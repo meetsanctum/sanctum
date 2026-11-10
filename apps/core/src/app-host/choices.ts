@@ -47,7 +47,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
   // An app's settings as it reads them, which may fail as app code.
   settingsOf: (entry: Entry) => AppSettings;
   grants: AppGrants;
-  coreEvents: Pick<CoreEvents, "permissions">;
+  coreEvents: Pick<CoreEvents, "permissions" | "settings">;
   // Someone changed an app's settings.
   onSettings?: (appId: string, settings: AppSettings) => void;
   // Before a permission the app holds goes off, what it lets the app hold
@@ -241,21 +241,19 @@ export function createAppChoices<Entry extends Chosen>(options: {
       if (!changes.success) {
         throw new ActionCallError("invalid_request");
       }
+      const { id, settings: schema } = entry.manifest;
+      const before = options.settings.of(id, schema);
       let settings: AppSettings | undefined;
       try {
-        settings = options.settings.change(
-          entry.manifest.id,
-          entry.manifest.settings,
-          changes.data,
-          () =>
-            record(
-              appId,
-              action,
-              who,
-              "ok",
-              undefined,
-              Object.keys(changes.data).sort().join(","),
-            ),
+        settings = options.settings.change(id, schema, changes.data, () =>
+          record(
+            appId,
+            action,
+            who,
+            "ok",
+            undefined,
+            Object.keys(changes.data).sort().join(","),
+          ),
         );
       } catch (error) {
         log(`apps: ${appId}'s settings failed (${message(error)})`);
@@ -263,6 +261,10 @@ export function createAppChoices<Entry extends Chosen>(options: {
       }
       if (!settings) {
         throw new ActionCallError("invalid_request");
+      }
+      // A running app hears it at once, as settings.changed.
+      if (JSON.stringify(before) !== JSON.stringify(settings)) {
+        options.coreEvents.settings(appId, before, settings);
       }
       options.onSettings?.(appId, settings);
       return settings;

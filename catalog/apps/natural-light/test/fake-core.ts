@@ -8,6 +8,7 @@ import {
   type AppSettings,
   type CapabilityInfo,
   type CoreCalls,
+  type CoreEventHandlers,
   type DeviceInfo,
   type HomeLocation,
   type Job,
@@ -29,7 +30,8 @@ afterEach(() => {
 // commands as the core's Devices does, saying who last set them, and the
 // entities the app publishes, each checked against the type it declares.
 // A light that is off and asked for a look holds it, and comes back at it
-// when switched on.
+// when switched on. The household changing the app's settings reaches its
+// start context as settings.changed.
 
 type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 
@@ -125,7 +127,10 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
     }
   };
 
-  function context(actor: Actor) {
+  // What the start context follows, which ctx.events.on() keeps here.
+  const handlers: CoreEventHandlers = new Map();
+
+  function context(actor: Actor, followed?: CoreEventHandlers) {
     const core: CoreCalls = {
       query: storage.query,
       serviceConnection: absent,
@@ -146,7 +151,11 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       entities: absent,
       fetch: absent,
       emit: absent,
-      follow: absent,
+      follow: async (name) => {
+        if (name !== "settings.changed") {
+          throw new Error(`Natural light does not follow ${name}`);
+        }
+      },
       async scheduleJob(job) {
         state.jobs = state.jobs.filter((each) => each.key !== job.key);
         const scheduled = {
@@ -205,13 +214,26 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       },
       log: (message) => state.logs.push(message),
     };
-    return createAppContext({ appId: app.id, actor, core });
+    return createAppContext({
+      appId: app.id,
+      actor,
+      core,
+      ...(followed ? { handlers: followed } : {}),
+    });
   }
 
   return {
     state,
     /** The context the app's start hook gets, acting as the app itself. */
-    ctx: context({ kind: "app", id: app.id }),
+    ctx: context({ kind: "app", id: app.id }, handlers),
+    /** The household changes the app's settings, as Settings → Apps does. */
+    async changeSettings(settings: AppSettings) {
+      const before = state.settings;
+      state.settings = settings;
+      for (const handler of handlers.get("settings.changed") ?? []) {
+        await handler({ name: "settings.changed", settings, before });
+      }
+    },
     /** The context of an action a person calls. */
     as: (actor: Actor) => context(actor),
     set,

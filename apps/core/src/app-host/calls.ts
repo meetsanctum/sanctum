@@ -86,7 +86,8 @@ function followRefusal(name: CoreEventName, permissions: readonly string[]) {
   if (noun === "person" && !permissions.includes(peopleReadPermission)) {
     return `does not hold ${peopleReadPermission}`;
   }
-  if (noun === "permissions") {
+  // About the app itself, its permissions or its settings.
+  if (noun === "permissions" || noun === "settings") {
     return null;
   }
   if (noun === "entity" && entityTypes(permissions).length === 0) {

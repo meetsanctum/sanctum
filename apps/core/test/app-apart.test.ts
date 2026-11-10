@@ -455,6 +455,44 @@ describe("an app that runs apart", () => {
       expect(heard).toEqual([]);
     });
 
+    it("hears its own settings change, needing no permission", async () => {
+      const heard: CoreEvent[] = [];
+      const app = defineApp({
+        ...base,
+        id: "test.tuned",
+        permissions: [],
+        settings: z.object({
+          days: z.number().int().min(1).default(7).meta({ title: "Days" }),
+        }),
+        actions: [],
+        start: async (ctx) => {
+          await ctx.events.on("settings.changed", async (event) => {
+            heard.push(event);
+          });
+        },
+      });
+      const { core } = await apart(app);
+      const maya = await claimed(core);
+      await running(core, app.id);
+
+      await post(
+        core,
+        `/api/apps/${app.id}/settings/update`,
+        { days: 3 },
+        maya,
+      );
+
+      await vi.waitFor(() =>
+        expect(heard).toEqual([
+          {
+            name: "settings.changed",
+            settings: { days: 3 },
+            before: { days: 7 },
+          },
+        ]),
+      );
+    });
+
     it("hears events in order, one at a time, after its start", async () => {
       const order: string[] = [];
       let handling = 0;

@@ -5,7 +5,8 @@ import {
 } from "@meetsanctum/app-sdk";
 
 import { naturalLightActions } from "./actions.js";
-import type { Timing } from "./lights.js";
+import { createFollower } from "./follower.js";
+import { createRunForLight, type Timing } from "./lights.js";
 import { naturalLightSettings } from "./settings.js";
 import { targetType } from "./target.js";
 
@@ -21,7 +22,8 @@ import { targetType } from "./target.js";
 // job every 5 minutes, and those intervals decide when a light is due
 // (lights.ts). The core logs every run, so a shorter beat would fill the
 // activity log; a light switched on through the core comes back at the curve
-// without waiting for one.
+// without waiting for one, and so does every light once the household
+// changes the curve (follower.ts).
 
 export const checkJob = "check";
 
@@ -37,9 +39,13 @@ function timingOf(options: NaturalLightOptions): Timing {
 
 /** The app, with intervals and a clock a test may change. */
 export function createNaturalLightApp(options: NaturalLightOptions = {}) {
+  const timing = timingOf(options);
+  const runForLight = createRunForLight();
   const { follow, resume, pause, preview, check } = naturalLightActions(
-    timingOf(options),
+    timing,
+    runForLight,
   );
+  let follower: ReturnType<typeof createFollower> | undefined;
 
   return defineApp({
     id: "sanctum.natural-light",
@@ -79,6 +85,12 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
         input: {},
         when: { every: 300 },
       });
+      follower = createFollower(ctx, timing, runForLight);
+      await follower.start();
+    },
+    async stop() {
+      follower?.stop();
+      follower = undefined;
     },
   });
 }

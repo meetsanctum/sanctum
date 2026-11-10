@@ -30,23 +30,7 @@ const light = z.object({
   capability: partOf("device"),
 });
 
-export function naturalLightActions(timing: Timing) {
-  // Calls for one light finish in order, including the job, so a delayed
-  // check cannot undo a pause or publish a target after following stops.
-  const pending = new Map<string, Promise<unknown>>();
-  const runForLight: RunForLight = async (device, capability, work) => {
-    const key = `${device}/${capability}`;
-    const result = (pending.get(key) ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(work);
-    pending.set(key, result);
-    try {
-      return await result;
-    } finally {
-      if (pending.get(key) === result) pending.delete(key);
-    }
-  };
-
+export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
   const follow = defineAction({
     id: "naturalLight.follow",
     title: "Follow natural light",
