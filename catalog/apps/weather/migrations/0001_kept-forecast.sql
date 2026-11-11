@@ -1,0 +1,1 @@
+ALTER TABLE `forecast_location` ADD `forecast` text;

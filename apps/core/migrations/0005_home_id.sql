@@ -1,0 +1,1 @@
+ALTER TABLE `home` ADD `home_id` text;

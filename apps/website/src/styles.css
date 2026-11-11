@@ -1,0 +1,267 @@
+/* Brand tokens, as in the client's styles.css. */
+:root {
+  --carbon: #222326;
+  --white: #ffffff;
+  --silver: #c5c7ca;
+  --steel: #5c5e62;
+  --hairline-on-white: #e3e4e6;
+  --hairline-on-carbon: rgb(255 255 255 / 14%);
+  /* The action colour, only for what you can press. */
+  --electric-blue: #3e6ae1;
+
+  color-scheme: dark;
+  background: var(--carbon);
+  color: var(--white);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-size: 17px;
+  line-height: 27px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--electric-blue);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* One screen: the photo behind everything, the logo and GitHub at the top,
+   the message and the waitlist at the bottom. */
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 20px 16px 40px;
+}
+
+/* The layer the glass samples: the photo, the veil and the GitHub button. */
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* The glass draws its shadow past the button; keep it from widening the
+     page at the right edge. */
+  overflow: clip;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 45% 60%;
+}
+
+/* A flat Carbon veil keeps White text readable on the lighter parts of the
+   photo. An element, not a pseudo-element, so the glass sees it too. */
+.veil {
+  position: absolute;
+  inset: 0;
+  background: rgb(34 35 38 / 45%);
+}
+
+/* The logo sets the name in lower case, the knot 1.27 times the cap height
+   (assets/brand/README.md), as in the client: the knot 28 px, two pixels to
+   each unit of its grid, and the name 30 px. Centred in the line, the knot
+   sits on the middle of the word, t included. */
+.logo {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.32em;
+  color: inherit;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+  text-decoration: none;
+}
+
+/* Frosted glass once the effect runs (main.ts); until then, and where WebGL
+   is missing, a Carbon secondary button with a hairline. Fully rounded, as
+   the glass caps its corner radius at half the height. */
+.github {
+  position: absolute;
+  /* Its own stacking context, so the glass canvas the library puts behind
+     the label stays above the photo. */
+  z-index: 1;
+  top: 20px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--hairline-on-carbon);
+  border-radius: 22px;
+  background: var(--carbon);
+  color: var(--white);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.github:not(.frosted):hover {
+  background: color-mix(in srgb, var(--carbon) 90%, var(--white));
+}
+
+.github.frosted {
+  border-color: transparent;
+  background: none;
+}
+
+/* Above the canvas the effect injects into the button. */
+.github .label {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  color: var(--silver);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.stars[hidden] {
+  display: none;
+}
+
+/* Narrower than 380 px the count runs into the logo, so GitHub goes
+   without it. */
+@media (max-width: 379px) {
+  .stars {
+    display: none;
+  }
+}
+
+/* Narrower than 320 px the button runs into the logo even without the
+   count, so it moves below it. */
+@media (max-width: 319px) {
+  .github {
+    top: 72px;
+  }
+}
+
+.stars svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.content {
+  width: min(760px, 100%);
+  margin-top: auto;
+  padding-top: 120px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(40px, 6.5vw, 88px);
+  font-weight: 300;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.description {
+  max-width: 520px;
+  margin: 24px 0 0;
+}
+
+.waitlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 520px;
+  margin-top: 32px;
+}
+
+.waitlist input {
+  flex: 1 1 240px;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--hairline-on-white);
+  border-radius: 4px;
+  background: var(--white);
+  color: var(--carbon);
+  color-scheme: light;
+  font: inherit;
+  font-size: 15px;
+}
+
+.waitlist input::placeholder {
+  color: var(--steel);
+}
+
+.waitlist input:focus {
+  outline: 2px solid var(--electric-blue);
+  outline-offset: -1px;
+}
+
+/* The one primary action: Electric blue with White text. */
+.primary {
+  flex: 1 1 auto;
+  height: 48px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 4px;
+  background: var(--electric-blue);
+  color: var(--white);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.primary:hover {
+  background: color-mix(in srgb, var(--electric-blue) 88%, var(--carbon));
+}
+
+.note {
+  min-height: 22px;
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--silver);
+}
+
+@media (min-width: 720px) {
+  .page {
+    padding: 28px 40px 56px;
+  }
+
+  .github {
+    top: 28px;
+    right: 40px;
+  }
+
+  .primary {
+    flex: none;
+  }
+}

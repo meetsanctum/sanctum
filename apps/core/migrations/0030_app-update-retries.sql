@@ -1,0 +1,1 @@
+ALTER TABLE `app_updates` ADD `retry_at` integer;

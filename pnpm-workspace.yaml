@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "catalog/apps/*"
+  - "assets/brand"
+
+# Electron downloads its binary when installed. CI skips the download
+# (ELECTRON_SKIP_BINARY_DOWNLOAD), since nothing there runs it.
+onlyBuiltDependencies:
+  - electron

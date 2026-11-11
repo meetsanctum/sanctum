@@ -1,0 +1,57 @@
+{
+  "name": "@meetsanctum/natural-light",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ui": "./src/ui/index.tsx"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "sanctum-app.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
+    "test": "vitest run && sanctum-app manifest --check",
+    "manifest": "sanctum-app manifest",
+    "clean": "rm -rf dist .turbo",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@meetsanctum/app-sdk": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@meetsanctum/app-testkit": "workspace:*",
+    "@meetsanctum/typescript-config": "workspace:*",
+    "@meetsanctum/ui-sdk": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "jsdom": "^30.1.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vitest": "^4.1.5"
+  },
+  "peerDependencies": {
+    "@meetsanctum/ui-sdk": "workspace:*",
+    "react": "^19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@meetsanctum/ui-sdk": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "@meetsanctum/typescript-config/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  // The UI is the shell's to bundle, checked with tsconfig.ui.json.
+  "include": ["src", "test"],
+  "exclude": ["src/ui"]
+}

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Nothing here runs the desktop app.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      # Each Turbo run lists its tasks in .turbo/runs, for the cache pruning
+      # at the end.
+      TURBO_RUN_SUMMARY: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Turbo's cache from this branch's last run, or else main's: packages
+      # that did not change replay their builds and tests from it.
+      - uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ github.sha }}
+          restore-keys: turbo-
+      # Apps' contract snapshots are checked against the branch a pull
+      # request goes into.
+      - if: github.event_name == 'pull_request'
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+        env:
+          BASE: ${{ github.base_ref }}
+      - run: pnpm format:check
+      # No `pnpm lint`: each package's lint is the same tsc run as its
+      # typecheck.
+      - run: pnpm typecheck
+      - run: pnpm test
+        env:
+          SANCTUM_CONTRACT_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+      - run: pnpm build
+      # Only this run's tasks are kept, so the cache stays the size of one
+      # run instead of growing with every one.
+      - name: Prune Turbo's cache
+        run: |
+          shopt -s nullglob
+          jq -r '.tasks[].hash' .turbo/runs/*.json | sort -u > "$RUNNER_TEMP/turbo-hashes"
+          for entry in .turbo/cache/*; do
+            hash="$(basename "$entry")"
+            grep -qxF "${hash%%[-.]*}" "$RUNNER_TEMP/turbo-hashes" || rm "$entry"
+          done

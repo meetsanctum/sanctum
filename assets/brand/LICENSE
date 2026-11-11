@@ -1,0 +1,29 @@
+Sanctum brand files
+Copyright © 2026 the Sanctum authors. All rights reserved.
+
+This licence covers every file in this folder (assets/brand, the
+@meetsanctum/brand package): the Sanctum logo and its knot, the app icons,
+the desktop app's icon and the brand's photos. They are not under the GNU
+Affero General Public License or the Apache License that cover the code in
+this repository.
+
+You may, without asking:
+
+1. Use these files, unmodified, to build and run Sanctum from this
+   repository for yourself or your household, whether or not you have
+   changed its code.
+2. Share unmodified official builds of Sanctum that contain these files.
+3. Show the logo, unmodified, to refer to Sanctum, as TRADEMARKS.md
+   describes.
+
+Anything else needs written permission (alex@meetsanctum.com). That includes
+using these files, or anything made from them, in a version of Sanctum you
+have changed and share with others, in another product, app or website, or
+changed in any way. A changed version of Sanctum that you share must use a
+name, logo and app icons of its own.
+
+The name Sanctum and its logo are trademarks, as described in
+TRADEMARKS.md. This licence grants no rights to them beyond what is
+written here.
+
+THE FILES ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

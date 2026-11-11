@@ -1,0 +1,8 @@
+{
+  "name": "fixture-lamps",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

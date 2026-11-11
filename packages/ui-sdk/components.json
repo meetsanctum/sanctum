@@ -1,0 +1,25 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "radix-vega",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "../../apps/client/src/styles.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "rtl": false,
+  "aliases": {
+    "components": "@meetsanctum/ui-sdk/src/components",
+    "utils": "cn",
+    "ui": "@meetsanctum/ui-sdk/src/components/ui",
+    "lib": "@meetsanctum/ui-sdk/src/lib",
+    "hooks": "@meetsanctum/ui-sdk/src/hooks"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `device_capabilities` ADD `set_by` text;

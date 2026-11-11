@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/dist
+**/build
+**/out
+**/.turbo
+**/coverage
+**/.env
+**/.env.*
+**/data
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.log
+**/.DS_Store
+apps/desktop/release

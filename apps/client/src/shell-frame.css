@@ -1,0 +1,229 @@
+/* The window is a frame the sidebar sits on, and the page a panel inset 7 px
+   from it with 12 px corners (src/shell-frame.tsx). Docked, the sidebar is 248 px wide and the panel
+   starts where it ends; collapsed, the panel takes the window's width in
+   the same frame. A phone has no frame: the page fills the screen and the
+   sidebar only floats over it. */
+.home-screen {
+  --sidebar-width: 248px;
+  --frame: 7px;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+@media (width < 40rem) {
+  .home-screen {
+    --frame: 0px;
+  }
+}
+
+/* The frame takes the page's colour: beside a place its dashboard's
+   background deepened, elsewhere the card fill of the device's mode. They
+   cross-fade, opacity only. On macOS the window's sidebar material shows
+   through, as Mac apps' sidebars do, with the colour only tinting it; the
+   page stays opaque. Over the light material a place's colour stays
+   denser, so the sidebar's White and Silver text keep their contrast. The
+   material goes flat while the window is not in front, as Finder's does. */
+.frame {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.frame[data-on] {
+  opacity: 1;
+}
+
+.frame-neutral {
+  background: var(--card);
+}
+
+:root[data-platform="macos"] {
+  background: transparent;
+}
+
+[data-platform="macos"] .frame-neutral {
+  background: color-mix(in srgb, var(--card) 30%, transparent);
+}
+
+[data-platform="macos"] .frame-neutral[data-mode="day"] {
+  background: color-mix(in srgb, var(--card) 35%, transparent);
+}
+
+[data-platform="macos"] .frame-place[data-on] {
+  opacity: 0.4;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-platform="macos"] .frame-place[data-on] {
+    opacity: 0.82;
+  }
+}
+
+/* What covers the window is frosted glass, and a blur over something
+   see-through comes out see-through, with the sharp original showing through
+   it. So over the macOS window's material the sidebar's labels and the page's
+   edge stayed legible through the glass. An opaque copy of the frame comes in
+   under it, on the glass's own timing, so the whole window diffuses as the page
+   does; nobody misses the material under the glass. Going by the overlay's
+   state, it goes as the overlay starts to fade rather than after. Elsewhere
+   the frame is opaque already. The glass still fades where motion is
+   reduced, so its backing does too. */
+.frame-under-glass {
+  background: var(--card);
+  transition: opacity 200ms ease;
+}
+
+[data-platform="macos"]
+  .home-screen:has(> .overlay[data-state="open"])
+  .frame-under-glass {
+  opacity: 1;
+}
+
+/* A veil fades in after a moment (src/styles.css), so a blip changes nothing
+   here either. */
+[data-platform="macos"] .home-screen:has(> .veil) .frame-under-glass {
+  opacity: 1;
+  transition: opacity 300ms ease-out 700ms;
+}
+
+/* The screen first mounts under a connection veil. Give the backing a
+   starting value then too, so it waits and fades with the veil rather than
+   appearing solid at once, before the glass has come in. */
+@starting-style {
+  [data-platform="macos"] .home-screen:has(> .veil) .frame-under-glass {
+    opacity: 0;
+  }
+}
+
+/* The strip above the page, which moves the window on macOS. */
+.frame-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--frame);
+}
+
+/* The docked sidebar, on the frame, with no surface of its own. It slides
+   in and out (transform only), and is out of reach once out. */
+.sidebar-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: var(--sidebar-width);
+  padding: 7px 8px calc(7px + env(safe-area-inset-bottom))
+    calc(8px + env(safe-area-inset-left));
+  color: var(--ink);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 300ms;
+}
+
+.sidebar-column[data-shown] {
+  transform: none;
+  visibility: visible;
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* In from the window's edge, the frame beside it counts as the floating
+   sidebar, so a pointer resting on the edge keeps it in rather than leave
+   it as soon as it has arrived. */
+.sidebar-float[data-peek]::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  left: -7px;
+  width: 7px;
+}
+
+/* Docked from the floating sidebar, it takes that one's place at once. */
+.sidebar-column[data-instant] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-column,
+  .sidebar-column[data-shown],
+  .frame-neutral,
+  .frame-place {
+    transition: none;
+  }
+}
+
+/* The page, in the current dashboard's background or the mode's, set on
+   the element; mocha until the dashboards are read. */
+.panel {
+  position: absolute;
+  top: var(--frame);
+  right: var(--frame);
+  bottom: var(--frame);
+  left: var(--frame);
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 0.8);
+  background: var(--dashboard-mocha);
+}
+
+.home-screen[data-sidebar="docked"] .panel {
+  left: var(--sidebar-width);
+}
+
+/* As the toggle docks or collapses the sidebar, the page's left edge goes
+   with it, on its curve, and its right edge stays, so the page narrows or
+   widens as it goes, as a Mac app's does beside its sidebar, and none of it
+   leaves the window (src/sidebar-state.ts). Only where it docks, the width
+   of the dock query there. */
+@media (width >= 960px) and (prefers-reduced-motion: no-preference) {
+  .home-screen[data-sliding] .panel {
+    transition: left 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
+@media (width < 40rem) {
+  .panel {
+    border-radius: 0;
+  }
+}
+
+/* Resting on the window's left edge brings the sidebar in over the page. */
+.sidebar-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 8px;
+}
+
+/* The sidebar floating over the page: frosted glass in the mode's card
+   fill, or a place's deepened background, inset like the page, with a
+   hairline and a soft shadow, and the traffic lights in its top row as
+   docked. */
+.sidebar-float {
+  position: fixed;
+  z-index: 50;
+  top: calc(7px + env(safe-area-inset-top));
+  bottom: calc(7px + env(safe-area-inset-bottom));
+  left: calc(7px + env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: var(--sidebar-width, 248px);
+  padding: 0 8px 8px;
+  border-radius: calc(var(--radius) * 0.8);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 16px 48px rgb(0 0 0 / 30%);
+}

@@ -1,0 +1,379 @@
+{
+  "id": "sanctum.weather",
+  "name": "Weather",
+  "version": "0.3.0",
+  "core": "^1.0.0",
+  "summary": "The forecast and sun times for where your home is.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": "migrations",
+  "driver": null,
+  "permissions": [
+    {
+      "id": "places.location",
+      "reason": "To fetch the forecast and sun times for where you live.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "net:api.open-meteo.com",
+      "reason": "To fetch the forecast. Only your home's position is sent.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "cloud-sun",
+    "color": "sky"
+  },
+  "pages": [
+    "main"
+  ],
+  "settings": null,
+  "actions": [],
+  "events": [],
+  "provides": {
+    "entities": [
+      {
+        "id": "sun",
+        "title": "Sun",
+        "standard": true,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "days": {
+              "minItems": 3,
+              "maxItems": 31,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "sunrise": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sunset": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "solarNoon": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "date",
+                  "sunrise",
+                  "sunset",
+                  "solarNoon"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "date",
+            "timeZone",
+            "days"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "weather.forecast",
+        "title": "Forecast",
+        "standard": true,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "current": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "temperatureC": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "weatherCode": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "isDay": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "temperatureC",
+                    "weatherCode",
+                    "isDay"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "days": {
+              "maxItems": 16,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "temperatureMaxC": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "temperatureMinC": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "precipitationProbabilityMax": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "weatherCode": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "date",
+                  "temperatureMaxC",
+                  "temperatureMinC",
+                  "precipitationProbabilityMax",
+                  "weatherCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "timeZone",
+            "updatedAt",
+            "current",
+            "days"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "widgets": [
+      {
+        "id": "weather.card",
+        "title": "Weather",
+        "size": {
+          "columns": 4,
+          "rows": 4
+        },
+        "preview": {
+          "blocks": [
+            {
+              "kind": "headline",
+              "value": {
+                "temperature": 18
+              },
+              "icon": "cloud-sun"
+            },
+            {
+              "kind": "line",
+              "text": "Partly cloudy · H {high} L {low} · {rain} rain",
+              "values": {
+                "high": {
+                  "temperature": 21
+                },
+                "low": {
+                  "temperature": 12
+                },
+                "rain": {
+                  "percent": 10
+                }
+              }
+            },
+            {
+              "kind": "facts",
+              "items": [
+                {
+                  "icon": "sunrise",
+                  "label": "Sunrise",
+                  "value": {
+                    "time": "2026-06-21T03:31:00Z"
+                  }
+                },
+                {
+                  "icon": "sunset",
+                  "label": "Sunset",
+                  "value": {
+                    "time": "2026-06-21T19:26:00Z"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "columns",
+              "items": [
+                {
+                  "label": {
+                    "date": "2026-06-22"
+                  },
+                  "icon": "sun",
+                  "iconLabel": "Clear",
+                  "value": {
+                    "temperature": 24
+                  },
+                  "detail": {
+                    "temperature": 13
+                  }
+                },
+                {
+                  "label": {
+                    "date": "2026-06-23"
+                  },
+                  "icon": "cloud-sun",
+                  "iconLabel": "Partly cloudy",
+                  "value": {
+                    "temperature": 22
+                  },
+                  "detail": {
+                    "temperature": 14
+                  }
+                },
+                {
+                  "label": {
+                    "date": "2026-06-24"
+                  },
+                  "icon": "cloud-rain",
+                  "iconLabel": "Rain",
+                  "value": {
+                    "temperature": 17
+                  },
+                  "detail": {
+                    "temperature": 11
+                  }
+                },
+                {
+                  "label": {
+                    "date": "2026-06-25"
+                  },
+                  "icon": "cloud-rain",
+                  "iconLabel": "Rain",
+                  "value": {
+                    "temperature": 19
+                  },
+                  "detail": {
+                    "temperature": 10
+                  }
+                },
+                {
+                  "label": {
+                    "date": "2026-06-26"
+                  },
+                  "icon": "sun",
+                  "iconLabel": "Clear",
+                  "value": {
+                    "temperature": 23
+                  },
+                  "detail": {
+                    "temperature": 12
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

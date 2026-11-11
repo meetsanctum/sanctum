@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `auto_named` integer DEFAULT false NOT NULL;

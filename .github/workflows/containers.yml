@@ -1,0 +1,47 @@
+name: Containers
+
+# Tests with real containers, apart from CI since they need Docker and take
+# minutes. On arm64 like a Pi, and only for what they cover: development
+# stacks, and the images a host runs, which stage the apps' packages.
+on:
+  pull_request:
+    paths:
+      - apps/core/Dockerfile
+      - apps/manager/**
+      - catalog/apps/**
+      - deploy/**
+      - packages/app-sdk/**
+      - pnpm-lock.yaml
+      - turbo.json
+      - .github/workflows/containers.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/core/Dockerfile
+      - apps/manager/**
+      - catalog/apps/**
+      - deploy/**
+      - packages/app-sdk/**
+      - pnpm-lock.yaml
+      - turbo.json
+      - .github/workflows/containers.yml
+
+concurrency:
+  group: containers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stacks:
+    runs-on: ubuntu-24.04-arm
+    env:
+      # Nothing here runs the desktop app.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:containers

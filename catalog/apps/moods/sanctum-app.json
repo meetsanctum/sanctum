@@ -1,0 +1,3656 @@
+{
+  "id": "sanctum.moods",
+  "name": "Moods",
+  "version": "0.9.0",
+  "core": "^1.0.0",
+  "summary": "Moods for each room, and what remotes and motion do with its lights.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": "migrations",
+  "driver": null,
+  "permissions": [
+    {
+      "id": "places.read",
+      "reason": "To keep moods for each room.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "devices.control:light",
+      "reason": "To set your lights when a mood runs.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "devices.read:button",
+      "reason": "So a press of a remote can run the mood you chose.",
+      "needed": false,
+      "asked": "when you choose what a remote's press does",
+      "startsOn": true
+    },
+    {
+      "id": "devices.read:occupancy",
+      "reason": "To turn a room's lights on when someone comes in.",
+      "needed": false,
+      "asked": "when you turn on lights for motion",
+      "startsOn": false
+    },
+    {
+      "id": "devices.read:sensor",
+      "reason": "To leave a room's lights off while it is bright enough.",
+      "needed": false,
+      "asked": "when you choose a light level for motion",
+      "startsOn": false
+    },
+    {
+      "id": "workflows.manage",
+      "reason": "So presses and motion run what you chose for them.",
+      "needed": false,
+      "asked": "with presses and motion",
+      "startsOn": true
+    }
+  ],
+  "icon": {
+    "glyph": "swatch-book",
+    "color": "ember"
+  },
+  "pages": [
+    "main",
+    "room",
+    "mood",
+    "scheduled"
+  ],
+  "settings": null,
+  "actions": [
+    {
+      "id": "moods.moods",
+      "title": "Moods",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "roomId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string",
+              "enum": [
+                "sparkles",
+                "armchair",
+                "baby",
+                "bath",
+                "bed",
+                "book-open",
+                "briefcase",
+                "cloud-moon",
+                "coffee",
+                "dumbbell",
+                "film",
+                "flame",
+                "flower",
+                "gamepad-2",
+                "heart",
+                "house",
+                "moon",
+                "music",
+                "palette",
+                "party-popper",
+                "play",
+                "star",
+                "sun",
+                "sunrise",
+                "sunset",
+                "trees",
+                "utensils",
+                "waves",
+                "wine",
+                "zap"
+              ]
+            },
+            "lights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "device": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "capability": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": false
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "brightness": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "colorTemperature": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 1000
+                          },
+                          "hue": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 360
+                          },
+                          "saturation": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "device",
+                  "capability",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smart": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "definition": {
+                      "type": "string"
+                    },
+                    "brightness": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "off": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "device": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "capability": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "device",
+                          "capability"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "definition",
+                    "brightness",
+                    "off"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "roomId",
+            "name",
+            "icon",
+            "lights",
+            "smart"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.createMood",
+      "title": "Create a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "icon": {
+            "default": "sparkles",
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "roomId",
+          "name",
+          "lights"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "smart": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "definition": {
+                    "type": "string"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "off": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "definition",
+                  "brightness",
+                  "off"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "roomId",
+          "name",
+          "icon",
+          "lights",
+          "smart"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.updateMood",
+      "title": "Change a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "smart": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "definition": {
+                    "type": "string"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "off": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "definition",
+                  "brightness",
+                  "off"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "roomId",
+          "name",
+          "icon",
+          "lights",
+          "smart"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.deleteMood",
+      "title": "Delete a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.orderMoods",
+      "title": "Order a room's moods",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "moodIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "roomId",
+          "moodIds"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "moodIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "moodIds"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.runMood",
+      "title": "Run a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "entityOf": "moods.mood"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "switched": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "switched",
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.previewMood",
+      "title": "Preview a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lights": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "roomId",
+          "lights"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "switched": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "switched",
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.smartMoods",
+      "title": "Smart moods",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "moods": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "type": "string"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "colours": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "hue": {
+                          "type": "number"
+                        },
+                        "saturation": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "hue",
+                        "saturation"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "icon",
+                  "brightness",
+                  "colours"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "moods"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.assignSmartMood",
+      "title": "Add a smart mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "definitionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brightness": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "off": {
+            "default": [],
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "roomId",
+          "definitionId"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "smart": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "definition": {
+                    "type": "string"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "off": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "definition",
+                  "brightness",
+                  "off"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "roomId",
+          "name",
+          "icon",
+          "lights",
+          "smart"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.updateSmartMood",
+      "title": "Change a smart mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brightness": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "off": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "sparkles",
+              "armchair",
+              "baby",
+              "bath",
+              "bed",
+              "book-open",
+              "briefcase",
+              "cloud-moon",
+              "coffee",
+              "dumbbell",
+              "film",
+              "flame",
+              "flower",
+              "gamepad-2",
+              "heart",
+              "house",
+              "moon",
+              "music",
+              "palette",
+              "party-popper",
+              "play",
+              "star",
+              "sun",
+              "sunrise",
+              "sunset",
+              "trees",
+              "utensils",
+              "waves",
+              "wine",
+              "zap"
+            ]
+          },
+          "lights": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "capability": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "brightness": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "colorTemperature": {
+                          "type": "integer",
+                          "minimum": 50,
+                          "maximum": 1000
+                        },
+                        "hue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        "saturation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "on"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "device",
+                "capability",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "smart": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "definition": {
+                    "type": "string"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "off": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "definition",
+                  "brightness",
+                  "off"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "roomId",
+          "name",
+          "icon",
+          "lights",
+          "smart"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.presses",
+      "title": "What a remote's presses do",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "presses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "choice": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "nothing"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "lights"
+                            },
+                            "place": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "room"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "zone"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "home"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "lights"
+                                    },
+                                    "lights": {
+                                      "minItems": 1,
+                                      "maxItems": 200,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "device": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          },
+                                          "capability": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        },
+                                        "required": [
+                                          "device",
+                                          "capability"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "lights"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "to": {
+                              "type": "string",
+                              "enum": [
+                                "on",
+                                "toggle",
+                                "off",
+                                "brighter",
+                                "dimmer",
+                                "brightenWhileHeld",
+                                "dimWhileHeld",
+                                "brightenOrDimWhileHeld"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "place",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "mood"
+                            },
+                            "moodId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "moodId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "default": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "nothing"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "lights"
+                            },
+                            "place": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "room"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "zone"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "home"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "lights"
+                                    },
+                                    "lights": {
+                                      "minItems": 1,
+                                      "maxItems": 200,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "device": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          },
+                                          "capability": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        },
+                                        "required": [
+                                          "device",
+                                          "capability"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "lights"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "to": {
+                              "type": "string",
+                              "enum": [
+                                "on",
+                                "toggle",
+                                "off",
+                                "brighter",
+                                "dimmer",
+                                "brightenWhileHeld",
+                                "dimWhileHeld",
+                                "brightenOrDimWhileHeld"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "place",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "mood"
+                            },
+                            "moodId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "moodId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hold": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "action",
+                "choice",
+                "default",
+                "hold"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "defaults": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "roomId": {
+                    "type": "string"
+                  },
+                  "dimmer": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "roomId",
+                  "dimmer"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presses",
+          "defaults"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.choosePress",
+      "title": "Choose what a press does",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "nothing"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "lights"
+                      },
+                      "place": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "room"
+                              },
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "zone"
+                              },
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "home"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "lights"
+                              },
+                              "lights": {
+                                "minItems": 1,
+                                "maxItems": 200,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "device": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    },
+                                    "capability": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "device",
+                                    "capability"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lights"
+                            ]
+                          }
+                        ]
+                      },
+                      "to": {
+                        "type": "string",
+                        "enum": [
+                          "on",
+                          "toggle",
+                          "off",
+                          "brighter",
+                          "dimmer",
+                          "brightenWhileHeld",
+                          "dimWhileHeld",
+                          "brightenOrDimWhileHeld"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "place",
+                      "to"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "mood"
+                      },
+                      "moodId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "moodId"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "device",
+          "action",
+          "choice"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "presses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "choice": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "nothing"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "lights"
+                            },
+                            "place": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "room"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "zone"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "home"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "lights"
+                                    },
+                                    "lights": {
+                                      "minItems": 1,
+                                      "maxItems": 200,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "device": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          },
+                                          "capability": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        },
+                                        "required": [
+                                          "device",
+                                          "capability"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "lights"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "to": {
+                              "type": "string",
+                              "enum": [
+                                "on",
+                                "toggle",
+                                "off",
+                                "brighter",
+                                "dimmer",
+                                "brightenWhileHeld",
+                                "dimWhileHeld",
+                                "brightenOrDimWhileHeld"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "place",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "mood"
+                            },
+                            "moodId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "moodId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "default": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "nothing"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "lights"
+                            },
+                            "place": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "room"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "zone"
+                                    },
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 64
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "home"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "lights"
+                                    },
+                                    "lights": {
+                                      "minItems": 1,
+                                      "maxItems": 200,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "device": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          },
+                                          "capability": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        },
+                                        "required": [
+                                          "device",
+                                          "capability"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "lights"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "to": {
+                              "type": "string",
+                              "enum": [
+                                "on",
+                                "toggle",
+                                "off",
+                                "brighter",
+                                "dimmer",
+                                "brightenWhileHeld",
+                                "dimWhileHeld",
+                                "brightenOrDimWhileHeld"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "place",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "mood"
+                            },
+                            "moodId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "moodId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hold": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "action",
+                "choice",
+                "default",
+                "hold"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "defaults": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "roomId": {
+                    "type": "string"
+                  },
+                  "dimmer": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "roomId",
+                  "dimmer"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presses",
+          "defaults"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.schedules",
+      "title": "Schedules",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "roomId": {
+              "type": "string"
+            },
+            "scheduled": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "roomId": {
+                    "type": "string"
+                  },
+                  "moodId": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "roomId",
+                  "moodId",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "turnOn": {
+              "type": "string",
+              "enum": [
+                "followSchedule",
+                "asTheyWere"
+              ]
+            },
+            "snapshot": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "takenAt": {
+                      "type": "string"
+                    },
+                    "lights": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "device": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "capability": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "device",
+                          "capability"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "takenAt",
+                    "lights"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "roomId",
+            "scheduled",
+            "turnOn",
+            "snapshot"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.scheduleMood",
+      "title": "Schedule a mood",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "moodId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1425,
+            "multipleOf": 15
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 15,
+            "maximum": 1440,
+            "multipleOf": 15
+          }
+        },
+        "required": [
+          "roomId",
+          "moodId",
+          "start",
+          "end"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "scheduled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "roomId": {
+                  "type": "string"
+                },
+                "moodId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "roomId",
+                "moodId",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "turnOn": {
+            "type": "string",
+            "enum": [
+              "followSchedule",
+              "asTheyWere"
+            ]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "takenAt": {
+                    "type": "string"
+                  },
+                  "lights": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "takenAt",
+                  "lights"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roomId",
+          "scheduled",
+          "turnOn",
+          "snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.unscheduleMood",
+      "title": "Take a mood off the schedule",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "scheduled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "roomId": {
+                  "type": "string"
+                },
+                "moodId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "roomId",
+                "moodId",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "turnOn": {
+            "type": "string",
+            "enum": [
+              "followSchedule",
+              "asTheyWere"
+            ]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "takenAt": {
+                    "type": "string"
+                  },
+                  "lights": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "takenAt",
+                  "lights"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roomId",
+          "scheduled",
+          "turnOn",
+          "snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.setTurnOn",
+      "title": "Choose how a room's lights turn on",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "turnOn": {
+            "type": "string",
+            "enum": [
+              "followSchedule",
+              "asTheyWere"
+            ]
+          }
+        },
+        "required": [
+          "roomId",
+          "turnOn"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "scheduled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "roomId": {
+                  "type": "string"
+                },
+                "moodId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "roomId",
+                "moodId",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "turnOn": {
+            "type": "string",
+            "enum": [
+              "followSchedule",
+              "asTheyWere"
+            ]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "takenAt": {
+                    "type": "string"
+                  },
+                  "lights": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "device": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "capability": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "device",
+                        "capability"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "takenAt",
+                  "lights"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roomId",
+          "scheduled",
+          "turnOn",
+          "snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.applySchedule",
+      "title": "Run a room's schedule",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1439
+          }
+        },
+        "required": [
+          "roomId",
+          "minute"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ran": {
+            "type": "string",
+            "enum": [
+              "mood",
+              "letGo",
+              "nothing"
+            ]
+          },
+          "switched": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "ran",
+          "switched",
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.motion",
+      "title": "What motion does to rooms' lights",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "roomId": {
+              "type": "string"
+            },
+            "turnOn": {
+              "type": "boolean"
+            },
+            "darkerThan": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "turnOffAfter": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "roomId",
+            "turnOn",
+            "darkerThan",
+            "turnOffAfter"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "assistant": null
+    },
+    {
+      "id": "moods.setMotion",
+      "title": "Choose what motion does to a room's lights",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "turnOn": {
+            "type": "boolean"
+          },
+          "darkerThan": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  5,
+                  10,
+                  30,
+                  50,
+                  100,
+                  200
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turnOffAfter": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  2,
+                  5,
+                  10,
+                  15,
+                  30,
+                  60
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roomId"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "turnOn": {
+            "type": "boolean"
+          },
+          "darkerThan": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "turnOffAfter": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roomId",
+          "turnOn",
+          "darkerThan",
+          "turnOffAfter"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [
+      {
+        "id": "moods.mood",
+        "title": "Mood",
+        "standard": false,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "placeId": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string",
+              "enum": [
+                "sparkles",
+                "armchair",
+                "baby",
+                "bath",
+                "bed",
+                "book-open",
+                "briefcase",
+                "cloud-moon",
+                "coffee",
+                "dumbbell",
+                "film",
+                "flame",
+                "flower",
+                "gamepad-2",
+                "heart",
+                "house",
+                "moon",
+                "music",
+                "palette",
+                "party-popper",
+                "play",
+                "star",
+                "sun",
+                "sunrise",
+                "sunset",
+                "trees",
+                "utensils",
+                "waves",
+                "wine",
+                "zap"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "placeId",
+            "icon",
+            "name",
+            "order",
+            "active",
+            "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "lights.turnOn",
+        "title": "Turning on",
+        "standard": true,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "placeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lights": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "device": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "capability": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": false
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "brightness": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "colorTemperature": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 1000
+                          },
+                          "hue": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 360
+                          },
+                          "saturation": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "device",
+                  "capability",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "until": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "placeId",
+            "lights",
+            "until"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "widgets": [],
+    "roomSections": [
+      {
+        "id": "moods.room",
+        "title": "Moods",
+        "entityType": "moods.mood",
+        "kind": "tiles",
+        "order": 200,
+        "press": {
+          "action": "moods.runMood"
+        },
+        "open": {
+          "page": "room",
+          "label": "Edit"
+        },
+        "whenEmpty": {
+          "roomHas": "light"
+        },
+        "preview": [
+          {
+            "icon": "sparkles",
+            "name": "Aurora",
+            "active": true
+          },
+          {
+            "icon": "book-open",
+            "name": "Reading",
+            "active": false
+          },
+          {
+            "icon": "moon",
+            "name": "Night",
+            "active": false
+          }
+        ]
+      }
+    ],
+    "devicePages": [
+      {
+        "id": "moods.presses",
+        "title": "Presses",
+        "kinds": [
+          "button"
+        ]
+      }
+    ],
+    "triggers": [],
+    "conditions": [],
+    "steps": [
+      {
+        "id": "moods.runMood",
+        "words": {
+          "sentence": "Run {id}",
+          "preview": {
+            "id": "Aurora"
+          }
+        },
+        "needs": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "@meetsanctum/typescript-config/react.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/ui"]
+}

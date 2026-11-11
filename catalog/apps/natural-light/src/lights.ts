@@ -1,0 +1,383 @@
+import {
+  ActionError,
+  isActionError,
+  type AppContext,
+  type CapabilityInfo,
+  type DeviceInfo,
+  type LightCommand,
+  type LightState,
+} from "@meetsanctum/app-sdk";
+import { and, eq } from "drizzle-orm";
+
+import {
+  brightnessPercent,
+  clampMired,
+  colorTemperatureKelvin,
+  kelvinToMired,
+  type CurveSettings,
+} from "./curve.js";
+import { followedLights, type Look } from "./schema.js";
+import { curveOf } from "./settings.js";
+import { sunToday, type HomeSun } from "./sun.js";
+import { targetKey, targetType, type TargetState } from "./target.js";
+
+// Lights following the curve: v1's natural-lighting.ts, rewritten on the
+// core's devices (Pragmata, v1-final). v1 changed a light's own turn-on
+// command and paused it from the core's command routes. An app cannot do
+// either, so here:
+//
+// - A light that is off holds the curve's look in the core, as an "off"
+//   that says what it comes back at, so switching it on brings it back at
+//   the curve, whoever switches it.
+// - Whether it is paused is read from who last set it: a light that is on,
+//   which a mood, a person or another app last set to a look of their own,
+//   is paused until it is switched off or on, as v1 paused it until it next
+//   turned on. Switching it off or on alone, or a look that is natural
+//   light's own (a mood preview putting the light back), pauses nothing.
+// - Every check brings lights that follow it to the curve: one that is on
+//   every 5 minutes as the curve moves, one that is off every 15 (v1's
+//   intervals), and either at once when someone else switched it.
+
+export type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
+export type Light = { device: DeviceInfo; capability: LightCapability };
+type Followed = typeof followedLights.$inferSelect;
+
+export type RunForLight = <T>(
+  device: string,
+  capability: string,
+  work: () => Promise<T>,
+) => Promise<T>;
+
+/** How natural light keeps time, which tests may change. */
+export type Timing = { now: () => Date; activeMs: number; offMs: number };
+
+/** What one call follows: its timing, and the curve as the household set it. */
+export type FollowOptions = Timing & { curve: CurveSettings };
+
+/**
+ * The options for one call, with the curve as its settings stand now: a
+ * change reaches the lights at the next check, or the next action.
+ */
+export async function followOptionsFor(
+  ctx: AppContext,
+  timing: Timing,
+): Promise<FollowOptions> {
+  return { ...timing, curve: curveOf(await ctx.settings.get()) };
+}
+
+/** A light natural light can set: one that takes a colour temperature. */
+export const takesColorTemperature = (
+  capability: CapabilityInfo,
+): capability is LightCapability =>
+  capability.kind === "light" && capability.features.colorTemperature !== null;
+
+/** What the curve sets a light to now, within what it can show. */
+export function lookFor(
+  curve: CurveSettings,
+  sun: HomeSun,
+  capability: LightCapability,
+  now: Date,
+): Look | null {
+  const range = capability.features.colorTemperature;
+  if (!range) {
+    return null;
+  }
+  const look: Look = {
+    colorTemperature: clampMired(
+      kelvinToMired(colorTemperatureKelvin(curve, sun, now)),
+      range,
+    ),
+  };
+  if (capability.features.brightness) {
+    look.brightness = brightnessPercent(curve, sun, now);
+  }
+  return look;
+}
+
+// v1's isNaturalLightingPauseCommand: a brightness, a colour or a colour
+// temperature, not on or off alone.
+const asksLook = (asked: Partial<LightState>) =>
+  (asked.brightness ?? 0) > 0 ||
+  asked.colorTemperature !== undefined ||
+  asked.hue !== undefined;
+
+// A look natural light set itself, such as a mood preview putting the light
+// back as it was.
+const isOwnLook = (asked: Partial<LightState>, applied: Look | null) =>
+  applied !== null &&
+  asked.hue === undefined &&
+  (asked.colorTemperature === undefined ||
+    asked.colorTemperature === applied.colorTemperature) &&
+  (asked.brightness === undefined || asked.brightness === applied.brightness);
+
+function hasEndedPause(
+  row: Pick<Followed, "pausedAt">,
+  capability: LightCapability,
+) {
+  return (
+    row.pausedAt !== null &&
+    (capability.state?.on === false ||
+      (capability.setBy !== null &&
+        Date.parse(capability.setBy.at) > row.pausedAt.getTime() &&
+        capability.setBy.asked.on !== undefined))
+  );
+}
+
+/** Whether a light that follows the curve is paused now. */
+export function isPaused(
+  row: Pick<Followed, "since" | "pausedAt" | "applied">,
+  capability: LightCapability,
+  appId: string,
+) {
+  if (capability.state?.on !== true) {
+    return false;
+  }
+  const { setBy } = capability;
+  const setAt = setBy ? Date.parse(setBy.at) : 0;
+  if (row.pausedAt && !hasEndedPause(row, capability)) {
+    return true;
+  }
+  return (
+    setBy !== null &&
+    setBy.app !== appId &&
+    setAt > row.since.getTime() &&
+    asksLook(setBy.asked) &&
+    !isOwnLook(setBy.asked, row.applied)
+  );
+}
+
+// A check that comes a moment before a light is due still counts, so jobs
+// on a 5-minute beat set it every 5 minutes, not every 10.
+const leewayMs = 30_000;
+
+function showsLook(state: LightState | null, look: Look) {
+  return (
+    state?.colorMode === "temperature" &&
+    state.colorTemperature === look.colorTemperature &&
+    (look.brightness === undefined || state.brightness === look.brightness)
+  );
+}
+
+/** What to send a light that follows the curve now, if anything. */
+export function commandFor(
+  light: Light,
+  row: Pick<Followed, "appliedAt">,
+  look: Look,
+  options: { appId: string; now: Date; activeMs: number; offMs: number },
+  force = false,
+): LightCommand | null {
+  const { device, capability } = light;
+  const state = capability.state;
+  if (!state || device.availability === "offline") {
+    return null;
+  }
+  if (showsLook(state, look)) {
+    return null;
+  }
+  if (!force && capability.sync === "pending") {
+    return null;
+  }
+  const every = state.on ? options.activeMs : options.offMs;
+  const isDue =
+    force ||
+    capability.setBy?.app !== options.appId ||
+    !row.appliedAt ||
+    options.now.getTime() - row.appliedAt.getTime() + leewayMs >= every;
+  if (!isDue) {
+    return null;
+  }
+  return state.on ? { ...look } : { on: false, ...look };
+}
+
+/** The row of a light that follows the curve. */
+export const followed = (device: string, capability: string) =>
+  and(
+    eq(followedLights.deviceId, device),
+    eq(followedLights.capabilityId, capability),
+  );
+
+async function publish(ctx: AppContext, light: Light, state: TargetState) {
+  await ctx.entities.publish({
+    type: targetType.id,
+    key: targetKey(light.device.id, light.capability.id),
+    name: light.device.name,
+    state,
+  });
+}
+
+/**
+ * Brings one light that follows the curve to it, or leaves it while it is
+ * paused, and publishes where it stands. `force` sends the curve's look at
+ * once, as following or resuming a light does.
+ */
+export async function followOne(
+  ctx: AppContext,
+  light: Light,
+  row: Followed,
+  sun: HomeSun | null,
+  options: FollowOptions,
+  force = false,
+): Promise<TargetState> {
+  const { device, capability } = light;
+  const now = options.now();
+  const look = sun ? lookFor(options.curve, sun, capability, now) : null;
+  const target = (status: TargetState["status"]): TargetState => ({
+    device: device.id,
+    capability: capability.id,
+    status: look ? status : "waiting",
+    colorTemperature: look?.colorTemperature ?? null,
+    brightness: look?.brightness ?? null,
+  });
+  if (hasEndedPause(row, capability)) {
+    // Switched since the pause, which ends here, before natural light's next
+    // command takes the switch's place as who set the light last.
+    await ctx.storage.db
+      .update(followedLights)
+      .set({ pausedAt: null })
+      .where(followed(device.id, capability.id));
+    row = { ...row, pausedAt: null };
+  }
+  if (!look) {
+    await publish(ctx, light, target("waiting"));
+    return target("waiting");
+  }
+  if (isPaused(row, capability, ctx.appId)) {
+    await publish(ctx, light, target("paused"));
+    return target("paused");
+  }
+  const command = commandFor(
+    light,
+    row,
+    look,
+    { ...options, appId: ctx.appId, now },
+    force,
+  );
+  if (command) {
+    try {
+      await ctx.devices.command({
+        device: device.id,
+        capability: capability.id,
+        command,
+      });
+      await ctx.storage.db
+        .update(followedLights)
+        .set({ applied: look, appliedAt: now })
+        .where(followed(device.id, capability.id));
+    } catch (error) {
+      // Asked for now, the caller hears of it; otherwise the next check
+      // tries again.
+      if (force) {
+        throw error;
+      }
+      ctx.log(`could not set ${device.name} (${describe(error)})`);
+    }
+  } else if (
+    showsLook(capability.state, look) &&
+    (row.applied?.colorTemperature !== look.colorTemperature ||
+      row.applied?.brightness !== look.brightness)
+  ) {
+    // Already at the curve: it counts as natural light's own look, so
+    // putting it back after a mood preview pauses nothing.
+    await ctx.storage.db
+      .update(followedLights)
+      .set({ applied: look })
+      .where(followed(device.id, capability.id));
+  }
+  await publish(ctx, light, target("following"));
+  return target("following");
+}
+
+/** The sun on the home's day, or none until the home has a location. */
+export async function homeSun(ctx: AppContext, now: Date) {
+  const location = await ctx.places.location();
+  return location ? sunToday(location, now) : null;
+}
+
+/** One light, by its device and capability, as the actor behind the call sees it. */
+export async function lightOf(
+  ctx: AppContext,
+  deviceId: string,
+  capabilityId: string,
+): Promise<Light> {
+  const device = await ctx.devices.state(deviceId);
+  const capability = device.capabilities.find(
+    (each) => each.id === capabilityId,
+  );
+  if (!capability || capability.kind !== "light") {
+    throw new ActionError("not_found");
+  }
+  return { device, capability };
+}
+
+export async function followedRow(
+  ctx: AppContext,
+  deviceId: string,
+  capabilityId: string,
+) {
+  return ctx.storage.db
+    .select()
+    .from(followedLights)
+    .where(followed(deviceId, capabilityId))
+    .get();
+}
+
+/** Stops following a light, and takes its entity out of the home. */
+export async function forget(
+  ctx: AppContext,
+  deviceId: string,
+  capabilityId: string,
+) {
+  await ctx.storage.db
+    .delete(followedLights)
+    .where(followed(deviceId, capabilityId));
+  await ctx.entities.remove(targetKey(deviceId, capabilityId));
+}
+
+/**
+ * Brings every light that follows the curve to it. A light that is gone
+ * from the home, or no longer a light, stops following; one that fails
+ * waits for the next check.
+ */
+export async function followAll(
+  ctx: AppContext,
+  options: FollowOptions,
+  runForLight: RunForLight,
+) {
+  const rows = await ctx.storage.db.select().from(followedLights);
+  if (rows.length === 0) {
+    return;
+  }
+  const sun = await homeSun(ctx, options.now());
+  for (const row of rows) {
+    await runForLight(row.deviceId, row.capabilityId, async () => {
+      // A caller may have paused, resumed or stopped following while the
+      // preceding light was being set. Read both sides again after waiting.
+      const current = await followedRow(ctx, row.deviceId, row.capabilityId);
+      if (!current) return;
+      let light: Light;
+      try {
+        light = await lightOf(ctx, row.deviceId, row.capabilityId);
+      } catch (error) {
+        if (isActionError(error) && error.code === "not_found") {
+          await forget(ctx, row.deviceId, row.capabilityId);
+          return;
+        }
+        ctx.log(`could not read ${row.deviceId} (${describe(error)})`);
+        return;
+      }
+      try {
+        await followOne(ctx, light, current, sun, options);
+      } catch (error) {
+        ctx.log(`could not follow ${light.device.name} (${describe(error)})`);
+      }
+    });
+  }
+}
+
+function describe(error: unknown) {
+  return isActionError(error)
+    ? error.code
+    : error instanceof Error
+      ? error.message
+      : String(error);
+}

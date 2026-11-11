@@ -1,0 +1,103 @@
+{
+  "id": "sanctum.zigbee",
+  "name": "Zigbee",
+  "version": "0.5.0",
+  "core": "^1.0.0",
+  "summary": "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": null,
+  "driver": {
+    "hooks": [
+      "command",
+      "move",
+      "pairing",
+      "remove",
+      "firmware",
+      "probe"
+    ]
+  },
+  "permissions": [
+    {
+      "id": "services:zigbee2mqtt",
+      "reason": "To reach your Zigbee devices through the stick.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "devices.register",
+      "reason": "To add your Zigbee devices and keep their state.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "radio-tower",
+    "color": "graphite"
+  },
+  "pages": [
+    "main"
+  ],
+  "settings": null,
+  "actions": [
+    {
+      "id": "zigbee.status",
+      "title": "Bridge status",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "broker": {
+            "type": "string",
+            "enum": [
+              "connecting",
+              "connected",
+              "disconnected"
+            ]
+          },
+          "bridge": {
+            "type": "string",
+            "enum": [
+              "online",
+              "offline",
+              "unknown"
+            ]
+          },
+          "joinUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "broker",
+          "bridge",
+          "joinUntil"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

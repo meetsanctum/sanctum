@@ -1,0 +1,46 @@
+{
+  "name": "@meetsanctum/core",
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/websocket": "^11.3.4",
+    "@meetsanctum/app-sdk": "workspace:*",
+    "@meetsanctum/auth-protocol": "workspace:*",
+    "@serenity-kit/opaque": "1.1.0",
+    "ajv": "8.20.0",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^6.0.1",
+    "undici": "^7.30.1",
+    "ws": "^8.22.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@meetsanctum/app-testkit": "workspace:*",
+    "@meetsanctum/moods": "workspace:*",
+    "@meetsanctum/natural-light": "workspace:*",
+    "@meetsanctum/typescript-config": "workspace:*",
+    "@meetsanctum/weather": "workspace:*",
+    "@meetsanctum/zigbee": "workspace:*",
+    "@peculiar/x509": "2.2.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/ws": "^8.18.2",
+    "drizzle-kit": "^0.31.11",
+    "reflect-metadata": "0.2.2",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.5"
+  }
+}

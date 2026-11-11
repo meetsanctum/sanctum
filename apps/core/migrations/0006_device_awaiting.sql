@@ -1,0 +1,1 @@
+ALTER TABLE `device_capabilities` ADD `awaiting` text;

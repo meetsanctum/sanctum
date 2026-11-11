@@ -1,0 +1,22 @@
+{
+  "name": "@meetsanctum/website",
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "lint": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "@meetsanctum/typescript-config": "workspace:*",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "@ybouane/liquidglass": "^1.0.3"
+  }
+}

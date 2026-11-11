@@ -1,0 +1,689 @@
+{
+  "id": "sanctum.natural-light",
+  "name": "Natural light",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "summary": "Lights that follow the colour of daylight through the day.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": "migrations",
+  "driver": null,
+  "permissions": [
+    {
+      "id": "places.location",
+      "reason": "To follow the sun where your home is.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "devices.control:light",
+      "reason": "To bring the lights that follow it to the light of the day.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "sun",
+    "color": "sun"
+  },
+  "pages": [
+    "main"
+  ],
+  "settings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "shape": {
+        "default": "balanced",
+        "title": "Curve",
+        "description": "When the curve peaks: at solar noon, or a third of the way into the day.",
+        "options": {
+          "balanced": "Balanced",
+          "early_riser": "Early riser"
+        },
+        "type": "string",
+        "enum": [
+          "balanced",
+          "early_riser"
+        ]
+      },
+      "lowKelvin": {
+        "default": 2000,
+        "title": "Colour temperature at night",
+        "description": "In kelvin, from sunset to sunrise. Lower is warmer.",
+        "type": "integer",
+        "minimum": 2000,
+        "maximum": 6500,
+        "multipleOf": 100
+      },
+      "highKelvin": {
+        "default": 5500,
+        "title": "Colour temperature at the peak",
+        "description": "In kelvin. Higher is cooler.",
+        "type": "integer",
+        "minimum": 2000,
+        "maximum": 6500,
+        "multipleOf": 100
+      },
+      "lowBrightness": {
+        "default": 80,
+        "title": "Brightness at night",
+        "description": "In percent, from sunset to sunrise.",
+        "type": "integer",
+        "minimum": 20,
+        "maximum": 100,
+        "multipleOf": 5
+      },
+      "highBrightness": {
+        "default": 100,
+        "title": "Brightness at the peak",
+        "description": "In percent.",
+        "type": "integer",
+        "minimum": 20,
+        "maximum": 100,
+        "multipleOf": 5
+      },
+      "sunriseOffsetMinutes": {
+        "default": 0,
+        "title": "Minutes after sunrise",
+        "description": "When the curve starts towards its peak; a negative number starts it before sunrise.",
+        "type": "integer",
+        "minimum": -120,
+        "maximum": 120,
+        "multipleOf": 15
+      },
+      "sunsetOffsetMinutes": {
+        "default": 0,
+        "title": "Minutes after sunset",
+        "description": "When the curve is back at night; a negative number ends it before sunset.",
+        "type": "integer",
+        "minimum": -120,
+        "maximum": 120,
+        "multipleOf": 15
+      }
+    }
+  },
+  "actions": [
+    {
+      "id": "naturalLight.follow",
+      "title": "Follow natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "names": "device"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "partOf": "device"
+          },
+          "follow": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "device",
+          "capability",
+          "follow"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string"
+              },
+              "capability": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "following",
+                  "paused",
+                  "waiting"
+                ]
+              },
+              "colorTemperature": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "brightness": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "device",
+              "capability",
+              "status",
+              "colorTemperature",
+              "brightness"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "assistant": {
+        "expose": true,
+        "description": "Have a light follow the sun through the day, or stop following it."
+      }
+    },
+    {
+      "id": "naturalLight.resume",
+      "title": "Resume natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "names": "device"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "partOf": "device"
+          }
+        },
+        "required": [
+          "device",
+          "capability"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "following",
+              "paused",
+              "waiting"
+            ]
+          },
+          "colorTemperature": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brightness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "device",
+          "capability",
+          "status",
+          "colorTemperature",
+          "brightness"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "naturalLight.pause",
+      "title": "Pause natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "names": "device"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "partOf": "device"
+          }
+        },
+        "required": [
+          "device",
+          "capability"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "following",
+              "paused",
+              "waiting"
+            ]
+          },
+          "colorTemperature": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brightness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "device",
+          "capability",
+          "status",
+          "colorTemperature",
+          "brightness"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "naturalLight.preview",
+      "title": "Today's natural light",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "timeZone": {
+                "type": "string"
+              },
+              "curve": {
+                "type": "object",
+                "properties": {
+                  "shape": {
+                    "default": "balanced",
+                    "title": "Curve",
+                    "description": "When the curve peaks: at solar noon, or a third of the way into the day.",
+                    "options": {
+                      "balanced": "Balanced",
+                      "early_riser": "Early riser"
+                    },
+                    "type": "string",
+                    "enum": [
+                      "balanced",
+                      "early_riser"
+                    ]
+                  },
+                  "lowKelvin": {
+                    "default": 2000,
+                    "title": "Colour temperature at night",
+                    "description": "In kelvin, from sunset to sunrise. Lower is warmer.",
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 6500,
+                    "multipleOf": 100
+                  },
+                  "highKelvin": {
+                    "default": 5500,
+                    "title": "Colour temperature at the peak",
+                    "description": "In kelvin. Higher is cooler.",
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 6500,
+                    "multipleOf": 100
+                  },
+                  "lowBrightness": {
+                    "default": 80,
+                    "title": "Brightness at night",
+                    "description": "In percent, from sunset to sunrise.",
+                    "type": "integer",
+                    "minimum": 20,
+                    "maximum": 100,
+                    "multipleOf": 5
+                  },
+                  "highBrightness": {
+                    "default": 100,
+                    "title": "Brightness at the peak",
+                    "description": "In percent.",
+                    "type": "integer",
+                    "minimum": 20,
+                    "maximum": 100,
+                    "multipleOf": 5
+                  },
+                  "sunriseOffsetMinutes": {
+                    "default": 0,
+                    "title": "Minutes after sunrise",
+                    "description": "When the curve starts towards its peak; a negative number starts it before sunrise.",
+                    "type": "integer",
+                    "minimum": -120,
+                    "maximum": 120,
+                    "multipleOf": 15
+                  },
+                  "sunsetOffsetMinutes": {
+                    "default": 0,
+                    "title": "Minutes after sunset",
+                    "description": "When the curve is back at night; a negative number ends it before sunset.",
+                    "type": "integer",
+                    "minimum": -120,
+                    "maximum": 120,
+                    "multipleOf": 15
+                  }
+                },
+                "required": [
+                  "shape",
+                  "lowKelvin",
+                  "highKelvin",
+                  "lowBrightness",
+                  "highBrightness",
+                  "sunriseOffsetMinutes",
+                  "sunsetOffsetMinutes"
+                ],
+                "additionalProperties": false
+              },
+              "now": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "kelvin": {
+                    "type": "number"
+                  },
+                  "brightness": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "at",
+                  "kelvin",
+                  "brightness"
+                ],
+                "additionalProperties": false
+              },
+              "sunrise": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "sunset": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "solarNoon": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "peak": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "kelvin": {
+                      "type": "number"
+                    },
+                    "brightness": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "kelvin",
+                    "brightness"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "date",
+              "timeZone",
+              "curve",
+              "now",
+              "sunrise",
+              "sunset",
+              "solarNoon",
+              "peak",
+              "points"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "assistant": null
+    },
+    {
+      "id": "naturalLight.check",
+      "title": "Bring lights to natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [
+      {
+        "id": "naturalLight.target",
+        "title": "Light following the sun",
+        "standard": false,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "device": {
+              "type": "string"
+            },
+            "capability": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "following",
+                "paused",
+                "waiting"
+              ]
+            },
+            "colorTemperature": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "brightness": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "device",
+            "capability",
+            "status",
+            "colorTemperature",
+            "brightness"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": [
+      {
+        "id": "naturalLight.follow",
+        "words": {
+          "presets": [
+            {
+              "title": "Let a light follow natural light",
+              "sentence": "Let {device} follow natural light",
+              "config": {
+                "follow": true
+              }
+            },
+            {
+              "title": "Stop a light following natural light",
+              "sentence": "Stop {device} following natural light",
+              "config": {
+                "follow": false
+              }
+            }
+          ],
+          "preview": {
+            "device": "Desk lamp"
+          }
+        },
+        "needs": []
+      },
+      {
+        "id": "naturalLight.pause",
+        "words": {
+          "sentence": "Pause natural light on {device}",
+          "preview": {
+            "device": "Desk lamp"
+          }
+        },
+        "needs": []
+      },
+      {
+        "id": "naturalLight.resume",
+        "words": {
+          "sentence": "Resume natural light on {device}",
+          "preview": {
+            "device": "Desk lamp"
+          }
+        },
+        "needs": []
+      }
+    ]
+  }
+}

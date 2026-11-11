@@ -1,0 +1,37 @@
+{
+  "name": "sanctum",
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "bash deploy/dev/stack.sh dev",
+    "dev:seed": "bash deploy/dev/stack.sh seed",
+    "dev:stop": "bash deploy/dev/stack.sh stop",
+    "dev:down": "bash deploy/dev/stack.sh down",
+    "dev:status": "bash deploy/dev/stack.sh status",
+    "dev:logs": "bash deploy/dev/stack.sh logs",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:containers": "turbo run test:containers --ui=stream",
+    "typecheck": "turbo run typecheck",
+    "manifest": "turbo run manifest",
+    "clean": "turbo run clean && rm -rf .turbo",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "host:setup": "bash deploy/dev/host.sh setup",
+    "host:push": "bash deploy/dev/host.sh push",
+    "host:publish": "bash deploy/dev/host.sh publish",
+    "host:status": "bash deploy/dev/host.sh status"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.6",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@meetsanctum/desktop",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "productName": "Sanctum",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "electron .",
+    "package": "turbo run build --filter=@meetsanctum/desktop... && node scripts/package.ts",
+    "artwork": "node scripts/artwork-files.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist build release .turbo"
+  },
+  "dependencies": {
+    "@meetsanctum/auth-protocol": "workspace:*",
+    "@meetsanctum/client": "workspace:*",
+    "bonjour-service": "^1.4.4"
+  },
+  "devDependencies": {
+    "@meetsanctum/typescript-config": "workspace:*",
+    "@peculiar/x509": "2.2.0",
+    "electron": "45.2.1",
+    "electron-builder": "26.17.0",
+    "esbuild": "0.28.2",
+    "reflect-metadata": "0.2.2",
+    "vitest": "^4.1.5"
+  }
+}

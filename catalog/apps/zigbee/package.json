@@ -1,0 +1,52 @@
+{
+  "name": "@meetsanctum/zigbee",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ui": "./src/ui/index.tsx"
+  },
+  "files": [
+    "dist",
+    "sanctum-app.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
+    "test": "vitest run && sanctum-app manifest --check",
+    "manifest": "sanctum-app manifest",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@meetsanctum/app-sdk": "workspace:*",
+    "mqtt": "^5.16.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@meetsanctum/app-testkit": "workspace:*",
+    "@meetsanctum/typescript-config": "workspace:*",
+    "@meetsanctum/ui-sdk": "workspace:*",
+    "@types/react": "^19.3.0",
+    "aedes": "^1.2.0",
+    "react": "^19.3.1",
+    "vitest": "^4.1.5"
+  },
+  "peerDependencies": {
+    "@meetsanctum/ui-sdk": "workspace:*",
+    "react": "^19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@meetsanctum/ui-sdk": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

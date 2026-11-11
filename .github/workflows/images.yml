@@ -1,0 +1,114 @@
+name: Images
+
+# Publishes multi-architecture images to GitHub's container registry, each
+# platform built on a runner of its own architecture.
+# - tag vX.Y.Z          -> :X.Y.Z, :X.Y and :stable
+# - run by hand on main -> :edge and :sha-<short>
+# Merges to main publish nothing by themselves: a dev host takes its builds
+# from a Mac.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # Both jobs work the tags out the same way: the build for the version it
+  # stamps, the publish for the tags it applies.
+  TAGS: |
+    type=raw,value=edge,enable={{is_default_branch}}
+    type=sha,prefix=sha-,enable={{is_default_branch}}
+    type=semver,pattern={{version}}
+    type=semver,pattern={{major}}.{{minor}}
+    type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  build:
+    # Anywhere but main or a tag there would be nothing to tag.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        service: [core, manager]
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/sanctum-${{ matrix.service }}
+          tags: ${{ env.TAGS }}
+      # Pushed untagged; the publish job tags both platforms' images as one.
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          platforms: linux/${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SANCTUM_VERSION=${{ steps.meta.outputs.version }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/sanctum-${{ matrix.service }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ matrix.platform }}
+      - run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.service }}-${{ matrix.platform }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [core, manager]
+    steps:
+      # Each platform's digest by name: a rerun after one has expired fails
+      # here instead of tagging the other platform alone.
+      - uses: actions/download-artifact@v8
+        with:
+          name: digests-${{ matrix.service }}-amd64
+          path: ${{ runner.temp }}/digests
+      - uses: actions/download-artifact@v8
+        with:
+          name: digests-${{ matrix.service }}-arm64
+          path: ${{ runner.temp }}/digests
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/sanctum-${{ matrix.service }}
+          tags: ${{ env.TAGS }}
+      - working-directory: ${{ runner.temp }}/digests
+        run: |
+          mapfile -t tags < <(jq -r '.tags[] | "--tag=" + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          images=()
+          for digest in *; do images+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${tags[@]}" "${images[@]}"
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/sanctum-${{ matrix.service }}

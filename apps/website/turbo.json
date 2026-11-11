@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/client/src/brand.ts",
+        "$TURBO_ROOT$/assets/brand/sanctum-favicon.svg",
+        "$TURBO_ROOT$/assets/brand/photos/living-room-dusk.jpg"
+      ]
+    },
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/client/src/brand.ts"]
+    },
+    "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/client/src/brand.ts"]
+    }
+  }
+}

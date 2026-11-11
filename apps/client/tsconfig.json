@@ -1,0 +1,10 @@
+{
+  "extends": "@meetsanctum/typescript-config/react.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "types": ["node", "vite/client"],
+    // The alias the shadcn components import from (components.json).
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

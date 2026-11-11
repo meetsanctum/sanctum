@@ -1,0 +1,8 @@
+{
+  "name": "fake-lights",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  }
+}

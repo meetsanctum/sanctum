@@ -1,0 +1,91 @@
+# Runs a Sanctum host (e.g. a Raspberry Pi 4B).
+#
+#   cp deploy/.env.example deploy/.env    # set SANCTUM_CHANNEL and owner
+#   docker compose -f deploy/compose.yml up -d
+#
+# Compose starts only the manager. The manager creates the core's container,
+# keeps it running and updates it, and updates itself through a short-lived
+# updater container. Compose is how a host is set up; afterwards the manager
+# owns its containers, and `docker compose up -d --force-recreate` puts the
+# manager back to this file's image if it ever needs rescuing.
+#
+# The manager mounts the Docker socket, which makes it root-equivalent on the
+# host, and sees the host's /dev read-only to find USB devices. It uses the
+# host's network so it can announce the host over mDNS. Its API has no port:
+# it listens on a Unix socket in the manager-socket volume, which only the
+# manager and the core mount. Clients only talk to the core, on port 4100. The
+# services the manager runs for apps, such as the MQTT broker, have no port
+# either: they are on the `sanctum` network only.
+#
+# Updates replace the manager's image but keep this container definition, so
+# a change to it here reaches a host only through `docker compose up -d`.
+name: sanctum
+
+services:
+  manager:
+    image: ${SANCTUM_MANAGER_IMAGE:-ghcr.io/${SANCTUM_IMAGE_OWNER:-meetsanctum}/sanctum-manager:${SANCTUM_CHANNEL:-stable}}
+    # The manager finds its own container by this name to update itself.
+    container_name: sanctum-manager
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      SANCTUM_CHANNEL: ${SANCTUM_CHANNEL:-stable}
+      SANCTUM_IMAGE_OWNER: ${SANCTUM_IMAGE_OWNER:-meetsanctum}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - manager-data:/data
+      # The core's data, which the manager backs up before every update.
+      - core-data:/core-data
+      - manager-socket:/run/sanctum
+      # The host's devices, read-only, so the manager finds a Zigbee
+      # coordinator to hand to Zigbee2MQTT.
+      - /dev:/host/dev:ro
+    healthcheck:
+      # Through the socket, like every call to the manager.
+      test: ["CMD", "node", "dist/cli.js", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # The dev channel's registry. It listens on the host's loopback only; the
+  # Mac pushes to it through an SSH tunnel.
+  registry:
+    profiles: [dev]
+    image: registry:3.0.0
+    container_name: sanctum-registry
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      REGISTRY_LOG_LEVEL: info
+      OTEL_TRACES_EXPORTER: none
+      # Lets Settings → Status' Free up space remove old builds.
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  manager-data:
+    name: sanctum-manager-data
+  core-data:
+    # The manager mounts this into the core's container it creates.
+    name: sanctum-core-data
+    labels:
+      sanctum.managed: "true"
+  manager-socket:
+    # Holds the manager's socket; the manager mounts it into the core too.
+    name: sanctum-manager-socket
+    labels:
+      sanctum.managed: "true"
+  registry-data:
+    name: sanctum-registry-data

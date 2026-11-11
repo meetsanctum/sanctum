@@ -1,0 +1,1 @@
+ALTER TABLE `device_capabilities` ADD `changed_at` integer;

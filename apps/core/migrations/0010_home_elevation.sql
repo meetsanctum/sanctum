@@ -1,0 +1,1 @@
+ALTER TABLE `home` ADD `elevation` real;

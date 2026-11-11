@@ -1,0 +1,718 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./shell-frame.css";
+
+/* The UIs the shell hosts bring Tailwind classes of their own: ui-sdk's
+   components and the bundled apps' pages (src/apps.tsx). */
+@source "../../../packages/ui-sdk/src";
+@source "../../../catalog/apps/*/src/ui/**/*.{ts,tsx}";
+
+/* shadcn's dark variant is the Evening mode. */
+@custom-variant dark (&:where([data-mode="evening"], [data-mode="evening"] *));
+
+/* The brand's tokens. */
+:root {
+  /* The two backgrounds; each is the ink of the other. */
+  --carbon: #222326;
+  --white: #ffffff;
+  /* Greys: Silver and Pewter on Carbon, Steel on White. */
+  --silver: #c5c7ca;
+  --pewter: #a3a6ab;
+  --steel: #5c5e62;
+  --hairline-on-white: #e3e4e6;
+  --hairline-on-carbon: rgb(255 255 255 / 14%);
+  /* The action colour, only for what you can press. */
+  --electric-blue: #3e6ae1;
+  --light-blue: #7a97ee;
+  /* App colours: the fill, then the text shades on Carbon and on White. */
+  --ember: #ff9500;
+  --ember-on-carbon: #ff9f0a;
+  --ember-on-white: #c93400;
+  --sun: #ffcc00;
+  --sun-on-carbon: #ffd60a;
+  --sun-on-white: #b25000;
+  --ruby: #ff3b30;
+  --ruby-on-carbon: #ff453a;
+  --ruby-on-white: #d70015;
+  --leaf: #34c759;
+  --leaf-on-carbon: #30d158;
+  --leaf-on-white: #1f8039;
+  --sky: #32ade6;
+  --sky-on-carbon: #64d2ff;
+  --sky-on-white: #0071a4;
+  --blossom: #ff2d55;
+  --blossom-on-carbon: #ff4d6a;
+  --blossom-on-white: #d30f45;
+  --iris: #af52de;
+  --iris-on-carbon: #c468f5;
+  --iris-on-white: #8944ab;
+  --graphite: #8e8e93;
+  --graphite-on-carbon: #98989d;
+  --graphite-on-white: #6c6c70;
+  /* Corners: one radius for cards, scaled down for buttons, fields, menus
+     and swatches (--radius-xs to --radius-4xl in the theme below). */
+  --radius: 15px;
+  /* The dashboard's grid: square cells that keep their size, as many across
+     as fit, with 12 px between them. A tile spans whole cells. */
+  --cell: 64px;
+  --cell-gap: 12px;
+
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* The two modes. Day is the default and Evening is set with
+   data-mode="evening" on any element. */
+:root,
+[data-mode="day"] {
+  color-scheme: light;
+  --background: var(--white);
+  /* A card on an app's page: the ink at 5% over the background. */
+  --card: #f4f4f4;
+  --ink: var(--carbon);
+  --secondary: var(--steel);
+  --hairline: var(--hairline-on-white);
+  --action: var(--electric-blue);
+  --ember-text: var(--ember-on-white);
+  --sun-text: var(--sun-on-white);
+  --ruby-text: var(--ruby-on-white);
+  --leaf-text: var(--leaf-on-white);
+  --sky-text: var(--sky-on-white);
+  --blossom-text: var(--blossom-on-white);
+  --iris-text: var(--iris-on-white);
+  --graphite-text: var(--graphite-on-white);
+}
+
+[data-mode="evening"] {
+  color-scheme: dark;
+  --background: var(--carbon);
+  --card: #2d2e31;
+  --ink: var(--white);
+  --secondary: var(--silver);
+  --hairline: var(--hairline-on-carbon);
+  --action: var(--light-blue);
+  --ember-text: var(--ember-on-carbon);
+  --sun-text: var(--sun-on-carbon);
+  --ruby-text: var(--ruby-on-carbon);
+  --leaf-text: var(--leaf-on-carbon);
+  --sky-text: var(--sky-on-carbon);
+  --blossom-text: var(--blossom-on-carbon);
+  --iris-text: var(--iris-on-carbon);
+  --graphite-text: var(--graphite-on-carbon);
+}
+
+:root,
+[data-mode] {
+  /* Destructive actions and problems take Apple's red, as in its own apps. */
+  --danger: var(--ruby-text);
+  color: var(--ink);
+}
+
+/* Only the page paints the mode's background; a part of it in another
+   mode, such as the sidebar's frosted glass in Evening over a page in Day,
+   keeps its own. */
+:root {
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* The signed-in screen. Each dashboard has its own background, a preset the
+   core names (src/dashboards.ts); the first is mocha, from a warm greige at
+   the top left through mocha to espresso at the bottom right, dark enough
+   everywhere for White text on a tile. It runs as it is, unshaded, under the
+   top bar and the page alike. Deepened, it is the frame around a place, and
+   as glass the floating sidebar over one. */
+:root {
+  --dashboard-mocha: linear-gradient(
+    to bottom right,
+    #7a6656 0%,
+    #5e4a3c 30%,
+    #47362b 62%,
+    #2c221d 100%
+  );
+  --dashboard-mocha-deep: linear-gradient(
+    to bottom right,
+    #4d4036 0%,
+    #3b2f26 30%,
+    #2e241d 62%,
+    #1e1814 100%
+  );
+  --dashboard-mocha-glass: linear-gradient(
+    to bottom right,
+    rgb(77 64 54 / 74%) 0%,
+    rgb(59 47 38 / 74%) 30%,
+    rgb(46 36 29 / 74%) 62%,
+    rgb(30 24 20 / 74%) 100%
+  );
+}
+
+/* What floats over a dashboard's background is frosted glass: widgets in
+   Carbon, tiles in White. An app's page has its own background, so there the
+   same parts take its card's fill and ink, except in a slice of Home, as an
+   app's settings page previews what it adds on Home's background. */
+:root,
+.home-slice {
+  --glass: rgb(34 35 38 / 60%);
+  --glass-ink: var(--white);
+  --glass-secondary: rgb(255 255 255 / 65%);
+  --glass-line: rgb(255 255 255 / 8%);
+  --tile: rgb(255 255 255 / 14%);
+  --tile-ink: var(--white);
+  --tile-secondary: rgb(255 255 255 / 65%);
+  --tile-chip: rgb(255 255 255 / 12%);
+  /* A switch that is on, and a mood that is showing. */
+  --tile-on: var(--white);
+  --tile-on-ink: var(--carbon);
+}
+
+.app-page {
+  --glass: var(--card);
+  --glass-ink: var(--ink);
+  --glass-secondary: var(--secondary);
+  --glass-line: transparent;
+  --tile: var(--card);
+  --tile-ink: var(--ink);
+  --tile-secondary: var(--secondary);
+  --tile-chip: color-mix(in srgb, var(--ink) 8%, transparent);
+  --tile-on: var(--ink);
+  --tile-on-ink: var(--background);
+}
+
+/* Solid there, they blur nothing: live backdrop-filter is only for the
+   dashboard's frosted glass. */
+.app-page [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* At the top of the page, inside its panel. Its buttons are centred 30 px
+   into the panel, clear of its top edge, rather than on the traffic
+   lights' row above them, and the sidebar's toggle starts it, 15 px in,
+   so its icon lines up with the page's 24 px edge. On a phone, with no
+   frame, it keeps clear of the screen's edges. */
+.top-bar {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 60px;
+  padding: 8px 24px 8px 15px;
+}
+
+@media (width < 40rem) {
+  .top-bar {
+    height: calc(64px + env(safe-area-inset-top));
+    padding: calc(12px + env(safe-area-inset-top))
+      calc(24px + env(safe-area-inset-right)) 8px
+      calc(15px + env(safe-area-inset-left));
+  }
+}
+
+/* On macOS the top bar moves the window, between its buttons, and so do the
+   sidebar's top row, the strip above the page and an overlay's header
+   (src/overlay.tsx). */
+[data-platform="macos"]
+  :is(.top-bar, .overlay-header, .sidebar-top, .frame-top) {
+  -webkit-app-region: drag;
+}
+
+[data-platform="macos"]
+  :is(.top-bar, .overlay-header, .sidebar-top)
+  :is(button, a, input) {
+  -webkit-app-region: no-drag;
+}
+
+/* The page lines up with the top bar's buttons, 24 px in. Its edge is
+   their bottom edge, 24 px above its first row, where what scrolls up
+   fades out (.top-fade). */
+.panel {
+  timeline-scope: --page;
+  --page-top: 52px;
+}
+
+@media (width < 40rem) {
+  .panel {
+    --page-top: calc(56px + env(safe-area-inset-top));
+  }
+}
+
+.page {
+  position: absolute;
+  top: var(--page-top);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 24px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  scrollbar-width: none;
+  scroll-timeline: --page block;
+}
+
+@media (width < 40rem) {
+  .page {
+    padding: 24px calc(24px + env(safe-area-inset-right))
+      calc(24px + env(safe-area-inset-bottom))
+      calc(24px + env(safe-area-inset-left));
+  }
+}
+
+/* What scrolls under the top bar fades out over 40 px, as a device's pages
+   do at the sides: a band of the screen's own background, solid at the
+   page's edge and clear 40 px below, comes in over the first 24 px of
+   scrolling, so at rest it covers nothing. A mask on the page would leave
+   the tiles' frosted glass nothing to blur. Opacity only, and where the
+   scroll cannot drive it, a 24 px band stays, above the first row. */
+.top-fade {
+  position: absolute;
+  inset: 0;
+  /* Match the screen's background bounds, then reveal just the band.
+     background-attachment: fixed cannot align it reliably on iOS. */
+  background: inherit;
+  mask-image: linear-gradient(to bottom, black, transparent);
+  mask-size: 100% 40px;
+  mask-position: 0 var(--page-top);
+  mask-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0;
+  animation-name: top-fade-in;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: --page;
+  animation-range: 0 24px;
+}
+
+@keyframes top-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* The band follows the page from beside it, so it needs timeline-scope as
+   well, which came a version after scroll timelines in Chromium. */
+@supports not ((animation-timeline: scroll()) and (timeline-scope: --page)) {
+  .top-fade {
+    mask-size: 100% 24px;
+    opacity: 1;
+  }
+}
+
+/* A veil (src/veil.tsx) fades in only once the screen has been held for a
+   moment, so a blip passes unnoticed. Opacity only. */
+.veil {
+  animation: veil-in 300ms ease-out 700ms both;
+}
+
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The knot loader (src/knot-loader.tsx), one turn every 4.8 s. The line draws
+   in 48%, holds for 4%, then pulls out the same way in 48%. It rests only on
+   the whole knot: its two curves mirror each other, easing to a stop there and
+   at full speed where it vanishes and grows again, so nothing waits while
+   there is no knot. It is 32 + 9π ≈ 60.27 units long: 28.21 in the upright path
+   and 32.07 in the lying one, whose dash runs from -28.2 to 32.1 in the
+   upright's coordinates. So one offset drives both, and the speed cannot kink
+   where they meet. The line vanishes at (10.5, 5) heading right, which is its
+   start (5, 3.5) turned a quarter clockwise, and the knot looks the same turned
+   90°. So each turn is the last one turned a quarter, and the line grows from
+   the point where it vanished. The drawing turns at the instant the line has
+   no length.
+   Drawing a stroke is the one animation of something other than transform
+   and opacity; where motion is reduced the whole knot breathes, opacity
+   only. */
+.knot-loader path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.knot-loader .knot-cut {
+  stroke: black;
+  stroke-width: 4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knot-loader g {
+    transform-origin: center;
+    animation: knot-turns 19.2s step-end infinite;
+  }
+
+  .knot-loader path {
+    stroke-dashoffset: 60.3;
+    animation: knot-line 4.8s infinite;
+  }
+
+  .knot-loader .knot-upright {
+    stroke-dasharray: 60.3 130;
+  }
+
+  .knot-loader .knot-lying {
+    stroke-dasharray: 32.1 61 28.2 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knot-loader {
+    animation: knot-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes knot-line {
+  0% {
+    stroke-dashoffset: 60.3;
+    animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1);
+  }
+  48% {
+    stroke-dashoffset: 0;
+  }
+  52% {
+    stroke-dashoffset: 0;
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33);
+  }
+  100% {
+    stroke-dashoffset: -60.3;
+  }
+}
+
+@keyframes knot-turns {
+  25% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  75% {
+    transform: rotate(270deg);
+  }
+}
+
+@keyframes knot-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Cards share the colour behind them, set apart by a hairline. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row-main strong {
+  font-weight: 500;
+}
+
+.row-detail {
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.row-action {
+  color: var(--action);
+  font-weight: 500;
+}
+
+/* The logo at the top, and the sheet in the middle of the screen as long as
+   there is room for both. The screen scrolls itself: at a fixed height the
+   empty row under a tall sheet shrinks away, where at a minimum height it
+   would keep the logo's height. */
+.sheet-screen {
+  position: relative;
+  isolation: isolate;
+  height: 100vh;
+  overflow-y: auto;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  padding: max(40px, env(safe-area-inset-top)) 24px 40px;
+}
+
+.sheet-logo {
+  align-self: start;
+  margin-bottom: 32px;
+  color: var(--white);
+}
+
+/* The screens before the dashboard show their sheet over a moody landscape
+   (src/backdrop.ts), blurred and darkened ahead of time, so it needs no live
+   blur, and it stays put while a tall sheet scrolls. Its average colour
+   stands in until it has loaded. */
+.sheet-screen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--backdrop) center / cover no-repeat var(--backdrop-colour);
+}
+
+/* The logo sets the name in lower case, the knot 1.27 times the cap height
+   and centred on the word (assets/brand/README.md). The knot is 28 px, two
+   pixels to each unit of its grid, so its bands and gaps land on whole
+   pixels; the name is 30 px to keep the proportion. */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.32em;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+
+.logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* On the backdrop the sheet is frosted Carbon glass, as what floats over a
+   dashboard is, and the screen is in Evening (src/components.tsx). The photo
+   is blurred already, so the glass needs no live blur of its own. */
+.sheet {
+  width: min(420px, 100%);
+  gap: 18px;
+  padding: 28px;
+  border: none;
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+}
+
+/* Fields on the glass are filled with the ink at 8%, as the theme's
+   secondary surfaces are, so they read as part of it, not holes in it. */
+.sheet .field input {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.sheet-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* Where there is room, the title and what the sheet explains sit beside what
+   it asks for, so the tallest sheet fits a laptop's window without
+   scrolling. */
+@media (min-width: 820px) {
+  .sheet {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 48px;
+    width: 760px;
+    padding: 36px;
+  }
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+}
+
+.sheet .back {
+  margin-bottom: -4px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.field-label {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--secondary);
+}
+
+.field input {
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--ink);
+  font: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid var(--action);
+  outline-offset: -1px;
+}
+
+.field-hint {
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+.swatches {
+  display: flex;
+  gap: 10px;
+}
+
+.swatch {
+  position: relative;
+  cursor: pointer;
+}
+
+.swatch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.swatch > span:not(.visually-hidden) {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.swatch input:checked + span {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--action);
+}
+
+.swatch input:focus-visible + span {
+  outline: 2px solid var(--action);
+  outline-offset: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
+  margin: 0;
+  color: var(--secondary);
+  line-height: 1.45;
+}
+
+.notice,
+.problem {
+  margin: 0;
+  line-height: 1.4;
+  font-size: 15px;
+}
+
+.notice {
+  color: var(--secondary);
+}
+
+.problem {
+  color: var(--danger);
+}
+
+.empty p {
+  margin: 0 0 8px;
+}
+
+/* shadcn's theme (src/components/ui and packages/ui-sdk) on the brand tokens: its surfaces take
+   the mode's background and ink, its primary is Electric blue, its lines are
+   the hairline and its corners scale from --radius. */
+@theme inline {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--ink);
+  --color-card: var(--card);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--background);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--electric-blue);
+  --color-primary-foreground: var(--white);
+  --color-secondary: color-mix(in srgb, var(--ink) 8%, transparent);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: color-mix(in srgb, var(--ink) 8%, transparent);
+  --color-muted-foreground: var(--secondary);
+  --color-accent: color-mix(in srgb, var(--ink) 8%, transparent);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  /* The app colours by their plain names, in the mode's text shade, for
+     marks that aren't an app's icon or title, such as Status' bars and its
+     green check: bg-pink, text-green. */
+  --color-orange: var(--ember-text);
+  --color-yellow: var(--sun-text);
+  --color-red: var(--ruby-text);
+  --color-green: var(--leaf-text);
+  --color-cyan: var(--sky-text);
+  --color-pink: var(--blossom-text);
+  --color-purple: var(--iris-text);
+  --color-gray: var(--graphite-text);
+  --color-border: var(--hairline);
+  --color-input: var(--hairline);
+  --color-ring: var(--action);
+  --radius-xs: calc(var(--radius) * 0.4);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
