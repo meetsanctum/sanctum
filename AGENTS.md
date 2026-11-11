@@ -58,7 +58,7 @@ This repository is public. It describes what is built, in the present tense:
 - Code, comments, tests, fixtures, commit messages and pull request
   descriptions describe what exists. Example apps in tests are
   `sanctum.example`.
-- The copyright holder is "the Sanctum authors"; files name no person.
+- Copyright lines read "Copyright © 2026 Sanctum"; files name no person.
 
 ## Licences
 

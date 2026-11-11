@@ -99,7 +99,7 @@ await builder.build({
   config: {
     appId,
     productName,
-    copyright: "Copyright © 2026 the Sanctum authors",
+    copyright: "Copyright © 2026 Sanctum",
     buildVersion: buildNumber,
     electronVersion,
     electronLanguages: ["en"],

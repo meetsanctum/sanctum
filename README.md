@@ -2,7 +2,7 @@
   <img src="assets/brand/readme-hero.jpg" alt="Sanctum" width="100%">
 </p>
 
-<h3 align="center">Home automation that stays at home.</h3>
+<h3>Home automation that stays at home.</h3>
 
 Sanctum runs your home's lights, sensors and automations on a small computer
 in your home, such as a Raspberry Pi. It works without the internet and needs
@@ -77,7 +77,7 @@ host and build the Mac app.
 
 ## Licences
 
-Copyright © 2026 the Sanctum authors. Sanctum's code is open source under two
+Copyright © 2026 Sanctum. Sanctum's code is open source under two
 licences:
 
 - **The product** is under the
