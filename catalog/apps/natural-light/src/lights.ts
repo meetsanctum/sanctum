@@ -81,8 +81,7 @@ export type FollowOptions = Timing & {
 };
 
 /**
- * The options for one call, with the curve as its settings stand now: a
- * change reaches the lights at the next check, or the next action.
+ * The options for one call, with the curve as its settings stand now.
  */
 export async function followOptionsFor(
   ctx: AppContext,
@@ -206,7 +205,8 @@ export function commandFor(
   if (showsLook(state, look)) {
     return null;
   }
-  if (!force && capability.sync === "pending") {
+  // A new curve replaces the pending look; a periodic check waits for it.
+  if (!force && !options.isDueNow && capability.sync === "pending") {
     return null;
   }
   const every = state.on ? options.activeMs : options.offMs;
@@ -395,11 +395,12 @@ export async function forget(
 // Each light that follows the curve, read again once its turn comes, since a
 // caller may have paused, resumed or stopped following it while the preceding
 // light was being set. One that is gone from the home, or no longer a light,
-// stops following; one that can't be read or fails waits for the next time.
+// stops following. A check skips failures; startup must publish every target
+// so an update's commit does not remove one whose publication failed.
 async function eachFollowed(
   ctx: AppContext,
   runForLight: RunForLight,
-  what: string,
+  what: "follow" | "publish",
   work: (light: Light, row: Followed) => Promise<unknown>,
 ) {
   const rows = await ctx.storage.db.select().from(followedLights);
@@ -415,12 +416,14 @@ async function eachFollowed(
           await forget(ctx, row.deviceId, row.capabilityId);
           return;
         }
+        if (what === "publish") throw error;
         ctx.log(`could not read ${row.deviceId} (${describe(error)})`);
         return;
       }
       try {
         await work(light, current);
       } catch (error) {
+        if (what === "publish") throw error;
         ctx.log(`could not ${what} ${light.device.name} (${describe(error)})`);
       }
     });

@@ -649,6 +649,28 @@ describe("natural light", () => {
     await app.stop!(core.ctx, { reason: "shutdown" });
   });
 
+  it.each(["read", "publish"] as const)(
+    "fails its start when it cannot %s a followed light's target",
+    async (operation) => {
+      const { app, core, call, sentFrom } = running();
+      core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+      await call("naturalLight.follow", { ...lamp, follow: true });
+      const failure = new Error("The core call failed");
+      if (operation === "read") {
+        vi.spyOn(core.ctx.devices, "state").mockRejectedValue(failure);
+      } else {
+        vi.spyOn(core.ctx.entities, "publish").mockRejectedValue(failure);
+      }
+
+      await expect(app.start!(core.ctx, { reason: "started" })).rejects.toThrow(
+        failure,
+      );
+
+      expect(sentFrom(1)).toEqual([]);
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    },
+  );
+
   it("declares what it brings and the lights it controls", () => {
     const manifest = toStaticManifest(defineApp(createNaturalLightApp()));
 
