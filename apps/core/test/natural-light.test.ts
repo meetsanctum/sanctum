@@ -203,10 +203,10 @@ describe("natural light on the core's lights", () => {
         .toMatchObject({ on: state !== "off", colorTemperature: 370 });
       expect(before.state.colorTemperature).not.toBe(370);
       expect(radio.received).toHaveLength(sent + 1);
-      expect(await targetOf(core, maya.token)).toMatchObject({
-        status: "following",
-        colorTemperature: 370,
-      });
+      // Its target follows the command, once the light's row is written.
+      await expect
+        .poll(() => targetOf(core, maya.token))
+        .toMatchObject({ status: "following", colorTemperature: 370 });
     },
   );
 });
