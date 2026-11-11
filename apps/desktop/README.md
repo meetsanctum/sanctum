@@ -53,7 +53,7 @@ a hint like an announcement: the page checks the host's certificate before it
 sends anything.
 
 ```sh
-SANCTUM_DEV_HOST_URL=https://192.168.3.222:4100 pnpm --filter @meetsanctum/desktop start
+SANCTUM_DEV_HOST_URL=https://192.168.7.222:4100 pnpm --filter @meetsanctum/desktop start
 ```
 
 An unpackaged app also talks plain HTTP to a core under `pnpm dev`

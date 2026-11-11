@@ -56,12 +56,12 @@ async function pi(files: Record<string, string> = {}) {
 const interfaces = () => ({
   wlan0: [
     {
-      address: "192.168.3.222",
+      address: "192.168.7.222",
       netmask: "255.255.255.0",
       family: "IPv4" as const,
-      mac: "dc:a6:32:cd:21:ec",
+      mac: "dc:a6:32:01:02:03",
       internal: false,
-      cidr: "192.168.3.222/24",
+      cidr: "192.168.7.222/24",
     },
   ],
 });
@@ -201,7 +201,7 @@ describe("the host's status", () => {
       network: {
         interface: "wlan0",
         kind: "wifi",
-        address: "192.168.3.222",
+        address: "192.168.7.222",
         signalDbm: -37,
         speedMbps: null,
       },

@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export const zbt2 =
-  "/dev/serial/by-id/usb-Nabu_Casa_ZBT-2_9C139EACAFF0-if00-port0";
+  "/dev/serial/by-id/usb-Nabu_Casa_ZBT-2_0123456789AB-if00-port0";
 export const conbee =
-  "/dev/serial/by-id/usb-dresden_elektronik_ingenieurtechnik_GmbH_ConBee_II_DE2676574-if00";
+  "/dev/serial/by-id/usb-dresden_elektronik_ingenieurtechnik_GmbH_ConBee_II_DE1234567-if00";
 
 // A host's /dev, as the manager sees it at /host/dev: ttys, and udev's
 // relative links to them under serial/by-id.

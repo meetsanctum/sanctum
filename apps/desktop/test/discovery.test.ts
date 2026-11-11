@@ -112,7 +112,7 @@ describe("a development host", () => {
     );
 
     const stop = watchDevHost(
-      "https://192.168.3.222:4100/anything",
+      "https://192.168.7.222:4100/anything",
       (host) => hosts.push(host),
       fetchStatus,
     );
@@ -122,14 +122,14 @@ describe("a development host", () => {
         {
           id,
           homeId,
-          name: "192.168.3.222",
+          name: "192.168.7.222",
           claimed: true,
-          url: "https://192.168.3.222:4100",
+          url: "https://192.168.7.222:4100",
         },
       ]),
     );
     expect(String(fetchStatus.mock.calls[0]![0])).toBe(
-      "https://192.168.3.222:4100/api/auth/status",
+      "https://192.168.7.222:4100/api/auth/status",
     );
     stop();
   });
@@ -138,7 +138,7 @@ describe("a development host", () => {
     const hosts: unknown[] = [];
 
     const stop = watchDevHost(
-      "https://192.168.3.222:4100",
+      "https://192.168.7.222:4100",
       (host) => hosts.push(host),
       async () => Response.json({ hello: "world" }),
     );

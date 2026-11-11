@@ -303,7 +303,7 @@ describe("the Status page", () => {
     expect(facts("status-network")).toEqual([
       ["Connection", "Wi-Fi · signal excellent"],
       ["Name on the network", "sanctum-dev.local"],
-      ["IP address", "192.168.3.222"],
+      ["IP address", "192.168.7.222"],
       ["Clock", "Synchronised"],
     ]);
   });

@@ -17,7 +17,7 @@ const host: FoundHost = {
   homeId: "0d5c1f0a-7a43-4b6e-8f0e-2f6a0c9b1e55",
   name: "Maya's home",
   claimed: true,
-  url: "http://192.168.3.222:4100",
+  url: "http://192.168.7.222:4100",
 };
 
 let root: Root;
@@ -141,7 +141,7 @@ describe("a shared device's pairing screen", () => {
     await act(async () => {
       root.render(
         <PairDevice
-          host={{ ...host, url: "https://192.168.3.222:4100" }}
+          host={{ ...host, url: "https://192.168.7.222:4100" }}
           onBack={() => {}}
           onPaired={onPaired}
         />,

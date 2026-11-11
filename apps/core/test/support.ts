@@ -101,7 +101,7 @@ export function piStatus(): HostStatus {
     network: {
       interface: "wlan0",
       kind: "wifi",
-      address: "192.168.3.222",
+      address: "192.168.7.222",
       signalDbm: -37,
       speedMbps: null,
     },

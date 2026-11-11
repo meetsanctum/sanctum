@@ -47,8 +47,8 @@ describe("the device list", () => {
     // v1's office button, as Zigbee2MQTT listed it.
     const [entry] = deviceEntries([
       zigbeeDevice(
-        "0x00158d0006d3f8da",
-        "0x00158d0006d3f8da",
+        "0x00158d0003c4d5e6",
+        "0x00158d0003c4d5e6",
         [
           actionExpose([
             "single",
@@ -86,7 +86,7 @@ describe("the device list", () => {
     expect(entry).toMatchObject({
       battery: true,
       registration: {
-        key: "0x00158d0006d3f8da",
+        key: "0x00158d0003c4d5e6",
         name: "Wireless mini switch",
         manufacturer: "Aqara",
         model: "WXKG11LM",
