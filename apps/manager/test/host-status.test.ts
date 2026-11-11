@@ -33,7 +33,7 @@ async function pi(files: Record<string, string> = {}) {
     "proc/uptime": "421763.72 1659782.30\n",
     "proc/stat": stat(100, 900),
     "proc/net/route":
-      "Iface\tDestination\tGateway \tFlags\nwlan0\t0003A8C0\t00000000\t0001\nwlan0\t00000000\t0103A8C0\t0003\n",
+      "Iface\tDestination\tGateway \tFlags\nwlan0\t0007A8C0\t00000000\t0001\nwlan0\t00000000\t0107A8C0\t0003\n",
     "proc/net/wireless":
       "Inter-| sta-|   Quality        |   Discarded packets\n face | tus | link level noise |  nwid  crypt\n wlan0: 0000   70.  -37.  -256        0      0\n",
     "sys/class/thermal/thermal_zone0/temp": "57452\n",
