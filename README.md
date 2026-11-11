@@ -10,6 +10,8 @@ no cloud account: your devices, automations and data stay at home, under your
 control. Everyone in the household sees and does the same, from the Mac app
 on their own Mac or on one the whole household shares.
 
+![The Sanctum Mac app in dark mode: the Home dashboard with each room's moods and lights](assets/brand/readme-home.jpg)
+
 ## What it does today
 
 **Lights and moods**
@@ -22,6 +24,8 @@ on their own Mac or on one the whole household shares.
 - Natural light: lights that follow the sun's colour and brightness through
   the day, and step aside when someone sets them by hand.
 - A room's lights come back the way they were when it turns on again.
+
+![A light's page in the Sanctum Mac app, with its colours around the current one](assets/brand/readme-light.jpg)
 
 **Devices**
 

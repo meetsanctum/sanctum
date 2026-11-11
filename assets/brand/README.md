@@ -14,26 +14,28 @@ lower case: "sanctum". In running text the name stays "Sanctum".
 
 ## Files
 
-| File                              | Size        | Use                                                           |
-| --------------------------------- | ----------- | ------------------------------------------------------------- |
-| `sanctum-logo.svg`                | 512 × 92    | Horizontal lockup.                                            |
-| `sanctum-logo-white.svg`          | 512 × 92    | Horizontal lockup in White.                                   |
-| `sanctum-logo-stacked.svg`        | 388 × 347   | Stacked lockup with the line "Home OS".                       |
-| `sanctum-logo-stacked-white.svg`  | 388 × 347   | Stacked lockup in White.                                      |
-| `sanctum-mark.svg`                | 14 × 14     | The knot alone, on its grid; drawn 280 px by default.         |
-| `sanctum-mark-white.svg`          | 14 × 14     | The knot alone in White.                                      |
-| `sanctum-favicon.svg`             | 16 × 16     | Favicon: the knot at 14 px, in White where it is dark.        |
-| `sanctum-logo-carbon.png`         | 1339 × 248  | Horizontal lockup in Carbon, for White.                       |
-| `sanctum-logo-white.png`          | 1339 × 248  | Horizontal lockup in White, for Carbon.                       |
-| `sanctum-logo-stacked-carbon.png` | 723 × 648   | Stacked lockup in Carbon.                                     |
-| `sanctum-logo-stacked-white.png`  | 723 × 648   | Stacked lockup in White.                                      |
-| `sanctum-mark.png`                | 1024 × 1024 | The knot in Carbon, 812 px across in a square canvas.         |
-| `sanctum-mark-white.png`          | 1024 × 1024 | The knot in White, 812 px across in a square canvas.          |
-| `sanctum-app-icon.png`            | 1024 × 1024 | App icon: the White knot on Carbon as on any tile.            |
-| `sanctum-macos-icon.svg`          | 1024 × 1024 | The macOS app icon: the knot on a Carbon squircle.            |
-| `sanctum-macos-icon.icns`         | 64 to 1024  | The desktop app's icon, drawn like the SVG.                   |
-| `photos/living-room-dusk.jpg`     | 1254 × 1254 | The website's backdrop, generated for the brand guide.        |
-| `readme-hero.jpg`                 | 2000 × 700  | The README's hero: the logo over that photo, lightly blurred. |
+| File                              | Size        | Use                                                                   |
+| --------------------------------- | ----------- | --------------------------------------------------------------------- |
+| `sanctum-logo.svg`                | 512 × 92    | Horizontal lockup.                                                    |
+| `sanctum-logo-white.svg`          | 512 × 92    | Horizontal lockup in White.                                           |
+| `sanctum-logo-stacked.svg`        | 388 × 347   | Stacked lockup with the line "Home OS".                               |
+| `sanctum-logo-stacked-white.svg`  | 388 × 347   | Stacked lockup in White.                                              |
+| `sanctum-mark.svg`                | 14 × 14     | The knot alone, on its grid; drawn 280 px by default.                 |
+| `sanctum-mark-white.svg`          | 14 × 14     | The knot alone in White.                                              |
+| `sanctum-favicon.svg`             | 16 × 16     | Favicon: the knot at 14 px, in White where it is dark.                |
+| `sanctum-logo-carbon.png`         | 1339 × 248  | Horizontal lockup in Carbon, for White.                               |
+| `sanctum-logo-white.png`          | 1339 × 248  | Horizontal lockup in White, for Carbon.                               |
+| `sanctum-logo-stacked-carbon.png` | 723 × 648   | Stacked lockup in Carbon.                                             |
+| `sanctum-logo-stacked-white.png`  | 723 × 648   | Stacked lockup in White.                                              |
+| `sanctum-mark.png`                | 1024 × 1024 | The knot in Carbon, 812 px across in a square canvas.                 |
+| `sanctum-mark-white.png`          | 1024 × 1024 | The knot in White, 812 px across in a square canvas.                  |
+| `sanctum-app-icon.png`            | 1024 × 1024 | App icon: the White knot on Carbon as on any tile.                    |
+| `sanctum-macos-icon.svg`          | 1024 × 1024 | The macOS app icon: the knot on a Carbon squircle.                    |
+| `sanctum-macos-icon.icns`         | 64 to 1024  | The desktop app's icon, drawn like the SVG.                           |
+| `photos/living-room-dusk.jpg`     | 1254 × 1254 | The website's backdrop, generated for the brand guide.                |
+| `readme-hero.jpg`                 | 2000 × 700  | The README's hero: the logo over that photo, lightly blurred.         |
+| `readme-home.jpg`                 | 2000 × 1305 | The README's product shot: the Mac app's Home dashboard in dark mode. |
+| `readme-light.jpg`                | 2000 × 1305 | The README's second shot: a light's colours in the Mac app.           |
 
 The PNGs have transparent backgrounds except the app icon, which fills its
 square so each platform can apply its own mask. On macOS, whose classic icons
