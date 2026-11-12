@@ -606,6 +606,7 @@ export function Home(props: {
                           kind={route.params.kind ?? ""}
                           devices={devices}
                           openDevice={openDevice}
+                          openRoom={(id) => opener(placePages)("room", { id })}
                           back={back}
                         />
                       )

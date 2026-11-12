@@ -210,6 +210,7 @@ function Harness(props: {
         kind={props.id}
         devices={shown}
         openDevice={openDevice}
+        openRoom={() => {}}
         back={back}
       />
       <nav>

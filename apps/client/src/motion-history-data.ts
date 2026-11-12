@@ -59,11 +59,53 @@ export function motionSentence(
     : `${total}, the last at ${timeText(last.to)}`;
 }
 
+/**
+ * A room's spans from its motion sensors' (Presence's overview): motion
+ * while any of them saw it, quiet while any was known and none saw motion,
+ * and nothing known while none was, offline while all of them were.
+ */
+export function roomSpans(
+  sensors: readonly (readonly Span[])[],
+  from: number,
+  to: number,
+): Span[] {
+  const cuts = new Set([from, to]);
+  for (const spans of sensors) {
+    for (const span of spans) {
+      if (span.from > from && span.from < to) cuts.add(span.from);
+      if (span.to > from && span.to < to) cuts.add(span.to);
+    }
+  }
+  const times = [...cuts].sort((a, b) => a - b);
+  const joined: Span[] = [];
+  for (const [index, start] of times.slice(0, -1).entries()) {
+    const here = sensors.flatMap((spans) => {
+      const found = spans.find((span) => span.from <= start && start < span.to);
+      return found ? [found] : [];
+    });
+    const known = here.some((span) => span.known);
+    joined.push({
+      from: start,
+      to: times[index + 1]!,
+      known,
+      offline:
+        !known &&
+        here.length > 0 &&
+        here.length === sensors.length &&
+        here.every((span) => span.offline),
+      on: here.some((span) => span.known && span.on),
+      brightness: null,
+      colour: "#ffffff",
+    });
+  }
+  return motionSpans(joined);
+}
+
 /** What a span is, as the band's readout and a screen reader say it. */
 export function motionSpanText(span: Span) {
   if (span.offline) return "Offline";
   if (!span.known) return "Not known";
-  return span.on ? "Motion" : "No motion";
+  return span.on ? "Motion" : "Quiet";
 }
 
 /** When a span was, such as "09:05–10:40", or to now. */

@@ -230,8 +230,8 @@ export function Part(props: {
 }
 
 // The width a chart has, in whole pixels, so its marks sit on them at 1×.
-export function useWidth() {
-  const box = useRef<HTMLDivElement>(null);
+export function useWidth<Box extends HTMLElement = HTMLDivElement>() {
+  const box = useRef<Box>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const element = box.current;

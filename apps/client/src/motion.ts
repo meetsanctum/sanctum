@@ -4,9 +4,9 @@ import type { Tile } from "@meetsanctum/ui-sdk";
 import { midnight, timeText } from "./device-history-data";
 
 // What motion sensors say, in words rather than a value: on a sensor's tile,
-// in a room's line under its name, and where in the home there is motion
-// now, for its status and the Motion category. A place has motion while any
-// of its motion sensors that answers sees it, and is quiet since the last of
+// in a room's line under its name and Presence's overview, and where in the
+// home there is motion now, for its status. A place has motion while any of
+// its motion sensors that answers sees it, and is quiet since the last of
 // them went quiet, as the core's motion pieces read it
 // (apps/core/src/devices/motion.ts). Offline sensors, and those yet to say
 // anything, are left out.
@@ -21,8 +21,9 @@ const date = new Intl.DateTimeFormat("en-GB", {
 
 /**
  * What a motion sensor, or a place, says while it answers: "Motion now",
- * or how long there has been none. A sensor that has not said when it went
- * quiet, as before the core kept the time, says only "No motion".
+ * or how long it has been quiet, short enough for a tile ("Quiet since
+ * yesterday"). A sensor that has not said when it went quiet, as before
+ * the core kept the time, says only "Quiet".
  */
 export function motionText(
   occupied: boolean,
@@ -31,13 +32,13 @@ export function motionText(
 ) {
   if (occupied) return "Motion now";
   const since = changedAt === null ? NaN : Date.parse(changedAt);
-  if (Number.isNaN(since) || now - since < minute) return "No motion";
+  if (Number.isNaN(since) || now - since < minute) return "Quiet";
   if (now - since < hour) {
-    return `No motion for ${Math.floor((now - since) / minute)} min`;
+    return `Quiet for ${Math.floor((now - since) / minute)} min`;
   }
-  if (since >= midnight(now)) return `No motion since ${timeText(since)}`;
-  if (since >= midnight(now, 1)) return "No motion since yesterday";
-  return `No motion since ${date.format(since)}`;
+  if (since >= midnight(now)) return `Quiet since ${timeText(since)}`;
+  if (since >= midnight(now, 1)) return "Quiet since yesterday";
+  return `Quiet since ${date.format(since)}`;
 }
 
 /** The motion of the motion sensors among some tiles that answer and have said something. */
@@ -97,20 +98,13 @@ export function homeMotion(
 
 /**
  * Where there is motion now, as the home's status says it: "Office",
- * "Office and Hall", "3 rooms" or "No motion". Motion from a sensor in no
+ * "Office and Hall", "3 rooms" or "Quiet". Motion from a sensor in no
  * room counts only while no room has any, as "Motion now".
  */
 export function motionWhere(motion: HomeMotion) {
   const { rooms } = motion;
-  if (rooms.length === 0) return motion.elsewhere ? "Motion now" : "No motion";
+  if (rooms.length === 0) return motion.elsewhere ? "Motion now" : "Quiet";
   if (rooms.length === 1) return rooms[0]!;
   if (rooms.length === 2) return `${rooms[0]} and ${rooms[1]}`;
   return `${rooms.length} rooms`;
-}
-
-/** The same as the Motion category says it under its name: "Motion in Office", "No motion". */
-export function motionInText(motion: HomeMotion) {
-  return motion.rooms.length > 0
-    ? `Motion in ${motionWhere(motion)}`
-    : motionWhere(motion);
 }

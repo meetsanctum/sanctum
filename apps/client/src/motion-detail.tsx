@@ -15,12 +15,12 @@ import {
 import {
   dayMs,
   daysOf,
-  midnight,
   spansOf,
   timeText,
   type Span,
 } from "./device-history-data";
 import { motionText } from "./motion";
+import { BandMarks, bandHeight, BandTicks } from "./motion-band";
 import {
   motionSentence,
   motionSpans,
@@ -40,8 +40,6 @@ import { Battery } from "./sensor-detail";
 
 type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
 
-const minute = 60_000;
-const bandHeight = 40;
 // How near a span of motion the pointer has to be to show it, in px: a
 // minute of motion is narrower than a pixel.
 const snap = 4;
@@ -170,12 +168,6 @@ function Band(props: { spans: readonly Span[]; from: number; to: number }) {
   const markAt = pointed
     ? (cursor?.x ?? (x(pointed.from) + x(pointed.to)) / 2)
     : null;
-  // Every 6 hours of the day, away from the ends.
-  const ticks: number[] = [];
-  for (let at = midnight(from); at < to; at += 6 * 60 * minute) {
-    const left = x(at);
-    if (at > from && left > 20 && left < plot - 20) ticks.push(at);
-  }
 
   return (
     <div ref={box} className="relative">
@@ -198,41 +190,7 @@ function Band(props: { spans: readonly Span[]; from: number; to: number }) {
         onBlur={() => setCursor(null)}
         onKeyDown={onKeyDown}
       >
-        <svg
-          aria-hidden="true"
-          width={plot}
-          height={bandHeight}
-          className="block overflow-visible"
-        >
-          {spans.map((span) => {
-            if (!span.known) return null;
-            const left = Math.round(x(span.from));
-            const right = Math.round(x(span.to));
-            if (!span.on) {
-              return (
-                <rect
-                  key={span.from}
-                  x={left}
-                  y={bandHeight - 1}
-                  width={Math.max(0, right - left)}
-                  height={1}
-                  className="fill-white/30"
-                />
-              );
-            }
-            const spanWidth = Math.max(2, right - left);
-            return (
-              <rect
-                key={span.from}
-                x={left}
-                y={0}
-                width={spanWidth}
-                height={bandHeight}
-                rx={Math.min(3, spanWidth / 2)}
-                className={span === pointed ? "fill-white" : "fill-white/70"}
-              />
-            );
-          })}
+        <BandMarks spans={spans} x={x} plot={plot} pointed={pointed}>
           {pointed && !pointed.on && markAt !== null && (
             <rect
               x={Math.min(plot - 1, Math.round(markAt))}
@@ -242,7 +200,7 @@ function Band(props: { spans: readonly Span[]; from: number; to: number }) {
               className="fill-white/40"
             />
           )}
-        </svg>
+        </BandMarks>
         {pointed && markAt !== null && (
           <Readout
             x={markAt}
@@ -252,21 +210,12 @@ function Band(props: { spans: readonly Span[]; from: number; to: number }) {
           />
         )}
       </div>
-      <div
-        aria-hidden="true"
-        className="relative mt-2 h-[18px]"
-        style={{ width: plot }}
-      >
-        {ticks.map((at) => (
-          <span
-            key={at}
-            style={{ left: x(at) }}
-            className="absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
-          >
-            {timeText(at)}
-          </span>
-        ))}
-      </div>
+      <BandTicks
+        from={from}
+        to={to}
+        plot={plot}
+        className="mt-2 text-(--pewter)"
+      />
       <ul className="sr-only">
         {spans.map((span) => (
           <li key={span.from}>

@@ -39,7 +39,7 @@ export const categories = [
   { kind: "light", title: "Lights" },
   { kind: "switch", title: "Switches" },
   { kind: "sensor", title: "Climate" },
-  { kind: "occupancy", title: "Motion" },
+  { kind: "occupancy", title: "Presence" },
   { kind: "button", title: "Buttons" },
 ] as const satisfies { kind: Tile["kind"]; title: string }[];
 

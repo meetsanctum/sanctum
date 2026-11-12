@@ -586,7 +586,7 @@ describe("a motion sensor's tile", () => {
       tiles.map((tile) => [tile.kind, tile.status, tile.look, tile.on]),
     ).toEqual([
       ["occupancy", "Motion now", "on", true],
-      ["occupancy", "No motion for 12 min", "off", false],
+      ["occupancy", "Quiet for 12 min", "off", false],
     ]);
     expect(tiles[1]?.motion).toEqual({ occupied: false, changedAt: ago(12) });
   });
@@ -633,7 +633,7 @@ describe("a motion sensor's tile", () => {
     expect([tile?.status, tile?.motion]).toEqual(["Not heard from", undefined]);
   });
 
-  it("comes before its readings' tile, which keeps it under Climate too, and Motion follows Climate", () => {
+  it("comes before its readings' tile, which keeps it under Climate too, and Presence follows Climate", () => {
     const tiles = tilesOf(
       [
         device("office", "Office motion sensor", "living", [
@@ -660,7 +660,7 @@ describe("a motion sensor's tile", () => {
       ]),
     ).toEqual([
       ["Climate", ["21° · 320 lx"]],
-      ["Motion", ["No motion for 3 min"]],
+      ["Presence", ["Quiet for 3 min"]],
       ["Buttons", ["Idle"]],
     ]);
   });

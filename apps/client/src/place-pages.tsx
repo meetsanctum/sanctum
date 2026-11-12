@@ -25,12 +25,8 @@ import {
   type Reading,
 } from "./device-tiles";
 import { batteriesTile } from "./maintenance";
-import {
-  homeMotion,
-  motionInText,
-  motionWhere,
-  placeMotionText,
-} from "./motion";
+import { homeMotion, motionWhere, placeMotionText } from "./motion";
+import { PresenceOverview } from "./presence-overview";
 import {
   RoomSection,
   sectionsInOrder,
@@ -47,8 +43,9 @@ import type { Devices } from "./use-devices";
 // sections by their weight, Moods first, then its devices in a section for
 // each category. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
-// light in the home, Climate with what every sensor reads, Motion with
-// where there is motion now. The sidebar lists them, and Home shows each
+// light in the home, Climate with what every sensor reads, and Presence
+// with its overview, each room's last 24 hours (presence-overview.tsx),
+// above its sensors. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).
 // They look the same on every device, shared ones too: lights, switches
 // and sensors are household things.
@@ -430,6 +427,8 @@ export function CategoryPage(props: {
   kind: string;
   devices: Devices;
   openDevice: (tile: Tile) => void;
+  /** Opens a room's page over this one, from Presence's overview. */
+  openRoom: (roomId: string) => void;
   back: () => void;
 }) {
   const { devices, back } = props;
@@ -455,7 +454,7 @@ export function CategoryPage(props: {
         <PlaceHeader
           title={category.title}
           subtitle={
-            category.kind === "button"
+            category.kind === "button" || category.kind === "occupancy"
               ? undefined
               : category.kind === "sensor"
                 ? readingsText(
@@ -463,11 +462,12 @@ export function CategoryPage(props: {
                     unitOf(devices),
                     climateMeasures,
                   ) || undefined
-                : category.kind === "occupancy"
-                  ? motionSubtitle(own, devices)
-                  : onMeta(own) || undefined
+                : onMeta(own) || undefined
           }
         />
+      )}
+      {category.kind === "occupancy" && (
+        <PresenceOverview devices={devices} openRoom={props.openRoom} />
       )}
       <Sections
         sections={sectionsByRoom(own, devices.places)}
@@ -476,12 +476,6 @@ export function CategoryPage(props: {
       />
     </>
   );
-}
-
-// Where there is motion now, while any motion sensor answers.
-function motionSubtitle(tiles: Tile[], devices: Devices) {
-  const motion = homeMotion(tiles, devices.places);
-  return motion.answering ? motionInText(motion) : undefined;
 }
 
 // The places in the sidebar, after the dashboards: the categories the home
