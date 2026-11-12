@@ -165,12 +165,12 @@ describe("buttons", () => {
   it("are pressed by one of their actions, by the driver's key", () => {
     expect(
       devicePress.parse({
-        key: "0x00158d0006d3f8da",
+        key: "0x00158d0003c4d5e6",
         capability: "button",
         action: "single",
       }),
     ).toEqual({
-      key: "0x00158d0006d3f8da",
+      key: "0x00158d0003c4d5e6",
       capability: "button",
       action: "single",
     });

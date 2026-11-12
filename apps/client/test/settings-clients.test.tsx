@@ -88,7 +88,7 @@ describe("Settings → Clients", () => {
             code: "K7QXM4PD",
             platform: "web",
             suggestedName: "Lenovo Tab",
-            address: "192.168.3.50",
+            address: "192.168.7.50",
             createdAt: "2026-10-28T11:58:00Z",
             expiresAt: "2026-10-28T12:08:00Z",
           };
@@ -158,7 +158,7 @@ describe("Settings → Clients", () => {
     await type(dialog.querySelector("input")!, "k7qx-m4pd");
     await act(async () => button("Find the device").click());
     expect(dialog.textContent).toContain("Approve K7QX-M4PD");
-    expect(dialog.textContent).toContain("asked from 192.168.3.50");
+    expect(dialog.textContent).toContain("asked from 192.168.7.50");
     const name = dialog.querySelector<HTMLInputElement>("input")!;
     expect(name.value).toBe("Lenovo Tab");
 
@@ -219,7 +219,7 @@ describe("Settings → Clients", () => {
         code: "K7QXM4PD",
         platform: "web",
         suggestedName: "Old device",
-        address: "192.168.3.50",
+        address: "192.168.7.50",
       }),
     );
 

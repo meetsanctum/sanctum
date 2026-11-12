@@ -528,7 +528,7 @@ describe("Settings → Devices", () => {
 
     const joining: JoinedDevice = {
       driver: "sanctum.zigbee",
-      key: "0x001788010ffd026d",
+      key: "0x0017880102b3c4d5",
       stage: "interviewing",
       description: null,
       deviceId: null,
@@ -613,7 +613,7 @@ describe("Settings → Devices", () => {
           joined: [
             {
               driver: "sanctum.zigbee",
-              key: "0x001788010ffd026d",
+              key: "0x0017880102b3c4d5",
               stage: "interviewing",
               description: "Hue Essential White and Color Ambiance A60",
               deviceId: "desk",

@@ -33,7 +33,7 @@ async function pi(files: Record<string, string> = {}) {
     "proc/uptime": "421763.72 1659782.30\n",
     "proc/stat": stat(100, 900),
     "proc/net/route":
-      "Iface\tDestination\tGateway \tFlags\nwlan0\t0003A8C0\t00000000\t0001\nwlan0\t00000000\t0103A8C0\t0003\n",
+      "Iface\tDestination\tGateway \tFlags\nwlan0\t0007A8C0\t00000000\t0001\nwlan0\t00000000\t0107A8C0\t0003\n",
     "proc/net/wireless":
       "Inter-| sta-|   Quality        |   Discarded packets\n face | tus | link level noise |  nwid  crypt\n wlan0: 0000   70.  -37.  -256        0      0\n",
     "sys/class/thermal/thermal_zone0/temp": "57452\n",
@@ -56,12 +56,12 @@ async function pi(files: Record<string, string> = {}) {
 const interfaces = () => ({
   wlan0: [
     {
-      address: "192.168.3.222",
+      address: "192.168.7.222",
       netmask: "255.255.255.0",
       family: "IPv4" as const,
-      mac: "dc:a6:32:cd:21:ec",
+      mac: "dc:a6:32:01:02:03",
       internal: false,
-      cidr: "192.168.3.222/24",
+      cidr: "192.168.7.222/24",
     },
   ],
 });
@@ -201,7 +201,7 @@ describe("the host's status", () => {
       network: {
         interface: "wlan0",
         kind: "wifi",
-        address: "192.168.3.222",
+        address: "192.168.7.222",
         signalDbm: -37,
         speedMbps: null,
       },

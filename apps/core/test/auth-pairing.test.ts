@@ -22,7 +22,7 @@ import {
 // code up and approves it, a shared one too.
 
 const tablet = { platform: "android", suggestedName: "Lenovo Tab" } as const;
-const tabletAddress = "192.168.3.50";
+const tabletAddress = "192.168.7.50";
 
 async function ask(core: TestCore, remoteAddress = tabletAddress) {
   const response = await post(core, "/api/auth/pair/request", tablet, {
@@ -173,7 +173,7 @@ describe("pairing a shared device", () => {
     const core = await testCore();
     const maya = await claimed(core);
     const kitchen = await ask(core);
-    const hall = await ask(core, "192.168.3.51");
+    const hall = await ask(core, "192.168.7.51");
     await approve(core, maya.token, kitchen.code, "Kitchen tablet");
 
     expect((await poll(core, hall.deviceSecret)).json()).toEqual({
@@ -329,13 +329,13 @@ describe("pairing a shared device", () => {
     expect(third.statusCode).toBe(429);
     expect(third.json()).toEqual({ error: "busy" });
 
-    await ask(core, "192.168.3.51");
+    await ask(core, "192.168.7.51");
     const fourth = await post(core, "/api/auth/pair/request", tablet, {
-      remoteAddress: "192.168.3.52",
+      remoteAddress: "192.168.7.52",
     });
     expect(fourth.statusCode).toBe(429);
     await post(core, "/api/auth/pair/request", tablet, {
-      remoteAddress: "192.168.3.52",
+      remoteAddress: "192.168.7.52",
     });
 
     // One entry for each cap reached, however often the device asks.
@@ -347,7 +347,7 @@ describe("pairing a shared device", () => {
         .all(),
     ).toEqual([
       expect.objectContaining({ outcome: "refused", address: tabletAddress }),
-      expect.objectContaining({ outcome: "refused", address: "192.168.3.52" }),
+      expect.objectContaining({ outcome: "refused", address: "192.168.7.52" }),
     ]);
 
     // Expired requests no longer count.
