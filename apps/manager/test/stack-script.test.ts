@@ -23,7 +23,7 @@ async function worktree() {
   const root = join(folder, "same-worktree-name");
   const bin = join(folder, "bin");
   const commands = join(folder, "commands.jsonl");
-  await mkdir(join(root, "deploy/dev/apps"), { recursive: true });
+  await mkdir(join(root, "apps/core/dist"), { recursive: true });
   await mkdir(bin);
   await cp(script, join(root, "deploy/dev/stack.sh"));
   await writeFile(join(root, "deploy/dev/seed.mjs"), "");
@@ -43,7 +43,7 @@ if (args[0] === "inspect") {
   if (format.includes(".HostConfig.PortBindings")) console.log("45000");
   if (format === "{{.Image}}") console.log("sha256:current");
   if (format.includes('"sanctum.stack.core-binds"')) console.log(
-    process.cwd() + "/deploy/dev/apps:/app/deploy/dev/apps:ro" +
+    process.cwd() + "/apps/core/dist:/app/apps/core/dist:ro" +
     (process.env.STACK_TEST_OLD_BIND ?? ""));
   else if (format.includes(".Config.Labels")) console.log(
     args.at(-1).endsWith("-core")
@@ -117,11 +117,11 @@ describe("development stack CLI", () => {
     ]);
   });
 
-  it("drops mounts for app packages removed from the worktree", async () => {
+  it("drops mounts for packages removed from the worktree", async () => {
     const tree = await worktree();
 
     await tree.run("up", {
-      STACK_TEST_OLD_BIND: ";/removed/app:/app/catalog/apps/removed/dist:ro",
+      STACK_TEST_OLD_BIND: ";/removed/dist:/app/packages/removed/dist:ro",
     });
 
     expect(await tree.commands()).toContainEqual([

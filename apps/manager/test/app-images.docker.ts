@@ -191,6 +191,20 @@ describe("apps' images on real Docker", () => {
       SANCTUM_STACK: stack,
       SANCTUM_STACK_PORT: String(port),
     });
+    // The stack stages and starts its own apps first, and staging drops any
+    // folder it hasn't noted, as the test's are.
+    await waitFor("the stack's own apps", async () => {
+      const running = await docker(
+        "ps",
+        "--filter",
+        `label=sanctum.stack=${stack}`,
+        "--filter",
+        "label=sanctum.app=sanctum.fake-lights",
+        "--format",
+        "{{.Names}}",
+      );
+      return running || undefined;
+    });
     await stage("test.keeper", database);
     await stage("test.blocker", database);
     await stage("test.recovery", database);
@@ -234,7 +248,10 @@ describe("apps' images on real Docker", () => {
       canReadLostFound: false,
     });
     const { body } = await api("GET", "/api/apps/images");
-    const [record] = (body as { images: Array<{ bytes: number }> }).images;
+    // Beside the images of the stack's own apps.
+    const record = (
+      body as { images: Array<{ app: string; bytes: number }> }
+    ).images.find(({ app }) => app === "test.keeper");
     expect(record).toMatchObject({
       app: "test.keeper",
       state: "ok",

@@ -150,6 +150,20 @@ describe("apps' containers on real Docker", () => {
       SANCTUM_STACK: stack,
       SANCTUM_STACK_PORT: String(port),
     });
+    // The stack stages and starts its own apps first, and staging drops any
+    // folder it hasn't noted, as the test's are.
+    await waitFor("the stack's own apps", async () => {
+      const running = await docker(
+        "ps",
+        "--filter",
+        `label=sanctum.stack=${stack}`,
+        "--filter",
+        "label=sanctum.app=sanctum.fake-lights",
+        "--format",
+        "{{.Names}}",
+      );
+      return running || undefined;
+    });
     await stage("test.reporter", reporting);
     await stage("test.other", reporting);
     await stage("test.quits", "process.exit(3);");

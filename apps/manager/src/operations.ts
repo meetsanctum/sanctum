@@ -1,12 +1,13 @@
-// Only one of these runs at a time. Each writes every step to a journal of its own
-// before taking it, and those journals say who holds the slot, whichever process
-// wrote them. So there is nothing else to keep in step: a crash can't leave the
-// slot held by something that has ended, and a manager that starts finds what it
-// was doing by reading them. Keeping services running and signing certificates stay
-// outside it.
+// Only one of these runs at a time. Updates write every step to a journal of
+// their own before taking it, and those journals say who holds the slot,
+// whichever process wrote them. A short restart holds it only until Docker
+// answers, so a crash gives it up. A manager that starts finds interrupted
+// updates by reading their journals. Keeping services running and signing
+// certificates stay outside it.
 
 export type Operation =
   | { kind: "core-update"; version: string }
+  | { kind: "core-restart" }
   | { kind: "service-image"; service: string; to: string }
   | { kind: "app-update"; app: string; to: string };
 
@@ -15,7 +16,9 @@ export class OperationConflictError extends Error {
     super(
       holder.kind === "core-update"
         ? "An update is already running"
-        : `${holder.kind === "app-update" ? holder.app : holder.service} is moving to another version`,
+        : holder.kind === "core-restart"
+          ? "A restart is already running"
+          : `${holder.kind === "app-update" ? holder.app : holder.service} is moving to another version`,
     );
   }
 }
@@ -29,7 +32,7 @@ const isSameOperation = (holder: Operation, continuing?: Operation) =>
 
 export function createOperations() {
   const journals: Holder[] = [];
-  // One that has been claimed and hasn't written its journal yet.
+  // One running its first step, or a short operation that needs no journal.
   let claiming: Operation | null = null;
 
   async function inJournals(continuing?: Operation) {

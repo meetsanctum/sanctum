@@ -28,6 +28,10 @@ pnpm dev:down     # remove this worktree's stack and its data
 ```
 
 `pnpm dev` runs a stack for each checkout or worktree, on a port of its own.
+Its apps run in containers of their own, as on a host, the fake lights too:
+the manager stages each from the worktree's build, and a new build is an
+update, so a saved change to an app runs about ten seconds later, with the
+app's data copied first.
 The client's dev server proxies `/api` to the core. To call the core
 cross-origin instead, as the desktop app does, point the client at the core
 and allow the client's origin:

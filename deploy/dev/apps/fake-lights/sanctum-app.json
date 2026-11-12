@@ -1,0 +1,40 @@
+{
+  "id": "sanctum.fake-lights",
+  "name": "Fake lights",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "summary": null,
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": null,
+  "driver": {
+    "hooks": [
+      "command"
+    ]
+  },
+  "permissions": [
+    {
+      "id": "devices.register",
+      "reason": "To bring pretend lights into a development home.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": null,
+  "pages": [],
+  "settings": null,
+  "actions": [],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

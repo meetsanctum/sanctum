@@ -2,7 +2,8 @@
 # on a host (deploy/compose.yml), Compose starts only the manager, on Docker's
 # host network, and the manager creates the core and the services. What
 # differs: every name carries the stack's, so stacks can share a Docker, and
-# there is no /dev, no mDNS and no restart with Docker.
+# there is no /dev, no mDNS and no restart with Docker. Apps' packages come
+# from the worktree, staged again with each build.
 name: sanctum-${SANCTUM_STACK:?}
 
 services:
@@ -27,6 +28,11 @@ services:
       - core-data:/core-data
       - manager-socket:/run/sanctum
       - ../../apps/manager/dist:/app/apps/manager/dist:ro
+      # The worktree's apps and the app SDK as last built, which it stages with
+      # the dependencies its image holds, again whenever their build changes.
+      - ../../catalog/apps:/app/stack-sources/catalog/apps:ro
+      - ../../deploy/dev/apps:/app/stack-sources/deploy/dev/apps:ro
+      - ../../packages/app-sdk/dist:/app/stack-sources/packages/app-sdk/dist:ro
     logging:
       driver: json-file
       options:
@@ -48,6 +54,13 @@ services:
       REGISTRY_STORAGE_DELETE_ENABLED: "true"
     volumes:
       - registry-data:/var/lib/registry
+
+# Compose's own, which only the registry joins: labelled like everything else
+# of the stack's, so removing the stack removes it too.
+networks:
+  default:
+    labels:
+      sanctum.stack: ${SANCTUM_STACK}
 
 volumes:
   manager-data:

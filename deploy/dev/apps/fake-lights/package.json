@@ -1,8 +1,21 @@
 {
-  "name": "fake-lights",
+  "name": "@meetsanctum/fake-lights",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "sanctum-app.json"
+  ],
+  "scripts": {
+    "test": "sanctum-app manifest --check",
+    "manifest": "sanctum-app manifest"
+  },
+  "dependencies": {
+    "@meetsanctum/app-sdk": "workspace:*"
   }
 }

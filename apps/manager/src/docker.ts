@@ -79,6 +79,7 @@ export type DockerContainerLike = {
   inspect: () => Promise<ContainerInfo>;
   start: () => Promise<unknown>;
   stop: (options?: { t?: number }) => Promise<unknown>;
+  restart: () => Promise<unknown>;
   remove: (options?: { force?: boolean; v?: boolean }) => Promise<unknown>;
   rename: (options: { name: string }) => Promise<unknown>;
   update: (options: Record<string, unknown>) => Promise<unknown>;

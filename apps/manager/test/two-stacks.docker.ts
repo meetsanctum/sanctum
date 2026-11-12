@@ -1,12 +1,14 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Two real development stacks on one Docker, as parallel sessions run them
-// (deploy/dev/stack.sh). One is updated, manager included, cleaned up and
+// (deploy/dev/stack.sh). Each runs its apps apart from the worktree's build,
+// and both follow a new one. One is updated, manager included, cleaned up and
 // torn down while the other keeps running, untouched.
 
 const execFile = promisify(execFileCallback);
@@ -58,6 +60,7 @@ function stackOf(role: string, port: number, registry: boolean) {
     port,
     manager,
     core: `sanctum-${name}-core`,
+    app: (id: string) => `sanctum-${name}-app-${id}`,
     script: (command: string, env: NodeJS.ProcessEnv = {}) =>
       run("bash", ["deploy/dev/stack.sh", command], { ...settings, ...env }),
     // Over HTTPS, trusting only that stack's host CA, as the update path does.
@@ -120,6 +123,28 @@ function stackOf(role: string, port: number, registry: boolean) {
 
 type Stack = ReturnType<typeof stackOf>;
 
+// The core answers before it has started its apps, each in its container:
+// those these tests use, the fake lights and Weather.
+async function appsRunning(stack: Stack) {
+  await vi.waitFor(
+    async () => {
+      const running = await docker(
+        "ps",
+        "--filter",
+        `label=sanctum.stack=${stack.name}`,
+        "--filter",
+        "label=sanctum.role=app",
+        "--format",
+        '{{.Label "sanctum.app"}}',
+      );
+      expect(running.split("\n")).toEqual(
+        expect.arrayContaining(["sanctum.fake-lights", "sanctum.weather"]),
+      );
+    },
+    { timeout: 120_000, interval: 1_000 },
+  );
+}
+
 // A later build of a stack's image in its own registry, to update to.
 async function publish(stack: Stack, registryPort: number, service: string) {
   const tag = `localhost:${registryPort}/sanctum-${service}:${updated}`;
@@ -161,6 +186,8 @@ describe("two stacks on one Docker", () => {
     other = stackOf("other", await freePorts(first + 2), false);
     await one.script("up");
     await other.script("up");
+    await appsRunning(one);
+    await appsRunning(other);
   }, 600_000);
 
   afterAll(async () => {
@@ -179,15 +206,15 @@ describe("two stacks on one Docker", () => {
     );
   });
 
-  it("confirms fake lights' colour and white commands in the requested mode", async () => {
+  it("runs its fake lights apart, confirming colour and white commands in the requested mode", async () => {
     const states = JSON.parse(
       await docker(
         "exec",
-        one.core,
+        one.app("sanctum.fake-lights"),
         "node",
         "--input-type=module",
         "-e",
-        `const { default: app } = await import("/app/deploy/dev/apps/fake-lights/index.js");
+        `const { default: app } = await import("/package/index.js");
        const states = [];
        const ctx = { devices: { report: ({ states: { light } }) => states.push(light) } };
        for (const command of [{ hue: 120, saturation: 60 }, { colorTemperature: 250 }, { on: true }]) {
@@ -210,6 +237,51 @@ describe("two stacks on one Docker", () => {
       }),
     ]);
   });
+
+  it.each(["running", "stopped"])(
+    "updates a worktree build in both stacks with one manager %s",
+    async (managerState) => {
+      const built = join(root, "catalog/apps/weather/dist/index.js");
+      const original = await readFile(built, "utf8");
+      const folderOf = (stack: Stack) =>
+        docker(
+          "inspect",
+          "-f",
+          '{{index .Config.Labels "sanctum.app.folder"}}',
+          stack.app("sanctum.weather"),
+        ).catch(() => "");
+      const before = await folderOf(one);
+      expect(before).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
+      expect(await folderOf(other)).toBe(before);
+      // Until both run that build's package and their update has ended.
+      const settled = (folder: (now: string) => boolean) =>
+        vi.waitFor(
+          async () => {
+            for (const stack of [one, other]) {
+              expect(folder(await folderOf(stack))).toBe(true);
+              const { body } = await stack.api("GET", "/api/apps/updates");
+              expect(body).toEqual({ updates: {} });
+            }
+          },
+          { timeout: 120_000, interval: 1_000 },
+        );
+
+      try {
+        if (managerState === "stopped") await docker("stop", one.manager);
+        await writeFile(built, `${original}\n// A new build.\n`);
+        if (managerState === "stopped") await docker("start", one.manager);
+        await settled((now) => now !== "" && now !== before);
+        const after = await folderOf(one);
+        expect(after).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
+        expect(await folderOf(other)).toBe(after);
+      } finally {
+        await writeFile(built, original);
+      }
+      // And back, so what follows starts from the build it had.
+      await settled((now) => now === before);
+    },
+    300_000,
+  );
 
   it("reports only its own containers in Status", async () => {
     const { body } = await one.api("GET", "/api/host/status");
