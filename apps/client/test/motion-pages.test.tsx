@@ -273,8 +273,8 @@ describe("a room's line", () => {
     expect(readingsLine()).toBe(
       "Motion nowTemperature 21–21.5°Humidity 48%Light level 320 lx",
     );
-    // Its motion sensor under Climate and under Presence, after it.
-    expect(headings()).toEqual(["Climate", "Presence"]);
+    // Its motion sensor under Environment and under Presence, after it.
+    expect(headings()).toEqual(["Environment", "Presence"]);
   });
 
   it("is quiet since the last of its sensors went quiet, with light as a range, offline ones left out", async () => {
@@ -343,7 +343,7 @@ describe("the Presence category", () => {
     ],
   });
 
-  it("opens with each room's last 24 hours above its sensors by room, after Climate in the sidebar", async () => {
+  it("opens with each room's last 24 hours above its sensors by room, after Environment in the sidebar", async () => {
     devices = [
       motionSensor(
         "office",
@@ -370,7 +370,7 @@ describe("the Presence category", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Climate", "Presence", "Office", "Hall"]);
+    ).toEqual(["Environment", "Presence", "Office", "Hall"]);
   });
 
   it("leaves out rooms without a motion sensor", async () => {
@@ -611,8 +611,8 @@ describe("the Presence category", () => {
   });
 });
 
-describe("the Climate category", () => {
-  it("leaves the light level out of Climate's range", async () => {
+describe("the Environment category", () => {
+  it("leaves the light level out of Environment's range", async () => {
     devices = [
       motionSensor("office", "office", null, {
         temperature: 21,
@@ -628,7 +628,7 @@ describe("the Climate category", () => {
 });
 
 describe("the home's status", () => {
-  it("has Presence after Climate, naming where there is motion, and opens its category", async () => {
+  it("has Presence after Environment, naming where there is motion, and opens its category", async () => {
     devices = [
       motionSensor(
         "office",
@@ -640,7 +640,10 @@ describe("the home's status", () => {
     ];
     await show("status");
 
-    expect(statusTiles()).toEqual(["Climate21°", "PresenceOffice and Hall"]);
+    expect(statusTiles()).toEqual([
+      "Environment21°",
+      "PresenceOffice and Hall",
+    ]);
     const tile = container.querySelector<HTMLButtonElement>(
       "button[aria-label='Presence, Office and Hall']",
     )!;
@@ -676,7 +679,7 @@ describe("the home's status", () => {
     devices = [motionSensor("hall", "hall", null, { illuminance: 40 })];
     await show("status");
     expect(statusTiles()).toEqual([
-      "ClimateNo readings",
+      "EnvironmentNo readings",
       "PresenceNo readings",
     ]);
   });

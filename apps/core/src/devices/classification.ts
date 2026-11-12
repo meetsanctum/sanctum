@@ -8,8 +8,9 @@ import type { CapabilityKind } from "@meetsanctum/app-sdk";
 // otherwise just a device. v1 sorted out diagnostic entities, such as
 // battery and link quality, which never become capabilities here: a battery
 // is the device's own (DeviceInfo.battery). Its categories are the shell's,
-// by kind: lights, switches, climate for sensors, motion, and buttons; v1
-// put motion sensors under security, which is not one of them.
+// by kind: lights, switches, environment for sensors, presence for motion
+// sensors, and buttons; v1 put motion sensors under security, which is not
+// one of them.
 
 export type DeviceType =
   "light" | "plug" | "switch" | "button" | "motion" | "sensor" | "device";

@@ -448,7 +448,7 @@ describe("a sensor's tile", () => {
     expect(tiles[0]?.readings).toBeUndefined();
   });
 
-  it("is in Climate, after switches and before buttons, on a room's page", () => {
+  it("is in Environment, after switches and before buttons, on a room's page", () => {
     const sections = sectionsByCategory(
       tilesOf(
         [
@@ -461,7 +461,7 @@ describe("a sensor's tile", () => {
 
     expect(sections.map((section) => section.title)).toEqual([
       "Lights",
-      "Climate",
+      "Environment",
     ]);
   });
 });
@@ -523,7 +523,7 @@ describe("light level", () => {
     ]);
   });
 
-  it("ranges across sensors last, and stays out of what Climate ranges", () => {
+  it("ranges across sensors last, and stays out of what Environment ranges", () => {
     const readings = [
       { temperature: 21, humidity: 48, illuminance: 320 },
       { temperature: 19.8, illuminance: 40.4 },
@@ -633,7 +633,7 @@ describe("a motion sensor's tile", () => {
     expect([tile?.status, tile?.motion]).toEqual(["Not heard from", undefined]);
   });
 
-  it("comes before its readings' tile, which keeps it under Climate too, and Presence follows Climate", () => {
+  it("comes before its readings' tile, which keeps it under Environment too, and Presence follows Environment", () => {
     const tiles = tilesOf(
       [
         device("office", "Office motion sensor", "living", [
@@ -659,7 +659,7 @@ describe("a motion sensor's tile", () => {
         section.tiles.map((tile) => tile.status),
       ]),
     ).toEqual([
-      ["Climate", ["21° · 320 lx"]],
+      ["Environment", ["21° · 320 lx"]],
       ["Presence", ["Quiet for 3 min"]],
       ["Buttons", ["Idle"]],
     ]);

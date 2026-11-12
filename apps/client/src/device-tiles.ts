@@ -38,7 +38,7 @@ export const tileKey = (device: string, capability: string) =>
 export const categories = [
   { kind: "light", title: "Lights" },
   { kind: "switch", title: "Switches" },
-  { kind: "sensor", title: "Climate" },
+  { kind: "sensor", title: "Environment" },
   { kind: "occupancy", title: "Presence" },
   { kind: "button", title: "Buttons" },
 ] as const satisfies { kind: Tile["kind"]; title: string }[];
@@ -265,7 +265,7 @@ export const measureNames: Record<SensorMeasure, string> = {
 };
 
 /**
- * What the Climate category and the home's status range across the home:
+ * What the Environment category and the home's status range across the home:
  * a light level across it says nothing, since one room is dark while
  * another is bright.
  */
@@ -273,7 +273,7 @@ export const climateMeasures = ["temperature", "humidity"] as const;
 
 /**
  * What some sensors read now, measure by measure, as a room's page, a
- * sensor's tile, the Climate category and the dashboard's status say it.
+ * sensor's tile, the Environment category and the dashboard's status say it.
  * Humidity is in whole percent, as temperatures are in tenths of a degree;
  * a light level is in lux.
  */
