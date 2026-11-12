@@ -109,7 +109,22 @@ The Images workflow publishes multi-architecture images (`linux/amd64`,
 `:X.Y.Z` and `:stable`, and `main`, when the workflow is run by hand
 (`gh workflow run images.yml`), as `:edge`.
 
-A host runs the released images with [`deploy/compose.yml`](deploy/compose.yml):
+A host runs the released images. On a Raspberry Pi with Raspberry Pi OS
+(64-bit), or another 64-bit machine with Debian or Ubuntu,
+[`deploy/install.sh`](deploy/install.sh) sets one up:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
+```
+
+It installs Docker where it is missing, turns on the memory limits a
+Raspberry Pi leaves off (the Pi restarts once), keeps a laptop awake with its
+lid closed, and starts Sanctum from `/opt/sanctum`. Add `-s -- --channel edge`
+after `bash` for the latest build from `main` instead of a release. Running
+it again is safe.
+
+On a machine that already has Docker, the same by hand is
+[`deploy/compose.yml`](deploy/compose.yml):
 
 ```sh
 cp deploy/.env.example deploy/.env
