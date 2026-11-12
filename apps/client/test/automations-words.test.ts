@@ -259,7 +259,7 @@ describe("Automations' words for motion and light", () => {
       groupOf(deviceTrigger, { config: { kind: "occupancy" } }, names),
     ).toBe("Motion");
     expect(groupOf(deviceTrigger, { config: { kind: "sensor" } }, names)).toBe(
-      "Climate",
+      "Environment",
     );
     expect(
       [

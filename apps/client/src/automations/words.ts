@@ -451,7 +451,7 @@ const firstGroups = ["Time", "Sunrise and sunset", "Motion"];
 const categories: Record<string, string> = {
   light: "Lights",
   switch: "Switches",
-  sensor: "Climate",
+  sensor: "Environment",
   occupancy: "Motion",
   button: "Buttons",
 };

@@ -47,7 +47,7 @@ on their own Mac or on one the whole household shares.
 **Your home at a glance**
 
 - A Home dashboard with your rooms, and pages for every room and for Lights,
-  Switches, Climate, Motion and Buttons.
+  Switches, Environment, Presence and Buttons.
 - What the sensors read, where there's motion and how many lights are on, at
   the top of every dashboard.
 - A day and a week of history for every light, switch and sensor.

@@ -43,7 +43,7 @@ import type { Devices } from "./use-devices";
 // sections by their weight, Moods first, then its devices in a section for
 // each category. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
-// light in the home, Climate with what every sensor reads, and Presence
+// light in the home, Environment with what every sensor reads, and Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
 // above its sensors. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).

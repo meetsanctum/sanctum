@@ -604,7 +604,7 @@ describe("the climate", () => {
     expect(readingsLine()?.textContent).toBe(
       "Temperature 19.5–20.2°Humidity 55–58%",
     );
-    expect(headings()).toEqual(["Moods", "Lights", "Climate"]);
+    expect(headings()).toEqual(["Moods", "Lights", "Environment"]);
   });
 
   it("is not on the page of a room without sensors", async () => {
@@ -612,7 +612,7 @@ describe("the climate", () => {
     expect(readingsLine()).toBeNull();
   });
 
-  it("of the home heads Climate's page, which the sidebar lists before Buttons", async () => {
+  it("of the home heads Environment's page, which the sidebar lists before Buttons", async () => {
     devices = [
       lamp,
       plug,
@@ -621,7 +621,7 @@ describe("the climate", () => {
     ];
     await show("category", "sensor");
 
-    expect(container.querySelector("h1")?.textContent).toBe("Climate");
+    expect(container.querySelector("h1")?.textContent).toBe("Environment");
     expect(container.querySelector("header p")?.textContent).toBe(
       "19.5–21.5° · 48–58%",
     );
@@ -629,7 +629,14 @@ describe("the climate", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Lights1 on", "Switches", "Climate", "Office", "Hall", "Attic"]);
+    ).toEqual([
+      "Lights1 on",
+      "Switches",
+      "Environment",
+      "Office",
+      "Hall",
+      "Attic",
+    ]);
   });
 });
 
@@ -676,12 +683,12 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map((each) => each.textContent)).toEqual([
-      "Climate19.5–21.5°",
+      "Environment19.5–21.5°",
       "Lights1 on",
       "Switches1 on",
     ]);
     expect(tiles()[0]?.getAttribute("aria-label")).toBe(
-      "Climate, 19.5 to 21.5°",
+      "Environment, 19.5 to 21.5°",
     );
     await click(tiles()[0] as HTMLElement);
     expect(openCategory).toHaveBeenCalledWith("sensor");
@@ -697,7 +704,7 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map((each) => each.textContent)).toEqual([
-      "Climate19.5–21.5°",
+      "Environment19.5–21.5°",
       "Lights1 on",
       "BatteriesReplace 2",
     ]);
@@ -714,7 +721,7 @@ describe("the home's status", () => {
     devices = [lamp, { ...sensor("hall", "hall", 19.5, 58), battery: 10 }];
     await showStatus();
     expect(tiles().map((each) => each.textContent)).toEqual([
-      "Climate19.5°",
+      "Environment19.5°",
       "Lights1 on",
     ]);
   });
@@ -724,7 +731,7 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map((each) => each.textContent)).toEqual([
-      "ClimateNo readings",
+      "EnvironmentNo readings",
       "Lights1 on",
       // The sensor that doesn't answer needs attention.
       "hall sensorOffline",
@@ -778,7 +785,7 @@ describe("the home's status", () => {
     ];
     await showStatus();
     expect(tiles().map((each) => each.textContent)).toEqual([
-      "Climate19.5°",
+      "Environment19.5°",
       "Lights1 on",
       "hall sensorBattery 8%",
     ]);
@@ -811,12 +818,14 @@ describe("the home's status", () => {
         },
       ];
       await showStatus();
-      expect(tiles().map((each) => each.textContent)).toEqual(["Climate19.5°"]);
+      expect(tiles().map((each) => each.textContent)).toEqual([
+        "Environment19.5°",
+      ]);
       await act(async () => {
         vi.advanceTimersByTime(60_000);
       });
       expect(tiles().map((each) => each.textContent)).toEqual([
-        "ClimateNo readings",
+        "EnvironmentNo readings",
         "hall sensorGone quiet",
       ]);
     } finally {
