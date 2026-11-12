@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   homeMotion,
-  motionInText,
   motionText,
   motionWhere,
   placeMotionText,
@@ -51,34 +50,32 @@ function sensor(
 }
 
 describe("a motion sensor's words", () => {
-  it("say Motion now, or how long there has been none", () => {
+  it("say Motion now, or how long it has been quiet", () => {
     expect(motionText(true, ago(5 * minute), now)).toBe("Motion now");
-    expect(motionText(false, ago(30_000), now)).toBe("No motion");
+    expect(motionText(false, ago(30_000), now)).toBe("Quiet");
     expect(motionText(false, ago(12 * minute + 30_000), now)).toBe(
-      "No motion for 12 min",
+      "Quiet for 12 min",
     );
-    expect(motionText(false, ago(59 * minute), now)).toBe(
-      "No motion for 59 min",
-    );
+    expect(motionText(false, ago(59 * minute), now)).toBe("Quiet for 59 min");
   });
 
   it("say since when from an hour, then yesterday, then the date", () => {
     expect(
       motionText(false, new Date(2026, 9, 31, 14, 5).toISOString(), now),
-    ).toBe("No motion for 55 min");
+    ).toBe("Quiet for 55 min");
     expect(
       motionText(false, new Date(2026, 9, 31, 13, 5).toISOString(), now),
-    ).toBe("No motion since 13:05");
+    ).toBe("Quiet since 13:05");
     expect(
       motionText(false, new Date(2026, 9, 30, 23, 50).toISOString(), now),
-    ).toBe("No motion since yesterday");
+    ).toBe("Quiet since yesterday");
     expect(
       motionText(false, new Date(2026, 9, 28, 9, 0).toISOString(), now),
-    ).toBe("No motion since 28 Oct");
+    ).toBe("Quiet since 28 Oct");
   });
 
-  it("say only No motion when it is not known since when", () => {
-    expect(motionText(false, null, now)).toBe("No motion");
+  it("say only Quiet when it is not known since when", () => {
+    expect(motionText(false, null, now)).toBe("Quiet");
   });
 });
 
@@ -105,10 +102,10 @@ describe("a room's motion", () => {
         ],
         now,
       ),
-    ).toBe("No motion for 3 min");
+    ).toBe("Quiet for 3 min");
   });
 
-  it("is No motion while one of them has not said when it went quiet", () => {
+  it("is Quiet while one of them has not said when it went quiet", () => {
     expect(
       placeMotionText(
         [
@@ -117,7 +114,7 @@ describe("a room's motion", () => {
         ],
         now,
       ),
-    ).toBe("No motion");
+    ).toBe("Quiet");
   });
 
   it("is nothing while none answers", () => {
@@ -134,32 +131,20 @@ describe("where there is motion in the home", () => {
 
   it("names a room or two, in the home's order, and counts more", () => {
     const one = homeMotion([seeing("office"), quiet("hall")], places);
-    expect([motionWhere(one), motionInText(one)]).toEqual([
-      "Office",
-      "Motion in Office",
-    ]);
+    expect(motionWhere(one)).toBe("Office");
     const two = homeMotion([seeing("hall"), seeing("office")], places);
-    expect([motionWhere(two), motionInText(two)]).toEqual([
-      "Office and Hall",
-      "Motion in Office and Hall",
-    ]);
+    expect(motionWhere(two)).toBe("Office and Hall");
     const three = homeMotion(
       [seeing("hall"), seeing("office"), seeing("kitchen")],
       places,
     );
-    expect([motionWhere(three), motionInText(three)]).toEqual([
-      "3 rooms",
-      "Motion in 3 rooms",
-    ]);
+    expect(motionWhere(three)).toBe("3 rooms");
   });
 
-  it("says No motion, and counts a sensor in no room only while no room has motion", () => {
+  it("says Quiet, and counts a sensor in no room only while no room has motion", () => {
     const none = homeMotion([quiet("office")], places);
     expect(none.answering).toBe(true);
-    expect([motionWhere(none), motionInText(none)]).toEqual([
-      "No motion",
-      "No motion",
-    ]);
+    expect(motionWhere(none)).toBe("Quiet");
     expect(motionWhere(homeMotion([seeing(null)], places))).toBe("Motion now");
     expect(
       motionWhere(homeMotion([seeing(null), seeing("hall")], places)),

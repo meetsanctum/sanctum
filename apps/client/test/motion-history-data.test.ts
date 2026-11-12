@@ -12,6 +12,7 @@ import {
   motionSpans,
   motionSpanText,
   motionWeekHeadline,
+  roomSpans,
   spanTimes,
 } from "../src/motion-history-data";
 
@@ -63,13 +64,13 @@ describe("a motion sensor's day", () => {
     expect(
       spans.map((span) => [(span.from - from) / minute, motionSpanText(span)]),
     ).toEqual([
-      [0, "No motion"],
+      [0, "Quiet"],
       [60, "Motion"],
-      [120, "No motion"],
+      [120, "Quiet"],
       [300, "Offline"],
-      [360, "No motion"],
+      [360, "Quiet"],
       [1316, "Motion"],
-      [1350, "No motion"],
+      [1350, "Quiet"],
     ]);
     expect(spanTimes(spans[1]!, now)).toBe("16:00–17:00");
     expect(spanTimes(spans.at(-1)!, now)).toBe("13:30–now");
@@ -109,6 +110,71 @@ describe("a motion sensor's day", () => {
     expect(motionSentence([], from, now)).toBe(
       "Nothing read in the last 24 hours",
     );
+  });
+});
+
+describe("a room's day", () => {
+  const at = (minutes: number) => from + minutes * minute;
+  const read = (spans: ReturnType<typeof roomSpans>) =>
+    spans.map((span) => [(span.from - from) / minute, motionSpanText(span)]);
+
+  it("is motion while any of its sensors saw it, and quiet while none did", () => {
+    const door = spansOf(
+      history([
+        [from - hour, "online", { occupied: false }],
+        [at(60), "online", { occupied: true }],
+        [at(90), "online", { occupied: false }],
+      ]),
+      from,
+      now,
+    );
+    const desk = spansOf(
+      history([
+        [from - hour, "online", { occupied: false }],
+        [at(80), "online", { occupied: true }],
+        [at(120), "online", { occupied: false }],
+        [at(600), "online", { occupied: true }],
+        [at(610), "online", { occupied: false }],
+      ]),
+      from,
+      now,
+    );
+    expect(read(roomSpans([door, desk], from, now))).toEqual([
+      [0, "Quiet"],
+      [60, "Motion"],
+      [120, "Quiet"],
+      [600, "Motion"],
+      [610, "Quiet"],
+    ]);
+  });
+
+  it("knows a time while one sensor knew it, and is offline only while all were", () => {
+    const door = spansOf(
+      history([
+        [from - hour, "online", { occupied: false }],
+        [at(100), "offline", { occupied: false }],
+        [at(200), "online", { occupied: false }],
+      ]),
+      from,
+      now,
+    );
+    // Its first report came at 150 minutes, and it went offline at 180.
+    const desk = spansOf(
+      history([
+        [at(150), "online", { occupied: true }],
+        [at(180), "offline", { occupied: true }],
+      ]),
+      from,
+      now,
+    );
+    expect(read(roomSpans([door, desk], from, now))).toEqual([
+      [0, "Quiet"],
+      [100, "Not known"],
+      [150, "Motion"],
+      [180, "Offline"],
+      [200, "Quiet"],
+    ]);
+    expect(read(roomSpans([], from, now))).toEqual([[0, "Not known"]]);
   });
 });
 

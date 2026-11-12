@@ -25,7 +25,7 @@ import { tileKey, tilesOf } from "./device-tiles";
 // core could not deliver or that the device did not confirm shows on its
 // tile for a moment, without a message. A remote's press shows on its tile
 // for a few seconds. While the home has a motion sensor, the tiles move on
-// each minute, so "No motion for 12 min" keeps counting.
+// each minute, so "Quiet for 12 min" keeps counting.
 
 // How long a command from here may take to show as pending, and how long
 // after it went out a device that never confirms it still fails its tile,
@@ -454,7 +454,7 @@ export function useDevices(live: LiveFeed) {
     [live, apply, load],
   );
 
-  // Motion's "No motion for 12 min" counts on, and a device on a battery
+  // Presence's "Quiet for 12 min" counts on, and a device on a battery
   // whose driver no longer knows whether it answers turns quiet once a day
   // has passed (maintenance.ts), without a live message.
   const ticks = devices.some(

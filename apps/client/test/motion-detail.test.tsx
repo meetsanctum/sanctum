@@ -238,7 +238,7 @@ afterEach(async () => {
 
 describe("a motion sensor's detail", () => {
   it("opens from its motion's tile on Motion, then Readings and Activity, saying when it last said something", async () => {
-    await open("Office motion sensor, No motion for 12 min");
+    await open("Office motion sensor, Quiet for 12 min");
 
     expect(dialog().querySelector("h2")?.textContent).toBe(
       "Office motion sensor",
@@ -252,7 +252,7 @@ describe("a motion sensor's detail", () => {
   });
 
   it("says on Motion what it says now, the day in a sentence, the week and its battery", async () => {
-    await open("Office motion sensor, No motion for 12 min");
+    await open("Office motion sensor, Quiet for 12 min");
     const motion = panel("motion");
 
     const parts = [...motion.querySelectorAll("section")].map((each) => [
@@ -260,7 +260,7 @@ describe("a motion sensor's detail", () => {
       each.querySelector("h3 + p")?.textContent,
     ]);
     expect(parts).toEqual([
-      ["Last 24 hours", "No motion for 12 min"],
+      ["Last 24 hours", "Quiet for 12 min"],
       // Yesterday's 3 hours, the one day that has ended.
       ["Last 7 days", "About 3 h a day"],
     ]);
@@ -273,7 +273,7 @@ describe("a motion sensor's detail", () => {
   });
 
   it("gives screen readers each span, and the readout steps through them by key", async () => {
-    await open("Office motion sensor, No motion for 12 min");
+    await open("Office motion sensor, Quiet for 12 min");
     const band = panel("motion").querySelector<HTMLElement>(
       '[aria-label="Motion over the last 24 hours"]',
     )!;
@@ -281,17 +281,17 @@ describe("a motion sensor's detail", () => {
       (each) => each.textContent,
     );
     expect(spoken).toEqual([
-      "15:00 to 09:05: No motion",
+      "15:00 to 09:05: Quiet",
       "09:05 to 10:40: Motion",
-      "10:40 to 12:00: No motion",
+      "10:40 to 12:00: Quiet",
       "12:00 to 12:30: Offline",
-      "12:30 to 14:10: No motion",
+      "12:30 to 14:10: Quiet",
       "14:10 to 14:48: Motion",
-      "14:48 to 15:00: No motion",
+      "14:48 to 15:00: Quiet",
     ]);
 
     await act(async () => band.focus());
-    expect(band.textContent).toBe("No motion14:48–now");
+    expect(band.textContent).toBe("Quiet14:48–now");
     const key = (name: string) =>
       act(async () => {
         band.dispatchEvent(
@@ -368,7 +368,7 @@ describe("a motion sensor's detail", () => {
 
   it("has Motion and Activity only when it reads nothing else", async () => {
     devices = [motionSensor({})];
-    await open("Office motion sensor, No motion for 12 min");
+    await open("Office motion sensor, Quiet for 12 min");
     expect(tabs().map(([label]) => label)).toEqual(["Motion", "Activity"]);
   });
 });
