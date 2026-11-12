@@ -106,11 +106,10 @@ describe("turning an app off", () => {
     await settle();
 
     const answer = await turn(core, maya, app.id, false);
-    await settle();
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
+    await expect.poll(() => stateOf(core, app.id)).toBe("running");
 
     expect(answer.statusCode).toBe(200);
-    expect(said).toEqual(["start", "stop", "start"]);
-    expect(stateOf(core, app.id)).toBe("running");
     expect(
       (await post(core, `/api/apps/${app.id}/actions/lamp.ping`, {}, maya))
         .statusCode,
@@ -195,10 +194,8 @@ describe("turning an app off", () => {
     await stopping;
     await turn(core, maya, app.id, false);
     finish();
-    await settle();
-
-    expect(said).toEqual(["start", "stop", "start"]);
-    expect(stateOf(core, app.id)).toBe("running");
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
+    await expect.poll(() => stateOf(core, app.id)).toBe("running");
   });
 
   it("changes nothing when it's already as asked", async () => {
@@ -328,11 +325,9 @@ describe("turning an app off", () => {
       });
 
       await turn(core, maya, driver.id, false);
-      await settle();
-      expect(core.devices.get(device!.id)).toMatchObject({
-        availability: "online",
-        leftAt: null,
-      });
+      await expect
+        .poll(() => core.devices.get(device!.id))
+        .toMatchObject({ availability: "online", leftAt: null });
     });
 
     it("refuses a command for its device while it's off", async () => {

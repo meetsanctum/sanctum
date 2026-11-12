@@ -97,10 +97,9 @@ describe("the core's events", () => {
     await settled();
 
     // The lamp's command goes pending, then its report confirms it.
-    expect(lights.heard.map((event) => event.name)).toEqual([
-      "device.changed",
-      "device.changed",
-    ]);
+    await expect
+      .poll(() => named(lights.heard))
+      .toEqual(["device.changed", "device.changed"]);
     const [pending, confirmed] = lights.heard as Extract<
       CoreEvent,
       { name: "device.changed" }
@@ -114,13 +113,15 @@ describe("the core's events", () => {
     ]);
     // The plug moved to the hall, and only the app that reads switches
     // heard of it.
-    expect(switches.heard).toMatchObject([
-      {
-        name: "device.changed",
-        before: { id: plug, roomId: null },
-        device: { id: plug, roomId: room, name: "Hall plug" },
-      },
-    ]);
+    await expect
+      .poll(() => switches.heard)
+      .toMatchObject([
+        {
+          name: "device.changed",
+          before: { id: plug, roomId: null },
+          device: { id: plug, roomId: room, name: "Hall plug" },
+        },
+      ]);
     expect(
       switches.heard.flatMap((event) =>
         "device" in event ? event.device.capabilities : [],
@@ -207,33 +208,36 @@ describe("the core's events", () => {
       post(core, "/api/places/home/update", changes, maya);
 
     await update({ timeZone: "Europe/Zurich", coordinates: zurich });
-    await settled();
-    expect(located.heard).toEqual([
-      {
-        name: "location.changed",
-        before: null,
-        location: { ...zurich, timeZone: "Europe/Zurich" },
-      },
-    ]);
+    await expect
+      .poll(() => located.heard)
+      .toEqual([
+        {
+          name: "location.changed",
+          before: null,
+          location: { ...zurich, timeZone: "Europe/Zurich" },
+        },
+      ]);
     located.heard.length = 0;
 
     await update({ name: "The house" });
-    await settled();
+    await expect
+      .poll(() => named.heard)
+      .toMatchObject([
+        { name: "place.changed", place: { kind: "home", name: "The house" } },
+      ]);
     expect(located.heard).toEqual([]);
-    expect(named.heard).toMatchObject([
-      { name: "place.changed", place: { kind: "home", name: "The house" } },
-    ]);
     expect(JSON.stringify(named.heard)).not.toContain("latitude");
 
     await update({ coordinates: null });
-    await settled();
-    expect(located.heard).toEqual([
-      {
-        name: "location.changed",
-        before: { ...zurich, timeZone: "Europe/Zurich" },
-        location: null,
-      },
-    ]);
+    await expect
+      .poll(() => located.heard)
+      .toEqual([
+        {
+          name: "location.changed",
+          before: { ...zurich, timeZone: "Europe/Zurich" },
+          location: null,
+        },
+      ]);
   });
 
   it("follow the household, the claimant included, and nothing a rolled-back change made", async () => {
@@ -299,8 +303,11 @@ describe("the core's events", () => {
         throw new Error("rolled back");
       }),
     ).toThrow("rolled back");
-    await settled();
-    expect(people.heard).toEqual([]);
+    // This comes after anything the rollback might have wrongly announced.
+    const ben = core.people.add({ name: "Ben", colour: "#8fb5c9" });
+    await expect
+      .poll(() => people.heard)
+      .toMatchObject([{ name: "person.added", person: { id: ben.id } }]);
   });
 
   it("announce a committed person before a subsequent synchronous change", async () => {
@@ -540,7 +547,9 @@ describe("the core's events", () => {
     const maya = await claimed(first);
     await post(first, "/api/places/rooms/add", { name: "Office" }, maya);
     await post(first, "/api/places/rooms/add", { name: "Hall" }, maya);
-    await settled();
+    await expect
+      .poll(() => places.heard)
+      .toMatchObject([{ name: "place.added", place: { name: "Office" } }]);
 
     // Stopping waits for the office's handler; the hall's never runs.
     let stopped = false;
@@ -560,8 +569,9 @@ describe("the core's events", () => {
     // Started again, it follows anew, once.
     const next = await testCore({ dataDir: first.dataDir, apps: [pkg] });
     await post(next, "/api/places/rooms/add", { name: "Kitchen" }, maya);
-    await settled();
-    expect(named(places.heard)).toEqual(["place.added", "place.added"]);
+    await expect
+      .poll(() => named(places.heard))
+      .toEqual(["place.added", "place.added"]);
     expect(places.heard[1]).toMatchObject({ place: { name: "Kitchen" } });
   });
 });
