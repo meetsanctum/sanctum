@@ -143,9 +143,30 @@ EOF
   systemctl kill --signal=HUP systemd-logind 2>/dev/null || true
 }
 
-kept_channel() {
+kept_setting() {
   [[ -f "$dir/.env" ]] || return 0
-  sed -n 's/^SANCTUM_CHANNEL=//p' "$dir/.env" | tail -n 1
+  sed -n "s/^${1}=//p" "$dir/.env" | tail -n 1
+}
+
+# Refuse a different installation before changing the machine's boot or sleep
+# settings. Compose's labels survive the manager replacing itself on update.
+check_installation() {
+  local kept saved_owner
+  if docker inspect sanctum-manager >/dev/null 2>&1; then
+    [[ -f "$dir/compose.yml" && -f "$dir/.env" &&
+      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' sanctum-manager)" == sanctum &&
+      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' sanctum-manager)" == manager &&
+      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' sanctum-manager)" == "$dir/compose.yml" ]] ||
+      die "Sanctum already runs here, set up another way than by this installer. Nothing was changed."
+  fi
+  kept="$(kept_setting SANCTUM_CHANNEL)"
+  [[ -z "$kept" || "$kept" == stable || "$kept" == edge ]] ||
+    die "Sanctum here is on the ${kept} channel, and this installer does not change it. Nothing was changed."
+  [[ -z "$kept" || -z "$channel" || "$channel" == "$kept" ]] ||
+    die "Sanctum here is on the ${kept} channel, and this installer does not change it. Nothing was changed."
+  channel="${channel:-${kept:-stable}}"
+  saved_owner="$(kept_setting SANCTUM_IMAGE_OWNER)"
+  owner="${saved_owner:-$owner}"
 }
 
 # The compose file of the commit the image was built from, which the image
@@ -170,50 +191,48 @@ write_compose() {
 }
 
 start() {
-  local kept image
-  kept="$(kept_channel)"
+  local image
 
   if docker inspect sanctum-manager >/dev/null 2>&1; then
-    [[ -f "$dir/compose.yml" ]] ||
-      die "Sanctum already runs here, set up another way than by this installer. Nothing was changed."
-    [[ -z "$channel" || "$channel" == "$kept" ]] ||
-      die "Sanctum here is on the ${kept:-stable} channel, and this installer does not change it. Nothing was changed."
     if [[ "$(docker inspect -f '{{.State.Running}}' sanctum-manager)" == true ]]; then
       say "Sanctum is already installed"
       return
     fi
     say "Starting Sanctum"
-    docker compose -f "$dir/compose.yml" up -d
+    # Compose can recreate it from the installation image, undoing an update.
+    docker start sanctum-manager
     return
   fi
 
-  channel="${channel:-${kept:-stable}}"
   image="ghcr.io/${owner}/sanctum-manager:${channel}"
   say "Downloading Sanctum"
   docker pull "$image" ||
     die "Could not download ${image}. Check this machine's internet connection; --channel edge installs the latest build from main instead of a release."
   write_compose "$image"
-  printf 'SANCTUM_IMAGE_OWNER=%s\nSANCTUM_CHANNEL=%s\n' "$owner" "$channel" >"$dir/.env"
+  printf 'SANCTUM_IMAGE_OWNER=%s\nSANCTUM_CHANNEL=%s\n' "$owner" "$channel" >"$dir/.env.download"
+  mv "$dir/.env.download" "$dir/.env"
   say "Starting Sanctum"
-  docker compose -f "$dir/compose.yml" up -d
+  # Shell variables override .env in Compose. Start exactly what was pulled,
+  # even from a shell configured for another installation or the dev channel.
+  SANCTUM_IMAGE_OWNER="$owner" SANCTUM_CHANNEL="$channel" SANCTUM_MANAGER_IMAGE="$image" \
+    docker compose --project-name sanctum --env-file "$dir/.env" -f "$dir/compose.yml" up -d manager
 }
 
 # The manager downloads and starts the rest, which takes a few minutes on a
 # Pi's card.
 running() {
-  docker exec sanctum-manager node dist/cli.js core-health >/dev/null 2>&1
+  timeout 15s docker exec sanctum-manager node dist/cli.js core-health >/dev/null 2>&1
 }
 
 wait_until_running() {
+  local deadline=$((SECONDS + 900))
   running && return
   say "Waiting for Sanctum to start (a few minutes the first time)"
-  local waited=0
   until running; do
-    if ((waited >= 900)); then
+    if ((SECONDS >= deadline)); then
       die "Sanctum did not start within 15 minutes. What it was doing: sudo docker logs sanctum-manager"
     fi
     sleep 5
-    waited=$((waited + 5))
     printf '.'
   done
   printf '\n'
@@ -237,6 +256,7 @@ main() {
   install_docker
   docker info >/dev/null 2>&1 ||
     die "Docker is installed but not running. Start it (sudo systemctl enable --now docker), then run this again."
+  check_installation
   enable_memory_limits
   keep_awake
   start

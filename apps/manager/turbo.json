@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/deploy/install.sh",
+        "$TURBO_ROOT$/deploy/compose.yml"
+      ]
+    }
+  }
+}
