@@ -151,6 +151,36 @@ describe("a room's schedule", () => {
     ]);
   });
 
+  // After an update, the core keeps only the jobs the new version's start
+  // schedules; one scheduled as it was keeps its next run.
+  it("schedules every job again as it starts, those it has too, keeping their times", async () => {
+    const { call, focus, state, start } = await home();
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: focus.id,
+      start: 540,
+      end: 1020,
+    });
+    state.scheduledJobs.length = 0;
+
+    await start();
+
+    expect(
+      state.scheduledJobs.map(({ key, when, fresh }) => ({ key, when, fresh })),
+    ).toEqual([
+      {
+        key: "schedule:office:540",
+        when: { daily: "09:00" },
+        fresh: undefined,
+      },
+      {
+        key: "schedule:office:1020",
+        when: { daily: "17:00" },
+        fresh: undefined,
+      },
+    ]);
+  });
+
   it("refuses another room's mood, a time that overlaps, and an end at its start", async () => {
     const { call, focus, counter } = await home();
     await call(scheduleMood, {
