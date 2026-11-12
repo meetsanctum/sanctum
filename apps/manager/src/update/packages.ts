@@ -128,6 +128,8 @@ export function createPackages(options: {
   inUse?: () => Promise<readonly { app: string; folder: string }[]>;
   // A development stack's apps, for an image that ships none.
   worktree?: StackPackages;
+  // A worktree build now available to the running core, including at startup.
+  onStaged?: (apps: string[]) => void;
 }) {
   const { docker, dataDir, log } = options;
   const root = join(dataDir, "packages");
@@ -330,7 +332,14 @@ export function createPackages(options: {
       }
       await writeJson(statePath, next);
       await prune(next);
-      if (assembled) options.worktree?.noteStaged(assembled);
+      if (assembled) {
+        options.worktree?.noteStaged(assembled);
+        const changed = Object.keys(next.apps).filter(
+          (id) =>
+            next.apps[id]?.current.folder !== state.apps[id]?.current.folder,
+        );
+        if (changed.length) options.onStaged?.(changed);
+      }
       hasStaged = true;
     } finally {
       await rm(staging, { recursive: true, force: true });
@@ -388,7 +397,12 @@ export function createPackages(options: {
     stagedFor(image: string) {
       return inTurn(async () => {
         const known = await readState();
-        if (await isStaged(known, image)) return known.apps;
+        if (
+          (!options.worktree || hasStaged) &&
+          (await isStaged(known, image))
+        ) {
+          return known.apps;
+        }
         await run(image).catch((error: unknown) => {
           log(`Could not stage the apps' packages: ${errorMessage(error)}`);
         });
@@ -407,22 +421,14 @@ export function createPackages(options: {
     },
 
     // A development stack's apps again, or those named by their folder, after
-    // their build changed: the ids of those now on a new package. Undefined
-    // while nothing is staged to stage them beside, and on a failure, which is
-    // logged.
+    // their build changed. Nothing happens until a first image is staged.
     restage(only?: readonly string[]) {
       return inTurn(async () => {
-        const before = await readState();
-        if (!before.image) return undefined;
-        await run(before.image, { only });
-        const after = await readState();
-        return Object.keys(after.apps).filter(
-          (id) =>
-            after.apps[id]?.current.folder !== before.apps[id]?.current.folder,
-        );
+        const state = await readState();
+        if (!state.image) return;
+        await run(state.image, { only });
       }).catch((error: unknown) => {
         log(`Could not stage the apps' packages: ${errorMessage(error)}`);
-        return undefined;
       });
     },
   };

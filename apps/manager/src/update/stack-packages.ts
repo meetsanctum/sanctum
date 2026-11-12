@@ -75,7 +75,7 @@ export function createStackPackages(
     const manifest = await readJson<{ files?: string[] }>(
       join(source, "package.json"),
     );
-    return manifest?.files ?? [];
+    return ["package.json", ...(manifest?.files ?? [])];
   }
 
   // What says it changed: the app's own files and the SDK's.
@@ -162,6 +162,7 @@ export function watchStackBuilds(options: {
 
   async function look() {
     const now = await options.builds();
+    if (isClosed) return;
     const staged = options.staged();
     const settled =
       staged.size === 0
@@ -205,31 +206,66 @@ export function watchStackBuilds(options: {
 // or another operation is under way, so it doesn't cut one short.
 export function followStackBuilds(options: {
   stackPackages: StackPackages;
-  // The ids of the apps now on a new package, or undefined if it couldn't.
-  restage: (names: string[]) => Promise<string[] | undefined>;
+  restage: (names: string[]) => Promise<void>;
   isBusy: () => Promise<boolean>;
   restartCore: () => Promise<void>;
   log: Log;
   everyMs?: number;
 }) {
   const everyMs = options.everyMs ?? 1_000;
-  return watchStackBuilds({
+  let isClosed = false;
+  const pending = new Set<string>();
+  let restarting: Promise<void> | undefined;
+
+  // Staging can finish at startup or after a watched build. Keep its restart
+  // pending until operations have ended, coalescing builds that arrive meanwhile.
+  function staged(apps: string[]) {
+    if (isClosed) return;
+    for (const app of apps) pending.add(app);
+    if (!pending.size) return;
+    restarting ??= restart().finally(() => {
+      restarting = undefined;
+      if (pending.size) staged([]);
+    });
+  }
+
+  async function restart() {
+    while (!isClosed && pending.size) {
+      let changed: string[] = [];
+      try {
+        if (await options.isBusy()) {
+          await new Promise((done) => setTimeout(done, everyMs));
+          continue;
+        }
+        if (isClosed) return;
+        changed = [...pending];
+        pending.clear();
+        options.log(
+          `Restarting the core for the new build of ${changed.join(", ")}`,
+        );
+        await options.restartCore();
+      } catch (error) {
+        for (const app of changed) pending.add(app);
+        options.log(`Could not restart the core: ${String(error)}`);
+        await new Promise((done) => setTimeout(done, everyMs));
+      }
+    }
+  }
+
+  const watching = watchStackBuilds({
     builds: options.stackPackages.builds,
     staged: options.stackPackages.staged,
     everyMs,
     log: options.log,
     built: async (names) => {
-      const changed = await options.restage(names);
-      if (!changed?.length) return;
-      while (await options.isBusy()) {
-        await new Promise((done) => setTimeout(done, everyMs));
-      }
-      options.log(
-        `Restarting the core for the new build of ${changed.join(", ")}`,
-      );
-      await options.restartCore().catch((error: unknown) => {
-        options.log(`Could not restart the core: ${String(error)}`);
-      });
+      await options.restage(names);
     },
   });
+  return {
+    staged,
+    close() {
+      isClosed = true;
+      watching.close();
+    },
+  };
 }

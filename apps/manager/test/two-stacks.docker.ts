@@ -238,44 +238,50 @@ describe("two stacks on one Docker", () => {
     ]);
   });
 
-  it("updates an app to a new build in the worktree, in each stack", async () => {
-    const built = join(root, "catalog/apps/weather/dist/index.js");
-    const original = await readFile(built, "utf8");
-    const folderOf = (stack: Stack) =>
-      docker(
-        "inspect",
-        "-f",
-        '{{index .Config.Labels "sanctum.app.folder"}}',
-        stack.app("sanctum.weather"),
-      ).catch(() => "");
-    const before = await folderOf(one);
-    expect(before).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
-    expect(await folderOf(other)).toBe(before);
-    // Until both run that build's package and their update has ended.
-    const settled = (folder: (now: string) => boolean) =>
-      vi.waitFor(
-        async () => {
-          for (const stack of [one, other]) {
-            expect(folder(await folderOf(stack))).toBe(true);
-            const { body } = await stack.api("GET", "/api/apps/updates");
-            expect(body).toEqual({ updates: {} });
-          }
-        },
-        { timeout: 120_000, interval: 1_000 },
-      );
+  it.each(["running", "stopped"])(
+    "updates a worktree build in both stacks with one manager %s",
+    async (managerState) => {
+      const built = join(root, "catalog/apps/weather/dist/index.js");
+      const original = await readFile(built, "utf8");
+      const folderOf = (stack: Stack) =>
+        docker(
+          "inspect",
+          "-f",
+          '{{index .Config.Labels "sanctum.app.folder"}}',
+          stack.app("sanctum.weather"),
+        ).catch(() => "");
+      const before = await folderOf(one);
+      expect(before).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
+      expect(await folderOf(other)).toBe(before);
+      // Until both run that build's package and their update has ended.
+      const settled = (folder: (now: string) => boolean) =>
+        vi.waitFor(
+          async () => {
+            for (const stack of [one, other]) {
+              expect(folder(await folderOf(stack))).toBe(true);
+              const { body } = await stack.api("GET", "/api/apps/updates");
+              expect(body).toEqual({ updates: {} });
+            }
+          },
+          { timeout: 120_000, interval: 1_000 },
+        );
 
-    try {
-      await writeFile(built, `${original}\n// A new build.\n`);
-      await settled((now) => now !== "" && now !== before);
-      const after = await folderOf(one);
-      expect(after).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
-      expect(await folderOf(other)).toBe(after);
-    } finally {
-      await writeFile(built, original);
-    }
-    // And back, so what follows starts from the build it had.
-    await settled((now) => now === before);
-  }, 300_000);
+      try {
+        if (managerState === "stopped") await docker("stop", one.manager);
+        await writeFile(built, `${original}\n// A new build.\n`);
+        if (managerState === "stopped") await docker("start", one.manager);
+        await settled((now) => now !== "" && now !== before);
+        const after = await folderOf(one);
+        expect(after).toMatch(/^0\.\d+\.\d+\+[0-9a-f]{16}$/);
+        expect(await folderOf(other)).toBe(after);
+      } finally {
+        await writeFile(built, original);
+      }
+      // And back, so what follows starts from the build it had.
+      await settled((now) => now === before);
+    },
+    300_000,
+  );
 
   it("reports only its own containers in Status", async () => {
     const { body } = await one.api("GET", "/api/host/status");

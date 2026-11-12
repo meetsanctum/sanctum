@@ -18,6 +18,7 @@ import { loadConfig } from "./config.js";
 import {
   coreContainerName,
   corePort,
+  coreRole,
   reconcileCore,
   socketGroupId,
 } from "./core-container.js";
@@ -27,6 +28,7 @@ import {
   type StatusDockerLike,
   inspectContainer,
 } from "./docker.js";
+import { assertManaged } from "./docker-resources.js";
 import { createHostHistory } from "./host/history.js";
 import { createPower } from "./host/power.js";
 import { createHostReadings } from "./host/readings.js";
@@ -100,7 +102,9 @@ if (config.supervise) {
     dataDir: config.dataDir,
     log,
     inUse: () => foldersInUse(),
-    ...(worktree ? { worktree } : {}),
+    ...(worktree
+      ? { worktree, onStaged: (apps) => stackBuilds?.staged(apps) }
+      : {}),
   });
   const operations = createOperations();
   const isOperating = async () => (await operations.current()) !== null;
@@ -254,11 +258,16 @@ if (config.supervise) {
       stackPackages: worktree,
       restage: (names) => staging.restage(names),
       isBusy: async () => (await isOperating()) || (await updates.busy()),
-      restartCore: async () => {
-        if (await inspectContainer(docker, coreContainerName)) {
-          await docker.getContainer(coreContainerName).restart();
-        }
-      },
+      restartCore: () =>
+        operations.claim({ kind: "core-restart" }, async () => {
+          const core = await inspectContainer(docker, coreContainerName);
+          if (!core) return;
+          assertManaged(
+            { labels: core.Config.Labels, name: coreContainerName },
+            coreRole,
+          );
+          await docker.getContainer(core.Id).restart();
+        }),
       log,
     });
   }

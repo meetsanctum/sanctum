@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
+import { createOperations, OperationConflictError } from "../src/operations.js";
 import { createPackages, type PackagesState } from "../src/update/packages.js";
 import {
   createStackPackages,
@@ -85,6 +86,7 @@ describe("a development stack's apps", () => {
     expect((await readdir(weather)).sort()).toEqual([
       "dist",
       "node_modules",
+      "package.json",
       "sanctum-app.json",
     ]);
     expect(await readFile(join(weather, "dist/index.js"), "utf8")).toBe(
@@ -99,6 +101,31 @@ describe("a development stack's apps", () => {
         "utf8",
       ),
     ).toBe("// runner");
+  });
+
+  it("ships and watches the worktree's package entry metadata", async () => {
+    const { app, root, sources, stackPackages } = await stackOf();
+    await app("catalog/apps", "weather", "sanctum.weather");
+    const before = await stackPackages.builds();
+    const packageJson = JSON.stringify({
+      type: "module",
+      exports: "./dist/entry.js",
+      files: ["dist", "sanctum-app.json"],
+    });
+    await write(
+      join(sources, "catalog/apps/weather/package.json"),
+      packageJson,
+    );
+    const into = join(root, "staging");
+
+    await stackPackages.assemble(into);
+
+    expect((await stackPackages.builds()).get("weather")).not.toBe(
+      before.get("weather"),
+    );
+    expect(await readFile(join(into, "weather/package.json"), "utf8")).toBe(
+      packageJson,
+    );
   });
 
   it("finds the stack's own apps beside the catalog's", async () => {
@@ -182,7 +209,7 @@ describe("staging a stack's apps", () => {
       version: "dev-stack",
     });
     // As a manager that starts, on the stack's data.
-    const managing = () => {
+    const managing = (onStaged = vi.fn<(apps: string[]) => void>()) => {
       const stackPackages = createStackPackages({
         dependencies: join(stack.root, "image"),
         sources: stack.sources,
@@ -193,10 +220,11 @@ describe("staging a stack's apps", () => {
         dataDir,
         log: stack.log,
         worktree: stackPackages,
+        onStaged,
       });
-      return { packages, stackPackages };
+      return { packages, stackPackages, onStaged };
     };
-    const { packages, stackPackages } = managing();
+    const { packages, stackPackages, onStaged } = managing();
     const state = async () =>
       JSON.parse(
         await readFile(join(dataDir, "packages.json"), "utf8"),
@@ -207,6 +235,7 @@ describe("staging a stack's apps", () => {
       docker,
       image,
       managing,
+      onStaged,
       packages,
       stackPackages,
       state,
@@ -241,7 +270,7 @@ describe("staging a stack's apps", () => {
 
     await build("catalog/apps", "weather", "a new build");
 
-    expect(await packages.restage(["weather"])).toEqual(["sanctum.weather"]);
+    await packages.restage(["weather"]);
     const after = (await state()).apps;
     expect(after["sanctum.weather"]!.current.folder).not.toBe(
       before["sanctum.weather"]!.current.folder,
@@ -253,11 +282,14 @@ describe("staging a stack's apps", () => {
   });
 
   it("finds nothing new in a build that holds the same", async () => {
-    const { app, image, packages } = await staged();
+    const { app, image, onStaged, packages } = await staged();
     await app("catalog/apps", "weather", "sanctum.weather");
     await packages.stage(image);
+    onStaged.mockClear();
 
-    expect(await packages.restage()).toEqual([]);
+    await packages.restage();
+
+    expect(onStaged).not.toHaveBeenCalled();
   });
 
   it("waits for a first staging to stage beside", async () => {
@@ -289,6 +321,35 @@ describe("staging a stack's apps", () => {
     const after = (await state()).apps["sanctum.weather"]!;
     expect(after.current.folder).not.toBe(before.folder);
     expect(after.previous).toEqual(before);
+  });
+
+  it("refreshes a persisted package before answering a core after manager startup", async () => {
+    const { app, build, image, managing, packages, state } = await staged();
+    await app("catalog/apps", "weather", "sanctum.weather");
+    await packages.stage(image);
+    const before = (await state()).apps["sanctum.weather"]!.current;
+    await build("catalog/apps", "weather", "built while stopped");
+    const next = managing();
+
+    const apps = await next.packages.stagedFor(image);
+
+    expect(apps["sanctum.weather"]!.current.folder).not.toBe(before.folder);
+    expect(next.onStaged).toHaveBeenCalledWith(["sanctum.weather"]);
+  });
+
+  it("announces only successfully staged changes, including the first staging", async () => {
+    const { app, build, image, onStaged, packages } = await staged();
+    await app("catalog/apps", "weather", "sanctum.weather");
+    await packages.stage(image);
+    expect(onStaged.mock.calls).toEqual([[["sanctum.weather"]]]);
+    onStaged.mockClear();
+
+    await packages.restage();
+    expect(onStaged).not.toHaveBeenCalled();
+
+    await build("catalog/apps", "weather", "a new build");
+    await packages.restage(["weather"]);
+    expect(onStaged.mock.calls).toEqual([[["sanctum.weather"]]]);
   });
 
   it("then keeps what it has staged for the image", async () => {
@@ -349,6 +410,33 @@ describe("following a stack's builds", () => {
     expect(built.mock.calls).toEqual([[["weather"]]]);
   });
 
+  it("does not offer a build after closing during a filesystem scan", async () => {
+    let finish = (_builds: Map<string, string>) => {};
+    const builds = vi
+      .fn()
+      .mockResolvedValueOnce(weather("1"))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Map<string, string>>((done) => {
+            finish = done;
+          }),
+      );
+    const built = vi.fn(async () => {});
+    const watching = watchStackBuilds({
+      builds,
+      staged: () => weather("0"),
+      built,
+      everyMs: 2,
+    });
+
+    await vi.waitFor(() => expect(builds).toHaveBeenCalledTimes(2));
+    watching.close();
+    finish(weather("1"));
+    await settle();
+
+    expect(built).not.toHaveBeenCalled();
+  });
+
   it("offers nothing that's staged already", async () => {
     const { built, watching } = watched([weather("1")], weather("1"));
 
@@ -389,7 +477,7 @@ describe("following a stack's builds", () => {
     const restartCore = vi.fn(async () => {});
     const restage = vi.fn(async (names: string[]) => {
       stackPackages.noteStaged(await stackPackages.builds());
-      return names.includes("weather") ? ["sanctum.weather"] : [];
+      following.staged(names.includes("weather") ? ["sanctum.weather"] : []);
     });
     const log = vi.fn();
     const following = followStackBuilds({
@@ -417,12 +505,134 @@ describe("following a stack's builds", () => {
     );
   });
 
+  it("restarts for a package staged at startup without another build", async () => {
+    const { stackPackages } = await stackOf();
+    const restartCore = vi.fn(async () => {});
+    const following = followStackBuilds({
+      stackPackages,
+      restage: vi.fn(),
+      isBusy: async () => false,
+      restartCore,
+      log: vi.fn(),
+      everyMs: 2,
+    });
+
+    try {
+      following.staged(["sanctum.weather"]);
+      await vi.waitFor(() => expect(restartCore).toHaveBeenCalledTimes(1));
+    } finally {
+      following.close();
+    }
+  });
+
+  it("retries a failed restart without needing another build", async () => {
+    const { stackPackages } = await stackOf();
+    const restartCore = vi
+      .fn(async () => {})
+      .mockRejectedValueOnce(new Error("Docker busy"));
+    const log = vi.fn();
+    const following = followStackBuilds({
+      stackPackages,
+      restage: vi.fn(),
+      isBusy: async () => false,
+      restartCore,
+      log,
+      everyMs: 2,
+    });
+
+    try {
+      following.staged(["sanctum.weather"]);
+      await vi.waitFor(() => expect(restartCore).toHaveBeenCalledTimes(2));
+      expect(log).toHaveBeenCalledWith(
+        "Could not restart the core: Error: Docker busy",
+      );
+    } finally {
+      following.close();
+    }
+  });
+
+  it("waits if an operation takes the slot after the idle check", async () => {
+    const { stackPackages } = await stackOf();
+    const operations = createOperations();
+    let finish = () => {};
+    let operation: Promise<void> | undefined;
+    const restarted = vi.fn(async () => {
+      await expect(operations.current()).resolves.toEqual({
+        kind: "core-restart",
+      });
+      await expect(
+        operations.claim(
+          { kind: "core-update", version: "dev-2" },
+          async () => {},
+        ),
+      ).rejects.toBeInstanceOf(OperationConflictError);
+    });
+    const log = vi.fn();
+    const following = followStackBuilds({
+      stackPackages,
+      restage: vi.fn(),
+      isBusy: vi.fn(async () => {
+        operation ??= operations.claim(
+          { kind: "app-update", app: "sanctum.weather", to: "0.2.0" },
+          () =>
+            new Promise<void>((done) => {
+              finish = done;
+            }),
+        );
+        return false;
+      }),
+      restartCore: () => operations.claim({ kind: "core-restart" }, restarted),
+      log,
+      everyMs: 2,
+    });
+
+    try {
+      following.staged(["sanctum.weather"]);
+      await vi.waitFor(() =>
+        expect(log).toHaveBeenCalledWith(
+          expect.stringContaining("is moving to another version"),
+        ),
+      );
+      expect(restarted).not.toHaveBeenCalled();
+      finish();
+      await operation;
+      await vi.waitFor(() => expect(restarted).toHaveBeenCalledTimes(1));
+    } finally {
+      following.close();
+      finish();
+      await operation;
+    }
+  });
+
+  it("cancels a pending restart when closed while an operation is running", async () => {
+    const { stackPackages } = await stackOf();
+    let busy = true;
+    const isBusy = vi.fn(async () => busy);
+    const restartCore = vi.fn(async () => {});
+    const following = followStackBuilds({
+      stackPackages,
+      restage: vi.fn(),
+      isBusy,
+      restartCore,
+      log: vi.fn(),
+      everyMs: 2,
+    });
+
+    following.staged(["sanctum.weather"]);
+    await vi.waitFor(() => expect(isBusy).toHaveBeenCalled());
+    following.close();
+    busy = false;
+    await settle();
+
+    expect(restartCore).not.toHaveBeenCalled();
+  });
+
   it("leaves the core alone when nothing staged is new", async () => {
     const { app, build, stackPackages } = await stackOf();
     await app("catalog/apps", "weather", "sanctum.weather");
     stackPackages.noteStaged(await stackPackages.builds());
     const restartCore = vi.fn(async () => {});
-    const restage = vi.fn(async () => []);
+    const restage = vi.fn(async () => {});
     const following = followStackBuilds({
       stackPackages,
       restage,
