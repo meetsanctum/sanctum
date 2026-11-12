@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "packages/*"
   - "catalog/apps/*"
+  # A development stack's own apps, which only it stages.
+  - "deploy/dev/apps/*"
   - "assets/brand"
 
 # Electron downloads its binary when installed. CI skips the download

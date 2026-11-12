@@ -39,12 +39,16 @@ import { createServer, type ServerOptions } from "./server.js";
 import { createServices } from "./services/services.js";
 import { createServicesStateStore } from "./services/state.js";
 import { listenOnSocket } from "./socket.js";
-import { stackCore } from "./stack.js";
+import { stack, stackCore } from "./stack.js";
 import { createHostStateStore, createHostStateWriter } from "./state.js";
 import { defaultHealthTiming } from "./update/health.js";
 import { createJournalStore } from "./update/journal.js";
 import { createPackages } from "./update/packages.js";
 import { createUpdateService } from "./update/service.js";
+import {
+  createStackPackages,
+  followStackBuilds,
+} from "./update/stack-packages.js";
 import { createRegistry } from "./update/registry.js";
 import { createVersionList } from "./update/versions.js";
 
@@ -71,6 +75,7 @@ let host: ServerOptions["host"];
 let reconciler: ReturnType<typeof createReconciler> | undefined;
 let serviceReconciler: ReturnType<typeof createReconciler> | undefined;
 let packages: ReturnType<typeof createPackages> | undefined;
+let stackBuilds: ReturnType<typeof followStackBuilds> | undefined;
 let announcer: Awaited<ReturnType<typeof startAnnouncing>> | undefined;
 let statusDocker: StatusDockerLike | undefined;
 const readings = createHostReadings();
@@ -86,11 +91,16 @@ if (config.supervise) {
   await ensureAppFolders(config.dataDir);
   // Filled in below, once what knows of them exists.
   let foldersInUse = async (): Promise<{ app: string; folder: string }[]> => [];
+  // A development stack's apps come from the worktree, whose image built their
+  // dependencies.
+  const stackPackages = stack ? createStackPackages({ log }) : undefined;
+  const worktree = (await stackPackages?.has()) ? stackPackages : undefined;
   packages = createPackages({
     docker,
     dataDir: config.dataDir,
     log,
     inUse: () => foldersInUse(),
+    ...(worktree ? { worktree } : {}),
   });
   const operations = createOperations();
   const isOperating = async () => (await operations.current()) !== null;
@@ -238,6 +248,20 @@ if (config.supervise) {
     }),
     space,
   };
+  if (worktree) {
+    const staging = packages;
+    stackBuilds = followStackBuilds({
+      stackPackages: worktree,
+      restage: (names) => staging.restage(names),
+      isBusy: async () => (await isOperating()) || (await updates.busy()),
+      restartCore: async () => {
+        if (await inspectContainer(docker, coreContainerName)) {
+          await docker.getContainer(coreContainerName).restart();
+        }
+      },
+      log,
+    });
+  }
   reconciler = createReconciler({
     log,
     paused: updates.busy,
@@ -341,6 +365,7 @@ if (config.announce) {
 }
 
 const shutdown = async () => {
+  stackBuilds?.close();
   reconciler?.stop();
   serviceReconciler?.stop();
   hostStatus.stop();

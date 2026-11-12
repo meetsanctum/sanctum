@@ -146,6 +146,10 @@ function docker(
       events.push(`stop ${id}`);
       setRunning(id, false);
     },
+    restart: async () => {
+      events.push(`restart ${id}`);
+      setRunning(id, true);
+    },
     remove: async () => {
       events.push(`remove ${id}`);
       delete containers[id];

@@ -2,7 +2,7 @@ import { defineApp, light as lightKind } from "@meetsanctum/app-sdk";
 
 // Pretend lights for a development stack, since a Mac has no Zigbee stick: a
 // driver app like Zigbee, whose lights do what they're told at once. It ships
-// with no host: only deploy/dev/stack.Dockerfile loads it.
+// with no host: only a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
   [

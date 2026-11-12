@@ -26,6 +26,7 @@ import {
 import { syncFileSystem, syncPath } from "../durable.js";
 import { stacked } from "../stack.js";
 import { readJson, writeJson } from "../state.js";
+import type { StackPackages } from "./stack-packages.js";
 
 // Each official app's package, kept apart from the core's image, which an
 // update replaces. Once a core image is committed, the manager copies the apps
@@ -34,7 +35,8 @@ import { readJson, writeJson } from "../state.js";
 // changes after that, so it can be mounted read-only.
 //
 // A folder is named for its version and what it holds, since a build can change
-// an app's code and leave its version.
+// an app's code and leave its version. A development stack's image ships none:
+// its apps come from the worktree (stack-packages.ts), staged the same way.
 
 // In the core's image.
 const shippedAt = "/app/catalog/official";
@@ -124,6 +126,8 @@ export function createPackages(options: {
   log: Log;
   // What runs or may have to run again, whichever versions were staged since.
   inUse?: () => Promise<readonly { app: string; folder: string }[]>;
+  // A development stack's apps, for an image that ships none.
+  worktree?: StackPackages;
 }) {
   const { docker, dataDir, log } = options;
   const root = join(dataDir, "packages");
@@ -136,6 +140,11 @@ export function createPackages(options: {
   const helperRole = "packages-copy";
   const volume = managerDataVolumeName;
   let queue: Promise<void> = Promise.resolve();
+  // Images found to ship no packages, which never change what they hold.
+  const shipNone = new Set<string>();
+  // A development stack's apps may have been built again while its manager was
+  // stopped, so one that starts stages them afresh, once.
+  let hasStaged = false;
 
   const packagePath = (id: string, folder: string) => join(root, id, folder);
 
@@ -262,9 +271,30 @@ export function createPackages(options: {
     }
   }
 
-  async function run(image: string) {
+  // What the image ships into staging, or for one that ships none, as a
+  // development stack's, its apps from the worktree, or those named.
+  // The worktree's builds it assembled, to note once they're staged.
+  async function unpackOrAssemble(image: string, only?: readonly string[]) {
+    if (!shipNone.has(image)) {
+      if (await unpack(image)) return { ships: true };
+      shipNone.add(image);
+    }
+    if (!options.worktree) return { ships: false };
+    return {
+      ships: true,
+      assembled: await options.worktree.assemble(staging, only),
+    };
+  }
+
+  // Staging an image's packages, unless it's staged, or `again`: a development
+  // stack's apps once more, or those named, after their build changed.
+  async function run(
+    image: string,
+    again?: { only?: readonly string[] | undefined },
+  ) {
     const state = await readState();
-    if (await isStaged(state, image)) {
+    const mayKeep = !options.worktree || hasStaged;
+    if (!again && mayKeep && (await isStaged(state, image))) {
       // The record may have reached the disk just before a crash, leaving
       // cleanup unfinished even though no package needs unpacking again.
       await removeHelpers();
@@ -279,7 +309,10 @@ export function createPackages(options: {
       // A failed attempt may have placed whole packages without noting them.
       // Free those before another archive needs space, even if it fails too.
       await prune(state);
-      const shipsPackages = await unpack(image);
+      const { ships: shipsPackages, assembled } = await unpackOrAssemble(
+        image,
+        again?.only,
+      );
       const next: PackagesState = { image, apps: { ...state.apps } };
       if (shipsPackages) {
         // Whole on the disk before any appears under its own name.
@@ -297,6 +330,8 @@ export function createPackages(options: {
       }
       await writeJson(statePath, next);
       await prune(next);
+      if (assembled) options.worktree?.noteStaged(assembled);
+      hasStaged = true;
     } finally {
       await rm(staging, { recursive: true, force: true });
     }
@@ -368,6 +403,26 @@ export function createPackages(options: {
     stage(image: string) {
       return inTurn(() => run(image)).catch((error: unknown) => {
         log(`Could not stage the apps' packages: ${errorMessage(error)}`);
+      });
+    },
+
+    // A development stack's apps again, or those named by their folder, after
+    // their build changed: the ids of those now on a new package. Undefined
+    // while nothing is staged to stage them beside, and on a failure, which is
+    // logged.
+    restage(only?: readonly string[]) {
+      return inTurn(async () => {
+        const before = await readState();
+        if (!before.image) return undefined;
+        await run(before.image, { only });
+        const after = await readState();
+        return Object.keys(after.apps).filter(
+          (id) =>
+            after.apps[id]?.current.folder !== before.apps[id]?.current.folder,
+        );
+      }).catch((error: unknown) => {
+        log(`Could not stage the apps' packages: ${errorMessage(error)}`);
+        return undefined;
       });
     },
   };

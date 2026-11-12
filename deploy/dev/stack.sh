@@ -99,12 +99,12 @@ settings() {
 }
 
 # The worktree's built code over the image's, read-only. Compose mounts the
-# manager's; the manager mounts these into the core it creates.
+# manager's; the manager mounts these into the core it creates. Apps run
+# apart, from the packages the manager stages.
 core_binds() {
   local path binds=""
-  for path in deploy/dev/apps apps/core/dist apps/core/migrations \
-    packages/app-sdk/dist packages/auth-protocol/dist \
-    catalog/apps/*/dist catalog/apps/*/migrations catalog/apps/*/sanctum-app.json; do
+  for path in apps/core/dist apps/core/migrations \
+    packages/app-sdk/dist packages/auth-protocol/dist; do
     [[ -e "$path" ]] && binds+="${root}/${path}:/app/${path}:ro;"
   done
   echo "$binds"

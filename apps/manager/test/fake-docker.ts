@@ -355,6 +355,12 @@ export class FakeDocker implements DockerClientLike {
         container.running = false;
         this.events.push(`stop ${container.name}`);
       },
+      restart: async () => {
+        const container = get();
+        container.running = true;
+        container.startedAt = new Date();
+        this.events.push(`restart ${container.name}`);
+      },
       remove: async (options?: { v?: boolean }) => {
         const container = get();
         const archive = container.archiveBeingRead;
