@@ -143,7 +143,10 @@ export default defineApp({
     ],
   },
   // Following first, so no room's deletion or light's change falls
-  // between following and catching up.
+  // between following and catching up. Then it says again all it owns in
+  // the core, from its own database: each mood, each room's turning on,
+  // every job of its schedules, and the workflows for presses and motion.
+  // After an update, the core keeps only what the new version's start says.
   async start(ctx) {
     const snapshots = createSnapshots();
     const snapshotDevices = new Map<string, DeviceInfo>();
@@ -168,7 +171,7 @@ export default defineApp({
         before.kind === "home" &&
         place.timeZone !== before.timeZone
       ) {
-        await syncJobs(ctx, true);
+        await syncJobs(ctx, { fresh: true });
         await publishTurnOn(ctx);
       }
       if (place.kind === "room" && place.name !== before.name) {
@@ -216,7 +219,7 @@ export default defineApp({
     for (const device of await ctx.devices.list())
       snapshotDevices.set(device.id, device);
     await followLights(ctx, snapshots, roomIds, [...snapshotDevices.values()]);
-    await syncJobs(ctx);
+    await syncJobs(ctx, { all: true });
     await publishTurnOn(ctx);
     await syncPresses(ctx);
     await syncMotion(ctx);

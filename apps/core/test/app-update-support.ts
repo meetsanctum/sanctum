@@ -17,7 +17,9 @@ import { fakeManager, testCore, type TestCore } from "./support.js";
 
 export const folderOf = (app: AppDefinition) => `${app.version}+test`;
 
-export async function versions() {
+// A home whose app runs apart at one version after another. The runner
+// migrates its database from migrationsFolder, as its package brings them.
+export async function versions(options: { migrationsFolder?: string } = {}) {
   const folder = await mkdtemp(join(tmpdir(), "sanctum-versions-"));
   cleanUps.push(() => rm(folder, { recursive: true, force: true }));
   const fake = fakeManager();
@@ -59,7 +61,12 @@ export async function versions() {
         manifest: manifestDigest(text),
         load: async () => {
           onLoad?.();
-          return { app: definition };
+          return {
+            app: definition,
+            ...(options.migrationsFolder
+              ? { migrationsFolder: options.migrationsFolder }
+              : {}),
+          };
         },
       },
     });

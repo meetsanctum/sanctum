@@ -29,7 +29,11 @@ describe("loadConfig", () => {
       plainHttp: false,
       officialAppsDir: "../../catalog/apps",
       appsApart: [],
-      officialAppsApart: ["sanctum.weather", "sanctum.natural-light"],
+      officialAppsApart: [
+        "sanctum.weather",
+        "sanctum.natural-light",
+        "sanctum.moods",
+      ],
       packagesDir: "/packages",
       managerSocket: "../manager/data/manager.sock",
       version: "dev",

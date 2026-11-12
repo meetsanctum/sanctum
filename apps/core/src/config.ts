@@ -29,7 +29,7 @@ const envSchema = z.object({
   // The official apps that run apart, from what the manager staged for this image.
   CORE_OFFICIAL_APPS_APART: z
     .string()
-    .default("sanctum.weather,sanctum.natural-light"),
+    .default("sanctum.weather,sanctum.natural-light,sanctum.moods"),
   CORE_PACKAGES_DIR: z.string().min(1).default("/packages"),
   // The manager's socket. The default is where the manager puts it when run
   // from the workspace.

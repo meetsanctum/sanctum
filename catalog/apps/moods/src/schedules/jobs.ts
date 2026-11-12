@@ -98,15 +98,25 @@ let turn: Promise<unknown> = Promise.resolve();
 /**
  * Keeps a daily job at every start and end of every room's scheduled
  * moods, and none else of the schedule's, as on start for times changed or
- * rooms deleted while Moods was stopped.
+ * rooms deleted while Moods was stopped. With `all`, as on start, it
+ * schedules those it has again too: after an update the core keeps only
+ * the jobs the new version's start schedules, and one scheduled as it was
+ * keeps its next run. With `fresh`, as when the home's time zone moves, it
+ * schedules each again for a next run worked out afresh.
  */
-export function syncJobs(ctx: AppContext, hasTimeZoneChanged = false) {
-  const mine = turn.then(() => syncNow(ctx, hasTimeZoneChanged));
+export function syncJobs(
+  ctx: AppContext,
+  again: { all?: boolean; fresh?: boolean } = {},
+) {
+  const mine = turn.then(() => syncNow(ctx, again));
   turn = mine.catch(() => undefined);
   return mine;
 }
 
-async function syncNow(ctx: AppContext, hasTimeZoneChanged: boolean) {
+async function syncNow(
+  ctx: AppContext,
+  { all = false, fresh = false }: { all?: boolean; fresh?: boolean },
+) {
   const wanted = new Map<string, { roomId: string; minute: number }>();
   for (const { roomId, start, end } of await readSchedule(ctx.storage.db)) {
     for (const minute of [start, end % day]) {
@@ -121,13 +131,13 @@ async function syncNow(ctx: AppContext, hasTimeZoneChanged: boolean) {
   }
   const have = new Set(kept.map((job) => job.key));
   for (const [key, input] of wanted) {
-    if (have.has(key) && !hasTimeZoneChanged) continue;
+    if (have.has(key) && !all && !fresh) continue;
     await ctx.jobs.schedule({
       key,
       action: applySchedule,
       input,
       when: { daily: formatMinute(input.minute) },
-      ...(hasTimeZoneChanged ? { fresh: true } : {}),
+      ...(fresh ? { fresh: true } : {}),
     });
   }
 }

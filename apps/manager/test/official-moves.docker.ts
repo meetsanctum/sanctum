@@ -2,14 +2,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { realStack } from "./real-stack.js";
 
-// The official apps' moves, for real: Weather and Natural light from the real
-// image, first in the core's process as a release before this ran them, then each
-// on its own with what it had. The steps of a first move are in app-move.docker.ts
-// and the core's tests; what's here is that the real apps and the real wiring get
-// there.
+// The official apps' moves, for real: Weather, Natural light and Moods from the
+// real image, first in the core's process as a release before this ran them, then
+// each on its own with what it had. The steps of a first move are in
+// app-move.docker.ts and the core's tests; what's here is that the real apps and
+// the real wiring get there.
 
 const app = "sanctum.weather";
 const naturalLight = "sanctum.natural-light";
+const moods = "sanctum.moods";
+const apart = [app, naturalLight, moods];
 const running: string[] = ["CORE_OFFICIAL_APPS_APART="];
 const {
   build,
@@ -47,14 +49,31 @@ type Entity = { key: string; state: unknown };
 
 const info = async (id = app) =>
   ((await call("/api/apps")).body as Info[]).find((each) => each.id === id)!;
-const entities = async () =>
-  (await call(`/api/entities?app=${app}`)).body as Entity[];
+const entities = async (id = app) =>
+  (await call(`/api/entities?app=${id}`)).body as Entity[];
 
 const coreIsUp = () =>
   waitFor("the core", async () => {
     const response = await fetch(`http://127.0.0.1:${port}/api/health`);
     return response.ok ? true : undefined;
   });
+
+// The keys of an app's jobs, as the core keeps them.
+const jobsOf = async (id: string) =>
+  JSON.parse(
+    await docker(
+      "exec",
+      name("core"),
+      "node",
+      "--no-warnings",
+      "--input-type=module",
+      "-e",
+      `import { DatabaseSync } from "node:sqlite";
+       const db = new DatabaseSync("/data/core.db", { readOnly: true });
+       const rows = db.prepare("select key from jobs where app = ?").all("${id}");
+       console.log(JSON.stringify(rows.map(({ key }) => key).sort()));`,
+    ),
+  ) as string[];
 
 const at = (latitude: number) => ({
   timeZone: "Europe/Zurich",
@@ -93,19 +112,39 @@ describe("the official apps' moves, for real", () => {
     await waitFor("its sun and card", async () =>
       (await entities()).length >= 2 ? true : undefined,
     );
+    // A room with a mood, from nine to five.
+    const idOf = (response: { body: unknown }) =>
+      (response.body as { id: string }).id;
+    const office = idOf(
+      await call("/api/places/rooms/add", { name: "Office" }),
+    );
+    const focus = idOf(
+      await call(`/api/apps/${moods}/actions/moods.createMood`, {
+        roomId: office,
+        name: "Focus",
+        lights: [{ device: "desk", capability: "light", state: { on: true } }],
+      }),
+    );
+    const scheduled = await call(
+      `/api/apps/${moods}/actions/moods.scheduleMood`,
+      { roomId: office, moodId: focus, start: 540, end: 1020 },
+    );
+    expect(scheduled.status).toBe(200);
+    expect(await jobsOf(moods)).toHaveLength(2);
     const files = await docker("exec", name("core"), "ls", "/data/apps");
-    expect(files).toContain(`${app}.db`);
-    expect(files).toContain(`${naturalLight}.db`);
+    for (const id of apart) expect(files).toContain(`${id}.db`);
   }, 300_000);
 
   it("moves when it's listed, keeping what it owns, on its own image", async () => {
     const before = (await entities()).map(({ key }) => key).sort();
-    running[0] = `CORE_OFFICIAL_APPS_APART=${app},${naturalLight}`;
+    const moodsBefore = (await entities(moods)).map(({ key }) => key);
+    const jobsBefore = await jobsOf(moods);
+    running[0] = `CORE_OFFICIAL_APPS_APART=${apart.join(",")}`;
     await docker("rm", "-f", name("manager"), name("core"));
     await startManager(coreImage, port);
     await coreIsUp();
 
-    for (const id of [app, naturalLight]) {
+    for (const id of apart) {
       await waitFor(`${id} to run on its own`, async () => {
         const each = await info(id);
         return each.state === "running" && each.run ? true : undefined;
@@ -117,8 +156,9 @@ describe("the official apps' moves, for real", () => {
       expect.arrayContaining(before),
     );
     const volumes = await docker("volume", "ls", "--format", "{{.Name}}");
-    expect(volumes).toContain(`sanctum-${stack}-app-data-${app}`);
-    expect(volumes).toContain(`sanctum-${stack}-app-data-${naturalLight}`);
+    for (const id of apart) {
+      expect(volumes).toContain(`sanctum-${stack}-app-data-${id}`);
+    }
     // Each file came with it, on its own image.
     const count = (id: string, table: string) =>
       docker(
@@ -136,6 +176,11 @@ describe("the official apps' moves, for real", () => {
     expect(await count(app, "forecast_location")).toBe("1");
     // The lights that follow the curve: none in a home without lights.
     expect(await count(naturalLight, "followed_lights")).toBe("0");
+    // Moods' mood and its schedule, and the mood and jobs it says again it owns.
+    expect(await count(moods, "moods")).toBe("1");
+    expect(await count(moods, "scheduled_moods")).toBe("1");
+    expect((await entities(moods)).map(({ key }) => key)).toEqual(moodsBefore);
+    expect(await jobsOf(moods)).toEqual(jobsBefore);
   }, 300_000);
 
   it("hears at once that the home has moved, through its socket", async () => {
@@ -157,7 +202,7 @@ describe("the official apps' moves, for real", () => {
 
     await docker("restart", name("core"));
     await coreIsUp();
-    for (const id of [app, naturalLight]) {
+    for (const id of apart) {
       await waitFor(`${id} to run on its own`, async () => {
         const each = await info(id);
         return each.state === "running" && each.run ? true : undefined;
