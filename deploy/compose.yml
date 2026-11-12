@@ -3,6 +3,9 @@
 #   cp deploy/.env.example deploy/.env    # set SANCTUM_CHANNEL and owner
 #   docker compose -f deploy/compose.yml up -d
 #
+# deploy/install.sh does this on a fresh machine, Docker included, from a copy
+# of this file in /opt/sanctum.
+#
 # Compose starts only the manager. The manager creates the core's container,
 # keeps it running and updates it, and updates itself through a short-lived
 # updater container. Compose is how a host is set up; afterwards the manager
