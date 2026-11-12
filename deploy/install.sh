@@ -74,29 +74,40 @@ check_machine() {
   [[ $EUID -eq 0 ]] || die "Run the installer as root: add sudo before bash."
 }
 
-# Docker's own script sets up Docker's package repository, which carries the
-# Compose plugin the distributions' own packages may lack.
+# Docker comes from Docker's own package repository, which carries the Compose
+# plugin the distributions' packages may lack. Apt checks every package
+# against the repository's key, and nothing downloaded runs as a script.
 install_docker() {
   if command -v docker >/dev/null; then
     docker compose version >/dev/null 2>&1 ||
       die "Docker is here without its Compose plugin. Install the plugin, then run this again: https://docs.docker.com/compose/install/linux/"
     return
   fi
-  local distro=""
+  local id="" codename=""
   if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
-    distro="$(. /etc/os-release && echo "${ID:-} ${ID_LIKE:-}")"
+    id="$(. /etc/os-release && echo "${ID:-}")"
+    # shellcheck disable=SC1091
+    codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
   fi
-  case " $distro " in
-    *" debian "* | *" ubuntu "* | *" raspbian "*) ;;
-    *) die "Install Docker Engine with its Compose plugin, then run this again: https://docs.docker.com/engine/install/" ;;
-  esac
+  # Raspberry Pi OS (64-bit) says debian, and takes Debian's packages.
+  [[ ("$id" == debian || "$id" == ubuntu) && -n "$codename" ]] ||
+    die "Install Docker Engine with its Compose plugin, then run this again: https://docs.docker.com/engine/install/"
   say "Installing Docker"
-  if ! command -v curl >/dev/null; then
-    apt-get update
-    apt-get install -y curl ca-certificates
+  DEBIAN_FRONTEND=noninteractive apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL "https://download.docker.com/linux/${id}/gpg" -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${id} ${codename} stable" \
+    >/etc/apt/sources.list.d/docker.list
+  DEBIAN_FRONTEND=noninteractive apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  # The package starts Docker, except where the system holds services back
+  # while packages install.
+  if command -v systemctl >/dev/null; then
+    systemctl enable --now docker || true
   fi
-  curl -fsSL https://get.docker.com | sh
 }
 
 # Raspberry Pi OS leaves the memory cgroup off, and Docker then ignores every
