@@ -252,6 +252,7 @@ afterEach(async () => {
     root.unmount();
   });
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -379,6 +380,191 @@ describe("the Presence category", () => {
     ];
     await show("category", "occupancy");
     expect(overviewRows()).toEqual(["HallQuiet for 30 min"]);
+  });
+
+  it("measures the times when rooms arrive after the page mounts", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
+    devices = [
+      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
+    ];
+    await show("category", "occupancy");
+
+    const ticks = container.querySelector<HTMLElement>(
+      "section[aria-labelledby] [aria-hidden='true']",
+    )!;
+    expect(ticks.textContent).toContain("Now");
+    expect(ticks.style.width).toBe("480px");
+  });
+
+  it("leaves a sensor's band empty when its history is not kept", async () => {
+    const request = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) =>
+      path.startsWith("/api/history/states")
+        ? { ...historyOf(path), kept: false }
+        : request(path, init),
+    );
+    devices = [
+      motionSensor("hall", "hall", { occupied: true, minutesAgo: 120 }),
+    ];
+    await show("category", "occupancy");
+
+    expect(overviewRows()).toEqual(["HallMotion now"]);
+    expect(container.querySelectorAll("li > button rect")).toHaveLength(0);
+  });
+
+  it("shows live motion while its history request is still pending", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12));
+    recorded = { hall: [[Date.now() - 60 * minute, false]] };
+    devices = [
+      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
+    ];
+    await show("category", "occupancy");
+    vi.mocked(coreJson).mockImplementation(() => new Promise(() => {}));
+    vi.setSystemTime(Date.now() + 30_000);
+    const moving = motionSensor("hall", "hall", {
+      occupied: true,
+      minutesAgo: 10 / 60,
+    });
+    await act(async () => {
+      live.publish({ type: "device", id: moving.id, device: moving });
+    });
+
+    expect(
+      container.querySelector("li > button")?.getAttribute("aria-label"),
+    ).toBe("Hall, Motion now. Under a minute of motion, this time since 12:00");
+  });
+
+  it("keeps live offline and recovery spans when history cannot be refreshed", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12));
+    const moving = motionSensor("hall", "hall", {
+      occupied: true,
+      minutesAgo: 10,
+    });
+    recorded = { hall: [[Date.now() - 10 * minute, true]] };
+    devices = [moving];
+    await show("category", "occupancy");
+    vi.mocked(coreJson).mockRejectedValue(new Error("History unavailable"));
+    await act(async () => vi.advanceTimersByTime(minute));
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: moving.id,
+        device: { ...moving, availability: "offline" },
+      });
+    });
+    await act(async () => vi.advanceTimersByTime(minute));
+    expect(
+      container.querySelector("li > button")?.getAttribute("aria-label"),
+    ).toBe("Hall, Offline. 11 min of motion, the last at 12:01");
+
+    await act(async () => vi.advanceTimersByTime(minute));
+    await act(async () => {
+      live.publish({ type: "device", id: moving.id, device: moving });
+    });
+    await act(async () => vi.advanceTimersByTime(minute));
+    expect(
+      container.querySelector("li > button")?.getAttribute("aria-label"),
+    ).toBe("Hall, Motion now. 12 min of motion, this time since 12:03");
+  });
+
+  it("shows each room's history without waiting for another room's request", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12));
+    recorded = {
+      hall: [
+        [Date.now() - 60 * minute, true],
+        [Date.now() - 30 * minute, false],
+      ],
+    };
+    devices = [
+      motionSensor("office", "office", { occupied: false, minutesAgo: 60 }),
+      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
+    ];
+    const request = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path.startsWith("/api/history/states?device=office&")
+        ? new Promise(() => {})
+        : request(path, init),
+    );
+    await show("category", "occupancy");
+
+    expect(
+      container.querySelectorAll("li > button")[1]?.getAttribute("aria-label"),
+    ).toBe("Hall, Quiet for 30 min. 30 min of motion, the last at 11:30");
+  });
+
+  it("keeps the newer history when periodic responses arrive out of order", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12));
+    devices = [
+      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
+    ];
+    await show("category", "occupancy");
+    let answerOlder!: (history: DeviceHistory) => void;
+    let answerNewer!: (history: DeviceHistory) => void;
+    const older = historyOf("?device=hall&capability=occupancy");
+    const newer: DeviceHistory = {
+      ...older,
+      states: [
+        {
+          at: new Date(Date.now() - 60 * minute).toISOString(),
+          availability: "online",
+          state: { occupied: true },
+        },
+        {
+          at: new Date(Date.now() - 30 * minute).toISOString(),
+          availability: "online",
+          state: { occupied: false },
+        },
+      ],
+    };
+    vi.mocked(coreJson)
+      .mockImplementationOnce(
+        () => new Promise<DeviceHistory>((resolve) => (answerOlder = resolve)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<DeviceHistory>((resolve) => (answerNewer = resolve)),
+      );
+    await act(async () => vi.advanceTimersByTime(5 * minute));
+    await act(async () => vi.advanceTimersByTime(5 * minute));
+    await act(async () => answerNewer(newer));
+    expect(
+      container.querySelector("li > button")?.getAttribute("aria-label"),
+    ).toContain("30 min of motion, the last at 11:30");
+    await act(async () => answerOlder(older));
+    expect(
+      container.querySelector("li > button")?.getAttribute("aria-label"),
+    ).toContain("30 min of motion, the last at 11:30");
+  });
+
+  it("refreshes every sensor each five minutes while another sensor changes", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12));
+    devices = [
+      motionSensor("office", "office", { occupied: false, minutesAgo: 60 }),
+      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
+    ];
+    await show("category", "occupancy");
+    vi.mocked(coreJson).mockClear();
+    await act(async () => vi.advanceTimersByTime(4 * minute));
+    const moving = motionSensor("office", "office", {
+      occupied: true,
+      minutesAgo: 0,
+    });
+    await act(async () => {
+      live.publish({ type: "device", id: moving.id, device: moving });
+    });
+    await act(async () => vi.advanceTimersByTime(minute));
+
+    expect(
+      vi
+        .mocked(coreJson)
+        .mock.calls.some(([path]) =>
+          path.startsWith("/api/history/states?device=hall&"),
+        ),
+    ).toBe(true);
   });
 
   it("draws a room's day from all its sensors, and a row opens its room", async () => {

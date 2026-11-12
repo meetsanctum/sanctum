@@ -23,6 +23,7 @@ import type { Devices } from "./use-devices";
 
 type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
 type Sensor = { device: DeviceInfo; capability: Occupancy };
+type LiveChanges = { version: string; changes: Live[] };
 
 const minute = 60_000;
 const refreshMs = 5 * minute;
@@ -40,19 +41,70 @@ function useLastDay(sensors: readonly Sensor[]) {
     ReadonlyMap<string, DeviceHistory>
   >(new Map());
   const [now, setNow] = useState(() => Date.now());
+  const [live, setLive] = useState<ReadonlyMap<string, LiveChanges>>(new Map());
   // What each sensor was when its history was last read.
   const read = useRef(new Map<string, string>());
+  const refresh = useRef(() => {});
   const wanted = JSON.stringify(
     sensors.map(({ device, capability }) => [
       device.id,
       capability.id,
-      `${device.availability} ${capability.changedAt ?? ""}`,
+      JSON.stringify([
+        device.availability,
+        capability.observed,
+        capability.changedAt,
+      ]),
     ]),
   );
 
   useEffect(() => {
     let current = true;
+    const requests = new Map<string, object>();
     const each = JSON.parse(wanted) as [string, string, string][];
+    const at = Date.now();
+    const keys = new Set(
+      each.map(([device, capability]) => tileKey(device, capability)),
+    );
+    for (const key of read.current.keys()) {
+      if (!keys.has(key)) read.current.delete(key);
+    }
+    setHistories(
+      (previous) => new Map([...previous].filter(([key]) => keys.has(key))),
+    );
+    // Preserve changes until History includes them, including availability
+    // changes, whose times are not in the capability's changedAt.
+    setLive((previous) => {
+      const next = new Map<string, LiveChanges>();
+      for (const [device, capability, version] of each) {
+        const key = tileKey(device, capability);
+        const was = previous.get(key);
+        if (was?.version === version) {
+          next.set(key, was);
+          continue;
+        }
+        const [availability, state, changedAt] = JSON.parse(version) as [
+          Live["availability"],
+          Live["state"],
+          string | null,
+        ];
+        const reported = changedAt ? Date.parse(changedAt) : NaN;
+        const since =
+          availability === "offline" ||
+          (was && was.changes.at(-1)?.availability !== availability) ||
+          Number.isNaN(reported)
+            ? at
+            : reported;
+        const changes = (was?.changes ?? []).filter(
+          (_, index, all) => (all[index + 1]?.since ?? at) > at - dayMs,
+        );
+        next.set(key, {
+          version,
+          changes: [...changes, { availability, state, since }],
+        });
+      }
+      return next;
+    });
+    setNow(at);
     const load = async (all: boolean) => {
       const to = Date.now();
       const stale = each.filter(
@@ -60,59 +112,43 @@ function useLastDay(sensors: readonly Sensor[]) {
           all || read.current.get(tileKey(device, capability)) !== version,
       );
       if (stale.length === 0) return;
-      const results = await Promise.allSettled(
-        stale.map(([device, capability]) =>
-          coreJson<DeviceHistory>(
+      await Promise.allSettled(
+        stale.map(async ([device, capability, version]) => {
+          const key = tileKey(device, capability);
+          const request = {};
+          requests.set(key, request);
+          const history = await coreJson<DeviceHistory>(
             `/api/history/states?${new URLSearchParams({
               device,
               capability,
               from: new Date(to - dayMs).toISOString(),
               to: new Date(to).toISOString(),
             })}`,
-          ),
-        ),
+          );
+          if (!current || requests.get(key) !== request) return;
+          read.current.set(key, version);
+          setHistories((previous) => new Map(previous).set(key, history));
+          setNow(Date.now());
+        }),
       );
-      if (!current) return;
-      const fresh = new Map<string, DeviceHistory>();
-      for (const [index, result] of results.entries()) {
-        if (result.status !== "fulfilled") continue;
-        const [device, capability, version] = stale[index]!;
-        const key = tileKey(device, capability);
-        read.current.set(key, version);
-        fresh.set(key, result.value);
-      }
-      setHistories((previous) => new Map([...previous, ...fresh]));
-      setNow(Date.now());
     };
     void load(false);
-    const reload = setInterval(() => void load(true), refreshMs);
+    refresh.current = () => void load(true);
     return () => {
       current = false;
-      clearInterval(reload);
     };
   }, [wanted]);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), minute);
-    return () => clearInterval(tick);
+    const reload = setInterval(() => refresh.current(), refreshMs);
+    return () => {
+      clearInterval(tick);
+      clearInterval(reload);
+    };
   }, []);
 
-  return { histories, now };
-}
-
-// What a sensor says now, carried past its last recorded change: a change
-// the core broadcast before History had it shows at once.
-function liveOf({ device, capability }: Sensor): Live[] {
-  if (device.availability === "offline" || !capability.state) return [];
-  const since = capability.changedAt ? Date.parse(capability.changedAt) : NaN;
-  if (Number.isNaN(since)) return [];
-  return [
-    {
-      availability: device.availability,
-      state: capability.state as unknown as Record<string, unknown>,
-      since,
-    },
-  ];
+  return { histories, now, live };
 }
 
 /**
@@ -132,7 +168,6 @@ export function PresenceOverview(props: {
 }) {
   const { devices } = props;
   const headingId = useId();
-  const ticks = useWidth();
   const rooms = devices.places?.rooms ?? [];
   const placed = new Set(rooms.map((room) => room.id));
   const sensors = devices.devices.flatMap((device) =>
@@ -142,7 +177,7 @@ export function PresenceOverview(props: {
           .map((capability) => ({ device, capability }))
       : [],
   );
-  const { histories, now } = useLastDay(sensors);
+  const { histories, now, live } = useLastDay(sensors);
   const from = now - dayMs;
   const shown = rooms.flatMap((room) => {
     const own = sensors.filter((sensor) => sensor.device.roomId === room.id);
@@ -153,10 +188,11 @@ export function PresenceOverview(props: {
     const tiles = devices.tiles.filter((tile) => keys.has(tile.key));
     const spans = roomSpans(
       own.map((sensor) => {
-        const history = histories.get(
-          tileKey(sensor.device.id, sensor.capability.id),
-        );
-        return history ? spansOf(history, from, now, liveOf(sensor)) : [];
+        const key = tileKey(sensor.device.id, sensor.capability.id);
+        const history = histories.get(key);
+        return history?.kept
+          ? spansOf(history, from, now, live.get(key)?.changes)
+          : [];
       }),
       from,
       now,
@@ -182,15 +218,7 @@ export function PresenceOverview(props: {
           <SectionHeading id={headingId}>Last 24 hours</SectionHeading>
         </div>
         <div className="px-3.5 @lg/day:flex-1 @lg/day:ps-0">
-          <div ref={ticks.box}>
-            <BandTicks
-              from={from}
-              to={now}
-              plot={ticks.width}
-              withNow
-              className="text-(--tile-secondary)"
-            />
-          </div>
+          <OverviewTicks from={from} to={now} />
         </div>
       </div>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -209,6 +237,22 @@ export function PresenceOverview(props: {
         ))}
       </ul>
     </section>
+  );
+}
+
+// Mounted with the rows, so its element exists when useWidth measures it.
+function OverviewTicks(props: { from: number; to: number }) {
+  const { box, width } = useWidth();
+  return (
+    <div ref={box}>
+      <BandTicks
+        from={props.from}
+        to={props.to}
+        plot={width}
+        withNow
+        className="text-(--tile-secondary)"
+      />
+    </div>
   );
 }
 
