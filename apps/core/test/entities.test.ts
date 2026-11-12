@@ -393,7 +393,7 @@ describe("entities", () => {
       state: sun,
     });
 
-    // As after a failed migration: the app is not installed this time.
+    // As after a failed migration: its runner never gets ready.
     const next = await testCore({
       dataDir: core.dataDir,
       apps: [
@@ -404,7 +404,9 @@ describe("entities", () => {
         },
       ],
     });
-    expect(next.logs.join("\n")).toContain("test.sky was not installed");
+    expect(next.logs.join("\n")).toContain(
+      "apps: test.sky's connection ended: it could not get ready",
+    );
     expect(next.entities.list().map((each) => each.key)).toEqual(["home"]);
   });
 

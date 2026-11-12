@@ -17,8 +17,8 @@ import {
 // for the ones that are on, a service switched off loses the app's broker
 // account before the switch shows it off, and one switched back on gets a new
 // login. An app that needs the service pauses meanwhile; one that does without
-// it restarts, so no connection outlives the change. An app whose stop failed
-// never starts again until the core does.
+// it restarts, so no connection outlives the change. In the core's process, an
+// app whose stop failed never starts again until the core does.
 
 const said: string[] = [];
 beforeEach(() => (said.length = 0));
@@ -78,11 +78,17 @@ function bridge(
 
 async function bridgeCore(
   pkg: AppPackage,
-  options: { dataDir?: string; fake?: ReturnType<typeof fakeManager> } = {},
+  options: {
+    dataDir?: string;
+    fake?: ReturnType<typeof fakeManager>;
+    // In the core's process, where a failed stop leaves it stopped; apart, its
+    // container ends and starts again.
+    inProcess?: boolean;
+  } = {},
 ) {
   const fake = options.fake ?? fakeManager();
   const core = await testCore({
-    apps: [pkg],
+    ...(options.inProcess ? { inProcess: [pkg] } : { apps: [pkg] }),
     manager: fake.manager,
     dataDir: options.dataDir,
   });
@@ -213,7 +219,7 @@ describe("a service an app holds", () => {
     confirm();
 
     expect((await answered).statusCode).toBe(404);
-    await core.apps.start([bridge()]);
+    await core.startApps([bridge()]);
     expect(core.apps.list()[0]?.permissions).toContain("services:zigbee2mqtt");
   });
 
@@ -233,7 +239,7 @@ describe("a service an app holds", () => {
     );
     await core.apps.remove("test.bridge");
 
-    const starting = core.apps.start([bridge()]);
+    const starting = core.startApps([bridge()]);
     await settled();
     // Its PUT waits: the late DELETE would erase its login.
     expect(fake.calls).toEqual([
@@ -256,7 +262,7 @@ describe("a service an app holds", () => {
 
     const removing = core.apps.remove("test.bridge");
     await settled();
-    const starting = core.apps.start([bridge()]);
+    const starting = core.startApps([bridge()]);
     await settled();
     // Its PUT waits: the removal's DELETE would erase its login.
     expect(fake.calls).toEqual(["PUT zigbee2mqtt test.bridge"]);
@@ -318,9 +324,9 @@ describe("a service an app holds", () => {
       "services:zigbee2mqtt",
       true,
     );
-    await settled();
 
-    expect((answered.json() as AppInfo).state).toBe("running");
+    expect((answered.json() as AppInfo).state).toBe("starting");
+    await vi.waitFor(() => expect(core.apps.list()[0]?.state).toBe("running"));
     expect(fake.calls).toEqual([
       "PUT zigbee2mqtt test.bridge",
       "REVOKE zigbee2mqtt test.bridge",
@@ -364,7 +370,9 @@ describe("a service an app holds", () => {
 
 describe("an app whose stop failed", () => {
   it("never starts again until the core does, and says it is stopped", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }));
+    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
+      inProcess: true,
+    });
     await grant(core, maya.token, "places.read", false);
     await settled();
 
@@ -395,19 +403,23 @@ describe("an app whose stop failed", () => {
     await settled();
 
     await grant(core, maya.token, "places.read", true);
-    await expect
-      .poll(() =>
-        live.messages
-          .filter((each) => each.type === "app")
-          .map((each) => (each.app as AppInfo).state),
-      )
-      .toEqual(["paused", "running"]);
+    const states = () =>
+      live.messages
+        .filter((each) => each.type === "app")
+        .map((each) => (each.app as AppInfo).state);
+    await expect.poll(states).toContain("running");
     // By then it had started again, so a client may call it at once.
     expect(said).toEqual(["start", "stop", "start"]);
+    expect(states().slice(0, states().indexOf("running"))).toEqual([
+      "paused",
+      "starting",
+    ]);
   });
 
   it("tells every live client it stopped, after it paused", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }));
+    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
+      inProcess: true,
+    });
     const live = await openLive(core, maya.token);
 
     await grant(core, maya.token, "places.read", false);
@@ -424,7 +436,9 @@ describe("an app whose stop failed", () => {
   });
 
   it("does not announce an app removed while its stop fails", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }));
+    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
+      inProcess: true,
+    });
     const live = await openLive(core, maya.token);
 
     await core.apps.remove("test.bridge");
@@ -439,6 +453,7 @@ describe("an app whose stop failed", () => {
     const stopping = new Promise<void>((resolve) => (finishStop = resolve));
     const { core, maya } = await bridgeCore(
       bridge({ failsToStop: true, stopWaits: stopping }),
+      { inProcess: true },
     );
     const live = await openLive(core, maya.token);
 

@@ -151,7 +151,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
         : [packageOf(definition, options.folder)],
       ...(options.inProcess || options.isInProcessOnly
         ? {
-            apps: [
+            inProcess: [
               {
                 app: options.inProcess ?? definition,
                 origin: "official" as const,

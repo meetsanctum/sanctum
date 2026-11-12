@@ -9,7 +9,7 @@ import {
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 import { randomUUID } from "node:crypto";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,6 +39,7 @@ import type { SpaceManager } from "../src/system/space.js";
 import type { StatusManager } from "../src/system/status.js";
 import type { UpdateManager } from "../src/system/updates.js";
 import type { SunDays } from "../src/workflows/jobs.js";
+import { firstStarts, runnerApps } from "./runner-apps.js";
 
 // A core on a fresh database, and a device that talks to it the way the
 // apps do: OPAQUE on its side, with fast key stretching for tests.
@@ -307,7 +308,10 @@ export async function testCore(
     onTrial?: boolean;
     // How soon an app's update asks for its turn again, and where its versions are.
     appUpdates?: Parameters<typeof createModules>[1]["appUpdates"];
+    // Apps the test defines, each run apart through the runner in this process.
     apps?: readonly AppPackage[];
+    // Apps in the core's own process, as a development stack runs them.
+    inProcess?: readonly AppPackage[];
     // Apps that run apart, each listening in its own folder under `appSockets`.
     apart?: readonly ApartPackage[];
     appSockets?: string;
@@ -348,11 +352,19 @@ export async function testCore(
   const claims: boolean[] = [];
   const logs: string[] = [];
   const coreHomeId = loadHomeId(database.db, now);
+  const sockets =
+    options.appSockets ?? (await mkdtemp(join(tmpdir(), "sanctum-run-")));
+  const runner = runnerApps({
+    dataDir,
+    sockets,
+    manager: options.manager ?? fakeManager().manager,
+  });
+  const apps = runner.add(options.apps ?? []);
   const modules = await createModules(database.db, {
     ...(options.appUpdates ? { appUpdates: options.appUpdates } : {}),
     dataDir,
     version: "1.2.3",
-    manager: options.manager ?? fakeManager().manager,
+    manager: runner.manager,
     hostId: () =>
       options.hostId === undefined ? hostId : (options.hostId ?? undefined),
     homeId: coreHomeId,
@@ -362,7 +374,7 @@ export async function testCore(
     limits: { ...defaultLimits, ...options.limits },
     now,
     appTimeoutMs: options.appTimeoutMs,
-    appSockets: options.appSockets,
+    appSockets: sockets,
     supervision: options.supervision,
     confirmMs: options.confirmMs,
     firmwareStaleMs: options.firmwareStaleMs,
@@ -379,15 +391,17 @@ export async function testCore(
     allowEveryPermission(
       database.db,
       [
-        ...(options.apps ?? []).map(({ app }) => app),
-        ...(options.apart ?? []).map(({ apart }) => apart.manifest),
+        ...(options.inProcess ?? []).map(({ app }) => app),
+        ...[...apps, ...(options.apart ?? [])].map(
+          ({ apart }) => apart.manifest,
+        ),
       ],
       now(),
     );
   }
   if (options.onTrial) modules.workflows.hold();
   await modules.apps.start(
-    [...(options.apps ?? []), ...(options.apart ?? [])],
+    [...(options.inProcess ?? []), ...apps, ...(options.apart ?? [])],
     {
       onTrial: options.onTrial ?? false,
     },
@@ -403,7 +417,14 @@ export async function testCore(
     await server.close();
     await modules.close();
     database.close();
+    await runner.close();
+    if (!options.appSockets) {
+      await rm(sockets, { recursive: true, force: true });
+    }
   });
+  // Each app the test defines has had its first start, as one in the core's
+  // process has once the core starts, unless it waits for a commit.
+  if (!options.onTrial) await firstStarts(modules.apps, apps);
   return {
     ...modules,
     db: database.db,
@@ -415,6 +436,13 @@ export async function testCore(
     now,
     // Moves the core's clock on.
     advance: (ms: number) => (clock.now += ms),
+    // Installs and starts more apps the test defines, through the runner as
+    // `apps` are.
+    async startApps(packages: readonly AppPackage[]) {
+      const added = runner.add(packages);
+      await modules.apps.start(added);
+      await firstStarts(modules.apps, added);
+    },
   };
 }
 

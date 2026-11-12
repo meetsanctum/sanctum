@@ -1,5 +1,5 @@
 import { defineAction, defineApp, type AppInfo } from "@meetsanctum/app-sdk";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { createActivity } from "../src/activity/activity.js";
@@ -169,9 +169,11 @@ describe("switching off a permission an app needs", () => {
     await settled();
 
     const answered = await grant(core, maya.token, "places.read", true);
-    await settled();
 
-    expect(answered.json()).toMatchObject({ state: "running" });
+    expect(answered.json()).toMatchObject({ state: "starting" });
+    await expect
+      .poll(async () => (await lampInfo(core, maya.token)).state)
+      .toBe("running");
     expect(lamp.said).toEqual(["start", "stop", "start"]);
     expect((await call(core, maya.token, "lamp.ping")).json()).toEqual({
       places: 0,
@@ -240,11 +242,14 @@ describe("switching off a permission an app needs", () => {
       dataDir: first.core.dataDir,
     });
 
+    // Once its container has come, which it does paused.
+    await vi.waitFor(() =>
+      expect(again.logs).toContain(
+        "apps: test.lamp is paused while places.read is off",
+      ),
+    );
     expect(lamp.said).toEqual([]);
     expect(again.apps.list()[0]).toMatchObject({ state: "paused" });
-    expect(again.logs).toContain(
-      "apps: test.lamp is paused while places.read is off",
-    );
   });
 });
 

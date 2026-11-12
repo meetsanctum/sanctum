@@ -161,30 +161,34 @@ describe("the core's events", () => {
         maya,
       )
     ).json();
-    await settled();
+    // The zone came last, so the app has heard all before it.
+    await expect
+      .poll(() => places.heard.at(-1))
+      .toMatchObject({ name: "place.added", place: { id: zone.id } });
     places.heard.length = 0;
     await post(core, "/api/places/rooms/remove", { id: room.id }, maya);
-    await settled();
 
     // Its devices move to no room first, then follow its name to none.
-    expect(places.heard).toMatchObject([
-      {
-        name: "device.changed",
-        before: { id: lamp, roomId: room.id, name: "Office light" },
-        device: { id: lamp, roomId: null, name: "Office light" },
-      },
-      { name: "place.deleted", place: { kind: "room", id: room.id } },
-      {
-        name: "place.changed",
-        before: { kind: "zone", id: zone.id, roomIds: [room.id] },
-        place: { kind: "zone", id: zone.id, roomIds: [] },
-      },
-      {
-        name: "device.changed",
-        before: { id: lamp, roomId: null, name: "Office light" },
-        device: { id: lamp, roomId: null, name: "Light" },
-      },
-    ]);
+    await expect
+      .poll(() => places.heard)
+      .toMatchObject([
+        {
+          name: "device.changed",
+          before: { id: lamp, roomId: room.id, name: "Office light" },
+          device: { id: lamp, roomId: null, name: "Office light" },
+        },
+        { name: "place.deleted", place: { kind: "room", id: room.id } },
+        {
+          name: "place.changed",
+          before: { kind: "zone", id: zone.id, roomIds: [room.id] },
+          place: { kind: "zone", id: zone.id, roomIds: [] },
+        },
+        {
+          name: "device.changed",
+          before: { id: lamp, roomId: null, name: "Office light" },
+          device: { id: lamp, roomId: null, name: "Light" },
+        },
+      ]);
   });
 
   it("follow where the home is, apart from its name and its rooms", async () => {
@@ -249,32 +253,33 @@ describe("the core's events", () => {
         throw new Error("rolled back");
       }),
     ).toThrow("rolled back");
-    await settled();
 
-    expect(people.heard).toEqual([
-      {
-        name: "person.added",
-        person: {
-          id: maya.person.id,
-          name: maya.person.name,
-          avatar: null,
-          colour: expect.any(String),
+    await expect
+      .poll(() => people.heard)
+      .toEqual([
+        {
+          name: "person.added",
+          person: {
+            id: maya.person.id,
+            name: maya.person.name,
+            avatar: null,
+            colour: expect.any(String),
+          },
         },
-      },
-      {
-        name: "person.added",
-        person: expect.objectContaining({ id: ben.id, name: "Ben" }),
-      },
-      {
-        name: "person.changed",
-        before: expect.objectContaining({ name: "Ben" }),
-        person: expect.objectContaining({ name: "Benjamin" }),
-      },
-      {
-        name: "person.deleted",
-        person: expect.objectContaining({ id: ben.id, name: "Benjamin" }),
-      },
-    ]);
+        {
+          name: "person.added",
+          person: expect.objectContaining({ id: ben.id, name: "Ben" }),
+        },
+        {
+          name: "person.changed",
+          before: expect.objectContaining({ name: "Ben" }),
+          person: expect.objectContaining({ name: "Benjamin" }),
+        },
+        {
+          name: "person.deleted",
+          person: expect.objectContaining({ id: ben.id, name: "Benjamin" }),
+        },
+      ]);
   });
 
   it("never announce intermediate people from a rolled-back transaction", async () => {
@@ -309,15 +314,16 @@ describe("the core's events", () => {
       core.people.add({ name: "Ben", colour: "#8fb5c9" }),
     );
     core.people.update(person.id, { name: "Benjamin" });
-    await settled();
-    expect(people.heard).toMatchObject([
-      { name: "person.added", person: { name: "Ben" } },
-      {
-        name: "person.changed",
-        before: { name: "Ben" },
-        person: { name: "Benjamin" },
-      },
-    ]);
+    await expect
+      .poll(() => people.heard)
+      .toMatchObject([
+        { name: "person.added", person: { name: "Ben" } },
+        {
+          name: "person.changed",
+          before: { name: "Ben" },
+          person: { name: "Benjamin" },
+        },
+      ]);
   });
 
   it("show only the standard types each app may read, whichever app provides them", async () => {
@@ -346,17 +352,18 @@ describe("the core's events", () => {
       type: forecastType.id,
       state: {},
     });
-    await settled();
 
-    expect(sun.heard).toMatchObject([
-      { name: "entity.added", entity: { app: "test.sky", key: "home" } },
-      {
-        name: "entity.changed",
-        before: { state: { date: "2026-10-29" } },
-        entity: { state: { date: "2026-10-30" } },
-      },
-      { name: "entity.deleted", entity: { type: sunType.id, key: "home" } },
-    ]);
+    await expect
+      .poll(() => sun.heard)
+      .toMatchObject([
+        { name: "entity.added", entity: { app: "test.sky", key: "home" } },
+        {
+          name: "entity.changed",
+          before: { state: { date: "2026-10-29" } },
+          entity: { state: { date: "2026-10-30" } },
+        },
+        { name: "entity.deleted", entity: { type: sunType.id, key: "home" } },
+      ]);
   });
 
   it.each([
@@ -460,12 +467,13 @@ describe("the core's events", () => {
   });
 
   it.each(["fails", "times out"])(
-    "reach nothing of an app whose start %s, and leave its actions be",
+    "reach nothing of an app in the core's process whose start %s, and leave its actions be",
     async (outcome) => {
       const heard: CoreEvent[] = [];
+      // Apart, its container ends and it starts again.
       const core = await testCore({
         appTimeoutMs: 50,
-        apps: [
+        inProcess: [
           {
             origin: "system",
             app: defineApp({

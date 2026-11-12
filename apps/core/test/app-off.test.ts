@@ -15,7 +15,7 @@ import { claimed, post, testCore, type TestCore } from "./support.js";
 
 // Someone turning an app off in its settings: it doesn't run, what it adds leaves
 // every screen, a driver's devices are offline and its data stays, until someone turns
-// it on. It works in the core's process and in a container.
+// it on. Its container stops while it's off.
 
 useCleanUps();
 
@@ -66,7 +66,7 @@ function lamp(said: string[], stops: StopInfo[] = []) {
   });
 }
 
-describe("turning an app off, in the core's process", () => {
+describe("turning an app off", () => {
   it("stops it, says so, and refuses its calls", async () => {
     const said: string[] = [];
     const stops: StopInfo[] = [];

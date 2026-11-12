@@ -107,6 +107,8 @@ describe("a driver app's devices", () => {
       { id: lamp, roomId: kitchen.id },
       maya,
     );
+    // The lamp says what it did only once the test has seen the answer.
+    radio.confirms = false;
     const sent = await command(core, maya.token, lamp, "light", {
       brightness: 60,
     });
@@ -133,6 +135,8 @@ describe("a driver app's devices", () => {
       },
     ]);
 
+    radio.confirms = true;
+    await radio.press("lamp-1", {});
     await settled();
     const [, light] = await devicesSeenBy(core, maya.token);
     expect(light.capabilities[0]).toMatchObject({
@@ -463,7 +467,7 @@ describe("the Drivers contract", () => {
     radio.gadgets.delete("plug-1");
     const live = await openLive(core, maya.token);
 
-    await core.apps.start([
+    await core.startApps([
       await loadAppPackage(join(fixtureApps, "lamps"), "official"),
     ]);
 

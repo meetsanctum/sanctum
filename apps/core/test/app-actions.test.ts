@@ -290,6 +290,7 @@ describe("listing apps", () => {
           },
         ],
         state: "running",
+        run: { since: "2026-10-26T12:00:00.000Z" },
         settings: null,
         provides: {
           entities: [],
@@ -315,6 +316,7 @@ describe("listing apps", () => {
           },
         ],
         state: "running",
+        run: { since: "2026-10-26T12:00:00.000Z" },
         settings: null,
         provides: {
           entities: [],

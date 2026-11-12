@@ -348,13 +348,13 @@ describe("an app in the core's process", () => {
       origin: "official" as const,
     });
     const first = await testCore({
-      apps: [owner(() => ({ entities: ["kept"], jobs: ["kept"] }))],
+      inProcess: [owner(() => ({ entities: ["kept"], jobs: ["kept"] }))],
     });
     await new Promise((done) => setTimeout(done, 10));
     const next = owner(() => ({}));
 
     const second = await testCore({
-      apps: [{ ...next, app: { ...next.app, version: "2.0.0" } }],
+      inProcess: [{ ...next, app: { ...next.app, version: "2.0.0" } }],
       dataDir: first.dataDir,
     });
     await new Promise((done) => setTimeout(done, 10));

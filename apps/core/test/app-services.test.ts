@@ -74,6 +74,15 @@ async function account(core: TestCore, appId = "test.bridge") {
 const asked = (socket: { received: { method: string }[] }) =>
   socket.received.filter(({ method }) => method !== "GET");
 
+// The manager's socket, answering for services as `answer` says, with no app's
+// update under way, which an app reads before it starts.
+const servicesSocket = (answer: Parameters<typeof managerSocket>[0]) =>
+  managerSocket((request) =>
+    request.url === "/api/apps/updates"
+      ? { status: 200, body: { updates: {} } }
+      : answer(request),
+  );
+
 describe("what a version left behind", () => {
   it("releases a service the app no longer declares, as a failed version's", async () => {
     const { manager, calls, kept } = fakeManager();
@@ -112,7 +121,7 @@ describe("what a version left behind", () => {
 
     await core.apps.remove("test.bridge");
     const next = bridge();
-    await core.apps.start([
+    await core.startApps([
       {
         ...next,
         app: {
@@ -154,7 +163,7 @@ describe("what a version left behind", () => {
 
 describe("an app's services", () => {
   it("are requested from the manager over its socket, and reach the app", async () => {
-    const socket = await managerSocket(() => ({
+    const socket = await servicesSocket(() => ({
       status: 200,
       body: { service: { name: "zigbee2mqtt" }, connection: zigbeeConnection },
     }));
@@ -175,7 +184,7 @@ describe("an app's services", () => {
 
   it("wait for a manager that is not answering yet", async () => {
     let up = false;
-    const socket = await managerSocket(() =>
+    const socket = await servicesSocket(() =>
       up
         ? { status: 200, body: { connection: zigbeeConnection } }
         : { status: 503, body: { error: "starting" } },
@@ -190,7 +199,7 @@ describe("an app's services", () => {
   });
 
   it("fail the app's calls when the manager refuses, without asking again", async () => {
-    const socket = await managerSocket(() => ({
+    const socket = await servicesSocket(() => ({
       status: 404,
       body: { error: "No service zigbee2mqtt for apps" },
     }));
@@ -206,7 +215,7 @@ describe("an app's services", () => {
   });
 
   it("are released when the app is removed, and its data stays", async () => {
-    const socket = await managerSocket(({ method }) =>
+    const socket = await servicesSocket(({ method }) =>
       method === "PUT"
         ? { status: 200, body: { connection: zigbeeConnection } }
         : { status: 204 },

@@ -110,9 +110,10 @@ describe("room sections", () => {
     }
   });
 
-  it("keep an app whose section's type has no tile shape from being installed", async () => {
+  it("keep an app whose section's type has no tile shape from being installed in the core's process", async () => {
+    // Apart, the package's own defineApp refuses it before it has a manifest.
     const core = await testCore({
-      apps: [
+      inProcess: [
         {
           app: nook(spotState.extend({ active: z.string() })),
           origin: "official",
