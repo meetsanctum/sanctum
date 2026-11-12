@@ -33,6 +33,7 @@ describe("loadConfig", () => {
         "sanctum.weather",
         "sanctum.natural-light",
         "sanctum.moods",
+        "sanctum.zigbee",
       ],
       packagesDir: "/packages",
       managerSocket: "../manager/data/manager.sock",

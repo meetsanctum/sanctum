@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
+import { isBroker, joinAppNetworks } from "../apps/broker.js";
 import type { Log } from "../docker-resources.js";
 import {
   errorMessage,
@@ -230,6 +231,7 @@ export function createServices(options: {
       spec: wanted,
       log,
     });
+    if (isBroker(name)) await joinAppNetworks(docker, container, log);
     await imageChanges.ran(name, wanted.image);
     observed.set(name, observe(container, wanted.image));
   }

@@ -90,6 +90,7 @@ export class FakeDocker implements DockerClientLike {
   // Images a pull can fetch, by reference.
   registry = new Map<string, Omit<FakeImage, "tags">>();
   networks = new Map<string, Labels>();
+  internalNetworks = new Set<string>();
   volumes = new Map<string, Labels>();
   // How a local volume mounts what it's tied to.
   volumeOptions = new Map<string, Record<string, string>>();
@@ -500,8 +501,25 @@ export class FakeDocker implements DockerClientLike {
     return {};
   }
 
-  async createNetwork(options: { Name: string; Labels?: Labels }) {
+  async createNetwork(options: {
+    Name: string;
+    Labels?: Labels;
+    Internal?: boolean;
+  }) {
     this.networks.set(options.Name, options.Labels ?? {});
+    if (options.Internal) this.internalNetworks.add(options.Name);
+  }
+
+  async listNetworks(options: { filters?: { label?: string[] } } = {}) {
+    const has = (labels: Labels, filter: string) => {
+      const [key, value] = filter.split("=");
+      return value === undefined ? key! in labels : labels[key!] === value;
+    };
+    return [...this.networks]
+      .filter(([, labels]) =>
+        (options.filters?.label ?? []).every((each) => has(labels, each)),
+      )
+      .map(([Name, Labels]) => ({ Name, Labels }));
   }
 
   getNetwork(name: string) {
@@ -519,7 +537,7 @@ export class FakeDocker implements DockerClientLike {
         if (!labels) {
           throw notFound();
         }
-        return { Labels: labels };
+        return { Labels: labels, Internal: this.internalNetworks.has(name) };
       },
     };
   }

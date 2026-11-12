@@ -34,10 +34,16 @@ export function assertManaged(
   }
 }
 
-export async function ensureNetwork(docker: DockerClientLike, name: string) {
+// An internal one reaches nothing beyond the containers on it, and one of that
+// name that isn't is refused rather than used.
+export async function ensureNetwork(
+  docker: DockerClientLike,
+  name: string,
+  options: { internal?: boolean; labels?: Labels } = {},
+) {
+  let inspected;
   try {
-    const inspected = await docker.getNetwork(name).inspect();
-    assertManaged({ labels: inspected.Labels, name: `${name} network` });
+    inspected = await docker.getNetwork(name).inspect();
   } catch (error) {
     if (!isNotFound(error)) {
       throw error;
@@ -45,8 +51,18 @@ export async function ensureNetwork(docker: DockerClientLike, name: string) {
     await docker.createNetwork({
       Name: name,
       CheckDuplicate: true,
-      Labels: { [managedLabel]: "true", ...stackLabels() },
+      ...(options.internal ? { Internal: true } : {}),
+      Labels: {
+        ...options.labels,
+        [managedLabel]: "true",
+        ...stackLabels(),
+      },
     });
+    return;
+  }
+  assertManaged({ labels: inspected.Labels, name: `${name} network` });
+  if (options.internal && inspected.Internal !== true) {
+    throw new Error(`The ${name} network reaches beyond its containers`);
   }
 }
 
@@ -65,7 +81,7 @@ export async function ensureVolume(docker: DockerClientLike, name: string) {
   }
 }
 
-async function ensureContainerNetwork(
+export async function ensureContainerNetwork(
   docker: DockerClientLike,
   container: ContainerInfo,
   networkName: string,

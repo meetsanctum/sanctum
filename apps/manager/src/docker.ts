@@ -122,6 +122,8 @@ export type DockerClientLike = {
   createNetwork: (options: {
     Name: string;
     CheckDuplicate?: boolean;
+    // Reaching nothing beyond the containers on it.
+    Internal?: boolean;
     Labels?: Labels;
   }) => Promise<unknown>;
   getNetwork: (id: string) => {
@@ -130,8 +132,11 @@ export type DockerClientLike = {
       Container: string;
       Force?: boolean;
     }) => Promise<unknown>;
-    inspect: () => Promise<{ Labels?: Labels | null }>;
+    inspect: () => Promise<{ Labels?: Labels | null; Internal?: boolean }>;
   };
+  listNetworks: (options?: {
+    filters?: { label?: string[] };
+  }) => Promise<{ Name: string; Labels?: Labels | null }[]>;
   createVolume: (options: {
     Name: string;
     Labels?: Labels;

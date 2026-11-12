@@ -1,4 +1,9 @@
-import { defineAction, defineApp } from "@meetsanctum/app-sdk";
+import {
+  defineAction,
+  defineApp,
+  isNotReady,
+  NotReady,
+} from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 import { createBridge, type Bridge, type BridgeOptions } from "./bridge.js";
@@ -69,16 +74,32 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     ],
     actions: [status],
     events: [],
-    // Connects in the background: the manager may take a while to run the
-    // services, and start should not wait for it.
+    // Returns once it has Zigbee2MQTT's device list, every device the core
+    // will take registered and those here said, so a new version that can't
+    // reach its devices isn't kept. Until then it says it's waiting for
+    // Zigbee2MQTT, as the manager may still be starting it, and the core
+    // tries again; it keeps nothing running from a start that didn't finish.
     async start(ctx) {
       const started = createBridge(ctx, options);
       bridge = started;
-      started.open().catch((error: unknown) => {
-        ctx.log(
-          `could not connect (${error instanceof Error ? error.message : String(error)})`,
-        );
-      });
+      try {
+        await started.open().catch((error: unknown) => {
+          ctx.log(
+            `could not connect (${error instanceof Error ? error.message : String(error)})`,
+          );
+          throw new NotReady("Waiting for Zigbee2MQTT");
+        });
+        await started.listed();
+      } catch (error) {
+        if (bridge === started) bridge = undefined;
+        await started.close();
+        if (!isNotReady(error)) {
+          ctx.log(
+            `did not start (${error instanceof Error ? error.message : String(error)})`,
+          );
+        }
+        throw error;
+      }
     },
     async stop() {
       const stopping = bridge;

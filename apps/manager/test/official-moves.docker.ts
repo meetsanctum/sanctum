@@ -2,16 +2,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { realStack } from "./real-stack.js";
 
-// The official apps' moves, for real: Weather, Natural light and Moods from the
-// real image, first in the core's process as a release before this ran them, then
-// each on its own with what it had. The steps of a first move are in
+// The official apps' moves, for real: Weather, Natural light, Moods and Zigbee
+// from the real image, first in the core's process as a release before this ran
+// them, then each on its own with what it had. The steps of a first move are in
 // app-move.docker.ts and the core's tests; what's here is that the real apps and
-// the real wiring get there.
+// the real wiring get there. With no stick here, the test says Zigbee2MQTT's
+// device list on the broker in its place.
 
 const app = "sanctum.weather";
 const naturalLight = "sanctum.natural-light";
 const moods = "sanctum.moods";
-const apart = [app, naturalLight, moods];
+const zigbee = "sanctum.zigbee";
+const apart = [app, naturalLight, moods, zigbee];
 const running: string[] = ["CORE_OFFICIAL_APPS_APART="];
 const {
   build,
@@ -75,6 +77,38 @@ const jobsOf = async (id: string) =>
     ),
   ) as string[];
 
+// Zigbee2MQTT's device list, kept on the broker as Zigbee2MQTT keeps it, said
+// with its own account.
+const listZigbeeDevices = async () => {
+  const broker = `sanctum-${stack}-mosquitto`;
+  await waitFor("the broker", async () =>
+    (await docker("inspect", "-f", "{{.State.Running}}", broker).catch(
+      () => "",
+    )) === "true"
+      ? true
+      : undefined,
+  );
+  const services = JSON.parse(
+    await docker("exec", name("manager"), "cat", "/data/services.json"),
+  ) as { mqttAccounts: Record<string, { password: string }> };
+  await docker(
+    "exec",
+    broker,
+    "mosquitto_pub",
+    "-h",
+    "localhost",
+    "-u",
+    "zigbee2mqtt",
+    "-P",
+    services.mqttAccounts.zigbee2mqtt!.password,
+    "-t",
+    "zigbee2mqtt/bridge/devices",
+    "-r",
+    "-m",
+    "[]",
+  );
+};
+
 const at = (latitude: number) => ({
   timeZone: "Europe/Zurich",
   coordinates: { latitude, longitude: 8.5417 },
@@ -133,6 +167,7 @@ describe("the official apps' moves, for real", () => {
     expect(await jobsOf(moods)).toHaveLength(2);
     const files = await docker("exec", name("core"), "ls", "/data/apps");
     for (const id of apart) expect(files).toContain(`${id}.db`);
+    await listZigbeeDevices();
   }, 300_000);
 
   it("moves when it's listed, keeping what it owns, on its own image", async () => {
@@ -181,6 +216,41 @@ describe("the official apps' moves, for real", () => {
     expect(await count(moods, "scheduled_moods")).toBe("1");
     expect((await entities(moods)).map(({ key }) => key)).toEqual(moodsBefore);
     expect(await jobsOf(moods)).toEqual(jobsBefore);
+    // Zigbee reaches the broker, and only the broker, on a network of its own
+    // that reaches nothing beyond.
+    const network = `sanctum-${stack}-app-${zigbee}-broker`;
+    expect(
+      await docker(
+        "inspect",
+        "-f",
+        "{{.HostConfig.NetworkMode}}",
+        `sanctum-${stack}-app-${zigbee}`,
+      ),
+    ).toBe(network);
+    expect(
+      await docker("network", "inspect", "-f", "{{.Internal}}", network),
+    ).toBe("true");
+    const onIt = await docker(
+      "network",
+      "inspect",
+      "-f",
+      "{{range .Containers}}{{.Name}} {{end}}",
+      network,
+    );
+    expect(onIt.split(" ").filter(Boolean).sort()).toEqual(
+      [`sanctum-${stack}-app-${zigbee}`, `sanctum-${stack}-mosquitto`].sort(),
+    );
+    // Every other app has no network at all.
+    for (const id of [app, naturalLight, moods]) {
+      expect(
+        await docker(
+          "inspect",
+          "-f",
+          "{{.HostConfig.NetworkMode}}",
+          `sanctum-${stack}-app-${id}`,
+        ),
+      ).toBe("none");
+    }
   }, 300_000);
 
   it("hears at once that the home has moved, through its socket", async () => {

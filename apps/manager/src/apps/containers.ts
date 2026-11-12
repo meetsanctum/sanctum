@@ -17,11 +17,13 @@ import {
   type StatusDockerLike,
 } from "../docker.js";
 import { isOurs, stacked } from "../stack.js";
+import { brokerNetworkFor, usesBroker } from "./broker.js";
 import { defaultImageMb, type AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
 
 // An app's own container, beside the core: the official Node image, the app's
-// staged package read-only, its socket's folder, and nothing else. The core
+// staged package read-only, its socket's folder, and no network but the
+// broker's, for an app that uses it (broker.ts). The core
 // decides when each starts, and Docker never restarts one by itself, so whoever
 // supervises it hears why it stopped. What runs in it comes with the app's own
 // copy of the SDK.
@@ -102,6 +104,7 @@ function nodeFlags(memoryMb: number) {
 export function appContainerOptions(
   spec: AppContainerSpec,
   dataVolume: string,
+  network?: string,
 ): ContainerCreateOptions {
   const memory = spec.memoryMb * mebibyte;
   return {
@@ -122,7 +125,7 @@ export function appContainerOptions(
       [memoryLabel]: String(spec.memoryMb),
     },
     HostConfig: {
-      NetworkMode: "none",
+      NetworkMode: network ?? "none",
       ReadonlyRootfs: true,
       Tmpfs: { "/tmp": temporarySpace },
       CapDrop: ["ALL"],
@@ -382,14 +385,8 @@ export function createAppContainers(options: {
     // through this.
     start(spec: AppContainerSpec) {
       return inTurn(async () => {
-        const folder = join(
-          dataDir,
-          packagesFolder,
-          spec.app,
-          spec.folder,
-          "package.json",
-        );
-        await access(folder).catch(() => {
+        const packageDir = join(dataDir, packagesFolder, spec.app, spec.folder);
+        await access(join(packageDir, "package.json")).catch(() => {
           throw new AppRefusal(
             `${spec.app} has no staged package ${spec.folder}`,
             404,
@@ -408,8 +405,12 @@ export function createAppContainers(options: {
         await ensureImage(docker, nodeImage);
         await removeNext(spec.app);
 
+        const network = (await usesBroker(packageDir))
+          ? await brokerNetworkFor(docker, spec.app, log)
+          : undefined;
+
         // The one it replaces keeps running until this one is sure to start.
-        const desired = appContainerOptions(spec, dataVolume);
+        const desired = appContainerOptions(spec, dataVolume, network);
         const { id } = await docker.createContainer({
           ...desired,
           name: nextContainerName(spec.app),

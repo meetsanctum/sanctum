@@ -47,6 +47,7 @@ const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
     id: string;
     version: string;
     runtime: { memory: number; data: number };
+    permissions: { id: string }[];
   }),
 }));
 
@@ -243,8 +244,13 @@ describe("the apps' packages on real images", () => {
         : undefined;
     });
 
-    for (const { id, version, runtime } of shipped) {
+    for (const { id, version, runtime, permissions } of shipped) {
       const folder = staged.apps[id]!.current.folder;
+      // A driver's start waits for its service, which this home's broker,
+      // reachable by nobody, never gives it; then nothing else reaches it.
+      const isWaiting = permissions.some((each) =>
+        each.id.startsWith("services:"),
+      );
       const started = await api("PUT", `/api/apps/${id}/container`, {
         folder,
         memoryMb: runtime.memory,
@@ -268,16 +274,25 @@ describe("the apps' packages on real images", () => {
             manifest: report.expected.manifest,
           },
           prepared: { ready: true },
-          started: { ok: true },
+          ...(isWaiting
+            ? {
+                started: { ok: false, code: "not_ready" },
+                startedAgain: { ok: false, code: "not_ready" },
+                unknownAction: null,
+                unknownDevice: null,
+              }
+            : {
+                started: { ok: true },
+                startedAgain: { ok: true },
+                unknownAction: { ok: false, code: "not_found" },
+                // A driver refuses a device it doesn't know, and an app with
+                // no driver is unavailable for one.
+                unknownDevice: {
+                  ok: false,
+                  code: expect.stringMatching(/^(not_found|unavailable)$/),
+                },
+              }),
           stopped: { ok: true },
-          startedAgain: { ok: true },
-          unknownAction: { ok: false, code: "not_found" },
-          // A driver refuses a device it doesn't know, and an app with no
-          // driver is unavailable for one.
-          unknownDevice: {
-            ok: false,
-            code: expect.stringMatching(/^(not_found|unavailable)$/),
-          },
           refused: [],
           lateAnswers: [],
           violations: [],

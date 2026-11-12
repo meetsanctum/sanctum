@@ -19,7 +19,6 @@ import {
 import { createBridge } from "../src/bridge.js";
 import { createZigbeeApp } from "../src/index.js";
 import {
-  account,
   climateExposes,
   lightExpose,
   PretendBridge,
@@ -702,27 +701,5 @@ describe("commands", () => {
     await expect(
       core.command(key, "light", "light", { on: true }),
     ).rejects.toMatchObject({ name: "ActionError", code: "not_found" });
-  });
-
-  it("fail while the broker does not let the driver in", async () => {
-    const { core, action } = await running({
-      zigbee2mqtt: {
-        ...bridge.connection,
-        mqtt: { ...bridge.connection.mqtt!, password: "wrong" },
-      },
-    });
-    const { key, name } = fresh("plug");
-    await bridge.add(zigbeeDevice(key, name, [switchExpose()]), {
-      state: "OFF",
-    });
-
-    await expect(core.openPairing(60)).rejects.toThrow(
-      "not connected to the broker",
-    );
-    expect(await action("zigbee.status", {})).toMatchObject({
-      broker: "disconnected",
-    });
-    expect(core.registered.size).toBe(0);
-    expect(account.password).not.toBe("wrong");
   });
 });

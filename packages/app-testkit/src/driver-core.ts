@@ -59,7 +59,11 @@ async function absent(): Promise<never> {
 
 export function createDriverCore(
   app: AppDefinition,
-  options: { services?: Record<string, ServiceConnection> } = {},
+  options: {
+    services?: Record<string, ServiceConnection>;
+    // Calls the core doesn't answer, failing as when it can't be reached.
+    unanswered?: (keyof CoreCalls)[];
+  } = {},
 ) {
   const registered = new Map<string, Registered>();
   const reports: Reported[] = [];
@@ -75,6 +79,8 @@ export function createDriverCore(
   const firmware: FirmwareSaid[] = [];
   // What the core refused, which a driver must never send.
   const refused: Error[] = [];
+  // Each list of the devices the driver said are here.
+  const presented: string[][] = [];
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -191,6 +197,7 @@ export function createDriverCore(
       if (!parsed.success) {
         refuse(new Error(`Presence refused: ${z.prettifyError(parsed.error)}`));
       }
+      presented.push([...parsed.data.keys]);
       // As the core does: the driver's other devices are offline.
       const keys = new Set(parsed.data.keys);
       for (const key of registered.keys()) {
@@ -226,6 +233,11 @@ export function createDriverCore(
     },
     log() {},
   };
+  for (const name of options.unanswered ?? []) {
+    core[name] = (async () => {
+      throw new Error(`The core did not answer ${name}`);
+    }) as never;
+  }
 
   const context = (actor: Actor): AppContext =>
     createAppContext({ appId: app.id, actor, core });
@@ -248,6 +260,7 @@ export function createDriverCore(
     joining,
     firmware,
     refused,
+    presented,
 
     start: async () => app.start?.(own, { reason: "started" }),
     stop: async () => app.stop?.(own, { reason: "shutdown" }),
