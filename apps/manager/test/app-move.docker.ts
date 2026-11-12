@@ -3,17 +3,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { realStack } from "./real-stack.js";
 import { stageTestApp } from "./test-update-app.js";
 
-// An app's first move, for real: a real core with the app in its process and its file
-// in the core's data, then its own container with that file on its image, through the
-// real maintenance container. The core's tests cover the steps and their interruptions;
-// what's here is what only real files can show, such as a WAL a killed core left
-// behind, and a read-only mount.
+// An app's first move, for real: the host as a release whose core ran the app in its
+// own process leaves it, its file in the core's data with a WAL a killed core left
+// behind, then its own container with that file on its image, through the real
+// maintenance container. The core's tests cover the steps and their interruptions;
+// what's here is what only real files can show, such as that WAL, and a read-only
+// mount.
 
 const app = "test.updater";
-const inside = "test.inside";
 const folderOf = (version: string) => `${version}+test`;
-const inProcess = `CORE_OFFICIAL_APPS_DIR=/packages/${inside}`;
-const running = [inProcess];
+const running: string[] = [];
 const {
   api,
   build,
@@ -28,6 +27,7 @@ const {
   stack,
   stagedFrom,
   startManager,
+  turnBack,
   waitFor,
 } = realStack("test-moving", running);
 
@@ -103,12 +103,12 @@ const copiesLeft = async () =>
     .filter(Boolean);
 
 // Its package staged as the manager stages what an image ships, so nothing prunes it.
-async function stage(version: string, start: string, parent = app) {
-  const folder = parent === app ? folderOf(version) : "only";
+async function stage(version: string, start: string) {
+  const folder = folderOf(version);
   await stageTestApp(docker, name("manager"), {
     app,
     from: sourcePackage,
-    parent,
+    parent: app,
     folder,
     version,
     start,
@@ -121,7 +121,7 @@ async function stage(version: string, start: string, parent = app) {
     `const fs = require("node:fs");
      const path = "/data/packages.json";
      const state = JSON.parse(fs.readFileSync(path, "utf8"));
-     state.apps[${JSON.stringify(parent)}] = ${JSON.stringify({
+     state.apps[${JSON.stringify(app)}] = ${JSON.stringify({
        current: { version, folder },
      })};
      fs.writeFileSync(path, JSON.stringify(state));`,
@@ -129,7 +129,7 @@ async function stage(version: string, start: string, parent = app) {
 }
 
 const apart = (version: string) => {
-  running[1] = `CORE_APPS_APART=${app}@${folderOf(version)}`;
+  running[0] = `CORE_APPS_APART=${app}@${folderOf(version)}`;
 };
 
 // As a core update brings it, and a stop without warning leaves things.
@@ -139,12 +139,21 @@ async function startAgain() {
 }
 const killed = () => docker("rm", "-f", name("manager"), name("core"));
 
-const inTheCore = (each: Info) =>
-  each.state === "running" && each.run === undefined;
 const onItsOwn = (version: string) => (each: Info) =>
   each.state === "running" &&
   each.run !== undefined &&
   each.version === version;
+
+// One more note, which a core that died just after writing it left in its WAL.
+const leftInTheWal = `owner="$(stat -c %u:%g /core-data/core.db)"
+  node --no-warnings -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync("/core-data/apps/${app}.db");
+    db.exec("pragma journal_mode = wal");
+    db.exec("pragma wal_autocheckpoint = 0");
+    db.prepare("insert into notes (text) values (?)").run("written just before moving");
+    process.kill(process.pid, "SIGKILL");' || true
+  chown "$owner" /core-data/apps/${app}.db*`;
 
 describe("an app's first move, for real", () => {
   beforeAll(async () => {
@@ -156,18 +165,20 @@ describe("an app's first move, for real", () => {
     const staged = await stagedFrom(await imageId(coreImage));
     const moods = staged.apps["sanctum.moods"]!.current.folder;
     sourcePackage = `/data/packages/sanctum.moods/${moods}`;
-    await stage("1.0.0", "", inside);
+    await stage("1.0.0", "");
+    apart("1.0.0");
     await waitFor("the manager to run apps", async () => {
       const { body } = await api("GET", "/api/capabilities");
       return (body as { appContainers: boolean }).appContainers
         ? true
         : undefined;
     });
-    await coreIsUp();
+    await killed();
+    await startAgain();
     token = await claim();
-    await docker("restart", name("core"));
-    await until("it to run in the core's process", inTheCore);
-    await write("written in the core");
+    await until("it to run on its own", onItsOwn("1.0.0"));
+    await write("written before it moved");
+    await turnBack([app], leftInTheWal);
   }, 1_800_000);
 
   afterAll(async () => {
@@ -176,64 +187,15 @@ describe("an app's first move, for real", () => {
     }).catch(() => undefined);
   }, 120_000);
 
-  it("keeps it there, its file as it was, when the version apart fails", async () => {
-    await stage("1.1.0", `throw new Error("1.1.0 falls over");`);
-    apart("1.1.0");
-    await killed();
-    await startAgain();
-
-    await until("it to carry on in the core's process", inTheCore);
-
-    expect(await notes()).toEqual(["written in the core"]);
-    await waitFor("the manager to let go", async () =>
-      Object.keys(await journal()).length === 0 ? true : undefined,
-    );
-    await write("written after that failed");
-  }, 300_000);
-
-  it("keeps it there after a power cut while the version apart starts", async () => {
-    await stage("1.2.0", `await new Promise(() => undefined);`);
-    apart("1.2.0");
-    await killed();
-    await startAgain();
-    await waitFor("the version apart to start", async () => {
-      const { body } = await api("GET", `/api/apps/${app}/container`);
-      return (body as { state: string }).state === "running" ? true : undefined;
-    });
-
-    await docker(
-      "rm",
-      "-f",
-      name("manager"),
-      name("core"),
-      `sanctum-${stack}-app-${app}`,
-    );
-    await startAgain();
-
-    await until("it to carry on in the core's process", inTheCore);
-    expect(await notes()).toEqual([
-      "written in the core",
-      "written after that failed",
-    ]);
-    await waitFor("the manager to let go", async () =>
-      Object.keys(await journal()).length === 0 ? true : undefined,
-    );
-    await write("written just before moving");
-  }, 300_000);
-
   it("moves with all its file has, what a killed core left in its WAL too", async () => {
-    await stage("1.3.0", "");
-    apart("1.3.0");
-    await killed();
     expect(await originalFiles()).toContain(`${app}.db-wal`);
     const before = await originalSums();
     await startAgain();
 
-    await until("it to run on its own", onItsOwn("1.3.0"));
+    await until("it to run on its own", onItsOwn("1.0.0"));
 
     expect(await notes()).toEqual([
-      "written in the core",
-      "written after that failed",
+      "written before it moved",
       "written just before moving",
     ]);
     await write("written apart");
@@ -245,12 +207,11 @@ describe("an app's first move, for real", () => {
     expect((await call(`/api/apps/${app}/go-back`)).body).toEqual({ to: null });
   }, 300_000);
 
-  it("stays on its own with nothing apart to go by, not on its old file", async () => {
-    running.length = 1;
+  it("stays on its own when the core starts again, not on its old file", async () => {
     await killed();
     await startAgain();
 
-    await until("it to run on its own", onItsOwn("1.3.0"));
+    await until("it to run on its own", onItsOwn("1.0.0"));
 
     expect((await notes()).at(-1)).toBe("written apart");
   }, 300_000);
@@ -268,7 +229,7 @@ describe("an app's first move, for real", () => {
 
     expect((await notes()).at(-1)).toBe("written apart");
     expect((await call(`/api/apps/${app}/go-back`)).body).toMatchObject({
-      to: { version: "1.3.0" },
+      to: { version: "1.0.0" },
     });
   }, 300_000);
 });

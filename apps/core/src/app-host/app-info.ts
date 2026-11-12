@@ -57,9 +57,8 @@ type Installed = {
   granted: readonly string[];
   settings: SettingsSchema | null;
   running?: unknown;
-  stopFailed?: true;
   off?: boolean;
-  supervision?: Pick<
+  supervision: Pick<
     Supervision,
     | "phase"
     | "since"
@@ -73,31 +72,22 @@ type Installed = {
 };
 
 /**
- * Whether an installed app runs: stopped once its stop hook failed, until
- * the core restarts, since its code may still run; off once someone turned it
- * off; paused while a
- * permission it needs is off; for one in its own container, as its supervisor
- * has it (supervisor.ts); running otherwise.
+ * Whether an installed app runs: off once someone turned it off; paused while
+ * a permission it needs is off; otherwise as its supervisor has it
+ * (supervisor.ts).
  */
 export function appStateOf(entry: Installed): AppState {
-  if (entry.stopFailed && !entry.running) {
-    return "stopped";
-  }
   if (entry.off) {
     return "off";
   }
   if (pausedBy(entry.manifest.permissions, entry.granted).length > 0) {
     return "paused";
   }
-  return entry.supervision?.phase ?? "running";
+  return entry.supervision.phase;
 }
 
-// More of its state, for an app in its own container.
-function runOf(
-  { supervision }: Installed,
-  update?: AppRunUpdate,
-): AppRun | undefined {
-  if (!supervision) return undefined;
+// More of its state, as its supervisor has it.
+function runOf({ supervision }: Installed, update?: AppRunUpdate): AppRun {
   return {
     ...(update ? { update } : {}),
     since: supervision.since.toISOString(),
@@ -119,14 +109,13 @@ export function installedInfoOf(
   entry: Installed,
   update?: AppRunUpdate,
 ): AppInfo {
-  const run = runOf(entry, update);
   return {
     ...appInfoOf(entry.manifest, {
       granted: entry.granted,
       state: appStateOf(entry),
       settings: entry.settings,
     }),
-    ...(run ? { run } : {}),
+    run: runOf(entry, update),
     ...(entry.origin === "system" ? { alwaysOn: true as const } : {}),
   };
 }

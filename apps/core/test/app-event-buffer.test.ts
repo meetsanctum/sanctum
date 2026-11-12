@@ -23,15 +23,14 @@ const rooms = (from: number, count: number, name = "Room"): Places => ({
   })) as Places["rooms"],
 });
 
-function setUp(apart = true) {
+function setUp() {
   const log = vi.fn();
   const events = createCoreEvents({ timeoutMs: 1_000, log });
   const overflowed = vi.fn();
   const following = events.start(
     "test.apart",
     () => ["places.read"],
-    undefined,
-    apart ? { overflowed } : undefined,
+    overflowed,
   );
   const heard: string[] = [];
   following.handlers.set("place.added", [
@@ -141,18 +140,5 @@ describe("the events waiting for an app apart", () => {
     await events.stop("test.apart");
 
     expect(heard).toEqual([]);
-  });
-
-  it("leaves an app in the core's process as it was, hearing only what it follows from then", async () => {
-    const { events, following, heard, overflowed } = setUp(false);
-
-    events.places(nowhere, rooms(1, 1));
-    following.follow("place.added");
-    events.places(rooms(1, 1), rooms(1, 2));
-    following.started();
-    await settled();
-
-    expect(heard).toEqual(["Room 2"]);
-    expect(overflowed).not.toHaveBeenCalled();
   });
 });

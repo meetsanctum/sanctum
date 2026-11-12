@@ -7,8 +7,8 @@ import { dirname } from "node:path";
 
 import type { StorageQuery, StorageResult } from "./context.js";
 
-// Each app's own SQLite file, opened and migrated by whatever hosts the app:
-// the core while it runs in the core's process, the runner in its container.
+// Each app's own SQLite file, opened and migrated by its runner in its
+// container.
 // App code reaches it only through `query`, Drizzle's sqlite-proxy calls.
 // Isolation is by file: the connection opens nothing else, so an app sees
 // neither the core's database nor another app's tables.

@@ -41,9 +41,6 @@ export type InstalledApp = {
   requests: RequestsUnderWay;
   // Its starts and stops as its grants change, one after another.
   lifecycle: Promise<void>;
-  // Its stop hook failed, so its code may still run: it starts again only
-  // when the core does.
-  stopFailed?: true;
   // The context its lifecycle hooks share, acting as the app itself, from
   // start until stop.
   running?: { ctx: AppContext; storage: ReturnType<AppStorage["call"]> };
@@ -51,13 +48,13 @@ export type InstalledApp = {
   off: boolean;
   // A new id for each start, including after removal and another install.
   runId: number;
-  // When it runs apart: its socket, the folder of the version it runs, and how
-  // its supervisor finds it.
-  link?: AppLink;
-  apartIn?: string;
+  // Its socket, the folder of the version it runs, and how its supervisor
+  // finds it.
+  link: AppLink;
+  apartIn: string;
   // What that version holds, as its folder is named for.
-  digest?: string;
-  supervision?: Supervision;
+  digest: string;
+  supervision: Supervision;
   // The start on a new version under way, and what it has claimed (commits.ts).
   updating?: AppUpdate;
 };

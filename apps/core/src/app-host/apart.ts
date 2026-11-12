@@ -13,10 +13,9 @@ import { z } from "zod";
 
 import type { AppLink } from "./link.js";
 
-// An app that runs in its own container, as the host sees it: the shape of
-// an app whose every hook, action and driver call crosses the socket, so
-// what the host does around a call stays one piece of code for apps in the
-// core's process and apps apart: the gate, the activity log, events held
+// An app in its own container, as the host sees it: the shape of an app whose
+// every hook, action and driver call crosses the socket, so what the host does
+// around a call is one piece of code: the gate, the activity log, events held
 // until a call succeeds, what a call may do. Its own schemas parse on its
 // side, and the core checks what results against the manifest of the version
 // it runs.

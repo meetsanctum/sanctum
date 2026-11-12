@@ -17,6 +17,15 @@ const manifest = toStaticManifest(
     events: [],
   }),
 );
+// As its supervisor has it, given up on after failing.
+const supervision = {
+  phase: "failed" as const,
+  since: new Date("2026-11-13T12:00:00.000Z"),
+  isFirstStart: false,
+  failures: [],
+  quiet: false,
+  attention: false,
+};
 
 it("logs a listener that fails, and goes on", () => {
   const logs: string[] = [];
@@ -28,7 +37,7 @@ it("logs a listener that fails, and goes on", () => {
   );
 
   expect(() =>
-    announce({ manifest, granted: [], settings: null, stopFailed: true }),
+    announce({ manifest, granted: [], settings: null, supervision }),
   ).not.toThrow();
   expect(logs).toEqual([
     "apps: test.plain's change was not announced (socket gone)",
@@ -42,7 +51,7 @@ it("logs a listener's promise that rejects", async () => {
       throw new Error("later");
     },
     (line) => logs.push(line),
-  )({ manifest, granted: [], settings: null, stopFailed: true });
+  )({ manifest, granted: [], settings: null, supervision });
 
   await expect
     .poll(() => logs)
@@ -60,9 +69,9 @@ it("hands a listener the app as clients see it", () => {
     manifest,
     granted: [],
     settings: null,
-    stopFailed: true,
+    supervision,
   });
   expect(heard).toEqual([
-    expect.objectContaining({ id: "test.plain", state: "stopped" }),
+    expect.objectContaining({ id: "test.plain", state: "failed" }),
   ]);
 });

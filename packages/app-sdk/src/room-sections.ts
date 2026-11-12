@@ -199,12 +199,21 @@ const fits: Record<keyof RoomSectionTile, (field: JsonSchema) => boolean> = {
 
 /** What keeps a state schema from having the tile shape, if anything. */
 export function tileShapeProblems(state: z.ZodType): string[] {
-  let json: JsonSchema;
+  let json: unknown;
   try {
-    json = z.toJSONSchema(state, { io: "output" }) as JsonSchema;
+    json = z.toJSONSchema(state, { io: "output" });
   } catch {
     return ["its state has no JSON Schema"];
   }
+  return tileShapeProblemsOf(json);
+}
+
+/**
+ * The same, for a state's JSON Schema as a manifest holds it, so the core can
+ * check what it reads there.
+ */
+export function tileShapeProblemsOf(schema: unknown): string[] {
+  const json = (schema ?? {}) as JsonSchema;
   if (json.type !== "object") {
     return ["its state is not an object"];
   }

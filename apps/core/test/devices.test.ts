@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
-import { loadAppPackage } from "../src/app-host/loader.js";
+import { loadAppPackage } from "./runner-apps.js";
 import { createDevices } from "../src/devices/devices.js";
 import { deviceCapabilities } from "../src/devices/schema.js";
 import {

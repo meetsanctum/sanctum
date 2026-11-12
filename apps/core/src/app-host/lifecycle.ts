@@ -26,15 +26,19 @@ import type { AppUpdates } from "./updates.js";
 
 // An app's starts and stops. It is paused while a permission it needs is
 // switched off: it stops, and its actions, jobs and driver calls are refused
-// until it is back on. An app whose stop failed may still be running its
-// code, so it never starts again until the core does. One in its own
-// container starts once its socket's connection is ready, and stops when
-// that goes, which needs no hook; its supervisor does the rest
+// until it is back on. It starts once its socket's connection is ready, and
+// stops when that goes, which needs no hook; its supervisor does the rest
 // (supervisor.ts).
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
+
+// Its supervisor has it restarting or has given up on it, which it may have
+// done during anything awaited.
+const isInSupervisorsHands = (entry: InstalledApp) =>
+  entry.supervision.phase === "restarting" ||
+  entry.supervision.phase === "failed";
 
 export function createAppLifecycle(options: {
   installed: ReadonlyMap<string, InstalledApp>;
@@ -48,12 +52,10 @@ export function createAppLifecycle(options: {
   updates: Pick<AppUpdates, "startOf">;
   commits: AppCommits;
   supervisor: () => Supervisor;
-  // An app's state changed, while it is still installed.
-  announce: (entry: InstalledApp) => void;
   timeoutMs: number;
   log: (message: string) => void;
 }) {
-  const { installed, coreEvents, contexts, timeoutMs, log, announce } = options;
+  const { installed, coreEvents, contexts, timeoutMs, log } = options;
   let lastRunId = 0;
 
   // Whether the app takes calls now: it runs and is not paused.
@@ -79,12 +81,11 @@ export function createAppLifecycle(options: {
     try {
       await withTimeout(
         Promise.resolve().then(() => run.call(entry.app, ctx, info)),
-        name === "stop" && entry.link ? stopLimitMs(timeoutMs) : timeoutMs,
+        name === "stop" ? stopLimitMs(timeoutMs) : timeoutMs,
       );
       return { ok: true };
     } catch (error) {
-      // Only an app apart can wait: one in the core's process has failed.
-      if (entry.link && isNotReady(error)) {
+      if (isNotReady(error)) {
         return { ok: false, notReady: error.message };
       }
       log(
@@ -101,57 +102,45 @@ export function createAppLifecycle(options: {
     }
     // Its connection's being ready brings it back here.
     if (
-      link &&
-      (!link.isReady() ||
-        entry.supervision?.isEnded ||
-        entry.supervision?.phase === "restarting" ||
-        entry.supervision?.phase === "failed")
+      !link.isReady() ||
+      entry.supervision.isEnded ||
+      isInSupervisorsHands(entry)
     ) {
       return;
     }
-    if (link) options.supervisor().starting(entry);
+    options.supervisor().starting(entry);
     const storage = createEventStorage(entry.storage, timeoutMs);
-    // For an app apart, these two are one moment: what it reads while it
-    // starts, and the first of the events it hears after.
-    const snapshot = link ? createReadSnapshot(options) : undefined;
+    // These two are one moment: what it reads while it starts, and the first
+    // of the events it hears after.
+    const snapshot = createReadSnapshot(options);
     const following = coreEvents.start(
       app.id,
       () => entry.granted,
+      // It starts again, and catches up, as it does after any stop.
+      () => void reconcile(entry, { restartFor: "its events' backlog" }),
       (work) =>
         storage.run(() => {
           // A pause can arrive before a slow start releases queued events.
           if (accepts(entry)) return work();
         }),
-      link
-        ? {
-            // It starts again, and catches up, as it does after any stop.
-            overflowed: () =>
-              void reconcile(entry, { restartFor: "its events' backlog" }),
-          }
-        : undefined,
     );
     const ctx: AppContext = contexts.contextFor(
       entry,
       { kind: "app", id: app.id },
       storage,
-      {
-        following,
-        ...(snapshot ? { snapshot } : {}),
-      },
+      { following, snapshot },
     );
-    if (link) {
-      // The core hands each event it follows across its socket. Its own handlers
-      // are on the other side.
-      const across = (event: unknown) =>
-        link.call(
-          contexts.coreOf(ctx),
-          ctx.actor,
-          { kind: "event", event: event as never },
-          timeoutMs,
-        ) as Promise<void>;
-      for (const name of coreEventNames) {
-        following.handlers.set(name, [across]);
-      }
+    // The core hands each event it follows across its socket. Its own handlers
+    // are on the other side.
+    const across = (event: unknown) =>
+      link.call(
+        contexts.coreOf(ctx),
+        ctx.actor,
+        { kind: "event", event: event as never },
+        timeoutMs,
+      ) as Promise<void>;
+    for (const name of coreEventNames) {
+      following.handlers.set(name, [across]);
     }
     entry.running = { ctx, storage };
     lastRunId += 1;
@@ -159,15 +148,13 @@ export function createAppLifecycle(options: {
     const { info, update } = options.updates.startOf(entry);
     // Each try claims afresh.
     entry.updating =
-      link && (update || info.reason === "updated")
-        ? newAppUpdate(update)
-        : undefined;
+      update || info.reason === "updated" ? newAppUpdate(update) : undefined;
     let outcome = await hook(entry, "start", ctx, info);
-    snapshot?.release();
+    snapshot.release();
     if (outcome.ok) {
       try {
         options.commits.commit(entry);
-        if (link) options.supervisor().started(entry);
+        options.supervisor().started(entry);
       } catch (error) {
         log(`apps: ${app.id} did not commit (${message(error)})`);
         outcome = { ok: false };
@@ -177,25 +164,11 @@ export function createAppLifecycle(options: {
     if (outcome.ok) {
       return;
     }
-    // A start that failed has not caught up, and one that timed out may
-    // still be running, so the app hears none of the core's events until it
-    // starts again; its actions go on. Stopping marks it at once, so nothing
-    // released here reaches a handler.
-    if (!link) {
-      await coreEvents.stop(app.id);
-      return;
-    }
-    // An app apart isn't left half started: what that start was given ends, and
-    // its supervisor decides what comes next. One whose connection went has been
+    // It isn't left half started: what that start was given ends, and its
+    // supervisor decides what comes next. One whose connection went has been
     // seen to already.
     await stopApp(entry, { reason: "restarting", gone: true });
-    if (
-      !link.isReady() ||
-      entry.supervision?.phase === "restarting" ||
-      entry.supervision?.phase === "failed"
-    ) {
-      return;
-    }
+    if (!link.isReady() || isInSupervisorsHands(entry)) return;
     if (outcome.notReady !== undefined) {
       options.supervisor().notReady(entry, outcome.notReady);
     } else {
@@ -207,9 +180,9 @@ export function createAppLifecycle(options: {
   // captures of presses and its requests to the internet. The core's events
   // stop, the one the app is handling and, unless the core is shutting
   // down, its calls under way finish; then its stop hook runs and every
-  // context it had ends. A stop hook that fails marks the app as stopped
-  // for good, until the core restarts. One whose connection has gone has no
-  // hook to run, and starts again with a new connection.
+  // context it had ends. A stop hook that fails ends its container, so
+  // whatever its code was doing ends too. One whose connection has gone has
+  // no hook to run, and starts again with a new connection.
   async function stopApp(
     entry: InstalledApp,
     { reason, gone = false }: { reason: StopInfo["reason"]; gone?: boolean },
@@ -229,24 +202,14 @@ export function createAppLifecycle(options: {
     const stopped =
       gone || (await hook(entry, "stop", running.ctx, { reason })).ok;
     running.storage.end();
-    if (!stopped && !shutdown && entry.link) {
-      // Its code ends with its container, whatever it was doing.
-      options.supervisor().stopFailed(entry);
-    } else if (!stopped && !shutdown) {
-      entry.stopFailed = true;
-      log(
-        `apps: ${entry.app.id} did not stop cleanly, so it starts again only when Sanctum restarts`,
-      );
-      announce(entry);
-    }
+    if (!stopped && !shutdown) options.supervisor().stopFailed(entry);
   }
 
   // Starts or stops the app to match its grants, after its last start or
   // stop: paused while a permission it needs is off, started again once
   // every one is back on, and restarted when a service it may do without
   // changed, since a connection it holds would outlive the change. One
-  // removed meanwhile stays stopped, and so does one whose stop failed. A
-  // start or stop that fails is logged and holds up nothing else, so the
+  // removed meanwhile stays stopped. A start or stop that fails is logged and holds up nothing else, so the
   // chain never rejects.
   function reconcile(
     entry: InstalledApp,
@@ -271,7 +234,7 @@ export function createAppLifecycle(options: {
             log(`apps: ${entry.app.id} restarts for ${restartFor}`);
             await stopApp(entry, { reason: "restarting" });
           }
-          if (!entry.running && !entry.stopFailed) {
+          if (!entry.running) {
             await startApp(entry);
           }
         } else if (off.length > 0) {
@@ -290,7 +253,7 @@ export function createAppLifecycle(options: {
     stopApp,
     reconcile,
 
-    // An app apart's connection went, after what its lifecycle is already doing.
+    // Its connection went, after what its lifecycle is already doing.
     gone(entry: InstalledApp) {
       entry.lifecycle = entry.lifecycle
         .then(() => stopApp(entry, { reason: "restarting", gone: true }))

@@ -1,8 +1,6 @@
 import {
   appSectionOrderFrom,
-  defineApp,
   type Actor,
-  type AppDefinition,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
@@ -13,7 +11,6 @@ import {
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
-import { openAppStorage } from "@meetsanctum/app-sdk/storage";
 import { join } from "node:path";
 
 import type { Activity } from "../activity/activity.js";
@@ -28,7 +25,6 @@ import type { PlacesModule } from "../places/places.js";
 import {
   checkManifest,
   contractOf,
-  manifestFor,
   type AppPieces,
   type DeclaredAction,
 } from "./contract.js";
@@ -70,9 +66,9 @@ import { createApartStarts } from "./apart-starts.js";
 // database and the services it declares, starts and stops them
 // (lifecycle.ts), runs their actions, hands running apps the core's events
 // they follow (core-events.ts) and hands driver apps what Devices asks of
-// them (drivers.ts). Every call goes through the permission gate. An app
-// runs in the core's process or apart, in its own container with its own
-// database (apart.ts), and the host treats both alike. The services it holds
+// them (drivers.ts). Every call goes through the permission gate. Every app
+// runs apart, in its own container with its own database, and the core knows
+// it by its manifest alone, never importing its code (apart.ts). The services it holds
 // follow its grants: one switched off loses its broker account before the
 // switch shows it off, and one switched back on gets a new login. What an
 // app brings to the home stays only while it is installed; its settings,
@@ -86,27 +82,13 @@ const defaultAppSockets = "/run/sanctum-apps";
 export const origins = ["system", "official", "third-party"] as const;
 export type Origin = (typeof origins)[number];
 
-// An app in the core's process: its code, and what its package declares
-// (sanctum-app.json), worked out from the app when it has none, as for an app a
-// test defines.
-export type AppPackage = {
-  app: AppDefinition;
-  manifest?: StaticManifest;
-  origin: Origin;
-  // The app's migrations, inside its package.
-  migrationsFolder?: string;
-};
-
-// An app apart, in its own container, of which the core knows its running
-// version's manifest as its folder of packages holds it: never the one bundled
-// in the core's image, which can be newer until its update starts.
+// An app, in its own container, of which the core knows its running version's
+// manifest as its folder of packages holds it: never the one bundled in the
+// core's image, which can be newer until its update starts.
 export type ApartPackage = {
   apart: { manifest: StaticManifest; digest: string; folder: string };
   origin: Origin;
 };
-
-const packagedAppId = (pkg: AppPackage | ApartPackage) =>
-  "apart" in pkg ? pkg.apart.manifest.id : pkg.app.id;
 
 type Log = (message: string) => void;
 
@@ -241,6 +223,9 @@ export function createAppHost(options: {
   });
   let isOnTrial = false;
   let installing = Promise.resolve();
+  // The apps whose entities stay: those checked as they installed, and those
+  // the core says are coming, as one whose package isn't staged yet.
+  const kept = new Set<string>();
   const waitingForCommit: InstalledApp[] = [];
   const apartStarts = createApartStarts({
     installed,
@@ -248,7 +233,6 @@ export function createAppHost(options: {
     updates: options.updates,
     supervisor,
     install,
-    reconcile: (entry) => reconcile(entry),
     stopApp: (entry, info) => stopApp(entry, info),
     announce,
     log,
@@ -260,8 +244,8 @@ export function createAppHost(options: {
     if (installed.get(entry.app.id) !== entry) return;
     if (entry.off) {
       markDriverOffline(entry);
-      if (entry.supervision) await supervisor.turnedOff(entry);
-    } else if (entry.supervision && !entry.link?.isConnected()) {
+      await supervisor.turnedOff(entry);
+    } else if (!entry.link.isConnected()) {
       // Back on the connection it never lost, if someone was quick; otherwise it
       // needs a new container, which says when it's ready.
       startApart(entry);
@@ -280,24 +264,19 @@ export function createAppHost(options: {
     commits: options.commits,
     updates: options.updates,
     supervisor: () => supervisor,
-    announce,
     timeoutMs,
     log,
   });
 
   // `checked` collects the apps whose entities were checked against their
   // types, which keep them even when the rest of the install fails.
-  function install(pkg: AppPackage | ApartPackage, checked: Set<string>) {
+  function install(pkg: ApartPackage, checked: Set<string>) {
     const { origin } = pkg;
-    const app = "apart" in pkg ? undefined : defineApp(pkg.app);
-    const appId = packagedAppId(pkg);
+    const appId = pkg.apart.manifest.id;
     if (installed.has(appId)) {
       throw new Error("another package has the same id");
     }
-    const manifest =
-      "apart" in pkg
-        ? checkManifest(pkg.apart.manifest)
-        : manifestFor(app!, pkg.manifest, log);
+    const manifest = checkManifest(pkg.apart.manifest);
     const contract = contractOf(manifest);
     const services = declaredServices(manifest);
     if (services.length > 0 && !mayRunServices.includes(origin)) {
@@ -320,44 +299,33 @@ export function createAppHost(options: {
     // migration, leaves what it brought, such as a forecast kept offline.
     options.entities.reconcileTypes(appId, contract.entityTypes.values());
     checked.add(appId);
-    const link =
-      "apart" in pkg
-        ? createAppLink({
-            appId,
-            version: manifest.version,
-            manifest: pkg.apart.digest,
-            socket: join(
-              options.appSockets ?? defaultAppSockets,
-              appId,
-              coreSocketName,
-            ),
-            log,
-            onReady() {
-              const entry = installed.get(appId);
-              if (entry) supervisor.ready(entry);
-            },
-            onGone(_reason, hung) {
-              const entry = installed.get(appId);
-              if (entry) supervisor.lost(entry, hung);
-            },
-          })
-        : undefined;
-    const storage =
-      "apart" in pkg
-        ? apartStorage(appId)
-        : openAppStorage(join(options.dataDir, "apps", `${appId}.db`), {
-            appId,
-            migrationsFolder: pkg.migrationsFolder,
-          });
-    const code = link
-      ? apartApp(
-          manifest,
-          link,
-          coreOf,
-          (ctx) => contexts.timeLeft(ctx) ?? timeoutMs,
-          () => installed.get(appId)?.updating?.id,
-        )
-      : app!;
+    const link = createAppLink({
+      appId,
+      version: manifest.version,
+      manifest: pkg.apart.digest,
+      socket: join(
+        options.appSockets ?? defaultAppSockets,
+        appId,
+        coreSocketName,
+      ),
+      log,
+      onReady() {
+        const entry = installed.get(appId);
+        if (entry) supervisor.ready(entry);
+      },
+      onGone(_reason, hung) {
+        const entry = installed.get(appId);
+        if (entry) supervisor.lost(entry, hung);
+      },
+    });
+    const storage = apartStorage(appId);
+    const code = apartApp(
+      manifest,
+      link,
+      coreOf,
+      (ctx) => contexts.timeLeft(ctx) ?? timeoutMs,
+      () => installed.get(appId)?.updating?.id,
+    );
     options.grants.adopt(manifest);
     const granted = options.grants.of(manifest);
     const held = (name: string) => granted.includes(servicePermission(name));
@@ -385,14 +353,10 @@ export function createAppHost(options: {
       lifecycle: Promise.resolve(),
       runId: 0,
       off: options.off.isOff(appId),
-      ...("apart" in pkg && link
-        ? {
-            link,
-            apartIn: pkg.apart.folder,
-            digest: pkg.apart.digest,
-            supervision: newSupervision(now()),
-          }
-        : {}),
+      link,
+      apartIn: pkg.apart.folder,
+      digest: pkg.apart.digest,
+      supervision: newSupervision(now()),
     });
   }
 
@@ -425,7 +389,7 @@ export function createAppHost(options: {
     },
     // Only one its supervisor has given up on.
     onRestart(entry) {
-      if (entry.supervision?.phase !== "failed") return false;
+      if (entry.supervision.phase !== "failed") return false;
       void supervisor.restart(entry);
       return true;
     },
@@ -530,27 +494,30 @@ export function createAppHost(options: {
   return {
     // Installs the packages the core found, then starts them. A package
     // that cannot be installed is logged and left out, and the others go on.
-    // Resolves once every app's start hook has settled.
+    // It can be called again for packages that arrive later. Resolves once
+    // every app's start hook has settled.
     async start(
-      packages:
-        | readonly (AppPackage | ApartPackage)[]
-        | Promise<readonly (AppPackage | ApartPackage)[]>,
-      { onTrial = false }: { onTrial?: boolean } = {},
+      packages: readonly ApartPackage[] | Promise<readonly ApartPackage[]>,
+      {
+        onTrial = false,
+        coming = [],
+      }: { onTrial?: boolean; coming?: readonly string[] } = {},
     ) {
       isOnTrial = onTrial;
+      for (const appId of coming) kept.add(appId);
       let allInstalled!: () => void;
       installing = new Promise<void>((resolve) => {
         allInstalled = resolve;
       });
       const added: InstalledApp[] = [];
       const checked = new Set<string>();
-      for (const [pkg, inProcess] of apartStarts.packagesFor(await packages)) {
-        const appId = packagedAppId(pkg);
+      for (const pkg of await packages) {
+        const appId = pkg.apart.manifest.id;
         try {
           // Its old stop and socket cleanup must finish before a new install
           // binds the same path.
           await removals.get(appId);
-          install(await options.updates.packageFor(pkg, inProcess), checked);
+          install(await options.updates.packageFor(pkg), checked);
           added.push(installed.get(appId)!);
         } catch (error) {
           log(`apps: ${appId} was not installed (${message(error)})`);
@@ -558,16 +525,13 @@ export function createAppHost(options: {
       }
       // What apps that are no longer here brought goes with them, and so
       // does what the core could not check.
-      options.entities.keepApps([...checked]);
+      for (const appId of checked) kept.add(appId);
+      options.entities.keepApps([...kept]);
       allInstalled();
       await Promise.all(
         added.map(async (entry) => {
           // The core may have stopped after saving the choice and before this.
           if (entry.off) markDriverOffline(entry);
-          if (!entry.link) {
-            await reconcile(entry);
-            return;
-          }
           if (isOnTrial) waitingForCommit.push(entry);
           else await startApart(entry);
         }),
@@ -598,7 +562,8 @@ export function createAppHost(options: {
         throw new ActionCallError("forbidden");
       }
       installed.delete(appId);
-      const ended = entry.supervision ? supervisor.end(entry) : undefined;
+      kept.delete(appId);
+      const ended = supervisor.end(entry);
       // Before it yields, so an app installed again waits for its release.
       const release = appServices.removing(appId, entry.services);
       const removing = (async () => {
@@ -609,18 +574,16 @@ export function createAppHost(options: {
           await ended;
           await stopApp(entry, { reason: "removing" });
           entry.storage.close();
-          await entry.link?.close();
-          if (entry.link) {
-            await manager.removeAppContainer(appId).catch((error: unknown) => {
-              log(`apps: ${appId}'s container stays (${message(error)})`);
-            });
-          }
+          await entry.link.close();
+          await manager.removeAppContainer(appId).catch((error: unknown) => {
+            log(`apps: ${appId}'s container stays (${message(error)})`);
+          });
           options.entities.removeApp(appId);
         } finally {
           await release();
         }
       })();
-      if (entry.link) removals.set(appId, removing);
+      removals.set(appId, removing);
       try {
         await removing;
       } finally {
@@ -648,10 +611,10 @@ export function createAppHost(options: {
       return entry ? options.updates.goBackOption(entry) : null;
     },
 
-    /** How one in its own container is running now, for its settings page. */
+    /** How one is running now in its own container, for its settings page. */
     async running(appId: string): Promise<AppRunning | null> {
       const entry = installed.get(appId);
-      if (!entry?.supervision) return null;
+      if (!entry) return null;
       const usage = await manager.appUsage(appId).catch(() => null);
       return {
         memoryBytes: usage?.memoryBytes ?? null,
@@ -782,9 +745,7 @@ export function createAppHost(options: {
       const replacementsEnded = apartStarts.close();
       const entries = [...installed.values()];
       installed.clear();
-      const ended = entries.map((entry) =>
-        entry.supervision ? supervisor.end(entry) : undefined,
-      );
+      const ended = entries.map((entry) => supervisor.end(entry));
       await Promise.all(
         entries.map(async (entry, index) => {
           await entry.lifecycle;
@@ -796,7 +757,7 @@ export function createAppHost(options: {
       await Promise.all(
         entries.map(async ({ storage, link }) => {
           storage.close();
-          await link?.close();
+          await link.close();
         }),
       );
     },

@@ -1,42 +1,17 @@
 import type { StaticManifest } from "@meetsanctum/app-sdk";
-import {
-  loadPackagedApp,
-  manifestDigest,
-  manifestFileName,
-} from "@meetsanctum/app-sdk/package";
+import { manifestDigest, manifestFileName } from "@meetsanctum/app-sdk/package";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ApartPackage, AppPackage, Origin } from "./host.js";
+import type { ApartPackage, Origin } from "./host.js";
 
-// Finds app packages in a folder, such as the workspace's catalog/apps: one
-// folder per package, whose entry's default export is its defineApp(). The
-// core gives each the origin of the place it was found, never one from the
-// package.
+// Reads apps' packages as the core knows them: by their manifests, never
+// importing their code. The core gives each the origin of where it came from,
+// never one from the package.
 
 type Log = (message: string) => void;
 
-export async function loadAppPackage(
-  packageDir: string,
-  origin: Origin,
-): Promise<AppPackage> {
-  const { app, migrationsFolder } = await loadPackagedApp(packageDir);
-  const manifest = await readFile(join(packageDir, manifestFileName), "utf8")
-    .then((text) => JSON.parse(text) as StaticManifest)
-    .catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return undefined;
-      throw error;
-    });
-  return {
-    app,
-    ...(manifest ? { manifest } : {}),
-    origin,
-    ...(migrationsFolder ? { migrationsFolder } : {}),
-  };
-}
-
-// An app that runs apart, at the version staged in its folder: the core reads
-// its manifest there and imports nothing of it.
+// An app at the version staged in its folder, as its manifest there has it.
 export async function loadApartPackage(
   packagesDir: string,
   appId: string,
@@ -53,7 +28,7 @@ export async function loadApartPackage(
   return { apart: { manifest, digest: manifestDigest(text), folder }, origin };
 }
 
-// Every app the core is told runs apart, as `id@folder`. One that doesn't load is
+// Every app the core is told to run, as `id@folder`. One that doesn't load is
 // logged and left out, as any other package.
 export async function loadApartPackages(
   apart: readonly string[],
@@ -76,33 +51,30 @@ export async function loadApartPackages(
   return packages;
 }
 
-// Every package in `dir` that loads. One that does not is logged and left
-// out, so it cannot keep the core or the other apps from starting.
-export async function loadAppPackages(
-  dir: string,
-  origin: Origin,
-  log: Log,
-): Promise<AppPackage[]> {
+// The ids of the apps the core's image ships for its manager to stage, one
+// folder each, read from their manifests. None, where there is no such folder,
+// as in a development stack, whose apps come from the worktree.
+export async function shippedApps(dir: string, log: Log): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
-    }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  const packages: AppPackage[] = [];
-  for (const entry of entries
-    .filter((each) => each.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name))) {
+  const ids: string[] = [];
+  for (const entry of entries.filter((each) => each.isDirectory())) {
     try {
-      packages.push(await loadAppPackage(join(dir, entry.name), origin));
+      const text = await readFile(
+        join(dir, entry.name, manifestFileName),
+        "utf8",
+      );
+      ids.push((JSON.parse(text) as { id: string }).id);
     } catch (error) {
       log(
-        `apps: ${entry.name} was not loaded (${error instanceof Error ? error.message : String(error)})`,
+        `apps: ${entry.name} has no manifest to read (${error instanceof Error ? error.message : String(error)})`,
       );
     }
   }
-  return packages;
+  return ids.sort();
 }

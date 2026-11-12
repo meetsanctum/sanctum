@@ -3,18 +3,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { realStack } from "./real-stack.js";
 
 // The official apps' moves, for real: Weather, Natural light, Moods and Zigbee
-// from the real image, first in the core's process as a release before this ran
-// them, then each on its own with what it had. The steps of a first move are in
-// app-move.docker.ts and the core's tests; what's here is that the real apps and
-// the real wiring get there. With no stick here, the test says Zigbee2MQTT's
-// device list on the broker in its place.
+// from the real image, each with what it was given, then the host as a release
+// whose core ran them in its own process leaves it, and each moves to its own
+// image with what it had. The steps of a first move are in app-move.docker.ts
+// and the core's tests; what's here is that the real apps and the real wiring
+// get there. With no stick here, the test says Zigbee2MQTT's device list on the
+// broker in its place.
 
 const app = "sanctum.weather";
 const naturalLight = "sanctum.natural-light";
 const moods = "sanctum.moods";
 const zigbee = "sanctum.zigbee";
 const apart = [app, naturalLight, moods, zigbee];
-const running: string[] = ["CORE_OFFICIAL_APPS_APART="];
 const {
   build,
   claim,
@@ -23,13 +23,15 @@ const {
   docker,
   freePort,
   imageId,
+  managerLogs,
   name,
   run,
   stack,
   stagedFrom,
   startManager,
+  turnBack,
   waitFor,
-} = realStack("test-weather", running);
+} = realStack("test-weather");
 
 let port: number;
 let token: string;
@@ -134,12 +136,14 @@ describe("the official apps' moves, for real", () => {
     }).catch(() => undefined);
   }, 120_000);
 
-  it("runs in the core's process while it isn't listed, with its file there", async () => {
-    await waitFor("it to run", async () => {
-      const each = await info();
-      return each.state === "running" ? true : undefined;
-    });
-    expect((await info()).run).toBeUndefined();
+  it("runs each on its own from its first start, with what it's given", async () => {
+    await listZigbeeDevices();
+    for (const id of apart) {
+      await waitFor(`${id} to run on its own`, async () => {
+        const each = await info(id);
+        return each.state === "running" && each.run ? true : undefined;
+      });
+    }
 
     await call("/api/places/home/update", at(47.3769));
 
@@ -165,19 +169,17 @@ describe("the official apps' moves, for real", () => {
     );
     expect(scheduled.status).toBe(200);
     expect(await jobsOf(moods)).toHaveLength(2);
-    const files = await docker("exec", name("core"), "ls", "/data/apps");
-    for (const id of apart) expect(files).toContain(`${id}.db`);
-    await listZigbeeDevices();
   }, 300_000);
 
-  it("moves when it's listed, keeping what it owns, on its own image", async () => {
+  it("moves each from a core that ran it in its own process, keeping what it owns, on its own image", async () => {
     const before = (await entities()).map(({ key }) => key).sort();
     const moodsBefore = (await entities(moods)).map(({ key }) => key);
     const jobsBefore = await jobsOf(moods);
-    running[0] = `CORE_OFFICIAL_APPS_APART=${apart.join(",")}`;
-    await docker("rm", "-f", name("manager"), name("core"));
+    await turnBack(apart);
+    const since = new Date().toISOString();
     await startManager(coreImage, port);
     await coreIsUp();
+    await listZigbeeDevices();
 
     for (const id of apart) {
       await waitFor(`${id} to run on its own`, async () => {
@@ -193,6 +195,14 @@ describe("the official apps' moves, for real", () => {
     const volumes = await docker("volume", "ls", "--format", "{{.Name}}");
     for (const id of apart) {
       expect(volumes).toContain(`sanctum-${stack}-app-data-${id}`);
+    }
+    // Each took in its file from the core's data, which stays until its next
+    // update commits.
+    const logs = await managerLogs(since);
+    const originals = await docker("exec", name("core"), "ls", "/data/apps");
+    for (const id of apart) {
+      expect(logs).toContain(`adopt on ${id}'s app.db`);
+      expect(originals).toContain(`${id}.db`);
     }
     // Each file came with it, on its own image.
     const count = (id: string, table: string) =>

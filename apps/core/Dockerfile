@@ -32,10 +32,10 @@ COPY apps/core apps/core
 COPY catalog/apps catalog/apps
 RUN pnpm --filter @meetsanctum/core... --filter "{./catalog/apps/**}..." build
 RUN pnpm --filter @meetsanctum/core deploy --prod --legacy /out
-# Catalog apps are Sanctum's own, so the core gives them the official origin
-# from the folder they ship in. Each stands alone, with its own production
-# dependencies and its own copy of the app SDK, since the manager stages it
-# apart from this image. pnpm's own record goes: it holds this build's time, and
+# Catalog apps are Sanctum's own, which the manager stages from here for the
+# core to run apart, each with the official origin; the core reads only their
+# ids here. Each stands alone, with its own production dependencies and its own
+# copy of the app SDK, since the manager stages it apart from this image. pnpm's own record goes: it holds this build's time, and
 # an app that hasn't changed must come out the same. So does its link from a
 # package back to this stage's workspace, which is nothing once built and which
 # Docker refuses to unpack.
@@ -55,7 +55,6 @@ ENV NODE_ENV=production \
     CORE_HOST=0.0.0.0 \
     CORE_PORT=4100 \
     CORE_DATA_DIR=/data \
-    CORE_SYSTEM_APPS_DIR=/app/catalog/system \
     CORE_OFFICIAL_APPS_DIR=/app/catalog/official \
     CORE_MANAGER_SOCKET=/run/sanctum/manager.sock
 LABEL sanctum.service="core" \

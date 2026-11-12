@@ -13,8 +13,7 @@ import { join } from "node:path";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
-import { manifestFor } from "./contract.js";
-import type { ApartPackage, AppPackage } from "./host.js";
+import type { ApartPackage } from "./host.js";
 import type { InstalledApp } from "./installed.js";
 import { appUpdates } from "./schema.js";
 import type { AppSettingsStore } from "./settings.js";
@@ -42,12 +41,12 @@ import type { AppVersions } from "./versions.js";
 // version. Its commit leaves the row at undone, the other way round, as it then stays
 // on the old version just as if the newer one had failed.
 //
-// An app's first move is an update from the core's process, which has no folder. The
-// manager takes in its file from the core's data, read-only, so the original stays as
-// it was, and its commit is what says it has moved: from there it never goes back to
-// the core's process. Before that, if the version apart fails or the power goes, the
-// app simply carries on in the core's process with that file, with nothing to undo,
-// until another version arrives. The original goes once its next update commits.
+// An app's first move is an update from a core that ran it in its own process, which
+// has no folder. The manager takes in its file from the core's data, read-only, so the
+// original stays as it was, and its commit is what says it has moved. With nowhere
+// else to carry on, a version that fails or isn't ready before that is any app's
+// failure: it goes on from the copy it took in, tried again with growing pauses and
+// stopped in the end with Restart. The original goes once its next update commits.
 //
 // An app's own database is the truth for what it owns in the core, so undoing puts
 // that back and lets the old version rebuild from it, through the same calls any app
@@ -75,7 +74,7 @@ const isMove = (row: AppUpdateRow) => row.fromFolder === inTheCore;
 
 export function createAppUpdates(options: {
   db: CoreDatabase;
-  // Where the core keeps the files of the apps in its process.
+  // Where a core that ran apps in its own process kept their files.
   dataDir: string;
   versions: AppVersions;
   settings: Pick<AppSettingsStore, "chosen" | "restore" | "settleAfterUndo">;
@@ -97,13 +96,8 @@ export function createAppUpdates(options: {
   let host: {
     launch: (entry: InstalledApp) => void;
     waits: (entry: InstalledApp, why: string, again?: () => void) => void;
-    replace: (
-      entry: InstalledApp,
-      pkg: ApartPackage | AppPackage,
-    ) => Promise<void>;
+    replace: (entry: InstalledApp, pkg: ApartPackage) => Promise<void>;
     isCurrent: (entry: InstalledApp) => boolean;
-    // The package an app has in the core's process, if it has one.
-    inProcess: (appId: string) => AppPackage | undefined;
   };
   let isClosed = false;
   let catchingUp: NodeJS.Timeout | undefined;
@@ -192,63 +186,7 @@ export function createAppUpdates(options: {
     swapTo(entry, row.fromFolder);
   }
 
-  // Whether a first move has somewhere to carry on if it doesn't work.
-  const canFallBack = (row: AppUpdateRow) =>
-    isMove(row) && host.inProcess(row.appId) !== undefined;
-
-  // Back in the core's process, asking again until it can, as for going back.
-  function backInTheCore(entry: InstalledApp) {
-    if (isClosed) return;
-    const appId = entry.manifest.id;
-    const pkg = host.inProcess(appId);
-    if (!pkg) return;
-    host.replace(entry, pkg).catch((error: unknown) => {
-      log(`apps: ${appId} couldn't go back yet (${String(error)})`);
-      if (isClosed) return;
-      setTimeout(() => backInTheCore(entry), turnPauseMs).unref();
-    });
-  }
-
-  // One that won't read is what installing it says, not a reason to stay half-way.
-  function settingsSchemaOf(pkg: AppPackage) {
-    try {
-      return manifestFor(pkg.app, pkg.manifest, log).settings;
-    } catch {
-      return null;
-    }
-  }
-
-  // Its original is as it was, so nothing needs putting back. The manager's slot frees
-  // once it hears, which goes on being asked until it does.
-  function moveUndone(
-    row: AppUpdateRow,
-    pkg: AppPackage | undefined,
-    change: Partial<AppUpdateRow> = {},
-  ) {
-    const schema = pkg && settingsSchemaOf(pkg);
-    durably(db, () => {
-      if (schema) settings.settleAfterUndo(row.appId, schema, row.settings);
-      db.update(appUpdates)
-        .set({ status: "undone", ...change })
-        .where(eq(appUpdates.appId, row.appId))
-        .run();
-    });
-  }
-
-  function moveFailed(
-    entry: InstalledApp,
-    row: AppUpdateRow,
-    change: Partial<AppUpdateRow>,
-  ) {
-    const appId = entry.manifest.id;
-    moveUndone(row, host.inProcess(appId), change);
-    log(`apps: ${appId} stays in the core's process, its file as it was`);
-    backInTheCore(entry);
-    retryCatchUp();
-  }
-
   function undoFailed(entry: InstalledApp, row: AppUpdateRow, failure: string) {
-    if (isMove(row)) return moveFailed(entry, row, { failure });
     mark(entry.manifest.id, { status: "undoing", failure });
     goBack(entry, row);
   }
@@ -330,7 +268,7 @@ export function createAppUpdates(options: {
       });
     } catch (error) {
       if (!host.isCurrent(entry)) return;
-      if ((row.restores || canFallBack(row)) && givesUp(row, error)) {
+      if (row.restores && givesUp(row, error)) {
         log(`apps: ${appId} can't go on (${String(error)})`);
         undoFailed(entry, row, "failed_start");
         return;
@@ -404,7 +342,7 @@ export function createAppUpdates(options: {
 
   // Not while it's off, or while an update of it is under way.
   function canGoBack(entry: InstalledApp) {
-    if (entry.off || !entry.apartIn || !host.isCurrent(entry)) return false;
+    if (entry.off || !host.isCurrent(entry)) return false;
     const state = appStateOf(entry);
     if (state === "paused" || state === "starting") return false;
     const status = rowOf(entry.manifest.id)?.status;
@@ -431,22 +369,7 @@ export function createAppUpdates(options: {
      * an update of it failed or never reached its commit, which brings the old one
      * back. This writes only to the core's own data, so a core on trial may run it.
      */
-    async packageFor(
-      pkg: AppPackage | ApartPackage,
-      inProcess?: AppPackage,
-    ): Promise<AppPackage | ApartPackage> {
-      if (!("apart" in pkg)) {
-        // Once it has moved its data is apart, and its old file is out of date.
-        const moved = versions.last(pkg.app.id)?.folder;
-        if (!moved) {
-          const row = rowOf(pkg.app.id);
-          if (row && isMove(row) && row.status !== "undone") {
-            moveUndone(row, pkg);
-          }
-          return pkg;
-        }
-        pkg = await options.loadPackage(pkg.app.id, moved);
-      }
+    async packageFor(pkg: ApartPackage): Promise<ApartPackage> {
       const appId = pkg.apart.manifest.id;
       const row = rowOf(appId);
       if (!row) return pkg;
@@ -455,21 +378,14 @@ export function createAppUpdates(options: {
         const isTheSame = row.toFolder === folder;
         // It hadn't started, so it carries on.
         if (row.status === "waiting" && isTheSame) return pkg;
-        // Another version, or its time to try again: a move from the start.
+        // Another version, its time to try again, or one a core that ran it in its
+        // own process went back from: a move from the start.
         const isTimeToRetry = row.retryAt !== null && row.retryAt <= now();
-        if (
-          !isTheSame ||
-          isTimeToRetry ||
-          (!inProcess && row.status === "undone")
-        ) {
+        if (!isTheSame || isTimeToRetry || row.status === "undone") {
           forget(appId);
-          return pkg;
         }
         // With nowhere else to carry on, it goes on from the copy it took in.
-        if (!inProcess) return pkg;
-        // The power went after it started and before its commit.
-        if (row.status !== "undone") moveUndone(row, inProcess);
-        return inProcess;
+        return pkg;
       }
       if (row.status === "waiting") {
         // Someone asked to go back, and the core still brings what they left.
@@ -596,13 +512,9 @@ export function createAppUpdates(options: {
         return host.launch(entry);
       }
       const last = versions.last(appId);
-      // It ran in the core's process, so its file comes with it, whether or not the
-      // package it ran from is here now.
-      const isFirstMove = last && !last.folder && entry.apartIn;
-      if (
-        !isFirstMove &&
-        (!last?.folder || last.folder === entry.apartIn || !entry.apartIn)
-      ) {
+      // A core that ran it in its own process left its file, which comes with it.
+      const isFirstMove = last && !last.folder;
+      if (!isFirstMove && (!last?.folder || last.folder === entry.apartIn)) {
         return host.launch(entry);
       }
       const started: AppUpdateRow = {
@@ -611,7 +523,7 @@ export function createAppUpdates(options: {
         fromVersion: last!.version,
         fromFolder: last!.folder ?? inTheCore,
         toVersion: version,
-        toFolder: entry.apartIn!,
+        toFolder: entry.apartIn,
         status: "waiting",
         settings: settings.chosen(appId),
         failure: null,
@@ -701,7 +613,7 @@ export function createAppUpdates(options: {
       if (row?.status !== "starting") return false;
       // With nowhere to go back to, it's any app's failure: tried again as they are,
       // and stopped in the end with Restart. Its file stays as it was until a commit.
-      if (isMove(row) && !canFallBack(row)) return false;
+      if (isMove(row)) return false;
       log(
         `apps: ${appId} ${row.toVersion} failed (${failure}), so it goes back`,
       );
@@ -725,15 +637,8 @@ export function createAppUpdates(options: {
         undoFailed(entry, row, "failed_start");
         return true;
       }
-      if (isMove(row) && !canFallBack(row)) return false;
-      if (isMove(row)) {
-        log(`apps: ${appId} ${row.toVersion} isn't ready (${waitingFor})`);
-        // Tried again when the core next starts after that.
-        moveFailed(entry, row, {
-          retryAt: new Date(now().getTime() + retryAfterMs),
-        });
-        return true;
-      }
+      // On a first move it waits, as any app does, for what it needs.
+      if (isMove(row)) return false;
       log(
         `apps: ${appId} ${row.toVersion} isn't ready (${waitingFor}), so it goes back for now`,
       );

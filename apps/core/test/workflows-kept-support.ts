@@ -8,7 +8,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
 import { sample, samplePackage, steps, trigger } from "./workflows-support.js";
 

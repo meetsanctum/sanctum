@@ -182,8 +182,7 @@ export function createAppContexts(options: {
     const ctx = createAppContext({
       appId,
       actor,
-      // An app apart's own schemas are on its side of the socket.
-      ...(entry.link ? {} : { app: entry.app }),
+      // Its own schemas are on its side of the socket.
       handlers: following?.handlers,
       core,
     });

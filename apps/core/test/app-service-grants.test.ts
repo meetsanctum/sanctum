@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { createActivity } from "../src/activity/activity.js";
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { openLive } from "./devices-support.js";
 import {
   claimed,
@@ -17,8 +17,7 @@ import {
 // for the ones that are on, a service switched off loses the app's broker
 // account before the switch shows it off, and one switched back on gets a new
 // login. An app that needs the service pauses meanwhile; one that does without
-// it restarts, so no connection outlives the change. In the core's process, an
-// app whose stop failed never starts again until the core does.
+// it restarts, so no connection outlives the change.
 
 const said: string[] = [];
 beforeEach(() => (said.length = 0));
@@ -28,7 +27,6 @@ beforeEach(() => (said.length = 0));
 function bridge(
   options: {
     needed?: boolean;
-    failsToStop?: boolean;
     // While set, its stop hook waits for it.
     stopWaits?: Promise<void>;
   } = {},
@@ -68,9 +66,6 @@ function bridge(
       async stop() {
         said.push("stop");
         await options.stopWaits;
-        if (options.failsToStop) {
-          throw new Error("the radio would not let go");
-        }
       },
     }),
   };
@@ -81,14 +76,11 @@ async function bridgeCore(
   options: {
     dataDir?: string;
     fake?: ReturnType<typeof fakeManager>;
-    // In the core's process, where a failed stop leaves it stopped; apart, its
-    // container ends and starts again.
-    inProcess?: boolean;
   } = {},
 ) {
   const fake = options.fake ?? fakeManager();
   const core = await testCore({
-    ...(options.inProcess ? { inProcess: [pkg] } : { apps: [pkg] }),
+    apps: [pkg],
     manager: fake.manager,
     dataDir: options.dataDir,
   });
@@ -368,35 +360,8 @@ describe("a service an app holds", () => {
   });
 });
 
-describe("an app whose stop failed", () => {
-  it("never starts again until the core does, and says it is stopped", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
-      inProcess: true,
-    });
-    await grant(core, maya.token, "places.read", false);
-    await settled();
-
-    const answered = await grant(core, maya.token, "places.read", true);
-    await settled();
-
-    expect((answered.json() as AppInfo).state).toBe("stopped");
-    expect(said).toEqual(["start", "stop"]);
-    expect(core.logs.join("\n")).toContain(
-      "apps: test.bridge did not stop cleanly, so it starts again only when Sanctum restarts",
-    );
-    expect(
-      (
-        await post(
-          core,
-          "/api/apps/test.bridge/actions/bridge.account",
-          {},
-          maya,
-        )
-      ).json(),
-    ).toEqual({ error: "unavailable" });
-  });
-
-  it("announces a grant given back only once the app runs again", async () => {
+describe("a grant given back", () => {
+  it("is announced only once the app runs again", async () => {
     const { core, maya } = await bridgeCore(bridge());
     const live = await openLive(core, maya.token);
     await grant(core, maya.token, "places.read", false);
@@ -414,59 +379,5 @@ describe("an app whose stop failed", () => {
       "paused",
       "starting",
     ]);
-  });
-
-  it("tells every live client it stopped, after it paused", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
-      inProcess: true,
-    });
-    const live = await openLive(core, maya.token);
-
-    await grant(core, maya.token, "places.read", false);
-    await settled();
-
-    // Paused as its grant went, then stopped once its stop failed.
-    await expect
-      .poll(() =>
-        live.messages
-          .filter((each) => each.type === "app")
-          .map((each) => (each.app as AppInfo).state),
-      )
-      .toEqual(["paused", "stopped"]);
-  });
-
-  it("does not announce an app removed while its stop fails", async () => {
-    const { core, maya } = await bridgeCore(bridge({ failsToStop: true }), {
-      inProcess: true,
-    });
-    const live = await openLive(core, maya.token);
-
-    await core.apps.remove("test.bridge");
-    await settled();
-
-    expect(core.apps.list()).toEqual([]);
-    expect(live.messages.filter((each) => each.type === "app")).toEqual([]);
-  });
-
-  it("does not announce a failed stop for an app installed again meanwhile", async () => {
-    let finishStop!: () => void;
-    const stopping = new Promise<void>((resolve) => (finishStop = resolve));
-    const { core, maya } = await bridgeCore(
-      bridge({ failsToStop: true, stopWaits: stopping }),
-      { inProcess: true },
-    );
-    const live = await openLive(core, maya.token);
-
-    const removing = core.apps.remove("test.bridge");
-    await vi.waitFor(() => expect(said).toContain("stop"));
-    const starting = core.apps.start([bridge()]);
-    await vi.waitFor(() => expect(said).toEqual(["start", "stop", "start"]));
-    finishStop();
-    await removing;
-    await starting;
-    await settled();
-
-    expect(core.apps.list()[0]?.state).toBe("running");
-    expect(live.messages.filter((each) => each.type === "app")).toEqual([]);
   });
 });

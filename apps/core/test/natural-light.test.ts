@@ -2,7 +2,7 @@ import { createNaturalLightApp } from "@meetsanctum/natural-light";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, type TestCore } from "./support.js";
 

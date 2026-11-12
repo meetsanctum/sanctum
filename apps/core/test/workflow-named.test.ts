@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { namedIn } from "../src/workflows/named.js";
 import { lampsCore, radio } from "./devices-support.js";
 import { get, post } from "./support.js";

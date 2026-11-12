@@ -27,14 +27,8 @@ describe("loadConfig", () => {
       dataDir: "./data",
       // HTTPS unless `pnpm dev` asks for plain HTTP.
       plainHttp: false,
-      officialAppsDir: "../../catalog/apps",
+      officialAppsDir: "/app/catalog/official",
       appsApart: [],
-      officialAppsApart: [
-        "sanctum.weather",
-        "sanctum.natural-light",
-        "sanctum.moods",
-        "sanctum.zigbee",
-      ],
       packagesDir: "/packages",
       managerSocket: "../manager/data/manager.sock",
       version: "dev",
@@ -42,15 +36,15 @@ describe("loadConfig", () => {
     expect(loadConfig({ CORE_PLAIN_HTTP: "true" }).plainHttp).toBe(true);
   });
 
-  it("reads system and official app folders apart", () => {
+  it("reads where the image keeps its apps and which more to run", () => {
     expect(
       loadConfig({
-        CORE_SYSTEM_APPS_DIR: "/app/catalog/system",
-        CORE_OFFICIAL_APPS_DIR: "/app/catalog/official",
+        CORE_OFFICIAL_APPS_DIR: "/srv/official",
+        CORE_APPS_APART: "sanctum.example@1.0.0+abc, ",
       }),
     ).toMatchObject({
-      systemAppsDir: "/app/catalog/system",
-      officialAppsDir: "/app/catalog/official",
+      officialAppsDir: "/srv/official",
+      appsApart: ["sanctum.example@1.0.0+abc"],
     });
   });
 

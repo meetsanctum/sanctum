@@ -1,4 +1,4 @@
-import { defineApp, type AppContext } from "@meetsanctum/app-sdk";
+import { defineApp } from "@meetsanctum/app-sdk";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -91,25 +91,6 @@ describe("workflows and jobs, on trial", () => {
     await core.workflows.settled();
 
     expect(core.workflows.jobs.list(samplePackage.app.id)).toEqual([]);
-  });
-
-  it("still starts an app in the core's process, whose data a rollback restores", async () => {
-    const started: string[] = [];
-    const app = defineApp({
-      ...base,
-      id: "test.inside",
-      permissions: [],
-      actions: [],
-      start: async (_ctx: AppContext) => void started.push("start"),
-    });
-
-    const core = await testCore({
-      inProcess: [{ app, origin: "official" }],
-      onTrial: true,
-    });
-
-    expect(started).toEqual(["start"]);
-    expect(core.apps.isRunning(app.id)).toBe(true);
   });
 });
 

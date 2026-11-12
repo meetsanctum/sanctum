@@ -5,7 +5,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import {
   lampsCore,
   openLive,

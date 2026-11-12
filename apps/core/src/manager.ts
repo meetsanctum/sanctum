@@ -576,7 +576,8 @@ export function createManagerClient(options: {
       app: string,
       request: {
         id: string;
-        // No folder on an app's first move, as it ran in the core's process.
+        // No folder on an app's first move, from a core that ran it in its own
+        // process.
         from: { version: string; folder?: string };
         to: { version: string; folder: string };
         file: string;

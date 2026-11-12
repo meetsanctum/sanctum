@@ -186,10 +186,10 @@ type Follower = {
   delivering: Promise<void>;
   stopped: boolean;
   run: (work: () => void | Promise<void>) => Promise<void>;
-  // An app apart: every event from the moment it began starting, kept until
-  // its start has said which it follows, and how much waits for it.
+  // Every event from the moment it began starting, kept until its start has
+  // said which it follows, and how much waits for it.
   early?: { event: CoreEvent; bytes: number }[];
-  overflowed?: () => void;
+  overflowed: () => void;
   waiting: number;
   waitingBytes: number;
 };
@@ -229,13 +229,10 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
     if (follower.stopped) {
       return;
     }
-    const bytes = follower.overflowed
-      ? Buffer.byteLength(JSON.stringify(event))
-      : 0;
+    const bytes = Buffer.byteLength(JSON.stringify(event));
     if (
-      follower.overflowed &&
-      (follower.waiting >= maxWaitingEvents ||
-        follower.waitingBytes + bytes > maxWaitingBytes)
+      follower.waiting >= maxWaitingEvents ||
+      follower.waitingBytes + bytes > maxWaitingBytes
     ) {
       options.log(`apps: ${appId} fell behind the core's events`);
       follower.stopped = true;
@@ -275,15 +272,15 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
     // What happens meanwhile waits for `started`, once the start hook has
     // caught up, so the two never interleave.
     //
-    // An app apart hears what happened from the moment this is called, which is
-    // when its reads' snapshot was taken, once it has said what it follows, and
+    // It hears what happened from the moment this is called, which is when its
+    // reads' snapshot was taken, once it has said what it follows, and
     // `overflowed` says when too much waits for it.
     start(
       appId: string,
       permissions: () => readonly string[],
+      overflowed: () => void,
       run: Follower["run"] = (work) =>
         withTimeout(Promise.resolve().then(work), options.timeoutMs),
-      apart?: { overflowed: () => void },
     ) {
       let open!: () => void;
       const follower: Follower = {
@@ -295,7 +292,8 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
         run,
         waiting: 0,
         waitingBytes: 0,
-        ...(apart ? { early: [], overflowed: apart.overflowed } : {}),
+        early: [],
+        overflowed,
       };
       followers.set(appId, follower);
       return {
