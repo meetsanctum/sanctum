@@ -4,7 +4,7 @@ import {
   type ActionDefinition,
   type Actor,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { checkJob, createNaturalLightApp } from "../src/index.js";
 import {
@@ -528,6 +528,38 @@ describe("the curve the household sets", () => {
     ]);
   });
 
+  it("reaches every light at once when the household changes it, even one set a moment ago", async () => {
+    const { app, core, call, now, sentFrom } = running();
+    core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+    await call("naturalLight.follow", { ...lamp, follow: true });
+    await app.start!(core.ctx, { reason: "started" });
+    const changed = { ...defaultCurve, highKelvin: 4000, highBrightness: 90 };
+
+    await core.changeSettings({ highKelvin: 4000, highBrightness: 90 });
+
+    await vi.waitFor(() =>
+      expect(sentFrom(1)).toEqual([curveAt(now(), changed)]),
+    );
+    expect(core.state.entities.get("lamp/light")?.state).toMatchObject({
+      status: "following",
+      ...curveAt(now(), changed),
+    });
+    await app.stop!(core.ctx, { reason: "shutdown" });
+  });
+
+  it("is taken by nothing once natural light stops", async () => {
+    const { app, core, call, sentFrom } = running();
+    core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+    await call("naturalLight.follow", { ...lamp, follow: true });
+    await app.start!(core.ctx, { reason: "started" });
+    await app.stop!(core.ctx, { reason: "shutdown" });
+
+    await core.changeSettings({ highKelvin: 4000 });
+    await new Promise((done) => setTimeout(done, 20));
+
+    expect(sentFrom(1)).toEqual([]);
+  });
+
   it("shapes the preview", async () => {
     const { core, call } = running();
     core.state.settings = { shape: "early_riser", sunriseOffsetMinutes: 30 };
@@ -582,6 +614,62 @@ describe("natural light", () => {
       },
     ]);
   });
+
+  it("publishes where each light it follows stands as it starts, from its own database, setting none", async () => {
+    const { app, core, call, advance, sentFrom, now } = running();
+    core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+    core.addLight("desk", "Desk lamp", { ...on, colorTemperature: 153 });
+    await call("naturalLight.follow", { ...lamp, follow: true });
+    await call("naturalLight.follow", {
+      device: "desk",
+      capability: "light",
+      follow: true,
+    });
+    advance(minute);
+    core.set("desk", { hue: 30, saturation: 80 }, moods);
+    // A core put back, holding none of what the app owns.
+    core.state.entities.clear();
+
+    await app.start!(core.ctx, { reason: "started" });
+
+    expect(sentFrom(2)).toEqual([]);
+    expect(Object.fromEntries(core.state.entities)).toEqual({
+      "lamp/light": expect.objectContaining({
+        state: {
+          device: "lamp",
+          capability: "light",
+          status: "following",
+          ...curveAt(now()),
+        },
+      }),
+      "desk/light": expect.objectContaining({
+        state: expect.objectContaining({ status: "paused" }),
+      }),
+    });
+    await app.stop!(core.ctx, { reason: "shutdown" });
+  });
+
+  it.each(["read", "publish"] as const)(
+    "fails its start when it cannot %s a followed light's target",
+    async (operation) => {
+      const { app, core, call, sentFrom } = running();
+      core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+      await call("naturalLight.follow", { ...lamp, follow: true });
+      const failure = new Error("The core call failed");
+      if (operation === "read") {
+        vi.spyOn(core.ctx.devices, "state").mockRejectedValue(failure);
+      } else {
+        vi.spyOn(core.ctx.entities, "publish").mockRejectedValue(failure);
+      }
+
+      await expect(app.start!(core.ctx, { reason: "started" })).rejects.toThrow(
+        failure,
+      );
+
+      expect(sentFrom(1)).toEqual([]);
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    },
+  );
 
   it("declares what it brings and the lights it controls", () => {
     const manifest = toStaticManifest(defineApp(createNaturalLightApp()));

@@ -163,4 +163,50 @@ describe("natural light on the core's lights", () => {
       actor: { kind: "app", id: "sanctum.natural-light" },
     });
   });
+
+  it.each(["off", "awaiting confirmation"] as const)(
+    "takes a new curve to its lights without its job when the light is %s",
+    async (state) => {
+      const { core, maya, lamp } = await naturalLightCore();
+      if (state === "awaiting confirmation") {
+        await viaPanel(core, maya.token, {
+          device: lamp,
+          capability: "light",
+          command: { on: true },
+        });
+        await settled();
+        radio.confirms = false;
+      }
+      await call(core, maya.token, "naturalLight.follow", {
+        device: lamp,
+        capability: "light",
+        follow: true,
+      });
+      await settled();
+      const before = await lampOf(core, maya.token, lamp);
+      if (state === "awaiting confirmation") {
+        expect(before.sync).toBe("pending");
+      }
+      const sent = radio.received.length;
+
+      const changed = await post(
+        core,
+        "/api/apps/sanctum.natural-light/settings/update",
+        { lowKelvin: 2700, lowBrightness: 50, highKelvin: 2700 },
+        maya,
+      );
+      expect(changed.statusCode).toBe(200);
+
+      // 2,700 K is 370 mireds, all day with the peak that warm.
+      await expect
+        .poll(async () => (await lampOf(core, maya.token, lamp)).state)
+        .toMatchObject({ on: state !== "off", colorTemperature: 370 });
+      expect(before.state.colorTemperature).not.toBe(370);
+      expect(radio.received).toHaveLength(sent + 1);
+      // Its target follows the command, once the light's row is written.
+      await expect
+        .poll(() => targetOf(core, maya.token))
+        .toMatchObject({ status: "following", colorTemperature: 370 });
+    },
+  );
 });

@@ -48,15 +48,40 @@ export type RunForLight = <T>(
   work: () => Promise<T>,
 ) => Promise<T>;
 
+/**
+ * Calls for one light finish in order, the job and a new curve's included, so a
+ * delayed check cannot undo a pause or publish a target after following stops.
+ */
+export function createRunForLight(): RunForLight {
+  const pending = new Map<string, Promise<unknown>>();
+  return async (device, capability, work) => {
+    const key = `${device}/${capability}`;
+    const result = (pending.get(key) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(work);
+    pending.set(key, result);
+    try {
+      return await result;
+    } finally {
+      if (pending.get(key) === result) pending.delete(key);
+    }
+  };
+}
+
 /** How natural light keeps time, which tests may change. */
 export type Timing = { now: () => Date; activeMs: number; offMs: number };
 
-/** What one call follows: its timing, and the curve as the household set it. */
-export type FollowOptions = Timing & { curve: CurveSettings };
+/**
+ * What one call follows: its timing, and the curve as the household set it.
+ * `isDueNow` has every light take it now, as once the household changes it.
+ */
+export type FollowOptions = Timing & {
+  curve: CurveSettings;
+  isDueNow?: boolean;
+};
 
 /**
- * The options for one call, with the curve as its settings stand now: a
- * change reaches the lights at the next check, or the next action.
+ * The options for one call, with the curve as its settings stand now.
  */
 export async function followOptionsFor(
   ctx: AppContext,
@@ -163,7 +188,13 @@ export function commandFor(
   light: Light,
   row: Pick<Followed, "appliedAt">,
   look: Look,
-  options: { appId: string; now: Date; activeMs: number; offMs: number },
+  options: {
+    appId: string;
+    now: Date;
+    activeMs: number;
+    offMs: number;
+    isDueNow?: boolean;
+  },
   force = false,
 ): LightCommand | null {
   const { device, capability } = light;
@@ -174,12 +205,14 @@ export function commandFor(
   if (showsLook(state, look)) {
     return null;
   }
-  if (!force && capability.sync === "pending") {
+  // A new curve replaces the pending look; a periodic check waits for it.
+  if (!force && !options.isDueNow && capability.sync === "pending") {
     return null;
   }
   const every = state.on ? options.activeMs : options.offMs;
   const isDue =
     force ||
+    options.isDueNow === true ||
     capability.setBy?.app !== options.appId ||
     !row.appliedAt ||
     options.now.getTime() - row.appliedAt.getTime() + leewayMs >= every;
@@ -195,6 +228,37 @@ export const followed = (device: string, capability: string) =>
     eq(followedLights.deviceId, device),
     eq(followedLights.capabilityId, capability),
   );
+
+// Where a light stands, with the look the curve gives it now.
+const targetOf = (
+  light: Light,
+  look: Look | null,
+  status: TargetState["status"],
+): TargetState => ({
+  device: light.device.id,
+  capability: light.capability.id,
+  status: look ? status : "waiting",
+  colorTemperature: look?.colorTemperature ?? null,
+  brightness: look?.brightness ?? null,
+});
+
+/** Where one light that follows the curve stands now, without setting it. */
+export function standing(
+  light: Light,
+  row: Followed,
+  sun: HomeSun | null,
+  options: FollowOptions,
+  appId: string,
+): TargetState {
+  const look = sun
+    ? lookFor(options.curve, sun, light.capability, options.now())
+    : null;
+  return targetOf(
+    light,
+    look,
+    isPaused(row, light.capability, appId) ? "paused" : "following",
+  );
+}
 
 async function publish(ctx: AppContext, light: Light, state: TargetState) {
   await ctx.entities.publish({
@@ -221,13 +285,8 @@ export async function followOne(
   const { device, capability } = light;
   const now = options.now();
   const look = sun ? lookFor(options.curve, sun, capability, now) : null;
-  const target = (status: TargetState["status"]): TargetState => ({
-    device: device.id,
-    capability: capability.id,
-    status: look ? status : "waiting",
-    colorTemperature: look?.colorTemperature ?? null,
-    brightness: look?.brightness ?? null,
-  });
+  const target = (status: TargetState["status"]) =>
+    targetOf(light, look, status);
   if (hasEndedPause(row, capability)) {
     // Switched since the pause, which ends here, before natural light's next
     // command takes the switch's place as who set the light last.
@@ -333,25 +392,20 @@ export async function forget(
   await ctx.entities.remove(targetKey(deviceId, capabilityId));
 }
 
-/**
- * Brings every light that follows the curve to it. A light that is gone
- * from the home, or no longer a light, stops following; one that fails
- * waits for the next check.
- */
-export async function followAll(
+// Each light that follows the curve, read again once its turn comes, since a
+// caller may have paused, resumed or stopped following it while the preceding
+// light was being set. One that is gone from the home, or no longer a light,
+// stops following. A check skips failures; startup must publish every target
+// so an update's commit does not remove one whose publication failed.
+async function eachFollowed(
   ctx: AppContext,
-  options: FollowOptions,
   runForLight: RunForLight,
+  what: "follow" | "publish",
+  work: (light: Light, row: Followed) => Promise<unknown>,
 ) {
   const rows = await ctx.storage.db.select().from(followedLights);
-  if (rows.length === 0) {
-    return;
-  }
-  const sun = await homeSun(ctx, options.now());
   for (const row of rows) {
     await runForLight(row.deviceId, row.capabilityId, async () => {
-      // A caller may have paused, resumed or stopped following while the
-      // preceding light was being set. Read both sides again after waiting.
       const current = await followedRow(ctx, row.deviceId, row.capabilityId);
       if (!current) return;
       let light: Light;
@@ -362,16 +416,52 @@ export async function followAll(
           await forget(ctx, row.deviceId, row.capabilityId);
           return;
         }
+        if (what === "publish") throw error;
         ctx.log(`could not read ${row.deviceId} (${describe(error)})`);
         return;
       }
       try {
-        await followOne(ctx, light, current, sun, options);
+        await work(light, current);
       } catch (error) {
-        ctx.log(`could not follow ${light.device.name} (${describe(error)})`);
+        if (what === "publish") throw error;
+        ctx.log(`could not ${what} ${light.device.name} (${describe(error)})`);
       }
     });
   }
+}
+
+// The sun for every light of one pass, read once the first light needs it, so
+// a pass with no lights asks nothing.
+function sunOnce(ctx: AppContext, options: FollowOptions) {
+  let sun: Promise<HomeSun | null> | undefined;
+  return () => (sun ??= homeSun(ctx, options.now()));
+}
+
+/** Brings every light that follows the curve to it. */
+export async function followAll(
+  ctx: AppContext,
+  options: FollowOptions,
+  runForLight: RunForLight,
+) {
+  const sun = sunOnce(ctx, options);
+  await eachFollowed(ctx, runForLight, "follow", async (light, row) =>
+    followOne(ctx, light, row, await sun(), options),
+  );
+}
+
+/**
+ * Publishes where every light that follows the curve stands, from its own
+ * database and the lights as they are, setting none of them.
+ */
+export async function publishAll(
+  ctx: AppContext,
+  options: FollowOptions,
+  runForLight: RunForLight,
+) {
+  const sun = sunOnce(ctx, options);
+  await eachFollowed(ctx, runForLight, "publish", async (light, row) =>
+    publish(ctx, light, standing(light, row, await sun(), options, ctx.appId)),
+  );
 }
 
 function describe(error: unknown) {

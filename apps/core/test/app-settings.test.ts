@@ -3,6 +3,7 @@ import {
   defineApp,
   type AppDefinition,
   type AppInfo,
+  type CoreEvent,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -243,6 +244,51 @@ describe("an app's settings", () => {
         .poll(() => live.messages.filter((each) => each.type === "settings"))
         .toEqual([message]);
     }
+  });
+
+  it("reach the running app at once as settings.changed, and no other app", async () => {
+    const heard: { app: string; event: CoreEvent }[] = [];
+    const listening = (app: AppDefinition): AppDefinition => ({
+      ...app,
+      async start(ctx) {
+        await ctx.events.on("settings.changed", (event) => {
+          heard.push({ app: app.id, event });
+        });
+      },
+    });
+    const core = await testCore({
+      apps: [
+        { origin: "official", app: defineApp(listening(sky())) },
+        { origin: "official", app: defineApp(listening(plain)) },
+      ],
+    });
+    const maya = await claimed(core);
+
+    await change(core, maya.token, { days: 3 });
+    // The same again, and a value of the default's, change nothing.
+    await change(core, maya.token, { days: 3 });
+    await change(core, maya.token, { temperatureUnit: "celsius" });
+    await change(core, maya.token, { days: null });
+
+    await expect.poll(() => heard.length).toBe(2);
+    expect(heard).toEqual([
+      {
+        app: "test.sky",
+        event: {
+          name: "settings.changed",
+          settings: { temperatureUnit: "celsius", days: 3 },
+          before: { temperatureUnit: "celsius", days: 7 },
+        },
+      },
+      {
+        app: "test.sky",
+        event: {
+          name: "settings.changed",
+          settings: { temperatureUnit: "celsius", days: 7 },
+          before: { temperatureUnit: "celsius", days: 3 },
+        },
+      },
+    ]);
   });
 
   it("are kept across a restart, and a choice a new version no longer offers falls back to its default", async () => {

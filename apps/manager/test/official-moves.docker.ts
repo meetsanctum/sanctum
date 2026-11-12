@@ -2,12 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { realStack } from "./real-stack.js";
 
-// Weather's move, for real: the real app from the real image, first in the core's
-// process as a release before this ran it, then on its own with what it had. The
-// steps of a first move are in app-move.docker.ts and the core's tests; what's here is
-// that the real app and the real wiring get there.
+// The official apps' moves, for real: Weather and Natural light from the real
+// image, first in the core's process as a release before this ran them, then each
+// on its own with what it had. The steps of a first move are in app-move.docker.ts
+// and the core's tests; what's here is that the real apps and the real wiring get
+// there.
 
 const app = "sanctum.weather";
+const naturalLight = "sanctum.natural-light";
 const running: string[] = ["CORE_OFFICIAL_APPS_APART="];
 const {
   build,
@@ -43,8 +45,8 @@ const call = async (path: string, body?: object) => {
 type Info = { id: string; state: string; run?: unknown };
 type Entity = { key: string; state: unknown };
 
-const info = async () =>
-  ((await call("/api/apps")).body as Info[]).find(({ id }) => id === app)!;
+const info = async (id = app) =>
+  ((await call("/api/apps")).body as Info[]).find((each) => each.id === id)!;
 const entities = async () =>
   (await call(`/api/entities?app=${app}`)).body as Entity[];
 
@@ -59,7 +61,7 @@ const at = (latitude: number) => ({
   coordinates: { latitude, longitude: 8.5417 },
 });
 
-describe("Weather's move, for real", () => {
+describe("the official apps' moves, for real", () => {
   beforeAll(async () => {
     await build("apps/core/Dockerfile", coreImage);
     await build("apps/manager/Dockerfile", `${name("manager")}:real`);
@@ -91,22 +93,24 @@ describe("Weather's move, for real", () => {
     await waitFor("its sun and card", async () =>
       (await entities()).length >= 2 ? true : undefined,
     );
-    expect(await docker("exec", name("core"), "ls", "/data/apps")).toContain(
-      `${app}.db`,
-    );
+    const files = await docker("exec", name("core"), "ls", "/data/apps");
+    expect(files).toContain(`${app}.db`);
+    expect(files).toContain(`${naturalLight}.db`);
   }, 300_000);
 
   it("moves when it's listed, keeping what it owns, on its own image", async () => {
     const before = (await entities()).map(({ key }) => key).sort();
-    running[0] = `CORE_OFFICIAL_APPS_APART=${app}`;
+    running[0] = `CORE_OFFICIAL_APPS_APART=${app},${naturalLight}`;
     await docker("rm", "-f", name("manager"), name("core"));
     await startManager(coreImage, port);
     await coreIsUp();
 
-    await waitFor("it to run on its own", async () => {
-      const each = await info();
-      return each.state === "running" && each.run ? true : undefined;
-    });
+    for (const id of [app, naturalLight]) {
+      await waitFor(`${id} to run on its own`, async () => {
+        const each = await info(id);
+        return each.state === "running" && each.run ? true : undefined;
+      });
+    }
 
     // The forecast may have come meanwhile, from the real Open-Meteo.
     expect((await entities()).map(({ key }) => key)).toEqual(
@@ -114,19 +118,24 @@ describe("Weather's move, for real", () => {
     );
     const volumes = await docker("volume", "ls", "--format", "{{.Name}}");
     expect(volumes).toContain(`sanctum-${stack}-app-data-${app}`);
-    // Its file came with it: where the forecast is for, kept in its database.
-    const rows = await docker(
-      "exec",
-      `sanctum-${stack}-app-${app}`,
-      "node",
-      "--no-warnings",
-      "--input-type=module",
-      "-e",
-      `import { DatabaseSync } from "node:sqlite";
-       const db = new DatabaseSync("/data/app.db", { readOnly: true });
-       console.log(db.prepare("select location from forecast_location").all().length);`,
-    );
-    expect(rows).toBe("1");
+    expect(volumes).toContain(`sanctum-${stack}-app-data-${naturalLight}`);
+    // Each file came with it, on its own image.
+    const count = (id: string, table: string) =>
+      docker(
+        "exec",
+        `sanctum-${stack}-app-${id}`,
+        "node",
+        "--no-warnings",
+        "--input-type=module",
+        "-e",
+        `import { DatabaseSync } from "node:sqlite";
+         const db = new DatabaseSync("/data/app.db", { readOnly: true });
+         console.log(db.prepare("select * from ${table}").all().length);`,
+      );
+    // Where the forecast is for, kept in Weather's database.
+    expect(await count(app, "forecast_location")).toBe("1");
+    // The lights that follow the curve: none in a home without lights.
+    expect(await count(naturalLight, "followed_lights")).toBe("0");
   }, 300_000);
 
   it("hears at once that the home has moved, through its socket", async () => {
@@ -148,10 +157,12 @@ describe("Weather's move, for real", () => {
 
     await docker("restart", name("core"));
     await coreIsUp();
-    await waitFor("it to run on its own", async () => {
-      const each = await info();
-      return each.state === "running" && each.run ? true : undefined;
-    });
+    for (const id of [app, naturalLight]) {
+      await waitFor(`${id} to run on its own`, async () => {
+        const each = await info(id);
+        return each.state === "running" && each.run ? true : undefined;
+      });
+    }
 
     expect((await entities()).map(({ key }) => key)).toEqual(
       expect.arrayContaining(before),

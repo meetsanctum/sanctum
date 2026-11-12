@@ -2,6 +2,7 @@ import {
   peopleReadPermission,
   placesLocationPermission,
   placesReadPermission,
+  type AppSettings,
   type CoreEvent,
   type CoreEventHandlers,
   type CoreEventName,
@@ -398,6 +399,18 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
           name: "permissions.changed",
           granted: [...granted],
           before: [...before],
+        });
+      }
+    },
+
+    // Someone changed one app's own settings: only that app hears it.
+    settings(appId: string, before: AppSettings, settings: AppSettings) {
+      const follower = followers.get(appId);
+      if (follower && wants(follower, "settings.changed")) {
+        deliver(appId, follower, {
+          name: "settings.changed",
+          settings: { ...settings },
+          before: { ...before },
         });
       }
     },

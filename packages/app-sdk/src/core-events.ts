@@ -2,13 +2,14 @@ import type { DeviceInfo } from "./devices.js";
 import type { EntityInfo } from "./entities.js";
 import type { PersonInfo } from "./people.js";
 import type { Floor, HomeLocation, Places, Room, Zone } from "./places.js";
+import type { AppSettings } from "./settings.js";
 
 // The core's events: what happens to the core's own nouns, which an app
 // follows from its start context with ctx.events.on(name, handler). Each is
 // about a device, a place, a person or an entity of a standard type, needs
 // the permission to read it, and shows it as the app's reads would; or about
-// the app's own permissions, which needs none. Apps never hear another app's
-// own events.
+// the app's own permissions or settings, which needs none. Apps never hear
+// another app's own events.
 
 /** A place as the core's events name it: the home, a floor, a room or a zone. */
 export type Place =
@@ -85,6 +86,17 @@ export type PermissionsEvent = {
   before: string[];
 };
 
+/**
+ * Someone changed the app's own settings: all of them now and as they were,
+ * as the core keeps them, with the schema's defaults. Needs no permission,
+ * and reaches only that app.
+ */
+export type SettingsEvent = {
+  name: "settings.changed";
+  settings: AppSettings;
+  before: AppSettings;
+};
+
 export type CoreEvent =
   | DeviceEvent
   | DevicePressEvent
@@ -92,7 +104,8 @@ export type CoreEvent =
   | LocationEvent
   | PersonEvent
   | EntityEvent
-  | PermissionsEvent;
+  | PermissionsEvent
+  | SettingsEvent;
 
 export const coreEventNames = [
   "device.added",
@@ -110,6 +123,7 @@ export const coreEventNames = [
   "entity.changed",
   "entity.deleted",
   "permissions.changed",
+  "settings.changed",
 ] as const satisfies readonly CoreEvent["name"][];
 
 export type CoreEventName = (typeof coreEventNames)[number];
