@@ -157,6 +157,8 @@ describe("an app without the permission", () => {
 
 describe("an action that timed out", () => {
   it("commands nothing afterwards", async () => {
+    let tried!: () => void;
+    const hasTried = new Promise<void>((done) => (tried = done));
     const slow = defineAction({
       id: "slow.switch",
       title: "Switch, slowly",
@@ -165,11 +167,15 @@ describe("an action that timed out", () => {
       output: z.unknown(),
       async run(ctx, input) {
         await new Promise((resolve) => setTimeout(resolve, 400));
-        return ctx.devices.command({
-          device: input.device,
-          capability: "light",
-          command: { on: true },
-        });
+        try {
+          return await ctx.devices.command({
+            device: input.device,
+            capability: "light",
+            command: { on: true },
+          });
+        } finally {
+          tried();
+        }
       },
     });
     const app = defineApp({
@@ -193,7 +199,8 @@ describe("an action that timed out", () => {
       { device: lamp },
       maya,
     );
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Once its late command has had its answer from the core.
+    await hasTried;
 
     expect(asked.json()).toEqual({ error: "timeout" });
     expect(radio.received).toEqual([]);

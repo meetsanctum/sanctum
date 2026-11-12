@@ -21,9 +21,11 @@ export function runnerApps(options: {
   manager: TestManager;
 }) {
   const { manager } = options;
-  const byId = new Map<string, AppPackage>();
+  // The apps it runs, and each package it has staged, by its app and folder.
+  const runs = new Set<string>();
+  const staged = new Map<string, { pkg: AppPackage; digest: string }>();
+  const stagedIn = (appId: string, folder: string) => `${appId}/${folder}`;
   const sessions = new Map<string, Session>();
-  const digests = new Map<string, string>();
 
   async function stopSession(appId: string) {
     const session = sessions.get(appId);
@@ -31,26 +33,30 @@ export function runnerApps(options: {
     await session?.shutdown(50);
   }
 
-  // Its container, as the manager would start it from the staged package.
-  function startSession(pkg: AppPackage) {
-    const { app, migrationsFolder } = pkg;
+  // Its container, as the manager would start it from the folder the core
+  // asks for, which after an update or going back is another package.
+  async function startSession(appId: string, folder: string) {
+    const found = staged.get(stagedIn(appId, folder));
+    if (!found) throw new Error(`${appId} has no package in ${folder}`);
+    await stopSession(appId);
+    const { app, migrationsFolder } = found.pkg;
     const session = runSession({
-      appId: app.id,
-      socket: join(options.sockets, app.id, coreSocketName),
-      database: join(options.dataDir, "apps", `${app.id}.db`),
+      appId,
+      socket: join(options.sockets, appId, coreSocketName),
+      database: join(options.dataDir, "apps", `${appId}.db`),
       package: {
         version: app.version,
-        manifest: digests.get(app.id)!,
+        manifest: found.digest,
         load: async () => ({
           app,
           ...(migrationsFolder ? { migrationsFolder } : {}),
         }),
       },
     });
-    sessions.set(app.id, session);
+    sessions.set(appId, session);
     // One that ends by itself, as a crashed container does, is gone.
     void session.finished.then(() => {
-      if (sessions.get(app.id) === session) sessions.delete(app.id);
+      if (sessions.get(appId) === session) sessions.delete(appId);
     });
   }
 
@@ -67,24 +73,22 @@ export function runnerApps(options: {
   > = {
     capabilities: () => ({
       ...manager.capabilities(),
-      ...(byId.size > 0 ? { appContainers: true } : {}),
+      ...(runs.size > 0 ? { appContainers: true } : {}),
     }),
     async startAppContainer(appId, spec) {
-      const pkg = byId.get(appId);
-      if (!pkg) return manager.startAppContainer(appId, spec);
-      await stopSession(appId);
-      startSession(pkg);
+      if (!runs.has(appId)) return manager.startAppContainer(appId, spec);
+      await startSession(appId, spec.folder);
     },
     async stopAppContainer(appId) {
-      if (!byId.has(appId)) return manager.stopAppContainer(appId);
+      if (!runs.has(appId)) return manager.stopAppContainer(appId);
       await stopSession(appId);
     },
     async removeAppContainer(appId) {
-      if (!byId.has(appId)) return manager.removeAppContainer(appId);
+      if (!runs.has(appId)) return manager.removeAppContainer(appId);
       await stopSession(appId);
     },
     async appContainer(appId) {
-      if (!byId.has(appId)) return manager.appContainer(appId);
+      if (!runs.has(appId)) return manager.appContainer(appId);
       return { state: sessions.has(appId) ? "running" : "stopped" };
     },
   };
@@ -102,14 +106,16 @@ export function runnerApps(options: {
       return packages.map((pkg) => {
         const { app, manifest, origin } = pkg;
         const text = JSON.stringify(manifest ?? toStaticManifest(app));
-        byId.set(app.id, pkg);
-        digests.set(app.id, manifestDigest(text));
+        const digest = manifestDigest(text);
+        const folder = `${app.version}+test`;
+        runs.add(app.id);
+        staged.set(stagedIn(app.id, folder), { pkg, digest });
         return {
           apart: {
             // The test's own, which it may change while the core runs.
             manifest: manifest ?? (JSON.parse(text) as StaticManifest),
-            digest: manifestDigest(text),
-            folder: `${app.version}+test`,
+            digest,
+            folder,
           },
           origin,
         };
@@ -121,29 +127,20 @@ export function runnerApps(options: {
   };
 }
 
-// The timer and clock the test started with, which its fake timers don't stop.
+// The timer the test started with, which its fake timers don't stop.
 const wait = globalThis.setTimeout;
-const clock = performance.now.bind(performance);
 
 // Until none of these apps is still starting: each is running, or has said why
-// not, as the supervisor has it.
+// not, as the supervisor has it. It waits as long as the host gives a start,
+// whose own deadlines end it, and a closed core lists none.
 export async function firstStarts(
   apps: { list(): { id: string; state: string }[] },
   packages: readonly ApartPackage[],
-  withinMs = 10_000,
 ) {
   const ids = packages.map(({ apart }) => apart.manifest.id);
-  const by = clock() + withinMs;
-  for (;;) {
-    const starting = apps
+  const isStarting = () =>
+    apps
       .list()
-      .filter(({ id, state }) => ids.includes(id) && state === "starting");
-    if (starting.length === 0) return;
-    if (clock() > by) {
-      throw new Error(
-        `${starting.map(({ id }) => id).join(", ")} didn't start in time`,
-      );
-    }
-    await new Promise((done) => wait(done, 2));
-  }
+      .some(({ id, state }) => ids.includes(id) && state === "starting");
+  while (isStarting()) await new Promise((done) => wait(done, 2));
 }
