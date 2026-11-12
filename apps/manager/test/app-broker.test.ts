@@ -123,4 +123,127 @@ describe("the broker's network", () => {
     await expect(start()).rejects.toThrow(/reaches beyond/);
     expect(docker.container(`sanctum-app-${app}`)).toBeUndefined();
   });
+
+  it("refuses an unmanaged container with the broker's name without connecting it", async () => {
+    const { docker, start, networksOf } = await home(["services:zigbee2mqtt"]);
+    docker.run({ name: "sanctum-mosquitto", Image: nodeImage });
+
+    await expect(start()).rejects.toThrow(/unlabelled/);
+
+    expect(networksOf("sanctum-mosquitto")).toEqual([]);
+    expect(docker.container(`sanctum-app-${app}`)).toBeUndefined();
+  });
+
+  it("ignores an unmanaged network carrying an app's broker label", async () => {
+    const { docker, services, networksOf } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await docker.createNetwork({
+      Name: network,
+      Internal: true,
+      Labels: { "sanctum.app.broker": app },
+    });
+    await services.need("zigbee2mqtt", app);
+
+    await services.reconcile();
+
+    expect(services.status("mosquitto").state).toBe("running");
+    expect(networksOf("sanctum-mosquitto")).not.toContain(network);
+  });
+
+  it("refuses to reconnect the broker to a managed app network that reaches beyond", async () => {
+    const { docker, services, networksOf } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await docker.createNetwork({
+      Name: network,
+      Labels: { [managedLabel]: "true", "sanctum.app.broker": app },
+    });
+    await services.need("zigbee2mqtt", app);
+
+    await services.reconcile();
+
+    expect(services.status("mosquitto")).toMatchObject({
+      state: "failed",
+      problem: expect.stringMatching(/reaches beyond/),
+    });
+    expect(networksOf("sanctum-mosquitto")).not.toContain(network);
+  });
+
+  it("refuses an existing network without the app's broker label", async () => {
+    const { docker, start } = await home(["services:zigbee2mqtt"]);
+    await docker.createNetwork({
+      Name: network,
+      Internal: true,
+      Labels: { [managedLabel]: "true" },
+    });
+
+    await expect(start()).rejects.toThrow(/labels/);
+
+    expect(docker.container(`sanctum-app-${app}`)).toBeUndefined();
+  });
+
+  it("removes an app's unused broker network while keeping its service running", async () => {
+    const { docker, apps, services, start, networksOf } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+
+    await apps.remove(app);
+    await services.reconcile();
+    await apps.remove(app);
+
+    expect(docker.networks.has(network)).toBe(false);
+    expect(networksOf("sanctum-mosquitto")).not.toContain(network);
+    expect(services.status("mosquitto").state).toBe("running");
+  });
+
+  it("keeps the broker network when replacing an app's container", async () => {
+    const { docker, services, start, networksOf } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+
+    await start();
+
+    expect(docker.networks.has(network)).toBe(true);
+    expect(networksOf("sanctum-mosquitto")).toContain(network);
+  });
+
+  it("leaves an unmanaged network alone when removing an app", async () => {
+    const { docker, apps } = await home(["services:zigbee2mqtt"]);
+    await docker.createNetwork({
+      Name: network,
+      Internal: true,
+      Labels: { "sanctum.app.broker": app },
+    });
+
+    await expect(apps.remove(app)).rejects.toThrow(/unlabelled/);
+
+    expect(docker.networks.has(network)).toBe(true);
+  });
+
+  it("does not recreate a network removed while the broker reconciles", async () => {
+    const { docker, apps, services, start } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+    const listNetworks = docker.listNetworks.bind(docker);
+    vi.spyOn(docker, "listNetworks").mockImplementationOnce(async (options) => {
+      const networks = await listNetworks(options);
+      await apps.remove(app);
+      return networks;
+    });
+
+    await services.reconcile();
+
+    expect(docker.networks.has(network)).toBe(false);
+    expect(services.status("mosquitto").state).toBe("running");
+  });
 });

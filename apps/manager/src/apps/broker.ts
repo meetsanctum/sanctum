@@ -2,16 +2,18 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  assertManaged,
   ensureContainerNetwork,
   ensureNetwork,
   type Log,
 } from "../docker-resources.js";
 import {
-  inspectContainer,
+  isNotFound,
+  managedLabel,
   type ContainerInfo,
   type DockerClientLike,
 } from "../docker.js";
-import { serviceContainerName } from "../services/containers.js";
+import { inspectService } from "../services/containers.js";
 import { findService } from "../services/registry.js";
 import { isOurs, stacked } from "../stack.js";
 
@@ -59,7 +61,7 @@ export async function brokerNetworkFor(
     internal: true,
     labels: { [brokerLabel]: app },
   });
-  const running = await inspectContainer(docker, serviceContainerName(broker));
+  const running = await inspectService(docker, broker);
   if (running) await ensureContainerNetwork(docker, running, name, log);
   return name;
 }
@@ -71,12 +73,57 @@ export async function joinAppNetworks(
   log: Log,
 ) {
   const networks = await docker.listNetworks({
-    filters: { label: [brokerLabel] },
+    filters: { label: [brokerLabel, `${managedLabel}=true`] },
   });
   for (const network of networks) {
     if (!isOurs(network.Labels)) continue;
+    const inspected = await docker
+      .getNetwork(network.Name)
+      .inspect()
+      .catch((error: unknown) => {
+        if (isNotFound(error)) return null;
+        throw error;
+      });
+    // Removing an app can release its network while this reconcile runs.
+    if (!inspected) continue;
+    assertManaged({
+      labels: inspected.Labels,
+      name: `${network.Name} network`,
+    });
+    if (inspected.Internal !== true) {
+      throw new Error(
+        `The ${network.Name} network reaches beyond its containers`,
+      );
+    }
     await ensureContainerNetwork(docker, container, network.Name, log);
   }
+}
+
+/** Releases the app's network once its containers no longer use it. */
+export async function removeBrokerNetwork(
+  docker: DockerClientLike,
+  app: string,
+  log: Log,
+) {
+  const name = brokerNetworkName(app);
+  const network = docker.getNetwork(name);
+  const inspected = await network.inspect().catch((error: unknown) => {
+    if (isNotFound(error)) return null;
+    throw error;
+  });
+  if (!inspected) return;
+  assertManaged({ labels: inspected.Labels, name: `${name} network` });
+  if (inspected.Labels?.[brokerLabel] !== app) {
+    throw new Error(
+      `Refusing to remove ${name} network with unexpected labels`,
+    );
+  }
+  const container = await inspectService(docker, broker);
+  if (container?.NetworkSettings?.Networks?.[name]) {
+    await network.disconnect({ Container: container.Id, Force: true });
+  }
+  log(`Removing ${name}`);
+  await network.remove();
 }
 
 /** Whether a service is the broker, which joins apps' networks. */

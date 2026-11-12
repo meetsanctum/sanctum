@@ -127,6 +127,7 @@ export type DockerClientLike = {
     Labels?: Labels;
   }) => Promise<unknown>;
   getNetwork: (id: string) => {
+    remove: () => Promise<unknown>;
     connect: (options: { Container: string }) => Promise<unknown>;
     disconnect: (options: {
       Container: string;

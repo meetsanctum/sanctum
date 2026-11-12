@@ -12,6 +12,7 @@ import {
   expect,
   it,
   onTestFinished,
+  vi,
 } from "vitest";
 
 import { createZigbeeApp } from "../src/index.js";
@@ -46,6 +47,7 @@ function zigbee(
     services?: Record<string, ServiceConnection>;
     unanswered?: (keyof CoreCalls)[];
     listWithinMs?: number;
+    onContext?: (ctx: AppContext) => void;
   } = {},
 ) {
   const app = createZigbeeApp({
@@ -53,10 +55,19 @@ function zigbee(
     answerMs: 300,
     reconnectWaitMs: 300,
   });
-  const core = createDriverCore(app, {
-    services: options.services ?? { zigbee2mqtt: bridge.connection },
-    ...(options.unanswered ? { unanswered: options.unanswered } : {}),
-  });
+  const core = createDriverCore(
+    {
+      ...app,
+      async start(ctx, info) {
+        options.onContext?.(ctx);
+        await app.start?.(ctx, info);
+      },
+    },
+    {
+      services: options.services ?? { zigbee2mqtt: bridge.connection },
+      ...(options.unanswered ? { unanswered: options.unanswered } : {}),
+    },
+  );
   onTestFinished(() => core.stop());
   const status = () =>
     app.actions
@@ -179,5 +190,73 @@ describe("Zigbee's start", () => {
     expect(isNotReady(error)).toBe(false);
     expect(error.message).toMatch(/could not say which devices are here/);
     await expect(status()).rejects.toThrow("not running");
+  });
+
+  it("finishes registering a list that arrived on time even when processing exceeds the arrival deadline", async () => {
+    const { key, name } = fresh("bulb");
+    await bridge.add(zigbeeDevice(key, name, [lightExpose()]), {
+      state: "OFF",
+    });
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    onTestFinished(() => release());
+    let isRegistering = false;
+    const { core } = zigbee({
+      onContext(ctx) {
+        const register = ctx.devices.register;
+        vi.spyOn(ctx.devices, "register").mockImplementation(async (input) => {
+          isRegistering = true;
+          await waiting;
+          return register(input);
+        });
+      },
+    });
+    const starting = core.start();
+    starting.catch(() => undefined);
+    await core.until(() => isRegistering, "the list to start registering");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    release();
+
+    await expect(starting).resolves.toBeUndefined();
+    expect(core.registered.has(key)).toBe(true);
+    expect(core.presented.at(-1)).toContain(key);
+  });
+
+  it("starts no more registrations after closing during a list", async () => {
+    for (const name of ["bulb", "plug"]) {
+      const device = fresh(name);
+      await bridge.add(
+        zigbeeDevice(device.key, device.name, [switchExpose()]),
+        { state: "OFF" },
+      );
+    }
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    onTestFinished(() => release());
+    const registered: string[] = [];
+    const { core } = zigbee({
+      onContext(ctx) {
+        const register = ctx.devices.register;
+        vi.spyOn(ctx.devices, "register").mockImplementation(async (input) => {
+          registered.push(input.key);
+          await waiting;
+          return register(input);
+        });
+      },
+    });
+    const starting = core.start();
+    starting.catch(() => undefined);
+    await core.until(() => registered.length > 0, "the first registration");
+
+    await core.stop();
+    release();
+    await thrown(starting);
+
+    expect(registered).toHaveLength(1);
+    expect(core.presented).toEqual([]);
   });
 });

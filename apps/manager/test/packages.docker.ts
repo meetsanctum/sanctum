@@ -334,6 +334,18 @@ describe("the apps' packages on real images", () => {
       } finally {
         peer.stop();
         await api("DELETE", `/api/apps/${id}/container`);
+        expect(
+          await docker(
+            "network",
+            "ls",
+            "--filter",
+            `label=sanctum.app.broker=${id}`,
+            "--filter",
+            `label=sanctum.stack=${stack}`,
+            "--format",
+            "{{.Name}}",
+          ),
+        ).toBe("");
       }
     }
   }, 300_000);

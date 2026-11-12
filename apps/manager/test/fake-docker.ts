@@ -524,6 +524,19 @@ export class FakeDocker implements DockerClientLike {
 
   getNetwork(name: string) {
     return {
+      remove: async () => {
+        if (!this.networks.has(name)) throw notFound();
+        if (
+          [...this.containers.values()].some(
+            (container) => container.networks[name],
+          )
+        ) {
+          throw new Error(`Network ${name} is still in use`);
+        }
+        this.networks.delete(name);
+        this.internalNetworks.delete(name);
+        this.events.push(`remove network ${name}`);
+      },
       connect: async ({ Container }: { Container: string }) => {
         const container = this.find(Container);
         if (container) {
@@ -531,7 +544,11 @@ export class FakeDocker implements DockerClientLike {
         }
         this.events.push(`connect ${Container} ${name}`);
       },
-      disconnect: async () => undefined,
+      disconnect: async ({ Container }: { Container: string }) => {
+        const container = this.find(Container);
+        if (container) delete container.networks[name];
+        this.events.push(`disconnect ${Container} ${name}`);
+      },
       inspect: async () => {
         const labels = this.networks.get(name);
         if (!labels) {

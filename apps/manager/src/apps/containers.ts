@@ -17,7 +17,7 @@ import {
   type StatusDockerLike,
 } from "../docker.js";
 import { isOurs, stacked } from "../stack.js";
-import { brokerNetworkFor, usesBroker } from "./broker.js";
+import { brokerNetworkFor, removeBrokerNetwork, usesBroker } from "./broker.js";
 import { defaultImageMb, type AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
 
@@ -475,6 +475,7 @@ export function createAppContainers(options: {
         log(`Removing ${appContainerName(app)}`);
         await removeNext(app);
         await remove(app);
+        await removeBrokerNetwork(docker, app, log);
       });
     },
 

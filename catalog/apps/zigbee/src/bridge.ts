@@ -1,6 +1,5 @@
 import {
   ActionError,
-  NotReady,
   type AppContext,
   type DriverCommand,
   type DriverDevice,
@@ -14,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import mqtt, { type MqttClient } from "mqtt";
 
 import { deviceEntries, type ZigbeeDeviceEntry } from "./devices.js";
+import { createFirstList } from "./first-list.js";
 import { firmwareOf } from "./firmware.js";
 import { createFirmwareUpdates, firmwareRequests } from "./firmware-updates.js";
 import { createJoining } from "./joining.js";
@@ -141,14 +141,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   let listed: Set<string> | undefined;
   // That list as it came, to register a device again from.
   let latestList: unknown = [];
-  // The first list, which the start waits for: taken, or why it couldn't be.
-  let firstList:
-    { resolve: () => void; reject: (error: Error) => void } | undefined;
-  const firstListed = new Promise<void>((resolve, reject) => {
-    firstList = { resolve, reject };
-  });
-  firstListed.catch(() => undefined);
-  let hasConnected = false;
+  const firstList = createFirstList(options.listWithinMs ?? 20_000);
   const joining = createJoining((key, stage, description) =>
     ctx.devices.joining({ key, stage, description }),
   );
@@ -239,6 +232,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   // Registers a device unless the core has it as it is; false when the
   // core would not take it.
   async function take(entry: ZigbeeDeviceEntry) {
+    if (closed) return false;
     const registration = JSON.stringify(entry.registration);
     if (registered.get(entry.key) === registration) {
       return true;
@@ -324,15 +318,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     await joining.listed(list, (key) => devices.has(key));
     // The start waits for the first list. A device the core wouldn't take
     // stays out, as on any list; a core that can't hear which are here fails it.
-    const first = firstList;
-    firstList = undefined;
-    if (unsaid === undefined) {
-      first?.resolve();
-    } else {
-      first?.reject(
-        new Error(`could not say which devices are here (${unsaid})`),
-      );
-    }
+    firstList.taken(unsaid);
   }
 
   // Forgets a device Zigbee2MQTT no longer has, so nothing it said late
@@ -585,6 +571,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     if (closed || !queue) {
       return;
     }
+    firstList.receive(message, base);
     if (
       requestNames.some(
         (name) => message.topic === topic("bridge", "response", name),
@@ -634,7 +621,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
       });
       client = mqttClient;
       mqttClient.on("connect", () => {
-        hasConnected = true;
+        firstList.connected();
         needsStateRefresh = true;
         status.broker = "connected";
         lastError = undefined;
@@ -649,13 +636,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
           ctx.log("lost the broker; reconnecting");
         }
         status.broker = "disconnected";
-        // A broker that won't have it brings no list: the start waits no
-        // longer for one.
-        if (!hasConnected) {
-          const first = firstList;
-          firstList = undefined;
-          first?.reject(new NotReady("Waiting for Zigbee2MQTT"));
-        }
+        firstList.disconnected();
       });
       mqttClient.on("error", (error) => {
         // Said once, not on every attempt to reconnect.
@@ -669,25 +650,8 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
       );
     },
 
-    /**
-     * Once Zigbee2MQTT's first device list is taken: every device the core
-     * will take registered and those here said. Until one comes, it waits
-     * for Zigbee2MQTT, which the core tries again.
-     */
-    async listed() {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new NotReady("Waiting for Zigbee2MQTT")),
-          options.listWithinMs ?? 20_000,
-        );
-      });
-      try {
-        await Promise.race([firstListed, late]);
-      } finally {
-        clearTimeout(timer);
-      }
-    },
+    /** Once its first device list is registered and said to the core. */
+    listed: () => firstList.wait(),
 
     /**
      * Moves a light's brightness up or down at a rate, or stops it, with
@@ -818,6 +782,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
 
     async close() {
       closed = true;
+      firstList.close();
       firmware.close();
       queue?.clear();
       requests.cancel("the Zigbee app stopped");

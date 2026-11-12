@@ -64,6 +64,13 @@ export async function ensureNetwork(
   if (options.internal && inspected.Internal !== true) {
     throw new Error(`The ${name} network reaches beyond its containers`);
   }
+  if (
+    Object.entries(options.labels ?? {}).some(
+      ([key, value]) => inspected.Labels?.[key] !== value,
+    )
+  ) {
+    throw new Error(`Refusing to use ${name} network with unexpected labels`);
+  }
 }
 
 export async function ensureVolume(docker: DockerClientLike, name: string) {
