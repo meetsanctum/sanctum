@@ -33,7 +33,8 @@ async function home() {
   for (const id of [lamp, remote]) {
     await post(core, "/api/devices/update", { id, roomId: office.id }, maya);
   }
-  await settled();
+  // Moods hears the remote is in a room, and keeps its presses' workflow.
+  await expect.poll(() => kept(core, maya)).toHaveLength(1);
   return { core, maya, lamp, remote, office };
 }
 
@@ -103,25 +104,27 @@ describe("a remote's presses", () => {
       defaults: { roomId: office.id, dimmer: false },
     });
     await press(core, "single");
-    expect(lampIsOn(core, lamp)).toBe(true);
+    await expect.poll(() => lampIsOn(core, lamp)).toBe(true);
     await press(core, "double");
-    expect(lampIsOn(core, lamp)).toBe(false);
+    await expect.poll(() => lampIsOn(core, lamp)).toBe(false);
 
     // The lamp is on at full, so the first hold dims it, until let go.
     await press(core, "single");
+    await expect.poll(() => lampIsOn(core, lamp)).toBe(true);
     await press(core, "hold");
-    expect(radio.moves.map(({ move }) => move.move)).toEqual([
-      { move: "down", percentPerSecond: 25 },
-    ]);
+    await expect
+      .poll(() => radio.moves.map(({ move }) => move.move))
+      .toEqual([{ move: "down", percentPerSecond: 25 }]);
     core.advance(2_000);
     await radio.releaseButton("remote-1");
-    await settled();
-    await settled();
-    expect(radio.moves.at(-1)!.move.move).toEqual({ move: "stop" });
-    const shown = core.devices
-      .get(lamp)!
-      .capabilities.find((each) => each.kind === "light")!.state;
-    expect(shown).toMatchObject({ on: true, brightness: 50 });
+    await expect
+      .poll(() => radio.moves.at(-1)!.move.move)
+      .toEqual({ move: "stop" });
+    const shown = () =>
+      core.devices
+        .get(lamp)!
+        .capabilities.find((each) => each.kind === "light")!.state;
+    await expect.poll(shown).toMatchObject({ on: true, brightness: 50 });
   });
 
   it("do what is chosen for each, and the others their default", async () => {
@@ -258,8 +261,7 @@ describe("a remote's presses", () => {
 
     // In no room, there is no room to switch.
     await post(core, "/api/devices/update", { id: remote, roomId: null }, maya);
-    await settled();
-    expect(await kept(core, maya)).toEqual([]);
+    await expect.poll(() => kept(core, maya)).toEqual([]);
 
     await post(
       core,
@@ -267,18 +269,18 @@ describe("a remote's presses", () => {
       { id: remote, roomId: office.id },
       maya,
     );
+    await expect.poll(() => kept(core, maya)).toHaveLength(1);
     await post(core, "/api/devices/remove", { id: remote, force: true }, maya);
-    await settled();
-    expect(await kept(core, maya)).toEqual([]);
+    await expect.poll(() => kept(core, maya)).toEqual([]);
   });
 
   it("keeps valid long names and press actions within workflow limits", async () => {
     const { core, maya, lamp, remote, office } = await home();
     const name = "Remote".repeat(20);
     await post(core, "/api/devices/update", { id: remote, name }, maya);
-    await settled();
-    const fallback = await kept(core, maya);
-    expect(fallback[0]?.name).toBe(`${name.slice(0, 100)}: presses not chosen`);
+    await expect
+      .poll(async () => (await kept(core, maya))[0]?.name)
+      .toBe(`${name.slice(0, 100)}: presses not chosen`);
 
     const action = "a".repeat(64);
     core.devices.register("test.lamps", {
@@ -305,7 +307,7 @@ describe("a remote's presses", () => {
     expect(workflows[0]?.name.endsWith(`: ${action}`)).toBe(true);
     expect(workflows[0]?.appKey).toBe(`press:${remote}:${action}`);
     await press(core, action);
-    expect(lampIsOn(core, lamp)).toBe(true);
+    await expect.poll(() => lampIsOn(core, lamp)).toBe(true);
   });
 
   it("keeps another remote's choices when a shared client chooses a press", async () => {
@@ -366,6 +368,6 @@ describe("a remote's presses", () => {
 
     await post(core, "/api/devices/capture/stop", { id: capture.id }, maya);
     await press(core, "single");
-    expect(lampIsOn(core, lamp)).toBe(true);
+    await expect.poll(() => lampIsOn(core, lamp)).toBe(true);
   });
 });

@@ -375,8 +375,11 @@ describe("a failing app", () => {
       );
       expect(response.statusCode).toBe(500);
       expect(response.json()).toEqual({ error: "app_failed" });
+      // The app's side reads its own schemas, and says which failed.
       expect(core.logs).toContain(
-        "apps: schema.run schema failed (broken refinement)",
+        stage === "input"
+          ? "apps: schema.run failed (schema.run's schema failed: Error: broken refinement)"
+          : "apps: schema.run failed (schema.run returned something its output schema refuses)",
       );
     },
   );
@@ -448,7 +451,7 @@ describe("a failing app", () => {
     }
     expect(core.logs).toEqual([
       "apps: failing.throw failed (broken)",
-      "apps: failing.lie returned something its output schema refuses",
+      "apps: failing.lie failed (failing.lie returned something its output schema refuses)",
     ]);
     // Failed reads changed nothing, so the activity log has no entry.
     expect(activity(core, "test.failing")).toEqual([]);

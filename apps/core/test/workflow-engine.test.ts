@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keptRuns } from "../src/workflows/runs.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
@@ -160,6 +160,8 @@ describe("a run", () => {
         config: { device: lamp, capability: "light", command: { on: true } },
       }),
     });
+    // The lamp never says what it did, so the step's output is what was sent.
+    radio.confirms = false;
 
     await runByHand(core, token, id);
     await core.workflows.settled();
@@ -398,7 +400,7 @@ describe("run modes", () => {
     const { core, release, start } = await held("parallel");
     await start();
     await start();
-    expect(sample.noted).toHaveLength(2);
+    await vi.waitFor(() => expect(sample.noted).toHaveLength(2));
     release();
     await core.workflows.settled();
     expect(sample.noted).toHaveLength(4);
@@ -504,7 +506,7 @@ describe("a workflow whose app is gone", () => {
     });
 
     await core.apps.remove("test.sample");
-    await core.apps.start([samplePackage]);
+    await core.startApps([samplePackage]);
 
     expect((await runByHand(core, token, id)).json().status).toBe("running");
     await core.workflows.settled();

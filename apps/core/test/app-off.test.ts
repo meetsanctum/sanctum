@@ -15,7 +15,7 @@ import { claimed, post, testCore, type TestCore } from "./support.js";
 
 // Someone turning an app off in its settings: it doesn't run, what it adds leaves
 // every screen, a driver's devices are offline and its data stays, until someone turns
-// it on. It works in the core's process and in a container.
+// it on. Its container stops while it's off.
 
 useCleanUps();
 
@@ -66,7 +66,7 @@ function lamp(said: string[], stops: StopInfo[] = []) {
   });
 }
 
-describe("turning an app off, in the core's process", () => {
+describe("turning an app off", () => {
   it("stops it, says so, and refuses its calls", async () => {
     const said: string[] = [];
     const stops: StopInfo[] = [];
@@ -106,11 +106,10 @@ describe("turning an app off, in the core's process", () => {
     await settle();
 
     const answer = await turn(core, maya, app.id, false);
-    await settle();
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
+    await expect.poll(() => stateOf(core, app.id)).toBe("running");
 
     expect(answer.statusCode).toBe(200);
-    expect(said).toEqual(["start", "stop", "start"]);
-    expect(stateOf(core, app.id)).toBe("running");
     expect(
       (await post(core, `/api/apps/${app.id}/actions/lamp.ping`, {}, maya))
         .statusCode,
@@ -195,10 +194,8 @@ describe("turning an app off, in the core's process", () => {
     await stopping;
     await turn(core, maya, app.id, false);
     finish();
-    await settle();
-
-    expect(said).toEqual(["start", "stop", "start"]);
-    expect(stateOf(core, app.id)).toBe("running");
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
+    await expect.poll(() => stateOf(core, app.id)).toBe("running");
   });
 
   it("changes nothing when it's already as asked", async () => {
@@ -328,11 +325,9 @@ describe("turning an app off, in the core's process", () => {
       });
 
       await turn(core, maya, driver.id, false);
-      await settle();
-      expect(core.devices.get(device!.id)).toMatchObject({
-        availability: "online",
-        leftAt: null,
-      });
+      await expect
+        .poll(() => core.devices.get(device!.id))
+        .toMatchObject({ availability: "online", leftAt: null });
     });
 
     it("refuses a command for its device while it's off", async () => {

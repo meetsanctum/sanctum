@@ -432,8 +432,17 @@ describe("an app's page capturing a remote's presses", () => {
       (await capture(home.core, home.maya.token, home.office)).statusCode,
     ).toBe(200);
 
-    const blind = pressListener(["devices.read:light"]);
-    const other = await remotesHome([blind.pkg]);
+    // It runs, reading only lights, so what refuses it is the permission.
+    const blind = defineApp({
+      id: "test.presses",
+      name: "Presses",
+      version: "0.1.0",
+      core: "^1.0.0",
+      permissions: [{ id: "devices.read:light", reason: "For the test." }],
+      actions: [],
+      events: [],
+    });
+    const other = await remotesHome([{ app: blind, origin: "system" }]);
     expect(
       (await capture(other.core, other.maya.token, other.office)).json(),
     ).toEqual({ error: "forbidden" });

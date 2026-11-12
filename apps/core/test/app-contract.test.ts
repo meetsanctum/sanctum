@@ -251,12 +251,17 @@ describe("an app's manifest", () => {
     actions: [loose, refined],
   });
 
-  async function core(change: (manifest: StaticManifest) => void = () => {}) {
+  async function core(
+    change: (manifest: StaticManifest) => void = () => {},
+    // In the core's process, which checks its manifest against its code.
+    inProcess = false,
+  ) {
     const manifest = toStaticManifest(app);
     change(manifest);
-    const started = await testCore({
-      apps: [{ app, manifest, origin: "official" }],
-    });
+    const pkg = { app, manifest, origin: "official" } as const;
+    const started = await testCore(
+      inProcess ? { inProcess: [pkg] } : { apps: [pkg] },
+    );
     const { token } = await claimed(started);
     return { started, token };
   }
@@ -419,9 +424,9 @@ describe("an app's manifest", () => {
     },
   );
 
-  it("must be the one for the app it comes with", async () => {
+  it("must be the one for the app it comes with, in the core's process", async () => {
     const started = await testCore({
-      apps: [
+      inProcess: [
         {
           app,
           manifest: { ...toStaticManifest(app), version: "0.2.0" },
@@ -496,10 +501,10 @@ describe("an app's manifest", () => {
     },
   );
 
-  it("says when it's out of step with the code, and is still what counts", async () => {
+  it("says when it's out of step with the code in the core's process, and is still what counts", async () => {
     const { started, token } = await core((manifest) => {
       manifest.actions = manifest.actions.filter(({ id }) => id !== loose.id);
-    });
+    }, true);
 
     const missing = await post(
       started,

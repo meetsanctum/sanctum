@@ -8,7 +8,7 @@ import {
   updatePendingFile,
   watchUpdatePending,
 } from "../src/update-pending.js";
-import { base, supervised, useCleanUps } from "./app-apart-support.js";
+import { base, running, supervised, useCleanUps } from "./app-apart-support.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { testCore } from "./support.js";
 import {
@@ -85,6 +85,7 @@ describe("workflows and jobs, on trial", () => {
     expect(core.workflows.jobs.list(samplePackage.app.id)).toHaveLength(1);
 
     await core.apps.committed();
+    await running(core, samplePackage.app.id);
     core.workflows.start({ ticking: false });
     core.workflows.tick();
     await core.workflows.settled();
@@ -103,7 +104,7 @@ describe("workflows and jobs, on trial", () => {
     });
 
     const core = await testCore({
-      apps: [{ app, origin: "official" }],
+      inProcess: [{ app, origin: "official" }],
       onTrial: true,
     });
 
@@ -165,13 +166,14 @@ describe("an app that runs apart, on trial", () => {
     };
     const core = await testCore();
 
-    const starting = core.apps.start([...packages, slow]);
+    const starting = core.startApps([...packages, slow]);
     await core.apps.committed();
 
     expect(core.apps.list().map(({ id }) => id)).toEqual(
       expect.arrayContaining([...ids, "test.slow"]),
     );
     // It got here with that start still under way, which only this ends.
+    await vi.waitFor(() => expect(finish).toBeDefined());
     finish();
     await starting;
   });

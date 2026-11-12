@@ -42,6 +42,8 @@ describe("an app with places.read and light permissions", () => {
 
   it("switches a light as the person behind the call", async () => {
     const { core, maya, lamp } = await lampsCore();
+    // The lamp says what it did only once the test has seen the answer.
+    radio.confirms = false;
 
     const switched = await call(core, maya.token, "panel.command", {
       device: lamp,
@@ -54,6 +56,8 @@ describe("an app with places.read and light permissions", () => {
     expect(radio.received.map(({ actor }) => actor)).toEqual([
       { kind: "user", id: maya.person.id },
     ]);
+    radio.confirms = true;
+    await radio.press("lamp-1", {});
     await settled();
     const shown = await call(core, maya.token, "panel.show", { device: lamp });
     expect(shown.json().capabilities[0]).toMatchObject({
@@ -153,6 +157,8 @@ describe("an app without the permission", () => {
 
 describe("an action that timed out", () => {
   it("commands nothing afterwards", async () => {
+    let tried!: () => void;
+    const hasTried = new Promise<void>((done) => (tried = done));
     const slow = defineAction({
       id: "slow.switch",
       title: "Switch, slowly",
@@ -160,12 +166,16 @@ describe("an action that timed out", () => {
       input: z.object({ device: z.string() }),
       output: z.unknown(),
       async run(ctx, input) {
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        return ctx.devices.command({
-          device: input.device,
-          capability: "light",
-          command: { on: true },
-        });
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        try {
+          return await ctx.devices.command({
+            device: input.device,
+            capability: "light",
+            command: { on: true },
+          });
+        } finally {
+          tried();
+        }
       },
     });
     const app = defineApp({
@@ -179,7 +189,8 @@ describe("an action that timed out", () => {
     });
     const { core, maya, lamp } = await lampsCore({
       apps: [{ app, origin: "system" }],
-      appTimeoutMs: 10,
+      // Time enough for the driver's start, which registers its devices.
+      appTimeoutMs: 300,
     });
 
     const asked = await post(
@@ -188,7 +199,8 @@ describe("an action that timed out", () => {
       { device: lamp },
       maya,
     );
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // Once its late command has had its answer from the core.
+    await hasTried;
 
     expect(asked.json()).toEqual({ error: "timeout" });
     expect(radio.received).toEqual([]);
