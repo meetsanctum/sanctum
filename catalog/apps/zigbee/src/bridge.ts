@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import mqtt, { type MqttClient } from "mqtt";
 
 import { deviceEntries, type ZigbeeDeviceEntry } from "./devices.js";
+import { createFirstList } from "./first-list.js";
 import { firmwareOf } from "./firmware.js";
 import { createFirmwareUpdates, firmwareRequests } from "./firmware-updates.js";
 import { createJoining } from "./joining.js";
@@ -71,6 +72,8 @@ export type BridgeOptions = {
   progressEveryMs?: number;
   /** How often it tells the core an update is still under way, in ms. */
   heartbeatMs?: number;
+  /** How long its start waits for Zigbee2MQTT's device list, in ms. */
+  listWithinMs?: number;
 };
 
 export type BridgeStatus = {
@@ -138,6 +141,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   let listed: Set<string> | undefined;
   // That list as it came, to register a device again from.
   let latestList: unknown = [];
+  const firstList = createFirstList(options.listWithinMs ?? 20_000);
   const joining = createJoining((key, stage, description) =>
     ctx.devices.joining({ key, stage, description }),
   );
@@ -228,6 +232,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   // Registers a device unless the core has it as it is; false when the
   // core would not take it.
   async function take(entry: ZigbeeDeviceEntry) {
+    if (closed) return false;
     const registration = JSON.stringify(entry.registration);
     if (registered.get(entry.key) === registration) {
       return true;
@@ -296,8 +301,10 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     // or it joins again, as itself; until then nothing reaches it. One the
     // core is removing it forgets instead. A device the core would not take
     // this time is still on the network.
+    let unsaid: string | undefined;
     await ctx.devices.present({ keys: [...listed] }).catch((error: unknown) => {
-      ctx.log(`could not say which devices are here (${messageOf(error)})`);
+      unsaid = messageOf(error);
+      ctx.log(`could not say which devices are here (${unsaid})`);
     });
     unsubscribe(
       [...subscribed].filter((name) => !byName.has(name)).flatMap(deviceTopics),
@@ -309,6 +316,9 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     (needsStateRefresh ? taken : added).forEach(read);
     needsStateRefresh = false;
     await joining.listed(list, (key) => devices.has(key));
+    // The start waits for the first list. A device the core wouldn't take
+    // stays out, as on any list; a core that can't hear which are here fails it.
+    firstList.taken(unsaid);
   }
 
   // Forgets a device Zigbee2MQTT no longer has, so nothing it said late
@@ -561,6 +571,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     if (closed || !queue) {
       return;
     }
+    firstList.receive(message, base);
     if (
       requestNames.some(
         (name) => message.topic === topic("bridge", "response", name),
@@ -610,6 +621,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
       });
       client = mqttClient;
       mqttClient.on("connect", () => {
+        firstList.connected();
         needsStateRefresh = true;
         status.broker = "connected";
         lastError = undefined;
@@ -624,6 +636,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
           ctx.log("lost the broker; reconnecting");
         }
         status.broker = "disconnected";
+        firstList.disconnected();
       });
       mqttClient.on("error", (error) => {
         // Said once, not on every attempt to reconnect.
@@ -636,6 +649,9 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
         receive({ topic: to, payload, retained: packet.retain }),
       );
     },
+
+    /** Once its first device list is registered and said to the core. */
+    listed: () => firstList.wait(),
 
     /**
      * Moves a light's brightness up or down at a rate, or stops it, with
@@ -766,6 +782,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
 
     async close() {
       closed = true;
+      firstList.close();
       firmware.close();
       queue?.clear();
       requests.cancel("the Zigbee app stopped");
