@@ -128,7 +128,8 @@ export function createPackages(options: {
   inUse?: () => Promise<readonly { app: string; folder: string }[]>;
   // A development stack's apps, for an image that ships none.
   worktree?: StackPackages;
-  // A worktree build now available to the running core, including at startup.
+  // Apps on a new package from the worktree, which a running core may be on
+  // the one before of, including a manager's first staging after it starts.
   onStaged?: (apps: string[]) => void;
 }) {
   const { docker, dataDir, log } = options;
@@ -334,9 +335,13 @@ export function createPackages(options: {
       await prune(next);
       if (assembled) {
         options.worktree?.noteStaged(assembled);
+        // An app with a package before may be running it. One staged for the
+        // first time isn't: the core runs only what it was told was staged,
+        // and it waits for this.
         const changed = Object.keys(next.apps).filter(
           (id) =>
-            next.apps[id]?.current.folder !== state.apps[id]?.current.folder,
+            state.apps[id] !== undefined &&
+            next.apps[id]?.current.folder !== state.apps[id].current.folder,
         );
         if (changed.length) options.onStaged?.(changed);
       }

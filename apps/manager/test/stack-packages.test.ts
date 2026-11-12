@@ -337,12 +337,12 @@ describe("staging a stack's apps", () => {
     expect(next.onStaged).toHaveBeenCalledWith(["sanctum.weather"]);
   });
 
-  it("announces only successfully staged changes, including the first staging", async () => {
-    const { app, build, image, onStaged, packages } = await staged();
+  it("announces apps on a new package, also on a manager's first staging", async () => {
+    const { app, build, image, managing, onStaged, packages } = await staged();
     await app("catalog/apps", "weather", "sanctum.weather");
+    // None ran before, and the core waits for this.
     await packages.stage(image);
-    expect(onStaged.mock.calls).toEqual([[["sanctum.weather"]]]);
-    onStaged.mockClear();
+    expect(onStaged).not.toHaveBeenCalled();
 
     await packages.restage();
     expect(onStaged).not.toHaveBeenCalled();
@@ -350,6 +350,12 @@ describe("staging a stack's apps", () => {
     await build("catalog/apps", "weather", "a new build");
     await packages.restage(["weather"]);
     expect(onStaged.mock.calls).toEqual([[["sanctum.weather"]]]);
+
+    // Built while the manager was stopped, with the core still running.
+    await build("catalog/apps", "weather", "built while stopped");
+    const started = managing();
+    await started.packages.stage(image);
+    expect(started.onStaged.mock.calls).toEqual([[["sanctum.weather"]]]);
   });
 
   it("then keeps what it has staged for the image", async () => {
