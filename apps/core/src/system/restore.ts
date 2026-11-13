@@ -98,7 +98,7 @@ export function createRestores(
       return true;
     },
 
-    // The last restore, until an admin dismisses its message.
+    // The last restore, until someone dismisses its message.
     current(): RestoreInfo | null {
       const restore = latest();
       if (!restore || restore.dismissedAt) {

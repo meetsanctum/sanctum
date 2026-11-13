@@ -34,7 +34,7 @@ type Request = typeof authPairingRequests.$inferSelect;
 
 const requests = authPairingRequests;
 
-// How the admin sees the address: IPv4 without its IPv6 mapping.
+// The address as it is shown: IPv4 without its IPv6 mapping.
 function shownAddress(address: string) {
   return address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
 }
@@ -79,7 +79,7 @@ export function createPairing(
     throw new AuthError("busy");
   }
 
-  // A request still waiting for an admin: not expired, approved or used.
+  // A request still waiting for approval: not expired, approved or used.
   function waiting(code: string) {
     const normalised = normalisePairingCode(code);
     if (!normalised) {

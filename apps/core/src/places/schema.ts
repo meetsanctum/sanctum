@@ -20,7 +20,7 @@ export const home = sqliteTable("home", {
   // restore, onto the same host or another.
   homeId: text("home_id"),
   name: text("name").notNull(),
-  // Where the home is, which an admin sets: both coordinates or neither,
+  // Where the home is, which the household sets: both coordinates or neither,
   // and only with a time zone. Until then Weather knows no sun times and
   // fetches no forecast.
   latitude: real("latitude"),

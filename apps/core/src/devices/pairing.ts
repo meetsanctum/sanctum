@@ -57,7 +57,7 @@ export function createPairing(options: {
   // The core's id for a driver's device, if it has it.
   deviceId: (driver: string, key: string) => string | null;
   record: RecordActivity;
-  // Called after every change, so admins' live clients can follow.
+  // Called after every change, so live clients can follow.
   onChange?: (pairing: PairingInfo) => void;
   log: (message: string) => void;
   now?: () => Date;
@@ -131,8 +131,8 @@ export function createPairing(options: {
   return {
     info,
 
-    // Lets new devices join every driver's network that can pair, for an
-    // admin the gate has let through. Opening again while open starts the
+    // Lets new devices join every driver's network that can pair, for
+    // someone the gate has let through. Opening again while open starts the
     // time again. It answers until when, and since when: what joined from
     // then on is what this person is adding.
     open(

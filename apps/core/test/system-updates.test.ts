@@ -98,7 +98,7 @@ function entries(core: TestCore) {
 }
 
 describe("updates from the UI", () => {
-  it("show an admin the version, the channel and the update's progress", async () => {
+  it("show the version, the channel and the update's progress", async () => {
     const { core, admin } = await host({ journal: journal() });
 
     const response = await get(core, "/api/system/update", admin);
@@ -157,7 +157,7 @@ describe("updates from the UI", () => {
     });
   });
 
-  it("start when an admin asks, and go in the activity log", async () => {
+  it("start when someone asks, and go in the activity log", async () => {
     const { core, admin, socket } = await host();
 
     const response = await post(

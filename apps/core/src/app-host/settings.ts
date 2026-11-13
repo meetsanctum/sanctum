@@ -78,7 +78,7 @@ export function createAppSettings(
 ) {
   const now = options.now ?? (() => new Date());
 
-  // What admins chose for an app, by setting name.
+  // What the household chose for an app, by setting name.
   function chosen(appId: string): Record<string, unknown> {
     const row = db
       .select()
@@ -132,7 +132,7 @@ export function createAppSettings(
       return schema ? resolve(schema, chosen(appId)) : {};
     },
 
-    // Applies an admin's changes and writes their activity entry in one
+    // Applies someone's changes and writes their activity entry in one
     // transaction. Undefined, and nothing changed, when the app declares
     // no such setting or its schema refuses a value.
     change(
