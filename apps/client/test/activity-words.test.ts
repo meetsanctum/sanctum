@@ -224,6 +224,41 @@ describe("an entry's words", () => {
     );
   });
 
+  it("says what its driver found wrong with a device, in the driver's words", () => {
+    const found = entry({
+      kind: "devices",
+      action: "device.problem",
+      detail: {
+        name: "Hall plug",
+        problem: "Its encryption key doesn't match",
+      },
+      who: { kind: "device" },
+      app: { id: "sanctum.example", name: "Example" },
+      subject: { type: "device", id: "plug", name: "Hall plug", gone: false },
+    });
+    expect(activityWords(found, "home")).toEqual({
+      title: "Hall plug has a problem",
+      detail: "Its encryption key doesn't match",
+      problem: true,
+    });
+  });
+
+  it.each([
+    ["ok", "Repaired", false],
+    ["refused", "Couldn't be repaired", true],
+  ] as const)("says a device was repaired (%s)", (outcome, title, problem) => {
+    const repaired = entry({
+      kind: "devices",
+      action: "device.repair",
+      outcome,
+      detail: { name: "Hall plug" },
+    });
+    expect(activityWords(repaired, "device")).toMatchObject({
+      title,
+      problem,
+    });
+  });
+
   it("says what a press did", () => {
     const pressed = (fields: Partial<ActivityInfo>) =>
       activityWords(

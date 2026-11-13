@@ -377,6 +377,7 @@ describe("what needs attention", () => {
     probe: true,
     battery: null,
     leftAt: null,
+    problem: null,
   };
 
   it("is nothing for a device that answers, in a room", () => {
@@ -403,6 +404,26 @@ describe("what needs attention", () => {
           roomId: null,
           leftAt: "2026-10-31T12:00:00.000Z",
         },
+        true,
+      ),
+    ).toEqual(["left"]);
+  });
+
+  it("puts what its driver says is wrong after left and before offline", () => {
+    const problem = {
+      id: "keyMismatch",
+      words: "Its key doesn't match",
+      repair: null,
+    };
+    expect(
+      attentionOf(
+        { ...plug, availability: "offline", roomId: null, problem },
+        true,
+      ),
+    ).toEqual(["problem", "offline", "room"]);
+    expect(
+      attentionOf(
+        { ...plug, problem, leftAt: "2026-10-31T12:00:00.000Z" },
         true,
       ),
     ).toEqual(["left"]);
@@ -564,6 +585,7 @@ describe("a device from a core newer than this build", () => {
     probe: false,
     battery: null,
     leftAt: null,
+    problem: null,
   });
 
   it("keeps the parts of the kinds it knows and skips the others", () => {

@@ -92,6 +92,7 @@ function sensor(
     probe: false,
     battery: 87,
     leftAt: null,
+    problem: null,
     capabilities: [
       capability,
       {

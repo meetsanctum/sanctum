@@ -70,6 +70,7 @@ describe("a driver app's devices", () => {
         probe: true,
         battery: null,
         leftAt: null,
+        problem: null,
       },
       expect.objectContaining({
         name: "Light",

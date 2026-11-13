@@ -70,6 +70,7 @@ export function device(
     probe: false,
     battery: null,
     leftAt: null,
+    problem: null,
     capabilities,
   };
 }

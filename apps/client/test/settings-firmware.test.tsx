@@ -73,6 +73,7 @@ function light(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     probe: true,
     battery: null,
     leftAt: null,
+    problem: null,
     capabilities: [
       {
         id: "light",
@@ -98,6 +99,7 @@ const button = {
     probe: false,
     battery: null,
     leftAt: null,
+    problem: null,
   }),
   driverName: "Wireless mini switch",
   type: "button",

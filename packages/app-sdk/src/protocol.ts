@@ -20,7 +20,7 @@ import {
  * says, so a core speaks every version from `oldestProtocolVersion` on: an
  * app that kept running through a core's update goes on with the new core.
  */
-export const protocolVersion = 2;
+export const protocolVersion = 3;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 1;
 
@@ -72,6 +72,7 @@ export const coreCallMethods = [
   "entities",
   "fetch",
   "joining",
+  "problem",
   "secret",
   "putSecret",
   "removeSecret",
@@ -97,6 +98,7 @@ export const driverHooks = [
   "firmware.update",
   "firmware.stop",
   "probe",
+  "repair",
 ] as const;
 export type DriverHook = (typeof driverHooks)[number];
 

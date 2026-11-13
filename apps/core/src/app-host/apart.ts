@@ -89,6 +89,7 @@ export function apartApp(
               },
             }),
             ...has("probe", { probe: hook("probe") }),
+            ...has("repair", { repair: hook("repair") }),
           },
         }
       : {}),

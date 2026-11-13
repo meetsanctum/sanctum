@@ -9,6 +9,7 @@ import type { Rule } from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
 import type { Who } from "./activity.js";
 import { deviceCapabilities, devices } from "./schema.js";
+import type { Turns } from "./turns.js";
 
 // Removing a device: its driver takes it off its network, then the core
 // forgets it, what it was asked included. A device whose driver is not
@@ -36,6 +37,8 @@ export function createRemoval(
   db: CoreDatabase,
   options: {
     record: ReturnType<Activity["for"]>;
+    // Removing a device waits for a repair under way, and the other way round.
+    turns: Turns;
     removeFromDriver?: RemoveFromDriver;
     // Its name now, for its entry once it is gone.
     nameOf: (id: string) => string | null;
@@ -62,55 +65,63 @@ export function createRemoval(
         throw new ActionCallError("invalid_request");
       }
       const { id, force } = parsed.data;
-      const device = db.select().from(devices).where(eq(devices.id, id)).get();
-      if (!device) {
+      if (!db.select().from(devices).where(eq(devices.id, id)).get()) {
         throw new ActionCallError("not_found");
       }
-      const name = options.nameOf(id);
-      const log = (outcome: Outcome, reason?: string) =>
-        record({
-          action: "device.remove",
-          outcome,
-          reason,
-          personId: who.personId,
-          clientId: who.clientId,
-          subjectId: id,
-          detail: { name },
-        });
-      removing.add(id);
-      try {
-        if (!options.removeFromDriver) {
-          throw new ActionCallError("unavailable");
-        }
-        await options.removeFromDriver(
-          device.driver,
-          { key: device.key, device: id, force },
-          actor,
-        );
-      } catch (error) {
-        const failure =
-          error instanceof ActionCallError
-            ? error
-            : new ActionCallError("app_failed");
-        if (!force || failure.code !== "unavailable") {
-          log(failure.status >= 500 ? "failed" : "refused", failure.code);
-          throw failure;
-        }
-      } finally {
-        // Nothing runs between here and forgetting it.
-        removing.delete(id);
-      }
-      changing(id, () => {
-        for (const capability of db
-          .select({ id: deviceCapabilities.id })
-          .from(deviceCapabilities)
-          .where(eq(deviceCapabilities.deviceId, id))
-          .all()) {
-          forget(id, capability.id);
-        }
-        db.delete(devices).where(eq(devices.id, id)).run();
-      });
-      log("ok");
+      await options.turns.take(id, () => removeNow(actor, who, id, force));
     },
   };
+
+  async function removeNow(actor: Actor, who: Who, id: string, force: boolean) {
+    // As it is once its turn comes.
+    const device = db.select().from(devices).where(eq(devices.id, id)).get();
+    if (!device) {
+      throw new ActionCallError("not_found");
+    }
+    const name = options.nameOf(id);
+    const log = (outcome: Outcome, reason?: string) =>
+      record({
+        action: "device.remove",
+        outcome,
+        reason,
+        personId: who.personId,
+        clientId: who.clientId,
+        subjectId: id,
+        detail: { name },
+      });
+    removing.add(id);
+    try {
+      if (!options.removeFromDriver) {
+        throw new ActionCallError("unavailable");
+      }
+      await options.removeFromDriver(
+        device.driver,
+        { key: device.key, device: id, force },
+        actor,
+      );
+    } catch (error) {
+      const failure =
+        error instanceof ActionCallError
+          ? error
+          : new ActionCallError("app_failed");
+      if (!force || failure.code !== "unavailable") {
+        log(failure.status >= 500 ? "failed" : "refused", failure.code);
+        throw failure;
+      }
+    } finally {
+      // Nothing runs between here and forgetting it.
+      removing.delete(id);
+    }
+    changing(id, () => {
+      for (const capability of db
+        .select({ id: deviceCapabilities.id })
+        .from(deviceCapabilities)
+        .where(eq(deviceCapabilities.deviceId, id))
+        .all()) {
+        forget(id, capability.id);
+      }
+      db.delete(devices).where(eq(devices.id, id)).run();
+    });
+    log("ok");
+  }
 }

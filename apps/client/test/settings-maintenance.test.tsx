@@ -116,6 +116,7 @@ function device(
     probe: kind === "light",
     battery: kind === "light" ? null : 64,
     leftAt: null,
+    problem: null,
     ...extra,
   };
 }

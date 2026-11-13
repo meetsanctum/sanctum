@@ -132,6 +132,9 @@ export function createCoreCalls(options: {
   devices: Devices;
   presses: Pick<Presses, "press" | "released">;
   firmware: Pick<Firmware, "report">;
+  // What's wrong with the driver's devices, in the words of the problems its
+  // manifest declares.
+  problems: { report: (problem: unknown) => void };
   // Checks one of the app's own events and hands it on.
   emit: (event: unknown) => void;
   // Has the core hand the app one of its events; the start context's only.
@@ -318,6 +321,11 @@ export function createCoreCalls(options: {
     async firmware(firmware) {
       need(registerPermission);
       options.firmware.report(appId, firmware);
+    },
+
+    async problem(problem) {
+      need(registerPermission);
+      options.problems.report(problem);
     },
 
     async emit(event) {

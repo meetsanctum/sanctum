@@ -49,6 +49,7 @@ function device(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     probe: true,
     battery: null,
     leftAt: null,
+    problem: null,
     capabilities: [],
     ...extra,
   } satisfies DeviceInfo;
@@ -388,6 +389,70 @@ describe("Needs attention", () => {
       "Hall heaterOffline: check it's switched on and in range · Hall",
     ]);
     expect(status()).toBe("Hall plug is removed.");
+  });
+
+  it("repairs a device in its driver's words, showing a refused answer under its field", async () => {
+    const problem = {
+      id: "keyMismatch",
+      words: "Its encryption key doesn't match",
+      repair: {
+        help: "Enter the key from its configuration.",
+        asks: [
+          {
+            id: "key",
+            label: "Encryption key",
+            kind: "secret" as const,
+            help: null,
+            placeholder: "44 characters, ending in =",
+            refusals: { wrongKey: "That key doesn't match." },
+          },
+        ],
+      },
+    };
+    const kettle = device("kettle", "Kettle plug", {
+      roomId: "hall",
+      problem,
+    });
+    await show([kettle, heater]);
+    expect(rows()[0]).toBe(
+      "Kettle plugIts encryption key doesn't match · HallRepair",
+    );
+
+    await act(async () => buttonIn(rowOf("Kettle plug"), "Repair").click());
+    const dialog = document.querySelector("[role=dialog]")!;
+    expect(dialog.textContent).toContain("Repair Kettle plug");
+    expect(dialog.textContent).toContain(
+      "Enter the key from its configuration.",
+    );
+    const field = dialog.querySelector("input")!;
+    expect(buttonIn(dialog, "Repair").disabled).toBe(true);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(field, "a wrong key");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    answer = () => ({ refused: { question: "key", refusal: "wrongKey" } });
+    await act(async () => buttonIn(dialog, "Repair").click());
+    expect(requests.at(-1)).toEqual({
+      path: "/api/devices/repair",
+      json: { id: "kettle", answers: { key: "a wrong key" } },
+    });
+    expect(dialog.querySelector("[role=alert]")?.textContent).toBe(
+      "That key doesn't match.",
+    );
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(field.value).toBe("a wrong key");
+
+    const repaired = { ...kettle, problem: null };
+    answer = () => ({ repaired });
+    await act(async () => buttonIn(dialog, "Repair").click());
+    await show([repaired, heater]);
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+    expect(rowOf("Kettle plug").textContent).toContain("Repaired");
+    expect(status()).toBe("Kettle plug is repaired.");
   });
 
   it("lets a row go when it clears by itself, as a light switched back on at the wall", async () => {

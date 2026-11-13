@@ -39,6 +39,7 @@ export function light(
     probe: false,
     battery: null,
     leftAt: null,
+    problem: null,
     capabilities: [
       {
         id: "light",

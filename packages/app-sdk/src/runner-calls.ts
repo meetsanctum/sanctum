@@ -11,6 +11,7 @@ import type {
   CoreEventHandler,
   CoreEventHandlers,
 } from "./core-events.js";
+import type { DriverRepair } from "./device-problems.js";
 import type { DriverCommand, DriverMove } from "./devices.js";
 import type { DriverDevice } from "./firmware.js";
 import {
@@ -75,6 +76,9 @@ const driverHooks: Record<DriverHook, (driver: Driver) => Hook | undefined> = {
   probe: (driver) =>
     driver.probe &&
     ((ctx, params) => driver.probe!(ctx, params as DriverDevice)),
+  repair: (driver) =>
+    driver.repair &&
+    ((ctx, params) => driver.repair!(ctx, params as DriverRepair)),
 };
 
 // How work ended. A refusal keeps its code; anything else is the app's failure.

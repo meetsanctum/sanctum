@@ -38,6 +38,7 @@ import {
   RoomPicker,
   updateDevice,
 } from "./device-parts";
+import { RepairDevice } from "./repair-device";
 import { DeviceLine, EditDevice, type Editing } from "./settings-devices";
 import { SanctumAttentionRow } from "./settings-status";
 import type { SystemStatus } from "./system-status";
@@ -47,7 +48,8 @@ import type { SystemStatus } from "./system-status";
 // opens Status, where each says what to do. Each app that isn't running
 // follows: a paused one opens its settings, where the permission it needs
 // is, and one that stopped opens Status, where Restart is. Each device has
-// its fix in its row: Remove for one its network no longer has, Check
+// its fix in its row: Remove for one its network no longer has, Repair for
+// one whose driver says what's wrong and how to set it right, Check
 // connection for one that is offline, a room for one in none. The same on
 // every client, a shared one too. A row fixed from here stays, with a check
 // and what was done, until Settings closes, so every fix is answered where
@@ -56,7 +58,7 @@ import type { SystemStatus } from "./system-status";
 // Upkeep, such as a battery to replace, is not among them.
 
 // A row's fix: the first of its reasons that has one.
-type Fix = "remove" | "probe" | "room";
+type Fix = "remove" | "repair" | "probe" | "room";
 
 function fixOf(
   device: DeviceInfo,
@@ -64,6 +66,7 @@ function fixOf(
 ): Fix | null {
   for (const reason of reasons) {
     if (reason === "left") return "remove";
+    if (reason === "problem" && device.problem?.repair) return "repair";
     if (reason === "offline" && device.probe) return "probe";
     if (reason === "room") return "room";
   }
@@ -164,6 +167,8 @@ export function NeedsAttentionSection(props: {
   const [moving, setMoving] = useState<Record<string, boolean>>({});
   // The device someone is about to remove, as the dialog takes it.
   const [removing, setRemoving] = useState<Editing>();
+  // The device someone is repairing.
+  const [repairing, setRepairing] = useState<DeviceInfo>();
   const [announcement, setAnnouncement] = useState("");
 
   const needing = needingAttention(props.devices, props.rooms, props.apps);
@@ -306,7 +311,7 @@ export function NeedsAttentionSection(props: {
       return { text: noAnswer, tone: "problem" };
     }
     return {
-      text: attentionText(lead),
+      text: attentionText(lead, row.device),
       tone: isProblem(lead) ? "problem" : "plain",
     };
   };
@@ -389,6 +394,18 @@ export function NeedsAttentionSection(props: {
                     >
                       Remove
                     </Button>
+                  ) : fix === "repair" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Repair ${device.name}`}
+                      onClick={() => {
+                        keepPosition(device);
+                        setRepairing(device);
+                      }}
+                    >
+                      Repair
+                    </Button>
                   ) : fix === "probe" ? (
                     <Button
                       variant="outline"
@@ -431,6 +448,18 @@ export function NeedsAttentionSection(props: {
           setRemoving(undefined);
         }}
         onForgotten={() => undefined}
+      />
+      <RepairDevice
+        device={repairing}
+        appName={repairing ? appName(repairing) : null}
+        onClose={() => setRepairing(undefined)}
+        onRepaired={(device) => {
+          setDone((current) => ({
+            ...current,
+            [device.id]: { text: "Repaired", reason: "problem" },
+          }));
+          setAnnouncement(`${device.name} is repaired.`);
+        }}
       />
     </Section>
   );

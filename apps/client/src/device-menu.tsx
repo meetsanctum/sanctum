@@ -11,6 +11,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Trash2,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -32,7 +33,8 @@ import { hasMotionSettings, occupancyOf } from "./motion-settings";
 // A device's menu in Settings → Devices: its firmware's version, then
 // renaming it, its room, whether it shows on Home, whether its history is
 // kept, a motion sensor's settings, its checks, dimmed with why when they
-// cannot run, and removing it.
+// cannot run, Repair where its driver says how to set it right, and
+// removing it.
 
 /** What the menu asks Settings → Devices to do with a dialog. */
 export type EditAction = "rename" | "forget" | "remove";
@@ -55,6 +57,8 @@ export function DeviceMenu(props: {
   onCheck: () => void;
   onProbe: () => void;
   onStop: () => void;
+  // Repair, for a device whose driver says how to set it right.
+  onRepair?: () => void;
 }) {
   const { device, result } = props;
   const isChecking = result?.kind === "checking" || result?.kind === "probing";
@@ -160,6 +164,12 @@ export function DeviceMenu(props: {
           <DropdownMenuItem onSelect={props.onStop}>
             <CircleStop />
             {state === "waiting" ? "Cancel update" : "Stop update"}
+          </DropdownMenuItem>
+        )}
+        {device.problem?.repair && props.onRepair && (
+          <DropdownMenuItem onSelect={props.onRepair}>
+            <Wrench />
+            Repair
           </DropdownMenuItem>
         )}
         <DropdownMenuItem

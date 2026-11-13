@@ -28,6 +28,7 @@ import { createNaming } from "./naming.js";
 import { createPresence } from "./presence.js";
 import { writeCapabilities } from "./registration.js";
 import { createRemoval, type RemoveFromDriver } from "./removal.js";
+import { createTurns } from "./turns.js";
 import { deviceCapabilities, devices, type StoredSetBy } from "./schema.js";
 import {
   confirmMs as defaultConfirmMs,
@@ -247,8 +248,11 @@ export function createDevices(
     return result;
   }
 
+  // Removing and repairing a device take turns (turns.ts).
+  const turns = createTurns();
   const removal = createRemoval(db, {
     record,
+    turns,
     removeFromDriver: options.removeFromDriver,
     nameOf: (id) => load(id)?.name ?? null,
     changing,
@@ -767,6 +771,9 @@ export function createDevices(
 
     // Removes a device (removal.ts).
     remove: removal.remove,
+
+    // Removing and repairing a device, which take turns.
+    turns,
 
     // The core is stopping: nothing goes to a device again from now on.
     closing() {

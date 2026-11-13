@@ -1,5 +1,6 @@
 import {
   createAppContext,
+  shownProblem,
   type Actor,
   type AppContext,
   type CoreCalls,
@@ -9,6 +10,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Devices } from "../devices/devices.js";
 import type { Firmware } from "../devices/firmware.js";
+import type { Problems } from "../devices/problems.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
@@ -44,6 +46,7 @@ export function createAppContexts(options: {
   entities: Entities;
   presses: () => Pick<Presses, "press" | "released">;
   firmware: () => Pick<Firmware, "report">;
+  problems: () => Pick<Problems, "report">;
   onEvent?: (event: AppEvent) => void;
   jobs?: JobCalls;
   workflows?: KeptWorkflowCalls;
@@ -157,6 +160,15 @@ export function createAppContexts(options: {
       },
       firmware: {
         report: (driver, said) => options.firmware().report(driver, said),
+      },
+      // By what the version running declares.
+      problems: {
+        report: (said) =>
+          options
+            .problems()
+            .report(appId, said, (id) =>
+              shownProblem(entry.manifest.driver, id),
+            ),
       },
       emit(input) {
         const event = emitted(entry, input);

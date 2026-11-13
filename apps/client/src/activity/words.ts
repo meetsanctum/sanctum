@@ -572,6 +572,17 @@ function deviceEntry(
     }
     case "device.remove":
       return said(entry.outcome === "ok" ? "Removed" : "Couldn't be removed");
+    // In the words its driver declares for what's wrong.
+    case "device.problem":
+      return {
+        ...said(
+          "Has a problem",
+          typeof entry.detail?.problem === "string" ? entry.detail.problem : "",
+        ),
+        problem: true,
+      };
+    case "device.repair":
+      return said(entry.outcome === "ok" ? "Repaired" : "Couldn't be repaired");
     // Home by its name then.
     case "device.home.add":
       return said(`Added to ${String(entry.detail?.dashboard ?? "Home")}`);

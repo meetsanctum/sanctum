@@ -66,6 +66,7 @@ export function deviceInfo(
     probe: device.probe,
     battery: device.battery,
     leftAt: device.leftAt?.toISOString() ?? null,
+    problem: device.problem ?? null,
     capabilities: capabilities
       .sort((a, b) => a.position - b.position)
       .map(

@@ -41,6 +41,7 @@ const device = (id: string, capabilities: CapabilityInfo[]): DeviceInfo => ({
   probe: false,
   battery: null,
   leftAt: null,
+  problem: null,
   capabilities,
 });
 const tap = device("tap", [valve, power]);

@@ -67,6 +67,7 @@ const device = (
   probe: false,
   battery: null,
   leftAt: null,
+  problem: null,
   capabilities: [light(colorTemperature)],
 });
 const target = (

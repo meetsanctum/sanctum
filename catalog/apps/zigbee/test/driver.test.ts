@@ -588,6 +588,7 @@ describe("re-registering a device", () => {
           entities: absent,
           fetch: absent,
           joining: absent,
+          problem: absent,
           secret: absent,
           putSecret: absent,
           removeSecret: absent,

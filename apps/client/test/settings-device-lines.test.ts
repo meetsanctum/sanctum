@@ -61,6 +61,7 @@ describe("a device's line", () => {
       availability: "offline",
       battery: 8,
       leftAt: "2026-10-31T12:00:00.000Z",
+      problem: null,
     } satisfies DeviceInfo;
     expect(deviceDetail(left, [office])).toBe("Office · Wireless mini switch");
     expect(
@@ -69,6 +70,16 @@ describe("a device's line", () => {
       text: "Not paired any more: add it again or remove it",
       tone: "problem",
     });
+  });
+
+  it("leads with what its driver says is wrong, before its firmware's news", () => {
+    const broken = {
+      ...remote,
+      problem: { id: "loose", words: "Its plug is loose", repair: null },
+    } satisfies DeviceInfo;
+    expect(
+      deviceStatus(broken, { text: "Update available", tone: "plain" }, now),
+    ).toEqual({ text: "Its plug is loose", tone: "problem" });
   });
 
   it("says a remote's press for a moment, by what it is called", () => {
