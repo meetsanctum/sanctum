@@ -8,14 +8,19 @@ type Context = { params: Promise<{ contact: string }> };
 //
 // Takes the contact off the waitlist. The confirmation names this address
 // in its List-Unsubscribe header, so a mail app's own Unsubscribe posts
-// here, and the site's page for leaving does too. A contact already gone
-// has left as well.
+// here, and the site's page for leaving does too. A contact in other
+// segments than the waitlist's leaves only that one, and a contact already
+// gone has left as well.
 export async function POST(_request: Request, context: Context) {
   const { contact } = await context.params;
   if (!isContactId(contact)) return new Response(null, { status: 404 });
   const key = process.env.RESEND_API_KEY;
   if (!key) return new Response(null, { status: 503 });
-  const outcome = await leaveWaitlist(new Resend(key), contact);
+  const outcome = await leaveWaitlist(
+    new Resend(key),
+    contact,
+    process.env.RESEND_SEGMENT_ID || undefined,
+  );
   return new Response(null, { status: outcome === "left" ? 200 : 502 });
 }
 

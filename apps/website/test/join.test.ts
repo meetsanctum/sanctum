@@ -22,6 +22,7 @@ function mailer(
     remove?: Refusal;
     list?: Refusal;
     add?: Refusal;
+    leave?: Refusal;
     send?: Refusal;
   },
   /** The segments the contact Resend already has is in. */
@@ -39,6 +40,7 @@ function mailer(
       segments: {
         list: answer({ data: inSegments.map((id) => ({ id })) }, refusals.list),
         add: answer({}, refusals.add),
+        remove: answer({}, refusals.leave),
       },
     },
     emails: { send: answer({}, refusals.send) },
@@ -151,6 +153,34 @@ describe("leaving the waitlist", () => {
     const resend = mailer({});
     expect(await leaveWaitlist(resend, contact)).toBe("left");
     expect(resend.contacts.remove).toHaveBeenCalledWith({ id: contact });
+  });
+
+  it("removes a contact that is in the waitlist's segment alone", async () => {
+    const resend = mailer({}, ["segment-1"]);
+    expect(await leaveWaitlist(resend, contact, "segment-1")).toBe("left");
+    expect(resend.contacts.remove).toHaveBeenCalledWith({ id: contact });
+    expect(resend.contacts.segments.remove).not.toHaveBeenCalled();
+  });
+
+  it("takes a contact in other segments out of the waitlist's only", async () => {
+    const resend = mailer({}, ["segment-1", "segment-2"]);
+    expect(await leaveWaitlist(resend, contact, "segment-1")).toBe("left");
+    expect(resend.contacts.segments.remove).toHaveBeenCalledWith({
+      contactId: contact,
+      segmentId: "segment-1",
+    });
+    expect(resend.contacts.remove).not.toHaveBeenCalled();
+  });
+
+  it("fails when a shared contact's segments can't be read or left", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shared = ["segment-1", "segment-2"];
+    for (const refusals of [{ list: refused }, { leave: refused }]) {
+      const resend = mailer(refusals, shared);
+      expect(await leaveWaitlist(resend, contact, "segment-1")).toBe("failed");
+      expect(resend.contacts.remove).not.toHaveBeenCalled();
+    }
+    log.mockRestore();
   });
 
   it("has left when the contact is already gone", async () => {

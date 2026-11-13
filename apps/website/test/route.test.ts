@@ -14,6 +14,7 @@ const resend = vi.hoisted(() => ({
   remove: vi.fn(),
   list: vi.fn(),
   add: vi.fn(),
+  leave: vi.fn(),
   send: vi.fn(),
 }));
 vi.mock("resend", () => ({
@@ -22,7 +23,11 @@ vi.mock("resend", () => ({
       create: resend.create,
       get: resend.get,
       remove: resend.remove,
-      segments: { list: resend.list, add: resend.add },
+      segments: {
+        list: resend.list,
+        add: resend.add,
+        remove: resend.leave,
+      },
     };
     emails = { send: resend.send };
     constructor(key: string) {
@@ -70,7 +75,7 @@ const setUp = () => {
     call.mockResolvedValue({ data: { id: contact }, error: null });
   }
   resend.list.mockResolvedValue({ data: { data: [] }, error: null });
-  for (const call of [resend.remove, resend.add, resend.send]) {
+  for (const call of [resend.remove, resend.add, resend.leave, resend.send]) {
     call.mockResolvedValue(fine);
   }
 };
@@ -172,6 +177,21 @@ describe("/api/unsubscribe/<contact>", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("");
     expect(resend.remove).toHaveBeenCalledWith({ id: contact });
+  });
+
+  it("takes a contact in other segments out of the waitlist's only", async () => {
+    setUp();
+    vi.stubEnv("RESEND_SEGMENT_ID", "segment-1");
+    resend.list.mockResolvedValue({
+      data: { data: [{ id: "segment-1" }, { id: "segment-2" }] },
+      error: null,
+    });
+    expect((await leaving("POST", contact)).status).toBe(200);
+    expect(resend.leave).toHaveBeenCalledWith({
+      contactId: contact,
+      segmentId: "segment-1",
+    });
+    expect(resend.remove).not.toHaveBeenCalled();
   });
 
   it("changes nothing when opened, and leads to the page for leaving", async () => {

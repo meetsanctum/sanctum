@@ -24,7 +24,8 @@ Railway's edge names. While developing,
 <http://localhost:5174/emails/waitlist> shows the confirmation as a page.
 
 The confirmation's Unsubscribe opens `/unsubscribe/<contact>`, which asks
-once and then removes the contact from Resend. Its `List-Unsubscribe` headers
+once and then removes the contact from Resend; a contact that is in other
+segments than the waitlist's leaves only that one. Its `List-Unsubscribe` headers
 name `/api/unsubscribe/<contact>`, where a mail app's own Unsubscribe posts
 to do the same in one click.
 

@@ -23,11 +23,17 @@ describe("a limit", () => {
     expect(allows("one", 1501)).toBe(true);
   });
 
-  it("forgets keys rather than keep ever more of them", () => {
+  it("refuses new keys when it is full, and gives no key its tries back", () => {
     const allows = createLimit(1, 1000);
     expect(allows("one", 0)).toBe(true);
+    for (let key = 1; key < 10_000; key++) allows(`key-${key}`, 0);
+    expect(allows("one more", 1)).toBe(false);
+    expect(allows("one", 1)).toBe(false);
+  });
+
+  it("forgets the keys gone quiet to make room", () => {
+    const allows = createLimit(1, 1000);
     for (let key = 0; key < 10_000; key++) allows(`key-${key}`, 0);
-    // Past ten thousand keys in one window, all are forgotten.
-    expect(allows("one", 1)).toBe(true);
+    expect(allows("one more", 1001)).toBe(true);
   });
 });

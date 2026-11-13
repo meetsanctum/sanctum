@@ -23,6 +23,10 @@ export interface WaitlistMailer {
         contactId: string;
         segmentId: string;
       }): Promise<Answer>;
+      remove(membership: {
+        contactId: string;
+        segmentId: string;
+      }): Promise<Answer>;
     };
   };
   emails: {
@@ -115,15 +119,41 @@ function kept(why: string) {
 }
 
 /**
- * Takes a contact off the waitlist, address and all. One already gone has
- * left too, so asking twice is no failure.
+ * Takes a contact off the waitlist. Its address goes with it, unless the
+ * waitlist is a segment and the contact is in others too: then it leaves
+ * only the waitlist's. One already gone has left as well, so asking twice
+ * is no failure.
  */
 export async function leaveWaitlist(
   mailer: WaitlistMailer,
   contact: string,
+  /** The segment of contacts the waitlist is, if they are kept in one. */
+  segment?: string,
 ): Promise<"left" | "failed"> {
+  if (segment) {
+    const segments = await mailer.contacts.segments.list({
+      contactId: contact,
+      limit: 100,
+    });
+    if (segments.error || !segments.data) {
+      return gone(
+        segments.error ?? { message: "its segments didn't come back" },
+      );
+    }
+    if (segments.data.data.some(({ id }) => id !== segment)) {
+      const left = await mailer.contacts.segments.remove({
+        contactId: contact,
+        segmentId: segment,
+      });
+      return left.error ? gone(left.error) : "left";
+    }
+  }
   const removed = await mailer.contacts.remove({ id: contact });
-  if (!removed.error || removed.error.name === "not_found") return "left";
-  console.error(`The waitlist kept a contact: ${removed.error.message}`);
-  return "failed";
+  return removed.error ? gone(removed.error) : "left";
+}
+
+function gone(error: { message: string; name?: string }) {
+  if (error.name === "not_found") return "left" as const;
+  console.error(`The waitlist kept a contact: ${error.message}`);
+  return "failed" as const;
 }
