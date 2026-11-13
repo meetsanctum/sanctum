@@ -34,6 +34,9 @@ sudo apt-get update
 sudo apt-get install -y curl ca-certificates
 ```
 
+On a Debian set up without `sudo`, become root with `su -` and leave `sudo`
+out of the commands in this guide.
+
 ### A Raspberry Pi with a blank card
 
 1. On your Mac, open [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
