@@ -99,6 +99,11 @@ export function createAppLink(options: {
   // manifest's digest. A package that doesn't match never gets further.
   version: string;
   manifest: string;
+  /**
+   * Why one that says it is that package is not the one the core waits for,
+   * if it isn't: a build of the same version says the same of itself.
+   */
+  refuses?: () => string | undefined;
   /** Where the core listens, in the app's folder of sockets. */
   socket: string;
   log: (message: string) => void;
@@ -178,7 +183,7 @@ export function createAppLink(options: {
             ? `it is version ${said.version}, and this core expects ${options.version}`
             : said.manifest !== options.manifest
               ? `its manifest isn't the one staged for version ${options.version}`
-              : undefined;
+              : options.refuses?.();
     if (refusal) {
       refuse(connection, refusal);
       return;

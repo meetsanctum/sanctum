@@ -62,6 +62,25 @@ describe("the core's end of an app's socket", () => {
       expect(logs.join()).toContain("was refused");
     });
 
+    it("refuses the package it expects while there is a reason to, and welcomes it once there is none", async () => {
+      let reason: string | undefined = "its update hasn't begun";
+      await listening({ refuses: () => reason });
+      const early = await appOnSocket();
+
+      early.say(welcomeHello);
+
+      expect((await early.hearing("refused")).reason).toBe(
+        "its update hasn't begun",
+      );
+      await vi.waitFor(() => expect(early.isClosed()).toBe(true));
+      expect(ready).toBe(0);
+
+      reason = undefined;
+      const app = await appOnSocket();
+      app.say(welcomeHello);
+      expect((await app.hearing("welcome")).type).toBe("welcome");
+    });
+
     it("ends a connection that does anything else first", async () => {
       await listening();
       const app = await appOnSocket();

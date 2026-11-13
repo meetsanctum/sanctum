@@ -491,6 +491,35 @@ export function createAppUpdates(options: {
       return true;
     },
 
+    /**
+     * Why an app that says hello is not the one the core waits for: its
+     * update has not begun, so what runs is the build before, which a new
+     * build of the same version can't be told from by what it says. Taking
+     * it would start that build in the new one's place, and its update
+     * would never be asked for again. Refused, it ends, as one of another
+     * version does, and the update begins with nothing of the app running.
+     * The socket listens before arrive records a new update, so the last
+     * committed folder must hold it back during that interval too.
+     * A failed build must also stay out until its data has been restored.
+     */
+    holdsBack(appId: string, folder: string) {
+      const row = rowOf(appId);
+      if (row?.status === "undoing") return "its data hasn't been restored";
+      const last = versions.last(appId);
+      // A loaded retry gets its new waiting row only once arrive runs.
+      const isRetryPending =
+        row?.status === "undone" &&
+        row.retryAt !== null &&
+        row.toFolder === folder;
+      const isUpdateNeeded =
+        (!row || isRetryPending) &&
+        last !== undefined &&
+        last.folder !== folder;
+      return row?.status === "waiting" || isUpdateNeeded
+        ? "its update hasn't begun, so it is the build before"
+        : undefined;
+    },
+
     /** Its socket is listening: an update's next step, or it simply runs. */
     arrive(entry: InstalledApp) {
       const { id: appId, version } = entry.manifest;

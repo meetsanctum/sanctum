@@ -302,6 +302,7 @@ export function createAppHost(options: {
       appId,
       version: manifest.version,
       manifest: pkg.apart.digest,
+      refuses: () => options.updates.holdsBack(appId, pkg.apart.folder),
       socket: join(
         options.appSockets ?? defaultAppSockets,
         appId,

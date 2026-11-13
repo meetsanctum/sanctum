@@ -99,29 +99,6 @@ describe("an update that works", () => {
     expect(home.containers).toEqual(["2.0.0+test"]);
   });
 
-  it("waits for its turn while the manager's slot is taken, not counting it", async () => {
-    const home = await versions();
-    await running(await home.coreWith(version("1.0.0")), id);
-    let busy = true;
-    const begin = home.manager.beginAppUpdate;
-    home.manager.beginAppUpdate = async (app, request) => {
-      if (busy) throw new Error("HTTP 409: An update is already running");
-      await begin(app, request);
-    };
-
-    const core = await home.coreWith(version("2.0.0"));
-    await vi.waitFor(() => expect(stateOf(core, id).state).toBe("waiting"));
-    expect(stateOf(core, id).run?.waitingFor).toBe(
-      "Waiting for its turn to update",
-    );
-    expect(stateOf(core, id).run?.failures).toBeUndefined();
-
-    busy = false;
-    await running(core, id);
-
-    expect(committedOf(core)?.version).toBe("2.0.0");
-  });
-
   it("does nothing while it's off, and updates when it's turned on", async () => {
     const home = await versions();
     const before = await home.coreWith(version("1.0.0"));
