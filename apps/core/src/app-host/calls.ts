@@ -36,6 +36,7 @@ import type { PlacesModule } from "../places/places.js";
 import { ActionCallError } from "./errors.js";
 import type { JobCalls, KeptWorkflowCalls } from "./host.js";
 import type { NetFetch, NetHolds } from "./net.js";
+import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
 // The calls an app makes into the core, for one app and one actor. Two
 // checks always apply: the app must hold the permission, and the actor must
@@ -150,6 +151,7 @@ export function createCoreCalls(options: {
   // each needs.
   watch: NetHolds["watch"];
   pairing: () => Pick<Pairing, "joining">;
+  secrets: AppSecrets;
   log: (message: string) => void;
 }): CoreCalls {
   const { appId, actor, devices } = options;
@@ -183,6 +185,14 @@ export function createCoreCalls(options: {
     if (options.ended()) {
       throw new Error(`This call to ${appId} has ended`);
     }
+  }
+
+  function named(name: unknown) {
+    const parsed = secretName.safeParse(name);
+    if (!parsed.success) {
+      throw new Error(`${appId} named a secret the core cannot keep`);
+    }
+    return parsed.data;
   }
 
   function readsDevices() {
@@ -429,6 +439,29 @@ export function createCoreCalls(options: {
     async joining(joining) {
       need(registerPermission);
       options.pairing().joining(appId, joining);
+    },
+
+    // Its own secrets, which need no permission, as its own database needs
+    // none. What's refused names neither the secret nor its value.
+    async secret(name) {
+      open();
+      return options.secrets.get(appId, named(name));
+    },
+
+    async putSecret(secret) {
+      open();
+      const parsed = z
+        .object({ name: secretName, value: secretValue })
+        .safeParse(secret);
+      if (!parsed.success) {
+        throw new Error(`${appId} kept a secret the core cannot keep`);
+      }
+      options.secrets.put(appId, parsed.data.name, parsed.data.value);
+    },
+
+    async removeSecret(name) {
+      open();
+      options.secrets.remove(appId, named(name));
     },
 
     log: options.log,

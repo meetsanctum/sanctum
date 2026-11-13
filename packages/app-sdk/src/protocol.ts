@@ -14,8 +14,15 @@ import {
 // these schemas. The core treats whatever arrives as untrusted, since only
 // the SDK's rule keeps an app's own code off the socket.
 
-/** The runner speaks the version its app's SDK was built for; the core refuses one it doesn't support. */
-export const protocolVersion = 1;
+/**
+ * The runner speaks the version its app's SDK was built for; the core refuses
+ * one it doesn't support. A version adds calls and keeps what the one before
+ * says, so a core speaks every version from `oldestProtocolVersion` on: an
+ * app that kept running through a core's update goes on with the new core.
+ */
+export const protocolVersion = 2;
+/** The oldest version a core still speaks. */
+export const oldestProtocolVersion = 1;
 
 /** The socket's name in an app's folder of sockets, where the core listens. */
 export const coreSocketName = "core.sock";
@@ -65,6 +72,9 @@ export const coreCallMethods = [
   "entities",
   "fetch",
   "joining",
+  "secret",
+  "putSecret",
+  "removeSecret",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 

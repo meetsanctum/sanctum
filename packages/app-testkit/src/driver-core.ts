@@ -25,12 +25,14 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import { createSecretCalls } from "./secret-calls.js";
+
 // A fake core for one driver app: it takes the driver's registrations,
 // reports, presses and releases, what it says of joining devices and of
 // firmware, and which devices it still has exactly as the core does, with
 // the same schemas, remembers them, and hands the driver commands, moves,
-// pairing, removals, firmware calls and probes. Nothing else of the core is
-// there.
+// pairing, removals, firmware calls and probes, and keeps its secrets.
+// Nothing else of the core is there.
 
 type Registered = z.output<typeof deviceRegistration>;
 
@@ -81,6 +83,7 @@ export function createDriverCore(
   const refused: Error[] = [];
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
+  const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -231,6 +234,7 @@ export function createDriverCore(
       }
       joining.push(parsed.data);
     },
+    ...secretCalls,
     log() {},
   };
   for (const name of options.unanswered ?? []) {
@@ -261,6 +265,7 @@ export function createDriverCore(
     firmware,
     refused,
     presented,
+    secrets,
 
     start: async () => app.start?.(own, { reason: "started" }),
     /** As the core does once it restarted while the driver ran on. */

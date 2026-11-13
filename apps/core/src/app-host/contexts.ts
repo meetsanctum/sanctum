@@ -22,6 +22,7 @@ import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./host.js";
 import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
+import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
 
 // What each call of an app's code gets from the core: a context acting as
@@ -49,6 +50,7 @@ export function createAppContexts(options: {
   settings: AppSettingsStore;
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
+  secrets: AppSecrets;
   log: (message: string) => void;
   now: () => Date;
   // Whether someone turned an app off: other apps don't read what it brought.
@@ -177,6 +179,7 @@ export function createAppContexts(options: {
       net: options.net,
       watch: (permission) => entry.requests.watch(permission),
       pairing: options.pairing,
+      secrets: options.secrets,
       log: (text) => log(`${appId}: ${text}`),
     });
     const ctx = createAppContext({

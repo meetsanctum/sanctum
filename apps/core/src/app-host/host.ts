@@ -53,6 +53,7 @@ import {
   servicePermission,
   type ServiceManager,
 } from "./services.js";
+import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
 import {
   createSupervisor,
@@ -138,6 +139,8 @@ export function createAppHost(options: {
   workflows?: KeptWorkflowCalls;
   entities: Entities;
   settings: AppSettingsStore;
+  // Apps' own secrets, sealed by the core.
+  secrets: AppSecrets;
   grants: AppGrants;
   commits: AppCommits;
   updates: AppUpdates;
