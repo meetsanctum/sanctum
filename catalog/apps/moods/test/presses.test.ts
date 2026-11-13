@@ -206,7 +206,7 @@ describe("syncing a remote's choices", () => {
   });
 });
 
-// v1's office dimmer, a Hue dimmer switch gen 1 (RWL021), as Zigbee2MQTT
+// An office dimmer, a Hue dimmer switch gen 1 (RWL021), as Zigbee2MQTT
 // declares it, and two lights of the office's.
 const dimmer = () =>
   device("dimmer", "office", [

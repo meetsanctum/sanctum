@@ -7,9 +7,8 @@ import {
 import type { Light } from "../targets.js";
 
 // The snapshot of a room's lights as they were when it went dark, which
-// turning it on brings back (v1's light snapshots). v1 took one when its
-// own room action switched the lights off. The core switches them now, as
-// a remote, a workflow or a wall switch may, so Moods takes one from the
+// turning it on brings back. The core switches the lights off, as a
+// remote, a workflow or a wall switch may, so Moods takes one from the
 // lights themselves, which it follows anyway: the last light to go off and
 // those switched off together with it, a few seconds apart at most, each
 // with the look it had, and the room's other lights off.

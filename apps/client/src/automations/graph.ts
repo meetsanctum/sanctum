@@ -15,12 +15,12 @@ import {
   type Names,
 } from "./words";
 
-// How Automations saves a workflow: v1's simple graph, in which every
-// trigger leads to the first condition, each condition to the next, and the
-// last to every step, or every trigger to every step when there are no
-// conditions. Nodes keep that order, since steps run in the graph's order. A
-// graph of another shape, made through the API, opens read only rather than
-// being reshaped.
+// How Automations saves a workflow: a simple graph, in which every trigger
+// leads to the first condition, each condition to the next, and the last to
+// every step, or every trigger to every step when there are no conditions.
+// Nodes keep that order, since steps run in the graph's order. A graph of
+// another shape, made through the API, opens read only rather than being
+// reshaped.
 
 const kindOrder = ["trigger", "condition", "step"] as const;
 

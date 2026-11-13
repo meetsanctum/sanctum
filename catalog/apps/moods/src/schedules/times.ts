@@ -1,12 +1,11 @@
-// Times of a room's schedule, in minutes from midnight in 15-minute steps:
-// v1's room schedules (room-schedules.ts in web-nuxt, room-schedule-configs.ts
-// in the core, Pragmata v1-final), with a time that runs past midnight
-// kept as one rather than split in two. Moods' actions and its pages share
-// it, so it imports nothing at run time.
+// Times of a room's schedule, in minutes from midnight in 15-minute steps,
+// with a time that runs past midnight kept as one rather than split in
+// two. Moods' actions and its pages share it, so it imports nothing at run
+// time.
 
 /** Minutes in a day; an end of 1440 is midnight. */
 export const day = 1440;
-/** The steps a time takes, as in v1. */
+/** The steps a time takes. */
 export const step = 15;
 
 /** When a scheduled mood holds: from its start to its end, past midnight when the end is not after the start. */
@@ -53,7 +52,7 @@ export function windowsOf(span: Span): Span[] {
 export const holds = (span: Span, minute: number) =>
   windowsOf(span).some((part) => part.start <= minute && minute < part.end);
 
-/** The span that holds at a minute, if one does (v1's currentRoomScheduleConfigEntry). */
+/** The span that holds at a minute, if one does. */
 export function spanAt<T extends Span>(
   spans: readonly T[],
   minute: number,
@@ -77,8 +76,8 @@ export function byStart<T extends Span>(spans: readonly T[]): T[] {
 
 /**
  * The ends a span from this start may take, in order: each step after it,
- * past midnight, until another span begins (v1 let any end be picked and
- * refused an overlap on saving). None when another span holds the start.
+ * past midnight, until another span begins. None when another span holds
+ * the start.
  */
 export function endsFrom(spans: readonly Span[], start: number): number[] {
   if (spans.some((span) => holds(span, start))) return [];
@@ -123,10 +122,9 @@ const preferredLength = 60;
 const defaultStart = 7 * 60;
 
 /**
- * Where a new span goes first (v1's nextAvailableScheduleWindow): an hour
- * at 07:00 in an empty schedule, else the first free hour after the latest
- * end, then from midnight, then a free quarter of an hour; none when the
- * day is full.
+ * Where a new span goes first: an hour at 07:00 in an empty schedule, else
+ * the first free hour after the latest end, then from midnight, then a
+ * free quarter of an hour; none when the day is full.
  */
 export function nextFreeWindow(spans: readonly Span[]): Span | null {
   const taken = covered(spans);

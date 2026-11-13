@@ -30,14 +30,13 @@ import { createRollups } from "./compile.js";
 import { isRecorded, type Recorded } from "./statistics.js";
 import { historyTimes as times } from "./time.js";
 
-// History, ported from v1's recorder: each change of what a device's
-// capability reported, or of whether the device answered, kept for 10 days,
-// and roll-ups of it every 5 minutes, kept as long, and every hour, kept for
-// two years. Changes wait in memory and are written together every few
-// seconds. Nothing is known while the core is stopped, so each capability is
-// recorded as unknown when it stops and as it is when it starts. Anyone can
-// stop keeping a device's history, which deletes it. Every client reads it
-// through the gate; it names no one.
+// History: each change of what a device's capability reported, or of whether
+// the device answered, kept for 10 days, and roll-ups of it every 5 minutes,
+// kept as long, and every hour, kept for two years. Changes wait in memory
+// and are written together every few seconds. Nothing is known while the
+// core is stopped, so each capability is recorded as unknown when it stops
+// and as it is when it starts. Anyone can stop keeping a device's history,
+// which deletes it. Every client reads it through the gate; it names no one.
 
 type Pending = Recorded & {
   device: string;

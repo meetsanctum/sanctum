@@ -4,8 +4,8 @@ import Docker from "dockerode";
 
 import type { SpaceDockerLike } from "./host/space.js";
 
-// Ported from v1's docker-runtime: the narrow slice of the Docker API the
-// manager uses, shaped like dockerode so tests can pass a fake.
+// The narrow slice of the Docker API the manager uses, shaped like dockerode
+// so tests can pass a fake.
 
 export const managedLabel = "sanctum.managed";
 export const roleLabel = "sanctum.role";

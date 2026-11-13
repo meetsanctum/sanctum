@@ -15,9 +15,9 @@ import {
 
 import { devices } from "../devices/schema.js";
 
-// History: what each device's capabilities reported over time, and roll-ups
-// of it every 5 minutes and every hour, ported from v1's recorder. Removing
-// a device takes its history with it.
+// History: what each device's capabilities reported over time, and
+// roll-ups of it every 5 minutes and every hour. Removing a device takes
+// its history with it.
 
 // Each capability recorded, by a small id so the many rows below stay small.
 // A capability whose kind changed starts a series afresh.

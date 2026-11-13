@@ -1,6 +1,4 @@
-// Zigbee2MQTT's values and the capability kinds' (light, switch), ported
-// from v1's zigbee2mqtt-values.ts and zigbee2mqtt-model.ts (Pragmata,
-// v1-final).
+// Zigbee2MQTT's values and the capability kinds' (light, switch).
 
 export function numericValue(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {

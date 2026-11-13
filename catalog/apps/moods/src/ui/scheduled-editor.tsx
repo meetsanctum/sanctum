@@ -28,10 +28,9 @@ import { useMoodsApp } from "./state";
 // schedule opens, with { room, id }, or Schedule a mood without an id: when,
 // then which mood. A start another scheduled mood holds is dimmed and named
 // in the From list, and To runs only up to the next one, past midnight, so
-// two never overlap (v1 refused an overlap on saving). A new one starts at
-// the first free hour, as in v1, with the first of the room's moods not yet
-// scheduled. Cancel and Save are in the top bar; Remove from the schedule,
-// at the foot, asks first.
+// two never overlap. A new one starts at the first free hour, with the
+// first of the room's moods not yet scheduled. Cancel and Save are in the
+// top bar; Remove from the schedule, at the foot, asks first.
 
 const starts = Array.from({ length: day / step }, (_, index) => index * step);
 

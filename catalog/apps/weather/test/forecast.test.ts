@@ -5,7 +5,7 @@ import { fetchForecast } from "../src/forecast.js";
 import app from "../src/index.js";
 import { answer, fakeCore, openMeteoAnswer } from "./fake-core.js";
 
-// The forecast from Open-Meteo, ported from v1's weather.ts and its tests.
+// The forecast from Open-Meteo.
 
 const zurich = {
   latitude: 47.3769,

@@ -77,10 +77,10 @@ export const homeLocationSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   /**
-   * Metres above sea level, from the Dead Sea's shore to the highest peaks
-   * (v1's range), or null while the household has not said. Sun times count
-   * it, as published tables do: the higher the home, the earlier the sun
-   * rises and the later it sets.
+   * Metres above sea level, from the Dead Sea's shore to the highest peaks,
+   * or null while the household has not said. Sun times count it, as
+   * published tables do: the higher the home, the earlier the sun rises and
+   * the later it sets.
    */
   elevation: z.number().min(-500).max(9000).nullable(),
   timeZone: z

@@ -10,10 +10,7 @@ import {
 } from "./devices-support.js";
 import { post, type TestCore } from "./support.js";
 
-// What a device is and what it is called until the household names it,
-// ported from v1's classification and automatic names (classification.ts,
-// device-derived-state-db.ts and core-device-name-preview.test.ts,
-// Pragmata v1-final).
+// What a device is and what it is called until the household names it.
 
 describe("what a device is", () => {
   const light = { kind: "light" } as const;

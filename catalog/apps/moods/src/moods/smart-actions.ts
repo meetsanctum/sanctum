@@ -7,12 +7,11 @@ import { lightKey } from "./light-states.js";
 import { smartCatalog, smartDefinition } from "./smart.js";
 import { changeSmartMood, insertMood } from "./store.js";
 
-// Smart moods (v1's smart mood assignments, Pragmata v1-final): a
-// definition from Moods' catalog assigned to a room, once per room, with a
-// brightness and the lights it leaves off. They run, list, order and
-// delete with the custom moods (actions.ts), and their editor previews
-// them through moods.previewMood. Who may do what is as for those: they
-// are the household's.
+// Smart moods: a definition from Moods' catalog assigned to a room, once
+// per room, with a brightness and the lights it leaves off. They run,
+// list, order and delete with the custom moods (actions.ts), and their
+// editor previews them through moods.previewMood. Who may do what is as
+// for those: they are the household's.
 
 const brightness = z.number().int().min(1).max(100);
 const off = z

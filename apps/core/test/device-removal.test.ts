@@ -10,10 +10,9 @@ import {
 } from "./devices-support.js";
 import { post, sharedClient, type TestCore } from "./support.js";
 
-// Removing a device: its driver takes it off its network first, then the core
-// forgets it. Ported from v1's removal tests (core-zigbee-pairing.test.ts,
-// Pragmata v1-final: removing after the adapter confirms, keeping the records
-// when it fails, and forcing it), with the lamps driver's pretend radio.
+// Removing a device, with the lamps driver's pretend radio: its driver takes
+// it off its network first, then the core forgets it. A device its driver
+// cannot remove is kept, unless it is forgotten by force.
 
 function entries(core: TestCore, action: string) {
   return core.activity.recent().filter((entry) => entry.action === action);

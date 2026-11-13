@@ -9,9 +9,9 @@ import {
 } from "./devices-support.js";
 import { get, post, sharedClient, testCore, type TestCore } from "./support.js";
 
-// History, ported from v1's recorder: each change of what a device reported, or
-// of whether it answered, and its roll-ups every 5 minutes and every hour, for
-// whoever may see the device.
+// History: each change of what a device reported, or of whether it
+// answered, and its roll-ups every 5 minutes and every hour, for whoever
+// may see the device.
 
 const minute = 60_000;
 const lampOff = {

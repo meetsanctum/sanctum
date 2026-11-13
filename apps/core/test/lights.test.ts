@@ -17,9 +17,9 @@ import {
 } from "./workflows-support.js";
 
 // The lights of a room, a zone or the whole home together: the route a room's
-// and Lights' button use, and the core's lights condition and step, ported from
-// the Rooms app, now Moods. Turning a place on follows each room's
-// lights.turnOn, which an app such as Moods publishes.
+// and Lights' button use, and the core's lights condition and step. Turning a
+// place on follows each room's lights.turnOn, which an app such as Moods
+// publishes.
 
 // Publishes a room's lights.turnOn as a test asks, as Moods would.
 const rule = defineAction({

@@ -6,13 +6,11 @@ import type { ZigbeeDevice } from "./types.js";
 import { stringValue } from "./values.js";
 
 // Zigbee2MQTT's device list (`bridge/devices`) onto the devices the driver
-// brings into the core, ported from v1's handleDevices and
-// discoveryStatusFromZigbeeDevice (Pragmata v1-final). A device comes in once
-// its interview has succeeded and it exposes a light, a switch, buttons, a
-// room's temperature, humidity or light level, or motion; the
-// coordinator, disabled devices and the rest stay out. v1 removed a device
-// whose interview failed and that Zigbee2MQTT does not support (ghost
-// devices); here such a device never comes in.
+// brings into the core. A device comes in once its interview has succeeded
+// and it exposes a light, a switch, buttons, a room's temperature, humidity
+// or light level, or motion; the coordinator, disabled devices and the rest
+// stay out. So a device whose interview failed and that Zigbee2MQTT does not
+// support (a ghost device) never comes in.
 
 export type ZigbeeDeviceEntry = {
   /** Its IEEE address, which outlives renames: the driver's key in the core. */

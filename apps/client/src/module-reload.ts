@@ -1,11 +1,10 @@
 // After an update a page still running the build before it can ask for a
-// chunk the new build no longer has, and the import fails (v1's
-// client-recovery plugin). Reloading loads the new build. The page reloads
-// once per build: one that comes back as the same build and fails again
-// keeps the error, rather than reloading in a loop. The build is told by
-// the entry chunk's address, whose name carries its hash, and remembered
-// for the window's session, which a reload keeps, in the desktop app's
-// session of its own too (apps/desktop/src/pages.ts).
+// chunk the new build no longer has, and the import fails. Reloading loads
+// the new build. The page reloads once per build: one that comes back as the
+// same build and fails again keeps the error, rather than reloading in a
+// loop. The build is told by the entry chunk's address, whose name carries
+// its hash, and remembered for the window's session, which a reload keeps,
+// in the desktop app's session of its own too (apps/desktop/src/pages.ts).
 
 const reloadedFrom = "sanctum.reloadedFrom";
 

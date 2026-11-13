@@ -36,14 +36,13 @@ import { MoodPicker } from "./mood-picker";
 import { SmartMoodEditor } from "./smart-editor";
 import { useMoodsApp } from "./state";
 
-// The mood editor (v1's MoodEditorOverlay), a page a room's page opens on
-// every device. A new mood starts with a choice: the room's lights as
-// they are, or a smart mood from the catalog. A custom mood's editor has
-// its name, its icon and what it sets each of the room's lights to, as
-// tiles to tap and drag; a smart mood's is in smart-editor.tsx. Both
-// preview the draft on the lights as it changes, with Cancel, which puts
-// the lights back, and Save in the top bar (mood-editing.tsx): with no
-// Back, they are the page's way out.
+// The mood editor, a page a room's page opens on every device. A new mood
+// starts with a choice: the room's lights as they are, or a smart mood
+// from the catalog. A custom mood's editor has its name, its icon and what
+// it sets each of the room's lights to, as tiles to tap and drag; a smart
+// mood's is in smart-editor.tsx. Both preview the draft on the lights as
+// it changes, with Cancel, which puts the lights back, and Save in the top
+// bar (mood-editing.tsx): with no Back, they are the page's way out.
 
 // The icons as a radio group: the arrow keys move the choice.
 function IconPicker(props: {

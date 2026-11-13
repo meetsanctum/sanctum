@@ -240,7 +240,7 @@ describe("jobs", () => {
 });
 
 describe("a workflow's graph", () => {
-  it("is v1's nodes and edges", () => {
+  it("is nodes and edges", () => {
     const graph = workflowGraph.parse({
       nodes: [
         { id: "t", kind: "trigger", piece: "time", config: { time: "07:00" } },

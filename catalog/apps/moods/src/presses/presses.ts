@@ -19,20 +19,19 @@ import { readMoods } from "../moods/store.js";
 // What each press of a remote does: the household chooses on the remote's
 // Presses page, Moods keeps the choice, and from it a workflow from the
 // core's press trigger to the core's lights step or Moods' own runMood. A
-// choice of lights is a room, a zone, the whole home or chosen lights, as
-// v1's button bindings chose them (toggle_lights' entity targets), and what
-// to do with them: switch them, step them brighter or dimmer, or brighten or
-// dim them while a hold lasts. Each press a remote in a room has no choice
-// for keeps its default, in one workflow for all of them: a remote with up
-// and down buttons is a dimmer for its room, and any other press switches
-// the room's lights on or off, as v1's default toggle did, with a hold
-// brightening or dimming them by turns. Moods works the workflows out again
-// whenever the choices, a remote, its room, a place, a light, a mood or its
-// permissions change, and only then puts or removes them. Presses pause
-// while Moods may not read remotes, their lights or the home's places: their
-// workflows go and the choices stay, since losing sight of something is not
-// losing it. Without its own automations it can change none of them, so it
-// leaves them all as they are.
+// choice of lights is a room, a zone, the whole home or chosen lights, and
+// what to do with them: switch them, step them brighter or dimmer, or
+// brighten or dim them while a hold lasts. Each press a remote in a room
+// has no choice for keeps its default, in one workflow for all of them: a
+// remote with up and down buttons is a dimmer for its room, and any other
+// press switches the room's lights on or off, with a hold brightening or
+// dimming them by turns. Moods works the workflows out again whenever the
+// choices, a remote, its room, a place, a light, a mood or its permissions
+// change, and only then puts or removes them. Presses pause while Moods
+// may not read remotes, their lights or the home's places: their workflows
+// go and the choices stay, since losing sight of something is not losing
+// it. Without its own automations it can change none of them, so it leaves
+// them all as they are.
 
 type Db = AppContext["storage"]["db"];
 

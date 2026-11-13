@@ -20,9 +20,7 @@ import {
 // Firmware over the air and Check connection against Zigbee2MQTT, played by
 // the pretend bridge: what the driver registers of each device's firmware,
 // what it says as Zigbee2MQTT publishes it, and the requests it makes for
-// someone's check, update and stop and for a probe. Rewritten from v1's
-// OTA and probe tests (core-zigbee-ota.test.ts, core-zigbee-events.test.ts,
-// Pragmata v1-final) against the Drivers contract.
+// someone's check, update and stop and for a probe.
 
 const bridge = await PretendBridge.start();
 afterAll(() => bridge.stop());

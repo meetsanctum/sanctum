@@ -67,7 +67,7 @@ export const kettle: DeviceInfo = {
   ],
 };
 
-// v1's office button, whose detail shows the pages apps add for remotes.
+// An office button, whose detail shows the pages apps add for remotes.
 export const remote: DeviceInfo = {
   ...lamp,
   type: "button",

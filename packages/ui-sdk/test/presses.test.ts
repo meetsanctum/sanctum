@@ -10,8 +10,7 @@ import {
   pressTitle,
 } from "../src/presses";
 
-// A remote's presses on screen, from v1's formatButtonAction
-// (button-actions.test.ts) and useButtonActionCapture.
+// A remote's presses on screen.
 
 describe("what a press is called", () => {
   it("treats inherited object names as ordinary action names", () => {
@@ -20,7 +19,6 @@ describe("what a press is called", () => {
     expect(pressLabel("toString")).toBe("Tostring");
   });
   it("names the common actions, in sentence case", () => {
-    // v1's cases, which it wrote in title case.
     expect(pressLabel("button_1_single")).toBe("1 single press");
     expect(pressLabel("click")).toBe("Single press");
     expect(pressLabel("double")).toBe("Double press");

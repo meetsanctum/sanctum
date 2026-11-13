@@ -3,12 +3,10 @@ import type { FirmwareState } from "@meetsanctum/app-sdk";
 import type { ZigbeeDevice } from "./types.js";
 import { isRecord, numericValue, stringValue } from "./values.js";
 
-// Firmware over the air, as Zigbee2MQTT 2 describes it, ported from v1's
-// zigbee2mqtt-ota.ts (Pragmata v1-final: normalizeOtaState,
-// mergeZigbeeOtaMetadata, versionValue) onto the Drivers contract's
-// firmware states. Zigbee2MQTT checks for an update by itself whenever a
-// device asks for one, at most once a day, and publishes what it knows as
-// the device state's `update`: its state, and while it updates its
+// Firmware over the air, as Zigbee2MQTT 2 describes it, onto the Drivers
+// contract's firmware states. Zigbee2MQTT checks for an update by itself
+// whenever a device asks for one, at most once a day, and publishes what it
+// knows as the device state's `update`: its state, and while it updates its
 // progress and the seconds it has left.
 
 /** What a device's firmware is doing, as the driver tells the core. */

@@ -12,22 +12,19 @@ import {
 import { byStart, isEnd, isStart, overlaps, type Span } from "./times.js";
 
 // Each room's schedule, how a room turns its lights on and the snapshot of
-// them, in Moods' own database: v1's room schedules, target settings and
-// light snapshots (room-schedule-configs.ts, target-settings-db.ts and
-// light-snapshots-db.ts in the core, Pragmata v1-final). v1 kept a
-// schedule as a system automation; here it is Moods' own, and its jobs run
+// them, in Moods' own database. A schedule is Moods' own, and its jobs run
 // it (jobs.ts).
 
 type Db = AppContext["storage"]["db"];
 
 /**
- * How turning a target's lights on goes: following its schedule, v1's
- * smart and the default, or exactly as they were, v1's restore previous.
+ * How turning a target's lights on goes: following its schedule, the
+ * default, or exactly as they were.
  */
 export type TurnOnBehaviour = "followSchedule" | "asTheyWere";
 export const turnOnBehaviours = ["followSchedule", "asTheyWere"] as const;
 
-/** A room, a zone or the home, as v1's target settings named them. */
+/** A room, a zone or the home. */
 export type Target =
   | { kind: "room"; id: string }
   | { kind: "zone"; id: string }
@@ -61,9 +58,8 @@ export async function readSchedule(
 
 /**
  * Schedules one of a room's moods, or moves or changes one already
- * scheduled (v1's replaceRoomScheduleConfig, one at a time): in 15-minute
- * steps, with an end apart from its start, and overlapping none of the
- * room's others.
+ * scheduled: in 15-minute steps, with an end apart from its start, and
+ * overlapping none of the room's others.
  */
 export async function saveScheduledMood(
   db: Db,
@@ -83,7 +79,7 @@ export async function saveScheduledMood(
       .from(moods)
       .where(eq(moods.id, moodId))
       .get();
-    // v1's validateMoodActionForRoom: a mood of this room.
+    // A mood of this room.
     if (!mood || mood.roomId !== roomId) {
       throw new ActionError("not_found", "Not one of the room's moods");
     }
@@ -151,7 +147,7 @@ export async function readTurnOn(
   return row?.behaviour === "asTheyWere" ? "asTheyWere" : "followSchedule";
 }
 
-/** Sets how a target turns its lights on (v1's updateTargetSettings). */
+/** Sets how a target turns its lights on. */
 export async function setTurnOn(
   db: Db,
   target: Target,
@@ -170,7 +166,7 @@ export async function setTurnOn(
 /** A target's lights as they were when it last went dark. */
 export type Snapshot = { takenAt: string; lights: MoodLight[] };
 
-/** A target's snapshot (v1's listLightTargetSnapshot), or null before its first. */
+/** A target's snapshot, or null before its first. */
 export async function readSnapshot(
   db: Db,
   target: Target,
@@ -198,7 +194,7 @@ export async function readSnapshot(
   };
 }
 
-/** Replaces a target's snapshot (v1's replaceLightTargetSnapshot). */
+/** Replaces a target's snapshot. */
 export async function replaceSnapshot(
   db: Db,
   target: Target,

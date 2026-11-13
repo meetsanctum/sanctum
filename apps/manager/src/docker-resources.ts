@@ -10,9 +10,9 @@ import {
 } from "./docker.js";
 import { isOurs, stackLabels } from "./stack.js";
 
-// Ported from v1's docker-runtime. The manager only touches Docker resources
-// it labelled itself, so a same-name container or volume a person created by
-// hand is refused instead of being taken over.
+// The manager only touches Docker resources it labelled itself, so a
+// same-name container or volume a person created by hand is refused instead
+// of being taken over.
 
 export type Log = (message: string) => void;
 

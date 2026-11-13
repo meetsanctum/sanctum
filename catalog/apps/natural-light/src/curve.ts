@@ -1,8 +1,7 @@
-// The curve lights follow through the day, ported from v1's
-// natural-lighting-curve.ts (Pragmata, v1-final): warm and dim from sunset
-// to sunrise, cooling and brightening to a peak at solar noon (or a third
-// into the day for an early riser), then back, eased at both ends. Times
-// shift with the sunrise and sunset offsets.
+// The curve lights follow through the day: warm and dim from sunset to
+// sunrise, cooling and brightening to a peak at solar noon (or a third into
+// the day for an early riser), then back, eased at both ends. Times shift
+// with the sunrise and sunset offsets.
 
 export const curveShapes = ["balanced", "early_riser"] as const;
 export type CurveShape = (typeof curveShapes)[number];
@@ -66,8 +65,8 @@ export function shifted(curve: CurveSettings, sun: SunDay) {
   };
 }
 
-// v1 had one function each for temperature and brightness, the same apart
-// from their ends.
+// Temperature and brightness go the same way along the curve, apart from
+// their ends.
 function along(
   curve: CurveSettings,
   sun: SunDay,

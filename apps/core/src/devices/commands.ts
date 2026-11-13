@@ -11,10 +11,10 @@ import {
 type State = Record<string, unknown>;
 
 // What a command sends once more when its device has not confirmed it in
-// time (v1's retryOrFail): what went to the driver, and how to send it
-// again, once. A command with nothing to send that waits for an "off" on
-// its way shares that off's, so the off goes again once in all, when the
-// off's time is up, and fails with it when it cannot go.
+// time: what went to the driver, and how to send it again, once. A
+// command with nothing to send that waits for an "off" on its way shares
+// that off's, so the off goes again once in all, when the off's time is
+// up, and fails with it when it cannot go.
 type Retry = {
   send: State;
   deliver: (send: State) => Promise<void>;

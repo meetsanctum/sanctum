@@ -1,17 +1,16 @@
 import type { ZigbeeMessage } from "./types.js";
 
 // Messages wait here while the driver handles them one at a time, in order,
-// since each may call the core. Ported from v1's zigbee2mqtt-message-queue.ts
-// (Pragmata v1-final): a message that only says what something is now (the
-// device list, the bridge's state and info, a device's availability)
-// replaces any older one of its topic still waiting, and the queue holds a
-// bounded number, dropping retained and replaceable messages first.
+// since each may call the core. A message that only says what something is
+// now (the device list, the bridge's state and info, a device's
+// availability) replaces any older one of its topic still waiting, and the
+// queue holds a bounded number, dropping retained and replaceable messages
+// first.
 //
-// v1 also took live messages before retained ones, to get through the
-// retained backlog of every device's state at start. This driver subscribes
-// to each device's topics once it knows the device, so little is retained,
-// and it keeps the order: a device's retained availability, older than any
-// live message after it, cannot overwrite what that message said.
+// Live messages do not go before retained ones. The driver subscribes to
+// each device's topics once it knows the device, so little is retained, and
+// it keeps the order: a device's retained availability, older than any live
+// message after it, cannot overwrite what that message said.
 
 export const messageQueueCapacity = 2_000;
 

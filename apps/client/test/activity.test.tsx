@@ -28,7 +28,6 @@ describe("a live list", () => {
       subject: { type: "device", id: device, name: device, gone: false },
     });
 
-  // Ported from v1's device-admin.test.ts.
   it("reduces live device activity newest-first, target-only, and capped", () => {
     const belongs = belongsTo({ device: "desk-light" });
     const reduced = Array.from({ length: 205 }, (_, index) =>

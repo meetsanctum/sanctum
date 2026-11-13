@@ -12,8 +12,8 @@ import type { CoreDatabase } from "../database.js";
 import { workflowRunSteps, workflowRuns, type RunTrigger } from "./schema.js";
 
 // A workflow's run history: each run, and each condition and step it
-// reached, with what went in and came out. A workflow keeps its latest runs
-// only, as v1 showed them.
+// reached, with what went in and came out. A workflow keeps its latest
+// runs only.
 
 export const keptRuns = 50;
 

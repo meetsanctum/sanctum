@@ -10,8 +10,7 @@ import {
   type CapabilitySync,
 } from "../src/devices/sync.js";
 
-// Desired and observed state, ported from v1's device-state-model.ts and the
-// behaviour its Zigbee state tests relied on.
+// Desired and observed state, and how they are reconciled.
 
 const offLight: CapabilitySync = {
   kind: "light",
@@ -510,8 +509,8 @@ describe("a report from before an earlier command", () => {
   });
 });
 
-// v1's light brightness recovery (Pragmata 5b9230e): many lights report their
-// lowest level once off, and a plain "on" would bring them back almost dark.
+// Many lights report their lowest level once off, and a plain "on" would
+// bring them back almost dark.
 describe("a light's brightness", () => {
   const lamp = (
     observed: Record<string, unknown> | null,
@@ -634,7 +633,7 @@ describe("a light's brightness", () => {
   });
 
   it("comes back at 1% for a light that was at 1% before it went off", () => {
-    // Set to 1% as a night light, then turned off. v1 brought it back at 100.
+    // Set to 1% as a night light, then turned off.
     const off = observe(lamp({ on: true, brightness: 1 }), {
       on: false,
       brightness: 1,

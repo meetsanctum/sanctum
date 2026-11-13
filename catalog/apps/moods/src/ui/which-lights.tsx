@@ -14,8 +14,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 
 // Which lights a press is for: the remote's room, a zone with it, all
-// lights, or some lights, chosen from a list of the home's lights by room as
-// v1 chose them for button bindings.
+// lights, or some lights, chosen from a list of the home's lights by room.
 // A choice applies at once, as the press's own page does.
 
 export function WhichLightsPage(props: {

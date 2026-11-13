@@ -7,9 +7,8 @@ import { get, post, sharedClient, type TestCore } from "./support.js";
 
 // What each press of a remote does, end to end: Moods keeps a workflow for each
 // press the household chooses, and for a remote in a room one for the presses
-// it has not chosen, which switch the room's lights as v1's default toggle did
-// (core-runtime-suppressions.test.ts, app.ts's maybeRunDefaultButtonAction) and
-// whose hold brightens or dims them while it lasts.
+// it has not chosen, which switch the room's lights and whose hold brightens or
+// dims them while it lasts.
 
 async function home() {
   const moods = await loadAppPackage(
@@ -357,7 +356,6 @@ describe("a remote's presses", () => {
   });
 
   it("are held back while someone finds a press, the default toggle too", async () => {
-    // v1's "suppresses the default room toggle for the scoped button device".
     const { core, maya, lamp, remote } = await home();
     const capture = (
       await post(core, "/api/devices/capture/start", { device: remote }, maya)

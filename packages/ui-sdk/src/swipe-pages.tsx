@@ -11,12 +11,12 @@ import {
 
 import { ScrollArea } from "./components/ui/scroll-area";
 
-// Pages side by side, as v1's device detail had them: a finger swipes
-// between them, and so does a mouse; along the bottom a tab for each, an
-// icon with a dot under the current one, which a click or the arrow keys
-// change too. One page has no tabs. They fill their parent's height, an
-// overlay's glass edge to edge, each page in the middle of the room above
-// the tabs, and only a page taller than that room scrolls, on its own.
+// Pages side by side: a finger swipes between them, and so does a mouse;
+// along the bottom a tab for each, an icon with a dot under the current one,
+// which a click or the arrow keys change too. One page has no tabs. They
+// fill their parent's height, an overlay's glass edge to edge, each page in
+// the middle of the room above the tabs, and only a page taller than that
+// room scrolls, on its own.
 
 // How far a press moves before it is a swipe, and how far a swipe goes to
 // turn the page, in px.

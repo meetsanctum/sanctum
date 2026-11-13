@@ -4,13 +4,10 @@ import type { ZigbeeExpose } from "./types.js";
 import { stringValue } from "./values.js";
 
 // A remote's presses: the actions its action expose declares, which of them
-// are holds, and what a device's message carries. Ported from v1's
-// actionValuesFromExposes (zigbee2mqtt-model.ts) and
-// isReleaseLikeButtonAction (button-actions.ts, Pragmata v1-final). v1 kept
-// the last action as the button's state and ignored release-like ones; here
-// each press goes to the core once, a hold once however often the remote
-// repeats it, and a release-like action, such as a hold's end, tells the
-// core the button was let go.
+// are holds, and what a device's message carries. Each press goes to the
+// core once, a hold once however often the remote repeats it, and a
+// release-like action, such as a hold's end, tells the core the button was
+// let go.
 
 const releaseLike = /(?:^|[_\s-])(release|released|stop|end)(?:$|[_\s-])/i;
 // A press that lasts until its release: Hue's up_hold, Aqara's hold and

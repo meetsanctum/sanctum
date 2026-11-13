@@ -10,8 +10,6 @@ import type { CoreBridge } from "./client";
 // A remote's presses on screen: what to call each of its actions, its
 // presses by button, and capturing the next presses while someone picks one,
 // as binding a button to a mood or choosing a press trigger does.
-// Ported from v1's formatButtonAction (button-action-common.ts) and
-// useButtonActionCapture (Pragmata v1-final), in sentence case.
 
 // What the common actions are called, alone or after a button's number.
 const common = new Map([

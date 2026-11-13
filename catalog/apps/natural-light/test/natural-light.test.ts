@@ -18,10 +18,9 @@ import { defaultCurve } from "../src/settings.js";
 import { sunToday } from "../src/sun.js";
 import { fakeCore, zurich } from "./fake-core.js";
 
-// Lights following the curve, as v1's natural lighting did: a light that
-// follows it is set to it at once, kept on it as the day goes, comes back on
-// at it, and is paused while a mood or a person has set it, until it is
-// switched off.
+// Lights following the curve: a light that follows it is set to it at once,
+// kept on it as the day goes, comes back on at it, and is paused while a
+// mood or a person has set it, until it is switched off.
 
 const appId = "sanctum.natural-light";
 const maya: Actor = { kind: "user", id: "maya" };

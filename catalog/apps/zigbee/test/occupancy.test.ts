@@ -17,8 +17,7 @@ import {
 } from "./motion-sensors.js";
 
 // A motion sensor's occupancy and settings (occupancy.ts), for the motion
-// sensors the household has. v1 made a generic binary sensor of occupancy
-// and had no settings, so these are new.
+// sensors the household has.
 
 function occupancyOf(device: ZigbeeDevice, detectionInterval?: number) {
   const mapping = capabilityMappings(device.definition?.exposes ?? [], {

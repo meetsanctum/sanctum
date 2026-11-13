@@ -43,19 +43,17 @@ import {
 
 // The driver's connection to Zigbee2MQTT, through the broker account the
 // core hands it (ctx.services.connection), from the app's start until its
-// stop. Rewritten from v1's createZigbee2mqttIntegration and its handlers
-// (zigbee2mqtt.ts, zigbee2mqtt-handlers.ts, Pragmata v1-final) against the
-// Drivers contract: the devices Zigbee2MQTT lists are registered with the
-// core, what they say is reported, and the core's commands are published on
-// <device>/set for the device's report to confirm, as are its moves of a
-// light's brightness while a remote is held, or for how long an Aqara
-// motion sensor waits, as Zigbee2MQTT's device option (motion-timing.ts).
-// While the core lets devices join, the driver says how each one that
-// joins is getting on, and it asks Zigbee2MQTT to remove a device when the
-// core removes it. It
-// follows each device's firmware as Zigbee2MQTT publishes it with the
-// device's state, and checks for, starts and stops updates over the air
-// and asks a device how it is when someone asks.
+// stop. It keeps the Drivers contract: the devices Zigbee2MQTT lists are
+// registered with the core, what they say is reported, and the core's
+// commands are published on <device>/set for the device's report to
+// confirm, as are its moves of a light's brightness while a remote is held,
+// or for how long an Aqara motion sensor waits, as Zigbee2MQTT's device
+// option (motion-timing.ts). While the core lets devices join, the driver
+// says how each one that joins is getting on, and it asks Zigbee2MQTT to
+// remove a device when the core removes it. It follows each device's
+// firmware as Zigbee2MQTT publishes it with the device's state, and checks
+// for, starts and stops updates over the air and asks a device how it is
+// when someone asks.
 
 export type BridgeOptions = {
   /** How long Zigbee2MQTT has to answer a request, in ms. */
@@ -430,7 +428,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   ) {
     const availability = availabilityValue(payload);
     // A battery-powered device that has not been heard from is likely
-    // asleep rather than gone (v1's normalizeDeviceAvailability).
+    // asleep rather than gone.
     await ctx.devices.report({
       key: device.key,
       availability:

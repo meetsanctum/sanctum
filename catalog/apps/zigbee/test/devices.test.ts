@@ -8,8 +8,7 @@ import {
   zigbeeDevice,
 } from "./pretend-bridge.js";
 
-// Zigbee2MQTT's device list onto what the driver registers, from v1's
-// handleDevices tests (core-zigbee-pairing.test.ts, core-zigbee-state.test.ts).
+// Zigbee2MQTT's device list onto what the driver registers.
 
 const lamp = zigbeeDevice("0x00124b0001abcd", "desk_lamp", [
   lightExpose({ colorTemperature: [200, 454], color: "color_hs" }),
@@ -44,7 +43,7 @@ describe("the device list", () => {
   });
 
   it("registers a remote with its buttons' presses", () => {
-    // v1's office button, as Zigbee2MQTT listed it.
+    // An office button, as Zigbee2MQTT lists it.
     const [entry] = deviceEntries([
       zigbeeDevice(
         "0x00158d0003c4d5e6",
@@ -129,7 +128,7 @@ describe("the device list", () => {
       interviewing: true,
       interview_state: "IN_PROGRESS",
     });
-    // v1's ghost devices: unsupported and failed to interview.
+    // Ghost devices: unsupported and failed to interview.
     const ghost = zigbeeDevice("0x05", "0x05", [switchExpose()], {
       supported: false,
       interview_completed: false,

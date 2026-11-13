@@ -32,8 +32,8 @@ const json = (body: unknown, status = 200) =>
 const elevationAtZurich =
   "https://api.open-meteo.com/v1/elevation?latitude=47.3769&longitude=8.5417";
 
-// The services the suggestion asks, as v1's tests had them, and Open-Meteo
-// for the elevation unless it is down.
+// The services the suggestion asks, and Open-Meteo for the elevation
+// unless it is down.
 function locationServices(options: { openMeteo?: "down" } = {}) {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input);
