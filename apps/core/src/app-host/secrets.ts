@@ -14,9 +14,9 @@ import {
 import {
   closeSync,
   fsyncSync,
+  linkSync,
   openSync,
   readFileSync,
-  renameSync,
   rmSync,
   writeSync,
 } from "node:fs";
@@ -52,21 +52,26 @@ export const secretValue = z
     `A secret is at most ${maxSecretBytes} bytes`,
   );
 
-// The key, made once and on the disk before anything is sealed with it.
+// The key, made once and on the disk before anything is sealed with it. It's
+// written whole under a name of its own, then linked into place, which never
+// replaces a key already there: a core that finds one put there meanwhile, by
+// another started on the same data, seals with that one instead.
 function keyIn(dataDir: string) {
   const path = join(dataDir, secretsKeyFile);
-  try {
+  const read = () => {
     const key = readFileSync(path);
     if (key.length !== keyBytes) {
       throw new Error(`${path} is not a key of ${keyBytes} bytes`);
     }
     return key;
+  };
+  try {
+    return read();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   const key = randomBytes(keyBytes);
-  const partial = `${path}.partial`;
-  rmSync(partial, { force: true });
+  const partial = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.partial`;
   const file = openSync(partial, "wx", 0o600);
   try {
     writeSync(file, key);
@@ -74,14 +79,22 @@ function keyIn(dataDir: string) {
   } finally {
     closeSync(file);
   }
-  renameSync(partial, path);
+  let published = true;
+  try {
+    linkSync(partial, path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    published = false;
+  } finally {
+    rmSync(partial, { force: true });
+  }
   const folder = openSync(dataDir, "r");
   try {
     fsyncSync(folder);
   } finally {
     closeSync(folder);
   }
-  return key;
+  return published ? key : read();
 }
 
 // What each secret is sealed with names its app and name, so a sealed value

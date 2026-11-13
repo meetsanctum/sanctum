@@ -1,5 +1,12 @@
 import { defineAction, defineApp, maxAppSecrets } from "@meetsanctum/app-sdk";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -170,9 +177,24 @@ describe("the core's sealed secrets", () => {
     const key = join(dataDir, secretsKeyFile);
     expect((await readFile(key)).length).toBe(32);
     expect((await stat(key)).mode & 0o777).toBe(0o600);
+    expect(await readdir(dataDir)).not.toContainEqual(
+      expect.stringMatching(/\.partial$/),
+    );
 
     const again = createAppSecrets(open().db, { dataDir, log() {} });
     expect(again.get("test.keeper", "device")).toBe(value);
+  });
+
+  it("are sealed with a key already there, never replacing it", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "sanctum-secrets-"));
+    const there = Buffer.alloc(32, 7);
+    await writeFile(join(dataDir, secretsKeyFile), there, { mode: 0o600 });
+
+    const secrets = createAppSecrets(open().db, { dataDir, log() {} });
+    secrets.put("test.keeper", "device", value);
+
+    expect(await readFile(join(dataDir, secretsKeyFile))).toEqual(there);
+    expect(secrets.get("test.keeper", "device")).toBe(value);
   });
 
   it("open only in the row they were sealed for", async () => {
