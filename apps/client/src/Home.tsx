@@ -603,7 +603,7 @@ export function Home(props: {
                       ) : (
                         <CategoryPage
                           key={`${routes.length}:${JSON.stringify(route)}`}
-                          kind={route.params.kind ?? ""}
+                          id={route.params.id ?? ""}
                           devices={devices}
                           openDevice={openDevice}
                           openRoom={(id) => opener(placePages)("room", { id })}
@@ -681,12 +681,12 @@ export function Home(props: {
                             openMaintenance={() =>
                               opener(settingsApp.id)(maintenanceSettingsPage)
                             }
-                            openCategory={(kind) =>
+                            openCategory={(id) =>
                               setRoutes([
                                 {
                                   app: placePages,
                                   page: "category",
-                                  params: { kind },
+                                  params: { id },
                                 },
                               ])
                             }

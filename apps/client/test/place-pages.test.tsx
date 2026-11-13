@@ -68,7 +68,7 @@ function Harness(props: {
   ) : (
     <>
       <CategoryPage
-        kind={props.id}
+        id={props.id}
         devices={shown}
         openDevice={openDevice}
         openRoom={() => {}}
@@ -77,7 +77,7 @@ function Harness(props: {
       <nav>
         <SidebarPlaces
           devices={shown}
-          current={{ page: "category", params: { kind: props.id } }}
+          current={{ page: "category", params: { id: props.id } }}
           open={() => {}}
         />
       </nav>
@@ -185,7 +185,7 @@ describe("all the lights", () => {
         ],
       },
     ];
-    await show("category", "button");
+    await show("category", "buttons");
     expect(container.querySelector("header")?.textContent).toBe("Buttons");
     await act(async () => {
       live.publish({
@@ -211,7 +211,7 @@ describe("all the lights", () => {
   });
 
   it("of the home, from Lights' page", async () => {
-    await show("category", "light");
+    await show("category", "lights");
     await click(button("Turn off all the lights"));
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "home" }, to: "toggle" },
@@ -229,7 +229,7 @@ describe("all the lights", () => {
 
 describe("a category's page", () => {
   it("shows its tiles by room, devices with no room last, and the sidebar marks it", async () => {
-    await show("category", "light");
+    await show("category", "lights");
     expect(container.querySelector("h1")?.textContent).toBe("Lights");
     expect(headings()).toEqual([
       "Office",
@@ -249,7 +249,7 @@ describe("a category's page", () => {
 
   it("is not in the sidebar while the home has none of its devices", async () => {
     devices = [lamp];
-    await show("category", "light");
+    await show("category", "lights");
     expect(
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
@@ -450,7 +450,7 @@ describe("the climate", () => {
       sensor("desk", "office", 21.5, 48),
       sensor("hall", "hall", 19.5, 58),
     ];
-    await show("category", "sensor");
+    await show("category", "environment");
 
     expect(container.querySelector("h1")?.textContent).toBe("Environment");
     expect(container.querySelector("header p")?.textContent).toBe(
@@ -522,7 +522,7 @@ describe("the home's status", () => {
       "Environment, 19.5 to 21.5°",
     );
     await click(tiles()[0] as HTMLElement);
-    expect(openCategory).toHaveBeenCalledWith("sensor");
+    expect(openCategory).toHaveBeenCalledWith("environment");
   });
 
   it("ends with Batteries while a battery is to replace, which opens Maintenance", async () => {

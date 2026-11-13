@@ -180,7 +180,7 @@ function Harness(props: { page: "room" | "category" | "status"; id: string }) {
   ) : (
     <>
       <CategoryPage
-        kind={props.id}
+        id={props.id}
         devices={shown}
         openDevice={() => {}}
         openRoom={openRoom}
@@ -189,7 +189,7 @@ function Harness(props: { page: "room" | "category" | "status"; id: string }) {
       <nav>
         <SidebarPlaces
           devices={shown}
-          current={{ page: "category", params: { kind: props.id } }}
+          current={{ page: "category", params: { id: props.id } }}
           open={() => {}}
         />
       </nav>
@@ -355,7 +355,7 @@ describe("the Presence category", () => {
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
       loose(),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
 
     expect(container.querySelector("h1")?.textContent).toBe("Presence");
     // Nothing under its name: the overview says where there is motion.
@@ -379,7 +379,7 @@ describe("the Presence category", () => {
       climate("desk", "office", 21.5, 48),
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
     expect(overviewRows()).toEqual(["HallQuiet for 30 min"]);
   });
 
@@ -388,7 +388,7 @@ describe("the Presence category", () => {
     devices = [
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
 
     const ticks = container.querySelector<HTMLElement>(
       "section[aria-labelledby] [aria-hidden='true']",
@@ -407,7 +407,7 @@ describe("the Presence category", () => {
     devices = [
       motionSensor("hall", "hall", { occupied: true, minutesAgo: 120 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
 
     expect(overviewRows()).toEqual(["HallMotion now"]);
     expect(container.querySelectorAll("li > button rect")).toHaveLength(0);
@@ -420,7 +420,7 @@ describe("the Presence category", () => {
     devices = [
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
     vi.mocked(coreJson).mockImplementation(() => new Promise(() => {}));
     vi.setSystemTime(Date.now() + 30_000);
     const moving = motionSensor("hall", "hall", {
@@ -445,7 +445,7 @@ describe("the Presence category", () => {
     });
     recorded = { hall: [[Date.now() - 10 * minute, true]] };
     devices = [moving];
-    await show("category", "occupancy");
+    await show("category", "presence");
     vi.mocked(coreJson).mockRejectedValue(new Error("History unavailable"));
     await act(async () => vi.advanceTimersByTime(minute));
     await act(async () => {
@@ -489,7 +489,7 @@ describe("the Presence category", () => {
         ? new Promise(() => {})
         : request(path, init),
     );
-    await show("category", "occupancy");
+    await show("category", "presence");
 
     expect(
       container.querySelectorAll("li > button")[1]?.getAttribute("aria-label"),
@@ -502,7 +502,7 @@ describe("the Presence category", () => {
     devices = [
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
     let answerOlder!: (history: DeviceHistory) => void;
     let answerNewer!: (history: DeviceHistory) => void;
     const older = historyOf("?device=hall&capability=occupancy");
@@ -547,7 +547,7 @@ describe("the Presence category", () => {
       motionSensor("office", "office", { occupied: false, minutesAgo: 60 }),
       motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
     vi.mocked(coreJson).mockClear();
     await act(async () => vi.advanceTimersByTime(4 * minute));
     const moving = motionSensor("office", "office", {
@@ -587,7 +587,7 @@ describe("the Presence category", () => {
       motionSensor("door", "office", { occupied: false, minutesAgo: 300 }),
       motionSensor("desk", "office", { occupied: false, minutesAgo: 240 }),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
 
     const row = container.querySelector<HTMLButtonElement>("li > button")!;
     expect(row.getAttribute("aria-label")).toBe(
@@ -607,7 +607,7 @@ describe("the Presence category", () => {
         "offline",
       ),
     ];
-    await show("category", "occupancy");
+    await show("category", "presence");
     expect(overviewRows()).toEqual(["HallOffline"]);
   });
 });
@@ -621,7 +621,7 @@ describe("the Environment category", () => {
       }),
       climate("desk", "hall", 19.5, 58),
     ];
-    await show("category", "sensor");
+    await show("category", "environment");
     expect(container.querySelector("header p")?.textContent).toBe(
       "19.5–21° · 58%",
     );
@@ -649,7 +649,7 @@ describe("the home's status", () => {
       "button[aria-label='Presence, Office and Hall']",
     )!;
     await act(async () => tile.click());
-    expect(openCategory).toHaveBeenCalledWith("occupancy");
+    expect(openCategory).toHaveBeenCalledWith("presence");
   });
 
   it("says Quiet, or No readings while no motion sensor answers", async () => {
