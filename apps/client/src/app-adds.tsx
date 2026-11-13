@@ -259,7 +259,12 @@ export function AppAdds(props: {
             const devices = now.devices.filter((device) =>
               device.capabilities.some((each) => kinds.has(each.kind)),
             );
-            const nouns = page.kinds.map(
+            // A kind this build has no words for is left out of the line.
+            const known = page.kinds.filter((kind) =>
+              Object.hasOwn(kindNouns, kind),
+            );
+            if (known.length === 0) return null;
+            const nouns = known.map(
               (kind) => kindNouns[kind][devices.length === 1 ? 0 : 1],
             );
             return (
@@ -269,7 +274,7 @@ export function AppAdds(props: {
                 title={page.title}
                 detail={
                   devices.length === 0
-                    ? `In the detail of ${list(page.kinds.map((kind) => kindNouns[kind][1]))}`
+                    ? `In the detail of ${list(known.map((kind) => kindNouns[kind][1]))}`
                     : `In the detail of your ${devices.length === 1 ? "" : `${devices.length} `}${list(nouns)}`
                 }
               />

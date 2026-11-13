@@ -66,6 +66,14 @@ const both = device("both", [
   capability("light", "light"),
   capability("switch", "switch"),
 ]);
+// A kind this build has not heard of, as a core newer than it might serve.
+const valve = {
+  ...capability("valve", "switch"),
+  kind: "valve",
+} as unknown as CapabilityInfo;
+const tap = { ...device("tap", [capability("light", "light")]) };
+tap.capabilities = [...tap.capabilities, valve];
+const drain = { ...device("drain", []), capabilities: [valve] };
 const places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" as const },
   floors: [],
@@ -150,6 +158,30 @@ describe("an app's client", () => {
     ).toEqual([
       ["lamp", ["light"]],
       ["both", ["light"]],
+    ]);
+  });
+
+  it("skips the parts of a kind this build does not know, though the app may read it", async () => {
+    const { client, json, live } = setup([
+      "devices.read:light",
+      "devices.read:valve",
+    ]);
+    json.mockImplementation(async () => [tap, drain]);
+    expect(await client.devices()).toEqual([
+      { ...tap, capabilities: [tap.capabilities[0]] },
+    ]);
+
+    const messages: LiveMessage[] = [];
+    client.subscribe({ message: (message) => messages.push(message) });
+    live.publish({ type: "device", id: "tap", device: tap });
+    live.publish({ type: "device", id: "drain", device: drain });
+    expect(messages).toEqual([
+      {
+        type: "device",
+        id: "tap",
+        device: { ...tap, capabilities: [tap.capabilities[0]] },
+      },
+      { type: "device", id: "drain", device: null },
     ]);
   });
 
@@ -462,6 +494,31 @@ describe("an app's client", () => {
     // Another app's settings never reach it.
     expect(messages).toEqual([
       { type: "settings", app: "test.lights", settings: {} },
+    ]);
+  });
+});
+
+describe("the shell's live feed", () => {
+  it("hands every listener a device with the parts this build knows", () => {
+    const live = createLiveFeed();
+    const messages: LiveMessage[] = [];
+    live.subscribe({ message: (message) => messages.push(message) });
+
+    live.publish({ type: "device", id: "tap", device: tap });
+    live.publish({ type: "device", id: "drain", device: drain });
+    live.publish({ type: "device", id: "lamp", device: lamp });
+    live.publish({ type: "device", id: "gone", device: null });
+
+    expect(messages).toEqual([
+      {
+        type: "device",
+        id: "tap",
+        device: { ...tap, capabilities: [tap.capabilities[0]] },
+      },
+      // Nothing of it is known here: a device this build cannot use.
+      { type: "device", id: "drain", device: { ...drain, capabilities: [] } },
+      { type: "device", id: "lamp", device: lamp },
+      { type: "device", id: "gone", device: null },
     ]);
   });
 });

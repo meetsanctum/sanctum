@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { Progress } from "./components/ui/progress";
+import { coreDevice, coreDevices } from "./core-devices";
 import { CoreError, coreJson } from "./core-fetch";
 import type { OnHome } from "./dashboards";
 import {
@@ -180,7 +181,7 @@ export function DevicesSection(props: {
     pending.current = request;
     try {
       const [nextDevices, places, histories] = await Promise.all([
-        coreJson<DeviceInfo[]>("/api/devices"),
+        coreDevices(),
         coreJson<Places>("/api/places"),
         // Without them, the menus leave the choice out.
         coreJson<HistoryKept[]>("/api/history/devices").catch(() => []),
@@ -327,13 +328,10 @@ export function DevicesSection(props: {
     hook: "check" | "update" | "stop",
   ) => {
     const before = liveDevices.current.get(device.id);
-    const response = await coreJson<DeviceInfo>(
-      `/api/devices/firmware/${hook}`,
-      {
-        method: "POST",
-        json: { id: device.id },
-      },
-    );
+    const response = await coreDevice(`/api/devices/firmware/${hook}`, {
+      method: "POST",
+      json: { id: device.id },
+    });
     const latest = liveDevices.current.get(device.id);
     if (latest === before) {
       changed(response);

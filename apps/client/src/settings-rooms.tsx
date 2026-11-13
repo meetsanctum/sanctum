@@ -31,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
+import { coreDevices } from "./core-devices";
 import { CoreError, coreJson } from "./core-fetch";
 
 // Settings → Rooms: the home's rooms, which the core keeps, with their floor
@@ -149,7 +150,7 @@ export function RoomsSection(props: {
     try {
       const [nextPlaces, nextDevices] = await Promise.all([
         coreJson<Places>("/api/places"),
-        coreJson<DeviceInfo[]>("/api/devices"),
+        coreDevices(),
       ]);
       if (pending.current !== request) return;
       setPlaces(

@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Section } from "../components";
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
+import { coreDevices } from "../core-devices";
 import { coreJson } from "../core-fetch";
 import { daysOf, foldCauses, useActivity, type Folded } from "./data";
 import {
@@ -51,7 +52,7 @@ function usePlacesAndDevices() {
     coreJson<Places>("/api/places")
       .then((next) => isCurrent && setPlaces(next))
       .catch(() => undefined);
-    coreJson<DeviceInfo[]>("/api/devices")
+    coreDevices()
       .then((next) => isCurrent && setDevices(next))
       .catch(() => undefined);
     return () => {

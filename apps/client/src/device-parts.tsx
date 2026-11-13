@@ -19,7 +19,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
-import { CoreError, coreJson } from "./core-fetch";
+import { coreDevice } from "./core-devices";
+import { CoreError } from "./core-fetch";
 
 // What Settings → Devices and adding devices share: a device's icon, the
 // room it is in, and saving what the household decides about it.
@@ -64,7 +65,7 @@ export function updateDevice(
   id: string,
   changes: { name?: string | null; roomId?: string | null },
 ) {
-  return coreJson<DeviceInfo>("/api/devices/update", {
+  return coreDevice("/api/devices/update", {
     method: "POST",
     json: { id, ...changes },
   });

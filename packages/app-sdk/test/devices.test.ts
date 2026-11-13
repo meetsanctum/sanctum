@@ -10,6 +10,7 @@ import {
   deviceRegistration,
   deviceRelease,
   deviceReport,
+  knownParts,
   light,
   lightMove,
   lowBattery,
@@ -17,6 +18,7 @@ import {
   onBattery,
   pressParts,
   switchCapability,
+  type CapabilityInfo,
   type DeviceInfo,
   type FirmwareInfo,
 } from "../src/index.js";
@@ -525,5 +527,56 @@ describe("what a device needs from the household", () => {
       maintenanceOf({ ...light, firmware: firmware({ state: null }) }, now),
     ).toBeNull();
     expect(maintenanceOf({ ...light, firmware: null }, now)).toBeNull();
+  });
+});
+
+describe("a device from a core newer than this build", () => {
+  const power: CapabilityInfo = {
+    id: "power",
+    kind: "switch",
+    features: {},
+    state: { on: true },
+    observed: { on: true },
+    desired: null,
+    sync: "synced",
+    setBy: null,
+    changedAt: null,
+  };
+  // A kind this build has not heard of, as a later core might serve it.
+  const valve = {
+    ...power,
+    id: "valve",
+    kind: "valve",
+  } as unknown as CapabilityInfo;
+  const device = (capabilities: CapabilityInfo[]): DeviceInfo => ({
+    id: "tap",
+    name: "Garden tap",
+    driver: "sanctum.example",
+    manufacturer: null,
+    model: null,
+    roomId: null,
+    driverName: "Tap",
+    type: "plug",
+    availability: "online",
+    lastSeenAt: null,
+    capabilities,
+    firmware: null,
+    probe: false,
+    battery: null,
+    leftAt: null,
+  });
+
+  it("keeps the parts of the kinds it knows and skips the others", () => {
+    const tap = device([valve, power]);
+    expect(knownParts(tap)).toEqual({ ...tap, capabilities: [power] });
+  });
+
+  it("is left with no parts when it knows none of them", () => {
+    expect(knownParts(device([valve])).capabilities).toEqual([]);
+  });
+
+  it("is the same device when it knows every part", () => {
+    const tap = device([power]);
+    expect(knownParts(tap)).toBe(tap);
   });
 });

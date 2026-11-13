@@ -488,6 +488,22 @@ describe("an app's settings page", () => {
     expect(text()).toContain("PressesIn the detail of your 2 remotes");
   });
 
+  it("leaves a kind this build has no words for out of that line", async () => {
+    const page = moods.provides.devicePages[0]!;
+    const withKinds = (kinds: string[]): AppInfo => ({
+      ...moods,
+      provides: {
+        ...moods.provides,
+        devicePages: [{ ...page, kinds: kinds as typeof page.kinds }],
+      },
+    });
+    await show(withKinds(["valve", "button"]));
+    expect(text()).toContain("PressesIn the detail of your 2 remotes");
+
+    await show(withKinds(["valve"]));
+    expect(text()).not.toContain("PressesIn the detail");
+  });
+
   it("says which devices a driver brings", async () => {
     await show(zigbee);
 
