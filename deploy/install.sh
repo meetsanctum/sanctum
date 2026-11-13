@@ -300,35 +300,41 @@ listed() {
   [[ "$kind" != container ]] || name=Names
   for label in sanctum.managed=true com.docker.compose.project=sanctum; do
     docker "$kind" ls "$@" --filter "label=${label}" \
-      --format "{{if .Label \"sanctum.stack\"}}{{else}}{{.${name}}}{{end}}"
+      --format "{{if .Label \"sanctum.stack\"}}{{else}}{{.${name}}}{{end}}" || return 1
   done | awk 'NF && !seen[$0]++'
 }
 
 # The images Sanctum is built into, and those the given containers run.
 images_of() {
-  local each
-  for each in $(docker image ls -q --filter label=sanctum.service); do
-    [[ -n "$(docker image inspect -f '{{index .Config.Labels "sanctum.stack"}}' "$each")" ]] ||
-      echo "$each"
+  local each images image_stack
+  images="$(docker image ls -q --filter label=sanctum.service)" || return 1
+  for each in $images; do
+    image_stack="$(docker image inspect -f '{{index .Config.Labels "sanctum.stack"}}' "$each")" || return 1
+    [[ -n "$image_stack" ]] || echo "$each"
   done
   for each in "$@"; do
-    docker inspect -f '{{.Image}}' "$each" 2>/dev/null || true
+    docker inspect -f '{{.Image}}' "$each" || return 1
   done
 }
 
 # Only what this installer set up, whole or cut short: its manager, or with no
 # manager its files in /opt/sanctum. Returns 1 where there is no Sanctum.
 check_removal() {
-  local kept
-  if docker inspect sanctum-manager >/dev/null 2>&1; then
+  local kept manager containers volumes networks
+  manager="$(docker container ls -a --filter 'name=^/sanctum-manager$' --format '{{.Names}}')" ||
+    die "Could not find Sanctum's manager. Nothing was changed."
+  if [[ -n "$manager" ]]; then
     manager_is_the_installers ||
       die "Sanctum here was set up another way than by this installer, which removes only what it set up. Nothing was changed."
   elif [[ ! -f "$dir/compose.yml" && ! -f "$dir/.env" ]]; then
-    [[ -z "$(listed container -a)$(listed volume)$(listed network)" ]] ||
+    containers="$(listed container -a)" || die "Could not list Sanctum's containers. Nothing was changed."
+    volumes="$(listed volume)" || die "Could not list Sanctum's volumes. Nothing was changed."
+    networks="$(listed network)" || die "Could not list Sanctum's networks. Nothing was changed."
+    [[ -z "$containers$volumes$networks" ]] ||
       die "Sanctum here was set up another way than by this installer, which removes only what it set up. Nothing was changed."
     return 1
   fi
-  kept="$(kept_setting SANCTUM_CHANNEL)"
+  kept="$(kept_setting SANCTUM_CHANNEL)" || die "Could not read Sanctum's settings. Nothing was changed."
   [[ -z "$kept" || "$kept" == stable || "$kept" == edge ]] ||
     die "Sanctum here is on the ${kept} channel, set up another way than by this installer. Nothing was changed."
 }
@@ -369,7 +375,7 @@ detach_images() {
 }
 
 remove_from_docker() {
-  local containers volumes networks images each
+  local containers volumes networks images each in_use
   containers="$(listed container -a)"
   if [[ -n "$containers" ]]; then
     say "Stopping Sanctum"
@@ -385,6 +391,13 @@ remove_from_docker() {
   say "Removing Sanctum and your home's data"
   # shellcheck disable=SC2086
   images="$(images_of $containers | sort -u)"
+  # A retry must remember the third-party images after their containers go.
+  if [[ -f "$dir/.uninstall-images" ]]; then
+    images+=$'\n'"$(cat "$dir/.uninstall-images")"
+  fi
+  images="$(sort -u <<<"$images")"
+  printf '%s\n' "$images" >"$dir/.uninstall-images.download"
+  mv "$dir/.uninstall-images.download" "$dir/.uninstall-images"
   if [[ -n "$containers" ]]; then
     # shellcheck disable=SC2086
     docker rm -f -v $containers >/dev/null
@@ -404,7 +417,8 @@ remove_from_docker() {
   fi
   # An image something else's container runs stays.
   for each in $images; do
-    [[ -z "$(docker ps -aq --filter "ancestor=${each}")" ]] || continue
+    in_use="$(docker ps -aq --filter "ancestor=${each}")"
+    [[ -z "$in_use" ]] || continue
     docker image rm -f "$each" >/dev/null 2>&1 || true
   done
 }
@@ -444,7 +458,8 @@ remove() {
   confirm_removal
   remove_from_docker
   let_sleep
-  rm -f "$dir/compose.yml" "$dir/compose.yml.download" "$dir/.env" "$dir/.env.download"
+  rm -f "$dir/compose.yml" "$dir/compose.yml.download" "$dir/.env" "$dir/.env.download" \
+    "$dir/.uninstall-images" "$dir/.uninstall-images.download"
   rmdir "$dir" 2>/dev/null || true
   say "Sanctum is removed"
   echo "Docker stays installed."

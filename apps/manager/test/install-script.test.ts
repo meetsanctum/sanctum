@@ -72,6 +72,20 @@ appendFileSync(env.INSTALL_TEST_COMMANDS, JSON.stringify({
 }) + "\\n");
 const format = args.join(" ");
 const held = JSON.parse(env.INSTALL_TEST_DOCKER || "{}");
+const isManagerLookup = (args[0] === "inspect" && args.length === 2) ||
+  (args[0] === "container" && args[1] === "ls" && format.includes("name=^/sanctum-manager$"));
+if (isManagerLookup && env.INSTALL_TEST_FAIL_MANAGER_LOOKUP) {
+  console.error("Manager lookup failed");
+  process.exit(1);
+}
+if (args[0] === "container" && isManagerLookup) {
+  if (env.INSTALL_TEST_MANAGER) console.log("sanctum-manager");
+  process.exit(0);
+}
+if (env.INSTALL_TEST_FAIL_COMMAND && format.includes(env.INSTALL_TEST_FAIL_COMMAND)) {
+  console.error("Docker query failed");
+  process.exit(1);
+}
 if (args[0] === "info" && env.INSTALL_TEST_DOCKER_STOPPED) process.exit(1);
 if (args[1] === "ls" && args[0] !== "image") {
   const label = args[args.indexOf("--filter") + 1].replace("label=", "");
@@ -514,6 +528,21 @@ describe("host installer, removing", () => {
     expect(changing(await host.commands())).toEqual([]);
   });
 
+  it("does not bypass ownership checks when finding the manager fails", async () => {
+    const host = await installation();
+    await host.save();
+
+    await expect(
+      host.uninstall(home, {
+        args: ["--yes"],
+        env: { INSTALL_TEST_FAIL_MANAGER_LOOKUP: "1" },
+      }),
+    ).rejects.toThrow("Manager lookup failed");
+
+    expect(changing(await host.commands())).toEqual([]);
+    expect(await host.settings()).toContain("SANCTUM_CHANNEL=edge");
+  });
+
   it("refuses what a manager left behind with no installation of its own", async () => {
     const host = await installation();
 
@@ -567,6 +596,32 @@ describe("host installer, removing", () => {
     expect(await exists(host.dir)).toBe(false);
   });
 
+  it("remembers service images after an interruption removed their containers", async () => {
+    const host = await installation();
+    await host.save();
+    const service: Docker = {
+      containers: [{ name: "sanctum-mosquitto", image: "mosquitto-image" }],
+      volumes: [{ name: "sanctum-core-data" }],
+    };
+
+    await expect(
+      host.uninstall(service, {
+        args: ["--yes"],
+        env: { INSTALL_TEST_FAIL_COMMAND: "volume rm" },
+      }),
+    ).rejects.toThrow();
+
+    expect(changing(await host.commands())).toContain(
+      "docker rm -f -v sanctum-mosquitto",
+    );
+    await host.uninstall({ volumes: service.volumes }, { args: ["--yes"] });
+
+    expect(changing(await host.commands())).toContain(
+      "docker image rm -f mosquitto-image",
+    );
+    expect(await exists(host.dir)).toBe(false);
+  });
+
   it("waits for Docker rather than removing half", async () => {
     const host = await installation();
     await host.save();
@@ -579,6 +634,83 @@ describe("host installer, removing", () => {
     ).rejects.toThrow("Docker, which is not running");
 
     expect(await host.settings()).toContain("SANCTUM_CHANNEL=edge");
+  });
+
+  it.each(["container", "volume", "network"])(
+    "keeps its installation files when listing managed %ss fails",
+    async (kind) => {
+      const host = await installation();
+      await host.save();
+
+      await expect(
+        host.uninstall(home, {
+          args: ["--yes"],
+          env: {
+            INSTALL_TEST_FAIL_COMMAND: `${kind} ls ${kind === "container" ? "-a " : ""}--filter label=sanctum.managed=true`,
+          },
+        }),
+      ).rejects.toThrow("Docker query failed");
+
+      expect(await host.settings()).toContain("SANCTUM_CHANNEL=edge");
+      expect(await exists(join(host.dir, "compose.yml"))).toBe(true);
+    },
+  );
+
+  it("does not mistake a failed ownership query for no installation", async () => {
+    const host = await installation();
+
+    await expect(
+      host.uninstall(
+        {},
+        {
+          args: ["--yes"],
+          env: {
+            INSTALL_TEST_FAIL_COMMAND: "container ls -a --filter",
+          },
+        },
+      ),
+    ).rejects.toThrow("Docker query failed");
+
+    expect(changing(await host.commands())).toEqual([]);
+  });
+
+  it.each(["image ls", "image inspect", "inspect -f {{.Image}}"])(
+    "keeps its installation files when collecting images fails at %s",
+    async (command) => {
+      const host = await installation();
+      await host.save();
+
+      await expect(
+        host.uninstall(home, {
+          args: ["--yes"],
+          env: { INSTALL_TEST_FAIL_COMMAND: command },
+        }),
+      ).rejects.toThrow("Docker query failed");
+
+      expect(await host.settings()).toContain("SANCTUM_CHANNEL=edge");
+      expect((await host.commands()).some(({ args }) => args[0] === "rm")).toBe(
+        false,
+      );
+    },
+  );
+
+  it("does not delete an image when it cannot check who uses it", async () => {
+    const host = await installation();
+    await host.save();
+
+    await expect(
+      host.uninstall(home, {
+        args: ["--yes"],
+        env: { INSTALL_TEST_FAIL_COMMAND: "ps -aq --filter ancestor=" },
+      }),
+    ).rejects.toThrow("Docker query failed");
+
+    expect(await host.settings()).toContain("SANCTUM_CHANNEL=edge");
+    expect(
+      (await host.commands()).some(
+        ({ args }) => args[0] === "image" && args[1] === "rm",
+      ),
+    ).toBe(false);
   });
 
   it("lets a laptop sleep again, and only one it kept awake", async () => {
