@@ -31,7 +31,88 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Whether the stacks run, and in which groups. Any of the paths above runs
+  # them, but the lockfile only when it changes what they install: a
+  # dependency of the website's own changes nothing there.
+  plan:
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        # Failed dependency-list pipelines must run the stacks too.
+        shell: bash
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The commit the change goes onto is compared with it.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - name: Check what changed
+        id: changes
+        env:
+          # A pull request runs on its merge into its base, whose first
+          # parent is that base; a push to main on main as it was.
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+        run: |
+          # What the stacks install at a commit, read from its lockfile.
+          installs() {
+            local dir
+            # As pnpm prints it, through any symlink.
+            dir="$(cd "$(mktemp -d)" && pwd -P)"
+            git archive "$1" | tar -x -C "$dir" || return
+            # Keep each package's dependency tree: changing which version one
+            # uses matters even when another already installs that version.
+            # The root's tools count too: every package compiles with its
+            # TypeScript, and Turbo runs the tests.
+            (cd "$dir" && pnpm list -r --lockfile-only --depth Infinity --json \
+              --filter '{.}' --filter './apps/core...' --filter './apps/manager...' \
+              --filter './catalog/apps/*...' --filter './deploy/dev/apps/*...') |
+              jq -S --arg dir "$dir" \
+                'walk(if type == "string" then ltrimstr($dir) else . end) | sort_by(.path)'
+          }
+          # Whatever this can't tell runs them.
+          changed() {
+            git rev-parse -q --verify "$BASE^{commit}" >/dev/null || return 0
+            files="$(git diff --name-only "$BASE" HEAD)"
+            # The paths above but the lockfile.
+            grep -qE '^(apps/core/Dockerfile|apps/manager/|catalog/apps/|deploy/|packages/app-sdk/|turbo\.json|\.github/workflows/containers\.yml)' <<<"$files" && return 0
+            grep -qxF pnpm-lock.yaml <<<"$files" || return 0
+            installs "$BASE" >"$RUNNER_TEMP/before" && installs HEAD >"$RUNNER_TEMP/after" || return 0
+            if cmp -s "$RUNNER_TEMP/before" "$RUNNER_TEMP/after"; then
+              echo "The lockfile changes nothing the stacks install."
+              return 1
+            fi
+            echo "The lockfile changes what the stacks install:"
+            diff "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" || true
+          }
+          if changed; then
+            echo run=true >>"$GITHUB_OUTPUT"
+          else
+            echo run=false >>"$GITHUB_OUTPUT"
+          fi
+      # The container tests in groups of about the same length, each on a
+      # runner of its own. A file no group names runs on its own.
+      - name: Group the tests
+        id: groups
+        run: |
+          groups='[["official-moves"], ["two-stacks", "app-containers", "app-move"], ["app-images", "packages"], ["app-supervision", "app-update"]]'
+          files="$(cd apps/manager/test && find . -type f -name '*.docker.ts' | sed 's|^\./||; s/\.docker\.ts$//' | sort | jq -Rnc '[inputs]')"
+          # Vitest accepts a partly matching group, so check every named file.
+          jq -en --argjson groups "$groups" --argjson files "$files" \
+            '($groups | add) - $files | if length == 0 then true else error("Missing test files: \(join(", "))") end' >/dev/null
+          jq -rn --argjson groups "$groups" --argjson files "$files" \
+            '"groups=" + ($groups + ($files - ($groups | add) | map([.])) | map(join(" ")) | tojson)' >>"$GITHUB_OUTPUT"
+
   stacks:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    strategy:
+      # One group failing says nothing about the others.
+      fail-fast: false
+      matrix:
+        tests: ${{ fromJSON(needs.plan.outputs.groups) }}
     runs-on: ubuntu-24.04-arm
     env:
       # Nothing here runs the desktop app.
@@ -44,4 +125,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:containers
+      # Vitest runs the files that match, and fails if none does.
+      - run: pnpm test:containers -- $(printf 'test/%s.docker.ts ' $TESTS)
+        env:
+          TESTS: ${{ matrix.tests }}
