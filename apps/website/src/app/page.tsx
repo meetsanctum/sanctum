@@ -64,7 +64,7 @@ export default async function Page() {
           <div className="veil" />
 
           <div className="pitch">
-            <h1 id="tagline">Smart home for everyone</h1>
+            <h1 id="tagline">A smart home for everyone</h1>
             <p className="description">
               {productName}'s goal is to make it super easy and intuitive to
               make your home smart. It runs your lights, sensors and
