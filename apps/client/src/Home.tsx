@@ -52,7 +52,14 @@ import { HomeRooms } from "./home-dashboard";
 import { HomeSidebar } from "./home-sidebar";
 import { HomeWidgets, useWidgetCards } from "./home-widgets";
 import { PageDoesntMatch } from "./page-mismatch";
-import { CategoryPage, HomeStatus, placePages, RoomPage } from "./place-pages";
+import {
+  CategoryPage,
+  HomeStatus,
+  noRoomPage,
+  NoRoomPage,
+  placePages,
+  RoomPage,
+} from "./place-pages";
 import { usePins } from "./pins";
 import { useSectionEntities } from "./room-sections";
 import { SettingsPage, settingsApp } from "./settings";
@@ -600,6 +607,13 @@ export function Home(props: {
                           openDevice={openDevice}
                           back={back}
                         />
+                      ) : route.page === noRoomPage ? (
+                        <NoRoomPage
+                          key={`${routes.length}:${JSON.stringify(route)}`}
+                          devices={devices}
+                          openDevice={openDevice}
+                          back={back}
+                        />
                       ) : (
                         <CategoryPage
                           key={`${routes.length}:${JSON.stringify(route)}`}
@@ -703,6 +717,15 @@ export function Home(props: {
                                   app: placePages,
                                   page: "room",
                                   params: { id },
+                                },
+                              ])
+                            }
+                            openNoRoom={() =>
+                              setRoutes([
+                                {
+                                  app: placePages,
+                                  page: noRoomPage,
+                                  params: {},
                                 },
                               ])
                             }
