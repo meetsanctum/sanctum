@@ -232,6 +232,8 @@ describe("registering a device", () => {
       name: "Kitchen lamp",
       manufacturer: null,
       model: null,
+      // What it is is left to the core.
+      type: null,
       capabilities: [
         {
           id: "light",
@@ -243,6 +245,28 @@ describe("registering a device", () => {
       firmware: null,
       probe: false,
     });
+  });
+
+  it("may say what the device is, by a type's id", () => {
+    const plug = {
+      key: "plug",
+      name: "Relay",
+      capabilities: [{ id: "power", kind: "switch" }],
+    };
+    expect(deviceRegistration.parse({ ...plug, type: "plug" }).type).toBe(
+      "plug",
+    );
+    // An id this version has no type for is still an id: whoever reads it
+    // decides what to make of it.
+    expect(deviceRegistration.parse({ ...plug, type: "curtain" }).type).toBe(
+      "curtain",
+    );
+    for (const type of ["", "Plug", "smart plug", "a".repeat(33), 7]) {
+      expect(
+        deviceRegistration.safeParse({ ...plug, type }).success,
+        String(type),
+      ).toBe(false);
+    }
   });
 
   it("says what its firmware is, and only with whether it can be updated", () => {

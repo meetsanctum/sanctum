@@ -225,6 +225,13 @@
       "when": 1793957804386,
       "tag": "0031_app-go-back",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794587229029,
+      "tag": "0032_device-declared-type",
+      "breakpoints": true
     }
   ]
 }

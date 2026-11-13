@@ -45,6 +45,10 @@ export const devices = sqliteTable(
       .default(false),
     manufacturer: text("manufacturer"),
     model: text("model"),
+    // What its driver says it is, a device type's id as the driver said
+    // it, or nothing: the core works out what the device is from this and
+    // its capabilities whenever it is read (classification.ts).
+    declaredType: text("declared_type"),
     // Removing a room keeps its devices, in no room.
     roomId: text("room_id").references(() => rooms.id, {
       onDelete: "set null",

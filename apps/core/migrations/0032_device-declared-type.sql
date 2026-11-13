@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `declared_type` text;

@@ -579,6 +579,10 @@ const capabilityId = z
 // The driver's own id for a device, such as a Zigbee IEEE address.
 export const deviceKey = z.string().min(1).max(128);
 const label = z.string().trim().min(1).max(120);
+// A device type's id, whether or not this version has the type yet.
+const deviceTypeId = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]{0,31}$/, "use a device type's id such as plug");
 
 const capabilityRegistration = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -614,6 +618,12 @@ export const deviceRegistration = z.strictObject({
   name: label,
   manufacturer: label.nullable().default(null),
   model: label.nullable().default(null),
+  // What the device is, where its driver can tell: a device type's id
+  // (device-types.ts), such as plug, which no capability tells from a
+  // switch. The core takes it when the device has the kinds that type
+  // needs, and works out the type itself when a driver says none or one
+  // it does not know.
+  type: deviceTypeId.nullable().default(null),
   capabilities: z
     .array(capabilityRegistration)
     .min(1)
@@ -637,7 +647,10 @@ export const deviceRegistration = z.strictObject({
   // that sleeps, or has nothing to read, cannot be asked.
   probe: z.boolean().default(false),
 });
-export type DeviceRegistration = z.input<typeof deviceRegistration>;
+export type DeviceRegistration = Omit<
+  z.input<typeof deviceRegistration>,
+  "type"
+> & { type?: DeviceType | null };
 
 /**
  * What a driver reports about one of its devices (ctx.devices.report):

@@ -182,6 +182,53 @@ describe("the device list", () => {
     expect(entry?.registration.model).toBeNull();
   });
 
+  it("says a switch is a plug when its name or model does, and nothing of the rest", () => {
+    const outlet = (extra: Parameters<typeof zigbeeDevice>[3] = {}) =>
+      zigbeeDevice("0x08", "0x08", [switchExpose()], {
+        definition: {
+          vendor: "IKEA",
+          model: "E1603",
+          description: "TRADFRI control outlet",
+          exposes: [switchExpose()],
+        },
+        ...extra,
+      });
+    const typeOf = (device: ReturnType<typeof zigbeeDevice>) =>
+      deviceEntries([device])[0]?.registration.type;
+
+    // Named by what it is, while nobody renamed it in Zigbee2MQTT.
+    expect(typeOf(outlet())).toBe("plug");
+    // By its model, under a name that says nothing.
+    expect(
+      typeOf(
+        outlet({
+          friendly_name: "kettle",
+          definition: {
+            vendor: "Test Vendor",
+            model: "Smart socket S1",
+            description: "Relay",
+            exposes: [switchExpose()],
+          },
+        }),
+      ),
+    ).toBe("plug");
+    // Only a whole word says so, and only of a switch.
+    expect(typeOf(outlet({ friendly_name: "remote_plug" }))).toBeNull();
+    expect(typeOf(zigbeeDevice("0x09", "0x09", [switchExpose()]))).toBeNull();
+    expect(
+      typeOf(
+        zigbeeDevice("0x0a", "0x0a", [lightExpose()], {
+          definition: {
+            vendor: "Test Vendor",
+            model: "TL-1",
+            description: "Plug-in light",
+            exposes: [lightExpose()],
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it("knows a battery-powered device", () => {
     const [entry] = deviceEntries([
       zigbeeDevice("0x07", "remote_plug", [switchExpose()], {

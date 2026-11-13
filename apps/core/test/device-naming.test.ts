@@ -69,6 +69,95 @@ describe("what a device is", () => {
       }),
     ).toBe("switch");
   });
+
+  it("is what its driver says, when it has the kinds that type needs", () => {
+    // A plug its driver's name does not give away.
+    expect(
+      deviceType({
+        driverName: "Relay",
+        model: null,
+        declaredType: "plug",
+        capabilities: [power],
+      }),
+    ).toBe("plug");
+    // The driver's word goes before the order of the types,
+    expect(
+      deviceType({
+        driverName: "Bulb",
+        model: null,
+        declaredType: "switch",
+        capabilities: [power, light],
+      }),
+    ).toBe("switch");
+    // and before what it calls the device.
+    expect(
+      deviceType({
+        driverName: "Smart plug",
+        model: null,
+        declaredType: "switch",
+        capabilities: [power],
+      }),
+    ).toBe("switch");
+  });
+
+  it("is worked out when the driver's type does not fit, is not known or is not said", () => {
+    expect(
+      deviceType({
+        driverName: "Climate sensor",
+        model: null,
+        declaredType: "light",
+        capabilities: [{ kind: "sensor" }],
+      }),
+    ).toBe("sensor");
+    for (const declaredType of ["light", "curtain", null, undefined]) {
+      expect(
+        deviceType({
+          driverName: "Smart plug",
+          model: null,
+          declaredType,
+          capabilities: [power],
+        }),
+        String(declaredType),
+      ).toBe("plug");
+    }
+  });
+});
+
+describe("a driver that says what its device is", () => {
+  const relay = async (core: TestCore, token: string) => {
+    const { type, name } = (await devicesSeenBy(core, token)).find(
+      (device: { driverName: string }) => device.driverName === "Relay",
+    );
+    return { type, name };
+  };
+
+  it("is taken at its word, until it says nothing again", async () => {
+    const { core, maya } = await lampsCore();
+
+    // The radio's switches are plugs by their model's name.
+    await radio.add("relay-1", "switch", "Relay", "switch");
+    expect(await relay(core, maya.token)).toEqual({
+      type: "switch",
+      name: "Switch",
+    });
+
+    // The kettle's plug is "Plug" already.
+    await radio.add("relay-1", "switch", "Relay");
+    expect(await relay(core, maya.token)).toEqual({
+      type: "plug",
+      name: "Plug 2",
+    });
+  });
+
+  it("is not, for a type its device does not fit or the core does not know", async () => {
+    const { core, maya } = await lampsCore();
+
+    await radio.add("relay-1", "switch", "Relay", "light");
+    expect((await relay(core, maya.token)).type).toBe("plug");
+
+    await radio.add("relay-1", "switch", "Relay", "curtain");
+    expect((await relay(core, maya.token)).type).toBe("plug");
+  });
 });
 
 describe("an automatic name", () => {

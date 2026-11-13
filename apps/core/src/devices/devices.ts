@@ -495,6 +495,7 @@ export function createDevices(
             driverName: registration.name,
             manufacturer: registration.manufacturer,
             model: registration.model,
+            declaredType: registration.type,
             // What an update is doing outlives the driver saying again
             // what the device runs.
             firmware: registration.firmware && {
@@ -526,7 +527,8 @@ export function createDevices(
             at,
             forget: (capability) => commands.forget(id, capability),
           });
-          // What it is may have changed with its capabilities.
+          // What it is may have changed with its capabilities, or with
+          // what its driver says it is.
           rename(id);
         }),
       );

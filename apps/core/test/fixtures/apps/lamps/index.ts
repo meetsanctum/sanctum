@@ -27,6 +27,8 @@ import {
 type Gadget = {
   kind: "light" | "switch" | "button" | "sensor" | "occupancy";
   name: string;
+  // What the driver says it is, if it says.
+  type?: string;
   state: Record<string, unknown>;
   // Whether it still answers; an unplugged one takes nothing.
   answers: boolean;
@@ -106,10 +108,11 @@ class Radio {
   private ctx?: AppContext;
 
   // Puts a gadget in range, as pairing would.
-  async add(key: string, kind: Gadget["kind"], name = key) {
+  async add(key: string, kind: Gadget["kind"], name = key, type?: string) {
     this.gadgets.set(key, {
       kind,
       name,
+      type,
       state:
         kind === "light"
           ? {
@@ -370,6 +373,8 @@ class Radio {
       name: gadget.name,
       manufacturer: "Test",
       model: models[gadget.kind],
+      // Any id goes over the wire, one a core does not know too.
+      type: gadget.type as DeviceRegistration["type"],
       capabilities:
         gadget.kind === "sensor"
           ? sensorCapabilities
