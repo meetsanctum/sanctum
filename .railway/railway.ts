@@ -12,17 +12,21 @@ export default defineRailway(() => {
     source: github("meetsanctum/sanctum", { branch: "main" }),
     build: {
       builder: "RAILPACK",
-      buildCommand: `pnpm --filter ${website} build`,
+      // Turbo builds what the site depends on first, and keeps what it
+      // built for the next build.
+      buildCommand: `pnpm exec turbo run build --filter=${website}`,
       // What the site is built from: a push that changes nothing here
-      // deploys nothing.
+      // deploys nothing. Each pattern starts at the repository's root.
       watchPatterns: [
-        "apps/website/**",
-        "apps/client/src/brand.ts",
-        "assets/brand/**",
-        "packages/typescript-config/**",
-        "package.json",
-        "pnpm-lock.yaml",
-        "pnpm-workspace.yaml",
+        "/apps/website/**",
+        "/apps/client/src/brand.ts",
+        "/assets/brand/**",
+        "/packages/typescript-config/**",
+        "/.dockerignore",
+        "/package.json",
+        "/pnpm-lock.yaml",
+        "/pnpm-workspace.yaml",
+        "/turbo.json",
       ],
     },
     start: `pnpm --filter ${website} start`,
