@@ -573,6 +573,22 @@ export type DeviceInfo = {
   leftAt: string | null;
 };
 
+/**
+ * A device with only the capabilities of the kinds this build has. A core
+ * newer than a client may serve a kind the client has no tile, words or
+ * history for: the client skips that part and shows the rest of the device,
+ * and a device with nothing else is one it cannot use. The same device when
+ * it has every kind.
+ */
+export function knownParts(device: DeviceInfo): DeviceInfo {
+  const known = device.capabilities.filter((each) =>
+    isCapabilityKind(each.kind),
+  );
+  return known.length === device.capabilities.length
+    ? device
+    : { ...device, capabilities: known };
+}
+
 const capabilityId = z
   .string()
   .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/, "use a short id such as light or l1");

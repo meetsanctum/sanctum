@@ -13,6 +13,7 @@ import {
 import type { LiveFeed, Tile } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { useMinuteClock } from "./device-firmware";
 import { tileKey, tilesOf } from "./device-tiles";
@@ -230,7 +231,7 @@ export function useDevices(live: LiveFeed) {
     pendingLoad.current = request;
     try {
       const [nextDevices, nextPlaces] = await Promise.all([
-        coreJson<DeviceInfo[]>("/api/devices"),
+        coreDevices(),
         coreJson<Places>("/api/places"),
       ]);
       if (pendingLoad.current !== request) return;

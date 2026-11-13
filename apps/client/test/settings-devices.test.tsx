@@ -219,6 +219,68 @@ describe("Settings → Devices", () => {
     expect(container.textContent).toContain("No devices yet.");
   });
 
+  it("lists a device with a part of a kind this build does not know", async () => {
+    // As a core newer than this build might serve it.
+    const valve = { ...light("x", "x").capabilities[0]!, kind: "valve" };
+    const withValve = (device: DeviceInfo, own = device.capabilities) =>
+      ({ ...device, capabilities: [...own, valve] }) as unknown as DeviceInfo;
+    devices = [
+      withValve(light("desk", "Light")),
+      withValve(light("tap", "Garden tap"), []),
+    ];
+    await show(admin);
+    expect(container.textContent).toContain("Light");
+    expect(container.textContent).toContain("Garden tap");
+
+    await act(async () =>
+      live.publish({
+        type: "device",
+        id: "drain",
+        device: withValve(light("drain", "Drain"), []),
+      }),
+    );
+    expect(container.textContent).toContain("Drain");
+
+    // The device a change answers with is taken the same way.
+    await choose("Garden tap: more", "Rename");
+    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
+    await type(dialog.querySelector("input")!, "Hose");
+    await act(async () => button("Save").click());
+    expect(container.textContent).toContain("Hose");
+  });
+
+  it.each([false, true])(
+    "leaves history out when it knows none of a device's parts (live: %s)",
+    async (isLive) => {
+      const known = light("tap", "Garden tap");
+      const unknown = {
+        ...known,
+        capabilities: [{ ...known.capabilities[0]!, kind: "valve" }],
+      } as unknown as DeviceInfo;
+      devices = [isLive ? known : unknown];
+      await show(admin);
+      if (isLive) {
+        await act(async () =>
+          live.publish({ type: "device", id: unknown.id, device: unknown }),
+        );
+      }
+
+      const trigger = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Garden tap: more"]',
+      )!;
+      await act(async () =>
+        trigger.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        ),
+      );
+      expect(
+        [...document.querySelectorAll("[role=menuitemcheckbox]")].some(
+          (item) => item.textContent === "Keep history",
+        ),
+      ).toBe(false);
+    },
+  );
+
   it("shows a remote's presses as they happen, for a few seconds", async () => {
     vi.useFakeTimers({
       toFake: [

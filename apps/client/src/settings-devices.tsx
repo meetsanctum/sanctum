@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { Progress } from "./components/ui/progress";
+import { coreDevice, coreDevices } from "./core-devices";
 import { CoreError, coreJson } from "./core-fetch";
 import type { OnHome } from "./dashboards";
 import {
@@ -180,7 +181,7 @@ export function DevicesSection(props: {
     pending.current = request;
     try {
       const [nextDevices, places, histories] = await Promise.all([
-        coreJson<DeviceInfo[]>("/api/devices"),
+        coreDevices(),
         coreJson<Places>("/api/places"),
         // Without them, the menus leave the choice out.
         coreJson<HistoryKept[]>("/api/history/devices").catch(() => []),
@@ -327,13 +328,10 @@ export function DevicesSection(props: {
     hook: "check" | "update" | "stop",
   ) => {
     const before = liveDevices.current.get(device.id);
-    const response = await coreJson<DeviceInfo>(
-      `/api/devices/firmware/${hook}`,
-      {
-        method: "POST",
-        json: { id: device.id },
-      },
-    );
+    const response = await coreDevice(`/api/devices/firmware/${hook}`, {
+      method: "POST",
+      json: { id: device.id },
+    });
     const latest = liveDevices.current.get(device.id);
     if (latest === before) {
       changed(response);
@@ -460,6 +458,9 @@ export function DevicesSection(props: {
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {devices.map((device) => {
               const button = updateButton(device, devices);
+              const hasHistory = device.capabilities.some(
+                (capability) => historyFields[capability.kind].length > 0,
+              );
               return (
                 <li key={device.id} className="flex items-center gap-3">
                   <DeviceIcon device={device} />
@@ -487,7 +488,7 @@ export function DevicesSection(props: {
                     device={device}
                     rooms={rooms}
                     result={results[device.id]}
-                    kept={kept[device.id]}
+                    kept={hasHistory ? kept[device.id] : undefined}
                     home={
                       props.home.devices && {
                         name: props.home.name,

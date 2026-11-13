@@ -140,6 +140,14 @@ export function AppAdds(props: {
   const { app, manifest, now } = props;
   const { provides } = manifest;
   const own = now.devices.filter((device) => device.driver === app.id);
+  // A kind this build has no words for is left out, and so is a page
+  // whose kinds are all unfamiliar.
+  const devicePages = app.provides.devicePages
+    .map((page) => ({
+      ...page,
+      kinds: page.kinds.filter((kind) => Object.hasOwn(kindNouns, kind)),
+    }))
+    .filter((page) => page.kinds.length > 0);
   return (
     <>
       {manifest.driver && (
@@ -252,9 +260,9 @@ export function AppAdds(props: {
           </Section>
         );
       })}
-      {app.provides.devicePages.length > 0 && (
+      {devicePages.length > 0 && (
         <Section id="settings-app-device-pages" title="Device pages">
-          {app.provides.devicePages.map((page) => {
+          {devicePages.map((page) => {
             const kinds = new Set<string>(page.kinds);
             const devices = now.devices.filter((device) =>
               device.capabilities.some((each) => kinds.has(each.kind)),

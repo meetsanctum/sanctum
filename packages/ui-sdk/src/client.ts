@@ -1,5 +1,6 @@
 import {
   entityReadPermission,
+  knownParts,
   standardEntityTypes,
 } from "@meetsanctum/app-sdk";
 import { capturePresses, type PressCaptureListener } from "./presses";
@@ -187,7 +188,7 @@ export function createAppClient(
     async devices() {
       need(access.kinds.reads.size > 0, "a devices.read: permission");
       const devices = await bridge.json<DeviceInfo[]>("/api/devices");
-      return devices.flatMap((device) => seen(device) ?? []);
+      return devices.flatMap((device) => seen(knownParts(device)) ?? []);
     },
 
     async command({ device, capability, kind, command }) {
@@ -293,8 +294,13 @@ export function createLiveFeed() {
         listeners.delete(listener);
       };
     },
+    // A device arrives with the parts this build knows, for every listener.
     publish(message: LiveMessage) {
-      for (const listener of listeners) listener.message?.(message);
+      const said =
+        message.type === "device" && message.device
+          ? { ...message, device: knownParts(message.device) }
+          : message;
+      for (const listener of listeners) listener.message?.(said);
     },
     refresh() {
       for (const listener of listeners) listener.refresh?.();
