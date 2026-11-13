@@ -1,11 +1,5 @@
 // @vitest-environment jsdom
-import type {
-  AppInfo,
-  DeviceInfo,
-  EntityInfo,
-  Places,
-  RoomSectionInfo,
-} from "@meetsanctum/app-sdk";
+import type { AppInfo, DeviceInfo, EntityInfo } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,161 +14,28 @@ import {
 } from "../src/place-pages";
 import { useSectionEntities } from "../src/room-sections";
 import { useDevices } from "../src/use-devices";
+import {
+  alarms,
+  awnings,
+  entity,
+  hallLight,
+  lamp,
+  light,
+  loose,
+  moods,
+  places,
+  plug,
+  relax,
+  sensor,
+  spots,
+  work,
+} from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // Room and category pages, the shell's: a button for all the lights, the
 // devices by category or room, and apps' room sections drawn from their
 // entities.
-
-const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
-  floors: [],
-  zones: [],
-  rooms: [
-    { id: "office", name: "Office", floorId: null },
-    { id: "hall", name: "Hall", floorId: null },
-    { id: "attic", name: "Attic", floorId: null },
-  ],
-};
-
-function light(
-  id: string,
-  name: string,
-  roomId: string | null,
-  on: boolean,
-): DeviceInfo {
-  const state = { on, brightness: 40 };
-  return {
-    id,
-    name,
-    driverName: name,
-    driver: "sanctum.zigbee",
-    manufacturer: null,
-    model: null,
-    roomId,
-    availability: "online",
-    lastSeenAt: null,
-    firmware: null,
-    probe: false,
-    battery: null,
-    leftAt: null,
-    capabilities: [
-      {
-        id: "light",
-        kind: "light",
-        features: { brightness: true, colorTemperature: null, color: false },
-        state,
-        observed: state,
-        desired: null,
-        sync: "synced",
-        setBy: null,
-        changedAt: null,
-      },
-    ],
-  };
-}
-const plug: DeviceInfo = {
-  ...light("plug", "Kettle", "office", true),
-  capabilities: [
-    {
-      id: "power",
-      kind: "switch",
-      features: {},
-      state: { on: true },
-      observed: { on: true },
-      desired: null,
-      sync: "synced",
-      setBy: null,
-      changedAt: null,
-    },
-  ],
-};
-const lamp = light("lamp", "Lamp", "office", true);
-const hallLight = light("hall-light", "Ceiling", "hall", false);
-const loose = light("loose", "Loose", null, false);
-
-const moodsSection: RoomSectionInfo = {
-  id: "moods.room",
-  title: "Moods",
-  entityType: "moods.mood",
-  kind: "tiles",
-  order: 200,
-  press: { action: "moods.runMood" },
-  open: { page: "room", label: "Edit" },
-  whenEmpty: { roomHas: "light" },
-};
-const app = (id: string, name: string, section: RoomSectionInfo): AppInfo => ({
-  id,
-  name,
-  version: "0.1.0",
-  icon: { glyph: "sparkles", color: "ember" },
-  pages: ["room"],
-  permissions: [],
-  requests: [],
-  state: "running",
-  settings: null,
-  provides: {
-    entities: [],
-    widgets: [],
-    roomSections: [section],
-    devicePages: [],
-  },
-});
-const moods = app("sanctum.moods", "Moods", moodsSection);
-// More apps' sections, which come after Moods by their weight, ties by
-// app id, and before the devices.
-const spots = app("test.spots", "Spots", {
-  ...moodsSection,
-  id: "spots.room",
-  title: "Spots",
-  entityType: "spots.spot",
-  order: 400,
-  press: { action: "spots.use" },
-  open: null,
-  whenEmpty: null,
-});
-const alarms = app("test.alarms", "Alarms", {
-  ...spots.provides.roomSections[0]!,
-  id: "alarms.room",
-  title: "Alarms",
-  entityType: "alarms.alarm",
-  order: 500,
-  press: { action: "alarms.arm" },
-});
-const awnings = app("test.awnings", "Awnings", {
-  ...alarms.provides.roomSections[0]!,
-  id: "awnings.room",
-  title: "Awnings",
-  entityType: "awnings.awning",
-});
-
-const entity = (
-  appId: string,
-  type: string,
-  key: string,
-  state: Record<string, unknown>,
-): EntityInfo => ({
-  app: appId,
-  key,
-  type,
-  name: String(state.name),
-  state: { icon: "sun", order: 0, active: false, input: { id: key }, ...state },
-  updatedAt: "2026-10-29T10:00:00.000Z",
-});
-const relax = entity("sanctum.moods", "moods.mood", "relax", {
-  placeId: "office",
-  name: "Relax",
-  icon: "armchair",
-  order: 0,
-  active: true,
-});
-const work = entity("sanctum.moods", "moods.mood", "work", {
-  placeId: "office",
-  name: "Work",
-  icon: "briefcase",
-  order: 1,
-});
 
 let root: Root;
 let container: HTMLDivElement;
@@ -308,6 +169,7 @@ describe("all the lights", () => {
         ...lamp,
         id: "remote",
         name: "Remote",
+        type: "button",
         capabilities: [
           {
             id: "button",
@@ -553,37 +415,6 @@ describe("a room's page", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 });
-
-// A climate sensor in a room, as Zigbee brings one: a reading for each
-// measure.
-function sensor(
-  id: string,
-  roomId: string | null,
-  temperature: number,
-  humidity: number,
-  availability: DeviceInfo["availability"] = "online",
-): DeviceInfo {
-  const reading = (measure: "temperature" | "humidity", value: number) => ({
-    id: measure,
-    kind: "sensor" as const,
-    features: { measures: measure },
-    state: { value },
-    observed: { value },
-    desired: null,
-    sync: "synced" as const,
-    setBy: null,
-    changedAt: null,
-  });
-  return {
-    ...light(id, `${id} sensor`, roomId, false),
-    availability,
-    battery: 87,
-    capabilities: [
-      reading("temperature", temperature),
-      reading("humidity", humidity),
-    ],
-  };
-}
 
 describe("the climate", () => {
   const readingsLine = () =>

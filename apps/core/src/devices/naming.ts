@@ -1,8 +1,9 @@
+import { deviceTypes, type DeviceType } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
 
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
-import { deviceType, type DeviceType } from "./classification.js";
+import { deviceType } from "./classification.js";
 import { deviceCapabilities, devices } from "./schema.js";
 
 // Automatic device names, ported from v1's resolveDeviceName and
@@ -15,19 +16,13 @@ import { deviceCapabilities, devices } from "./schema.js";
 // device keeps a number that is still free, so removing "Office light"
 // does not rename "Office light 2".
 
-const words: Record<DeviceType, string> = {
-  light: "light",
-  plug: "plug",
-  switch: "switch",
-  button: "button",
-  motion: "motion sensor",
-  sensor: "sensor",
-  device: "device",
-};
+const words = new Map<DeviceType, string>(
+  deviceTypes.map((type) => [type.id, type.noun]),
+);
 
 /** What a device of this type is called in this room, before any number. */
 export function baseName(type: DeviceType, room: string | null) {
-  const word = words[type];
+  const word = words.get(type)!;
   return room ? `${room} ${word}` : `${word[0]!.toUpperCase()}${word.slice(1)}`;
 }
 

@@ -38,6 +38,7 @@ function device(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     id,
     name,
     driverName: name,
+    type: "unknown",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

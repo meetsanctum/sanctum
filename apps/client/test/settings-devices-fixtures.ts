@@ -21,6 +21,7 @@ export function light(
     id,
     name,
     driverName: "Hue Essential White and Color Ambiance A60",
+    type: "light",
     driver: "sanctum.zigbee",
     manufacturer: "Philips",
     model: "9290022166",
@@ -51,6 +52,7 @@ export function light(
 export const remote = {
   ...light("remote", "Office button", { roomId: "office" }),
   driverName: "Wireless mini switch",
+  type: "button",
   manufacturer: "Aqara",
   model: "WXKG11LM",
   capabilities: [

@@ -60,6 +60,7 @@ function motionSensor(
     id: "hue",
     name: "Office motion sensor",
     driverName: "SML001",
+    type: "motion",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

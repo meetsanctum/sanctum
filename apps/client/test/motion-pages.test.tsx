@@ -67,6 +67,7 @@ function motionSensor(
     id,
     name: `${id} motion sensor`,
     driverName: "SML001",
+    type: "motion",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

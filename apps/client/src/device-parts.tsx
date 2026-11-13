@@ -1,4 +1,4 @@
-import type { DeviceInfo, Room } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, DeviceType, Room } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import {
   ChevronDown,
@@ -8,6 +8,7 @@ import {
   Power,
   Radio,
   Thermometer,
+  type LucideIcon,
 } from "lucide-react";
 
 import { productName } from "./brand";
@@ -23,20 +24,26 @@ import { CoreError, coreJson } from "./core-fetch";
 // What Settings → Devices and adding devices share: a device's icon, the
 // room it is in, and saving what the household decides about it.
 
-/** A light, a switch, a remote, a motion sensor, a sensor, or something else, in the round a row starts with. */
+const typeIcons: Record<DeviceType, LucideIcon> = {
+  light: Lightbulb,
+  plug: Power,
+  switch: Power,
+  button: CircleDot,
+  motion: Footprints,
+  sensor: Thermometer,
+  unknown: Radio,
+};
+
+/**
+ * A light, a switch, a remote, a motion sensor, a sensor, or something
+ * else, in the round a row starts with: its type's icon, and the general
+ * one for a type this client has none for, as a core may serve.
+ */
 export function DeviceIcon(props: { device?: DeviceInfo }) {
-  const kinds = new Set(props.device?.capabilities.map((each) => each.kind));
-  const Icon = kinds.has("light")
-    ? Lightbulb
-    : kinds.has("switch")
-      ? Power
-      : kinds.has("button")
-        ? CircleDot
-        : kinds.has("occupancy")
-          ? Footprints
-          : kinds.has("sensor")
-            ? Thermometer
-            : Radio;
+  const Icon: LucideIcon =
+    props.device && Object.hasOwn(typeIcons, props.device.type)
+      ? typeIcons[props.device.type]
+      : Radio;
   return (
     <span
       aria-hidden="true"

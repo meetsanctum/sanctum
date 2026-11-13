@@ -5,6 +5,7 @@ import type {
   LightState,
   Places,
 } from "@meetsanctum/app-sdk";
+import { deviceTypeOf } from "@meetsanctum/app-sdk";
 
 import type { Light, LightCapability } from "../../src/targets.js";
 
@@ -58,6 +59,7 @@ export function device(
     id,
     name: id,
     driverName: id,
+    type: deviceTypeOf(capabilities.map((each) => each.kind)),
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

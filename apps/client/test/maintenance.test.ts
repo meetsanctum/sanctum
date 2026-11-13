@@ -44,6 +44,7 @@ function device(
     name,
     driver: "sanctum.zigbee",
     driverName: "Wireless mini switch",
+    type: "button",
     manufacturer: "Aqara",
     model: "WXKG11LM",
     roomId: "office",

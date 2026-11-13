@@ -102,6 +102,7 @@ function device(
         : kind === "button"
           ? "Wireless mini switch"
           : "Temperature and humidity sensor",
+    type: kind,
     manufacturer: null,
     model: null,
     roomId: "office",

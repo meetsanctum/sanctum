@@ -5,6 +5,7 @@ import type {
   Places,
   SyncStatus,
 } from "@meetsanctum/app-sdk";
+import { deviceTypeOf } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -73,6 +74,7 @@ function device(
     id,
     name,
     driverName: name,
+    type: deviceTypeOf(capabilities.map((each) => each.kind)),
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

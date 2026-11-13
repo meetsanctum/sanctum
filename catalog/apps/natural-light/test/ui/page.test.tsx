@@ -60,6 +60,7 @@ const device = (
   model: null,
   roomId: null,
   driverName: name,
+  type: "light",
   availability: "online",
   lastSeenAt: null,
   firmware: null,

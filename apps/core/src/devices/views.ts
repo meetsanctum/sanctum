@@ -5,6 +5,7 @@ import {
   type DeviceInfo,
 } from "@meetsanctum/app-sdk";
 
+import { deviceType } from "./classification.js";
 import type { deviceCapabilities, devices } from "./schema.js";
 import { shownState } from "./sync.js";
 
@@ -51,6 +52,7 @@ export function deviceInfo(
     model: device.model,
     roomId: device.roomId,
     driverName: device.driverName,
+    type: deviceType({ ...device, capabilities }),
     availability: device.availability,
     lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
     firmware: device.firmware,

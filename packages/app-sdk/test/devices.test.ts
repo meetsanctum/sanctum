@@ -334,6 +334,7 @@ describe("what needs attention", () => {
     model: null,
     roomId: "hall",
     driverName: "TRADFRI control outlet",
+    type: "plug",
     availability: "online",
     lastSeenAt: null,
     capabilities: [],

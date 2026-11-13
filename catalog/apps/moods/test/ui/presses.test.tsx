@@ -26,6 +26,7 @@ const remote: DeviceInfo = {
   id: "remote",
   name: "Office button",
   driverName: "Wireless mini switch",
+  type: "button",
   driver: "sanctum.zigbee",
   manufacturer: "Aqara",
   model: "WXKG11LM",
