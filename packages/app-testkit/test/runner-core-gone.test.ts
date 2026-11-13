@@ -125,6 +125,92 @@ describe("an app's runner when the core goes", () => {
     expect(String(failure)).toContain("connection to the core has gone");
   });
 
+  it("discards calls still waiting for a start when the core goes", async () => {
+    let finishStart!: () => void;
+    const started = new Promise<void>((done) => (finishStart = done));
+    const run = vi.fn(async () => "done");
+    const app = testApp([{ ...waits, run }], { start: async () => started });
+    await fixture.connected(app);
+    fixture.peer!.issue({ kind: "start", reason: "started" });
+    fixture.peer!.issue({
+      kind: "action",
+      action: waits.id,
+      input: { tag: "old" },
+    });
+    // A heartbeat is handled after both calls have reached the runner.
+    await fixture.peer!.beat();
+    const next = await nextCore();
+    await new Promise((done) => setTimeout(done, 50));
+    finishStart();
+    await next.hello;
+    next.welcome();
+    await next.prepared;
+    await next.call({ kind: "start", reason: "started" });
+
+    expect(run).not.toHaveBeenCalled();
+    expect(next.requests).toEqual([]);
+  });
+
+  it("discards remaining event handlers when their core goes", async () => {
+    let finishHandler!: () => void;
+    const blocked = new Promise<void>((done) => (finishHandler = done));
+    const first = vi.fn(async () => blocked);
+    const second = vi.fn(async () => undefined);
+    await fixture.connected(
+      testApp([], {
+        start: async (ctx) => {
+          await ctx.events.on("place.changed", first);
+          await ctx.events.on("place.changed", second);
+        },
+      }),
+      { follow: async () => undefined },
+    );
+    await fixture.peer!.call({ kind: "start", reason: "started" });
+    fixture.peer!.issue({
+      kind: "event",
+      event: { name: "place.changed" } as never,
+    });
+    await vi.waitFor(() => expect(first).toHaveBeenCalledTimes(1));
+
+    const next = await nextCore();
+    await next.hello;
+    next.welcome();
+    await next.prepared;
+    finishHandler();
+    await new Promise((done) => setTimeout(done, 50));
+
+    expect(second).not.toHaveBeenCalled();
+    expect(next.requests).toEqual([]);
+  });
+
+  it("waits for the next core's start even when the previous core never started it", async () => {
+    let finishStart!: () => void;
+    const started = new Promise<void>((done) => (finishStart = done));
+    const run = vi.fn(async () => "done");
+    await fixture.connected(
+      testApp([{ ...waits, run }], {
+        start: async () => started,
+      }),
+    );
+
+    const next = await nextCore();
+    await next.hello;
+    next.welcome();
+    await next.prepared;
+    const starting = next.issue({ kind: "start", reason: "started" });
+    const action = next.issue({
+      kind: "action",
+      action: waits.id,
+      input: { tag: "new" },
+    });
+    await next.beat();
+
+    expect(run).not.toHaveBeenCalled();
+    finishStart();
+    expect(await starting.answer).toMatchObject({ ok: true });
+    expect(await action.answer).toMatchObject({ ok: true, value: "done" });
+  });
+
   it("ends when no core comes back in time", async () => {
     await running(testApp(), { awayWithinMs: 50 });
 

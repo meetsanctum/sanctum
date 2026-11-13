@@ -321,6 +321,51 @@ describe("starting one", () => {
 
       expect(docker.container(appContainerName(app))!.id).not.toBe(first);
     });
+
+    it("replaces one mounted on another app's data volume", async () => {
+      const { apps, docker } = await setup();
+      const options = appContainerOptions(
+        start,
+        "sanctum-app-data-sanctum.example",
+      );
+      const first = docker.run(options).id;
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status.kept).toBeUndefined();
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+      expect(
+        docker.container(appContainerName(app))!.options.HostConfig!.Mounts,
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ Target: "/data", Source: dataVolume }),
+        ]),
+      );
+    });
+
+    it.each([
+      [
+        "an obsolete environment variable",
+        {
+          Env: [
+            ...appContainerOptions(start, dataVolume).Env!,
+            "NODE_OPTIONS=--no-warnings",
+          ],
+        },
+      ],
+      ["another working directory", { WorkingDir: "/tmp" }],
+    ])("replaces one with %s", async (_what, change) => {
+      const { apps, docker } = await setup();
+      const first = docker.run({
+        ...appContainerOptions(start, dataVolume),
+        ...change,
+      }).id;
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status.kept).toBeUndefined();
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+    });
   });
 
   describe("when it can't replace the one that runs", () => {

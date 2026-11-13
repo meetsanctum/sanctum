@@ -23,7 +23,7 @@ import {
   removeBrokerNetwork,
   usesBroker,
 } from "./broker.js";
-import { defaultImageMb, type AppImages } from "./images.js";
+import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
 
 // An app's own container, beside the core: the official Node image, the app's
@@ -241,15 +241,22 @@ export function isAsMade(
   desired: ContainerCreateOptions,
   actual: ContainerInfo,
   memoryLimits: boolean,
+  imageEnv: string[],
 ) {
   const labels = actual.Config.Labels ?? {};
   const wantedLabels = desired.Labels ?? {};
-  const env = new Set(actual.Config.Env ?? []);
+  // Docker merges image defaults with the manager's variables by name.
+  const environment = (entries: string[]) =>
+    [
+      ...new Map(entries.map((entry) => [entry.split("=")[0], entry])).values(),
+    ].sort();
   return (
     actual.State.Running &&
     actual.Config.Image === desired.Image &&
     JSON.stringify(actual.Config.Cmd) === JSON.stringify(desired.Cmd) &&
-    (desired.Env ?? []).every((each) => env.has(each)) &&
+    actual.Config.WorkingDir === desired.WorkingDir &&
+    JSON.stringify(environment(actual.Config.Env ?? [])) ===
+      JSON.stringify(environment([...imageEnv, ...(desired.Env ?? [])])) &&
     Object.entries(wantedLabels).every(
       ([key, value]) => labels[key] === value,
     ) &&
@@ -393,18 +400,25 @@ export function createAppContainers(options: {
   // The app's running container, when it's the one a start would make now.
   async function keptAsMade(spec: AppContainerSpec, packageDir: string) {
     const existing = await inspectApp(spec.app);
-    const data = (
-      (existing?.HostConfig.Mounts ?? []) as {
-        Target?: string;
-        Source?: string;
-      }[]
-    ).find(({ Target }) => Target === dataTarget)?.Source;
-    if (!existing?.State.Running || !data) return undefined;
+    if (!existing?.State.Running) return undefined;
     const network = (await usesBroker(packageDir))
       ? brokerNetworkName(spec.app)
       : undefined;
-    const desired = appContainerOptions(spec, data, network);
-    if (!isAsMade(desired, existing, await memoryLimits())) return undefined;
+    const desired = appContainerOptions(
+      spec,
+      imageVolumeName(spec.app),
+      network,
+    );
+    const image = await docker.getImage(existing.Image).inspect();
+    if (
+      !isAsMade(
+        desired,
+        existing,
+        await memoryLimits(),
+        image.Config?.Env ?? [],
+      )
+    )
+      return undefined;
     log(`Keeping ${desired.name} on ${spec.folder}`);
     return { ...statusOf(spec.app, existing), kept: true };
   }
