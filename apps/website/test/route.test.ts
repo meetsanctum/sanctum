@@ -12,6 +12,8 @@ const resend = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
   remove: vi.fn(),
+  list: vi.fn(),
+  add: vi.fn(),
   send: vi.fn(),
 }));
 vi.mock("resend", () => ({
@@ -20,6 +22,7 @@ vi.mock("resend", () => ({
       create: resend.create,
       get: resend.get,
       remove: resend.remove,
+      segments: { list: resend.list, add: resend.add },
     };
     emails = { send: resend.send };
     constructor(key: string) {
@@ -40,10 +43,14 @@ vi.mock("../src/waitlist/confirmation", () => ({
 const waitlist = await import("../src/app/api/waitlist/route");
 const unsubscribe = await import("../src/app/api/unsubscribe/[contact]/route");
 
-const join = (body: unknown) =>
+// Each join comes from a client of its own unless a test names one, as the
+// route counts joins by client.
+let clients = 0;
+const join = (body: unknown, client = `client-${++clients}`) =>
   waitlist.POST(
     new Request("https://example.com/api/waitlist", {
       method: "POST",
+      headers: { "x-real-ip": client },
       body: typeof body === "string" ? body : JSON.stringify(body),
     }),
   );
@@ -59,8 +66,11 @@ const setUp = () => {
   vi.stubEnv("RESEND_API_KEY", "key-1");
   vi.stubEnv("WAITLIST_FROM", "Example <hello@example.com>");
   const fine: Answer = { data: {}, error: null };
-  resend.create.mockResolvedValue({ data: { id: contact }, error: null });
-  for (const call of [resend.get, resend.remove, resend.send]) {
+  for (const call of [resend.create, resend.get]) {
+    call.mockResolvedValue({ data: { id: contact }, error: null });
+  }
+  resend.list.mockResolvedValue({ data: { data: [] }, error: null });
+  for (const call of [resend.remove, resend.add, resend.send]) {
     call.mockResolvedValue(fine);
   }
 };
@@ -129,6 +139,20 @@ describe("POST /api/waitlist", () => {
     expect(resend.create).not.toHaveBeenCalled();
   });
 
+  it("lets one client join five times in ten minutes, and no more", async () => {
+    setUp();
+    const from = (client: string) =>
+      join({ email: "someone@example.com" }, client);
+    for (let joins = 0; joins < 5; joins++) {
+      expect((await from("one")).status).toBe(200);
+    }
+    const refused = await from("one");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: "too-many" });
+    expect(resend.create).toHaveBeenCalledTimes(5);
+    expect((await from("another")).status).toBe(200);
+  });
+
   it("says so when Resend kept no address", async () => {
     setUp();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -167,6 +191,7 @@ describe("/api/unsubscribe/<contact>", () => {
   });
 
   it("says it is not set up without a key", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
     expect((await leaving("POST", contact)).status).toBe(503);
   });
 

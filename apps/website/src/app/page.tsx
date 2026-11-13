@@ -411,6 +411,8 @@ async function starCount(): Promise<string | null> {
     const repository = new URL(repositoryUrl).pathname.slice(1);
     const response = await fetch(`https://api.github.com/repos/${repository}`, {
       next: { revalidate: 3600 },
+      // The count is an extra: the page goes without it rather than wait.
+      signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) return null;
     const data: unknown = await response.json();

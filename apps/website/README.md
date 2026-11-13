@@ -17,8 +17,11 @@ The waitlist is kept with [Resend](https://resend.com): joining
 (`POST /api/waitlist`) makes the address one of its contacts and sends it one
 confirmation (`src/waitlist/email.ts`). An address already there is left as
 it is and gets no second email, and the form hears the same answer either
-way. While developing, <http://localhost:5174/emails/waitlist> shows the
-confirmation as a page.
+way. With `RESEND_SEGMENT_ID` set, a contact Resend already has for another
+reason joins that segment and is confirmed like a new one. One client gets
+five joins in ten minutes, counted in the server's memory by the address
+Railway's edge names. While developing,
+<http://localhost:5174/emails/waitlist> shows the confirmation as a page.
 
 The confirmation's Unsubscribe opens `/unsubscribe/<contact>`, which asks
 once and then removes the contact from Resend. Its `List-Unsubscribe` headers

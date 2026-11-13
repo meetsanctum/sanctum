@@ -15,27 +15,33 @@ type Refusal = { message: string; name?: string };
 const refused: Refusal = { message: "refused" };
 const contact = "0b4d2f6e-3a1c-4e5f-8a9b-7c6d5e4f3a2b";
 
-function mailer(refusals: {
-  create?: Refusal;
-  get?: Refusal;
-  remove?: Refusal;
-  send?: Refusal;
-}) {
-  const answer = (refusal?: Refusal) =>
+function mailer(
+  refusals: {
+    create?: Refusal;
+    get?: Refusal;
+    remove?: Refusal;
+    list?: Refusal;
+    add?: Refusal;
+    send?: Refusal;
+  },
+  /** The segments the contact Resend already has is in. */
+  inSegments: string[] = [],
+) {
+  const answer = <Data>(data: Data, refusal?: Refusal) =>
     vi.fn(async () =>
-      refusal ? { data: null, error: refusal } : { data: {}, error: null },
+      refusal ? { data: null, error: refusal } : { data, error: null },
     );
   return {
     contacts: {
-      create: vi.fn(async () =>
-        refusals.create
-          ? { data: null, error: refusals.create }
-          : { data: { id: contact }, error: null },
-      ),
-      get: answer(refusals.get),
-      remove: answer(refusals.remove),
+      create: answer({ id: contact }, refusals.create),
+      get: answer({ id: contact }, refusals.get),
+      remove: answer({}, refusals.remove),
+      segments: {
+        list: answer({ data: inSegments.map((id) => ({ id })) }, refusals.list),
+        add: answer({}, refusals.add),
+      },
     },
-    emails: { send: answer(refusals.send) },
+    emails: { send: answer({}, refusals.send) },
   } satisfies WaitlistMailer;
 }
 
@@ -84,6 +90,43 @@ describe("joining the waitlist", () => {
       email: "someone@example.com",
     });
     expect(resend.emails.send).not.toHaveBeenCalled();
+  });
+
+  it("takes a contact Resend has for another reason into the segment, and confirms", async () => {
+    const resend = mailer({ create: refused }, ["segment-2"]);
+    expect(
+      await joinWaitlist(resend, { ...joining, segment: "segment-1" }),
+    ).toBe("joined");
+    expect(resend.contacts.segments.list).toHaveBeenCalledWith({
+      contactId: contact,
+      limit: 100,
+    });
+    expect(resend.contacts.segments.add).toHaveBeenCalledWith({
+      contactId: contact,
+      segmentId: "segment-1",
+    });
+    expect(resend.emails.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a contact already in the segment as it is", async () => {
+    const resend = mailer({ create: refused }, ["segment-1"]);
+    expect(
+      await joinWaitlist(resend, { ...joining, segment: "segment-1" }),
+    ).toBe("already");
+    expect(resend.contacts.segments.add).not.toHaveBeenCalled();
+    expect(resend.emails.send).not.toHaveBeenCalled();
+  });
+
+  it("fails when the contact could not join the segment", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const refusals of [{ list: refused }, { add: refused }]) {
+      const resend = mailer({ create: refused, ...refusals });
+      expect(
+        await joinWaitlist(resend, { ...joining, segment: "segment-1" }),
+      ).toBe("failed");
+      expect(resend.emails.send).not.toHaveBeenCalled();
+    }
+    log.mockRestore();
   });
 
   it("fails when the address could not be kept", async () => {

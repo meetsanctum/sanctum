@@ -12,8 +12,18 @@ export interface WaitlistMailer {
       email: string;
       segments?: { id: string }[];
     }): Promise<Answer<{ id: string }>>;
-    get(contact: { email: string }): Promise<Answer>;
+    get(contact: { email: string }): Promise<Answer<{ id: string }>>;
     remove(contact: { id: string }): Promise<Answer>;
+    segments: {
+      list(contact: {
+        contactId: string;
+        limit?: number;
+      }): Promise<Answer<{ data: { id: string }[] }>>;
+      add(membership: {
+        contactId: string;
+        segmentId: string;
+      }): Promise<Answer>;
+    };
   };
   emails: {
     send(email: {
@@ -54,25 +64,41 @@ export async function joinWaitlist(
     confirmation: (contact: string) => WaitlistEmail;
   },
 ): Promise<"joined" | "already" | "failed"> {
-  const { email } = joining;
+  const { email, segment } = joining;
   const created = await mailer.contacts.create({
     email,
-    ...(joining.segment ? { segments: [{ id: joining.segment }] } : {}),
+    ...(segment ? { segments: [{ id: segment }] } : {}),
   });
-  if (created.error || !created.data) {
+  let contact = created.data?.id;
+  if (created.error || !contact) {
     // Whatever Resend says of an address it already has, having it settles
     // the question.
     const existing = await mailer.contacts.get({ email });
-    if (!existing.error) return "already";
-    console.error(
-      `The waitlist kept no address: ${created.error?.message ?? "no contact came back"}`,
-    );
-    return "failed";
+    if (existing.error || !existing.data) {
+      return kept(created.error?.message ?? "no contact came back");
+    }
+    contact = existing.data.id;
+    if (!segment) return "already";
+    // A contact can be Resend's for another reason than the waitlist: only
+    // one in the waitlist's segment is on it, and any other joins it now.
+    const segments = await mailer.contacts.segments.list({
+      contactId: contact,
+      limit: 100,
+    });
+    if (segments.error || !segments.data) {
+      return kept(segments.error?.message ?? "its segments didn't come back");
+    }
+    if (segments.data.data.some(({ id }) => id === segment)) return "already";
+    const added = await mailer.contacts.segments.add({
+      contactId: contact,
+      segmentId: segment,
+    });
+    if (added.error) return kept(added.error.message);
   }
   const sent = await mailer.emails.send({
     from: joining.from,
     to: email,
-    ...joining.confirmation(created.data.id),
+    ...joining.confirmation(contact),
   });
   // The address is on the list either way; the email only says so.
   if (sent.error) {
@@ -81,6 +107,11 @@ export async function joinWaitlist(
     );
   }
   return "joined";
+}
+
+function kept(why: string) {
+  console.error(`The waitlist kept no address: ${why}`);
+  return "failed" as const;
 }
 
 /**

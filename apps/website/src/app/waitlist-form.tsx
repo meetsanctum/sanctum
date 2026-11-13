@@ -6,6 +6,14 @@ import { isEmailAddress } from "../waitlist/join";
 
 type Stage = "asking" | "sending" | "joined";
 
+// What the form says when an address didn't join.
+const notes = {
+  "not-set-up":
+    "The waitlist isn't set up on this copy of the site. Nothing was sent.",
+  "too-many": "That's a lot of tries from here. Try again in a few minutes.",
+  failed: "That didn't go through. Try again in a moment.",
+};
+
 // The waitlist's form. It checks the address itself, so what is wrong shows
 // under the field in the page's own words, sends it to the site's own
 // route, and answers in the same place.
@@ -42,11 +50,7 @@ export function WaitlistForm() {
       return;
     }
     setStage("asking");
-    setNote(
-      answer === "not-set-up"
-        ? "The waitlist isn't set up on this copy of the site. Nothing was sent."
-        : "That didn't go through. Try again in a moment.",
-    );
+    setNote(notes[answer]);
   }
 
   if (stage === "joined") {
@@ -115,7 +119,7 @@ export function WaitlistForm() {
 async function send(
   email: string,
   company: string,
-): Promise<"joined" | "not-set-up" | "failed"> {
+): Promise<"joined" | "not-set-up" | "too-many" | "failed"> {
   try {
     const response = await fetch("/api/waitlist", {
       method: "POST",
@@ -123,7 +127,8 @@ async function send(
       body: JSON.stringify({ email, company }),
     });
     if (response.ok) return "joined";
-    return response.status === 503 ? "not-set-up" : "failed";
+    if (response.status === 503) return "not-set-up";
+    return response.status === 429 ? "too-many" : "failed";
   } catch {
     return "failed";
   }
