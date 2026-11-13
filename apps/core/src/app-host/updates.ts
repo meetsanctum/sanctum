@@ -498,11 +498,25 @@ export function createAppUpdates(options: {
      * it would start that build in the new one's place, and its update
      * would never be asked for again. Refused, it ends, as one of another
      * version does, and the update begins with nothing of the app running.
+     * The socket listens before arrive records a new update, so the last
+     * committed folder must hold it back during that interval too.
+     * A failed build must also stay out until its data has been restored.
      */
-    holdsBack(appId: string) {
+    holdsBack(appId: string, folder: string) {
       const row = rowOf(appId);
-      return row?.status === "waiting"
-        ? `its update to ${row.toVersion} hasn't begun, so it is the build before`
+      if (row?.status === "undoing") return "its data hasn't been restored";
+      const last = versions.last(appId);
+      // A loaded retry gets its new waiting row only once arrive runs.
+      const isRetryPending =
+        row?.status === "undone" &&
+        row.retryAt !== null &&
+        row.toFolder === folder;
+      const isUpdateNeeded =
+        (!row || isRetryPending) &&
+        last !== undefined &&
+        last.folder !== folder;
+      return row?.status === "waiting" || isUpdateNeeded
+        ? "its update hasn't begun, so it is the build before"
         : undefined;
     },
 
