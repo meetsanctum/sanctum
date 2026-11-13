@@ -458,6 +458,9 @@ export function DevicesSection(props: {
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {devices.map((device) => {
               const button = updateButton(device, devices);
+              const hasHistory = device.capabilities.some(
+                (capability) => historyFields[capability.kind].length > 0,
+              );
               return (
                 <li key={device.id} className="flex items-center gap-3">
                   <DeviceIcon device={device} />
@@ -485,7 +488,7 @@ export function DevicesSection(props: {
                     device={device}
                     rooms={rooms}
                     result={results[device.id]}
-                    kept={kept[device.id]}
+                    kept={hasHistory ? kept[device.id] : undefined}
                     home={
                       props.home.devices && {
                         name: props.home.name,
