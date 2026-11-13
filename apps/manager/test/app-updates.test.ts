@@ -539,7 +539,32 @@ describe("an app's first move", () => {
 
     expect(entry).toMatchObject({ status: "ready", copied: false });
     expect(said).toEqual(["stop test.app", "adopt app.db test.app.db"]);
+    expect(await operations.current()).toBeNull();
+  });
+
+  it("holds the slot while it takes its file in, and gives it up once that's done", async () => {
+    let takeIn: (() => void) | undefined;
+    const { start } = setup({
+      run: (each) =>
+        each.operation === "adopt"
+          ? new Promise<void>((done) => {
+              takeIn = done;
+            })
+          : Promise.resolve(),
+    });
+    const { operations, updates } = await start();
+
+    const begun = updates.begin(app, move);
+    await vi.waitFor(() => expect(takeIn).toBeDefined());
     expect(await operations.current()).toMatchObject({ app });
+    takeIn!();
+    await begun;
+
+    // Whether its start works or not, nothing would need undoing, so another
+    // app's update goes while it starts.
+    await expect(
+      updates.begin("test.other", { ...request, id: "update-2" }),
+    ).resolves.toMatchObject({ status: "ready" });
   });
 
   it("makes its image for that, as it hasn't run apart before", async () => {
