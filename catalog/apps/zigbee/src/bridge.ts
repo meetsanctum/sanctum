@@ -276,15 +276,22 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     }
     const subscribed = new Set(byName.keys());
     const taken: ZigbeeDeviceEntry[] = [];
+    const changedCapabilities = new Set<string>();
     for (const entry of deviceEntries(payload, timing.intervals)) {
+      const previous = devices.get(entry.key);
       if (await take(entry)) {
         taken.push(entry);
+        if (
+          JSON.stringify(previous?.capabilities) !==
+          JSON.stringify(entry.capabilities)
+        ) {
+          changedCapabilities.add(entry.key);
+        }
         continue;
       }
       // The core keeps what it took before, so a device it has stays
       // reachable as it was, under its current name, until the next list
       // tries again.
-      const previous = devices.get(entry.key);
       if (previous) {
         taken.push({ ...previous, friendlyName: entry.friendlyName });
       }
@@ -316,7 +323,15 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     subscribe(added.flatMap((entry) => deviceTopics(entry.friendlyName)));
     // What changed while the broker was away is lost with the session, so
     // after a reconnect it reads every device again, by its current name.
-    (needsStateRefresh ? taken : added).forEach(read);
+    // A changed definition can give a known device something new to read.
+    const refresh = needsStateRefresh
+      ? taken
+      : taken.filter(
+          (entry) =>
+            !subscribed.has(entry.friendlyName) ||
+            changedCapabilities.has(entry.key),
+        );
+    refresh.forEach(read);
     needsStateRefresh = false;
     await joining.listed(list, (key) => devices.has(key));
     // The start waits for the first list. A device the core wouldn't take

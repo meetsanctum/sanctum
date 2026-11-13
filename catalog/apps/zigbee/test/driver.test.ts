@@ -377,6 +377,25 @@ describe("a light's brightness", () => {
 });
 
 describe("what devices say", () => {
+  it("reads a device when its definition gains a capability the core can use", async () => {
+    const { core } = await running();
+    const { key, name } = fresh("unknown_plug");
+    await bridge.add(zigbeeDevice(key, name, []), { state: "ON" });
+    await core.until(() => core.registered.has(key), "registered");
+    expect(core.registered.get(key)?.capabilities).toEqual([]);
+
+    await bridge.change(name, zigbeeDevice(key, name, [switchExpose()]));
+
+    await core.until(
+      () => core.registered.get(key)?.capabilities.length === 1,
+      "switch registered",
+    );
+    await core.until(() => core.latest(key, "switch")?.on === true, "read");
+    expect(
+      bridge.received.filter((each) => each.topic === `${name}/get`),
+    ).toEqual([{ topic: `${name}/get`, payload: { state: "" } }]);
+  });
+
   it("refreshes devices discovered before the bridge is ready", async () => {
     const { key, name } = fresh("starting_plug");
     await bridge.add(zigbeeDevice(key, name, [switchExpose()]), {
