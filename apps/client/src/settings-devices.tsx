@@ -553,10 +553,9 @@ export function DevicesSection(props: {
         device={repairing}
         appName={repairing ? appName(repairing) : null}
         onClose={() => setRepairing(undefined)}
-        onRepaired={(device) => {
-          changed(device);
-          setAnnouncement(`${device.name} is repaired.`);
-        }}
+        // The device's live updates bring its state, which a reply that
+        // arrives later must not undo.
+        onRepaired={(device) => setAnnouncement(`${device.name} is repaired.`)}
       />
       <EditDevice
         editing={editing}
