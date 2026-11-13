@@ -494,7 +494,8 @@ export function createAppHost(options: {
     // Installs the packages the core found, then starts them. A package
     // that cannot be installed is logged and left out, and the others go on.
     // It can be called again for packages that arrive later. Resolves once
-    // every app's start hook has settled.
+    // each app is listening on its socket, after any recovery of an update;
+    // its container and start come after that, as its supervisor has them.
     async start(
       packages: readonly ApartPackage[] | Promise<readonly ApartPackage[]>,
       {

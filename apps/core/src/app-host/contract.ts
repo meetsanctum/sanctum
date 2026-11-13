@@ -479,7 +479,12 @@ function checkPieces(manifest: StaticManifest) {
     ["widget", provides.widgets.map(({ id }) => id)],
   ];
   for (const [kind, ids] of kinds) {
-    const twice = ids.find((id, index) => ids.indexOf(id) !== index);
+    const seen = new Set<string>();
+    const twice = ids.find((id) => {
+      if (seen.has(id)) return true;
+      seen.add(id);
+      return false;
+    });
     if (twice !== undefined) {
       throw new Error(`its manifest has two of its ${kind}s called ${twice}`);
     }
