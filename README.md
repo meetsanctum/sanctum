@@ -74,10 +74,23 @@ on their own Mac or on one the whole household shares.
 
 ## Try it
 
-Sanctum runs on a Raspberry Pi 4 or another 64-bit Linux machine with
-Docker, with a Zigbee USB stick for your devices. Setting it up takes a
-developer today: [CONTRIBUTING.md](CONTRIBUTING.md) explains how to run a
-host and build the Mac app.
+Sanctum runs on a Raspberry Pi 4 or another 64-bit Linux machine, with a
+Zigbee USB stick for your devices and the Mac app to use it from.
+
+1. Put Raspberry Pi OS Lite (64-bit) on the Pi with Raspberry Pi Imager. A
+   machine that already runs Debian or Ubuntu needs nothing.
+2. On it, run:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
+   ```
+
+3. Plug in the Zigbee stick.
+4. Build the Mac app and open it. It finds your home on the network, and you
+   set it up from there.
+
+[The install guide](docs/install.md) has each step in full. The Mac app has
+no download: it is built from this repository, on a Mac with Apple silicon.
 
 ## Licences
 
