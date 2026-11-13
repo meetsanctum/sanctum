@@ -9,6 +9,8 @@ import { coreJson } from "../src/core-fetch";
 import {
   CategoryPage,
   HomeStatus,
+  NoRoomPage,
+  noRoomPage,
   RoomPage,
   SidebarPlaces,
 } from "../src/place-pages";
@@ -45,10 +47,11 @@ let entities: EntityInfo[];
 let answers: Record<string, () => Promise<unknown>>;
 const openApp = vi.fn();
 const openDevice = vi.fn();
+const openPlace = vi.fn();
 const back = vi.fn();
 
 function Harness(props: {
-  page: "room" | "category";
+  page: "room" | "category" | typeof noRoomPage;
   id: string;
   apps: AppInfo[];
 }) {
@@ -65,6 +68,19 @@ function Harness(props: {
       openDevice={openDevice}
       back={back}
     />
+  ) : props.page === noRoomPage ? (
+    <>
+      <main>
+        <NoRoomPage devices={shown} openDevice={openDevice} back={back} />
+      </main>
+      <nav>
+        <SidebarPlaces
+          devices={shown}
+          current={{ page: noRoomPage, params: {} }}
+          open={openPlace}
+        />
+      </nav>
+    </>
   ) : (
     <>
       <CategoryPage
@@ -86,8 +102,8 @@ function Harness(props: {
 }
 
 async function show(
-  page: "room" | "category",
-  id: string,
+  page: "room" | "category" | typeof noRoomPage,
+  id = "",
   apps: AppInfo[] = [moods],
 ) {
   await act(async () => {
@@ -132,6 +148,8 @@ beforeEach(() => {
   entities = [relax, work];
   answers = {};
   openApp.mockReset();
+  openDevice.mockReset();
+  openPlace.mockReset();
   back.mockReset();
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path) => {
@@ -234,7 +252,7 @@ describe("a category's page", () => {
     expect(headings()).toEqual([
       "Office",
       "Hall",
-      "Not in a room",
+      "No room",
       "Categories",
       "Rooms",
     ]);
@@ -244,7 +262,7 @@ describe("a category's page", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Lights1 on", "Switches", "Office", "Hall", "Attic"]);
+    ).toEqual(["Lights1 on", "Switches", "Office", "Hall", "Attic", "No room"]);
   });
 
   it("is not in the sidebar while the home has none of its devices", async () => {
@@ -255,6 +273,108 @@ describe("a category's page", () => {
         (each) => each.textContent,
       ),
     ).toEqual(["Lights1 on", "Office", "Hall", "Attic"]);
+  });
+});
+
+describe("the devices in no room", () => {
+  const sidebar = () =>
+    [...container.querySelectorAll("nav button")].map(
+      (each) => each.textContent,
+    );
+
+  it("have a page like a room's, their tiles by category under its name alone", async () => {
+    devices = [
+      lamp,
+      loose,
+      { ...plug, id: "spare", name: "Spare", roomId: null },
+    ];
+    await show(noRoomPage);
+    expect(container.querySelector("h1")?.textContent).toBe("No room");
+    expect(
+      [...container.querySelectorAll("main h2")].map(
+        (each) => each.textContent,
+      ),
+    ).toEqual(["Lights", "Switches"]);
+    expect(tile("Loose")).toBeDefined();
+    expect(tile("Spare")).toBeDefined();
+    // Another room's devices are not among them.
+    expect(
+      [...container.querySelectorAll("main button")].map(
+        (each) => each.textContent,
+      ),
+    ).not.toContain(tile("Lamp")?.textContent);
+    // Its devices are not together, so no button switches all its lights.
+    expect(button("Lights off")).toBeUndefined();
+    expect(button("Turn on the No room lights")).toBeUndefined();
+
+    await click(tile("Loose"));
+    expect(openDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: "loose" }),
+    );
+  });
+
+  it("are last among the sidebar's rooms, and marked while their page shows", async () => {
+    await show(noRoomPage);
+    expect(sidebar()).toEqual([
+      "Lights1 on",
+      "Switches",
+      "Office",
+      "Hall",
+      "Attic",
+      "No room",
+    ]);
+    expect(
+      container.querySelector("nav [aria-current=page]")?.textContent,
+    ).toBe("No room");
+
+    await click(button("No room"));
+    expect(openPlace).toHaveBeenCalledWith(noRoomPage, {});
+  });
+
+  it("are the only entry under Rooms in a home with no rooms yet", async () => {
+    answers["/api/places"] = async () => ({ ...places, rooms: [] });
+    devices = [loose];
+    await show(noRoomPage);
+    expect(headings()).toEqual(["Lights", "Categories", "Rooms"]);
+    expect(sidebar()).toEqual(["LightsOff", "No room"]);
+  });
+
+  it("leave the sidebar and their page once each has a room", async () => {
+    await show(noRoomPage);
+    expect(back).not.toHaveBeenCalled();
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "loose",
+        device: { ...loose, roomId: "hall" },
+      });
+    });
+    expect(sidebar()).toEqual([
+      "Lights1 on",
+      "Switches",
+      "Office",
+      "Hall",
+      "Attic",
+    ]);
+    expect(container.querySelector("main")?.textContent).toBe("");
+    expect(back).toHaveBeenCalledOnce();
+  });
+
+  it("do not leave their page before the home's devices are read", async () => {
+    let answer!: (devices: DeviceInfo[]) => void;
+    answers["/api/devices"] = () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      });
+    await show(noRoomPage);
+    expect(back).not.toHaveBeenCalled();
+
+    await act(async () => {
+      answer([loose]);
+    });
+    expect(back).not.toHaveBeenCalled();
+    expect(container.querySelector("h1")?.textContent).toBe("No room");
   });
 });
 

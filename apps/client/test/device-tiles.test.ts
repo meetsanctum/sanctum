@@ -109,7 +109,7 @@ describe("sectionsByRoom", () => {
     ).toEqual([
       ["Living room", ["Ceiling light", "Floor lamp"]],
       ["Kitchen", ["Kettle"]],
-      ["Not in a room", ["Lamp", "Pantry"]],
+      ["No room", ["Lamp", "Pantry"]],
     ]);
   });
 

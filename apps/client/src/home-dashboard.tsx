@@ -1,7 +1,7 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 
-import { readingsOf, sensorReadings } from "./device-tiles";
+import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
 import { placeMotionText } from "./motion";
 import {
   LightsButton,
@@ -21,7 +21,8 @@ import type { Devices } from "./use-devices";
 // the button for all its lights and what its motion and sensors say, as its
 // page's header does; then its apps' sections, its moods first, as on its
 // page but with no heading of their own; then its devices on Home, in the
-// household's order. Devices on Home with no room come last. A room's page
+// household's order. Devices on Home with no room come last, under a name
+// that opens their page as a room's does. A room's page
 // stays complete and fixed; Home shows only what was put on it, so a sensor
 // needs no tile here for its readings. A room with nothing to show is in the
 // sidebar only.
@@ -36,6 +37,8 @@ export function HomeRooms(props: {
   apps: readonly AppInfo[];
   entities: SectionEntities;
   openRoom: (roomId: string) => void;
+  /** Opens the page of the devices in no room. */
+  openNoRoom: () => void;
   openDevice: (tile: Tile) => void;
   onEdit: () => void;
 }) {
@@ -94,22 +97,20 @@ export function HomeRooms(props: {
               id={headingId}
               className="m-0 text-[15px] leading-5 font-medium"
             >
-              {room ? (
-                <Button
-                  variant="ghost"
-                  size="inline"
-                  type="button"
-                  onClick={() => props.openRoom(room.id)}
-                >
-                  {room.name}
-                  <icons.ChevronRight
-                    aria-hidden="true"
-                    className="size-4 text-white/65"
-                  />
-                </Button>
-              ) : (
-                "Not in a room"
-              )}
+              <Button
+                variant="ghost"
+                size="inline"
+                type="button"
+                onClick={() =>
+                  room ? props.openRoom(room.id) : props.openNoRoom()
+                }
+              >
+                {place.name}
+                <icons.ChevronRight
+                  aria-hidden="true"
+                  className="size-4 text-white/65"
+                />
+              </Button>
             </h2>
             {place.hasLine && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -184,7 +185,7 @@ export function homePlaces(
   const rooms = devices.places?.rooms ?? [];
   return [
     ...rooms.map((room) => ({ id: room.id, name: room.name, room })),
-    { id: "no-room", name: "Not in a room", room: null },
+    { id: "no-room", name: noRoomName, room: null },
   ].map((place) => {
     const roomId = place.room?.id ?? null;
     return {

@@ -366,12 +366,12 @@ describe("the Presence category", () => {
       "OfficeMotion now",
       "HallQuiet for 30 min",
     ]);
-    expect(headings()).toEqual(["Office", "Hall", "Not in a room"]);
+    expect(headings()).toEqual(["Office", "Hall", "No room"]);
     expect(
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Environment", "Presence", "Office", "Hall"]);
+    ).toEqual(["Environment", "Presence", "Office", "Hall", "No room"]);
   });
 
   it("leaves out rooms without a motion sensor", async () => {

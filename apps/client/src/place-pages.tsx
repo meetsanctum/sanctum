@@ -20,6 +20,7 @@ import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
   climateMeasures,
   measureNames,
+  noRoomName,
   onMeta,
   readingsOf,
   readingsText,
@@ -50,13 +51,17 @@ import type { Devices } from "./use-devices";
 // room, devices with no room last; Lights' opens with a button for every
 // light in the home, Environment with what every sensor reads, and Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
-// above its sensors. The sidebar lists them, and Home shows each
+// above its sensors. The devices in no room have a page too, last among
+// the rooms while there are any. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).
 // They look the same on every device, shared ones too: lights, switches
 // and sensors are household things.
 
 /** Where the shell's own pages are in its routes; never an app's id, which always has a dot. */
 export const placePages = "places";
+
+/** The page of the devices in no room, among the shell's own. */
+export const noRoomPage = "no-room";
 
 // A category's icon and colour, for each the SDK lists.
 const categoryLooks: Record<
@@ -434,6 +439,38 @@ export function RoomPage(props: {
   );
 }
 
+const inNoRoom = (devices: Devices) =>
+  devices.tiles.filter((tile) => tile.roomId === null);
+
+// The devices in no room have a page like a room's: their tiles in a
+// section for each category. It leaves out what needs a place: a line of
+// motion and readings and a button for all its lights, since its devices
+// are not together, and apps' sections, which belong to a room. Once every
+// device has a room, the page leaves, as a removed room's does.
+export function NoRoomPage(props: {
+  devices: Devices;
+  openDevice: (tile: Tile) => void;
+  back: () => void;
+}) {
+  const { devices, back } = props;
+  const own = inNoRoom(devices);
+  const gone = devices.loaded && own.length === 0;
+  useEffect(() => {
+    if (gone) back();
+  }, [gone, back]);
+  if (own.length === 0) return null;
+  return (
+    <>
+      <PlaceHeader title={noRoomName} />
+      <Sections
+        sections={sectionsByCategory(own)}
+        devices={devices}
+        onOpen={props.openDevice}
+      />
+    </>
+  );
+}
+
 export function CategoryPage(props: {
   id: string;
   devices: Devices;
@@ -491,12 +528,17 @@ export function CategoryPage(props: {
 
 // The places in the sidebar, after the dashboards: the categories the home
 // has devices for, then the rooms, each group under its heading. Only Lights
-// says how many are on; the rest would be noise.
+// says how many are on; the rest would be noise. While any device is in no
+// room, No room comes last among the rooms, the only one in a home that has
+// none yet.
 export function SidebarPlaces(props: {
   devices: Devices;
   /** The place on show, if any. */
   current: { page: string; params: PageParams } | null;
-  open: (page: "room" | "category", params: PageParams) => void;
+  open: (
+    page: "room" | "category" | typeof noRoomPage,
+    params: PageParams,
+  ) => void;
 }) {
   const { devices, current, open } = props;
   const shown = deviceCategories
@@ -506,6 +548,7 @@ export function SidebarPlaces(props: {
     }))
     .filter((category) => category.tiles.length > 0);
   const rooms = devices.places?.rooms ?? [];
+  const hasNoRoom = inNoRoom(devices).length > 0;
   return (
     <>
       {shown.length > 0 && <SidebarHeading>Categories</SidebarHeading>}
@@ -522,7 +565,7 @@ export function SidebarPlaces(props: {
           onSelect={() => open("category", { id: category.id })}
         />
       ))}
-      {rooms.length > 0 && (
+      {(rooms.length > 0 || hasNoRoom) && (
         <>
           <SidebarHeading>Rooms</SidebarHeading>
           {rooms.map((room) => (
@@ -536,6 +579,14 @@ export function SidebarPlaces(props: {
               onSelect={() => open("room", { id: room.id })}
             />
           ))}
+          {hasNoRoom && (
+            <SidebarItem
+              icon={icons.SquareDashed}
+              name={noRoomName}
+              current={current?.page === noRoomPage}
+              onSelect={() => open(noRoomPage, {})}
+            />
+          )}
         </>
       )}
     </>

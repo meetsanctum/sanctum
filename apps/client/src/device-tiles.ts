@@ -35,6 +35,9 @@ const quiet = "Not heard from";
 export const tileKey = (device: string, capability: string) =>
   `${device}/${capability}`;
 
+/** What the place of the devices in no room is called, wherever it is named. */
+export const noRoomName = "No room";
+
 /** The tiles a category holds: those of the kinds of capability it does. */
 export const tilesIn = (
   category: (typeof deviceCategories)[number],
@@ -386,7 +389,7 @@ export function sectionsByRoom(
     })),
     {
       id: "no-room",
-      title: "Not in a room",
+      title: noRoomName,
       tiles: tiles.filter((tile) => tile.roomId === null),
     },
   ]

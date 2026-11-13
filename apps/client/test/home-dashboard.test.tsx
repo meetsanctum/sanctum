@@ -154,6 +154,7 @@ let devices: DeviceInfo[];
 // Home's devices, as the core keeps them.
 let onHome: string[];
 const openRoom = vi.fn();
+const openNoRoom = vi.fn();
 const onEdit = vi.fn();
 
 function Harness(props: { editing: boolean }) {
@@ -170,6 +171,7 @@ function Harness(props: { editing: boolean }) {
       apps={[moods]}
       entities={entities}
       openRoom={openRoom}
+      openNoRoom={openNoRoom}
       openDevice={() => {}}
       onEdit={onEdit}
     />
@@ -218,6 +220,7 @@ beforeEach(() => {
   // The hall's ceiling light was taken off; the desk strip comes first.
   onHome = ["desk", "lamp", "loose"];
   openRoom.mockReset();
+  openNoRoom.mockReset();
   onEdit.mockReset();
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init) => {
@@ -281,7 +284,7 @@ describe("Home", () => {
           ["On Home", "Desk strip", "Lamp"],
         ],
       },
-      { heading: "Not in a room", groups: [["On Home", "Loose lamp"]] },
+      { heading: "No room", groups: [["On Home", "Loose lamp"]] },
     ]);
     // The hall's light is off Home, but its room's button is there.
     expect(button("Turn on the Hall lights").textContent).toBe("Lights off");
@@ -296,6 +299,13 @@ describe("Home", () => {
     await show();
     await act(async () => button("Office").click());
     expect(openRoom).toHaveBeenCalledWith("office");
+  });
+
+  it("opens the page of the devices in no room from their name", async () => {
+    await show();
+    await act(async () => button("No room").click());
+    expect(openNoRoom).toHaveBeenCalledOnce();
+    expect(openRoom).not.toHaveBeenCalled();
   });
 
   it("says how to put something on it while nothing is", async () => {
@@ -332,8 +342,8 @@ describe("Edit Home", () => {
         ],
       },
       {
-        heading: "Not in a room",
-        groups: [["Not in a room on Home", "Loose lamp"]],
+        heading: "No room",
+        groups: [["No room on Home", "Loose lamp"]],
       },
     ]);
     expect(container.textContent).toContain("Nothing in Hall is on Home.");

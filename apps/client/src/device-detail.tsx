@@ -21,6 +21,7 @@ import type { HostedApp } from "./apps";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
 import { historyPage } from "./device-history";
+import { noRoomName } from "./device-tiles";
 import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
@@ -190,7 +191,7 @@ export function DeviceDetail(props: {
       onClose={onClose}
       onCovering={props.onCovering}
       title={tile?.name ?? ""}
-      subtitle={tile && `${room?.name ?? "Not in a room"} · ${status}`}
+      subtitle={tile && `${room?.name ?? noRoomName} · ${status}`}
       leading={
         device &&
         props.home.devices && (
