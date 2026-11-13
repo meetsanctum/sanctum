@@ -4,6 +4,7 @@ import type { Outcome } from "@meetsanctum/app-sdk/protocol";
 import { readFile } from "node:fs/promises";
 
 import { createCorePeer, type PeerCalls } from "./core-peer.js";
+import { createSecretCalls } from "./secret-calls.js";
 
 // What every app must do through its socket in its real container: name its
 // version and manifest before anything else, open its database, start,
@@ -67,9 +68,7 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
       throw new Error("There is no internet here");
     },
     joining: done,
-    secret: async () => null,
-    putSecret: done,
-    removeSecret: done,
+    ...createSecretCalls(manifest.id).calls,
   };
 }
 

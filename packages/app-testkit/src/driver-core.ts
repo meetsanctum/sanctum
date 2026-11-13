@@ -9,10 +9,7 @@ import {
   deviceRegistration,
   deviceRelease,
   deviceReport,
-  maxAppSecrets,
-  maxSecretBytes,
   permissionIds,
-  secretNamePattern,
   type Actor,
   type AppContext,
   type AppDefinition,
@@ -27,6 +24,8 @@ import {
   type ServiceConnection,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
+
+import { createSecretCalls } from "./secret-calls.js";
 
 // A fake core for one driver app: it takes the driver's registrations,
 // reports, presses and releases, what it says of joining devices and of
@@ -84,8 +83,7 @@ export function createDriverCore(
   const refused: Error[] = [];
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
-  // The driver's own secrets, by name, as the core keeps them sealed.
-  const secrets = new Map<string, string>();
+  const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -236,26 +234,7 @@ export function createDriverCore(
       }
       joining.push(parsed.data);
     },
-    secret: async (name) => secrets.get(name) ?? null,
-    async putSecret(input) {
-      const parsed = z
-        .object({
-          name: z.string().regex(secretNamePattern),
-          value: z
-            .string()
-            .refine((value) => Buffer.byteLength(value) <= maxSecretBytes),
-        })
-        .safeParse(input);
-      if (!parsed.success) {
-        refuse(new Error(`${app.id} kept a secret the core cannot keep`));
-      }
-      const { name, value } = parsed.data;
-      if (!secrets.has(name) && secrets.size >= maxAppSecrets) {
-        refuse(new Error(`${app.id} keeps ${maxAppSecrets} secrets already`));
-      }
-      secrets.set(name, value);
-    },
-    removeSecret: async (name) => void secrets.delete(name),
+    ...secretCalls,
     log() {},
   };
   for (const name of options.unanswered ?? []) {
