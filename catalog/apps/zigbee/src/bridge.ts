@@ -653,6 +653,12 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     /** Once its first device list is registered and said to the core. */
     listed: () => firstList.wait(),
 
+    /** After the core restarted: its latest list, which are here and their states. */
+    async resume() {
+      needsStateRefresh = true;
+      if (listed) await syncDevices(latestList);
+    },
+
     /**
      * Moves a light's brightness up or down at a rate, or stops it, with
      * Zigbee2MQTT's brightness_move; once stopped, Zigbee2MQTT reads the

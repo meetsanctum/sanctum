@@ -20,7 +20,9 @@ import {
 } from "../src/core-peer.js";
 
 export const digest = "a".repeat(64);
-type Hooks = Partial<Pick<AppDefinition, "start" | "stop" | "driver">>;
+type Hooks = Partial<
+  Pick<AppDefinition, "start" | "resume" | "stop" | "driver">
+>;
 
 export function testApp(
   actions: AppDefinition["actions"] = [],

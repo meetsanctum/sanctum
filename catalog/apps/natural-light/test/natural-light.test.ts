@@ -649,6 +649,28 @@ describe("natural light", () => {
     await app.stop!(core.ctx, { reason: "shutdown" });
   });
 
+  it("publishes where each light it follows stands again when it resumes, setting none", async () => {
+    const { app, core, call, advance, sentFrom, now } = running();
+    core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+    await call("naturalLight.follow", { ...lamp, follow: true });
+    await app.start!(core.ctx, { reason: "started" });
+    advance(minute);
+    // What the core missed while it was away.
+    core.state.entities.clear();
+    const sent = sentFrom(0).length;
+
+    await app.resume!(core.ctx, { reason: "started" });
+
+    expect(sentFrom(sent)).toEqual([]);
+    expect(core.state.entities.get("lamp/light")?.state).toEqual({
+      device: "lamp",
+      capability: "light",
+      status: "following",
+      ...curveAt(now()),
+    });
+    await app.stop!(core.ctx, { reason: "shutdown" });
+  });
+
   it.each(["read", "publish"] as const)(
     "fails its start when it cannot %s a followed light's target",
     async (operation) => {

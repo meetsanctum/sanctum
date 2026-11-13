@@ -260,3 +260,31 @@ describe("Zigbee's start", () => {
     expect(core.presented).toEqual([]);
   });
 });
+
+describe("Zigbee's resume", () => {
+  it("says its devices, which are here and their states again, without reconnecting", async () => {
+    const lamp = fresh("bulb");
+    await bridge.add(zigbeeDevice(lamp.key, lamp.name, [lightExpose()]), {
+      state: "ON",
+      brightness: 200,
+    });
+    const { core, status } = zigbee();
+    await core.start();
+    await core.until(
+      () => core.reports.some(({ key }) => key === lamp.key),
+      "its first state",
+    );
+    const said = core.presented.length;
+    const reported = core.reports.length;
+
+    await core.resume();
+
+    expect(core.presented).toHaveLength(said + 1);
+    expect(core.presented.at(-1)).toContain(lamp.key);
+    await core.until(
+      () => core.reports.length > reported,
+      "its state, read again",
+    );
+    expect(await status()).toMatchObject({ broker: "connected" });
+  });
+});

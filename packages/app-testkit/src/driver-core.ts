@@ -263,6 +263,8 @@ export function createDriverCore(
     presented,
 
     start: async () => app.start?.(own, { reason: "started" }),
+    /** As the core does once it restarted while the driver ran on. */
+    resume: async () => app.resume?.(own, { reason: "started" }),
     stop: async () => app.stop?.(own, { reason: "shutdown" }),
 
     /** Hands the driver a command, as the core does, from a person. */

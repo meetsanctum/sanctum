@@ -26,8 +26,9 @@ import { openAppStorage, type AppStorage } from "./storage.js";
 // refuses never runs its code or its migrations. Then the database opens and
 // migrates, and the core learns the app is ready for calls. A core that goes,
 // as when it restarts or updates, takes every call on its connection with it:
-// the app stops as for a restart, its process and database stay, and the
-// runner says hello to the next core, which starts it again there. Nothing
+// the app stops as for a restart, or goes on if it has a resume, its process
+// and database stay, and the runner says hello to the next core, which starts
+// or resumes it there. Nothing
 // from one connection is answered on the next. One that finds no core for
 // 5 minutes ends the process, as does a stop that doesn't finish, and the
 // core starts it afresh.
@@ -49,6 +50,8 @@ const retryMs = 250;
 const defaultAwayWithinMs = 5 * 60_000;
 // What a stop may take once the core has gone.
 const defaultStopWithinMs = 8_000;
+// How long one that went on, to resume, waits for the next core's start.
+const defaultResumeWithinMs = 60_000;
 
 // How the core refused one of the app's calls, as its code sees it: an
 // ActionError for the codes apps tell apart.
@@ -98,6 +101,8 @@ export function runSession(options: {
   awayWithinMs?: number;
   /** What the app's stop may take once the core has gone. */
   stopWithinMs?: number;
+  /** How long an app that went on, to resume, waits for the next core's start. */
+  resumeWithinMs?: number;
   log?: (message: string) => void;
 }) {
   const { appId } = options;
@@ -268,8 +273,13 @@ export function runSession(options: {
         if (!welcomed) {
           welcomed = true;
           // One that ran for a core before has its database open already.
-          if (host) send({ type: "ready" });
-          else void prepare();
+          if (host) {
+            send({ type: "ready" });
+            host.resumesWithin(
+              options.resumeWithinMs ?? defaultResumeWithinMs,
+              options.stopWithinMs ?? defaultStopWithinMs,
+            );
+          } else void prepare();
         }
         return;
       case "refused":
