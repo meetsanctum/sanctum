@@ -36,6 +36,10 @@ jobs:
   # dependency of the website alone changes nothing there.
   plan:
     runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        # Failed dependency-list pipelines must run the stacks too.
+        shell: bash
     outputs:
       run: ${{ steps.changes.outputs.run }}
       groups: ${{ steps.groups.outputs.groups }}
@@ -58,10 +62,13 @@ jobs:
             # As pnpm prints it, through any symlink.
             dir="$(cd "$(mktemp -d)" && pwd -P)"
             git archive "$1" | tar -x -C "$dir" || return
-            (cd "$dir" && pnpm list -r --lockfile-only --depth Infinity --parseable \
+            # Keep each package's dependency tree: changing which version one
+            # uses matters even when another already installs that version.
+            (cd "$dir" && pnpm list -r --lockfile-only --depth Infinity --json \
               --filter './apps/core...' --filter './apps/manager...' \
               --filter './catalog/apps/*...' --filter './deploy/dev/apps/*...') |
-              sed "s|^$dir/||" | sort -u
+              jq -S --arg dir "$dir/" \
+                'walk(if type == "string" then ltrimstr($dir) else . end) | sort_by(.path)'
           }
           # Whatever this can't tell runs them.
           changed() {
@@ -78,14 +85,21 @@ jobs:
             echo "The lockfile changes what the stacks install:"
             diff "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" || true
           }
-          if changed; then echo run=true; else echo run=false; fi >>"$GITHUB_OUTPUT"
+          if changed; then
+            echo run=true >>"$GITHUB_OUTPUT"
+          else
+            echo run=false >>"$GITHUB_OUTPUT"
+          fi
       # The container tests in groups of about the same length, each on a
       # runner of its own. A file no group names runs on its own.
       - name: Group the tests
         id: groups
         run: |
           groups='[["official-moves"], ["two-stacks", "app-containers", "app-move"], ["app-images", "packages"], ["app-supervision", "app-update"]]'
-          files="$(cd apps/manager/test && ls -- *.docker.ts | sed 's/\.docker\.ts$//' | jq -Rnc '[inputs]')"
+          files="$(cd apps/manager/test && find . -type f -name '*.docker.ts' | sed 's|^\./||; s/\.docker\.ts$//' | sort | jq -Rnc '[inputs]')"
+          # Vitest accepts a partly matching group, so check every named file.
+          jq -en --argjson groups "$groups" --argjson files "$files" \
+            '($groups | add) - $files | if length == 0 then true else error("Missing test files: \(join(", "))") end'
           jq -rn --argjson groups "$groups" --argjson files "$files" \
             '"groups=" + ($groups + ($files - ($groups | add) | map([.])) | map(join(" ")) | tojson)' >>"$GITHUB_OUTPUT"
 
