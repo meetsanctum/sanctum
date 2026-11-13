@@ -99,7 +99,7 @@ jobs:
           files="$(cd apps/manager/test && find . -type f -name '*.docker.ts' | sed 's|^\./||; s/\.docker\.ts$//' | sort | jq -Rnc '[inputs]')"
           # Vitest accepts a partly matching group, so check every named file.
           jq -en --argjson groups "$groups" --argjson files "$files" \
-            '($groups | add) - $files | if length == 0 then true else error("Missing test files: \(join(", "))") end'
+            '($groups | add) - $files | if length == 0 then true else error("Missing test files: \(join(", "))") end' >/dev/null
           jq -rn --argjson groups "$groups" --argjson files "$files" \
             '"groups=" + ($groups + ($files - ($groups | add) | map([.])) | map(join(" ")) | tojson)' >>"$GITHUB_OUTPUT"
 
