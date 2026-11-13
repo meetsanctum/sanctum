@@ -1,3 +1,4 @@
+import { capabilityKinds } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { deviceType } from "../src/devices/classification.js";
@@ -160,11 +161,126 @@ describe("a driver that says what its device is", () => {
   });
 });
 
+describe("a device with no capabilities", () => {
+  const purifiers = async (core: TestCore, token: string) =>
+    (await devicesSeenBy(core, token)).filter(
+      (device: { model: string }) => device.model === "Air purifier",
+    );
+
+  it("is the household's as an unknown device, in a room too, and numbered like any", async () => {
+    const { core, maya } = await lampsCore();
+    const live = await openLive(core, maya.token);
+    await radio.add("purifier-1", "purifier", "STARKVIND");
+
+    const [purifier] = await purifiers(core, maya.token);
+    expect(purifier).toMatchObject({
+      name: "Unknown device",
+      driverName: "STARKVIND",
+      type: "unknown",
+      capabilities: [],
+      roomId: null,
+      probe: false,
+    });
+    expect(live.messages).toContainEqual(
+      expect.objectContaining({
+        type: "device",
+        id: purifier.id,
+        device: expect.objectContaining({ type: "unknown" }),
+      }),
+    );
+
+    const hall = await (
+      await post(core, "/api/places/rooms/add", { name: "Hall" }, maya)
+    ).json();
+    await post(
+      core,
+      "/api/devices/update",
+      { id: purifier.id, roomId: hall.id },
+      maya,
+    );
+    await radio.add("purifier-2", "purifier", "FÖRNUFTIG");
+    expect(
+      (await purifiers(core, maya.token)).map(
+        (device: { name: string; roomId: string | null }) => [
+          device.name,
+          device.roomId,
+        ],
+      ),
+    ).toEqual([
+      ["Unknown device 2", null],
+      ["Unknown device", hall.id],
+    ]);
+  });
+
+  it("is named, put on Home and removed like any device", async () => {
+    const { core, maya } = await lampsCore();
+    await radio.add("purifier-1", "purifier", "STARKVIND");
+    const [purifier] = await purifiers(core, maya.token);
+
+    await post(
+      core,
+      "/api/devices/update",
+      { id: purifier.id, name: "Hall purifier" },
+      maya,
+    );
+    expect((await purifiers(core, maya.token))[0].name).toBe("Hall purifier");
+
+    const home = await (
+      await post(
+        core,
+        "/api/dashboards/home/add",
+        { device: purifier.id },
+        maya,
+      )
+    ).json();
+    expect(home.devices).toContain(purifier.id);
+
+    await post(core, "/api/devices/remove", { id: purifier.id }, maya);
+    expect(await purifiers(core, maya.token)).toEqual([]);
+  });
+
+  it("is seen by no app, whatever kinds it may read", async () => {
+    const { core } = await lampsCore();
+    await radio.add("purifier-1", "purifier", "STARKVIND");
+    const everyKind = { kinds: new Set(capabilityKinds) };
+
+    expect(core.devices.list().map((device) => device.type)).toContain(
+      "unknown",
+    );
+    expect(
+      core.devices.list(everyKind).map((device) => device.type),
+    ).not.toContain("unknown");
+  });
+
+  it("becomes what it is once its driver registers it with a capability", async () => {
+    const { core, maya } = await lampsCore();
+    await radio.add("gadget-1", "purifier", "Relay");
+    const before = (await devicesSeenBy(core, maya.token)).find(
+      (device: { driverName: string }) => device.driverName === "Relay",
+    );
+    expect(before.name).toBe("Unknown device");
+
+    await radio.add("gadget-1", "switch", "Relay");
+    const after = (await devicesSeenBy(core, maya.token)).find(
+      (device: { driverName: string }) => device.driverName === "Relay",
+    );
+    // The same device, now a plug by its model's name.
+    expect(after).toMatchObject({
+      id: before.id,
+      type: "plug",
+      name: "Plug 2",
+    });
+  });
+});
+
 describe("an automatic name", () => {
   it("is the room and what the device is, or just what it is", () => {
     expect(baseName("light", "Office")).toBe("Office light");
     expect(baseName("plug", null)).toBe("Plug");
-    expect(baseName("unknown", "Hall")).toBe("Hall device");
+    // What Sanctum cannot use is an unknown device wherever it is.
+    expect(baseName("unknown", "Hall")).toBe("Unknown device");
+    expect(baseName("unknown", null)).toBe("Unknown device");
+    expect(baseName("motion", null)).toBe("Motion sensor");
   });
 
   it("is numbered from 2 when another device has it, whatever its case or spacing", () => {

@@ -1,7 +1,7 @@
 import type { CapabilityKind } from "./devices.js";
 
-// What a device is, to the household: the word in its name, "Office motion
-// sensor", and its icon in Settings. A capability kind says what one part
+// What a device is, to the household: what it is called, "Motion sensor" or
+// "Office motion sensor", and its icon in Settings. A capability kind says what one part
 // of a device does; its type says what the whole device is, whatever driver
 // brings it. A device is the first type in this order whose kinds it has,
 // so a light that also measures is a light, and a motion sensor that
@@ -9,8 +9,13 @@ import type { CapabilityKind } from "./devices.js";
 
 type DeviceTypeDefinition = {
   id: string;
-  /** What a device's name calls it: "Office motion sensor". */
-  noun: string;
+  /** What a device of this type is called while it is in no room: "Motion sensor". */
+  title: string;
+  /**
+   * What its name calls it after its room, "Office motion sensor". A type
+   * with none goes by its title in any room.
+   */
+  noun: string | null;
   /** The capability kinds a device of this type has, each of them. */
   needs: readonly CapabilityKind[];
   /**
@@ -22,16 +27,29 @@ type DeviceTypeDefinition = {
 };
 
 const types = [
-  { id: "light", noun: "light", needs: ["light"] },
-  { id: "plug", noun: "plug", needs: ["switch"], declaredOnly: true },
-  { id: "switch", noun: "switch", needs: ["switch"] },
+  { id: "light", title: "Light", noun: "light", needs: ["light"] },
+  {
+    id: "plug",
+    title: "Plug",
+    noun: "plug",
+    needs: ["switch"],
+    declaredOnly: true,
+  },
+  { id: "switch", title: "Switch", noun: "switch", needs: ["switch"] },
   // A remote, whatever else it has.
-  { id: "button", noun: "button", needs: ["button"] },
+  { id: "button", title: "Button", noun: "button", needs: ["button"] },
   // A motion sensor, which may measure too.
-  { id: "motion", noun: "motion sensor", needs: ["occupancy"] },
-  { id: "sensor", noun: "sensor", needs: ["sensor"] },
-  // What none of the above fits.
-  { id: "unknown", noun: "device", needs: [] },
+  {
+    id: "motion",
+    title: "Motion sensor",
+    noun: "motion sensor",
+    needs: ["occupancy"],
+  },
+  { id: "sensor", title: "Sensor", noun: "sensor", needs: ["sensor"] },
+  // What none of the above fits: a device with no capability Sanctum has,
+  // which it cannot use. A room's name before it would promise more than
+  // is known of it, so it is an unknown device wherever it is.
+  { id: "unknown", title: "Unknown device", noun: null, needs: [] },
 ] as const satisfies readonly DeviceTypeDefinition[];
 
 /** What a device is: one of the types' ids. */

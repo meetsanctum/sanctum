@@ -5,12 +5,22 @@ import { capabilityKinds, deviceTypeOf, deviceTypes } from "../src/index.js";
 // What a device is: the list every driver's devices are matched against.
 
 describe("the device types", () => {
-  it("have an id and a noun each, no id twice", () => {
+  it("have an id and a title each, neither twice, and a noun where a room's name can lead", () => {
     const ids = deviceTypes.map((type) => type.id);
+    const titles = deviceTypes.map((type) => type.title);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(titles).size).toBe(titles.length);
     for (const type of deviceTypes) {
-      expect(type.noun).toMatch(/^[a-z]+( [a-z]+)*$/);
+      expect(type.title).toMatch(/^[A-Z][a-z]+( [a-z]+)*$/);
+      // A noun is its title as a name ends with it: "Office motion sensor".
+      if (type.noun !== null) {
+        expect(type.noun).toBe(type.title.toLowerCase());
+      }
     }
+    // Only what Sanctum cannot use has none.
+    expect(
+      deviceTypes.filter((type) => type.noun === null).map((type) => type.id),
+    ).toEqual(["unknown"]);
   });
 
   it("end with the one that needs nothing, so every device is one of them", () => {

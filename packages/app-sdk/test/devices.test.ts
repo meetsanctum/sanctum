@@ -319,10 +319,19 @@ describe("registering a device", () => {
     ).toBe(false);
   });
 
-  it("refuses unknown kinds, repeated ids and devices without capabilities", () => {
+  it("takes a device with no capabilities, one Sanctum cannot use", () => {
+    expect(
+      deviceRegistration.parse({
+        key: "purifier",
+        name: "Air purifier",
+        capabilities: [],
+      }).capabilities,
+    ).toEqual([]);
+  });
+
+  it("refuses unknown kinds and repeated ids", () => {
     const device = { key: "plug", name: "Plug" };
     for (const capabilities of [
-      [],
       [{ id: "power", kind: "outlet" }],
       [
         { id: "l1", kind: "switch" },

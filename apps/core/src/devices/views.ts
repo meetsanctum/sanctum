@@ -21,10 +21,17 @@ type CapabilityRow = typeof deviceCapabilities.$inferSelect;
  */
 export type View = { kinds?: ReadonlySet<CapabilityKind> };
 
-/** A device as one view sees it, or nothing when it sees none of it. */
+/**
+ * A device as one view sees it, or nothing when it sees none of it. A
+ * client sees every device, one with no capabilities too, which the
+ * household still names, places and removes. An app sees a device through
+ * the kinds it may read, so it sees none of one that has no capabilities.
+ */
 export function viewOf(device: DeviceInfo, view: View = {}): DeviceInfo | null {
-  const capabilities = device.capabilities.filter(
-    (capability) => !view.kinds || view.kinds.has(capability.kind),
+  const { kinds } = view;
+  if (!kinds) return device;
+  const capabilities = device.capabilities.filter((capability) =>
+    kinds.has(capability.kind),
   );
   return capabilities.length ? { ...device, capabilities } : null;
 }
