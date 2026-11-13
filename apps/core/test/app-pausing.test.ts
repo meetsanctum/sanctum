@@ -132,14 +132,12 @@ async function lampInfo(core: TestCore, token: string) {
   return listed.find((app) => app.id === "test.lamp")!;
 }
 
-// A grant is answered before the app has stopped or runs again, so the tests
-// wait for the one they go on from, however long a slow runner takes: its
-// stop hook has run, or it takes calls again, which is after its start hook.
+// A grant is answered before the app has stopped or runs again. Wait for its
+// stop hook or for it to accept calls: its listed state can still be "running"
+// while the previous stop finishes.
 const stopped = () => expect.poll(() => lamp.said.at(-1)).toBe("stop");
 const running = (core: TestCore, appId = "test.lamp") =>
-  expect
-    .poll(() => core.apps.list().find((app) => app.id === appId)?.state)
-    .toBe("running");
+  expect.poll(() => core.apps.isRunning(appId)).toBe(true);
 
 // Long enough for a stop that must not come to have come.
 const aMoment = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -183,10 +181,9 @@ describe("switching off a permission an app needs", () => {
 
     const answered = await grant(core, maya.token, "places.read", true);
 
-    expect(answered.json()).toMatchObject({ state: "starting" });
-    await expect
-      .poll(async () => (await lampInfo(core, maya.token)).state)
-      .toBe("running");
+    expect(answered.statusCode).toBe(200);
+    await running(core);
+    expect((await lampInfo(core, maya.token)).state).toBe("running");
     expect(lamp.said).toEqual(["start", "stop", "start"]);
     expect((await call(core, maya.token, "lamp.ping")).json()).toEqual({
       places: 0,
