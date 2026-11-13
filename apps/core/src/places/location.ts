@@ -3,10 +3,10 @@ import { z } from "zod";
 
 // A suggestion for where the home is, from its public IP address: ipify
 // tells the address, GeoJS where it is and Open-Meteo how high that is. It
-// asks services on the internet, so the core asks only when an admin
-// presses the button in Settings → Household, and it saves nothing: the
-// admin checks the suggestion and saves it. Without Open-Meteo's answer it
-// suggests no elevation, which is optional.
+// asks services on the internet, so the core asks only when someone
+// presses the button in Settings → Household, and it saves nothing: they
+// check the suggestion and save it. Without Open-Meteo's answer it suggests
+// no elevation, which is optional.
 
 export type LocationSuggestion = HomeLocation & {
   // Where the address is, such as "Zurich, Switzerland", when GeoJS says.

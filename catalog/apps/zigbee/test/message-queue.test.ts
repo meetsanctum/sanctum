@@ -18,8 +18,8 @@ describe("the message queue", () => {
     ).toEqual({ coalesced: 1, dropped: 0 });
 
     expect(queue.size).toBe(4);
-    // In the order they came: a retained message is not older than one
-    // that came after it, so it is not put behind it.
+    // In the order they came: retained messages arrived before the live
+    // availability message, so they stay ahead of it.
     expectPayload(queue.next(), { revision: 2 });
     expectPayload(queue.next(), "online");
     expectPayload(queue.next(), { version: 2 });
