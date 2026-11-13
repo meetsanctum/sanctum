@@ -158,6 +158,23 @@ describe("POST /api/waitlist", () => {
     expect((await from("another")).status).toBe(200);
   });
 
+  it("counts by the client Cloudflare names, not by Cloudflare's own address", async () => {
+    setUp();
+    const from = (client: string) =>
+      waitlist.POST(
+        new Request("https://example.com/api/waitlist", {
+          method: "POST",
+          headers: { "x-real-ip": "cloudflare", "cf-connecting-ip": client },
+          body: JSON.stringify({ email: "someone@example.com" }),
+        }),
+      );
+    for (let joins = 0; joins < 5; joins++) {
+      expect((await from("visitor-1")).status).toBe(200);
+    }
+    expect((await from("visitor-1")).status).toBe(429);
+    expect((await from("visitor-2")).status).toBe(200);
+  });
+
   it("says so when Resend kept no address", async () => {
     setUp();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
