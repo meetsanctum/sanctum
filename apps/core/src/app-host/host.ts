@@ -122,7 +122,6 @@ function message(error: unknown) {
 }
 
 export function createAppHost(options: {
-  dataDir: string;
   gate: Gate;
   activity: Activity;
   manager: ServiceManager & AppContainerManager;

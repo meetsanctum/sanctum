@@ -56,7 +56,6 @@ type Installed = {
   origin?: string;
   granted: readonly string[];
   settings: SettingsSchema | null;
-  running?: unknown;
   off?: boolean;
   supervision: Pick<
     Supervision,

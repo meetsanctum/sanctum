@@ -373,7 +373,6 @@ export async function createModules(
         )),
   });
   const apps = createAppHost({
-    dataDir: options.dataDir,
     gate,
     activity,
     manager: options.manager,
