@@ -96,7 +96,7 @@ apps/core                  the core: modules, app host, client gateway
 apps/manager               the privileged process: Docker, updates, backups
 apps/client                the React + Vite shell
 apps/desktop               the Electron desktop app
-apps/website               the landing page
+apps/website               the landing page and its waitlist
 packages/app-sdk           defineApp, defineAction, defineEvent, schemas
 packages/ui-sdk            what apps' pages import: components, the app client
 packages/auth-protocol     Auth's routes, sign-in binding and rules

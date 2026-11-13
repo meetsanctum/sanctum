@@ -71,26 +71,85 @@ on their own Mac or on one the whole household shares.
 - Day and Evening themes
 - Dashboards you can arrange yourself
 - A signed Mac app
+- The app for iOS and Android, and for Windows
 
-## Try it
+## How to install
 
-Sanctum runs on a Raspberry Pi 4 or another 64-bit Linux machine, with a
-Zigbee USB stick for your devices and the Mac app to use it from.
+Setting up Sanctum still takes a few technical steps. Here is what you need,
+and two ways to get it running.
 
-1. Put Raspberry Pi OS Lite (64-bit) on the Pi with Raspberry Pi Imager. A
-   machine that already runs Debian or Ubuntu can skip this step.
-2. On it, run:
+- **A small computer that stays on.** Sanctum runs on a Raspberry Pi with at
+  least 2 GB of memory, or another machine with Raspberry Pi OS, Debian or
+  Ubuntu.
+- **A Zigbee USB stick.** We currently recommend: Nabu Casa ZBT-2 or
+  ConBee III.
+- **A Mac.** The Sanctum app runs on Macs with Apple silicon.
+
+### Set it up with your AI agent
+
+The easiest way for now. An AI agent that can run commands on your computer
+can guide you through the setup and do most of the typing. A few steps stay
+with you, like writing the memory card and plugging things in. Give it this:
+
+```text
+Read https://meetsanctum.com/install.md and guide me through setting up Sanctum.
+```
+
+That page tells the agent each step, what to check first and what to ask you.
+Open [install.md](apps/website/public/install.md) to read it yourself first.
+
+### Or do it yourself, step by step
+
+1. **Get the Raspberry Pi ready.** On your Mac, open the free Raspberry Pi
+   Imager and choose Raspberry Pi OS Lite (64-bit). In its settings, name the
+   Pi sanctum, set a username and a password, add your Wi-Fi if the Pi has no
+   network cable, and turn on SSH. Write the card, put it in the Pi and plug
+   the Pi in. Its first start takes a few minutes.
+2. **Connect to the Pi.** Open Terminal on your Mac and type this, with the
+   username you chose in place of "you":
+
+   ```sh
+   ssh you@sanctum.local
+   ```
+
+3. **Install Sanctum.** Paste this line and press Return. It downloads
+   Sanctum and starts it, which takes a few minutes, and ends with "Sanctum
+   is running".
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
    ```
 
-3. Plug in the Zigbee stick.
-4. Build the Mac app and open it. It finds your home on the network, and you
-   set it up from there.
+4. **Plug in the Zigbee stick.** Plug one stick into the Pi. It starts
+   working by itself within a minute.
+5. **Build the Mac app.** The app has no download for now, so your Mac builds
+   it. It needs Git, Node.js 24 and pnpm 10. In a new Terminal window on the
+   Mac:
 
-[The install guide](docs/install.md) has each step in full. The Mac app has
-no download: it is built from this repository, on a Mac with Apple silicon.
+   ```sh
+   git clone https://github.com/meetsanctum/sanctum.git
+   cd sanctum
+   git checkout "$(git describe --tags --abbrev=0 origin/main)"
+   pnpm install
+   pnpm --filter @meetsanctum/desktop package
+   open apps/desktop/release
+   ```
+
+   A folder opens with a disk image in it. Open the image and drag Sanctum
+   into Applications.
+
+6. **Set up your home.** Open Sanctum and let it find devices on your network
+   when your Mac asks. It lists your new home: choose Set up, enter your
+   name, a username and a password, and add your first light.
+
+[The full guide](docs/install.md) has each step in more detail, and what to
+do when one goes wrong.
+
+### Easier ways are on the way
+
+Getting Sanctum running is still a little complicated. A simpler setup is
+being worked on. [Join the waitlist](https://meetsanctum.com) and you'll hear
+when it is ready.
 
 ## Licences
 

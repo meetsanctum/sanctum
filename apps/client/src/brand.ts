@@ -1,4 +1,4 @@
-// The one place the product name is defined. The client's and the website's
-// index.html receive it through the brand plugin in their vite.config.ts; UI
-// text imports it from here.
+// The one place the product name is defined. The client's index.html
+// receives it through the brand plugin in its vite.config.ts; UI text and
+// the website import it from here.
 export const productName = "Sanctum";

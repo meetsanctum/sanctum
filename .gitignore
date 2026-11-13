@@ -5,6 +5,9 @@ node_modules
 dist
 build
 out
+.next
+next-env.d.ts
+*.tsbuildinfo
 .turbo
 coverage
 
@@ -23,6 +26,9 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+# The website's published settings, which dotenvx encrypts; their key stays
+# in .env.keys, ignored above. Its tests fail on a value in plain text.
+!apps/website/.env.production
 
 # OS/editor
 .DS_Store

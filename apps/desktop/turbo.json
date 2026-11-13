@@ -6,7 +6,7 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/assets/brand/*.svg",
-        "$TURBO_ROOT$/apps/website/index.html"
+        "$TURBO_ROOT$/apps/website/src/app/knot.tsx"
       ]
     }
   }
