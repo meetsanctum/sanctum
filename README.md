@@ -78,12 +78,15 @@ Sanctum runs on a Raspberry Pi 4 or another 64-bit Linux machine, with a
 Zigbee USB stick for your devices and the Mac app to use it from.
 
 1. Put Raspberry Pi OS Lite (64-bit) on the Pi with Raspberry Pi Imager. A
-   machine that already runs Debian or Ubuntu needs nothing.
+   machine that already runs Debian or Ubuntu can skip this step.
 2. On it, run:
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
    ```
+
+   If `curl` is missing, install it first with `sudo apt-get update` and
+   `sudo apt-get install -y curl ca-certificates`.
 
 3. Plug in the Zigbee stick.
 4. Build the Mac app and open it. It finds your home on the network, and you

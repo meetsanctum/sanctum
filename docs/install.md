@@ -4,7 +4,7 @@ Sanctum runs on a small computer in your home, and you use it from the Mac
 app. This guide takes a Raspberry Pi, or another Linux machine, from nothing
 to a home with its first light in it.
 
-It asks for a terminal twice: one pasted command on the machine, and a few
+It asks for a terminal twice: the installer on the machine, and a few commands
 to build the Mac app, which has no download.
 
 ## What you need
@@ -12,9 +12,10 @@ to build the Mac app, which has no download.
 - **A machine that stays on.** A Raspberry Pi 4, or another 64-bit machine
   (ARM, Intel or AMD) running Raspberry Pi OS (64-bit), Debian or Ubuntu. An
   old laptop with Debian or Ubuntu Server on it works too.
-- **A Zigbee USB stick** that Zigbee2MQTT supports. The Nabu Casa ZBT-2 and
+- **A Zigbee USB stick** that [Zigbee2MQTT supports](https://www.zigbee2mqtt.io/guide/adapters/),
+  with Zigbee coordinator firmware installed. The Nabu Casa ZBT-2 and
   the Dresden Elektronik ConBee III are recognised by themselves; so are
-  other Nabu Casa and Silicon Labs sticks and other ConBee and RaspBee ones.
+  other Nabu Casa and Silicon Labs sticks and other ConBee ones.
   [Any other](#zigbee-does-not-start) takes one command.
 - **A Mac with Apple silicon**, for the Mac app, with Git, Node.js 24 or
   newer and pnpm 10 to build it.
@@ -23,8 +24,8 @@ to build the Mac app, which has no download.
 
 ## 1. Prepare the machine
 
-A machine that already runs Debian or Ubuntu needs nothing: open a terminal
-on it, or one over SSH, and go on to step 2.
+A machine that already runs Debian or Ubuntu can skip this step: open a
+terminal on it, or one over SSH, and go on to step 2.
 
 ### A Raspberry Pi with a blank card
 
@@ -50,7 +51,14 @@ keeps it awake with its lid closed.
 
 ## 2. Install Sanctum
 
-On the machine, run:
+On the machine, if `curl` is missing, install it first:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates
+```
+
+Then run:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
@@ -63,8 +71,8 @@ It takes a few minutes, most of them downloading, and ends with:
 Open the Sanctum app on your Mac: it finds your home on this network.
 ```
 
-A Raspberry Pi then says it restarts in 10 seconds, once, to turn on a
-setting its system leaves off. Sanctum comes back by itself.
+If a Raspberry Pi needs memory limits turned on, it then says it restarts
+in 10 seconds, once, to enable them. Sanctum comes back by itself.
 
 Running the command again is safe: it leaves a running Sanctum alone and
 finishes an install that was cut short.
@@ -85,14 +93,14 @@ On the Mac:
 git clone https://github.com/meetsanctum/sanctum.git
 cd sanctum
 git checkout "$(git describe --tags --abbrev=0 origin/main)"
-corepack enable
 pnpm install
 pnpm --filter @meetsanctum/desktop package
 open apps/desktop/release
 ```
 
-The third line takes the code of the newest release, the version the
-installer put on your machine. The last opens the folder with the disk
+The third line takes the code of the newest release, matching a new install
+on the stable channel. For the edge channel, use the commit described under
+[Updating](#updating) instead. The last opens the folder with the disk
 image, `Sanctum-<version>-arm64.dmg`: open it and drag Sanctum into
 Applications.
 
@@ -134,8 +142,20 @@ home's data, restarts with the new version, and goes back by itself if the
 new version does not start. The home's controls are away for a minute or
 two.
 
-The Mac app carries its own screens, so after an update build it again from
-the new release, as in step 4.
+The Mac app carries its own screens, so after an update quit the app and
+build it again. In the `sanctum` folder on the Mac, fetch the new releases
+and select the tag matching the version Settings → System now shows (for
+example, `v0.1.0` for version `0.1.0`):
+
+```sh
+git fetch origin --tags
+git checkout v0.1.0
+pnpm install
+pnpm --filter @meetsanctum/desktop package
+open apps/desktop/release
+```
+
+Open the new disk image and replace Sanctum in Applications.
 
 The installer takes one option, for the newest build from `main` in place of
 a release:
@@ -145,6 +165,17 @@ curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/ins
 ```
 
 A home stays on the channel it was installed on.
+
+For an edge install or update, build the Mac app from the same commit as
+the running home. On the Linux machine, read that commit:
+
+```sh
+sudo docker inspect sanctum-core --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+```
+
+After fetching on the Mac, use `git checkout` with that commit in place of
+the release tag in the build commands above. Edge images are published by
+hand, so the latest code on `main` may be newer than the running home.
 
 ## When something isn't right
 
@@ -190,9 +221,8 @@ appears later is listed by itself.
 ### Zigbee does not start
 
 Settings → System → Status says what is missing: no stick plugged in, or
-several. With one stick in and Zigbee still not running, the stick's type is
-one Sanctum does not recognise by itself. On the machine, list the sticks it
-sees:
+several. If it asks you to choose the stick's adapter type, Sanctum does not
+recognise that type by itself. On the machine, list the sticks it sees:
 
 ```sh
 sudo docker exec sanctum-manager node dist/cli.js coordinator
@@ -216,8 +246,8 @@ sudo docker exec sanctum-manager node dist/cli.js coordinator choose /dev/serial
 - **In Docker**: containers, volumes and networks named `sanctum` or
   starting with `sanctum-`. Your home's data is in those volumes.
 - **On a Raspberry Pi** whose system gives containers no memory limits:
-  `cgroup_enable=memory` at the end of `/boot/firmware/cmdline.txt`, and one
-  restart.
+  `cgroup_enable=memory` at the end of `/boot/firmware/cmdline.txt` (or
+  `/boot/cmdline.txt` on older systems), and one restart.
 - **On a laptop**: `/etc/systemd/logind.conf.d/sanctum.conf`, which has the
   system ignore the lid, and the sleep, suspend and hibernate targets
   masked, so it never sleeps.
