@@ -110,7 +110,7 @@ export function DeviceDetail(props: {
   );
   // A device Sanctum cannot use, whose tile stands for the device itself.
   const unknown = tile?.kind === "unknown" ? device : undefined;
-  const shown = capability !== undefined || unknown !== undefined;
+  const hasDetail = capability !== undefined || unknown !== undefined;
   // A motion sensor's detail is the same from its motion's tile and from
   // its readings', and shows the motion whose tile opened it.
   const motion =
@@ -141,7 +141,7 @@ export function DeviceDetail(props: {
       : [];
   const history = device && capability ? historyPage(device, capability) : null;
   const activity =
-    device && shown
+    device && hasDetail
       ? activityPage(device, capability, {
           where: "device",
           apps: props.apps.map((app) => app.info),
@@ -152,7 +152,7 @@ export function DeviceDetail(props: {
         })
       : null;
   // A device removed meanwhile closes its detail.
-  const gone = props.open && devices.places !== undefined && !shown;
+  const gone = props.open && devices.places !== undefined && !hasDetail;
   useEffect(() => {
     if (gone) onClose();
   }, [gone, onClose]);
@@ -191,7 +191,7 @@ export function DeviceDetail(props: {
   return (
     <Overlay
       container={props.container}
-      open={props.open && shown}
+      open={props.open && hasDetail}
       onClose={onClose}
       onCovering={props.onCovering}
       title={tile?.name ?? ""}

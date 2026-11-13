@@ -1,19 +1,13 @@
 // @vitest-environment jsdom
-import type { AppInfo, DeviceInfo } from "@meetsanctum/app-sdk";
-import {
-  createLiveFeed,
-  DeviceSections,
-  useAppClient,
-  type AppClient,
-  type DevicePageProps,
-  type Tile,
-} from "@meetsanctum/ui-sdk";
+import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import { createLiveFeed, DeviceSections, type Tile } from "@meetsanctum/ui-sdk";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
 import { alex, entry } from "./activity-fixtures";
+import { pressesApp } from "./device-detail-app-fixtures";
 import { coreJson } from "../src/core-fetch";
 import { useDashboards } from "../src/dashboards";
 import { DeviceDetail } from "../src/device-detail";
@@ -33,47 +27,6 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 // A device's detail: opened from its tile's body, its controls send through
 // core Devices as the tiles do.
 
-// An app that adds a page to remotes' details, drawn in its own scope.
-function PressesPage(props: DevicePageProps) {
-  const client = useAppClient();
-  return (
-    <p>
-      {client.app.id} for {props.device.name}:{" "}
-      {props.device.capabilities.map((each) => each.kind).join(", ")}
-    </p>
-  );
-}
-function pressesApp(permissions: string[]): HostedApp {
-  const info: AppInfo = {
-    id: "test.presses",
-    name: "Presses",
-    version: "0.1.0",
-    icon: null,
-    pages: [],
-    permissions,
-    requests: [],
-    state: "running",
-    settings: null,
-    provides: {
-      entities: [],
-      widgets: [],
-      roomSections: [],
-      devicePages: [
-        { id: "test.presses", title: "Presses", kinds: ["button"] },
-      ],
-    },
-  };
-  return {
-    info,
-    ui: {
-      id: "test.presses",
-      version: "1.0.0",
-      pages: {},
-      devicePages: { "test.presses": PressesPage },
-    },
-    client: { app: info } as AppClient,
-  };
-}
 let apps: HostedApp[] = [];
 
 // Core History's answers: the lamp came on at 40% three hours ago, and
