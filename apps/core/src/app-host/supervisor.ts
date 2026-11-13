@@ -202,7 +202,7 @@ export function createSupervisor(options: {
     const isNew = supervision.phase !== phase;
     Object.assign(supervision, { phase, ...change });
     if (isNew) {
-      supervision.since = now();
+      supervision.since = change.since ?? now();
     }
     follow(entry, phase);
     if (phase === "running" || phase === "failed") {
@@ -412,9 +412,23 @@ export function createSupervisor(options: {
     /** Its connection is ready: it starts, by its grants. */
     ready,
 
-    /** A paused app, or one whose services changed, is starting again. */
+    /**
+     * A paused app, or one whose services changed, is starting again. Whether
+     * that was news: it was running until now.
+     */
     starting(entry: InstalledApp) {
-      if (of(entry).phase === "running") become(entry, "starting");
+      if (of(entry).phase !== "running") return false;
+      become(entry, "starting");
+      return true;
+    },
+
+    /**
+     * The start it was said to be starting for does not come, as when it is
+     * paused again first: it is as it was before.
+     */
+    calledOff(entry: InstalledApp, previousSince: Date) {
+      if (of(entry).phase === "starting")
+        become(entry, "running", { since: previousSince });
     },
 
     /** Its restarts, for its settings. */

@@ -374,6 +374,24 @@ describe("a service an app holds", () => {
       .poll(() => said)
       .toEqual(["start", "stop", "start", "stop", "start"]);
   });
+
+  it("is starting, not running, while it stops for that restart", async () => {
+    let stopped!: () => void;
+    const stopping = new Promise<void>((resolve) => (stopped = resolve));
+    const { core, maya } = await bridgeCore(
+      bridge({ needed: false, stopWaits: stopping }),
+    );
+
+    await grant(core, maya.token, "services:zigbee2mqtt", false);
+    await stopCalled();
+
+    expect(core.apps.list()[0]?.state).toBe("starting");
+    expect(core.apps.isRunning("test.bridge")).toBe(false);
+    stopped();
+
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
+    await expect.poll(() => core.apps.list()[0]?.state).toBe("running");
+  });
 });
 
 describe("a grant given back", () => {

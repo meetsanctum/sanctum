@@ -211,10 +211,23 @@ export function createAppLifecycle(options: {
   // changed, since a connection it holds would outlive the change. One
   // removed meanwhile stays stopped. A start or stop that fails is logged and holds up nothing else, so the
   // chain never rejects.
+  //
+  // It is starting from the moment a start is what comes next, though a stop
+  // comes or ends first: once its permissions are all back on, while the stop
+  // of its pause may still be under way, and as it stops to restart. So it
+  // never shows as running while it takes no calls. One paused again before
+  // that start came is as a paused app is.
   function reconcile(
     entry: InstalledApp,
     { restartFor }: { restartFor?: string } = {},
   ) {
+    const previousSince = entry.supervision.since;
+    const isStartPending =
+      installed.get(entry.app.id) === entry &&
+      !entry.off &&
+      !entry.running &&
+      pausedBy(entry.manifest.permissions, entry.granted).length === 0 &&
+      options.supervisor().starting(entry);
     const change = async () => {
       if (installed.get(entry.app.id) !== entry) {
         return;
@@ -232,12 +245,15 @@ export function createAppLifecycle(options: {
         } else if (off.length === 0) {
           if (restartFor && entry.running) {
             log(`apps: ${entry.app.id} restarts for ${restartFor}`);
+            options.supervisor().starting(entry);
             await stopApp(entry, { reason: "restarting" });
           }
           if (!entry.running) {
             await startApp(entry);
           }
         } else if (off.length > 0) {
+          if (isStartPending)
+            options.supervisor().calledOff(entry, previousSince);
           log(`apps: ${entry.app.id} is paused while ${off.join(", ")} is off`);
         }
       } catch (error) {
