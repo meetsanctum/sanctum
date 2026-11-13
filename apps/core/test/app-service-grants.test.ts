@@ -102,7 +102,19 @@ function grant(
   );
 }
 
-const settled = () => new Promise((resolve) => setTimeout(resolve, 10));
+// A grant is answered, and an app removed or installed again is under way,
+// before what they set going has ended, so the tests wait for what they go
+// on from, however long a slow runner takes: the app's stop hook has been
+// called, or the app installed again is there, its services asked for. One
+// installed while the one removed still stops is not there until it has.
+const stopCalled = () => expect.poll(() => said.at(-1)).toBe("stop");
+const installedAgain = (core: TestCore) =>
+  expect
+    .poll(() => core.apps.list().map((app) => app.id))
+    .toEqual(["test.bridge"]);
+
+// Long enough for a request that must wait to have gone if it did not.
+const aMoment = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe("a service an app holds", () => {
   it("is asked for only while its permission is on, and released at start while it is off", async () => {
@@ -116,7 +128,6 @@ describe("a service an app holds", () => {
       manager: fake.manager,
       dataDir: first.core.dataDir,
     });
-    await settled();
 
     expect(fake.calls).toEqual(["DELETE zigbee2mqtt test.bridge"]);
     // The same data, so Maya's client still signs in.
@@ -147,7 +158,7 @@ describe("a service an app holds", () => {
     });
 
     await grant(core, first.maya.token, "services:zigbee2mqtt", true);
-    await settled();
+    await aMoment();
     const callsBeforeCleanup = need.mock.calls.length;
     finishCleanup();
     await vi.waitFor(() => expect(need).toHaveBeenCalledOnce());
@@ -174,7 +185,9 @@ describe("a service an app holds", () => {
     };
 
     const answered = grant(core, maya.token, "services:zigbee2mqtt", false);
-    await settled();
+    await vi.waitFor(() =>
+      expect(fake.calls).toContain("REVOKE zigbee2mqtt test.bridge"),
+    );
     // Not yet off: the app still holds it.
     expect(core.apps.list()[0]).toMatchObject({
       permissions: ["services:zigbee2mqtt", "places.read"],
@@ -190,7 +203,7 @@ describe("a service an app holds", () => {
       permissions: ["places.read"],
       state: "paused",
     });
-    await settled();
+    await stopCalled();
     expect(fake.calls).toEqual([
       "PUT zigbee2mqtt test.bridge",
       "REVOKE zigbee2mqtt test.bridge",
@@ -232,7 +245,7 @@ describe("a service an app holds", () => {
     await core.apps.remove("test.bridge");
 
     const starting = core.startApps([bridge()]);
-    await settled();
+    await installedAgain(core);
     // Its PUT waits: the late DELETE would erase its login.
     expect(fake.calls).toEqual([
       "PUT zigbee2mqtt test.bridge",
@@ -242,9 +255,10 @@ describe("a service an app holds", () => {
     confirm();
     await starting;
     await answered;
-    await settled();
 
-    expect(fake.calls.at(-1)).toBe("PUT zigbee2mqtt test.bridge");
+    await expect
+      .poll(() => fake.calls.at(-1))
+      .toBe("PUT zigbee2mqtt test.bridge");
   });
 
   it("lets an app installed again ask for it only once the one removed has released it", async () => {
@@ -253,21 +267,22 @@ describe("a service an app holds", () => {
     const { core, fake } = await bridgeCore(bridge({ stopWaits: stopping }));
 
     const removing = core.apps.remove("test.bridge");
-    await settled();
+    await stopCalled();
     const starting = core.startApps([bridge()]);
-    await settled();
+    await aMoment();
     // Its PUT waits: the removal's DELETE would erase its login.
     expect(fake.calls).toEqual(["PUT zigbee2mqtt test.bridge"]);
     stopped();
     await removing;
     await starting;
-    await settled();
 
-    expect(fake.calls).toEqual([
-      "PUT zigbee2mqtt test.bridge",
-      "DELETE zigbee2mqtt test.bridge",
-      "PUT zigbee2mqtt test.bridge",
-    ]);
+    await expect
+      .poll(() => fake.calls)
+      .toEqual([
+        "PUT zigbee2mqtt test.bridge",
+        "DELETE zigbee2mqtt test.bridge",
+        "PUT zigbee2mqtt test.bridge",
+      ]);
   });
 
   it("stays on when the manager cannot take it back, and says so", async () => {
@@ -308,7 +323,7 @@ describe("a service an app holds", () => {
   it("gets a new login when it is back, and the app starts again", async () => {
     const { core, maya, fake } = await bridgeCore(bridge());
     await grant(core, maya.token, "services:zigbee2mqtt", false);
-    await settled();
+    await stopCalled();
 
     const answered = await grant(
       core,
@@ -366,7 +381,7 @@ describe("a grant given back", () => {
     const { core, maya } = await bridgeCore(bridge());
     const live = await openLive(core, maya.token);
     await grant(core, maya.token, "places.read", false);
-    await settled();
+    await stopCalled();
 
     await grant(core, maya.token, "places.read", true);
     const states = () =>
