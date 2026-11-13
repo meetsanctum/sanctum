@@ -12,10 +12,11 @@ to build the Mac app, which has no download.
 - **A machine that stays on.** A Raspberry Pi 4, or another 64-bit machine
   (ARM, Intel or AMD) running Raspberry Pi OS (64-bit), Debian or Ubuntu. An
   old laptop with Debian or Ubuntu Server on it works too.
-- **A Zigbee USB stick** that [Zigbee2MQTT supports](https://www.zigbee2mqtt.io/guide/adapters/),
-  with Zigbee coordinator firmware installed. The Nabu Casa ZBT-2 and
-  the Dresden Elektronik ConBee III are recognised by themselves; so are
-  other Nabu Casa and Silicon Labs sticks and other ConBee ones.
+- **A Zigbee USB stick** that
+  [Zigbee2MQTT supports](https://www.zigbee2mqtt.io/guide/adapters/). The
+  Nabu Casa ZBT-2 and the Dresden Elektronik ConBee III are recognised by
+  themselves; so are other Nabu Casa and Silicon Labs sticks and other
+  ConBee ones.
   [Any other](#zigbee-does-not-start) takes one command.
 - **A Mac with Apple silicon**, for the Mac app, with Git, Node.js 24 or
   newer and pnpm 10 to build it.
@@ -25,7 +26,13 @@ to build the Mac app, which has no download.
 ## 1. Prepare the machine
 
 A machine that already runs Debian or Ubuntu can skip this step: open a
-terminal on it, or one over SSH, and go on to step 2.
+terminal on it, or one over SSH, and go on to step 2. If it has no `curl`,
+as a fresh Debian may not, install it first:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates
+```
 
 ### A Raspberry Pi with a blank card
 
@@ -51,14 +58,7 @@ keeps it awake with its lid closed.
 
 ## 2. Install Sanctum
 
-On the machine, if `curl` is missing, install it first:
-
-```sh
-sudo apt-get update
-sudo apt-get install -y curl ca-certificates
-```
-
-Then run:
+On the machine, run:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
@@ -71,8 +71,8 @@ It takes a few minutes, most of them downloading, and ends with:
 Open the Sanctum app on your Mac: it finds your home on this network.
 ```
 
-If a Raspberry Pi needs memory limits turned on, it then says it restarts
-in 10 seconds, once, to enable them. Sanctum comes back by itself.
+A Raspberry Pi may then say it restarts in 10 seconds, once, to turn on a
+setting its system leaves off. Sanctum comes back by itself.
 
 Running the command again is safe: it leaves a running Sanctum alone and
 finishes an install that was cut short.
@@ -167,7 +167,7 @@ curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/ins
 A home stays on the channel it was installed on.
 
 For an edge install or update, build the Mac app from the same commit as
-the running home. On the Linux machine, read that commit:
+the running home. On the machine, read that commit:
 
 ```sh
 sudo docker inspect sanctum-core --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'

@@ -85,9 +85,6 @@ Zigbee USB stick for your devices and the Mac app to use it from.
    curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
    ```
 
-   If `curl` is missing, install it first with `sudo apt-get update` and
-   `sudo apt-get install -y curl ca-certificates`.
-
 3. Plug in the Zigbee stick.
 4. Build the Mac app and open it. It finds your home on the network, and you
    set it up from there.
