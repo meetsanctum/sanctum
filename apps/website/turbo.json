@@ -24,6 +24,7 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         ".env.production",
+        "$TURBO_ROOT$/.dockerignore",
         "$TURBO_ROOT$/apps/client/src/brand.ts"
       ]
     }

@@ -8,6 +8,9 @@
 **/coverage
 **/.env
 **/.env.*
+# The website's published settings, encrypted: Railway's builder reads this
+# file too, and the site's server reads them as it starts.
+!apps/website/.env.production
 **/data
 **/*.db
 **/*.db-shm

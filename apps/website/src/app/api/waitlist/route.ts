@@ -35,8 +35,9 @@ export async function POST(request: Request) {
   if (!key || !from) {
     return Response.json({ error: "not-set-up" }, { status: 503 });
   }
-  // Railway's edge names the client; without it, as when developing, every
-  // caller counts as one.
+  // Railway's public edge sets X-Real-IP. A direct caller can supply its
+  // own CF-Connecting-IP, so that header cannot identify a client here.
+  // Without an edge address, as when developing, every caller is one.
   if (!allows(request.headers.get("x-real-ip") ?? "unknown")) {
     return Response.json({ error: "too-many" }, { status: 429 });
   }

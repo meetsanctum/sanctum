@@ -20,7 +20,8 @@ it is and gets no second email, and the form hears the same answer either
 way. With `RESEND_SEGMENT_ID` set, a contact Resend already has for another
 reason joins that segment and is confirmed like a new one. One client gets
 five joins in ten minutes, counted in the server's memory by the address
-Railway's edge names. While developing,
+Railway's public edge sets in `X-Real-IP`. The route ignores
+`CF-Connecting-IP`, which a direct caller can supply. While developing,
 <http://localhost:5174/emails/waitlist> shows the confirmation as a page.
 
 The confirmation's Unsubscribe opens `/unsubscribe/<contact>`, which asks
@@ -70,7 +71,8 @@ The file is the whole project: a service or variable on Railway that it
 doesn't name is one the plan removes.
 
 `pnpm start` runs the server through dotenvx with `.env.production`, and what
-Railway sets wins over the file. So Railway holds one secret,
+Railway sets wins over the file. Railway's builder leaves out what
+`.dockerignore` names, so that file has an exception there. So Railway holds one secret,
 `DOTENV_PRIVATE_KEY_PRODUCTION`, the key from `.env.keys`, set there by hand;
 the file keeps it across applies. With `.env.production` in the repository
 and the key missing, the server stops as it starts. `SITE_URL`, for a copy
