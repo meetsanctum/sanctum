@@ -41,7 +41,6 @@ export function waitlistEmail(details: {
     why,
     `Unsubscribe: ${unsubscribeUrl}`,
     "",
-    `${productName} · Made in Zurich, Switzerland`,
     siteUrl,
   ].join("\n");
 
@@ -102,7 +101,6 @@ export function waitlistEmail(details: {
             <tr>
               <td style="${small}">
                 <a href="${escape(siteUrl)}" style="color: ${silver}; text-decoration: underline;">${escape(site)}</a>
-                · Made with ♥ in Zurich, Switzerland
               </td>
             </tr>
           </table>

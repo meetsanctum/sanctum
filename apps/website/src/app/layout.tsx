@@ -13,7 +13,7 @@ import { siteUrl } from "../site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: `${productName} · Smart home for everyone`,
+  title: `${productName} · A smart home for everyone`,
   description: `${productName} is free, open source home automation that runs your lights, sensors and automations on a small computer in your home. It needs no internet, and your data stays local.`,
   icons: { icon: favicon.src },
 };
