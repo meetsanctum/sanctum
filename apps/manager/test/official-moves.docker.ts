@@ -5,7 +5,9 @@ import { realStack } from "./real-stack.js";
 // The official apps' moves, for real: Weather, Natural light, Moods and Zigbee
 // from the real image, each with what it was given, then the host as a release
 // whose core ran them in its own process leaves it, and each moves to its own
-// image with what it had. The steps of a first move are in app-move.docker.ts
+// image with what it had. Then the same again with a first version that fails
+// as it starts, for all four at once, and the version that works arriving with a
+// power cut part way through. The steps of a first move are in app-move.docker.ts
 // and the core's tests; what's here is that the real apps and the real wiring
 // get there. With no stick here, the test says Zigbee2MQTT's device list on the
 // broker in its place.
@@ -62,26 +64,148 @@ const coreIsUp = () =>
     return response.ok ? true : undefined;
   });
 
-// The keys of an app's jobs, as the core keeps them.
-const jobsOf = async (id: string) =>
+// Rows of a database, read in the container that has it open.
+const rowsIn = async <T>(container: string, file: string, query: string) =>
   JSON.parse(
     await docker(
       "exec",
-      name("core"),
+      container,
       "node",
       "--no-warnings",
       "--input-type=module",
       "-e",
       `import { DatabaseSync } from "node:sqlite";
-       const db = new DatabaseSync("/data/core.db", { readOnly: true });
-       const rows = db.prepare("select key from jobs where app = ?").all("${id}");
-       console.log(JSON.stringify(rows.map(({ key }) => key).sort()));`,
+       const db = new DatabaseSync(${JSON.stringify(file)}, { readOnly: true });
+       console.log(JSON.stringify(db.prepare(${JSON.stringify(query)}).all()));`,
     ),
-  ) as string[];
+  ) as T[];
+
+// The keys of an app's jobs, as the core keeps them.
+const jobsOf = async (id: string) =>
+  (
+    await rowsIn<{ key: string }>(
+      name("core"),
+      "/data/core.db",
+      `select key from jobs where app = '${id}'`,
+    )
+  )
+    .map(({ key }) => key)
+    .sort();
+
+// How many rows a table has in an app's own database, on its image.
+const count = async (id: string, table: string) =>
+  (
+    await rowsIn(
+      `sanctum-${stack}-app-${id}`,
+      "/data/app.db",
+      `select * from ${table}`,
+    )
+  ).length;
+
+// The folder each app last committed from, which a first move sets.
+const movedFrom = async () =>
+  Object.fromEntries(
+    (
+      await rowsIn<{ app_id: string; folder: string | null }>(
+        name("core"),
+        "/data/core.db",
+        "select app_id, folder from app_versions",
+      )
+    )
+      .filter(({ app_id }) => apart.includes(app_id))
+      .map(({ app_id, folder }) => [app_id, folder]),
+  );
+
+// The files a core that ran them in its own process left, read without the core.
+const originalSums = () =>
+  docker(
+    "run",
+    "--rm",
+    "--volume",
+    `${name("core-data")}:/core-data:ro`,
+    "--entrypoint",
+    "sh",
+    `${name("manager")}:real`,
+    "-c",
+    "cd /core-data/apps && sha256sum *",
+  );
+
+// A version of each that fails as it starts, staged as an update brings one: its
+// own package, with an entry whose start throws.
+const stageFailing = (ids: readonly string[]) =>
+  docker(
+    "exec",
+    name("manager"),
+    "node",
+    "-e",
+    `const fs = require("node:fs");
+     const { execFileSync } = require("node:child_process");
+     const path = "/data/packages.json";
+     const state = JSON.parse(fs.readFileSync(path, "utf8"));
+     for (const id of ${JSON.stringify(ids)}) {
+       const works = state.apps[id].current;
+       const folder = works.version + "+fails";
+       const at = (each) => "/data/packages/" + id + "/" + each;
+       fs.rmSync(at(folder), { recursive: true, force: true });
+       execFileSync("cp", ["-a", at(works.folder), at(folder)]);
+       fs.writeFileSync(
+         at(folder + "/dist/fails.js"),
+         'import app from "./index.js";\\n' +
+           "export default { ...app, async start() { throw new Error(\\"This version fails on purpose\\"); } };\\n",
+       );
+       const manifest = JSON.parse(fs.readFileSync(at(folder + "/package.json"), "utf8"));
+       manifest.exports = { ".": "./dist/fails.js" };
+       fs.writeFileSync(at(folder + "/package.json"), JSON.stringify(manifest));
+       state.apps[id] = { current: { version: works.version, folder }, previous: works };
+     }
+     fs.writeFileSync(path, JSON.stringify(state));`,
+  );
+
+// The version that works, back as the next update.
+const stageWorking = (ids: readonly string[]) =>
+  docker(
+    "exec",
+    name("manager"),
+    "node",
+    "-e",
+    `const fs = require("node:fs");
+     const path = "/data/packages.json";
+     const state = JSON.parse(fs.readFileSync(path, "utf8"));
+     for (const id of ${JSON.stringify(ids)}) {
+       const { current, previous } = state.apps[id];
+       state.apps[id] = { current: previous, previous: current };
+     }
+     fs.writeFileSync(path, JSON.stringify(state));`,
+  );
+
+// Everything the stack runs stops at once, with no warning, and the host starts
+// again as compose starts it.
+async function powerCut() {
+  const running = (
+    await docker("ps", "-q", "--filter", `label=sanctum.stack=${stack}`)
+  )
+    .split("\n")
+    .filter(Boolean);
+  if (running.length > 0) await docker("kill", ...running);
+  await docker("rm", "-f", name("manager"), name("core"));
+}
+
+// What the apps own in the home, as the core keeps it.
+const whatTheHomeHas = async () => ({
+  entities: Object.fromEntries(
+    await Promise.all(
+      apart.map(async (id) => [
+        id,
+        (await entities(id)).map(({ key }) => key).sort(),
+      ]),
+    ),
+  ) as Record<string, string[]>,
+  jobs: await jobsOf(moods),
+});
 
 // Zigbee2MQTT's device list, kept on the broker as Zigbee2MQTT keeps it, said
-// with its own account.
-const listZigbeeDevices = async () => {
+// with its own account, or none.
+const listZigbeeDevices = async (list: string[] = ["-m", "[]"]) => {
   const broker = `sanctum-${stack}-mosquitto`;
   await waitFor("the broker", async () =>
     (await docker("inspect", "-f", "{{.State.Running}}", broker).catch(
@@ -106,15 +230,36 @@ const listZigbeeDevices = async () => {
     "-t",
     "zigbee2mqtt/bridge/devices",
     "-r",
-    "-m",
-    "[]",
+    ...list,
   );
 };
+// None kept: an empty retained message takes the list away.
+const forgetZigbeeDevices = () => listZigbeeDevices(["-n"]);
 
 const at = (latitude: number) => ({
   timeZone: "Europe/Zurich",
   coordinates: { latitude, longitude: 8.5417 },
 });
+
+const eachOnItsOwn = async () => {
+  for (const id of apart) {
+    await waitFor(`${id} to run on its own`, async () => {
+      const each = await info(id);
+      return each.state === "running" && each.run ? true : undefined;
+    });
+  }
+};
+
+// What each was given, in its own database on its own image.
+async function itsFileCameWithIt() {
+  // Where the forecast is for, kept in Weather's database.
+  expect(await count(app, "forecast_location")).toBe(1);
+  // The lights that follow the curve: none in a home without lights.
+  expect(await count(naturalLight, "followed_lights")).toBe(0);
+  // Moods' mood and its schedule.
+  expect(await count(moods, "moods")).toBe(1);
+  expect(await count(moods, "scheduled_moods")).toBe(1);
+}
 
 describe("the official apps' moves, for real", () => {
   beforeAll(async () => {
@@ -138,12 +283,7 @@ describe("the official apps' moves, for real", () => {
 
   it("runs each on its own from its first start, with what it's given", async () => {
     await listZigbeeDevices();
-    for (const id of apart) {
-      await waitFor(`${id} to run on its own`, async () => {
-        const each = await info(id);
-        return each.state === "running" && each.run ? true : undefined;
-      });
-    }
+    await eachOnItsOwn();
 
     await call("/api/places/home/update", at(47.3769));
 
@@ -181,12 +321,7 @@ describe("the official apps' moves, for real", () => {
     await coreIsUp();
     await listZigbeeDevices();
 
-    for (const id of apart) {
-      await waitFor(`${id} to run on its own`, async () => {
-        const each = await info(id);
-        return each.state === "running" && each.run ? true : undefined;
-      });
-    }
+    await eachOnItsOwn();
 
     // The forecast may have come meanwhile, from the real Open-Meteo.
     expect((await entities()).map(({ key }) => key)).toEqual(
@@ -205,25 +340,7 @@ describe("the official apps' moves, for real", () => {
       expect(originals).toContain(`${id}.db`);
     }
     // Each file came with it, on its own image.
-    const count = (id: string, table: string) =>
-      docker(
-        "exec",
-        `sanctum-${stack}-app-${id}`,
-        "node",
-        "--no-warnings",
-        "--input-type=module",
-        "-e",
-        `import { DatabaseSync } from "node:sqlite";
-         const db = new DatabaseSync("/data/app.db", { readOnly: true });
-         console.log(db.prepare("select * from ${table}").all().length);`,
-      );
-    // Where the forecast is for, kept in Weather's database.
-    expect(await count(app, "forecast_location")).toBe("1");
-    // The lights that follow the curve: none in a home without lights.
-    expect(await count(naturalLight, "followed_lights")).toBe("0");
-    // Moods' mood and its schedule, and the mood and jobs it says again it owns.
-    expect(await count(moods, "moods")).toBe("1");
-    expect(await count(moods, "scheduled_moods")).toBe("1");
+    await itsFileCameWithIt();
     expect((await entities(moods)).map(({ key }) => key)).toEqual(moodsBefore);
     expect(await jobsOf(moods)).toEqual(jobsBefore);
     // Zigbee reaches the broker, and only the broker, on a network of its own
@@ -282,15 +399,91 @@ describe("the official apps' moves, for real", () => {
 
     await docker("restart", name("core"));
     await coreIsUp();
-    for (const id of apart) {
-      await waitFor(`${id} to run on its own`, async () => {
-        const each = await info(id);
-        return each.state === "running" && each.run ? true : undefined;
-      });
-    }
+    await eachOnItsOwn();
 
     expect((await entities()).map(({ key }) => key)).toEqual(
       expect.arrayContaining(before),
     );
   }, 300_000);
+
+  // The same home on the release before, once more, and this time the first
+  // version each meets fails as it starts.
+  let homeBefore: Awaited<ReturnType<typeof whatTheHomeHas>>;
+  let originals: string;
+
+  it("says each couldn't start when all four fail their first move together, its original as it was", async () => {
+    homeBefore = await whatTheHomeHas();
+    await stageFailing(apart);
+    await turnBack(apart);
+    originals = await originalSums();
+    await startManager(coreImage, port);
+    await coreIsUp();
+    await listZigbeeDevices();
+
+    // Each has its turn to take in its file, and none waits on another's
+    // failing start for that.
+    for (const id of apart) {
+      await waitFor(`${id} to give up`, async () =>
+        (await info(id)).state === "failed" ? true : undefined,
+      );
+    }
+
+    expect(await movedFrom()).toEqual(
+      Object.fromEntries(apart.map((id) => [id, null])),
+    );
+    expect(await originalSums()).toBe(originals);
+    // What they own stays meanwhile, as for any app that fails.
+    const home = await whatTheHomeHas();
+    for (const id of apart) {
+      expect(home.entities[id]).toEqual(
+        expect.arrayContaining(homeBefore.entities[id]!),
+      );
+    }
+    expect(home.jobs).toEqual(homeBefore.jobs);
+  }, 600_000);
+
+  it("moves each afresh from its original once a version that works arrives, through a power cut part way", async () => {
+    await stageWorking(apart);
+    // Zigbee waits for its device list this time, which holds up none of the
+    // others, and the power goes while it waits: part way through its move.
+    await forgetZigbeeDevices();
+    const since = new Date().toISOString();
+    await docker("restart", name("core"));
+    await coreIsUp();
+    await waitFor("the others to move", async () => {
+      const folders = await movedFrom();
+      return [app, naturalLight, moods].every((id) => folders[id])
+        ? true
+        : undefined;
+    });
+    await waitFor("Zigbee to wait for its list", async () =>
+      (await info(zigbee)).state === "waiting" ? true : undefined,
+    );
+    expect((await movedFrom())[zigbee]).toBeNull();
+    const beforeTheCut = await managerLogs(since);
+    await powerCut();
+    const after = new Date().toISOString();
+    await startManager(coreImage, port);
+    await coreIsUp();
+    await listZigbeeDevices();
+
+    await eachOnItsOwn();
+
+    const folders = await movedFrom();
+    const logs = beforeTheCut + (await managerLogs(after));
+    for (const id of apart) {
+      expect(folders[id]).toBeTruthy();
+      expect(logs).toContain(`adopt on ${id}'s app.db`);
+    }
+    await itsFileCameWithIt();
+    const home = await whatTheHomeHas();
+    for (const id of apart) {
+      expect(home.entities[id]).toEqual(
+        expect.arrayContaining(homeBefore.entities[id]!),
+      );
+    }
+    expect(home.jobs).toEqual(homeBefore.jobs);
+    // Each original stays until its next update commits.
+    expect(await originalSums()).toBe(originals);
+  }, 600_000);
 });

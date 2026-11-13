@@ -19,7 +19,8 @@ import { AppRefusal } from "./refusal.js";
 // in the other direction: it copies the version it's leaving, so that a failed older
 // start can return to it, then puts the kept copy in place, and that copy goes for good
 // once it commits. An app's first move takes its file from the core's data instead of
-// copying anything, and has nothing to undo, as that file stays as it was.
+// copying anything, and has nothing to undo, as that file stays as it was, so it holds
+// the slot only while it takes that file in.
 
 export type AppVersionRef = { version: string; folder: string };
 
@@ -228,6 +229,11 @@ export function createAppUpdates(options: {
         continuing.to === entry.to.version
       )
         continue;
+      // A first move that has taken in its file has nothing left to undo: the
+      // original stays as it was, and anything that comes can start it afresh.
+      // So its start, however long it waits or however often it fails, holds up
+      // nobody, such as the other apps moving with it.
+      if (entry.moves && entry.status === "ready") continue;
       const since = Date.parse(entry.stepAt ?? entry.startedAt);
       if (Date.now() - since < stepLimitMs) {
         return { kind: "app-update", app, to: entry.to.version };
