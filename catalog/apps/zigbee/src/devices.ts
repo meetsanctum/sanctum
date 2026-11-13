@@ -68,6 +68,25 @@ function nameOf(device: ZigbeeDevice, key: string, friendlyName: string) {
   );
 }
 
+// What the driver says a device is, where its capabilities do not: a plug,
+// which switches like any switch. It is one when it switches, is no light,
+// and a whole word in the name or model the driver registers says so, as
+// Zigbee2MQTT's descriptions do: "TRADFRI control outlet", "Smart plug".
+const plugWords = /\b(plugs?|outlets?|sockets?)\b/i;
+
+function typeOf(
+  capabilities: readonly CapabilityMapping[],
+  name: string,
+  model: string | null,
+) {
+  const kinds = new Set(capabilities.map((each) => each.kind));
+  return kinds.has("switch") &&
+    !kinds.has("light") &&
+    plugWords.test(`${name} ${model ?? ""}`)
+    ? ("plug" as const)
+    : null;
+}
+
 // A capability as the core registers it: its kind's features, if it has any.
 function registered(capability: CapabilityMapping) {
   const { id } = capability;
@@ -108,6 +127,8 @@ function entryOf(
     return null;
   }
   const battery = /battery/i.test(device.power_source ?? "");
+  const name = nameOf(device, key, friendlyName);
+  const model = label(device.definition?.model) ?? label(device.model_id);
   return {
     key,
     friendlyName,
@@ -115,10 +136,11 @@ function entryOf(
     capabilities,
     registration: {
       key,
-      name: nameOf(device, key, friendlyName),
+      name,
       manufacturer:
         label(device.definition?.vendor) ?? label(device.manufacturer),
-      model: label(device.definition?.model) ?? label(device.model_id),
+      model,
+      type: typeOf(capabilities, name, model),
       capabilities: capabilities.map(registered),
       firmware: {
         version: versionOf(device),
