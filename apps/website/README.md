@@ -52,7 +52,8 @@ the repository holds: only encrypted, which `pnpm test` checks.
 The site runs on [Railway](https://railway.com) as one service, which Railway
 builds from this repository and starts with `pnpm start`.
 [`.railway/railway.ts`](../../.railway/railway.ts) describes it: where the
-source is, the commands, which changes deploy, the domain and the variables.
+source is, the commands, which changes deploy and the variables. The site's
+domain is added on Railway itself, which the file cannot do.
 Railway reads that file only when the CLI applies it, from a checkout linked
 to the project (`railway link`):
 

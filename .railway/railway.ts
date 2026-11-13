@@ -3,10 +3,11 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
 // The website on Railway: one service that Railway builds and runs from this
 // repository. `railway config plan` shows what applying this file would
 // change there and `railway config apply` changes it; deploys never read it.
+// A custom domain is added on Railway itself, which this file cannot do.
 
 const website = "@meetsanctum/website";
 
-export default defineRailway((ctx) => {
+export default defineRailway(() => {
   const site = service("website", {
     source: github("meetsanctum/sanctum", { branch: "main" }),
     build: {
@@ -26,7 +27,6 @@ export default defineRailway((ctx) => {
     },
     start: `pnpm --filter ${website} start`,
     healthcheck: "/",
-    domains: ctx.environment === "production" ? ["meetsanctum.com"] : [],
     env: {
       // Only the site's packages, not the whole workspace's.
       RAILPACK_INSTALL_CMD: `pnpm install --frozen-lockfile --prod=false --filter ${website}...`,
@@ -35,5 +35,5 @@ export default defineRailway((ctx) => {
       DOTENV_PRIVATE_KEY_PRODUCTION: preserve(),
     },
   });
-  return project("sanctum", { resources: [site] });
+  return project("website", { resources: [site] });
 });
