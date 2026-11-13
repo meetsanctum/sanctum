@@ -139,8 +139,8 @@ async function lampInfo(core: TestCore, token: string) {
 // A grant is answered before the app has stopped or runs again, so the tests
 // wait for the one they go on from, however long a slow runner takes: its
 // stop hook has run, or it takes calls again, which is after its start hook.
-// Its listed state would not do for that: with the permission back on, it
-// says running while a stop from before is still under way.
+// Its listed state would not do for that: paused does not say its stop hook
+// has run, and starting can still mean a stop from before is under way.
 const stopped = () => expect.poll(() => lamp.said.at(-1)).toBe("stop");
 const running = (core: TestCore, appId = "test.lamp") =>
   expect.poll(() => core.apps.isRunning(appId)).toBe(true);
@@ -226,8 +226,10 @@ describe("switching off a permission an app needs", () => {
     await grant(core, maya.token, "places.read", false);
     await stopped();
     const paused = await lampInfo(core, maya.token);
+    core.advance(1_000);
     await grant(core, maya.token, "places.read", true);
 
+    core.advance(1_000);
     await grant(core, maya.token, "places.read", false);
     release();
 

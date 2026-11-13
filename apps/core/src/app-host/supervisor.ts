@@ -202,7 +202,7 @@ export function createSupervisor(options: {
     const isNew = supervision.phase !== phase;
     Object.assign(supervision, { phase, ...change });
     if (isNew) {
-      supervision.since = now();
+      supervision.since = change.since ?? now();
     }
     follow(entry, phase);
     if (phase === "running" || phase === "failed") {
@@ -426,8 +426,9 @@ export function createSupervisor(options: {
      * The start it was said to be starting for does not come, as when it is
      * paused again first: it is as it was before.
      */
-    calledOff(entry: InstalledApp) {
-      if (of(entry).phase === "starting") become(entry, "running");
+    calledOff(entry: InstalledApp, previousSince: Date) {
+      if (of(entry).phase === "starting")
+        become(entry, "running", { since: previousSince });
     },
 
     /** Its restarts, for its settings. */

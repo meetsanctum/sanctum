@@ -221,7 +221,8 @@ export function createAppLifecycle(options: {
     entry: InstalledApp,
     { restartFor }: { restartFor?: string } = {},
   ) {
-    const startComes =
+    const previousSince = entry.supervision.since;
+    const isStartPending =
       installed.get(entry.app.id) === entry &&
       !entry.off &&
       !entry.running &&
@@ -251,7 +252,8 @@ export function createAppLifecycle(options: {
             await startApp(entry);
           }
         } else if (off.length > 0) {
-          if (startComes) options.supervisor().calledOff(entry);
+          if (isStartPending)
+            options.supervisor().calledOff(entry, previousSince);
           log(`apps: ${entry.app.id} is paused while ${off.join(", ")} is off`);
         }
       } catch (error) {
