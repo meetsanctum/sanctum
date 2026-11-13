@@ -48,6 +48,9 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     fetch: unused,
     firmware: unused,
     joining: unused,
+    secret: unused,
+    putSecret: unused,
+    removeSecret: unused,
     log() {},
   };
   return createAppContext({

@@ -67,6 +67,9 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
       throw new Error("There is no internet here");
     },
     joining: done,
+    secret: async () => null,
+    putSecret: done,
+    removeSecret: done,
   };
 }
 

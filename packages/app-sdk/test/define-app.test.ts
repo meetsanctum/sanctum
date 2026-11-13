@@ -689,6 +689,9 @@ const noCore: CoreCalls = {
   fetch: unused,
   firmware: unused,
   joining: unused,
+  secret: unused,
+  putSecret: unused,
+  removeSecret: unused,
   log() {},
 };
 

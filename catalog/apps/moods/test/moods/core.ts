@@ -195,6 +195,9 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     },
     firmware: unused,
     joining: unused,
+    secret: unused,
+    putSecret: unused,
+    removeSecret: unused,
     log() {},
   };
   const context = (actor: Actor) =>

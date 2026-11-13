@@ -244,6 +244,7 @@ describe("room sections", () => {
         },
         watch: () => ({ signal: new AbortController().signal, done() {} }),
         pairing: () => core.pairing,
+        secrets: { get: () => null, put() {}, remove() {} },
         log() {},
       });
     const loose = {

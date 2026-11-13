@@ -1,6 +1,7 @@
 import type { CoreCalls } from "@meetsanctum/app-sdk";
 import {
   maxMessageBytes,
+  oldestProtocolVersion,
   protocolVersion,
 } from "@meetsanctum/app-sdk/protocol";
 import { stat, writeFile } from "node:fs/promises";
@@ -45,8 +46,24 @@ describe("the core's end of an app's socket", () => {
       expect(link.isReady()).toBe(true);
     });
 
+    // An app that ran on through a core's update speaks the protocol of the
+    // core before.
+    it("welcomes an app speaking an older protocol the core still speaks", async () => {
+      await listening();
+      const app = await appOnSocket();
+
+      app.say({ ...welcomeHello, protocol: oldestProtocolVersion });
+
+      expect((await app.hearing("welcome")).type).toBe("welcome");
+    });
+
     it.each([
-      ["another protocol", { protocol: protocolVersion + 1 }, "protocol"],
+      ["a newer protocol", { protocol: protocolVersion + 1 }, "protocol"],
+      [
+        "an older protocol",
+        { protocol: oldestProtocolVersion - 1 },
+        "protocol",
+      ],
       ["another app", { app: "test.other" }, "test.other"],
       ["another version", { version: "9.9.9" }, "9.9.9"],
       ["another manifest", { manifest: "c".repeat(64) }, "manifest"],

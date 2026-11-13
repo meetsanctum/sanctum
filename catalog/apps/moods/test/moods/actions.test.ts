@@ -108,6 +108,9 @@ function home(
     removeWorkflow: unused,
     workflows: async () => [],
     joining: unused,
+    secret: unused,
+    putSecret: unused,
+    removeSecret: unused,
     log() {},
   };
   return {

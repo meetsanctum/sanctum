@@ -14,6 +14,7 @@ import {
   encodeMessage,
   failureOf,
   maxCallsUnderWay,
+  oldestProtocolVersion,
   protocolVersion,
   type AppMessage,
   type CallBody,
@@ -175,8 +176,8 @@ export function createAppLink(options: {
     said: Extract<AppMessage, { type: "hello" }>,
   ) {
     const refusal =
-      said.protocol !== protocolVersion
-        ? `it speaks protocol ${said.protocol}, and this core speaks ${protocolVersion}`
+      said.protocol < oldestProtocolVersion || said.protocol > protocolVersion
+        ? `it speaks protocol ${said.protocol}, and this core speaks ${oldestProtocolVersion} to ${protocolVersion}`
         : said.app !== appId
           ? `this is ${appId}'s socket, and it says it is ${said.app}`
           : said.version !== options.version

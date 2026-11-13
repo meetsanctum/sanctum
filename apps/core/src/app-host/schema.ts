@@ -83,3 +83,19 @@ export const appsOff = sqliteTable("apps_off", {
   appId: text("app_id").primaryKey(),
   turnedOffAt: integer("turned_off_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+// Apps' own secrets, such as their devices' keys (secrets.ts), each sealed
+// with AES-256-GCM under the key in the core's data folder: what's here
+// says nothing on its own. They stay as long as the app's database does.
+
+export const appSecrets = sqliteTable(
+  "app_secrets",
+  {
+    appId: text("app_id").notNull(),
+    name: text("name").notNull(),
+    // Base64 of its nonce, its tag and the value sealed.
+    sealed: text("sealed").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.appId, table.name] })],
+);

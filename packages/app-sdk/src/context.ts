@@ -115,8 +115,23 @@ export interface CoreCalls {
   entities(type: string): Promise<EntityInfo[]>;
   fetch(request: NetRequest): Promise<NetResponse>;
   joining(joining: DeviceJoining): Promise<void>;
+  /** One of the app's own secrets by its name, or null when it has none by that name. */
+  secret(name: string): Promise<string | null>;
+  /** Keeps one of the app's own secrets, replacing what it kept by that name. */
+  putSecret(secret: AppSecret): Promise<void>;
+  removeSecret(name: string): Promise<void>;
   log(message: string): void;
 }
+
+/** One of an app's own credentials, such as a device's key, by a name it chooses. */
+export type AppSecret = { name: string; value: string };
+
+/** The most secrets an app keeps. */
+export const maxAppSecrets = 64;
+/** The longest a secret's value is, in bytes of UTF-8. */
+export const maxSecretBytes = 4_096;
+/** What a secret's name may be: letters, digits and . _ : -, at most 128 of them. */
+export const secretNamePattern = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /** The core API handed to app code. */
 export interface AppContext {
@@ -299,6 +314,18 @@ export interface AppContext {
     /** An HTTPS request to a host the app holds `net:<host>` for. */
     fetch(request: NetRequest): Promise<NetResponse>;
   };
+  /**
+   * The app's own credentials, such as its devices' keys, which need no
+   * permission. The core keeps them encrypted, never shows them to anyone
+   * and keeps them as long as it keeps the app's database. Setting one is on
+   * the disk once it returns, so a key saved before it's sent to a device
+   * outlasts a power cut. At most 64, of up to 4 KB each.
+   */
+  readonly secrets: {
+    get(name: string): Promise<string | null>;
+    set(name: string, value: string): Promise<void>;
+    delete(name: string): Promise<void>;
+  };
   log(message: string): void;
 }
 
@@ -453,6 +480,11 @@ export function createAppContext(options: {
       hide: (key) => core.unpublish(key),
     },
     net: { fetch: (request) => core.fetch(request) },
+    secrets: {
+      get: (name) => core.secret(name),
+      set: (name, value) => core.putSecret({ name, value }),
+      delete: (name) => core.removeSecret(name),
+    },
     log: (message) => core.log(message),
   };
 }

@@ -23,6 +23,7 @@ import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage } from "./app-host/loader.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
+import { createAppSecrets } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
 import type { Limits } from "./auth/limits.js";
@@ -387,6 +388,7 @@ export async function createModules(
     firmware: () => firmware,
     entities,
     settings: appSettingsStore,
+    secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
     updates: appUpdates,
     grants: createAppGrants(db, { now }),
     commits: createAppCommits({

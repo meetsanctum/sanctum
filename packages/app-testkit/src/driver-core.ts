@@ -9,7 +9,10 @@ import {
   deviceRegistration,
   deviceRelease,
   deviceReport,
+  maxAppSecrets,
+  maxSecretBytes,
   permissionIds,
+  secretNamePattern,
   type Actor,
   type AppContext,
   type AppDefinition,
@@ -29,8 +32,8 @@ import { z } from "zod";
 // reports, presses and releases, what it says of joining devices and of
 // firmware, and which devices it still has exactly as the core does, with
 // the same schemas, remembers them, and hands the driver commands, moves,
-// pairing, removals, firmware calls and probes. Nothing else of the core is
-// there.
+// pairing, removals, firmware calls and probes, and keeps its secrets.
+// Nothing else of the core is there.
 
 type Registered = z.output<typeof deviceRegistration>;
 
@@ -81,6 +84,8 @@ export function createDriverCore(
   const refused: Error[] = [];
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
+  // The driver's own secrets, by name, as the core keeps them sealed.
+  const secrets = new Map<string, string>();
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -231,6 +236,26 @@ export function createDriverCore(
       }
       joining.push(parsed.data);
     },
+    secret: async (name) => secrets.get(name) ?? null,
+    async putSecret(input) {
+      const parsed = z
+        .object({
+          name: z.string().regex(secretNamePattern),
+          value: z
+            .string()
+            .refine((value) => Buffer.byteLength(value) <= maxSecretBytes),
+        })
+        .safeParse(input);
+      if (!parsed.success) {
+        refuse(new Error(`${app.id} kept a secret the core cannot keep`));
+      }
+      const { name, value } = parsed.data;
+      if (!secrets.has(name) && secrets.size >= maxAppSecrets) {
+        refuse(new Error(`${app.id} keeps ${maxAppSecrets} secrets already`));
+      }
+      secrets.set(name, value);
+    },
+    removeSecret: async (name) => void secrets.delete(name),
     log() {},
   };
   for (const name of options.unanswered ?? []) {
@@ -261,6 +286,7 @@ export function createDriverCore(
     firmware,
     refused,
     presented,
+    secrets,
 
     start: async () => app.start?.(own, { reason: "started" }),
     /** As the core does once it restarted while the driver ran on. */
