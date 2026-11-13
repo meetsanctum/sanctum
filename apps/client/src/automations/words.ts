@@ -1,4 +1,6 @@
 import {
+  capabilityKinds,
+  deviceCategoryOf,
   stateOperators,
   type PieceInfo,
   type PiecePreset,
@@ -448,13 +450,9 @@ export function cardOf(
 // its name, and By hand last. A motion sensor's device trigger joins the
 // core's Motion.
 const firstGroups = ["Time", "Sunrise and sunset", "Motion"];
-const categories: Record<string, string> = {
-  light: "Lights",
-  switch: "Switches",
-  sensor: "Environment",
-  occupancy: "Motion",
-  button: "Buttons",
-};
+const deviceGroup = (kind: string) =>
+  kind === "occupancy" ? "Motion" : deviceCategoryOf(kind)?.title;
+const deviceGroups = new Set(capabilityKinds.map(deviceGroup));
 const lastGroup = "By hand";
 
 /** The group a trigger's workflow is listed under. */
@@ -469,7 +467,7 @@ export function groupOf(
     (typeof node.config.kind === "string" && node.config.kind) ||
     (typeof node.config.device === "string" &&
       names.device(node.config.device)?.kinds[0]);
-  return (kind && categories[kind]) || "Devices";
+  return (kind && deviceGroup(kind)) || "Devices";
 }
 
 /** Sorts group names into the list's order. */
@@ -478,7 +476,7 @@ export function compareGroups(a: string, b: string) {
     const first = firstGroups.indexOf(group);
     if (first >= 0) return first;
     if (group === lastGroup) return firstGroups.length + 2;
-    return Object.values(categories).includes(group) || group === "Devices"
+    return deviceGroups.has(group) || group === "Devices"
       ? firstGroups.length
       : firstGroups.length + 1;
   };

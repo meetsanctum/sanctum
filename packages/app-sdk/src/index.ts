@@ -58,6 +58,7 @@ export * from "./app-manifest.js";
 export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
+export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";
 export * from "./device-types.js";

@@ -1,4 +1,5 @@
 import {
+  deviceCategories,
   maintenanceOf,
   sensorMeasures,
   type CapabilityInfo,
@@ -34,14 +35,14 @@ const quiet = "Not heard from";
 export const tileKey = (device: string, capability: string) =>
   `${device}/${capability}`;
 
-/** The categories, in the order the sidebar and a room's page list them. */
-export const categories = [
-  { kind: "light", title: "Lights" },
-  { kind: "switch", title: "Switches" },
-  { kind: "sensor", title: "Environment" },
-  { kind: "occupancy", title: "Presence" },
-  { kind: "button", title: "Buttons" },
-] as const satisfies { kind: Tile["kind"]; title: string }[];
+/** The tiles a category holds: those of the kinds of capability it does. */
+export const tilesIn = (
+  category: (typeof deviceCategories)[number],
+  tiles: readonly Tile[],
+) =>
+  tiles.filter((tile) =>
+    category.holds.some((each) => each.kind === tile.kind),
+  );
 
 // What a tile says under its name. A light turning on or off says so while
 // the command is on its way, but a new level or colour shows as it will be;
@@ -395,11 +396,11 @@ export function sectionsByRoom(
 
 /** Tiles in a section for each category, as a room's page shows them. */
 export function sectionsByCategory(tiles: Tile[]): TileSection[] {
-  return categories
+  return deviceCategories
     .map((category) => ({
-      id: category.kind,
+      id: category.id,
       title: category.title,
-      tiles: tiles.filter((tile) => tile.kind === category.kind).sort(byName),
+      tiles: tilesIn(category, tiles).sort(byName),
     }))
     .filter((section) => section.tiles.length > 0);
 }

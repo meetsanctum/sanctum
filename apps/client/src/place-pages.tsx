@@ -1,4 +1,9 @@
-import type { AppInfo, LightsPlace } from "@meetsanctum/app-sdk";
+import {
+  deviceCategories,
+  type AppInfo,
+  type DeviceCategory,
+  type LightsPlace,
+} from "@meetsanctum/app-sdk";
 import {
   Button,
   DeviceSections,
@@ -13,7 +18,6 @@ import { useEffect } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
-  categories,
   climateMeasures,
   measureNames,
   onMeta,
@@ -22,6 +26,7 @@ import {
   sectionsByCategory,
   sectionsByRoom,
   sensorReadings,
+  tilesIn,
   type Reading,
 } from "./device-tiles";
 import { batteriesTile } from "./maintenance";
@@ -53,15 +58,16 @@ import type { Devices } from "./use-devices";
 /** Where the shell's own pages are in its routes; never an app's id, which always has a dot. */
 export const placePages = "places";
 
+// A category's icon and colour, for each the SDK lists.
 const categoryLooks: Record<
-  Tile["kind"],
+  DeviceCategory,
   { icon: LucideIcon; colour: string }
 > = {
-  light: { icon: icons.Lightbulb, colour: "var(--sun-text)" },
-  switch: { icon: icons.Plug, colour: "var(--ember-text)" },
-  sensor: { icon: icons.Thermometer, colour: "var(--sky-text)" },
-  occupancy: { icon: icons.Footprints, colour: "var(--leaf-text)" },
-  button: { icon: icons.CircleDot, colour: "var(--graphite-text)" },
+  lights: { icon: icons.Lightbulb, colour: "var(--sun-text)" },
+  switches: { icon: icons.Plug, colour: "var(--ember-text)" },
+  environment: { icon: icons.Thermometer, colour: "var(--sky-text)" },
+  presence: { icon: icons.Footprints, colour: "var(--leaf-text)" },
+  buttons: { icon: icons.CircleDot, colour: "var(--graphite-text)" },
 };
 
 const readingIcons: Record<Reading["measure"], LucideIcon> = {
@@ -223,7 +229,12 @@ export function lightsButton(
   };
 }
 
-const statusOrder = ["sensor", "occupancy", "light", "switch"] as const;
+const statusOrder = [
+  "environment",
+  "presence",
+  "lights",
+  "switches",
+] as const satisfies DeviceCategory[];
 
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
@@ -250,7 +261,7 @@ export function HomeStatus(props: {
   // page.
   problems?: readonly HostProblem[];
   apps: readonly AppInfo[];
-  openCategory: (kind: Tile["kind"]) => void;
+  openCategory: (id: DeviceCategory) => void;
   openAttention: () => void;
   openStatus?: () => void;
   openMaintenance: () => void;
@@ -259,18 +270,18 @@ export function HomeStatus(props: {
   const unit = unitOf(devices);
   // What the sensors read first, the most glanceable; a remote has nothing
   // to say here.
-  const shown = statusOrder.flatMap((kind): StatusTile[] => {
-    const category = categories.find((each) => each.kind === kind)!;
-    const own = devices.tiles.filter((tile) => tile.kind === category.kind);
+  const shown = statusOrder.flatMap((id): StatusTile[] => {
+    const category = deviceCategories.find((each) => each.id === id)!;
+    const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
     let value: string;
     let label: string;
-    if (category.kind === "sensor") {
+    if (category.id === "environment") {
       // The temperatures when they have any; never the light level.
       const [reading] = readingsOf(sensorReadings(own), unit, climateMeasures);
       value = reading?.text ?? "No readings";
       label = reading?.spoken ?? value;
-    } else if (category.kind === "occupancy") {
+    } else if (category.id === "presence") {
       const motion = homeMotion(own, devices.places);
       value = motion.answering ? motionWhere(motion) : "No readings";
       label = value;
@@ -278,16 +289,16 @@ export function HomeStatus(props: {
       value = onMeta(own);
       label = value;
     }
-    const look = categoryLooks[category.kind];
+    const look = categoryLooks[category.id];
     return [
       {
-        key: category.kind,
+        key: category.id,
         title: category.title,
         value,
         label: `${category.title}, ${label}`,
         icon: look.icon,
         colour: look.colour,
-        open: () => props.openCategory(category.kind),
+        open: () => props.openCategory(category.id),
       },
     ];
   });
@@ -424,7 +435,7 @@ export function RoomPage(props: {
 }
 
 export function CategoryPage(props: {
-  kind: string;
+  id: string;
   devices: Devices;
   openDevice: (tile: Tile) => void;
   /** Opens a room's page over this one, from Presence's overview. */
@@ -432,15 +443,15 @@ export function CategoryPage(props: {
   back: () => void;
 }) {
   const { devices, back } = props;
-  const category = categories.find((each) => each.kind === props.kind);
+  const category = deviceCategories.find((each) => each.id === props.id);
   useEffect(() => {
     if (!category) back();
   }, [category, back]);
   if (!category) return null;
-  const own = devices.tiles.filter((tile) => tile.kind === category.kind);
+  const own = tilesIn(category, devices.tiles);
   return (
     <>
-      {category.kind === "light" ? (
+      {category.id === "lights" ? (
         <PlaceHeader
           title={category.title}
           lights={lightsButton(
@@ -454,9 +465,9 @@ export function CategoryPage(props: {
         <PlaceHeader
           title={category.title}
           subtitle={
-            category.kind === "button" || category.kind === "occupancy"
+            category.id === "buttons" || category.id === "presence"
               ? undefined
-              : category.kind === "sensor"
+              : category.id === "environment"
                 ? readingsText(
                     sensorReadings(own),
                     unitOf(devices),
@@ -466,7 +477,7 @@ export function CategoryPage(props: {
           }
         />
       )}
-      {category.kind === "occupancy" && (
+      {category.id === "presence" && (
         <PresenceOverview devices={devices} openRoom={props.openRoom} />
       )}
       <Sections
@@ -488,10 +499,10 @@ export function SidebarPlaces(props: {
   open: (page: "room" | "category", params: PageParams) => void;
 }) {
   const { devices, current, open } = props;
-  const shown = categories
+  const shown = deviceCategories
     .map((category) => ({
       ...category,
-      tiles: devices.tiles.filter((tile) => tile.kind === category.kind),
+      tiles: tilesIn(category, devices.tiles),
     }))
     .filter((category) => category.tiles.length > 0);
   const rooms = devices.places?.rooms ?? [];
@@ -500,16 +511,15 @@ export function SidebarPlaces(props: {
       {shown.length > 0 && <SidebarHeading>Categories</SidebarHeading>}
       {shown.map((category) => (
         <SidebarItem
-          key={category.kind}
-          icon={categoryLooks[category.kind].icon}
-          colour={categoryLooks[category.kind].colour}
+          key={category.id}
+          icon={categoryLooks[category.id].icon}
+          colour={categoryLooks[category.id].colour}
           name={category.title}
-          meta={category.kind === "light" ? onMeta(category.tiles) : undefined}
+          meta={category.id === "lights" ? onMeta(category.tiles) : undefined}
           current={
-            current?.page === "category" &&
-            current.params.kind === category.kind
+            current?.page === "category" && current.params.id === category.id
           }
-          onSelect={() => open("category", { kind: category.kind })}
+          onSelect={() => open("category", { id: category.id })}
         />
       ))}
       {rooms.length > 0 && (
