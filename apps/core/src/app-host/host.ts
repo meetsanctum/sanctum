@@ -741,7 +741,10 @@ export function createAppHost(options: {
     personChanged: coreEvents.person,
     entityChanged: coreEvents.entity,
 
-    // Stops every app, then closes their databases.
+    // Ends what the core has of every app, then their connections. Their
+    // containers go on: each runner stops its app there as its connection goes,
+    // and says hello to the next core, which starts it again in the same
+    // container. A host that shuts down stops the containers themselves.
     async close() {
       options.updates.close();
       const replacementsEnded = apartStarts.close();
@@ -752,7 +755,7 @@ export function createAppHost(options: {
         entries.map(async (entry, index) => {
           await entry.lifecycle;
           await ended[index];
-          await stopApp(entry, { reason: "shutdown" });
+          await stopApp(entry, { reason: "shutdown", gone: true });
         }),
       );
       await replacementsEnded;

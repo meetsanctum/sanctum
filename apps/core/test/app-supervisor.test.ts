@@ -145,6 +145,40 @@ describe("an app's supervisor", () => {
       expect(entry.supervision!.lastFailure).toBe("out_of_memory");
     });
 
+    it("waits a moment for the kernel's word on one killed outright", async () => {
+      let outOfMemory = false;
+      const { entry, supervisor } = setUp({
+        appContainer: async () => ({
+          state: "stopped",
+          exitCode: 137,
+          outOfMemory,
+        }),
+      });
+      supervisor.started(entry);
+
+      supervisor.lost(entry, false);
+      await passes(0);
+      expect(entry.supervision!.lastFailure).toBeUndefined();
+      outOfMemory = true;
+      await passes(100);
+
+      expect(entry.supervision!.lastFailure).toBe("out_of_memory");
+    });
+
+    it("says one killed outright by anything else crashed, once that moment has passed", async () => {
+      const { entry, supervisor } = setUp({
+        appContainer: async () => ({ state: "stopped", exitCode: 137 }),
+      });
+      supervisor.started(entry);
+
+      supervisor.lost(entry, false);
+      await passes(1_900);
+      expect(entry.supervision!.lastFailure).toBeUndefined();
+      await passes(200);
+
+      expect(entry.supervision!.lastFailure).toBe("crashed");
+    });
+
     it("says it crashed otherwise, and waits a little for how it stopped", async () => {
       let state: "running" | "stopped" = "running";
       const { entry, supervisor } = setUp({
@@ -244,7 +278,7 @@ describe("an app's supervisor", () => {
     });
 
     it("waits for the manager when it can't run apps yet, without counting", async () => {
-      const startAppContainer = vi.fn(async () => undefined);
+      const startAppContainer = vi.fn(async () => ({ kept: false }));
       let can = false;
       const { entry, supervisor, phase } = setUp({
         startAppContainer,
@@ -426,7 +460,7 @@ describe("an app's supervisor", () => {
         resolveStarting = resolve;
       });
       const { entry, supervisor, reconciled } = setUp({
-        startAppContainer: () => starting,
+        startAppContainer: () => starting.then(() => ({ kept: false })),
       });
       entry.link = { isReady: () => true } as InstalledApp["link"];
       supervisor.ready(entry);
@@ -447,7 +481,7 @@ describe("an app's supervisor", () => {
         resolveStarting = resolve;
       });
       const { entry, supervisor, phase } = setUp({
-        startAppContainer: () => starting,
+        startAppContainer: () => starting.then(() => ({ kept: false })),
       });
       const launched = supervisor.launch(entry);
       await passes(0);
@@ -489,7 +523,7 @@ describe("an app's supervisor", () => {
           rejectStarting = reject;
         });
         const { entry, supervisor } = setUp({
-          startAppContainer: () => starting,
+          startAppContainer: () => starting.then(() => ({ kept: false })),
         });
         const launched = supervisor.launch(entry);
         await passes(0);

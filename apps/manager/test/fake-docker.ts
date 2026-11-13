@@ -298,6 +298,7 @@ export class FakeDocker implements DockerClientLike {
           },
           Config: {
             Image: container.ref,
+            WorkingDir: container.options.WorkingDir ?? "",
             ...(container.options.User
               ? { User: container.options.User as string }
               : {}),

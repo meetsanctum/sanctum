@@ -1,6 +1,6 @@
 import { defineAction, defineApp } from "@meetsanctum/app-sdk";
 import { describeDriver } from "@meetsanctum/app-testkit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import lampsDriver from "./fixtures/apps/lamps/index.js";
@@ -213,7 +213,8 @@ describe("lifecycle hooks", () => {
 
     expect(radio.started).toBe(1);
     await core.apps.close();
-    expect(radio.stopped).toBe(1);
+    // In its container, as its runner hears the core go.
+    await vi.waitFor(() => expect(radio.stopped).toBe(1));
   });
 
   it("keep a failing app from holding up the others", async () => {

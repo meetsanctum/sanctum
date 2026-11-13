@@ -49,6 +49,10 @@ export type Supervision = {
   // started can reach this one's socket, and goes with that, so it isn't started and
   // its going is no failure of the app.
   isReplacing: boolean;
+  // Its first start in this core, which takes over a container a core before
+  // this one left running as the manager would make it: its runner says hello
+  // again, and it starts there.
+  mayKeep: boolean;
   // Container changes finish in order, including before removal.
   containerWork?: Promise<void>;
   timer?: NodeJS.Timeout;
@@ -74,6 +78,9 @@ const defaultQuietMs = 30_000;
 const defaultAttentionMs = 5 * 60_000;
 // How long the manager may take to see that a container has stopped.
 const howItStoppedWithinMs = 2_000;
+// The exit of a process killed outright, as the kernel kills one that ran out
+// of memory: 128 and SIGKILL's 9.
+const killedExitCode = 137;
 
 export function newSupervision(now: Date): Supervision {
   return {
@@ -87,6 +94,7 @@ export function newSupervision(now: Date): Supervision {
     attention: false,
     isEnded: false,
     isReplacing: false,
+    mayKeep: true,
     generation: 0,
     endingConnection: false,
     waiters: new Set(),
@@ -280,12 +288,18 @@ export function createSupervisor(options: {
       await manage(entry, async () => {
         if (!isCurrent(entry, generation)) return;
         of(entry).isReplacing = true;
+        // Only the first: a later one follows a failure, or a change that
+        // needs a container of its own.
+        const keep = of(entry).mayKeep;
+        of(entry).mayKeep = false;
         try {
-          await manager.startAppContainer(app.id, {
+          const { kept } = await manager.startAppContainer(app.id, {
             folder: apartIn,
             memoryMb: manifest.runtime.memory,
             dataMb: manifest.runtime.data,
+            ...(keep ? { keep } : {}),
           });
+          if (kept) log(`apps: ${app.id} goes on in its container`);
         } finally {
           of(entry).isReplacing = false;
         }
@@ -354,7 +368,8 @@ export function createSupervisor(options: {
   }
 
   // What stopped it, which the kernel told the manager. It may not know yet just
-  // as the socket closes.
+  // as the socket closes, and Docker may say a process was killed a moment
+  // before it says the kernel killed it for its memory.
   async function howItStopped(
     entry: InstalledApp,
     generation: number,
@@ -368,7 +383,8 @@ export function createSupervisor(options: {
         .appContainer(entry.app.id)
         .catch(() => undefined);
       if (container?.state === "stopped") {
-        return container.outOfMemory ? "out_of_memory" : "crashed";
+        if (container.outOfMemory) return "out_of_memory";
+        if (container.exitCode !== killedExitCode) return "crashed";
       }
       await new Promise((done) => setTimeout(done, 100));
     }

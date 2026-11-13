@@ -158,12 +158,23 @@ describe("an app's runner", () => {
     });
   });
 
-  it("ends when the connection goes", async () => {
-    await fixture.connected(testApp());
+  it("ends when the connection goes before it was ready", async () => {
+    fixture.peer = await createCorePeer({ socket: fixture.socket });
+    fixture.session = runSession({
+      appId: "test.runner",
+      socket: fixture.socket,
+      database: fixture.database,
+      package: {
+        version: "1.2.3",
+        manifest: digest,
+        load: async () => ({ app: testApp() }),
+      },
+    });
+    await fixture.peer.hello;
 
-    fixture.peer!.drop();
+    fixture.peer.drop();
 
-    expect(await fixture.session!.finished).toEqual({
+    expect(await fixture.session.finished).toEqual({
       code: 1,
       reason: "The connection to the core has gone",
     });

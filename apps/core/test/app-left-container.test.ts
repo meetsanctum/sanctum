@@ -39,7 +39,7 @@ describe("a container a core before this one left", () => {
       await vi.waitFor(() =>
         expect(core.logs.join()).toContain("connection ended"),
       );
-      await start(...args);
+      return start(...args);
     };
 
     const core: TestCore = await home.coreWith(app);
@@ -69,6 +69,7 @@ describe("a container a core before this one left", () => {
         home.runContainer(app, done);
       });
       await pause(100);
+      return { kept: false };
     };
 
     const core = await home.coreWith(app);

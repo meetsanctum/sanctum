@@ -294,6 +294,7 @@ const serviceGrant = z.object({
 // How an app's container stands.
 const appContainer = z.object({
   state: z.enum(["running", "stopped", "none"]),
+  exitCode: z.number().optional(),
   outOfMemory: z.boolean().optional(),
 });
 
@@ -302,6 +303,9 @@ const appUsage = z.object({
   processor: z.number().nullable(),
   dataBytes: z.number().nullable(),
 });
+
+// What a start did: whether it kept the one running.
+const startedBody = z.object({ kept: z.boolean().optional() });
 
 const appContainerPath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/container`;
@@ -553,12 +557,25 @@ export function createManagerClient(options: {
     hostId: () => hostId,
 
     // Runs an app in its own container, as its running version and limits say,
-    // making or attaching its data's image first, which can take a while.
+    // making or attaching its data's image first, which can take a while. With
+    // `keep`, one already running as the manager would make it goes on, as after
+    // the core restarted, which the answer says. A manager before that knows no
+    // such thing, and starts it afresh.
     async startAppContainer(
       app: string,
-      spec: { folder: string; memoryMb: number; dataMb: number },
+      spec: {
+        folder: string;
+        memoryMb: number;
+        dataMb: number;
+        keep?: boolean;
+      },
     ) {
-      await once("PUT", appContainerPath(app), spec, 120_000);
+      const body = await once("PUT", appContainerPath(app), spec, 120_000);
+      try {
+        return { kept: startedBody.parse(JSON.parse(body)).kept === true };
+      } catch {
+        return { kept: false };
+      }
     },
 
     // Stops it, which takes up to 10 s for one that doesn't answer.

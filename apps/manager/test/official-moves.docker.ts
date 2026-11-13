@@ -241,6 +241,17 @@ const at = (latitude: number) => ({
   coordinates: { latitude, longitude: 8.5417 },
 });
 
+// Each app's container, by its id, which a container started afresh changes.
+const containerIds = async () =>
+  Object.fromEntries(
+    await Promise.all(
+      apart.map(async (id) => [
+        id,
+        await docker("inspect", "-f", "{{.Id}}", `sanctum-${stack}-app-${id}`),
+      ]),
+    ),
+  ) as Record<string, string>;
+
 const eachOnItsOwn = async () => {
   for (const id of apart) {
     await waitFor(`${id} to run on its own`, async () => {
@@ -394,8 +405,9 @@ describe("the official apps' moves, for real", () => {
     );
   }, 60_000);
 
-  it("stays on its own, its store of what it owns as it was, when the core starts again", async () => {
+  it("stays on its own in the container it ran in, its store of what it owns as it was, when the core starts again", async () => {
     const before = (await entities()).map(({ key }) => key);
+    const containers = await containerIds();
 
     await docker("restart", name("core"));
     await coreIsUp();
@@ -404,6 +416,23 @@ describe("the official apps' moves, for real", () => {
     expect((await entities()).map(({ key }) => key)).toEqual(
       expect.arrayContaining(before),
     );
+    // Each went on in its own container, the app stopping and starting there.
+    expect(await containerIds()).toEqual(containers);
+    const since = await docker(
+      "inspect",
+      "-f",
+      "{{.State.StartedAt}}",
+      name("core"),
+    );
+    for (const id of apart) {
+      const started = await docker(
+        "inspect",
+        "-f",
+        "{{.State.StartedAt}}",
+        `sanctum-${stack}-app-${id}`,
+      );
+      expect(Date.parse(started)).toBeLessThan(Date.parse(since));
+    }
   }, 300_000);
 
   // The same home on the release before, once more, and this time the first

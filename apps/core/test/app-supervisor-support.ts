@@ -37,7 +37,10 @@ export function setUp(manager: Partial<AppContainerManager> = {}) {
   const supervisor = createSupervisor({
     manager: {
       capabilities: () => ({ appContainers: true, memoryLimits: true }),
-      startAppContainer: async (app) => void started.push(app),
+      startAppContainer: async (app) => {
+        started.push(app);
+        return { kept: false };
+      },
       stopAppContainer: async (app) => void stopped.push(app),
       removeAppContainer: async () => undefined,
       appContainer: async () => ({ state: "running" }),

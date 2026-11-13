@@ -341,8 +341,8 @@ describe("a service an app holds", () => {
     const { core, maya } = await bridgeCore(bridge({ needed: false }));
 
     await grant(core, maya.token, "services:zigbee2mqtt", false);
-    await settled();
-    expect(said).toEqual(["start", "stop", "start"]);
+    // A stop and a start, each through its socket.
+    await expect.poll(() => said).toEqual(["start", "stop", "start"]);
     expect(
       (
         await post(
@@ -355,8 +355,9 @@ describe("a service an app holds", () => {
     ).toBe(500);
 
     await grant(core, maya.token, "services:zigbee2mqtt", true);
-    await settled();
-    expect(said).toEqual(["start", "stop", "start", "stop", "start"]);
+    await expect
+      .poll(() => said)
+      .toEqual(["start", "stop", "start", "stop", "start"]);
   });
 });
 

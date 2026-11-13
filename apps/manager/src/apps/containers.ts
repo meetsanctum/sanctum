@@ -17,8 +17,13 @@ import {
   type StatusDockerLike,
 } from "../docker.js";
 import { isOurs, stacked } from "../stack.js";
-import { brokerNetworkFor, removeBrokerNetwork, usesBroker } from "./broker.js";
-import { defaultImageMb, type AppImages } from "./images.js";
+import {
+  brokerNetworkFor,
+  brokerNetworkName,
+  removeBrokerNetwork,
+  usesBroker,
+} from "./broker.js";
+import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
 
 // An app's own container, beside the core: the official Node image, the app's
@@ -72,6 +77,8 @@ export type AppContainerSpec = {
 export type AppContainerStatus = {
   app: string;
   state: "running" | "stopped" | "none";
+  // A start that found this one running as it would make it, and left it.
+  kept?: boolean;
   folder?: string;
   memoryMb?: number;
   // Why it stopped, as Docker saw it.
@@ -227,6 +234,36 @@ export function effectiveDifferences(
   return differences;
 }
 
+// Whether a running container is the one a start would make: the same package
+// and memory, as this manager makes containers now, which a manager's update
+// may have changed.
+export function isAsMade(
+  desired: ContainerCreateOptions,
+  actual: ContainerInfo,
+  memoryLimits: boolean,
+  imageEnv: string[],
+) {
+  const labels = actual.Config.Labels ?? {};
+  const wantedLabels = desired.Labels ?? {};
+  // Docker merges image defaults with the manager's variables by name.
+  const environment = (entries: string[]) =>
+    [
+      ...new Map(entries.map((entry) => [entry.split("=")[0], entry])).values(),
+    ].sort();
+  return (
+    actual.State.Running &&
+    actual.Config.Image === desired.Image &&
+    JSON.stringify(actual.Config.Cmd) === JSON.stringify(desired.Cmd) &&
+    actual.Config.WorkingDir === desired.WorkingDir &&
+    JSON.stringify(environment(actual.Config.Env ?? [])) ===
+      JSON.stringify(environment([...imageEnv, ...(desired.Env ?? [])])) &&
+    Object.entries(wantedLabels).every(
+      ([key, value]) => labels[key] === value,
+    ) &&
+    effectiveDifferences(desired, actual, memoryLimits).length === 0
+  );
+}
+
 // The folders the core's container and apps' mount by subpath. Docker refuses a
 // mount whose subpath doesn't exist, and Compose can't add a volume on an update.
 export async function ensureAppFolders(dataDir: string) {
@@ -360,6 +397,37 @@ export function createAppContainers(options: {
     }
   }
 
+  // The app's running container, when it's the one a start would make now.
+  async function keptAsMade(spec: AppContainerSpec, packageDir: string) {
+    const existing = await inspectApp(spec.app);
+    if (!existing?.State.Running) return undefined;
+    const network = (await usesBroker(packageDir))
+      ? brokerNetworkName(spec.app)
+      : undefined;
+    const desired = appContainerOptions(
+      spec,
+      imageVolumeName(spec.app),
+      network,
+    );
+    // One whose image can't be read isn't known to be the same: it's replaced.
+    const image = await docker
+      .getImage(existing.Image)
+      .inspect()
+      .catch(() => undefined);
+    if (
+      !image ||
+      !isAsMade(
+        desired,
+        existing,
+        await memoryLimits(),
+        image.Config?.Env ?? [],
+      )
+    )
+      return undefined;
+    log(`Keeping ${desired.name} on ${spec.folder}`);
+    return { ...statusOf(spec.app, existing), kept: true };
+  }
+
   async function releaseImage(app: string) {
     const existing = await inspectApp(app);
     if (existing?.State.Running) {
@@ -382,8 +450,9 @@ export function createAppContainers(options: {
     },
 
     // Starts the app's container, replacing any it had: the core restarts each
-    // through this.
-    start(spec: AppContainerSpec) {
+    // through this. With `keep`, one already running as this would make it goes
+    // on, as after the core restarted: its app is said to be found again.
+    start(spec: AppContainerSpec, { keep = false }: { keep?: boolean } = {}) {
       return inTurn(async () => {
         const packageDir = join(dataDir, packagesFolder, spec.app, spec.folder);
         await access(join(packageDir, "package.json")).catch(() => {
@@ -392,6 +461,10 @@ export function createAppContainers(options: {
             404,
           );
         });
+        if (keep) {
+          const kept = await keptAsMade(spec, packageDir);
+          if (kept) return kept;
+        }
         await assertFits(spec);
         await prepareImage?.(spec.app);
         const dataVolume = await images.ensure(

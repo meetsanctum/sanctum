@@ -138,6 +138,11 @@ export function createCallHost(options: {
   const delivering = new AsyncLocalStorage<Scope>();
   let running: Running | undefined;
   let stopping: Promise<Outcome> | undefined;
+  // The calls under way, which end with the connection they came on.
+  const open = new Set<Scope>();
+  // A start hook under way, which a stop never overlaps.
+  let starting: Promise<unknown> | undefined;
+  let connection = 0;
 
   // Nothing reaches the app before `start` returns or its time runs out: calls
   // wait here, within their own time limit.
@@ -175,12 +180,14 @@ export function createCallHost(options: {
     work: (scope: Scope) => Promise<T>,
   ) {
     const scope = { id, storage: storage.call() };
+    open.add(scope);
     const timer = setTimeout(() => scope.storage.end(), deadlineMs);
     try {
       return await work(scope);
     } finally {
       clearTimeout(timer);
       scope.storage.end();
+      open.delete(scope);
     }
   }
 
@@ -197,6 +204,7 @@ export function createCallHost(options: {
     actor: Actor,
     deadlineMs: number,
     info: StartInfo,
+    on: number,
     update?: string,
   ) {
     const arrived = Date.now();
@@ -204,6 +212,8 @@ export function createCallHost(options: {
     if (stopping && !(await within(stopping, deadlineMs))) {
       return failureOf(`${appId} was still stopping`);
     }
+    if (on !== connection)
+      return failureOf("The connection to the core has gone");
     if (running) {
       return failureOf(`${appId} has already started`);
     }
@@ -219,7 +229,7 @@ export function createCallHost(options: {
     });
     running = { ctx, lifetime, handlers };
     const timer = setTimeout(open, deadlineMs - (Date.now() - arrived));
-    const outcome = await outcomeOf(async () => {
+    const work = outcomeOf(async () => {
       await app.start?.(ctx, info);
       // The core commits an update on this, so it has to be on the disk first.
       if (update) {
@@ -227,6 +237,9 @@ export function createCallHost(options: {
         return { synced: update };
       }
     });
+    starting = work;
+    const outcome = await work;
+    if (starting === work) starting = undefined;
     clearTimeout(timer);
     // One that isn't ready hasn't started: nothing reaches it, and the core
     // calls this again when it tries again.
@@ -313,12 +326,19 @@ export function createCallHost(options: {
 
   // Each of the app's handlers in turn, the first failure answering for them
   // all: one that fails holds up nothing else.
-  async function deliver(id: string, deadlineMs: number, event: CoreEvent) {
+  async function deliver(
+    id: string,
+    deadlineMs: number,
+    event: CoreEvent,
+    on: number,
+  ) {
     const handlers = (running?.handlers.get(event.name) ??
       []) as CoreEventHandler[];
     const deadline = Date.now() + deadlineMs;
     let failure: Outcome | undefined;
     for (const handler of handlers) {
+      if (on !== connection)
+        return failureOf("The connection to the core has gone");
       const left = deadline - Date.now();
       if (left <= 0) {
         return failure ?? failureOf(`${event.name} ran out of time`);
@@ -333,7 +353,7 @@ export function createCallHost(options: {
     return failure ?? { ok: true as const };
   }
 
-  async function handle(message: CallMessage): Promise<Outcome> {
+  async function handle(message: CallMessage, on: number): Promise<Outcome> {
     const { id, actor, deadlineMs, body } = message;
     if (body.kind === "start") {
       const { reason, from, update } = body;
@@ -344,6 +364,7 @@ export function createCallHost(options: {
         reason === "updated" || reason === "rolledBack"
           ? { reason, from: from! }
           : { reason },
+        on,
         update,
       );
     }
@@ -354,6 +375,8 @@ export function createCallHost(options: {
     }
     const arrived = Date.now();
     const started = await within(afterStart, deadlineMs);
+    if (on !== connection)
+      return failureOf("The connection to the core has gone");
     const left = deadlineMs - (Date.now() - arrived);
     if (!started || left <= 0) {
       return failureOf(`${appId} had not started in time`);
@@ -366,16 +389,55 @@ export function createCallHost(options: {
       case "driver":
         return driverCall(message, left, body.hook, body.params);
       case "event":
-        return deliver(id, left, body.event);
+        return deliver(id, left, body.event, on);
     }
   }
 
   return {
-    /** Takes one call from the core, and answers it whenever it ends. */
-    take(message: CallMessage) {
-      void handle(message)
+    /**
+     * Takes one call from the core, and answers it whenever it ends, on the
+     * connection it came by.
+     */
+    take(
+      message: CallMessage,
+      answer: (outcome: Outcome) => void = (outcome) =>
+        options.answer(message.id, outcome),
+    ) {
+      void handle(message, connection)
         .catch((error: unknown) => failureOf(error))
-        .then((outcome) => options.answer(message.id, outcome));
+        .then(answer);
+    },
+
+    /**
+     * The connection to the core has gone, with every call on it: what they
+     * left open rolls back, and nothing of theirs reaches the next core, whose
+     * calls may have the same ids. The app stops as for a restart, and starts
+     * again when that core calls its start. Whether it stopped within `capMs`
+     * without failing.
+     */
+    async lost(capMs: number) {
+      const deadline = Date.now() + capMs;
+      connection += 1;
+      // Release calls waiting for this connection's start so they can end too.
+      opened();
+      afterStart = new Promise<void>((open) => (opened = open));
+      for (const scope of open) scope.storage.end();
+      open.clear();
+      // A start the core no longer waits for finishes first, so the stop that
+      // follows finds what it set going.
+      if (starting && !(await within(starting, capMs))) return false;
+      const left = deadline - Date.now();
+      const stopped = running
+        ? stop(left, { reason: "restarting" })
+        : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
+      let outcome: Outcome | undefined;
+      const settled = await within(
+        stopped.then((each) => {
+          outcome = each;
+        }),
+        left,
+      );
+      return settled && outcome?.ok === true;
     },
 
     // A stop nobody called for, as when the container is stopped: its hook is a
