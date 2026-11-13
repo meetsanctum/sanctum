@@ -454,6 +454,29 @@ describe("an app's supervisor", () => {
   });
 
   describe("work that outlives its run", () => {
+    it("starts one that said hello while its container was asked for, after a wait that wasn't its own", async () => {
+      let resolveStarting!: () => void;
+      const starting = new Promise<void>((resolve) => {
+        resolveStarting = resolve;
+      });
+      const { entry, supervisor, reconciled } = setUp({
+        startAppContainer: () => starting.then(() => ({ kept: true })),
+      });
+      // It waited for the manager to come back, and that wait is over.
+      supervisor.waits(entry, "Waiting for its data to come back");
+      const launched = supervisor.launch(entry);
+      await passes(0);
+      // The one that goes on says hello before the manager answers.
+      entry.link = { isReady: () => true } as InstalledApp["link"];
+      supervisor.ready(entry);
+      expect(reconciled).not.toHaveBeenCalled();
+
+      resolveStarting();
+      await launched;
+
+      expect(reconciled).toHaveBeenCalledTimes(1);
+    });
+
     it("keeps a NotReady retry's pause when the manager answers after the app", async () => {
       let resolveStarting!: () => void;
       const starting = new Promise<void>((resolve) => {

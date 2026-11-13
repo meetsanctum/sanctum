@@ -316,8 +316,15 @@ export function createSupervisor(options: {
     }
     if (!isCurrent(entry, generation)) return;
     if (entry.link.isReady()) {
-      // One that has said what it waits for is asked again after its pause.
-      if (!entry.running && !of(entry).waitingFor) ready(entry);
+      // It said hello while its container was asked for, as one that goes on
+      // in its container can, and ready() left it to this. One that has said
+      // what it waits for meanwhile is asked again after its pause, which is
+      // timing. Any other wait is the one that led here and is over, such as
+      // for the manager to come back: with no pause timing, nothing would
+      // ask again, so it starts now.
+      const isPausing =
+        of(entry).waitingFor !== undefined && of(entry).timer !== undefined;
+      if (!entry.running && !isPausing) ready(entry);
       return;
     }
     awaitHello(entry, generation, performance.now() + connectWithinMs);
