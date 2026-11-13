@@ -624,9 +624,11 @@ export const deviceRegistration = z.strictObject({
   // needs, and works out the type itself when a driver says none or one
   // it does not know.
   type: deviceTypeId.nullable().default(null),
+  // What it can do, as capabilities of the kinds Sanctum has. A device
+  // with none is one Sanctum cannot use: it is still the household's, to
+  // name, put in a room and remove.
   capabilities: z
     .array(capabilityRegistration)
-    .min(1)
     .max(32)
     .refine(
       (list) => new Set(list.map((each) => each.id)).size === list.length,

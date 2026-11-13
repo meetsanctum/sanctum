@@ -12,16 +12,18 @@ import { deviceCapabilities, devices } from "./schema.js";
 // "Office light 2". Names are compared ignoring case and spacing, and are
 // in sentence case like the rest of the interface. A device keeps a number
 // that is still free, so removing "Office light" does not rename
-// "Office light 2".
+// "Office light 2". A device Sanctum cannot use is an "Unknown device" in
+// any room, since its type has no word to follow a room's name.
 
-const words = new Map<DeviceType, string>(
-  deviceTypes.map((type) => [type.id, type.noun]),
-);
+const words = new Map(deviceTypes.map((type) => [type.id, type]));
 
-/** What a device of this type is called in this room, before any number. */
+/**
+ * What a device of this type is called in this room, before any number: its
+ * type's title in no room, and in any room for a type with no noun.
+ */
 export function baseName(type: DeviceType, room: string | null) {
-  const word = words.get(type)!;
-  return room ? `${room} ${word}` : `${word[0]!.toUpperCase()}${word.slice(1)}`;
+  const { title, noun } = words.get(type)!;
+  return room && noun ? `${room} ${noun}` : title;
 }
 
 const normal = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();

@@ -25,7 +25,8 @@ import {
 // is. Tests play the radio's side through the `radio` export.
 
 type Gadget = {
-  kind: "light" | "switch" | "button" | "sensor" | "occupancy";
+  // A purifier does nothing the core has a capability for.
+  kind: "light" | "switch" | "button" | "sensor" | "occupancy" | "purifier";
   name: string;
   // What the driver says it is, if it says.
   type?: string;
@@ -48,6 +49,7 @@ const models = {
   button: "Remote",
   sensor: "Climate sensor",
   occupancy: "Motion sensor",
+  purifier: "Air purifier",
 };
 // A climate sensor's two readings and its battery, as it first says them.
 const climate = { temperature: 21.5, humidity: 48, battery: 87 };
@@ -376,32 +378,34 @@ class Radio {
       // Any id goes over the wire, one a core does not know too.
       type: gadget.type as DeviceRegistration["type"],
       capabilities:
-        gadget.kind === "sensor"
-          ? sensorCapabilities
-          : gadget.kind === "occupancy"
-            ? motionCapabilities
-            : [
-                gadget.kind === "light"
-                  ? {
-                      id: capabilityIds.light,
-                      kind: "light",
-                      features: {
-                        brightness: true,
-                        colorTemperature: { min: 153, max: 500 },
-                        color: true,
-                      },
-                    }
-                  : gadget.kind === "button"
+        gadget.kind === "purifier"
+          ? []
+          : gadget.kind === "sensor"
+            ? sensorCapabilities
+            : gadget.kind === "occupancy"
+              ? motionCapabilities
+              : [
+                  gadget.kind === "light"
                     ? {
-                        id: capabilityIds.button,
-                        kind: "button",
+                        id: capabilityIds.light,
+                        kind: "light",
                         features: {
-                          actions: remoteActions,
-                          holds: remoteHolds,
+                          brightness: true,
+                          colorTemperature: { min: 153, max: 500 },
+                          color: true,
                         },
                       }
-                    : { id: capabilityIds.switch, kind: "switch" },
-              ],
+                    : gadget.kind === "button"
+                      ? {
+                          id: capabilityIds.button,
+                          kind: "button",
+                          features: {
+                            actions: remoteActions,
+                            holds: remoteHolds,
+                          },
+                        }
+                      : { id: capabilityIds.switch, kind: "switch" },
+                ],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)
@@ -418,12 +422,13 @@ class Radio {
 
   private async say(key: string) {
     const gadget = this.gadgets.get(key)!;
-    if (gadget.kind === "button") return;
+    if (gadget.kind === "button" || gadget.kind === "purifier") return;
     await this.ctx?.devices.report({ key, ...reportOf(gadget) });
   }
 }
 
 const sleeps = (gadget: Gadget) =>
+  gadget.kind === "purifier" ||
   gadget.kind === "button" ||
   gadget.kind === "sensor" ||
   gadget.kind === "occupancy";
@@ -453,7 +458,7 @@ const sensorCapabilities: DeviceRegistration["capabilities"] = [
 // What a gadget says of itself: a remote has no state, only presses; a
 // sensor says its readings and its battery.
 function reportOf(gadget: Gadget) {
-  if (gadget.kind === "button") return {};
+  if (gadget.kind === "button" || gadget.kind === "purifier") return {};
   if (gadget.kind === "occupancy") {
     const { illuminance, temperature, battery, ...occupancy } = gadget.state;
     return {
