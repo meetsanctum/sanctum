@@ -49,6 +49,7 @@ export const lamp: DeviceInfo = {
 };
 export const kettle: DeviceInfo = {
   ...lamp,
+  type: "switch",
   id: "kettle",
   name: "Kettle",
   capabilities: [
@@ -69,6 +70,7 @@ export const kettle: DeviceInfo = {
 // v1's office button, whose detail shows the pages apps add for remotes.
 export const remote: DeviceInfo = {
   ...lamp,
+  type: "button",
   id: "remote",
   name: "Office button",
   capabilities: [

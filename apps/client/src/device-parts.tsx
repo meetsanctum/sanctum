@@ -41,7 +41,9 @@ const typeIcons: Record<DeviceType, LucideIcon> = {
  */
 export function DeviceIcon(props: { device?: DeviceInfo }) {
   const Icon: LucideIcon =
-    (props.device && typeIcons[props.device.type]) ?? Radio;
+    props.device && Object.hasOwn(typeIcons, props.device.type)
+      ? typeIcons[props.device.type]
+      : Radio;
   return (
     <span
       aria-hidden="true"

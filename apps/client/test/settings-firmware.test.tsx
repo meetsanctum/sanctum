@@ -277,6 +277,7 @@ describe("a device's line", () => {
     // A sensor on a battery, before it has said how full it is.
     const sensor = {
       ...button,
+      type: "sensor" as const,
       capabilities: [
         {
           id: "temperature",

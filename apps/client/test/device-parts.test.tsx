@@ -36,10 +36,16 @@ describe("a device's icon", () => {
     ]);
   });
 
-  it("is the general one for a type this client has none for, and for no device", () => {
-    expect(
-      iconOf(light("device", "Device", { type: "curtain" as never })),
-    ).toBe("lucide-radio");
+  it.each(["curtain", "constructor", "toString", "__proto__"])(
+    "is the general one for the unfamiliar type %s",
+    (type) => {
+      expect(iconOf(light("device", "Device", { type: type as never }))).toBe(
+        "lucide-radio",
+      );
+    },
+  );
+
+  it("is the general one for no device", () => {
     expect(iconOf()).toBe("lucide-radio");
   });
 });
