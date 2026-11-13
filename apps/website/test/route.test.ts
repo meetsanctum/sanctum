@@ -158,21 +158,39 @@ describe("POST /api/waitlist", () => {
     expect((await from("another")).status).toBe(200);
   });
 
-  it("counts by the client Cloudflare names, not by Cloudflare's own address", async () => {
+  it("keeps the edge's client limit when a caller changes Cloudflare headers", async () => {
     setUp();
-    const from = (client: string) =>
+    const from = (client: string, claimed: string) =>
       waitlist.POST(
         new Request("https://example.com/api/waitlist", {
           method: "POST",
-          headers: { "x-real-ip": "cloudflare", "cf-connecting-ip": client },
+          headers: { "x-real-ip": client, "cf-connecting-ip": claimed },
           body: JSON.stringify({ email: "someone@example.com" }),
         }),
       );
     for (let joins = 0; joins < 5; joins++) {
-      expect((await from("visitor-1")).status).toBe(200);
+      expect((await from("visitor-1", `claimed-${joins}`)).status).toBe(200);
     }
-    expect((await from("visitor-1")).status).toBe(429);
-    expect((await from("visitor-2")).status).toBe(200);
+    expect((await from("visitor-1", "claimed-5")).status).toBe(429);
+    expect(resend.create).toHaveBeenCalledTimes(5);
+    expect((await from("visitor-2", "claimed-5")).status).toBe(200);
+  });
+
+  it("counts callers without an edge address together despite Cloudflare headers", async () => {
+    setUp();
+    const from = (claimed: string) =>
+      waitlist.POST(
+        new Request("https://example.com/api/waitlist", {
+          method: "POST",
+          headers: { "cf-connecting-ip": claimed },
+          body: JSON.stringify({ email: "someone@example.com" }),
+        }),
+      );
+    for (let joins = 0; joins < 5; joins++) {
+      expect((await from(`claimed-${joins}`)).status).toBe(200);
+    }
+    expect((await from("claimed-5")).status).toBe(429);
+    expect(resend.create).toHaveBeenCalledTimes(5);
   });
 
   it("says so when Resend kept no address", async () => {

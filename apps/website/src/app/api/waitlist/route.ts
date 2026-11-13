@@ -35,7 +35,10 @@ export async function POST(request: Request) {
   if (!key || !from) {
     return Response.json({ error: "not-set-up" }, { status: 503 });
   }
-  if (!allows(clientOf(request))) {
+  // Railway's public edge sets X-Real-IP. A direct caller can supply its
+  // own CF-Connecting-IP, so that header cannot identify a client here.
+  // Without an edge address, as when developing, every caller is one.
+  if (!allows(request.headers.get("x-real-ip") ?? "unknown")) {
     return Response.json({ error: "too-many" }, { status: 429 });
   }
   const outcome = await joinWaitlist(new Resend(key), {
@@ -50,16 +53,4 @@ export async function POST(request: Request) {
   // The same answer whether the address was new, so the form tells nobody
   // who is on the list.
   return Response.json({ ok: true });
-}
-
-// Who is asking, by address. Cloudflare stands in front of the site and
-// names the client it passes on; to Railway's edge every such request comes
-// from Cloudflare itself, so its name for the client counts only without
-// Cloudflare's. With neither, as when developing, every caller is one.
-function clientOf(request: Request) {
-  return (
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("x-real-ip") ??
-    "unknown"
-  );
 }

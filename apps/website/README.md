@@ -20,7 +20,8 @@ it is and gets no second email, and the form hears the same answer either
 way. With `RESEND_SEGMENT_ID` set, a contact Resend already has for another
 reason joins that segment and is confirmed like a new one. One client gets
 five joins in ten minutes, counted in the server's memory by the address
-Cloudflare names for it, or Railway's edge where no Cloudflare is in front. While developing,
+Railway's public edge sets in `X-Real-IP`. The route ignores
+`CF-Connecting-IP`, which a direct caller can supply. While developing,
 <http://localhost:5174/emails/waitlist> shows the confirmation as a page.
 
 The confirmation's Unsubscribe opens `/unsubscribe/<contact>`, which asks
