@@ -8,8 +8,9 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import { z } from "zod";
 
 import { createActivity } from "../src/activity/activity.js";
-import type { AppPackage } from "../src/app-host/host.js";
-import { loadAppPackage, loadAppPackages } from "../src/app-host/loader.js";
+import type { AppPackage } from "./runner-apps.js";
+import { loadAppPackage } from "./runner-apps.js";
+import { shippedApps } from "../src/app-host/loader.js";
 import { notes } from "./fixtures/apps/notes/schema.js";
 import {
   claimed,
@@ -105,49 +106,43 @@ describe("loading app packages", () => {
       /leads out of the package/,
     );
   });
+});
 
-  it("gives each package the origin of the place it was found", async () => {
-    const packages = await loadAppPackages(fixtureApps, "official", () => {});
+describe("the apps an image ships", () => {
+  it("are known by the ids their manifests have", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sanctum-shipped-"));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    for (const [folder, id] of [
+      ["weather", "sanctum.example"],
+      ["notes", "sanctum.example-notes"],
+    ] as const) {
+      await mkdir(join(dir, folder));
+      await writeFile(
+        join(dir, folder, "sanctum-app.json"),
+        JSON.stringify({ id }),
+      );
+    }
 
-    expect(packages.map(({ app, origin }) => `${app.id} ${origin}`)).toEqual([
-      "test.lamps official",
-      "test.notes official",
-      "test.panel official",
+    expect(await shippedApps(dir, () => {})).toEqual([
+      "sanctum.example",
+      "sanctum.example-notes",
     ]);
-    expect(packages[1]?.migrationsFolder).toBe(
-      join(fixtureApps, "notes", "migrations"),
-    );
   });
 
-  it("leaves out a package that does not load, and says why", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "sanctum-apps-"));
-    const broken = join(dir, "broken");
-    await mkdir(broken);
-    await writeFile(join(broken, "package.json"), '{"main": "index.js"}');
-    await writeFile(join(broken, "index.js"), "export default 42;");
-    const escaping = join(dir, "escaping");
-    await mkdir(escaping);
-    await writeFile(
-      join(escaping, "package.json"),
-      '{"exports": {".": "../broken/index.js"}}',
-    );
+  it("leave out a folder with no manifest to read, and say so", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sanctum-shipped-"));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    await mkdir(join(dir, "broken"));
     const logs: string[] = [];
 
-    const packages = await loadAppPackages(dir, "system", (line) =>
-      logs.push(line),
-    );
-
-    expect(packages).toEqual([]);
+    expect(await shippedApps(dir, (line) => logs.push(line))).toEqual([]);
     expect(logs).toEqual([
-      "apps: broken was not loaded (Its entry has no app as its default export)",
-      "apps: escaping was not loaded (../broken/index.js leads out of the package)",
+      expect.stringMatching(/^apps: broken has no manifest to read/),
     ]);
   });
 
-  it("finds no apps in a folder that does not exist", async () => {
-    expect(await loadAppPackages("/nonexistent", "system", () => {})).toEqual(
-      [],
-    );
+  it("are none where the image has no such folder, as a development stack's", async () => {
+    expect(await shippedApps("/nonexistent", () => {})).toEqual([]);
   });
 });
 

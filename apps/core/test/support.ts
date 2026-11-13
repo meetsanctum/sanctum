@@ -16,7 +16,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach } from "vitest";
 
-import type { ApartPackage, AppPackage } from "../src/app-host/host.js";
+import type { ApartPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import type { AppContainerManager } from "../src/app-host/supervisor.js";
 import type { AppUpdateManager } from "../src/app-host/updates.js";
 import { appGrants } from "../src/app-host/schema.js";
@@ -310,9 +311,8 @@ export async function testCore(
     appUpdates?: Parameters<typeof createModules>[1]["appUpdates"];
     // Apps the test defines, each run apart through the runner in this process.
     apps?: readonly AppPackage[];
-    // Apps in the core's own process, as a development stack runs them.
-    inProcess?: readonly AppPackage[];
-    // Apps that run apart, each listening in its own folder under `appSockets`.
+    // Apps the test runs itself, each listening in its own folder under
+    // `appSockets`.
     apart?: readonly ApartPackage[];
     appSockets?: string;
     supervision?: Parameters<typeof createModules>[1]["supervision"];
@@ -390,22 +390,14 @@ export async function testCore(
   if (options.allowed ?? true) {
     allowEveryPermission(
       database.db,
-      [
-        ...(options.inProcess ?? []).map(({ app }) => app),
-        ...[...apps, ...(options.apart ?? [])].map(
-          ({ apart }) => apart.manifest,
-        ),
-      ],
+      [...apps, ...(options.apart ?? [])].map(({ apart }) => apart.manifest),
       now(),
     );
   }
   if (options.onTrial) modules.workflows.hold();
-  await modules.apps.start(
-    [...(options.inProcess ?? []), ...apps, ...(options.apart ?? [])],
-    {
-      onTrial: options.onTrial ?? false,
-    },
-  );
+  await modules.apps.start([...apps, ...(options.apart ?? [])], {
+    onTrial: options.onTrial ?? false,
+  });
   // Tests move the clock and tick by hand.
   if (!options.onTrial) modules.workflows.start({ ticking: false });
   modules.history.start({ ticking: false });

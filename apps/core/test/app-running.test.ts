@@ -68,16 +68,6 @@ describe("how an app is running", () => {
     });
   });
 
-  it("has nothing to say of one in the core's process", async () => {
-    const home = await versions();
-    const core = await home.coreWith(version("1.0.0"), {
-      isInProcessOnly: true,
-    });
-    await isRunning(core, id);
-
-    expect(await read(core)).toBeNull();
-  });
-
   it("asks who's asking", async () => {
     const home = await versions();
     const core = await home.coreWith(version("1.0.0"));

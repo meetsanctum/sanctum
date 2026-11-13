@@ -341,29 +341,6 @@ describe("a start with no change of version", () => {
   });
 });
 
-describe("an app in the core's process", () => {
-  it("sweeps nothing on a new version, since its start isn't asked to say all it owns", async () => {
-    const owner = (owned: () => Owned) => ({
-      app: app(owned),
-      origin: "official" as const,
-    });
-    const first = await testCore({
-      inProcess: [owner(() => ({ entities: ["kept"], jobs: ["kept"] }))],
-    });
-    await new Promise((done) => setTimeout(done, 10));
-    const next = owner(() => ({}));
-
-    const second = await testCore({
-      inProcess: [{ ...next, app: { ...next.app, version: "2.0.0" } }],
-      dataDir: first.dataDir,
-    });
-    await new Promise((done) => setTimeout(done, 10));
-
-    expect(holds(second).entities).toEqual(["kept"]);
-    expect(holds(second).jobs).toEqual(["kept"]);
-  });
-});
-
 describe("forcing a commit to disk", () => {
   it("is on for that transaction alone, and it can be undone within it", async () => {
     const { db } = await testCore();

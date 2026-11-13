@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 
-import type { AppPackage, Origin } from "../src/app-host/host.js";
-import { loadAppPackage } from "../src/app-host/loader.js";
+import type { Origin } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
+import { loadAppPackage } from "./runner-apps.js";
 import { radio } from "./fixtures/apps/lamps/index.js";
 import {
   claimed,

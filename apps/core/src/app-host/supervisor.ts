@@ -131,7 +131,7 @@ export function createSupervisor(options: {
   const connectWithinMs = options.connectWithinMs ?? defaultConnectWithinMs;
   const connectCheckMs = options.connectCheckMs ?? defaultConnectCheckMs;
 
-  const of = (entry: InstalledApp) => entry.supervision!;
+  const of = (entry: InstalledApp) => entry.supervision;
   const isCurrent = (entry: InstalledApp, generation: number) =>
     !of(entry).isEnded && of(entry).generation === generation;
 
@@ -219,7 +219,7 @@ export function createSupervisor(options: {
     if (options.updateFailed(entry, failure)) return;
     if (entry.off) return;
     const generation = ++supervision.generation;
-    supervision.endingConnection = entry.link?.isConnected() ?? false;
+    supervision.endingConnection = entry.link.isConnected();
     const at = now().getTime();
     const failures = [
       ...supervision.failures.filter((when) => at - when < failureWindowMs),
@@ -282,7 +282,7 @@ export function createSupervisor(options: {
         of(entry).isReplacing = true;
         try {
           await manager.startAppContainer(app.id, {
-            folder: apartIn!,
+            folder: apartIn,
             memoryMb: manifest.runtime.memory,
             dataMb: manifest.runtime.data,
           });
@@ -301,7 +301,7 @@ export function createSupervisor(options: {
       return;
     }
     if (!isCurrent(entry, generation)) return;
-    if (entry.link?.isReady()) {
+    if (entry.link.isReady()) {
       // One that has said what it waits for is asked again after its pause.
       if (!entry.running && !of(entry).waitingFor) ready(entry);
       return;
@@ -315,7 +315,7 @@ export function createSupervisor(options: {
     const { id } = entry.app;
     let isChecking = false;
     const isWaiting = () =>
-      isCurrent(entry, generation) && !entry.link?.isConnected();
+      isCurrent(entry, generation) && !entry.link.isConnected();
     const check = async () => {
       of(entry).timer = undefined;
       if (!isWaiting()) return;
@@ -473,7 +473,7 @@ export function createSupervisor(options: {
       const supervision = of(entry);
       if (supervision.isEnded) return;
       supervision.generation += 1;
-      supervision.endingConnection = entry.link?.isConnected() ?? false;
+      supervision.endingConnection = entry.link.isConnected();
       clearTimeout(supervision.timer);
       clearTimeout(supervision.quietTimer);
       clearTimeout(supervision.attentionTimer);
@@ -526,7 +526,6 @@ export function createSupervisor(options: {
     async arrives(entry: InstalledApp, withinMs: number) {
       const supervision = entry.supervision;
       if (
-        !supervision ||
         supervision.isEnded ||
         entry.off ||
         (supervision.phase !== "starting" &&

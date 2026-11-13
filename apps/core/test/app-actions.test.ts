@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createActivity } from "../src/activity/activity.js";
-import { loadAppPackage } from "../src/app-host/loader.js";
+import { loadAppPackage } from "./runner-apps.js";
 import {
   claimed,
   fixtureApps,

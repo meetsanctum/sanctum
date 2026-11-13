@@ -2,7 +2,7 @@ import { defineApp, sunType, type SunTimes } from "@meetsanctum/app-sdk";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { loadAppPackage } from "../src/app-host/loader.js";
+import { loadAppPackage } from "./runner-apps.js";
 import type { SunDays } from "../src/workflows/jobs.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";

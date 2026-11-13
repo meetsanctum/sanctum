@@ -1,22 +1,9 @@
 import type { StopInfo } from "@meetsanctum/app-sdk";
 
-import type { ApartPackage, AppPackage } from "./host.js";
+import type { ApartPackage } from "./host.js";
 import type { InstalledApp } from "./installed.js";
 import type { Supervisor } from "./supervisor.js";
 import type { AppUpdates } from "./updates.js";
-
-/** An official app's package in the core's process, where one apart came with it. */
-function inProcessWhileApart(packages: readonly (AppPackage | ApartPackage)[]) {
-  const apart = packages.flatMap((pkg) =>
-    "apart" in pkg ? [pkg.apart.manifest.id] : [],
-  );
-  return packages.filter(
-    (pkg): pkg is AppPackage =>
-      !("apart" in pkg) &&
-      pkg.origin === "official" &&
-      apart.includes(pkg.app.id),
-  );
-}
 
 // Starting an app apart, including replacing a failed update's package. Recovery
 // finishes before its socket opens, and removal and shutdown can cancel a swap.
@@ -25,9 +12,7 @@ export function createApartStarts(options: {
   removals: Map<string, Promise<void>>;
   updates: AppUpdates;
   supervisor: Supervisor;
-  install: (pkg: ApartPackage | AppPackage, checked: Set<string>) => void;
-  // Starts one in the core's process, as it does for any there.
-  reconcile: (entry: InstalledApp) => Promise<void>;
+  install: (pkg: ApartPackage, checked: Set<string>) => void;
   stopApp: (
     entry: InstalledApp,
     info: { reason: StopInfo["reason"]; gone?: boolean },
@@ -46,8 +31,6 @@ export function createApartStarts(options: {
     log,
   } = options;
   let isClosed = false;
-  // Kept with the app's replacements, and released when it is removed.
-  const inProcessPackages = new Map<string, AppPackage>();
   const starting = new WeakMap<InstalledApp, Promise<void>>();
   const listening = new WeakMap<InstalledApp, Promise<void>>();
   const sockets = new Set<Promise<void>>();
@@ -58,7 +41,7 @@ export function createApartStarts(options: {
   const isCurrent = (entry: InstalledApp) =>
     !isClosed &&
     installed.get(entry.manifest.id) === entry &&
-    entry.supervision?.isEnded !== true;
+    !entry.supervision.isEnded;
 
   async function listen(entry: InstalledApp) {
     try {
@@ -78,7 +61,7 @@ export function createApartStarts(options: {
     try {
       let opened = listening.get(entry);
       if (!opened) {
-        opened = entry.link!.listen();
+        opened = entry.link.listen();
         listening.set(entry, opened);
         sockets.add(opened);
         const settled = () => void sockets.delete(opened!);
@@ -106,7 +89,7 @@ export function createApartStarts(options: {
 
   // Safe to ask again: one that failed part way has taken the old entry out and left
   // its record here, and the next try picks up from there.
-  async function replace(entry: InstalledApp, pkg: ApartPackage | AppPackage) {
+  async function replace(entry: InstalledApp, pkg: ApartPackage) {
     const appId = entry.manifest.id;
     const unfinished = replacements.get(appId);
     if (unfinished?.isCancelled) {
@@ -125,18 +108,12 @@ export function createApartStarts(options: {
       await ended;
       await stopApp(entry, { reason: "restarting", gone: true });
       entry.storage.close();
-      await entry.link?.close();
+      await entry.link.close();
       if (isClosed || replacement.isCancelled) return;
       install(pkg, new Set());
       const next = installed.get(appId)!;
       announce(next);
-      if (next.link) {
-        void start(next);
-      } else {
-        options.reconcile(next).catch((error: unknown) => {
-          log(`apps: ${appId} did not start (${String(error)})`);
-        });
-      }
+      void start(next);
     })();
     replacement.work = work;
     replacements.set(appId, replacement);
@@ -155,24 +132,11 @@ export function createApartStarts(options: {
       supervisor.waits(entry, why, again, updates.turnPauseMs),
     replace,
     isCurrent,
-    inProcess: (appId) => inProcessPackages.get(appId),
   });
 
   return {
-    // Each app installs once, with its in-process fallback kept beside it.
-    packagesFor(packages: readonly (AppPackage | ApartPackage)[]) {
-      const paired = inProcessWhileApart(packages);
-      for (const pkg of paired) inProcessPackages.set(pkg.app.id, pkg);
-      return packages
-        .filter((pkg) => "apart" in pkg || !paired.includes(pkg))
-        .map((pkg) => {
-          const appId = "apart" in pkg ? pkg.apart.manifest.id : pkg.app.id;
-          return [pkg, inProcessPackages.get(appId)] as const;
-        });
-    },
     start,
     cancel(appId: string) {
-      inProcessPackages.delete(appId);
       const replacement = replacements.get(appId);
       if (replacement) replacement.isCancelled = true;
     },

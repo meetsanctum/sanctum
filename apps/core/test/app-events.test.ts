@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { createCoreEvents } from "../src/app-host/core-events.js";
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, personWithClient, settled } from "./devices-support.js";
 import { claimed, post, testCore } from "./support.js";
 
@@ -473,65 +473,6 @@ describe("the core's events", () => {
     );
   });
 
-  it.each(["fails", "times out"])(
-    "reach nothing of an app in the core's process whose start %s, and leave its actions be",
-    async (outcome) => {
-      const heard: CoreEvent[] = [];
-      // Apart, its container ends and it starts again.
-      const core = await testCore({
-        appTimeoutMs: 50,
-        inProcess: [
-          {
-            origin: "system",
-            app: defineApp({
-              id: "test.halfway",
-              name: "Halfway",
-              version: "0.1.0",
-              core: "^1.0.0",
-              permissions: [{ id: "places.read", reason: "For the test." }],
-              actions: [
-                defineAction({
-                  id: "halfway.rooms",
-                  title: "Rooms",
-                  tier: "read",
-                  input: z.object({}),
-                  output: z.number(),
-                  async run(ctx) {
-                    return (await ctx.places.list()).rooms.length;
-                  },
-                }),
-              ],
-              events: [],
-              async start(ctx) {
-                await ctx.events.on("place.added", (event) => {
-                  heard.push(event);
-                });
-                if (outcome === "fails") throw new Error("no catching up");
-                await new Promise(() => {});
-              },
-            }),
-          },
-        ],
-      });
-      const maya = await claimed(core);
-
-      await post(core, "/api/places/rooms/add", { name: "Office" }, maya);
-      await settled();
-      const rooms = await post(
-        core,
-        "/api/apps/test.halfway/actions/halfway.rooms",
-        {},
-        maya,
-      );
-
-      expect(core.logs).toContainEqual(
-        expect.stringMatching(/^apps: test\.halfway did not start/),
-      );
-      expect(heard).toEqual([]);
-      expect(rooms.json()).toBe(1);
-    },
-  );
-
   it("stop with the app, which finishes the one it is handling, and start again with it", async () => {
     let release!: () => void;
     const releases = new Promise<void>((resolve) => (release = resolve));
@@ -596,7 +537,11 @@ describe("delivering the core's events", () => {
 
   it("waits for the start hook to catch up", async () => {
     const events = createCoreEvents({ timeoutMs: 1000, log() {} });
-    const following = events.start("test.places", () => ["places.read"]);
+    const following = events.start(
+      "test.places",
+      () => ["places.read"],
+      () => undefined,
+    );
     const heard: string[] = [];
     following.handlers.set("place.added", [
       onAdded((place) => void heard.push(place.kind)),
@@ -618,7 +563,11 @@ describe("delivering the core's events", () => {
       timeoutMs: 20,
       log: (message) => logs.push(message),
     });
-    const following = events.start("test.places", () => ["places.read"]);
+    const following = events.start(
+      "test.places",
+      () => ["places.read"],
+      () => undefined,
+    );
     const heard: string[] = [];
     following.handlers.set("place.added", [
       onAdded(async (place) => {

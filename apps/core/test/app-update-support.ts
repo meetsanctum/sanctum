@@ -2,12 +2,13 @@ import { toStaticManifest, type AppDefinition } from "@meetsanctum/app-sdk";
 import { manifestDigest } from "@meetsanctum/app-sdk/package";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { runSession } from "@meetsanctum/app-sdk/runner-session";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, vi } from "vitest";
 
 import { appUpdates, appVersions } from "../src/app-host/schema.js";
+import { createAppVersions } from "../src/app-host/versions.js";
 import { cleanUps } from "./app-apart-support.js";
 import { fakeManager, testCore, type TestCore } from "./support.js";
 
@@ -113,10 +114,8 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
       beforeLoad?: () => Promise<void>;
       retryAfterMs?: number;
       quietMs?: number;
-      // Its package in the core's process too, as an official app ships until it moves.
-      inProcess?: AppDefinition;
-      // Only that, as a release from before apps ran apart.
-      isInProcessOnly?: boolean;
+      // No app at all, as a core whose image brings none.
+      none?: boolean;
     } = {},
   ) {
     await latest?.apps.close();
@@ -146,19 +145,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
         },
       },
       manager,
-      apart: options.isInProcessOnly
-        ? []
-        : [packageOf(definition, options.folder)],
-      ...(options.inProcess || options.isInProcessOnly
-        ? {
-            inProcess: [
-              {
-                app: options.inProcess ?? definition,
-                origin: "official" as const,
-              },
-            ],
-          }
-        : {}),
+      apart: options.none ? [] : [packageOf(definition, options.folder)],
       ...(options.onTrial ? { onTrial: true } : {}),
     });
     dataDir = core.dataDir;
@@ -167,8 +154,23 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
     return core;
   }
 
+  // A home from a release whose core ran this app in its own process: the
+  // version it last started there, with no folder, and its file in the core's
+  // data, for its first move to take in.
+  async function ranInTheCore(definition: AppDefinition) {
+    const core = await coreWith(definition, { none: true });
+    createAppVersions(core.db).started(toStaticManifest(definition));
+    await mkdir(join(core.dataDir, "apps"), { recursive: true });
+    await writeFile(
+      join(core.dataDir, "apps", `${definition.id}.db`),
+      "as it was",
+    );
+    return core;
+  }
+
   return {
     coreWith,
+    ranInTheCore,
     containers,
     calls: fake.calls,
     manager,

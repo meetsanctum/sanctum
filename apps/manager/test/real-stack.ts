@@ -208,6 +208,60 @@ export function realStack(prefix: string, coreEnv: readonly string[] = []) {
       claimScript,
     );
 
+  // A host as a release whose core ran these apps in its own process leaves it:
+  // each app's database in the core's data, owned as the core's own files are,
+  // and the core's record of the version it last started with no folder, which
+  // is what a first move takes in. Each copy comes through the maintenance
+  // container while its app runs, then the manager, the core and the apps stop,
+  // as for a core update. `then` runs in a container with the core's data at
+  // /core-data, as a core that ran them would have gone on.
+  async function turnBack(ids: readonly string[], then = "") {
+    const copy = "turned-back.db";
+    for (const id of ids) {
+      const { status, body } = await api(
+        "POST",
+        `/api/apps/${id}/maintenance`,
+        { operation: "copy", file: "app.db", name: copy },
+      );
+      if (status !== 200) {
+        throw new Error(`${id} wasn't copied: ${JSON.stringify(body)}`);
+      }
+    }
+    await docker(
+      "rm",
+      "-f",
+      name("manager"),
+      name("core"),
+      ...ids.map((id) => name(`app-${id}`)),
+    ).catch(() => undefined);
+    const apps = JSON.stringify(ids);
+    await docker(
+      "run",
+      "--rm",
+      "--volume",
+      `${dataVolume}:/manager-data`,
+      "--volume",
+      `${name("core-data")}:/core-data`,
+      "--entrypoint",
+      "sh",
+      `${name("manager")}:real`,
+      "-c",
+      `set -e
+       mkdir -p /core-data/apps
+       for id in $(node -e 'console.log(${apps}.join(" "))'); do
+         mv "/manager-data/app-copies/$id/${copy}" "/core-data/apps/$id.db"
+         chown "$(stat -c %u:%g /core-data/core.db)" "/core-data/apps/$id.db"
+       done
+       node --no-warnings -e '
+         const { DatabaseSync } = require("node:sqlite");
+         const db = new DatabaseSync("/core-data/core.db");
+         const forget = db.prepare("update app_versions set folder = null, digest = null, update_id = null where app_id = ?");
+         for (const id of ${apps}) forget.run(id);
+         db.close();'
+       ${then}`,
+    );
+  }
+
   async function createVolumes() {
     for (const part of ["manager-data", "core-data", "manager-socket"]) {
       await docker(
@@ -225,6 +279,7 @@ export function realStack(prefix: string, coreEnv: readonly string[] = []) {
   return {
     api,
     build,
+    turnBack,
     buildOnTop,
     claim,
     coreImage,

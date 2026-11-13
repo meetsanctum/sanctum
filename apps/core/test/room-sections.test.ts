@@ -3,12 +3,15 @@ import {
   defineApp,
   defineEntityType,
   defineRoomSection,
+  toStaticManifest,
   type AppDefinition,
+  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { createCoreCalls } from "../src/app-host/calls.js";
+import { checkManifest } from "../src/app-host/contract.js";
 import { claimed, get, post, sharedClient, testCore } from "./support.js";
 
 // Room sections: the core lists each app's for clients, refuses an app whose
@@ -110,15 +113,15 @@ describe("room sections", () => {
     }
   });
 
-  it("keep an app whose section's type has no tile shape from being installed in the core's process", async () => {
-    // Apart, the package's own defineApp refuses it before it has a manifest.
+  it("keep an app whose manifest gives its section's type no tile shape from being installed", async () => {
+    // Its own defineApp refuses such an app, so only its manifest says it.
+    const manifest = toStaticManifest(defineApp(nook()));
+    const spot = manifest.provides.entities[0]!.state as {
+      properties: Record<string, unknown>;
+    };
+    spot.properties.active = { type: "string" };
     const core = await testCore({
-      inProcess: [
-        {
-          app: nook(spotState.extend({ active: z.string() })),
-          origin: "official",
-        },
-      ],
+      apps: [{ app: nook(), manifest, origin: "official" }],
     });
     const maya = await claimed(core);
     expect((await get(core, "/api/apps", maya)).json()).toEqual([]);
@@ -128,6 +131,40 @@ describe("room sections", () => {
       ),
     );
   });
+
+  it.each([
+    [
+      "a second section",
+      (manifest: StaticManifest) =>
+        manifest.provides.roomSections.push({
+          ...manifest.provides.roomSections[0]!,
+          id: "nook.other",
+        }),
+      "more than one room section",
+    ],
+    [
+      "a type it doesn't provide",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.entityType = "nook.elsewhere";
+      },
+      "shows nook.elsewhere, which it doesn't provide",
+    ],
+    [
+      "an action that isn't its own",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.press = { action: "nook.gone" };
+      },
+      "pressed with nook.gone, which must be one of its read or write actions",
+    ],
+  ])(
+    "keep an app whose manifest gives its section %s from being installed",
+    (_, change, refusal) => {
+      const manifest = toStaticManifest(defineApp(nook()));
+      change(manifest);
+
+      expect(() => checkManifest(manifest)).toThrow(refusal);
+    },
+  );
 
   it("keep the places before 300 for Sanctum's own apps", async () => {
     const early = (app: AppDefinition): AppDefinition => ({

@@ -7,15 +7,17 @@ import {
   type AppContext,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { createActivity } from "../src/activity/activity.js";
-import { contractOf, schemaCheck } from "../src/app-host/contract.js";
-import { loadAppPackage, loadAppPackages } from "../src/app-host/loader.js";
+import {
+  checkManifest,
+  contractOf,
+  schemaCheck,
+} from "../src/app-host/contract.js";
+import { loadAppPackages } from "./runner-apps.js";
 import { namedInSchema } from "../src/workflows/named.js";
 import { claimed, get, post, testCore } from "./support.js";
 
@@ -251,17 +253,12 @@ describe("an app's manifest", () => {
     actions: [loose, refined],
   });
 
-  async function core(
-    change: (manifest: StaticManifest) => void = () => {},
-    // In the core's process, which checks its manifest against its code.
-    inProcess = false,
-  ) {
+  async function core(change: (manifest: StaticManifest) => void = () => {}) {
     const manifest = toStaticManifest(app);
     change(manifest);
-    const pkg = { app, manifest, origin: "official" } as const;
-    const started = await testCore(
-      inProcess ? { inProcess: [pkg] } : { apps: [pkg] },
-    );
+    const started = await testCore({
+      apps: [{ app, manifest, origin: "official" }],
+    });
     const { token } = await claimed(started);
     return { started, token };
   }
@@ -424,22 +421,26 @@ describe("an app's manifest", () => {
     },
   );
 
-  it("must be the one for the app it comes with, in the core's process", async () => {
-    const started = await testCore({
-      inProcess: [
-        {
-          app,
-          manifest: { ...toStaticManifest(app), version: "0.2.0" },
-          origin: "official",
-        },
-      ],
-    });
+  it.each([
+    [
+      "action",
+      (manifest: StaticManifest) => manifest.actions.push(manifest.actions[0]!),
+    ],
+    ["page", (manifest: StaticManifest) => manifest.pages.push("room", "room")],
+    [
+      "permission",
+      (manifest: StaticManifest) =>
+        manifest.permissions.push(
+          { id: "places.read", reason: "Twice." } as never,
+          { id: "places.read", reason: "Twice." } as never,
+        ),
+    ],
+  ])("can't have two of its %ss with one id", (kind, change) => {
+    const manifest = toStaticManifest(app);
+    change(manifest);
 
-    expect(started.logs.join("\n")).toContain(
-      "its manifest is for test.contract 0.2.0, not 0.1.0",
-    );
-    expect(started.logs.join("\n")).toContain(
-      "test.contract was not installed",
+    expect(() => checkManifest(manifest)).toThrow(
+      `its manifest has two of its ${kind}s called`,
     );
   });
 
@@ -482,7 +483,6 @@ describe("an app's manifest", () => {
     expect(apps.find(({ id }) => id === "test.contract")?.oldestPage).toBe(
       "0.9.0",
     );
-    expect(started.logs.join("\n")).not.toContain("out of step");
   });
 
   it.each([9, "0.9.0oops", "0.9.0.1", "00.9.0"])(
@@ -501,10 +501,10 @@ describe("an app's manifest", () => {
     },
   );
 
-  it("says when it's out of step with the code in the core's process, and is still what counts", async () => {
+  it("is what counts, though the app's code has more", async () => {
     const { started, token } = await core((manifest) => {
       manifest.actions = manifest.actions.filter(({ id }) => id !== loose.id);
-    }, true);
+    });
 
     const missing = await post(
       started,
@@ -514,9 +514,6 @@ describe("an app's manifest", () => {
     );
 
     expect(missing.statusCode).toBe(404);
-    expect(started.logs).toContain(
-      "apps: test.contract's sanctum-app.json is out of step with its code: run pnpm manifest",
-    );
   });
 });
 
@@ -609,46 +606,11 @@ describe("what an app writes", () => {
   });
 });
 
-describe("a package's manifest", () => {
-  it("comes from its sanctum-app.json", async () => {
-    const folder = await mkdtemp(join(tmpdir(), "sanctum-contract-"));
-    try {
-      const packageDir = join(folder, "app");
-      await mkdir(packageDir);
-      await writeFile(
-        join(packageDir, "package.json"),
-        JSON.stringify({ type: "module", exports: { ".": "./index.js" } }),
-      );
-      await writeFile(
-        join(packageDir, "index.js"),
-        `export default {
-           id: "test.packaged", name: "Packaged", version: "0.1.0", core: "^1.0.0",
-           permissions: [], actions: [], events: [],
-         };`,
-      );
-      await writeFile(
-        join(packageDir, "sanctum-app.json"),
-        JSON.stringify({ id: "test.packaged", name: "From the file" }),
-      );
-
-      const { manifest } = await loadAppPackage(packageDir, "official");
-
-      expect(manifest?.name).toBe("From the file");
-    } finally {
-      await rm(folder, { recursive: true, force: true });
-    }
-  });
-});
-
 describe("the catalog's apps, from their packages", () => {
   const catalog = resolve(import.meta.dirname, "../../../catalog/apps");
 
   it("have manifests whose every schema compiles", async () => {
-    const packages = await loadAppPackages(
-      catalog,
-      "official",
-      () => undefined,
-    );
+    const packages = await loadAppPackages(catalog, "official");
 
     expect(packages.map(({ app }) => app.id).sort()).toEqual([
       "sanctum.moods",
@@ -680,7 +642,7 @@ describe("the catalog's apps, from their packages", () => {
 
   it("start and do their work against the core", async () => {
     const started = await testCore({
-      apps: await loadAppPackages(catalog, "official", () => undefined),
+      apps: await loadAppPackages(catalog, "official"),
     });
     const { token } = await claimed(started);
     const call = (app: string, action: string, input: object) =>

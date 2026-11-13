@@ -33,8 +33,8 @@ import {
 } from "./protocol.js";
 import type { AppStorage } from "./storage.js";
 
-// What a runner does with the calls the core makes: it runs the app's code
-// as the core does for an app in its own process, one context per call. Each
+// What a runner does with the calls the core makes: it runs the app's code,
+// one context per call. Each
 // context's database calls stay here, and everything else crosses the socket
 // naming the call it belongs to. A call's transaction ends with it: its time
 // running out, or its end, rolls back what it left open.

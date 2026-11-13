@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { loadAppPackages } from "../src/app-host/loader.js";
+import { loadAppPackages } from "./runner-apps.js";
 import { ManagerUnavailable, type HostStatus } from "../src/manager.js";
 import { createStatus, type SystemStatus } from "../src/system/status.js";
 import { personWithClient } from "./devices-support.js";
@@ -26,7 +26,7 @@ async function statusOf(
   options: { apps?: boolean } = {},
 ) {
   const apps = options.apps
-    ? (await loadAppPackages(fixtureApps, "official", () => {})).filter(
+    ? (await loadAppPackages(fixtureApps, "official")).filter(
         ({ app }) => app.id === "test.notes",
       )
     : [];
@@ -260,7 +260,7 @@ describe("the host's status", () => {
     expect(await problems(withApp(true))).not.toContain("memoryLimits");
     // An older manager doesn't say.
     expect(await problems(withApp(null))).not.toContain("memoryLimits");
-    // With every app still in the core's process, nothing is affected.
+    // With no app in a container, nothing is affected.
     expect(await problems({ ...host, memoryLimits: false })).not.toContain(
       "memoryLimits",
     );

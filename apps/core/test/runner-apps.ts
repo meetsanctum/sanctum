@@ -1,11 +1,65 @@
-import { toStaticManifest, type StaticManifest } from "@meetsanctum/app-sdk";
-import { manifestDigest } from "@meetsanctum/app-sdk/package";
+import {
+  toStaticManifest,
+  type AppDefinition,
+  type StaticManifest,
+} from "@meetsanctum/app-sdk";
+import {
+  loadPackagedApp,
+  manifestDigest,
+  manifestFileName,
+} from "@meetsanctum/app-sdk/package";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { runSession } from "@meetsanctum/app-sdk/runner-session";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ApartPackage, AppPackage } from "../src/app-host/host.js";
+import type { ApartPackage, Origin } from "../src/app-host/host.js";
 import type { TestManager } from "./support.js";
+
+// An app a test defines: its code, and what its package declares
+// (sanctum-app.json), worked out from the code when it has none.
+export type AppPackage = {
+  app: AppDefinition;
+  manifest?: StaticManifest;
+  origin: Origin;
+  // The app's migrations, inside its package.
+  migrationsFolder?: string;
+};
+
+// A package in a folder, such as a catalog app's, for a test to run: its
+// entry's default export is its defineApp().
+export async function loadAppPackage(
+  packageDir: string,
+  origin: Origin,
+): Promise<AppPackage> {
+  const { app, migrationsFolder } = await loadPackagedApp(packageDir);
+  const manifest = await readFile(join(packageDir, manifestFileName), "utf8")
+    .then((text) => JSON.parse(text) as StaticManifest)
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+  return {
+    app,
+    ...(manifest ? { manifest } : {}),
+    origin,
+    ...(migrationsFolder ? { migrationsFolder } : {}),
+  };
+}
+
+// Every package in a folder, one folder each, in order of their names.
+export async function loadAppPackages(
+  dir: string,
+  origin: Origin,
+): Promise<AppPackage[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  return Promise.all(
+    entries
+      .filter((each) => each.isDirectory())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((entry) => loadAppPackage(join(dir, entry.name), origin)),
+  );
+}
 
 // The apps a test defines, run as the core runs every app: apart, each through
 // the SDK's runner over a real socket. The runner runs in the test's own

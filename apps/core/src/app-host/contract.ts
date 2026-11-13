@@ -4,7 +4,7 @@ import {
   appManifestSchema,
   standardEntityTypes,
   tierSchema,
-  toStaticManifest,
+  tileShapeProblemsOf,
   widgetEntityType,
   type AppDefinition,
   type StaticManifest,
@@ -17,9 +17,8 @@ import { z } from "zod";
 // What the core knows of an app, from its static manifest: the core checks
 // every call across the line between it and the app with the JSON Schemas
 // there, and never with the app's own zod objects, which parse inside the
-// app (the SDK's context, and the action runner for an app in the core's
-// process). So a refinement only the app can run still holds, and what the
-// core keeps needs nothing of the app's code.
+// app's container. So a refinement only the app can run still holds, and what
+// the core keeps needs nothing of the app's code.
 
 // Formats aren't checked, since zod writes a pattern beside each one, and
 // patterns are JavaScript's own. A default fills in what its field leaves out,
@@ -431,7 +430,11 @@ const manifestShape = z.looseObject({
     entities: z.array(named.extend({ title: z.string(), state: schema })),
     widgets: z.array(named),
     roomSections: z.array(
-      named.extend({ entityType: z.string(), order: z.number() }),
+      named.extend({
+        entityType: z.string(),
+        order: z.number(),
+        press: z.looseObject({ action: z.string() }),
+      }),
     ),
     devicePages: z.array(named),
     triggers: z.array(
@@ -457,44 +460,57 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
       `its manifest is incomplete: ${z.prettifyError(shape.error)}`,
     );
   }
+  checkPieces(manifest);
   return manifest;
 }
 
-/**
- * The manifest an app's package declares, which must be the one for the code
- * it comes with. An app with none, as a test defines, has one worked out.
- */
-export function manifestFor(
-  app: AppDefinition,
-  declared: StaticManifest | undefined,
-  log: (message: string) => void,
-) {
-  if (!declared) return toStaticManifest(app);
-  checkManifest(declared);
-  if (declared.id !== app.id || declared.version !== app.version) {
-    throw new Error(
-      `its manifest is for ${declared.id} ${declared.version}, not ${app.version}`,
-    );
+// What defineApp checks where the manifest is made that the manifest alone can
+// show, since the core reads nothing else of an app: no two of a kind with one
+// id, and a room section over a type the app provides in the tile shape, pressed
+// with one of its own read or write actions.
+function checkPieces(manifest: StaticManifest) {
+  const { actions, events, pages, permissions, provides } = manifest;
+  const kinds: [string, readonly string[]][] = [
+    ["action", actions.map(({ id }) => id)],
+    ["event", events.map(({ id }) => id)],
+    ["page", pages],
+    ["permission", permissions.map(({ id }) => id)],
+    ["entity type", provides.entities.map(({ id }) => id)],
+    ["widget", provides.widgets.map(({ id }) => id)],
+  ];
+  for (const [kind, ids] of kinds) {
+    const seen = new Set<string>();
+    const twice = ids.find((id) => {
+      if (seen.has(id)) return true;
+      seen.add(id);
+      return false;
+    });
+    if (twice !== undefined) {
+      throw new Error(`its manifest has two of its ${kind}s called ${twice}`);
+    }
   }
-  // Only a package being worked on can be out of step, where it would explain
-  // an action its page can't find.
-  if (isStale(app, declared)) {
-    log(
-      `apps: ${app.id}'s sanctum-app.json is out of step with its code: run pnpm manifest`,
-    );
+  if (provides.roomSections.length > 1) {
+    throw new Error("its manifest has more than one room section");
   }
-  return declared;
-}
-
-function isStale(app: AppDefinition, declared: StaticManifest) {
-  try {
-    // Only the file keeps this: the code can't say what versions before it had.
-    const { oldestPage: _, ...fromItsCode } = declared;
-    return (
-      JSON.stringify(toStaticManifest(app)) !== JSON.stringify(fromItsCode)
-    );
-  } catch {
-    return true;
+  for (const section of provides.roomSections) {
+    const type = provides.entities.find(({ id }) => id === section.entityType);
+    if (!type) {
+      throw new Error(
+        `its room section ${section.id} shows ${section.entityType}, which it doesn't provide`,
+      );
+    }
+    const problems = tileShapeProblemsOf(type.state);
+    if (problems.length > 0) {
+      throw new Error(
+        `its room section ${section.id} shows ${type.id}, but ${problems.join(", ")}`,
+      );
+    }
+    const press = actions.find(({ id }) => id === section.press.action);
+    if (!press || (press.tier !== "read" && press.tier !== "write")) {
+      throw new Error(
+        `its room section ${section.id} is pressed with ${section.press.action}, which must be one of its read or write actions`,
+      );
+    }
   }
 }
 

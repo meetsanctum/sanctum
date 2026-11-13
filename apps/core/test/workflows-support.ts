@@ -10,7 +10,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import { get, post, type TestCore } from "./support.js";
 
 // An app for the workflow tests: Sample emits an event when a task is done,

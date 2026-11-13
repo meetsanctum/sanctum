@@ -15,9 +15,6 @@ import type { AppVersions } from "./versions.js";
 // version and removes what it didn't claim. That row is the only commit, so
 // it's forced to disk. A start that fails sweeps nothing, and the next try
 // claims afresh.
-//
-// An app in the core's process is left out: a rollback restores its data along with
-// the core's, and its start isn't asked to say all it owns.
 
 export type Claims = {
   entities: Set<string>;
@@ -46,10 +43,7 @@ export function createAppCommits(options: {
     /** Its start returned: this version is the one it runs from now on. */
     commit(entry: InstalledApp) {
       const { manifest, updating, digest, apartIn } = entry;
-      const commit = {
-        ...(digest ? { digest } : {}),
-        ...(apartIn ? { folder: apartIn } : {}),
-      };
+      const commit = { digest, folder: apartIn };
       if (!updating) {
         versions.started(manifest, commit);
         return;

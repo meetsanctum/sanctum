@@ -40,8 +40,8 @@ export type RunnerEnd = { code: number; reason: string };
 
 const retryMs = 250;
 
-// How the core refused one of the app's calls, as its code would see it in the
-// core's own process.
+// How the core refused one of the app's calls, as its code sees it: an
+// ActionError for the codes apps tell apart.
 function errorOf(outcome: Extract<Outcome, { ok: false }>) {
   return actionErrorCodes.includes(outcome.code as ActionErrorCode)
     ? new ActionError(outcome.code as ActionErrorCode, outcome.message)

@@ -8,8 +8,13 @@ import type { PackagesState } from "../src/update/packages.js";
 import { realStack } from "./real-stack.js";
 
 // The real images a host runs: a manager staging the official apps from a core,
-// each app then loading in a plain Node container with nothing else around it,
-// as in an app's own container.
+// the core running each apart from its staged package, and each app loading in
+// a plain Node container with nothing else around it, as in an app's own
+// container.
+
+// What the core runs with. Before the tests run apps' containers themselves, a
+// core that can't read the packages leaves them be.
+const running: string[] = [];
 
 const {
   api,
@@ -32,8 +37,7 @@ const {
   startManager,
   waitFor,
   createVolumes,
-  // These tests run each app's container themselves, so the core must leave them be.
-} = realStack("test-packages", ["CORE_OFFICIAL_APPS_APART="]);
+} = realStack("test-packages", running);
 
 // What each official app's manifest says, in the worktree.
 const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
@@ -182,7 +186,7 @@ describe("the apps' packages on real images", () => {
     }
   });
 
-  it("runs the core on those apps with their own copies of the SDK", async () => {
+  it("runs each app apart from its staged package", async () => {
     await waitFor("the core", async () => {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);
       return response.ok ? true : undefined;
@@ -206,14 +210,23 @@ describe("the apps' packages on real images", () => {
       return { status: response.status, body: await response.json() };
     };
 
-    const apps = await call("/api/apps");
-    expect(
-      (apps.body as Array<{ id: string; state: string }>)
+    // Zigbee waits for Zigbee2MQTT, which has no stick here.
+    const states = await waitFor("every app to have started", async () => {
+      const { body } = await call("/api/apps");
+      const apps = (body as Array<{ id: string; state: string }>)
         .map(({ id, state }) => ({ id, state }))
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    ).toEqual(
+        .sort((a, b) => a.id.localeCompare(b.id));
+      return apps.length === shipped.length &&
+        apps.every(({ state }) => state !== "starting")
+        ? apps
+        : undefined;
+    });
+    expect(states).toEqual(
       shipped
-        .map(({ id }) => ({ id, state: "running" }))
+        .map(({ id }) => ({
+          id,
+          state: id === "sanctum.zigbee" ? "waiting" : "running",
+        }))
         .sort((a, b) => a.id.localeCompare(b.id)),
     );
     const listed = await call(
@@ -229,6 +242,16 @@ describe("the apps' packages on real images", () => {
   });
 
   it("runs each app through its socket in the container the manager makes", async () => {
+    // The test plays the core's end of each app's socket now.
+    running.push("CORE_PACKAGES_DIR=/nowhere");
+    await docker(
+      "rm",
+      "-f",
+      name("manager"),
+      name("core"),
+      ...shipped.map(({ id }) => name(`app-${id}`)),
+    ).catch(() => undefined);
+    await startManager(coreImage, port);
     await run("pnpm", [
       "turbo",
       "run",

@@ -62,7 +62,11 @@ function setup(initial: string[]) {
   let granted = initial;
   const heard: CoreEvent[] = [];
   const events = createCoreEvents({ timeoutMs: 1000, log() {} });
-  const following = events.start("test.listener", () => granted);
+  const following = events.start(
+    "test.listener",
+    () => granted,
+    () => undefined,
+  );
   for (const name of coreEventNames) {
     following.follow(name);
     following.handlers.set(name, [(event) => void heard.push(event)]);

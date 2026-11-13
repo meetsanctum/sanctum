@@ -5,7 +5,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import type { AppPackage } from "../src/app-host/host.js";
+import type { AppPackage } from "./runner-apps.js";
 import {
   lampsCore,
   openLive,
@@ -213,22 +213,30 @@ describe("the press trigger", () => {
     });
   });
 
-  it("runs however often the remote is pressed, since a press never loops", async () => {
-    const { core, maya, office } = await remotesHome();
-    const { id } = await addWorkflow(core, maya.token, {
-      runMode: "parallel",
-      graph: steps(pressTrigger(office, "single"), noteStep("note")),
-    });
+  // Thirty-five presses, each crossing the sockets of the driver and of the app
+  // the workflow's step calls.
+  it(
+    "runs however often the remote is pressed, since a press never loops",
+    {
+      timeout: 20_000,
+    },
+    async () => {
+      const { core, maya, office } = await remotesHome();
+      const { id } = await addWorkflow(core, maya.token, {
+        runMode: "parallel",
+        graph: steps(pressTrigger(office, "single"), noteStep("note")),
+      });
 
-    for (let press = 0; press < 35; press++) {
-      await radio.pressButton("remote-1", "single");
-    }
+      for (let press = 0; press < 35; press++) {
+        await radio.pressButton("remote-1", "single");
+      }
 
-    await core.workflows.settled();
-    const runs = await runsOf(core, maya.token, id);
-    expect(runs).toHaveLength(35);
-    expect(runs.every((run) => run.status === "succeeded")).toBe(true);
-  });
+      await core.workflows.settled();
+      const runs = await runsOf(core, maya.token, id);
+      expect(runs).toHaveLength(35);
+      expect(runs.every((run) => run.status === "succeeded")).toBe(true);
+    },
+  );
 
   it("runs for any of the remote's presses when it names no action", async () => {
     const { core, maya, office } = await remotesHome();

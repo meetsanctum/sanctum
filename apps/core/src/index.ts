@@ -1,4 +1,4 @@
-import { loadApartPackages, loadAppPackages } from "./app-host/loader.js";
+import { loadApartPackages, shippedApps } from "./app-host/loader.js";
 import { createCoreCertificates } from "./certificate.js";
 import { loadConfig } from "./config.js";
 import { openCoreDatabase } from "./database.js";
@@ -50,44 +50,67 @@ const reportAgain = setInterval(
   5 * 60_000,
 );
 
-// The packages the core ships with, each with the origin of the folder it
-// was found in, never one from the package: system apps first, so an
-// official package cannot take a system app's id. Each gets its database,
-// asks for its services and starts; the core serves meanwhile, so a slow app
-// cannot hold it up. Workflows start once they're all installed, so they
-// find their pieces from the first tick. A core on trial runs no workflow or
-// job and starts no app that runs apart until the update commits, since a
+// The apps this core's image brings, each run apart from the package the manager
+// staged for it. Each gets its database, asks for its services and starts; the
+// core serves meanwhile, so a slow app cannot hold it up. Workflows start once
+// they're all installed, so they find their pieces from the first tick. A core on
+// trial runs no workflow or job and starts no app until the update commits, since a
 // rollback can't undo what they did.
 const onTrial = updatePending.isPending();
 if (onTrial) modules.workflows.hold();
-// The official apps that run apart come from what the manager staged for this image,
-// which it may still be doing, so they're asked for without holding up the core.
-async function packagesToStart() {
+const shipped = await shippedApps(config.officialAppsDir, log);
+const started = new Set<string>();
+// What the manager has staged for this image, which it may still be doing, so the
+// core doesn't wait for it to serve.
+async function stagedPackages(only?: readonly string[]) {
   const staged = await manager.stagedApps();
-  const apart = config.officialAppsApart.flatMap((id) => {
-    const package_ = staged[id];
-    return package_ ? [`${id}@${package_.folder}`] : [];
-  });
-  return [
-    ...(config.systemAppsDir
-      ? await loadAppPackages(config.systemAppsDir, "system", log)
-      : []),
-    ...(await loadAppPackages(config.officialAppsDir, "official", log)),
-    ...(await loadApartPackages(
-      [...config.appsApart, ...apart],
-      config.packagesDir,
-      log,
-    )),
-  ];
+  const apart = Object.entries(staged).flatMap(([id, { folder }]) =>
+    !started.has(id) && (!only || only.includes(id)) ? [`${id}@${folder}`] : [],
+  );
+  const packages = await loadApartPackages(
+    [...(only ? [] : config.appsApart), ...apart],
+    config.packagesDir,
+    log,
+  );
+  for (const pkg of packages) started.add(pkg.apart.manifest.id);
+  return packages;
 }
 // Packages that can't be read mean a broken image. The core may be serving by then,
 // but it ends all the same, so Docker tries it again and one on trial rolls back.
+const first = stagedPackages();
 void modules.apps
-  .start(packagesToStart(), { onTrial })
+  .start(first, { onTrial, coming: shipped })
   .catch((error: unknown) => {
     log(`apps: didn't start (${String(error)})`);
     process.exit(1);
   });
+// One the image ships that the manager hasn't staged, as an old manager or one
+// whose staging failed, is asked for again now and then, one ask at a time, and
+// starts once it's there. What it brought stays meanwhile.
+let askAgain: NodeJS.Timeout | undefined;
+let isAsking = false;
+async function startStaged(missing: readonly string[]) {
+  const packages = await stagedPackages(missing);
+  if (packages.length === 0) return;
+  await modules.apps.start(packages, {
+    onTrial: updatePending.isPending(),
+    coming: shipped,
+  });
+}
+void first.then(
+  () => {
+    askAgain = setInterval(() => {
+      const missing = shipped.filter((id) => !started.has(id));
+      if (missing.length === 0) return clearInterval(askAgain);
+      if (isAsking) return;
+      isAsking = true;
+      startStaged(missing)
+        .catch((error: unknown) => log(`apps: didn't start (${String(error)})`))
+        .finally(() => (isAsking = false));
+    }, 60_000);
+  },
+  () => undefined,
+);
 updatePending.whenCommitted(() => {
   void modules.apps.committed().then(() => modules.workflows.start());
 });
@@ -113,6 +136,7 @@ certificates?.watch((next) =>
 
 const shutdown = async () => {
   clearInterval(reportAgain);
+  clearInterval(askAgain);
   certificates?.close();
   manager.close();
   updatePending.close();

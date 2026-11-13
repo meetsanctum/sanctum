@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { loadAppPackage } from "../src/app-host/loader.js";
+import { loadAppPackage } from "./runner-apps.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, sharedClient, type TestCore } from "./support.js";
 

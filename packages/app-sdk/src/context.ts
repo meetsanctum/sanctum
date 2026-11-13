@@ -42,8 +42,8 @@ import type {
 
 // What an app gets from the core, and the calls it is built on. Every call
 // crosses the boundary as a message: it is async and takes and returns
-// JSON-serializable data, so the same app code runs in the core's process
-// and in its own container. The core's events cross as data too: the
+// JSON-serializable data, so the same app code runs in its own container and
+// against the testkit's fake core. The core's events cross as data too: the
 // handlers an app follows them with stay on its side.
 
 /** One SQL statement for the app's own database, as Drizzle's sqlite-proxy driver sends it. */

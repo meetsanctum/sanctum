@@ -417,14 +417,6 @@ describe("an app's supervisor", () => {
 
       await expect(arriving).resolves.toBe(false);
     });
-
-    it("doesn't wait for an app in the core's process", async () => {
-      const { entry, supervisor } = setUp();
-
-      await expect(
-        supervisor.arrives({ ...entry, supervision: undefined }, 30_000),
-      ).resolves.toBe(false);
-    });
   });
 
   describe("work that outlives its run", () => {
