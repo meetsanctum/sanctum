@@ -415,11 +415,14 @@ remove_from_docker() {
     # shellcheck disable=SC2086
     docker network rm $networks >/dev/null
   fi
-  # An image something else's container runs stays.
+  # An image something else's container runs stays, and so does one Docker
+  # won't remove, as where another image is built on it. Docker not answering
+  # is neither: the images stay noted for the next run.
   for each in $images; do
     in_use="$(docker ps -aq --filter "ancestor=${each}")"
     [[ -z "$in_use" ]] || continue
-    docker image rm -f "$each" >/dev/null 2>&1 || true
+    docker image rm -f "$each" >/dev/null 2>&1 || docker info >/dev/null 2>&1 ||
+      die "Docker stopped answering before Sanctum's images were removed. Start it (sudo systemctl start docker), then run this again to finish."
   done
 }
 
