@@ -256,7 +256,7 @@ export function lastAtText(iso: string, now = new Date()) {
     : `${at.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, ${time}`;
 }
 
-// What an app's name is, for a service's fix.
+// What an app's name is, for the fix of a problem with its data.
 type AppNames = (id: string) => string;
 
 /** A problem in a few words, leading its row: "Power supply too weak". */
@@ -287,10 +287,9 @@ export function problemTitle(problem: HostProblem, unit: TemperatureUnit) {
 
 // What a service's own problem means, and what to do. The manager says
 // why it can't start Zigbee's bridge; anything else starts again by itself.
-function serviceFix(
-  problem: Extract<HostProblem, { kind: "service" }>,
-  appName: AppNames,
-) {
+// An adapter of a type the manager can't tell is chosen on the command
+// line, which the install guide shows.
+function serviceFix(problem: Extract<HostProblem, { kind: "service" }>) {
   const text = problem.problem ?? "";
   if (text.startsWith("No Zigbee coordinator")) {
     return "No Zigbee adapter is plugged in. Plug it in, and Zigbee starts by itself";
@@ -302,8 +301,7 @@ function serviceFix(
     return "Several Zigbee adapters are plugged in. Unplug the ones it shouldn't use";
   }
   if (text.startsWith("Choose the adapter type")) {
-    const app = problem.apps[0];
-    return `Open ${app ? appName(app) : "Zigbee"} to choose its adapter`;
+    return `${productName} doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”`;
   }
   return `${productName} starts it again by itself`;
 }
@@ -324,7 +322,7 @@ export function problemFix(
     case "memory":
       return `It's using its storage as memory, so ${productName} may be slow`;
     case "service":
-      return serviceFix(problem, appName);
+      return serviceFix(problem);
     case "memoryLimits":
       return `An app can use more memory than it should until they're on in ${productName}'s boot settings`;
     case "appData":
