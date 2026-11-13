@@ -377,6 +377,9 @@ function problemWords(problem: unknown) {
   if (text.startsWith("Several possible")) {
     return "Several Zigbee adapters are plugged in. Unplug the ones it shouldn't use.";
   }
+  if (text.startsWith("Choose the adapter type")) {
+    return `${productName} doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”.`;
+  }
   return "It will try again by itself.";
 }
 

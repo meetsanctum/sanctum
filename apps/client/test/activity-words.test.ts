@@ -304,6 +304,20 @@ describe("an entry's words", () => {
     });
     expect(
       system({
+        action: "service.wait",
+        outcome: "failed",
+        detail: {
+          service: "zigbee2mqtt",
+          problem: "Choose the adapter type of the Zigbee coordinator /dev/x",
+        },
+      }),
+    ).toMatchObject({
+      title: "Zigbee couldn't start",
+      detail:
+        "Sanctum doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”.",
+    });
+    expect(
+      system({
         source: "sanctum",
         action: "sanctum.start",
         at: "2026-10-31T03:20:00",
