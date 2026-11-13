@@ -9,9 +9,10 @@ to build the Mac app, which has no download.
 
 ## What you need
 
-- **A machine that stays on.** A Raspberry Pi 4, or another 64-bit machine
-  (ARM, Intel or AMD) running Raspberry Pi OS (64-bit), Debian or Ubuntu. An
-  old laptop with Debian or Ubuntu Server on it works too.
+- **A machine that stays on.** A Raspberry Pi with at least 2 GB of memory,
+  or another 64-bit machine (ARM, Intel or AMD) running Raspberry Pi OS
+  (64-bit), Debian or Ubuntu. An old laptop with Debian or Ubuntu Server on
+  it works too.
 - **A Zigbee USB stick** that
   [Zigbee2MQTT supports](https://www.zigbee2mqtt.io/guide/adapters/). The
   Nabu Casa ZBT-2 and the Dresden Elektronik ConBee III are recognised by

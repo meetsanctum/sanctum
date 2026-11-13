@@ -28,7 +28,9 @@ describe("the knot", () => {
     expect(paths(read(brand, "sanctum-mark.svg"))).toEqual([knot]);
     expect(paths(read(brand, "sanctum-mark-white.svg"))).toEqual([knot]);
     expect(clientKnot).toBe(knot);
-    expect(paths(read(root, "apps", "website", "index.html"))).toContain(knot);
+    expect(
+      paths(read(root, "apps", "website", "src", "app", "knot.tsx")),
+    ).toEqual([knot]);
     expect(paths(read(brand, "sanctum-favicon.svg"))).toEqual([
       knotPath(1, 1, 1),
     ]);

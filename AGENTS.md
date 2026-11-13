@@ -13,8 +13,9 @@ setup, the commands and the layout; these notes are the rules.
   system app UIs), wrapped by the desktop app.
 - `apps/desktop` — the Electron desktop app: discovery of hosts and the
   token's storage around the built client.
-- `apps/website` — the public landing page: static HTML and CSS built with
-  Vite.
+- `apps/website` — the public landing page and its waitlist: a Next.js site
+  that keeps the waitlist in Resend and runs on Railway, as `.railway`
+  describes.
 - `packages/app-sdk` — `defineApp`, `defineAction`, `defineEvent`, schemas.
 - `packages/ui-sdk` — what apps' pages import: `defineAppUi`, the typed app
   client, the design components they share with the shell.
