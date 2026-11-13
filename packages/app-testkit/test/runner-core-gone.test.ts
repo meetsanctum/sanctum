@@ -351,6 +351,22 @@ describe("an app with a resume when the core goes", () => {
     expect(seen).toEqual(["start started", "stop restarting", "start updated"]);
   });
 
+  it("keeps its calls off the next connection until that core starts it", async () => {
+    const { app, ctx } = resumable([]);
+    await running(app, {}, { follow: async () => undefined });
+    const next = await readyNextCore({ follow: async () => undefined });
+
+    const failure = ctx().places.list().catch(String);
+    await next.beat();
+
+    expect(next.violations).toEqual([]);
+    expect(next.requests).toEqual([]);
+    expect(await failure).toContain("connection to the core has gone");
+    expect(await next.call({ kind: "start", reason: "started" })).toMatchObject(
+      { ok: true },
+    );
+  });
+
   it("stops when its resume fails, so the next start begins afresh", async () => {
     const seen: string[] = [];
     const { app } = resumable(seen, {
@@ -390,5 +406,54 @@ describe("an app with a resume when the core goes", () => {
 
     await vi.waitFor(() => expect(seen.at(-1)).toBe("stop restarting"));
     expect(seen).toEqual(["start started", "stop restarting"]);
+  });
+
+  it.each(["throws", "hangs"] as const)(
+    "ends when its stop %s after the next core keeps it stopped",
+    async (failure) => {
+      await running(
+        testApp([], {
+          resume: async () => undefined,
+          stop: async () => {
+            if (failure === "throws") throw new Error("Could not stop");
+            await new Promise<void>(() => undefined);
+          },
+        }),
+        { resumeWithinMs: 50, stopWithinMs: 50 },
+      );
+      await readyNextCore();
+
+      expect(await fixture.session!.finished).toMatchObject({ code: 1 });
+    },
+  );
+
+  it("discards a fresh start whose connection goes while the old run stops", async () => {
+    const seen: string[] = [];
+    let finishStop!: () => void;
+    const stopping = new Promise<void>((done) => (finishStop = done));
+    await running(
+      testApp([], {
+        start: async (_ctx, info) => void seen.push(`start ${info.reason}`),
+        resume: async () => undefined,
+        stop: async () => {
+          seen.push("stop");
+          await stopping;
+        },
+      }),
+    );
+    const next = await readyNextCore();
+    next.issue({ kind: "start", reason: "updated", from: "1.2.2" });
+    await vi.waitFor(() => expect(seen.at(-1)).toBe("stop"));
+
+    const third = await nextCore();
+    finishStop();
+    await third.hello;
+    third.welcome();
+    await third.prepared;
+
+    expect(seen).toEqual(["start started", "stop"]);
+    expect(
+      await third.call({ kind: "start", reason: "started" }),
+    ).toMatchObject({ ok: true });
   });
 });

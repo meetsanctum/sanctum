@@ -159,6 +159,9 @@ export function createCallHost(options: {
         method,
         async (...params: unknown[]) => {
           const scope = current();
+          if (!scope.id) {
+            throw new Error("The connection to the core has gone");
+          }
           const hasEnded = () =>
             scope.storage.ended || lifetime?.storage.ended === true;
           if (hasEnded()) {
@@ -230,6 +233,8 @@ export function createCallHost(options: {
         reason: "restarting",
       });
       if (!stopped.ok) return stopped;
+      if (on !== connection)
+        return failureOf("The connection to the core has gone");
     }
     if (running) {
       return failureOf(`${appId} has already started`);
@@ -314,6 +319,20 @@ export function createCallHost(options: {
       stopping = undefined;
     });
     return stopping;
+  }
+
+  async function stopWithin(capMs: number) {
+    const stopped = running
+      ? stop(capMs, { reason: "restarting" })
+      : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
+    let isStopped = false;
+    const settled = await within(
+      stopped.then((outcome) => {
+        isStopped = outcome.ok;
+      }),
+      capMs,
+    );
+    return settled && isStopped;
   }
 
   async function action(
@@ -478,18 +497,7 @@ export function createCallHost(options: {
         suspended = true;
         return true;
       }
-      const left = deadline - Date.now();
-      const stopped = running
-        ? stop(left, { reason: "restarting" })
-        : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
-      let outcome: Outcome | undefined;
-      const settled = await within(
-        stopped.then((each) => {
-          outcome = each;
-        }),
-        left,
-      );
-      return settled && outcome?.ok === true;
+      return stopWithin(deadline - Date.now());
     },
 
     /**
@@ -497,14 +505,16 @@ export function createCallHost(options: {
      * hasn't started it within `withinMs`, as when it keeps the app stopped,
      * giving its stop `capMs`.
      */
-    resumesWithin(withinMs: number, capMs: number) {
+    resumesWithin(withinMs: number, capMs: number, failed: () => void) {
       if (!suspended) return;
       clearTimeout(resumeTimer);
       const on = connection;
       resumeTimer = setTimeout(() => {
         if (!suspended || on !== connection) return;
         suspended = false;
-        void stop(capMs, { reason: "restarting" });
+        void stopWithin(capMs).then((isStopped) => {
+          if (!isStopped) failed();
+        });
       }, withinMs);
     },
 

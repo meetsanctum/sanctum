@@ -278,6 +278,8 @@ export function runSession(options: {
             host.resumesWithin(
               options.resumeWithinMs ?? defaultResumeWithinMs,
               options.stopWithinMs ?? defaultStopWithinMs,
+              () =>
+                end(1, `${appId} didn't stop after the core kept it stopped`),
             );
           } else void prepare();
         }
