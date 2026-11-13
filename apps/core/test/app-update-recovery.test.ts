@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import * as appLinks from "../src/app-host/link.js";
 import { useCleanUps } from "./app-apart-support.js";
 import { id, version } from "./app-update-fixtures.js";
 import { running, stateOf, versions } from "./app-update-support.js";
@@ -15,32 +16,60 @@ describe("an app that waited for the manager to come back", () => {
     const home = await versions();
     await running(await home.coreWith(version("1.0.0")), id);
 
-    let answering = false;
+    let isAnswering = false;
     const list = home.manager.appUpdates;
     home.manager.appUpdates = async () => {
-      if (!answering) throw new Error("The manager did not answer");
+      if (!isAnswering) throw new Error("The manager did not answer");
       return list();
     };
-    // The manager keeps its container, and takes longer to say so than the
-    // app takes to find this core: a runner looks every quarter of a second.
+    let resolveRequested!: () => void;
+    const requested = new Promise<void>((resolve) => {
+      resolveRequested = resolve;
+    });
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    // Deliver readiness during the container request, then let the manager
+    // answer. The runner's reconnect timing cannot change that order.
+    const createLink = appLinks.createAppLink;
+    const creating = vi
+      .spyOn(appLinks, "createAppLink")
+      .mockImplementation((options) =>
+        createLink({
+          ...options,
+          async onReady() {
+            await requested;
+            options.onReady();
+            resolveReady();
+          },
+        }),
+      );
     const start = home.manager.startAppContainer;
     home.manager.startAppContainer = async (app, spec) => {
       const kept = await start(app, spec);
-      await new Promise((done) => setTimeout(done, 700));
+      resolveRequested();
+      await ready;
       return kept;
     };
 
-    const core = await home.coreWith(version("1.0.0"));
-    await vi.waitFor(() => expect(stateOf(core, id).state).toBe("waiting"));
-    expect(stateOf(core, id).run?.waitingFor).toBe(
-      "Waiting for its data to come back",
-    );
+    try {
+      const core = await home.coreWith(version("1.0.0"));
+      await vi.waitFor(() => expect(stateOf(core, id).state).toBe("waiting"));
+      expect(stateOf(core, id).run?.waitingFor).toBe(
+        "Waiting for its data to come back",
+      );
 
-    answering = true;
-    await running(core, id);
+      isAnswering = true;
+      await running(core, id);
 
-    // The same container throughout.
-    expect(home.containers).toEqual(["1.0.0+test"]);
-    expect(stateOf(core, id).run?.waitingFor).toBeUndefined();
+      // The same container throughout.
+      expect(home.containers).toEqual(["1.0.0+test"]);
+      expect(stateOf(core, id).run?.waitingFor).toBeUndefined();
+    } finally {
+      resolveRequested();
+      resolveReady();
+      creating.mockRestore();
+    }
   });
 });
