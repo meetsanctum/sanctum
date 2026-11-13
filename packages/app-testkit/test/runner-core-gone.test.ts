@@ -13,6 +13,8 @@ import { createRunnerFixture, digest, testApp } from "./runner-fixture.js";
 const fixture = createRunnerFixture();
 
 const gates = new Map<string, () => void>();
+// The calls whose work has finished, so their answers are on their way.
+const finished = new Set<string>();
 const waits = defineAction({
   id: "runner.wait",
   title: "Wait",
@@ -21,6 +23,7 @@ const waits = defineAction({
   output: z.string(),
   run: async (_ctx, { tag }) => {
     await new Promise<void>((open) => gates.set(tag, open));
+    finished.add(tag);
     return tag;
   },
 });
@@ -101,7 +104,9 @@ describe("an app's runner when the core goes", () => {
     await vi.waitFor(() => expect(gates.has("new")).toBe(true));
     expect(now.id).toBe(old.id);
     gates.get("old")!();
-    await new Promise((done) => setTimeout(done, 50));
+    await vi.waitFor(() => expect(finished.has("old")).toBe(true));
+    // Whatever the runner sent for it has arrived by the heartbeat's answer.
+    await next.beat();
 
     expect(next.answered.has(now.id)).toBe(false);
     expect(next.lateAnswers).toEqual([]);

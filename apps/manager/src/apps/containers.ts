@@ -409,8 +409,13 @@ export function createAppContainers(options: {
       imageVolumeName(spec.app),
       network,
     );
-    const image = await docker.getImage(existing.Image).inspect();
+    // One whose image can't be read isn't known to be the same: it's replaced.
+    const image = await docker
+      .getImage(existing.Image)
+      .inspect()
+      .catch(() => undefined);
     if (
+      !image ||
       !isAsMade(
         desired,
         existing,

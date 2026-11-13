@@ -366,6 +366,35 @@ describe("starting one", () => {
       expect(status.kept).toBeUndefined();
       expect(docker.container(appContainerName(app))!.id).not.toBe(first);
     });
+
+    it("replaces one whose image can't be read", async () => {
+      const { apps, docker } = await setup();
+      await apps.start(start);
+      const first = docker.container(appContainerName(app))!.id;
+      const getImage = docker.getImage.bind(docker);
+      vi.spyOn(docker, "getImage").mockImplementationOnce((ref) => ({
+        ...getImage(ref),
+        inspect: async () => {
+          throw new Error(`No such image: ${ref}`);
+        },
+      }));
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status.kept).toBeUndefined();
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+    });
+
+    // What the ones above change, unchanged: so it's what they change that counts.
+    it("keeps one made just as it would make it, however it came to run", async () => {
+      const { apps, docker } = await setup();
+      const first = docker.run(appContainerOptions(start, dataVolume)).id;
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status.kept).toBe(true);
+      expect(docker.container(appContainerName(app))!.id).toBe(first);
+    });
   });
 
   describe("when it can't replace the one that runs", () => {
