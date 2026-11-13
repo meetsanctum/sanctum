@@ -547,7 +547,9 @@ describe("the words", () => {
     );
     expect(
       zigbee("Choose the adapter type of the Zigbee coordinator /dev/x")[1],
-    ).toBe("Open Zigbee to choose its adapter");
+    ).toBe(
+      "Sanctum doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”",
+    );
     expect(zigbee("It is exited", "failed")).toEqual([
       "Zigbee stopped",
       "Sanctum starts it again by itself",
