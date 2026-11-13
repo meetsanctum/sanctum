@@ -431,8 +431,9 @@ export function createAppHost(options: {
         entry,
         service ? { restartFor: "its changed services" } : {},
       );
-      // One taken away pauses it at once; one given back is announced once
-      // it runs again, so no client sees it running before it takes calls.
+      // One taken away pauses it at once. One given back has it starting
+      // at once, which its supervisor announces, and is announced again once
+      // it runs, so no client sees it running before it takes calls.
       if (granted) void settled.then(() => announce(entry));
       else announce(entry);
     },

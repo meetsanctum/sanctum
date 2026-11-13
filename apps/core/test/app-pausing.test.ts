@@ -18,10 +18,13 @@ const lamp = {
   hold: undefined as Promise<void> | undefined,
   // How many Pings have reached the app.
   pings: 0,
+  // While set, its stop hook waits for it.
+  stopHold: undefined as Promise<void> | undefined,
   reset() {
     this.said.length = 0;
     this.hold = undefined;
     this.pings = 0;
+    this.stopHold = undefined;
   },
 };
 
@@ -100,6 +103,7 @@ const lampPackage = {
     },
     async stop() {
       lamp.said.push("stop");
+      await lamp.stopHold;
     },
   }),
 };
@@ -191,6 +195,53 @@ describe("switching off a permission an app needs", () => {
     expect((await call(core, maya.token, "lamp.ping")).json()).toEqual({
       places: 0,
     });
+  });
+
+  it("is starting, not running, once the permission is back on while it still stops", async () => {
+    const { core, maya } = await lampCore();
+    let release!: () => void;
+    lamp.stopHold = new Promise((resolve) => (release = resolve));
+    await grant(core, maya.token, "places.read", false);
+    await stopped();
+
+    const answered = await grant(core, maya.token, "places.read", true);
+
+    expect(answered.json()).toMatchObject({ state: "starting" });
+    expect((await lampInfo(core, maya.token)).state).toBe("starting");
+    expect(core.apps.isRunning("test.lamp")).toBe(false);
+    expect(lamp.said).toEqual(["start", "stop"]);
+    // A call meanwhile waits for it, as for any app on its way back.
+    const glowing = call(core, maya.token, "lamp.glow");
+    release();
+
+    expect((await glowing).statusCode).toBe(200);
+    expect(lamp.said).toEqual(["start", "stop", "start", "glow"]);
+    expect((await lampInfo(core, maya.token)).state).toBe("running");
+  });
+
+  it("is paused as before when the permission goes off again while it still stops", async () => {
+    const { core, maya } = await lampCore();
+    let release!: () => void;
+    lamp.stopHold = new Promise((resolve) => (release = resolve));
+    await grant(core, maya.token, "places.read", false);
+    await stopped();
+    const paused = await lampInfo(core, maya.token);
+    await grant(core, maya.token, "places.read", true);
+
+    await grant(core, maya.token, "places.read", false);
+    release();
+
+    // Once what was under way has ended, with nothing started.
+    await vi.waitFor(() =>
+      expect(
+        core.logs.filter(
+          (line) =>
+            line === "apps: test.lamp is paused while places.read is off",
+        ),
+      ).toHaveLength(2),
+    );
+    expect(await lampInfo(core, maya.token)).toEqual(paused);
+    expect(lamp.said).toEqual(["start", "stop"]);
   });
 
   it("lets a call under way finish before the app stops", async () => {
