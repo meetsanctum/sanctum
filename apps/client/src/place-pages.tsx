@@ -24,8 +24,8 @@ import {
   onMeta,
   readingsOf,
   readingsText,
-  sectionsByCategory,
   sectionsByRoom,
+  sectionsOfRoom,
   sensorReadings,
   tilesIn,
   type Reading,
@@ -47,7 +47,7 @@ import type { Devices } from "./use-devices";
 // complete and fixed. A room's page opens with its name, its motion and what
 // its sensors read under it, and a button for all its lights, then apps'
 // sections by their weight, Moods first, then its devices in a section for
-// each category. A category's page shows its tiles in a section for each
+// each category, and last the devices Sanctum cannot use. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
 // light in the home, Environment with what every sensor reads, and Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
@@ -431,7 +431,7 @@ export function RoomPage(props: {
       />
       {sections.map(appSection)}
       <Sections
-        sections={sectionsByCategory(own)}
+        sections={sectionsOfRoom(own)}
         devices={devices}
         onOpen={props.openDevice}
       />
@@ -463,7 +463,7 @@ export function NoRoomPage(props: {
     <>
       <PlaceHeader title={noRoomName} />
       <Sections
-        sections={sectionsByCategory(own)}
+        sections={sectionsOfRoom(own)}
         devices={devices}
         onOpen={props.openDevice}
       />

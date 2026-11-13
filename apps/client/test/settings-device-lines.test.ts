@@ -105,4 +105,15 @@ describe("adding devices' words", () => {
     expect(stageText(joined("ready", true))).toBe("Joined again");
     expect(stageText(joined("unsupported"))).toBe("Sanctum cannot use it");
   });
+
+  it("say that a device which joined has nothing Sanctum can use", () => {
+    const purifier = { ...remote, type: "unknown" as const, capabilities: [] };
+    expect(stageText(joined("ready"), purifier)).toBe("Sanctum cannot use it");
+    expect(stageText(joined("ready", true), purifier)).toBe(
+      "Sanctum cannot use it",
+    );
+    // One it can use is ready as before.
+    expect(stageText(joined("ready"), remote)).toBe("Ready");
+    expect(stageText(joined("interviewing"), purifier)).toBe("Setting up…");
+  });
 });

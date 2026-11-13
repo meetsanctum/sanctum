@@ -43,7 +43,8 @@ import type { Devices } from "./use-devices";
 // with nothing of the shell's to set, such as a remote, shows the pages apps
 // add for its kind instead, each drawn by its app in the app's scope, such
 // as Moods' Presses. Every device's last page is its Activity: who did what
-// to it (activity/device-page.tsx).
+// to it (activity/device-page.tsx). For a device Sanctum cannot use it is
+// the only page: there is nothing of it to show or set.
 
 type Occupancy = Extract<
   DeviceInfo["capabilities"][number],
@@ -107,6 +108,9 @@ export function DeviceDetail(props: {
   const capability = device?.capabilities.find(
     (each) => each.id === tile?.capabilityId,
   );
+  // A device Sanctum cannot use, whose tile stands for the device itself.
+  const unknown = tile?.kind === "unknown" ? device : undefined;
+  const shown = capability !== undefined || unknown !== undefined;
   // A motion sensor's detail is the same from its motion's tile and from
   // its readings', and shows the motion whose tile opened it.
   const motion =
@@ -137,7 +141,7 @@ export function DeviceDetail(props: {
       : [];
   const history = device && capability ? historyPage(device, capability) : null;
   const activity =
-    device && capability
+    device && shown
       ? activityPage(device, capability, {
           where: "device",
           apps: props.apps.map((app) => app.info),
@@ -148,7 +152,7 @@ export function DeviceDetail(props: {
         })
       : null;
   // A device removed meanwhile closes its detail.
-  const gone = props.open && devices.places !== undefined && !capability;
+  const gone = props.open && devices.places !== undefined && !shown;
   useEffect(() => {
     if (gone) onClose();
   }, [gone, onClose]);
@@ -187,7 +191,7 @@ export function DeviceDetail(props: {
   return (
     <Overlay
       container={props.container}
-      open={props.open && capability !== undefined}
+      open={props.open && shown}
       onClose={onClose}
       onCovering={props.onCovering}
       title={tile?.name ?? ""}
@@ -203,6 +207,13 @@ export function DeviceDetail(props: {
         )
       }
     >
+      {tile && unknown && (
+        <SwipePages
+          key={tile.key}
+          label={tile.name}
+          pages={activity ? [activity] : []}
+        />
+      )}
       {tile &&
         device &&
         capability &&

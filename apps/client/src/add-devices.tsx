@@ -39,14 +39,21 @@ export function countdown(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-/** How far a device that joined has come, as the dialog says it. */
-export function stageText(joined: JoinedDevice) {
+/**
+ * How far a device that joined has come, as the dialog says it. One that is
+ * ready and has nothing Sanctum can use says so: it is the household's to
+ * name and place all the same.
+ */
+export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
   switch (joined.stage) {
     case "joined":
       return "Joining…";
     case "interviewing":
       return "Setting up…";
     case "ready":
+      if (device && device.capabilities.length === 0) {
+        return `${productName} cannot use it`;
+      }
       return joined.known ? "Joined again" : "Ready";
     case "unsupported":
       return `${productName} cannot use it`;
@@ -325,7 +332,7 @@ function JoinedRow(props: {
   const working = joined.stage === "joined" || joined.stage === "interviewing";
   const detail = [
     device && joined.description !== device.name ? joined.description : null,
-    stageText(joined),
+    stageText(joined, device),
   ]
     .filter(Boolean)
     .join(" · ");

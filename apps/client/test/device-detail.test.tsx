@@ -637,6 +637,47 @@ describe("a remote's detail", () => {
   });
 });
 
+describe("the detail of a device Sanctum cannot use", () => {
+  const purifier: DeviceInfo = {
+    ...lamp,
+    id: "purifier",
+    name: "Unknown device",
+    driverName: "STARKVIND air purifier",
+    type: "unknown",
+    roomId: null,
+    capabilities: [],
+  };
+
+  it("opens from its tile with its name, its place and what its driver calls it, on its Activity alone", async () => {
+    devices = [purifier];
+    await show();
+
+    await click(button("Unknown device, STARKVIND air purifier"));
+
+    expect(dialog()?.querySelector("h2")?.textContent).toBe("Unknown device");
+    expect(dialog()?.textContent).toContain("No room · STARKVIND air purifier");
+    expect(dialog()?.textContent).toContain("Last change");
+    // Nothing of it to control, and no other page.
+    expect(dialog()!.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect(dialog()!.querySelector('[role="slider"]')).toBeNull();
+    expect(posted()).toEqual([]);
+  });
+
+  it("goes on Home from its header, and closes when it is removed", async () => {
+    devices = [purifier];
+    await show();
+    await click(button("Unknown device, STARKVIND air purifier"));
+
+    await click(button("Add to Home", dialog()!));
+    expect(onHome).toEqual(["lamp", "purifier"]);
+
+    await act(async () => {
+      live.publish({ type: "device", id: "purifier", device: null });
+    });
+    expect(dialog()).toBeNull();
+  });
+});
+
 // A climate sensor on a battery, which last said something 3 minutes ago.
 const reading = (measure: "temperature" | "humidity", value: number) => ({
   id: measure,

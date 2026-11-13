@@ -166,6 +166,34 @@ function buttonTile(
   };
 }
 
+// The tile of a device with nothing here to show, which Sanctum cannot
+// use: what its driver calls it under its name. It switches nothing, and
+// opens the device's page as any tile does.
+function unknownTile(
+  device: DeviceInfo,
+  roomId: string | null,
+  isQuiet: boolean,
+): Tile {
+  return {
+    key: tileKey(device.id, ""),
+    deviceId: device.id,
+    capabilityId: "",
+    kind: "unknown",
+    roomId,
+    name: device.name,
+    status:
+      device.availability === "offline"
+        ? offline(device)
+        : isQuiet
+          ? quiet
+          : device.driverName,
+    look: "off",
+    on: false,
+    dims: false,
+    disabled: device.availability === "offline",
+  };
+}
+
 type Sensor = Extract<CapabilityInfo, { kind: "sensor" }>;
 
 const isSensor = (capability: CapabilityInfo): capability is Sensor =>
@@ -327,9 +355,10 @@ export const sensorReadings = (tiles: readonly Tile[]) =>
 
 /**
  * Every light, switch, button, sensor and motion sensor the devices have,
- * as tiles, with each button's press of the last few seconds by its tile's
- * key, and how long motion sensors have been quiet by `now`, which also
- * says which devices on a battery have gone quiet.
+ * as tiles, and one for each device with none of them, with each button's
+ * press of the last few seconds by its tile's key, and how long motion
+ * sensors have been quiet by `now`, which also says which devices on a
+ * battery have gone quiet.
  */
 export function tilesOf(
   devices: DeviceInfo[],
@@ -349,7 +378,7 @@ export function tilesOf(
     );
     const sensors = device.capabilities.filter(isSensor);
     const motion = device.capabilities.filter(isOccupancy);
-    return [
+    const tiles = [
       ...controls.map((capability) =>
         tileOf(device, capability, controls.length > 1, roomId),
       ),
@@ -371,6 +400,8 @@ export function tilesOf(
         ? [sensorTile(device, sensors, roomId, unit, isQuiet)]
         : []),
     ];
+    // A device none of whose parts has a tile still has one of its own.
+    return tiles.length > 0 ? tiles : [unknownTile(device, roomId, isQuiet)];
   });
 }
 
@@ -406,6 +437,20 @@ export function sectionsByCategory(tiles: Tile[]): TileSection[] {
       tiles: tilesIn(category, tiles).sort(byName),
     }))
     .filter((section) => section.tiles.length > 0);
+}
+
+/**
+ * A room's devices as its page shows them: a section for each category,
+ * then the devices Sanctum cannot use, which no category holds.
+ */
+export function sectionsOfRoom(tiles: Tile[]): TileSection[] {
+  const unknown = tiles.filter((tile) => tile.kind === "unknown").sort(byName);
+  return [
+    ...sectionsByCategory(tiles),
+    ...(unknown.length > 0
+      ? [{ id: "unknown", title: "Unknown devices", tiles: unknown }]
+      : []),
+  ];
 }
 
 /** A category's or a group's status: "3 on", "Off", or nothing for no tiles. */

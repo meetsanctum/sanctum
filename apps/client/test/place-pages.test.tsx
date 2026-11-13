@@ -313,6 +313,46 @@ describe("the devices in no room", () => {
     );
   });
 
+  it("include a device Sanctum cannot use, last, under no category", async () => {
+    const purifier: DeviceInfo = {
+      ...loose,
+      id: "purifier",
+      name: "Unknown device",
+      driverName: "STARKVIND air purifier",
+      type: "unknown",
+      capabilities: [],
+    };
+    devices = [lamp, loose, purifier];
+    await show(noRoomPage);
+    expect(
+      [...container.querySelectorAll("main h2")].map(
+        (each) => each.textContent,
+      ),
+    ).toEqual(["Lights", "Unknown devices"]);
+    expect(tile("Unknown device")?.textContent).toBe(
+      "Unknown deviceSTARKVIND air purifier",
+    );
+    // No category holds it, so the sidebar's categories are as they were.
+    expect(sidebar()).toEqual([
+      "Lights1 on",
+      "Office",
+      "Hall",
+      "Attic",
+      "No room",
+    ]);
+
+    await click(tile("Unknown device"));
+    expect(openDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: "purifier", kind: "unknown" }),
+    );
+
+    // By itself it keeps the entry and the page.
+    devices = [lamp, purifier];
+    await show(noRoomPage);
+    expect(sidebar()).toContain("No room");
+    expect(container.querySelector("h1")?.textContent).toBe("No room");
+  });
+
   it("are last among the sidebar's rooms, and marked while their page shows", async () => {
     await show(noRoomPage);
     expect(sidebar()).toEqual([
@@ -379,6 +419,26 @@ describe("the devices in no room", () => {
 });
 
 describe("a room's page", () => {
+  it("ends with the devices Sanctum cannot use, after its categories", async () => {
+    devices = [
+      lamp,
+      plug,
+      {
+        ...lamp,
+        id: "purifier",
+        name: "Unknown device",
+        driverName: "STARKVIND air purifier",
+        type: "unknown",
+        capabilities: [],
+      },
+    ];
+    await show("room", "office", []);
+    expect(headings()).toEqual(["Lights", "Switches", "Unknown devices"]);
+    expect(tile("Unknown device")?.textContent).toBe(
+      "Unknown deviceSTARKVIND air purifier",
+    );
+  });
+
   it("has Moods first, then other apps' sections by weight and app id, then its devices by category", async () => {
     entities = [
       relax,

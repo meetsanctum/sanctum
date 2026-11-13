@@ -225,14 +225,17 @@ export function updateButton(
 export function whyNot(device: DeviceInfo, check: "update" | "probe") {
   if (check === "probe") {
     if (device.probe) return null;
-    if (device.capabilities.every((each) => each.kind === "button")) {
+    // A device with no capabilities is neither a remote nor a sensor: all
+    // that can be said is that it can't be asked.
+    const kinds = device.capabilities.map((each) => each.kind);
+    if (kinds.length > 0 && kinds.every((kind) => kind === "button")) {
       return "It sleeps between presses";
     }
     // Its driver says it sleeps, as one on a battery does, before it has
     // said how full the battery is.
-    return device.capabilities.every(
-      (each) => each.kind === "sensor" || each.kind === "occupancy",
-    ) && device.firmware?.sleeps === true
+    return kinds.length > 0 &&
+      kinds.every((kind) => kind === "sensor" || kind === "occupancy") &&
+      device.firmware?.sleeps === true
       ? "It sleeps between readings"
       : "It can't be asked how it is";
   }
@@ -296,7 +299,10 @@ export function UpdateDialog(props: {
   const firmware = device?.firmware;
   const sleeps = firmware?.sleeps ?? false;
   const isLight = device?.capabilities.some((each) => each.kind === "light");
-  const isRemote = device?.capabilities.every((each) => each.kind === "button");
+  const isRemote =
+    device !== undefined &&
+    device.capabilities.length > 0 &&
+    device.capabilities.every((each) => each.kind === "button");
   const again =
     firmware?.state === "failed"
       ? `Last time it didn't finish: ${lowerFirst(firmware.problem ?? "it stopped partway.")}`

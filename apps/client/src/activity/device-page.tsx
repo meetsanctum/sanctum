@@ -26,10 +26,10 @@ export type DeviceActivityContext = ListContext & {
   onShowAll: (device: string) => void;
 };
 
-/** The Activity page for a device's detail. */
+/** The Activity page for a device's detail, opened from one of its capabilities' tiles or, for a device with none, from its own. */
 export function activityPage(
   device: DeviceInfo,
-  capability: CapabilityInfo,
+  capability: CapabilityInfo | undefined,
   context: DeviceActivityContext,
 ): SwipePage {
   return {
@@ -40,7 +40,7 @@ export function activityPage(
       <DeviceActivity
         key={device.id}
         device={device}
-        isRemote={capability.kind === "button"}
+        isRemote={capability?.kind === "button"}
         context={context}
       />
     ),
