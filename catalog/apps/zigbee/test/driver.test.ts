@@ -128,7 +128,8 @@ describe("letting devices join", () => {
     // One at a time, as devices join a network.
     await bridge.join(dimmable(bulb.key, bulb.name), { state: "OFF" });
     await core.until(() => core.stageOf(bulb.key) === "ready", "ready");
-    // A door sensor exposes nothing the core can use.
+    // A door sensor exposes nothing the core has a capability for: it comes
+    // in all the same, with none.
     await bridge.join(
       zigbeeDevice(door.key, door.name, [], {
         definition: {
@@ -140,10 +141,7 @@ describe("letting devices join", () => {
       }),
       {},
     );
-    await core.until(
-      () => core.stageOf(door.key) === "unsupported",
-      "unsupported",
-    );
+    await core.until(() => core.stageOf(door.key) === "ready", "ready");
     await bridge.join(dimmable(broken.key, broken.name), {}, "failed");
     await core.until(() => core.stageOf(broken.key) === "failed", "failed");
 
@@ -155,11 +153,15 @@ describe("letting devices join", () => {
     expect(core.joining.filter((each) => each.key === door.key).at(-1)).toEqual(
       {
         key: door.key,
-        stage: "unsupported",
+        stage: "ready",
         description: "Door and window sensor",
       },
     );
-    expect(core.registered.has(door.key)).toBe(false);
+    expect(core.registered.get(door.key)).toMatchObject({
+      name: door.name,
+      model: "MCCGQ11LM",
+      capabilities: [],
+    });
   });
 
   it("closes the network when the core stops pairing", async () => {

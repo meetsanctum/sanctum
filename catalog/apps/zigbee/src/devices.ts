@@ -6,11 +6,15 @@ import type { ZigbeeDevice } from "./types.js";
 import { stringValue } from "./values.js";
 
 // Zigbee2MQTT's device list (`bridge/devices`) onto the devices the driver
-// brings into the core. A device comes in once its interview has succeeded
-// and it exposes a light, a switch, buttons, a room's temperature, humidity
-// or light level, or motion; the coordinator, disabled devices and the rest
-// stay out. So a device whose interview failed and that Zigbee2MQTT does not
-// support (a ghost device) never comes in.
+// brings into the core. A device comes in once its interview has succeeded,
+// with what it exposes that the core has a capability for: a light, a
+// switch, buttons, a room's temperature, humidity or light level, or
+// motion. One that exposes none of them, such as a repeater or an air
+// purifier, comes in with no capabilities: the household has it on its
+// network, and names, places and removes it like any device, though
+// Sanctum cannot use it. The coordinator and disabled devices stay out, and
+// so does a device whose interview failed (a ghost device), which
+// Zigbee2MQTT knows nothing about.
 
 export type ZigbeeDeviceEntry = {
   /** Its IEEE address, which outlives renames: the driver's key in the core. */
@@ -123,9 +127,6 @@ function entryOf(
     model: stringValue(device.definition?.model),
     detectionInterval: detectionIntervals.get(key),
   });
-  if (capabilities.length === 0) {
-    return null;
-  }
   const battery = /battery/i.test(device.power_source ?? "");
   const name = nameOf(device, key, friendlyName);
   const model = label(device.definition?.model) ?? label(device.model_id);

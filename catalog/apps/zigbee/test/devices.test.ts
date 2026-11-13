@@ -102,7 +102,43 @@ describe("the device list", () => {
     });
   });
 
-  it("leaves out the coordinator, disabled devices and what it cannot switch", () => {
+  it("brings a device that exposes nothing the core has a capability for, with none", () => {
+    // A door sensor, and a repeater that exposes only its link quality.
+    const entries = deviceEntries([
+      zigbeeDevice("0x02", "door", [{ type: "binary", property: "contact" }], {
+        power_source: "Battery",
+      }),
+      zigbeeDevice("0x0b", "0x0b", [
+        { type: "numeric", property: "linkquality", access: 1 },
+      ]),
+    ]);
+    expect(entries).toMatchObject([
+      {
+        key: "0x02",
+        friendlyName: "door",
+        battery: true,
+        capabilities: [],
+        registration: {
+          key: "0x02",
+          name: "door",
+          manufacturer: "Test Vendor",
+          model: "TL-1",
+          // Nothing says what it is, and nothing of it can be read.
+          type: null,
+          capabilities: [],
+          firmware: { updatable: false, sleeps: true },
+          probe: false,
+        },
+      },
+      {
+        key: "0x0b",
+        // Named by what it is, while nobody renamed it in Zigbee2MQTT.
+        registration: { name: "Test light", capabilities: [], probe: false },
+      },
+    ]);
+  });
+
+  it("leaves out the coordinator and disabled and nameless devices", () => {
     expect(
       deviceEntries([
         {
@@ -111,7 +147,6 @@ describe("the device list", () => {
           friendly_name: "Coordinator",
         },
         zigbeeDevice("0x01", "off_list", [switchExpose()], { disabled: true }),
-        zigbeeDevice("0x02", "door", [{ type: "binary", property: "contact" }]),
         zigbeeDevice("0x03", "nameless", [switchExpose()], {
           friendly_name: undefined,
         }),

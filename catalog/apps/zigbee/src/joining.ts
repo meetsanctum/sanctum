@@ -7,8 +7,9 @@ import { isRecord, stringValue } from "./values.js";
 // Devices joining the network, for the core's pairing flow: Zigbee2MQTT says
 // on bridge/event that a device joined and how its interview goes, and its
 // device list then has it. Once the list has a device whose interview
-// succeeded, the driver has registered it (ready) or cannot use it
-// (unsupported).
+// succeeded, the driver has registered it (ready), with no capabilities
+// when it exposes nothing the core has one for. A device the core would not
+// take is said to be one it cannot use (unsupported).
 
 export type SayJoining = (
   key: string,
