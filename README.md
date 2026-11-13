@@ -4,11 +4,20 @@
 
 <h3>A smart home for everyone</h3>
 
-Sanctum runs your home's lights, sensors and automations on a small computer
-in your home, such as a Raspberry Pi. It works without the internet and needs
-no cloud account: your devices, automations and data stay at home, under your
-control. Everyone in the household sees and does the same, from the Mac app
-on their own Mac or on one the whole household shares.
+Sanctum's goal is to make it super easy and intuitive to make your home
+smart. It runs your lights, sensors and automations on a small computer in
+your home, such as a Raspberry Pi, and everyone in the household uses it from
+the Mac app.
+
+- **No internet needed.** It works without the internet and needs no cloud
+  account.
+- **Data stays local.** Your devices, automations and data stay at home,
+  under your control.
+- **Free & open source.** All of the code is in this repository;
+  [Licences](#licences) has the details.
+
+Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
+[follow on X](https://x.com/meetsanctum) for updates on the project.
 
 ![The Sanctum Mac app in dark mode: the Home dashboard with each room's moods and lights](assets/brand/readme-home.jpg)
 
