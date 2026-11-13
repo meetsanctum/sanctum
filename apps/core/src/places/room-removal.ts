@@ -6,7 +6,7 @@ import type { Entities } from "../entities/entities.js";
 import type { Workflows } from "../workflows/workflows.js";
 import { PlacesError, type PlacesModule } from "./places.js";
 
-// What removing a room takes with it, for the warning an admin reads before
+// What removing a room takes with it, for the warning someone reads before
 // removing it; nothing changes here. Its devices move to No room and stay
 // paired. Apps clean up what they keep for it on place.deleted, counted here
 // from their entities whose state puts them in the room by `placeId`, as a

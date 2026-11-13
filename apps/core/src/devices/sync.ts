@@ -6,20 +6,17 @@ import {
   type SyncStatus,
 } from "@meetsanctum/app-sdk";
 
-// Desired and observed state, and how they are reconciled: ported from v1's
-// device-state-model.ts and device-state-service.ts (Pragmata, v1-final).
-// A command records the fields it asks for as `desired` and waits for the
-// device to confirm them in a report; what clients show is the reported
-// state with what is desired applied. v1 kept a full target state and a
-// list of target fields; here the desired fields carry both. v1's conflict
-// that kept a light's colour while it was off is called `held`.
+// Desired and observed state, and how they are reconciled. A command
+// records the fields it asks for as `desired` and waits for the device to
+// confirm them in a report; what clients show is the reported state with
+// what is desired applied. A look asked of a light that is off is kept
+// as `held`.
 //
-// v1 took every report as the device's latest state. Commands go out in
-// order, but a device can still report the state it was in before an
-// earlier one: Zigbee2MQTT publishes a light's previous state before the
-// new one for every command. A pending command therefore awaits the on or
-// off of the earlier commands still on their way, and until the device has
-// shown them, its reports confirm nothing (reconcile()).
+// Commands go out in order, but a device can still report the state it was
+// in before an earlier one: Zigbee2MQTT publishes a light's previous state
+// before the new one for every command. A pending command therefore awaits
+// the on or off of the earlier commands still on their way, and until the
+// device has shown them, its reports confirm nothing (reconcile()).
 
 type State = Record<string, unknown>;
 
@@ -39,11 +36,11 @@ export type Settled = Pick<CapabilitySync, "desired" | "sync" | "awaiting">;
 /** A command, ready to go: what it asks for, and what the driver gets, if anything yet. */
 export type Prepared = Settled & { send: State | null };
 
-// How long a device has to confirm a command (v1: 6 s).
+// How long a device has to confirm a command.
 export const confirmMs = 6_000;
 
 // A light's appearance: what it keeps while off, and what a light that is
-// off does not take (v1's shouldPreserveUnconfirmedLightAppearanceTarget).
+// off does not take.
 const appearance = new Set([
   "brightness",
   "colorMode",
@@ -59,12 +56,11 @@ const isAppearance = (desired: State) =>
 const dims = (capability: CapabilitySync) =>
   capability.kind === "light" && capability.features.brightness === true;
 
-// The brightness a light comes back at (v1's rememberedLightBrightness): the
-// one last asked of it, or the one it last had while on, 1% included. Reports
-// keep only what it showed, so a command that fails leaves nothing behind.
-// v1 did not trust an off light's 1%, so a light set to 1% came back at 100.
-// Every brightness change goes through the core, so 1% was asked for or a
-// remote's dim stopped there, and a dim never ends in off.
+// The brightness a light comes back at: the one last asked of it, or the one
+// it last had while on. Reports keep only what it showed, so a command that
+// fails leaves nothing behind. A light that was at 1% comes back at 1%: every
+// brightness change goes through the core, so 1% was asked for or a remote's
+// dim stopped there, and a dim never ends in off.
 function rememberedBrightness(
   capability: CapabilitySync,
   from = [capability.desired, capability.observed],
@@ -82,11 +78,11 @@ function rememberedBrightness(
 }
 
 /**
- * A report as the core keeps it (v1's normalizeEntityObservation). A light
- * that is off keeps showing the brightness it comes back at, whatever it
- * reports: many lights report their lowest level once off, and a plain "on"
- * would bring them back almost dark. A light that is on is never at 0, keeps
- * its brightness when a report leaves it out, and keeps it while fading out.
+ * A report as the core keeps it. A light that is off keeps showing the
+ * brightness it comes back at, whatever it reports: many lights report their
+ * lowest level once off, and a plain "on" would bring them back almost dark.
+ * A light that is on is never at 0, keeps its brightness when a report
+ * leaves it out, and keeps it while fading out.
  */
 export function observe(capability: CapabilitySync, reported: State): State {
   if (!dims(capability)) {
@@ -137,8 +133,8 @@ export function shownState(capability: CapabilitySync): State | null {
 
 /**
  * Whether a report confirms what was asked. A field the device does not
- * report cannot be confirmed, so it does not hold the rest back (v1's
- * targetFieldsMatch), unless `reported` asks for every field to be there.
+ * report cannot be confirmed, so it does not hold the rest back, unless
+ * `reported` asks for every field to be there.
  */
 export function confirms(
   observed: State,
@@ -200,8 +196,6 @@ function withAppearance(held: State, asked: State): State {
   return { ...kept, ...asked };
 }
 
-// v1's normalizeEntityCommand, applyCommandWithOptions and
-// shouldPublishEntityCommand, for a light.
 function prepareLight(
   capability: CapabilitySync,
   input: LightCommand,
@@ -246,9 +240,9 @@ function prepareLight(
     // command may still report a different colour before then.
     return { desired: asked, sync: "pending", send };
   }
-  // Turning it on brings what was held, and the brightness it comes back at
-  // (v1's lightOnCommand), unless the light reports it is on already: an
-  // "on" still on its way may yet fail.
+  // Turning it on brings what was held, and the brightness it comes back
+  // at, unless the light reports it is on already: an "on" still on its way
+  // may yet fail.
   const desired = command.on === true ? withAppearance(held, asked) : asked;
   if (
     command.on === true &&
@@ -282,7 +276,7 @@ function stillAwaiting(capability: CapabilitySync, observed: State) {
   return left.length > 0 ? left : undefined;
 }
 
-/** A report from the device (v1's reconcileEntityObservation). */
+/** A report from the device. */
 export function reconcile(
   capability: CapabilitySync,
   observed: State,
@@ -320,7 +314,7 @@ export function reconcile(
   return { desired: null, sync: "synced" };
 }
 
-/** The device did not confirm a command in time (v1's settleCommandTarget). */
+/** The device did not confirm a command in time. */
 export function settle(capability: CapabilitySync): Settled {
   const { desired, sync } = capability;
   if (sync !== "pending") {

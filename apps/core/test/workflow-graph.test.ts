@@ -8,8 +8,7 @@ import {
   statePasses,
 } from "../src/workflows/graph.js";
 
-// A workflow's graph, ported with v1's tests (test/automation-engine.test.ts,
-// Pragmata v1-final): which steps a run reaches, and how a change of state
+// A workflow's graph: which steps a run reaches, and how a change of state
 // fires a trigger.
 
 const node = (
@@ -134,8 +133,7 @@ describe("executionPlan", () => {
 });
 
 describe("changeFires", () => {
-  // v1's "matches entity-state triggers by field changes and predicates",
-  // on a light's state as Devices keeps it.
+  // On a light's state as Devices keeps it.
   const now = { on: true, brightness: 80 };
   const wasOn = { on: true, brightness: 60 };
   const wasOff = { on: false, brightness: 80 };
@@ -201,7 +199,7 @@ describe("changeFires", () => {
     expect(changeFires({}, null, now)).toBe(true);
   });
 
-  it("accepts v1's state. prefix and nested fields", () => {
+  it("accepts a state. prefix and nested fields", () => {
     expect(
       changeFires(
         { field: "state.on", operator: "is_on" },
@@ -226,7 +224,7 @@ describe("changeFires", () => {
 });
 
 describe("statePasses", () => {
-  it("checks a field of the state now (v1's entity_state condition)", () => {
+  it("checks a field of the state now", () => {
     expect(statePasses({ field: "on", operator: "is_on" }, { on: true })).toBe(
       true,
     );

@@ -24,8 +24,8 @@ import type { AppHost } from "./host.js";
 //   GET  /api/apps/:appId/settings            AppSettings: its settings,
 //                                             with its schema's defaults
 //   POST /api/apps/:appId/settings/update     { [name]: value | null }:
-//                                             admins change some, null goes
-//                                             back to the default; answers
+//                                             changes some, null goes back
+//                                             to the default; answers
 //                                             AppSettings
 //   POST /api/apps/:appId/off                 { off }: turns it off or on
 //   POST /api/apps/:appId/restart             starts again an app its supervisor

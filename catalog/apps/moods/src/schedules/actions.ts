@@ -19,11 +19,10 @@ import {
 import { refreshRoom } from "../refresh.js";
 import { day, step } from "./times.js";
 
-// A room's schedule and how its lights turn on (v1's room schedules and
-// target settings, Pragmata v1-final), shown and changed on Moods' page
-// for the room. They are the household's, so everyone may read and change
-// them, on a shared client too. Each change sets the schedule's jobs again
-// (jobs.ts) and publishes the room's lights.turnOn (turn-on.ts).
+// A room's schedule and how its lights turn on, shown and changed on
+// Moods' page for the room. They are the household's, so everyone may read
+// and change them, on a shared client too. Each change sets the schedule's
+// jobs again (jobs.ts) and publishes the room's lights.turnOn (turn-on.ts).
 
 const start = z
   .number()

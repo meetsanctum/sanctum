@@ -17,11 +17,9 @@ import { applySchedule } from "../../src/schedules/jobs.js";
 import { startableHome } from "../moods/core.js";
 import { device, lightCapability } from "../moods/home.js";
 
-// A room's schedule, how its lights turn on and the snapshot of them
-// (v1's room schedules, target settings and light snapshots, ported from
-// room-schedules.test.ts and system-action-runner.test.ts, Pragmata
-// v1-final), against Moods' own database and a core that keeps its jobs
-// and entities. The home's day runs in UTC, and it is 15:20 on 30 October.
+// A room's schedule, how its lights turn on and the snapshot of them,
+// against Moods' own database and a core that keeps its jobs and entities.
+// The home's day runs in UTC, and it is 15:20 on 30 October.
 
 const at = (time: string) => new Date(`2026-10-30T${time}:00.000Z`);
 
@@ -303,7 +301,7 @@ describe("a schedule's jobs", () => {
     return context;
   }
 
-  it("bring the mood on at its start while a light in the room is on, as v1 did", async () => {
+  it("bring the mood on at its start while a light in the room is on", async () => {
     const { call, state } = await scheduled();
 
     const result = await call(applySchedule, { roomId: "office", minute: 540 });

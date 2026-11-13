@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LightControls } from "../src/light-controls";
 
-// A light's controls in its detail: v1's colour and white pickers and
+// A light's controls in its detail: the colour and white pickers and the
 // brightness slider, on pages to swipe or choose from their tabs.
 
 const colourLight: LightFeatures = {

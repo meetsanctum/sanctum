@@ -4,25 +4,24 @@ import type {
   WorkflowNode,
 } from "@meetsanctum/app-sdk";
 
-// A workflow's graph, ported from v1's automation-graph.ts: which steps a
-// run reaches from the triggers that fired, through which conditions, and
-// how a state field is compared.
+// A workflow's graph: which steps a run reaches from the triggers that
+// fired, through which conditions, and how a state field is compared.
 
 export type StepPlan = {
   step: WorkflowNode;
   /**
    * Whether a path of edges from the fired triggers reaches the step with
    * every condition on it passing. It asks `passes` about each condition it
-   * meets, in the order v1 tried its paths, and stops at the first path
-   * that passes.
+   * meets, following the edges in the graph's order, and stops at the first
+   * path that passes.
    */
   reached(
     passes: (condition: WorkflowNode) => Promise<boolean>,
   ): Promise<boolean>;
 };
 
-// The graph's edges, both ways. A path ends at the step it reaches (v1), so
-// no edge leads on from a step.
+// The graph's edges, both ways. A path ends at the step it reaches, so no
+// edge leads on from a step.
 function edgesOf(graph: WorkflowGraph) {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const next = new Map<string, string[]>();
@@ -54,12 +53,12 @@ function leadingTo(previous: Map<string, string[]>, stepId: string) {
 }
 
 /**
- * The steps a run from these triggers may reach, in the graph's order (v1's
- * executionPlan). Whether each runs is found as the run gets to it, so a
- * condition is checked after the steps before it have run, as in v1. Each
- * search visits a node once at most, as a condition passes or not whatever
- * path met it, so its work grows with the graph's size, not with the number
- * of paths through it.
+ * The steps a run from these triggers may reach, in the graph's order.
+ * Whether each runs is found as the run gets to it, so a condition is
+ * checked after the steps before it have run. Each search visits a node
+ * once at most, as a condition passes or not whatever path met it, so
+ * its work grows with the graph's size, not with the number of paths
+ * through it.
  */
 export function executionPlan(
   graph: WorkflowGraph,
@@ -132,7 +131,7 @@ export function hasTriggerToStepPath(graph: WorkflowGraph) {
   return false;
 }
 
-/** A field of a state, such as "on" or "color.hue"; v1's "state." prefix is allowed. */
+/** A field of a state, such as "on" or "color.hue"; a "state." prefix is allowed. */
 export function stateField(state: unknown, field: string) {
   let current: unknown = state;
   for (const segment of field.replace(/^state\./, "").split(".")) {
@@ -189,10 +188,10 @@ export type StatePredicate = {
 };
 
 /**
- * Whether a change from `before` to `after` fires a trigger (v1's rules for
- * entity_state_changed). With a field: it changed and its new value passes,
- * or there was no state before and it passes; below and above pass only as
- * the value crosses into them. Without one: anything changed.
+ * Whether a change from `before` to `after` fires a trigger. With a field:
+ * it changed and its new value passes, or there was no state before and it
+ * passes; below and above pass only as the value crosses into them. Without
+ * one: anything changed.
  */
 export function changeFires(
   predicate: StatePredicate,

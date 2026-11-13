@@ -10,10 +10,10 @@ import { smartCatalog, type SmartColour } from "../moods/smart.js";
 import { EditorHeader } from "./mood-editing";
 import { useMoodsApp } from "./state";
 
-// A new mood's first step (v1's MoodDefinitionPickerPage): a mood from the
-// room's lights as they are, or a smart mood from Moods' catalog, each
-// group in a section. A smart mood the room has already is there, but
-// cannot be added again. Cancel, at its end, leaves without a new mood.
+// A new mood's first step: a mood from the room's lights as they are, or a
+// smart mood from Moods' catalog, each group in a section. A smart mood
+// the room has already is there, but cannot be added again. Cancel, at its
+// end, leaves without a new mood.
 
 // A definition's colours, in the order the lights take them.
 function Swatches(props: { colours: readonly SmartColour[] }) {

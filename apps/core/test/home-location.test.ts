@@ -12,9 +12,9 @@ import {
   type TestCore,
 } from "./support.js";
 
-// Where the home is: an admin sets it in Settings → Household, with a
-// suggestion from the public IP address that the core asks for only when the
-// admin presses the button. Apps read it with places.location.
+// Where the home is: the household sets it in Settings → Household, with a
+// suggestion from the public IP address that the core asks for only when
+// someone presses the button. Apps read it with places.location.
 
 const zurich = {
   latitude: 47.3769,
@@ -32,8 +32,8 @@ const json = (body: unknown, status = 200) =>
 const elevationAtZurich =
   "https://api.open-meteo.com/v1/elevation?latitude=47.3769&longitude=8.5417";
 
-// The services the suggestion asks, as v1's tests had them, and Open-Meteo
-// for the elevation unless it is down.
+// The services the suggestion asks, and Open-Meteo for the elevation
+// unless it is down.
 function locationServices(options: { openMeteo?: "down" } = {}) {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input);
@@ -60,7 +60,7 @@ function entries(core: TestCore) {
   return core.activity.recent().filter((entry) => entry.source === "places");
 }
 
-// What the admin sends for Zurich.
+// What a client sends for Zurich.
 const atZurich = {
   timeZone: zurich.timeZone,
   coordinates: {
@@ -72,7 +72,7 @@ const atZurich = {
 const bern = { latitude: 46.948, longitude: 7.4474 };
 
 describe("the home's location", () => {
-  it("is unset until an admin sets it, changes it or takes it away", async () => {
+  it("is unset until someone sets it, changes it or takes it away", async () => {
     const core = await testCore();
     const maya = await claimed(core);
 

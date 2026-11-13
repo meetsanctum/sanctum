@@ -6,7 +6,7 @@ import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 export type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 export type Light = { device: DeviceInfo; capability: LightCapability };
 
-/** The lights in a room that a command can reach (v1's resolveLightActionTargets). */
+/** The lights in a room that a command can reach. */
 export function lightsInRoom(
   devices: readonly DeviceInfo[],
   roomId: string,

@@ -46,7 +46,7 @@ function approve(core: TestCore, token: string, code: string, name: string) {
 }
 
 describe("pairing a shared device", () => {
-  it("gives the device a shared client once an admin approves its code", async () => {
+  it("gives the device a shared client once someone approves its code", async () => {
     const core = await testCore();
     const maya = await claimed(core);
     const requested = await ask(core);

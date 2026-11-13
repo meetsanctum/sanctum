@@ -19,8 +19,8 @@ import { floors, home, rooms, zoneRooms, zones } from "./schema.js";
 
 // The Places module: the home and its floors, rooms and zones, kept in the
 // core because devices and apps such as Moods all place things in rooms, and
-// where the home is, which Weather and natural light both need. Admins
-// change them through its routes; anyone signed in reads the rooms, apps
+// where the home is, which Weather and natural light both need. Every
+// client reads and changes them through its routes, shared ones too; apps
 // read them with `places.read` and the location with `places.location`. The
 // home's time zone stands on its own, so a household that keeps its
 // coordinates to itself still has its clock, which the workflows engine
@@ -73,12 +73,12 @@ export const zoneChanges = z.object({
 });
 export const removal = z.object({ id });
 
-// The home's name until an admin gives it one.
+// The home's name until the household gives it one.
 const defaultHomeName = "Home";
 
 // The home's id (schema.ts), made on the first start of its database. A
 // row from before home ids gets one then, and a home without a row gets its
-// row, with the default name until an admin gives it one. A database
+// row, with the default name until the household gives it one. A database
 // restored from a backup made before home ids therefore gets a new id, and
 // apps take it for another home.
 export function loadHomeId(
@@ -183,9 +183,9 @@ export function createPlaces(
   const { record } = options;
   const now = options.now ?? (() => new Date());
 
-  // The home's name; the time zone its days run in: the one an admin set,
-  // or the host's while there is none, as the workflows engine and apps'
-  // jobs count it; and how it shows temperatures.
+  // The home's name; the time zone its days run in: the one the household
+  // set, or the host's while there is none, as the workflows engine and
+  // apps' jobs count it; and how it shows temperatures.
   function homeOf(row: typeof home.$inferSelect | undefined): Places["home"] {
     return {
       name: row?.name ?? defaultHomeName,
@@ -300,7 +300,7 @@ export function createPlaces(
 
   // The home's name, time zone and coordinates with its elevation.
   // Where the home is, for apps: its coordinates, elevation and time zone, or null
-  // until an admin has set the coordinates and time zone.
+  // until the household has set the coordinates and time zone.
   function locationNow(): HomeLocation | null {
     const { timeZone: zone, coordinates: at } = homeInfo();
     return zone && at ? { ...at, timeZone: zone } : null;
@@ -343,8 +343,8 @@ export function createPlaces(
         .get();
     },
 
-    // Where the home's public IP address says it is (location.ts), for the
-    // admin to check and save; nothing is saved here.
+    // Where the home's public IP address says it is (location.ts), for
+    // someone to check and save; nothing is saved here.
     async suggestLocation(by: ChangedBy) {
       const entry = {
         action: "home.suggestLocation",

@@ -9,9 +9,7 @@ import {
 } from "../../src/moods/light-states.js";
 import { light, lightCapability } from "./home.js";
 
-// What a mood does with a room's lights, ported from v1's tests
-// (room-schedules.test.ts in the core and mood-actions.test.ts in
-// web-nuxt, Pragmata v1-final).
+// What a mood does with a room's lights.
 
 const at = (device: string, state: MoodLight["state"]): MoodLight => ({
   device,
@@ -185,7 +183,7 @@ describe("activeMood", () => {
     ).toBeNull();
   });
 
-  it("matches within v1's tolerances, with hue going round", () => {
+  it("matches within the tolerances, with hue going round", () => {
     const wanted = {
       on: true,
       brightness: 50,

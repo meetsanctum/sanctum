@@ -2,10 +2,8 @@ import type { LightCommand, LightState } from "@meetsanctum/app-sdk";
 
 import type { Light, LightCapability } from "../targets.js";
 
-// What a mood does with a room's lights, ported from v1
-// (target-mood-commands.ts in the core, mood-settings.ts and mood-active.ts
-// in web-nuxt, Pragmata v1-final). Moods' actions and its pages share it,
-// so it imports nothing at run time.
+// What a mood does with a room's lights. Moods' actions and its pages
+// share it, so it imports nothing at run time.
 
 /**
  * What a mood sets one light to: off, or on with the level and colour it
@@ -50,9 +48,9 @@ export const keyOf = (light: Light) =>
   lightKey(light.device.id, light.capability.id);
 
 /**
- * A light as it is now, as a mood keeps it (v1's moodActionStateFromEntity):
- * a command still on its way counts, and only what the light can do is
- * kept, its colour or its colour temperature, whichever it shows.
+ * A light as it is now, as a mood keeps it: a command still on its way
+ * counts, and only what the light can do is kept, its colour or its colour
+ * temperature, whichever it shows.
  */
 export function captureLight(capability: LightCapability): MoodLightState {
   const { state, features } = capability;
@@ -89,12 +87,11 @@ export function moodCommand(state: PreviewLightState): LightCommand {
 }
 
 /**
- * What running a mood in its room sends (v1's lightMoodCommandsForMood, the
- * target-portion rule): each of its lights in the room takes the mood's
- * state, and every other light in the room that is on turns off. Its
- * lights elsewhere are left alone, and a mood with none of its lights in
- * the room does nothing rather than turn the room off. A preview sends
- * the same.
+ * What running a mood in its room sends, the target-portion rule: each of
+ * its lights in the room takes the mood's state, and every other light in
+ * the room that is on turns off. Its lights elsewhere are left alone, and
+ * a mood with none of its lights in the room does nothing rather than turn
+ * the room off. A preview sends the same.
  */
 export function moodCommands(
   lights: readonly PreviewLight[],
@@ -114,9 +111,8 @@ export function moodCommands(
   return [...own, ...off];
 }
 
-// How far a light may be from what a mood set and still show it (v1's
-// tolerances): a level, hue or saturation within 2, a colour temperature
-// within 15 mireds.
+// How far a light may be from what a mood set and still show it: a level,
+// hue or saturation within 2, a colour temperature within 15 mireds.
 const tolerance = 2;
 const temperatureTolerance = 15;
 
@@ -135,7 +131,7 @@ function nearHue(actual: number | undefined, wanted: number | undefined) {
   return Math.min(apart, 360 - apart) <= tolerance;
 }
 
-/** Whether a light shows what a mood sets it to (v1's lightStateMatchesExpectation). */
+/** Whether a light shows what a mood sets it to. */
 export function showsState(state: LightState | null, wanted: MoodLightState) {
   if (!state || state.on !== wanted.on) return false;
   if (!wanted.on) return true;
@@ -155,10 +151,9 @@ export function showsState(state: LightState | null, wanted: MoodLightState) {
 }
 
 /**
- * Whether a room's lights show a mood (v1's targetExpectationsMatch): each
- * of its lights in the room as it sets it, and every other light in the
- * room off. Like running it, a mood with none of its lights in the room
- * shows nowhere.
+ * Whether a room's lights show a mood: each of its lights in the room as
+ * it sets it, and every other light in the room off. Like running it, a
+ * mood with none of its lights in the room shows nowhere.
  */
 export function showsMood(
   lights: readonly MoodLight[],
@@ -177,8 +172,8 @@ export function showsMood(
 }
 
 /**
- * The mood a room's lights show now (v1's resolveTargetActiveMoodId): the
- * one that matches, or none when no mood or more than one does.
+ * The mood a room's lights show now: the one that matches, or none when no
+ * mood or more than one does.
  */
 export function activeMood(
   moods: readonly { id: string; lights: readonly MoodLight[] }[],

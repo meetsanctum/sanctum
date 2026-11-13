@@ -7,10 +7,10 @@ import {
   type NaturalLightView,
 } from "./use-natural-light";
 
-// The lights that take a colour temperature, from v1's lights picker: each
-// with where it stands and a switch to have it follow the curve, and Resume
-// for one a mood or a person paused. A refusal leaves the switch as it was
-// and says so on its row.
+// The lights that take a colour temperature: each with where it stands and
+// a switch to have it follow the curve, and Resume for one a mood or a
+// person paused. A refusal leaves the switch as it was and says so on its
+// row.
 
 const muted = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 

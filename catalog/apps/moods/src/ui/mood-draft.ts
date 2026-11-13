@@ -14,10 +14,9 @@ import {
 } from "../moods/light-states.js";
 import type { Light } from "../targets.js";
 
-// The mood editor's draft, ported from v1's mood-settings.ts and
-// mood-editor-dirty.ts (web-nuxt, Pragmata v1-final): each of the room's
-// lights on or off, with the level and colour it has when on, kept while
-// it is off so it comes back on as it was.
+// The mood editor's draft: each of the room's lights on or off, with the
+// level and colour it has when on, kept while it is off so it comes back
+// on as it was.
 
 export type Mood = ActionOutput<typeof listMoods>[number];
 
@@ -65,8 +64,8 @@ const currentLook = (light: Light) =>
 
 /**
  * The draft with every light the editor can set, each it does not have yet
- * as it starts (v1's buildTargetMoodActions): for a new mood as the light
- * is, for a saved one as the mood sets it, off when the mood leaves it out.
+ * as it starts: for a new mood as the light is, for a saved one as the
+ * mood sets it, off when the mood leaves it out.
  */
 export function fillDraft(
   draft: Draft,
@@ -111,7 +110,7 @@ export const moodState = (light: DraftLight): MoodLightState =>
 /**
  * The mood's lights from the draft: each light the editor sets, and what
  * the saved mood has for lights it cannot show, such as one offline or
- * moved to another room (v1's preserved hidden actions).
+ * moved to another room.
  */
 export function moodLightsOf(
   draft: Draft,
@@ -150,9 +149,8 @@ function earlierState(light: Light): PreviewLightState {
 }
 
 /**
- * What puts the lights back after a preview (v1's buildRestoreMoodActions):
- * each light as it was when the preview began, a light that turned up
- * later as it is now.
+ * What puts the lights back after a preview: each light as it was when the
+ * preview began, a light that turned up later as it is now.
  */
 export function restoreLights(
   lights: readonly Light[],
@@ -173,9 +171,8 @@ export function restoreLights(
   return [...restore.values()];
 }
 
-// A mood's lights in one form, whatever their order (v1's
-// normalizeLightMoodStates). A light off and one left out are the same:
-// running the mood turns both off.
+// A mood's lights in one form, whatever their order. A light off and one
+// left out are the same: running the mood turns both off.
 function signature(lights: readonly MoodLight[]) {
   return JSON.stringify(
     lights
@@ -196,7 +193,7 @@ function signature(lights: readonly MoodLight[]) {
   );
 }
 
-/** Whether saving the draft would change the saved mood (v1's mood-editor-dirty.ts). */
+/** Whether saving the draft would change the saved mood. */
 export function changes(
   mood: Mood | undefined,
   draft: { name: string; icon: MoodIcon; lights: readonly MoodLight[] },
@@ -209,7 +206,10 @@ export function changes(
   );
 }
 
-/** What a tile says of a draft light (v1's moodLightTileState): its level, and its colour or colour temperature. */
+/**
+ * What a tile says of a draft light: its level, and its colour or colour
+ * temperature.
+ */
 export function draftStatus(state: MoodLightState) {
   if (!state.on) return "Off";
   const parts = [

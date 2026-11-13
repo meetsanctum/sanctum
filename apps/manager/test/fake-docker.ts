@@ -11,9 +11,9 @@ import type {
   Labels,
 } from "../src/docker.js";
 
-// An in-memory Docker, grown from v1's FakeDockerClient: containers by id and
-// name, images that tags move between on pull, networks and volumes, and a
-// health endpoint per image so update tests can stage broken releases.
+// An in-memory Docker: containers by id and name, images that tags move
+// between on pull, networks and volumes, and a health endpoint per image so
+// update tests can stage broken releases.
 
 export type ImageBehaviour = "healthy" | "unhealthy" | "crash";
 

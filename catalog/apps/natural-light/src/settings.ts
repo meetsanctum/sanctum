@@ -4,11 +4,10 @@ import { curveShapes, type CurveSettings } from "./curve.js";
 
 // Natural light's settings: the curve, which Settings → Apps → Natural light
 // shows and the app's page opens.
-// They use v1's natural lighting preferences and defaults, extending its
-// colour temperature choices from 5,700 K up to 6,500 K: 2,000 to 6,500 K
-// in steps of 100, brightness from 20 to 100 % in steps of 5, and
-// sunrise and sunset offsets of up to two hours in steps of 15 minutes. A
-// light shows a colour temperature within its own range.
+// Colour temperature runs from 2,000 to 6,500 K in steps of 100, brightness
+// from 20 to 100 % in steps of 5, and sunrise and sunset offsets up to two
+// hours in steps of 15 minutes. A light shows a colour temperature within
+// its own range.
 
 const kelvin = z.number().int().min(2000).max(6500).multipleOf(100);
 const brightness = z.number().int().min(20).max(100).multipleOf(5);
@@ -52,7 +51,7 @@ export const naturalLightSettings = z.object({
   }),
 }) satisfies z.ZodType<CurveSettings>;
 
-/** v1's curve, until the household changes it. */
+/** The default curve, until the household changes it. */
 export const defaultCurve: CurveSettings = naturalLightSettings.parse({});
 
 /** The curve the household chose, from the app's settings (ctx.settings.get()). */

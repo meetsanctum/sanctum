@@ -22,8 +22,7 @@ import {
 import { floorTime, historyTimes as times } from "./time.js";
 
 // History's roll-ups in the database: each period's made once it has ended,
-// from the changes recorded, and what is past keeping taken out, ported from
-// v1's recorder.
+// from the changes recorded, and what is past keeping taken out.
 
 const periodMs: Record<HistoryPeriod, number> = {
   "5m": times.fiveMinutesMs,
@@ -196,7 +195,7 @@ export function createRollups(db: CoreDatabase) {
   /**
    * Makes the roll-ups of every period that has ended since the last were
    * made, as far back as the changes they come from are kept: after the
-   * core was stopped too, which v1 skipped.
+   * core was stopped too.
    */
   function compile(at: number) {
     const end = floorTime(at, times.fiveMinutesMs);

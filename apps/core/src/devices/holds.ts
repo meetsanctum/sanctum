@@ -54,7 +54,7 @@ type Dim = {
   isEnded: boolean;
 };
 
-/** How long a dim lasts at most when its release is lost (v1's 6 s). */
+/** How long a dim lasts at most when its release is lost. */
 export const holdLimitMs = 6_000;
 /** From the lowest to full in four seconds, as Hue's own dimmer goes. */
 export const holdPercentPerSecond = 25;

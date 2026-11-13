@@ -1,10 +1,9 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 
-// Temperatures and other readings as the household reads them (v1's
-// temperature.ts, and how its sensors, history and weather used it).
-// Standard types and sensors keep temperatures in Celsius; a page converts
-// them as it draws, into the unit the home shows, which the household sets
-// in Settings → Household and the shell hands every page
+// Temperatures and other readings as the household reads them. Standard
+// types and sensors keep temperatures in Celsius; a page converts them as it
+// draws, into the unit the home shows, which the household sets in
+// Settings → Household and the shell hands every page
 // (temperature-unit.tsx). A reading that carries its own unit says it, such
 // as "°C", "%" or "hPa".
 

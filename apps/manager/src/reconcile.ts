@@ -1,7 +1,7 @@
 import { errorMessage } from "./docker.js";
 
-// Ported from v1's manager: one reconcile at a time, run at start and then on
-// an interval, so the host converges after crashes, reboots and hand edits.
+// One reconcile at a time, run at start and then on an interval, so the host
+// converges after crashes, reboots and hand edits.
 
 export type Reconciler = {
   reconcile: () => Promise<void>;

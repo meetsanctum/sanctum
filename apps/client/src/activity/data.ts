@@ -12,7 +12,7 @@ import { midnight } from "../device-history-data";
 // What the activity lists show: pages of entries from GET /api/activity,
 // newest first, and each entry the live socket brings that belongs, in its
 // place, or in place of the one it changes. Live entries fill up to 200
-// rows, as v1's device logs did; loading older pages expands that window.
+// rows; loading older pages expands that window.
 
 export type ActivityFilter = { device?: string; kind?: ActivityKind };
 
@@ -21,8 +21,7 @@ const pageSize = 50;
 
 /**
  * An entry the live socket brought, in its place in a newest-first list,
- * or in place of the one it changes, keeping `limit` at most. Ported from
- * v1's applyDeviceActivityEvent (device-admin.ts).
+ * or in place of the one it changes, keeping `limit` at most.
  */
 export function applyActivity(
   current: readonly ActivityInfo[],

@@ -12,9 +12,7 @@ import {
 } from "../src/presses.js";
 import { actionExpose } from "./pretend-bridge.js";
 
-// A remote's presses, from v1's isReleaseLikeButtonAction (button-actions.ts)
-// and the release its core-zigbee-events.test.ts and button-actions.test.ts
-// ignore, which here ends a hold.
+// A remote's presses, and the release that ends a hold.
 
 describe("release-like actions", () => {
   it("end a press or a hold, by a word of their own", () => {
@@ -60,7 +58,7 @@ describe("a remote's presses", () => {
     const button = { property: "action", features: { actions: ["single"] } };
 
     expect(pressOf(button, { action: "single", battery: 100 })).toBe("single");
-    // v1 ignored a hold's release; this one is not declared either.
+    // A hold's release is no press, and this one is not declared either.
     expect(pressOf(button, { action: "release" })).toBeNull();
     expect(pressOf(button, { action: "double" })).toBeNull();
     // A battery report without a press.

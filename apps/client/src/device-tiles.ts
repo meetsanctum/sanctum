@@ -25,10 +25,10 @@ import { motionText } from "./motion";
 // shows what the core shows: a command waiting for the device, a colour held
 // for a light that is off, a device that did not answer, and one that is
 // offline or not paired any more. A remote's shows its latest press for a
-// few seconds, as v1's did; a sensor's its readings, in the unit the home
-// shows temperatures in; a motion sensor's whether it sees motion, or for
-// how long it has not. A remote or sensor on a battery gone quiet says "Not
-// heard from" (maintenance.ts), not what it said days ago.
+// few seconds; a sensor's its readings, in the unit the home shows
+// temperatures in; a motion sensor's whether it sees motion, or for how long
+// it has not. A remote or sensor on a battery gone quiet says "Not heard
+// from" (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
 

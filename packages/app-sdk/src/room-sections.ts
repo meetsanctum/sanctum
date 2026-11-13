@@ -10,8 +10,7 @@ import { permissionIds } from "./permissions.js";
 // native whoever brings it.
 
 /**
- * The icons a section's tiles may have, as Lucide names them: v1's mood
- * icons, with Lucide's own names for v1's home, work and gamepad. The shell
+ * The icons a section's tiles may have, as Lucide names them. The shell
  * draws each (ui-sdk's tileIconOf), so a tile shows only these.
  */
 export const tileIcons = [

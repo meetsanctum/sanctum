@@ -3,12 +3,11 @@ import { describe, expect, it } from "vitest";
 import { capabilityMappings } from "../src/exposes.js";
 import { actionExpose, lightExpose, switchExpose } from "./pretend-bridge.js";
 
-// Exposes onto capabilities, from v1's "normalizes Zigbee2MQTT devices"
-// (core-zigbee-pairing.test.ts) and entityMappings.
+// Exposes onto capabilities.
 
 describe("a device's exposes", () => {
   it("make a light with what it can do", () => {
-    // v1's desk lamp.
+    // A desk lamp.
     const [lamp] = capabilityMappings([
       {
         type: "light",
@@ -73,7 +72,7 @@ describe("a device's exposes", () => {
   });
 
   it("make a button of a remote's actions, leaving out release-like ones", () => {
-    // v1's office button, an Aqara wireless mini switch (WXKG11LM).
+    // An office button, an Aqara wireless mini switch (WXKG11LM).
     expect(
       capabilityMappings([
         actionExpose([
@@ -99,7 +98,7 @@ describe("a device's exposes", () => {
         readable: [],
       },
     ]);
-    // v1's Hue dimmer switch gen 1 (RWL021).
+    // A Hue dimmer switch gen 1 (RWL021).
     const [dimmer] = capabilityMappings([
       actionExpose(
         ["on", "up", "down", "off"].flatMap((button) => [
@@ -224,7 +223,7 @@ describe("a device's exposes", () => {
     };
 
     expect(range(142.6, 555.2)).toEqual({ min: 143, max: 555 });
-    // v1's range when the light gives none, or one the kind cannot take.
+    // The default range when the light gives none, or one the kind cannot take.
     expect(range()).toEqual({ min: 153, max: 500 });
     expect(range(0, 65535)).toEqual({ min: 153, max: 500 });
     expect(range(500, 153)).toEqual({ min: 153, max: 500 });

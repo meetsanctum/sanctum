@@ -33,15 +33,15 @@ import type { Runs } from "./runs.js";
 import type { RunTrigger, workflows } from "./schema.js";
 import { withinTimes } from "./time.js";
 
-// Runs workflows, ported from v1's automations.ts: run modes, dedupe and the
-// run itself, which reaches the steps the fired triggers lead to through
-// conditions that pass. Each condition and step calls its piece as the
-// workflow, so the gate applies the tier of the action or device behind it.
-// One an app keeps acts with the app's grants and sees devices as the app
-// does (kept-grants.ts): it is skipped while suspended, and a node the
-// grants no longer cover fails. A run that reaches a step goes to the
-// activity log, with what started it and, as its cause, the press or app's
-// action it ran within; what its steps do has the run as theirs.
+// Runs workflows: run modes, dedupe and the run itself, which reaches the
+// steps the fired triggers lead to through conditions that pass. Each
+// condition and step calls its piece as the workflow, so the gate applies
+// the tier of the action or device behind it. One an app keeps acts with the
+// app's grants and sees devices as the app does (kept-grants.ts): it is
+// skipped while suspended, and a node the grants no longer cover fails. A
+// run that reaches a step goes to the activity log, with what started it
+// and, as its cause, the press or app's action it ran within; what its steps
+// do has the run as theirs.
 
 export type WorkflowRow = typeof workflows.$inferSelect;
 
@@ -160,7 +160,7 @@ export function createEngine(options: {
     return set;
   }
 
-  // Whether this firing has run the workflow before (v1's dedupe).
+  // Whether this firing has run the workflow before.
   function duplicate(workflowId: string, key: string | null) {
     if (!key) {
       return false;
@@ -420,7 +420,7 @@ export function createEngine(options: {
 
   // One run: each step the fired triggers reach runs when a path of
   // conditions to it passes. A condition is checked once at most; steps run
-  // one after another, and one that fails does not stop the others (v1).
+  // one after another, and one that fails does not stop the others.
   async function execute(
     workflow: WorkflowRow,
     firing: Firing,
@@ -551,8 +551,8 @@ export function createEngine(options: {
   return {
     /**
      * Starts, queues or skips a run of a workflow for a firing, by its run
-     * mode (v1's enqueueOrStartRun). It records the run before it returns
-     * and runs it after; a firing it has seen before does nothing.
+     * mode. It records the run before it returns and runs it after; a
+     * firing it has seen before does nothing.
      */
     fire(workflow: WorkflowRow, fired: Firing): string | undefined {
       if (duplicate(workflow.id, fired.key)) {

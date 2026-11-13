@@ -172,7 +172,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
       });
     },
 
-    // Hands a driver an admin's firmware check, update or stop for one of
+    // Hands a driver someone's firmware check, update or stop for one of
     // its devices. A driver that cannot is unavailable for it.
     firmware(
       driverId: string,

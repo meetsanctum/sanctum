@@ -18,10 +18,8 @@ import {
 } from "./values.js";
 
 // A device's messages onto each capability's state, and the core's commands
-// and moves onto what Zigbee2MQTT takes on <device>/set. Ported from v1's
-// stateFromPayload and commandPayload (zigbee2mqtt-model.ts, Pragmata
-// v1-final). v1 filled what a message left out from the state it kept; a
-// driver reports only what the device said, and the core keeps the rest.
+// and moves onto what Zigbee2MQTT takes on <device>/set. A driver reports
+// only what the device said, and the core keeps the rest.
 
 const mireds = { min: 50, max: 1000 };
 

@@ -11,12 +11,10 @@ import {
 } from "./devices-support.js";
 import { post, sharedClient, type TestCore } from "./support.js";
 
-// Firmware updates and Check connection: any client checks for an update,
-// starts it and stops it through the device's driver, which says how it goes;
-// Check connection asks a device how it is and waits for its report. Rewritten
-// from v1's OTA and probe tests (core-zigbee-ota.test.ts and
-// core-zigbee-events.test.ts, Pragmata v1-final) against the Drivers contract,
-// with the lamps driver's pretend radio.
+// Firmware updates and Check connection, with the lamps driver's pretend
+// radio: any client checks for an update, starts it and stops it through the
+// device's driver, which says how it goes; Check connection asks a device how
+// it is and waits for its report.
 
 function entries(core: TestCore, action: string) {
   return core.activity.recent().filter((entry) => entry.action === action);

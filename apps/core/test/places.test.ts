@@ -15,8 +15,7 @@ import {
   type TestCore,
 } from "./support.js";
 
-// Places: admins arrange the home from their own client; anyone signed in
-// reads it.
+// Places: every client arranges the home and reads it, shared ones too.
 
 async function home() {
   const core = await testCore();
@@ -42,7 +41,7 @@ describe("places", () => {
     });
   });
 
-  it("are arranged by admins: floors, rooms on them, and zones of rooms", async () => {
+  it("are arranged from a client: floors, rooms on them, and zones of rooms", async () => {
     const { core, maya, add } = await home();
 
     await post(

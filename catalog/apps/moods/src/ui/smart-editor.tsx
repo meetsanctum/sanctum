@@ -16,11 +16,11 @@ import {
 } from "./mood-editing";
 import { useMoodsApp } from "./state";
 
-// A smart mood's editor (v1's smart mood page in MoodEditorOverlay): its
-// name, icon and colours are the catalog's, so it sets a brightness for
-// the room's lights and which of them it leaves off. The tiles show what
-// each light will be, its colour by name in turn; tapping one leaves it
-// off or brings it back. It previews like the custom editor.
+// A smart mood's editor: its name, icon and colours are the catalog's, so
+// it sets a brightness for the room's lights and which of them it leaves
+// off. The tiles show what each light will be, its colour by name in turn;
+// tapping one leaves it off or brings it back. It previews like the custom
+// editor.
 
 // Whether the settings differ from the saved mood's.
 function changed(mood: Mood | undefined, settings: SmartSettings) {

@@ -4,8 +4,7 @@ import { describe, expect, it } from "vitest";
 import { chosenLights, lightGroups, lightsOf } from "../../src/ui/press-lights";
 import { device, lightCapability } from "../moods/home";
 
-// The lights a press can be for, from v1's button binding light picker
-// tests (targetKey and groupLightOptions, button-actions.test.ts).
+// The lights a press can be for.
 
 const places: Places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },

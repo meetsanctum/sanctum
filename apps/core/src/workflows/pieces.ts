@@ -412,10 +412,9 @@ export function createPieces(options: {
     },
 
     /**
-     * What keeps a graph from being saved or from running (v1's
-     * validateAutomationGraph), and what it may not do on its own: a room,
-     * zone, device or entity it names that is gone among them. Saving also checks
-     * the commands its device steps send.
+     * What keeps a graph from being saved or from running, and what it may not
+     * do on its own: a room, zone, device or entity it names that is gone among
+     * them. Saving also checks the commands its device steps send.
      */
     check(graph: WorkflowGraph, options_: { saving?: boolean } = {}): Check {
       const saving = options_.saving ?? false;

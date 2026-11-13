@@ -16,15 +16,13 @@ import { mapSensor, type SensorMapping } from "./sensors.js";
 import { access, type ZigbeeExpose } from "./types.js";
 import { numericValue } from "./values.js";
 
-// A device's exposes onto the core's capability kinds, ported from v1's
-// entityMappings and normalizedEntityCapabilities (zigbee2mqtt-model.ts,
-// Pragmata v1-final). Lights, switches, a remote's buttons, a climate
-// sensor's temperature and humidity and a motion sensor's light level
-// (sensors.ts) and its occupancy with its settings (occupancy.ts): an expose
-// of any other kind is left out rather than guessed at, and so is a light or
-// switch that cannot be switched and an action expose with no presses. v1
-// made a switch of a device with nothing it recognised; this driver brings
-// no such device.
+// A device's exposes onto the core's capability kinds. Lights, switches, a
+// remote's buttons, a climate sensor's temperature and humidity and a motion
+// sensor's light level (sensors.ts) and its occupancy with its settings
+// (occupancy.ts): an expose of any other kind is left out rather than
+// guessed at, and so is a light or switch that cannot be switched and an
+// action expose with no presses. The driver brings no device with none of
+// these.
 
 /** A binary feature, such as a light's state, and the values it takes. */
 type Binary = { property: string; on: unknown; off: unknown };
@@ -71,7 +69,7 @@ export type CapabilityMapping =
   | SensorMapping
   | OccupancyMapping;
 
-// v1's colour temperature range when a light gives none.
+// The colour temperature range when a light gives none.
 const defaultColorTemperature = { min: 153, max: 500 };
 // The range the light kind takes, in mireds.
 const mireds = { min: 50, max: 1000 };

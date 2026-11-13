@@ -33,17 +33,16 @@ import { tileKey, tilesOf } from "./device-tiles";
 // as long again once it has sent it again.
 const pendingWithin = 10_000;
 const confirmWithin = 90_000;
-// How long a remote's tile shows a press, as v1's did, in ms.
+// How long a remote's tile shows a press, in ms.
 export const pressShownMs = 5_000;
 
 // A command from here, followed until its device confirms it or it fails.
 type Sent = { at: number; pending: boolean; failed: boolean };
 
 // The on or off and level a command from here asks of a tile, which the tile
-// shows as pending from the moment it goes out, as v1's did, rather than
-// once the core has taken it. Only what the core is sure to ask of the
-// device shows: a colour, or a level held for a light that is off, waits for
-// its answer.
+// shows as pending from the moment it goes out, rather than once the core
+// has taken it. Only what the core is sure to ask of the device shows: a
+// colour, or a level held for a light that is off, waits for its answer.
 type Asked = { on: boolean; brightness?: number };
 
 function askedOf(command: LightCommand): Asked | undefined {

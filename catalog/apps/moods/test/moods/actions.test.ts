@@ -35,9 +35,7 @@ import { smartDefinition } from "../../src/moods/smart.js";
 import { device, lightCapability, places } from "./home.js";
 
 // Moods' actions against its own database, migrated as the core
-// migrates it, and a core that answers what each test gives it. The order
-// and deletion tests are ported from v1's mood-target-orders.test.ts, and
-// the smart ones from moods-db.test.ts (Pragmata v1-final).
+// migrates it, and a core that answers what each test gives it.
 
 const migrationsFolder = fileURLToPath(
   new URL("../../migrations", import.meta.url),

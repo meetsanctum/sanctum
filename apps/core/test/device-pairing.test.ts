@@ -12,9 +12,7 @@ import { get, post, sharedClient, type TestCore } from "./support.js";
 
 // Adding devices, with the lamps driver's pretend radio: the core lets devices
 // join every driver that can pair, and follows each device that joins until it
-// is ready. Rewritten from v1's Zigbee pairing sessions
-// (core-zigbee-pairing.test.ts, Pragmata v1-final) against the Drivers
-// contract.
+// is ready.
 
 const pairing = async (core: TestCore, token: string) =>
   (await get(core, "/api/devices/pairing", { token })).json();
@@ -29,7 +27,7 @@ describe("adding devices", () => {
 
     const opened = await post(core, "/api/devices/pairing/open", {}, maya);
     expect(opened.statusCode).toBe(200);
-    // Four minutes unless asked otherwise, as v1 did, and since now.
+    // Four minutes unless asked otherwise, and since now.
     expect(opened.json()).toEqual({
       until: "2026-10-26T12:04:00.000Z",
       since: "2026-10-26T12:00:00.000Z",

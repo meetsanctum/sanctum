@@ -1,6 +1,6 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
 
-// The home Settings → Devices' tests see: a light, v1's office button and
+// The home Settings → Devices' tests see: a light, an office button and
 // the Zigbee app, and Maya on her MacBook.
 
 export const office = { id: "office", name: "Office", floorId: null };
@@ -48,7 +48,7 @@ export function light(
     ...extra,
   } satisfies DeviceInfo;
 }
-// v1's office button.
+// The office button.
 export const remote = {
   ...light("remote", "Office button", { roomId: "office" }),
   driverName: "Wireless mini switch",

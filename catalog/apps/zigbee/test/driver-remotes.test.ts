@@ -55,7 +55,7 @@ const dimmable = (key: string, name: string) =>
   zigbeeDevice(key, name, [lightExpose()]);
 
 describe("a remote", () => {
-  // v1's office button: battery-powered, so it sleeps between presses.
+  // An office button: battery-powered, so it sleeps between presses.
   const miniSwitch = (key: string, name: string) =>
     zigbeeDevice(
       key,

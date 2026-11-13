@@ -136,9 +136,9 @@ const clampLevel = (level: number) =>
   Math.max(0, Math.min(100, Math.round(level)));
 
 /**
- * A light's brightness as a tall slider filled in its colour, as v1 drew it.
- * A drag goes out once it ends, a tap where it lands; keys step it at most
- * every 300 ms. 0 turns the light off.
+ * A light's brightness as a tall slider filled in its colour. A drag goes
+ * out once it ends, a tap where it lands; keys step it at most every 300 ms.
+ * 0 turns the light off.
  */
 export function BrightnessSlider(props: {
   name: string;

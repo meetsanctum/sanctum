@@ -443,7 +443,7 @@ export function createWorkflows(
     },
 
     /**
-     * Runs a workflow by hand, even while it is off (v1): from its manual
+     * Runs a workflow by hand, even while it is off: from its manual
      * triggers, or from all its triggers when it has none. A run from a
      * shared client has no person behind it, so it keeps the client's name.
      */

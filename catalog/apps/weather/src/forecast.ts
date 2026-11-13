@@ -1,10 +1,10 @@
 import type { AppContext, Forecast, HomeLocation } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-// The forecast for the home from Open-Meteo, ported from v1's weather.ts:
-// the weather now and ten days, in Celsius and the home's time zone. Weather
-// reaches Open-Meteo through the core (ctx.net.fetch), at the one host it
-// holds net:api.open-meteo.com for.
+// The forecast for the home from Open-Meteo: the weather now and ten days,
+// in Celsius and the home's time zone. Weather reaches Open-Meteo through
+// the core (ctx.net.fetch), at the one host it holds net:api.open-meteo.com
+// for.
 
 export const openMeteoHost = "api.open-meteo.com";
 

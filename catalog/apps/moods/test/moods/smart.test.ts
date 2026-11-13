@@ -12,10 +12,6 @@ import {
 import type { Mood } from "../../src/moods/store.js";
 import { light } from "./home.js";
 
-// Smart moods, ported from v1's tests (room-schedules.test.ts and
-// moods-db.test.ts in the core, mood-actions.test.ts in web-nuxt,
-// Pragmata v1-final).
-
 const colour = { color: true };
 
 const testSmart: SmartDefinition = {
@@ -146,7 +142,7 @@ describe("smart moods", () => {
     ).toEqual([]);
   });
 
-  it("has a valid catalog, as v1's schema checked it", () => {
+  it("has a valid catalog", () => {
     const ids = smartDefinitions.map((definition) => definition.id);
     expect(new Set(ids).size).toBe(ids.length);
     const groups = smartCatalog.map((group) => group.id);
@@ -158,7 +154,7 @@ describe("smart moods", () => {
       expect(definition.colours.length).toBeGreaterThanOrEqual(1);
       expect(definition.colours.length).toBeLessThanOrEqual(5);
     }
-    // v1's catalog: Colour, Calm and Energy.
+    // The catalog: Colour, Calm and Energy.
     expect(ids).toEqual([
       "aurora",
       "crimson-pulse",

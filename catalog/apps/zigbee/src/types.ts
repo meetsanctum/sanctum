@@ -1,6 +1,5 @@
-// What Zigbee2MQTT publishes, as far as the driver reads it. Ported from v1's
-// zigbee2mqtt-types.ts (Pragmata, v1-final). Everything arrives over MQTT, so
-// every field is checked before use.
+// What Zigbee2MQTT publishes, as far as the driver reads it. Everything
+// arrives over MQTT, so every field is checked before use.
 
 /** One of a device's exposes, as Zigbee2MQTT describes what it can do. */
 export type ZigbeeExpose = {

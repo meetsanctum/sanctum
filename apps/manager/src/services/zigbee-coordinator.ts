@@ -9,11 +9,10 @@ import {
   type ZigbeeSerialSettings,
 } from "./zigbee-coordinator-profiles.js";
 
-// Ported from v1's docker-zigbee-coordinator: finds the USB serial devices
-// that may be a Zigbee coordinator and picks the one Zigbee2MQTT uses. The
-// manager sees the host's /dev read-only at `hostDevDir`
-// (deploy/compose.yml); the paths it returns are the host's, as Docker needs
-// them. macOS paths and the serial proxy are gone: development runs on a Pi.
+// Finds the USB serial devices that may be a Zigbee coordinator and picks
+// the one Zigbee2MQTT uses. The manager sees the host's /dev read-only at
+// `hostDevDir` (deploy/compose.yml); the paths it returns are the host's, as
+// Docker needs them.
 
 // The coordinator Zigbee2MQTT uses, as chosen by a person or picked when it
 // was the only one plugged in.

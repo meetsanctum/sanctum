@@ -11,14 +11,12 @@ import { access, type ZigbeeExpose } from "./types.js";
 import { numericValue, powerValue, stringValue } from "./values.js";
 
 // A motion sensor's occupancy and its settings, as Zigbee2MQTT publishes
-// them. v1 made a generic binary sensor of occupancy (zigbee2mqtt-model.ts,
-// Pragmata v1-final) and had no settings; here occupancy is its own kind,
-// and the settings a sensor has are the kind's: its sensitivity, how long it
-// waits after the last motion before it says none, and whether its light
-// blinks on motion, each the device's own expose by its exact property.
-// Aqara's motion sensors only ever say motion: Zigbee2MQTT says no motion
-// itself, after its occupancy_timeout device option, so that option is how
-// long they wait.
+// them. Occupancy is its own kind, and the settings a sensor has are the
+// kind's: its sensitivity, how long it waits after the last motion before it
+// says none, and whether its light blinks on motion, each the device's own
+// expose by its exact property. Aqara's motion sensors only ever say motion:
+// Zigbee2MQTT says no motion itself, after its occupancy_timeout device
+// option, so that option is how long they wait.
 
 type Binary = { property: string; on: unknown; off: unknown };
 

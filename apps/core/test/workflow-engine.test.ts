@@ -14,9 +14,9 @@ import {
   trigger,
 } from "./workflows-support.js";
 
-// Running workflows: v1's engine semantics (test/automation-engine.test.ts,
-// Pragmata v1-final), app events and device changes as triggers, steps as the
-// workflow, run modes, loops, history and workflows whose pieces are missing.
+// Running workflows: the steps a run reaches, app events and device changes
+// as triggers, steps as the workflow, run modes, loops, history and workflows
+// whose pieces are missing.
 
 beforeEach(() => sample.reset());
 
@@ -28,8 +28,7 @@ async function home() {
 describe("a run", () => {
   it("runs only the steps whose condition paths pass", async () => {
     const { core, token, lamp } = await home();
-    // The lamp is off, so the condition fails and only mood-b runs (v1's
-    // "runs only action branches with passing condition paths").
+    // The lamp is off, so the condition fails and only mood-b runs.
     const { id } = await addWorkflow(core, token, {
       runMode: "parallel",
       graph: {

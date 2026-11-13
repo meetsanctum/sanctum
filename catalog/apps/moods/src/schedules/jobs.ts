@@ -16,15 +16,13 @@ import { publishTurnOn } from "./turn-on.js";
 import { day, formatMinute } from "./times.js";
 
 // A room's schedule runs as Moods' jobs: a daily one at each start and end
-// of its scheduled moods, in the home's time, as v1 ran it from a system
-// automation's time triggers (room-schedule-runtime.ts, Pragmata v1-final).
-// At a start the mood comes on if a light in the room is on, as Moods, so
-// natural light pauses for its lights as for any mood. At an end with none
-// following, Moods lets go of the lights that still show it: it switches
-// them on again with no look, which tells whoever follows a light that no
-// one holds its look any more, so natural light takes it back, as v1's did
-// once the schedule moved on. A light someone changed meanwhile stays as
-// they set it. Each run publishes the room's lights.turnOn again
+// of its scheduled moods, in the home's time. At a start the mood comes on
+// if a light in the room is on, as Moods, so natural light pauses for its
+// lights as for any mood. At an end with none following, Moods lets go of
+// the lights that still show it: it switches them on again with no look,
+// which tells whoever follows a light that no one holds its look any more,
+// so natural light takes it back. A light someone changed meanwhile stays
+// as they set it. Each run publishes the room's lights.turnOn again
 // (turn-on.ts).
 
 const jobPrefix = "schedule:";
@@ -59,7 +57,7 @@ export const applySchedule = defineAction({
     };
     const mood = await readMood(db, (started ?? ended)?.moodId ?? "");
     if (mood && started) {
-      // v1 left a room that is off as it was.
+      // A room that is off stays as it is.
       if (inRoom.some((light) => on(light.capability.state))) {
         const { sent, failed } = await sendCommands(
           ctx,

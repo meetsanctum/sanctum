@@ -15,8 +15,7 @@ import { defaultCurve, naturalLightSettings } from "../src/settings.js";
 import { sunToday } from "../src/sun.js";
 import { zurich } from "./fake-core.js";
 
-// The curve and the sun it follows, ported from v1's
-// natural-lighting.test.ts (Pragmata, v1-final) and Weather's sun tests.
+// The curve and the sun it follows.
 
 const sun = {
   sunrise: new Date("2026-05-18T06:00:00.000Z"),
@@ -137,7 +136,7 @@ describe("the sun on the home's day", () => {
     expect(below.sunrise).toEqual(level.sunrise);
   });
 
-  it("is missing in a polar winter or summer, when v1 left lights alone", () => {
+  it("is missing in a polar winter or summer, when lights are left alone", () => {
     const tromso = {
       latitude: 69.6492,
       longitude: 18.9553,

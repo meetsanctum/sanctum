@@ -21,22 +21,21 @@ import { curveOf } from "./settings.js";
 import { sunToday, type HomeSun } from "./sun.js";
 import { targetKey, targetType, type TargetState } from "./target.js";
 
-// Lights following the curve: v1's natural-lighting.ts, rewritten on the
-// core's devices (Pragmata, v1-final). v1 changed a light's own turn-on
-// command and paused it from the core's command routes. An app cannot do
-// either, so here:
+// Lights following the curve, on the core's devices. An app can neither
+// change a light's own turn-on command nor pause it from the core's command
+// routes, so:
 //
 // - A light that is off holds the curve's look in the core, as an "off"
 //   that says what it comes back at, so switching it on brings it back at
 //   the curve, whoever switches it.
 // - Whether it is paused is read from who last set it: a light that is on,
 //   which a mood, a person or another app last set to a look of their own,
-//   is paused until it is switched off or on, as v1 paused it until it next
-//   turned on. Switching it off or on alone, or a look that is natural
-//   light's own (a mood preview putting the light back), pauses nothing.
+//   is paused until it is switched off or on. Switching it off or on alone,
+//   or a look that is natural light's own (a mood preview putting the light
+//   back), pauses nothing.
 // - Every check brings lights that follow it to the curve: one that is on
-//   every 5 minutes as the curve moves, one that is off every 15 (v1's
-//   intervals), and either at once when someone else switched it.
+//   every 5 minutes as the curve moves, one that is off every 15, and
+//   either at once when someone else switched it.
 
 export type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 export type Light = { device: DeviceInfo; capability: LightCapability };
@@ -119,7 +118,7 @@ export function lookFor(
   return look;
 }
 
-// v1's isNaturalLightingPauseCommand: a brightness, a colour or a colour
+// Asks for a look, which pauses: a brightness, a colour or a colour
 // temperature, not on or off alone.
 const asksLook = (asked: Partial<LightState>) =>
   (asked.brightness ?? 0) > 0 ||

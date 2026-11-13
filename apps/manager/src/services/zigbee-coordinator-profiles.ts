@@ -1,6 +1,6 @@
-// Ported from v1's zigbee-coordinator-profiles: what a coordinator's path
-// says about its serial settings. Only a profile sets a baud rate or flow
-// control; an adapter guessed from the path keeps zigbee-herdsman's defaults.
+// What a coordinator's path says about its serial settings. Only a profile
+// sets a baud rate or flow control; an adapter guessed from the path keeps
+// zigbee-herdsman's defaults.
 
 export const zigbeeAdapters = [
   "deconz",
@@ -123,7 +123,7 @@ function matchZigbeeCoordinatorProfile(path: string): {
   if (/^\/dev\/serial\/by-id\/usb-Nabu_Casa_ZBT-2_/i.test(path)) {
     return { confidence: "exact", profileId: nabuCasaZbt2ProfileId };
   }
-  // v1 also matched any "nabu", which took a SkyConnect for a ZBT-2.
+  // Not any "nabu": a SkyConnect is one too, and is not a ZBT-2.
   if (/zbt[-_ ]?2/i.test(path)) {
     return { confidence: "likely", profileId: nabuCasaZbt2ProfileId };
   }

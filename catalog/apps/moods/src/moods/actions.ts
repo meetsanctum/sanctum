@@ -30,15 +30,15 @@ import {
   type Mood,
 } from "./store.js";
 
-// Moods (v1's custom moods, Pragmata v1-final): what a room's lights are
-// set to, captured from them, run in one go and shown as active while the
-// lights still show it. Smart moods, from Moods' catalog, have their own
-// actions in smart-actions.ts and run and list with these. Moods are the
-// household's: anyone, a shared client included, may run, make, change,
-// order and delete them. Deleting one is an everyday write, as deleting a
-// dashboard is, and its page asks first. Each change publishes its room's
-// moods again (entities.ts), and what turning the room on brings
-// (turn-on.ts); deleting one takes it off the room's schedule too.
+// Moods: what a room's lights are set to, captured from them, run in one
+// go and shown as active while the lights still show it. Smart moods, from
+// Moods' catalog, have their own actions in smart-actions.ts and run and
+// list with these. Moods are the household's: anyone, a shared client
+// included, may run, make, change, order and delete them. Deleting one is
+// an everyday write, as deleting a dashboard is, and its page asks first.
+// Each change publishes its room's moods again (entities.ts), and what
+// turning the room on brings (turn-on.ts); deleting one takes it off the
+// room's schedule too.
 
 export const roomId = z.string().min(1);
 const name = z.string().trim().min(1).max(120);
@@ -251,7 +251,7 @@ export const runMood = defineAction({
   },
 });
 
-// v1's draft run: the mood editor shows a mood on the lights before it is
+// A preview: the mood editor shows a mood on the lights before it is
 // saved, and puts back what the lights were on cancel, through the same
 // rule as running it. A smart mood's editor works out its lights as
 // lightsOf does and previews them here too. Putting a light back off, it

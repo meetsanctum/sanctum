@@ -10,8 +10,8 @@ import {
   type SunTimes,
 } from "../src/index.js";
 
-// The sun around the home's day, from NOAA's Solar Calculator, with v1's date
-// handling, and checked against published times.
+// The sun around the home's day, from NOAA's Solar Calculator, and checked
+// against published times.
 
 const london = {
   latitude: 51.5074,

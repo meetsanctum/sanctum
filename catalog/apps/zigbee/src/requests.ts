@@ -1,9 +1,8 @@
 import { isRecord, parseJson, stringValue } from "./values.js";
 
 // Requests to Zigbee2MQTT's bridge (`bridge/request/<name>`) and its answers
-// (`bridge/response/<name>`), matched by transaction. Ported from v1's
-// zigbee2mqtt-confirmations.ts (Pragmata v1-final), which allowed one
-// pending request at a time; a transaction tells each answer apart.
+// (`bridge/response/<name>`), matched by transaction. Several requests may
+// wait at once; a transaction tells each answer apart.
 
 export type BridgeResponse = {
   transaction: string | null;

@@ -5,9 +5,9 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-// Apps' settings: what admins chose for each app's preferences, by setting
-// name. The app's schema fills in its defaults whenever they are read, so
-// nothing here is a default.
+// Apps' settings: what the household chose for each app's preferences, by
+// setting name. The app's schema fills in its defaults whenever they are
+// read, so nothing here is a default.
 
 export const appSettings = sqliteTable("app_settings", {
   appId: text("app_id").primaryKey(),

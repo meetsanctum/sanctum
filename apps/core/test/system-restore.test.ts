@@ -92,7 +92,7 @@ describe("a restore from a backup", () => {
     expect(polled.json()).toEqual({ error: "expired" });
   });
 
-  it("keeps people, logins and the claim, so the admin signs in again", async () => {
+  it("keeps people, logins and the claim, so people sign in again", async () => {
     const { after } = await restart({ [restoreMarkerFile]: marker });
 
     const again = await signIn(after);
@@ -143,7 +143,7 @@ describe("a restore from a backup", () => {
     expect(after.places.list().home.name).toBe("Maya's home");
   });
 
-  it("tells admins in Settings, until one dismisses it", async () => {
+  it("tells people in Settings, until one dismisses it", async () => {
     const { after } = await restart({ [restoreMarkerFile]: marker });
     const again = await signIn(after);
     if (again.outcome !== "signed-in") throw new Error("not signed in");

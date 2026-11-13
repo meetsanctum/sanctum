@@ -2,9 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { bridgeResponse, createPendingRequests } from "../src/requests.js";
 
-// Zigbee2MQTT's answers to bridge requests, from v1's
-// zigbee2mqtt-confirmations.ts and its permit-join tests
-// (core-zigbee-pairing.test.ts).
+// Zigbee2MQTT's answers to bridge requests.
 
 const answer = (payload: unknown) =>
   bridgeResponse(Buffer.from(JSON.stringify(payload)));

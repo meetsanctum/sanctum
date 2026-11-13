@@ -26,8 +26,6 @@ import {
 // Remotes' presses: a driver hands each press to the core, which passes it on
 // once to live clients, to running apps that follow device.pressed and to
 // workflows' press triggers, unless someone is capturing the remote's presses.
-// The captures are ported from v1's runtime suppressions
-// (core-runtime-suppressions.test.ts).
 
 // An app that follows remotes' presses and keeps what reaches it; it pauses
 // without the permissions it needs.

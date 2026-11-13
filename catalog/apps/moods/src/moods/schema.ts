@@ -27,7 +27,7 @@ export const moods = sqliteTable(
   "moods",
   {
     id: text("id").primaryKey(),
-    // Every mood belongs to one room, as v1's did once zones were dropped.
+    // Every mood belongs to one room.
     roomId: text("room_id").notNull(),
     name: text("name").notNull(),
     icon: text("icon").notNull(),
@@ -43,7 +43,7 @@ export const moods = sqliteTable(
   },
   (table) => [
     index("moods_room").on(table.roomId, table.position),
-    // A definition once per room, as in v1.
+    // A definition once per room.
     uniqueIndex("moods_room_definition").on(table.roomId, table.definitionId),
   ],
 );
@@ -94,10 +94,9 @@ export const presses = sqliteTable(
   (table) => [primaryKey({ columns: [table.deviceId, table.action] })],
 );
 
-// A room's schedule (v1's room schedules): its moods, each from a start to
-// an end in minutes from midnight, every day. An end not after its start
-// runs past midnight; an end of 1440 is midnight. A mood's times go with
-// it.
+// A room's schedule: its moods, each from a start to an end in minutes
+// from midnight, every day. An end not after its start runs past midnight;
+// an end of 1440 is midnight. A mood's times go with it.
 export const scheduledMoods = sqliteTable(
   "scheduled_moods",
   {
@@ -113,9 +112,8 @@ export const scheduledMoods = sqliteTable(
 );
 
 // How a room, a zone or the home turns its lights on, where the household
-// chose (v1's target settings); a target with no row follows its
-// schedule. A target is a kind with an id, the home's being "home", as
-// v1 keyed them; only rooms are offered.
+// chose; a target with no row follows its schedule. A target is a kind
+// with an id, the home's being "home"; only rooms are offered.
 export const turnOnSettings = sqliteTable(
   "turn_on_settings",
   {
@@ -126,9 +124,9 @@ export const turnOnSettings = sqliteTable(
   (table) => [primaryKey({ columns: [table.targetKind, table.targetId] })],
 );
 
-// Each target's lights as they were when it last went dark (v1's light
-// snapshots, light-snapshots-db.ts): those that went off together with the
-// last one with the look they had, and the others off.
+// Each target's lights as they were when it last went dark: those that
+// went off together with the last one with the look they had, and the
+// others off.
 export const snapshotLights = sqliteTable(
   "snapshot_lights",
   {

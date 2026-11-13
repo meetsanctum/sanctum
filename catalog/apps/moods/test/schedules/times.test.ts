@@ -15,8 +15,7 @@ import {
   windowsOf,
 } from "../../src/schedules/times.js";
 
-// A schedule's times, ported from v1's room-schedules.test.ts (web-nuxt,
-// Pragmata v1-final), with a time that runs past midnight kept as one.
+// A schedule's times, with a time that runs past midnight kept as one.
 
 const night = { start: 22 * 60, end: 6 * 60 + 30 };
 const focus = { start: 9 * 60, end: 17 * 60 };
@@ -47,7 +46,7 @@ describe("a schedule's times", () => {
     expect(lengthOf({ start: 0, end: 1440 })).toBe(1440);
   });
 
-  it("holds from its start up to its end (v1's currentRoomScheduleConfigEntry)", () => {
+  it("holds from its start up to its end", () => {
     expect(holds(focus, 540)).toBe(true);
     expect(holds(focus, 1019)).toBe(true);
     expect(holds(focus, 1020)).toBe(false);
@@ -85,7 +84,7 @@ describe("a schedule's times", () => {
     expect(endsFrom([focus], 10 * 60)).toEqual([]);
   });
 
-  it("chooses the next free hour after the latest time (v1's nextAvailableScheduleWindow)", () => {
+  it("chooses the next free hour after the latest time", () => {
     expect(nextFreeWindow([])).toEqual({ start: 420, end: 480 });
     expect(nextFreeWindow([{ start: 420, end: 960 }])).toEqual({
       start: 960,

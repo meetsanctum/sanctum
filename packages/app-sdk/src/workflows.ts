@@ -269,8 +269,8 @@ export const pieceKinds = ["trigger", "condition", "step"] as const;
 export type PieceKind = (typeof pieceKinds)[number];
 
 /**
- * How a field of a device's or entity's state is compared: v1's operators,
- * and below and above for numbers, such as a temperature below 18 °C.
+ * How a field of a device's or entity's state is compared, with below and
+ * above for numbers, such as a temperature below 18 °C.
  */
 export const stateOperators = [
   "equals",
@@ -309,7 +309,7 @@ export const workflowNode = z.strictObject({
 });
 export type WorkflowNode = z.output<typeof workflowNode>;
 
-/** v1's graph: triggers lead through conditions to steps along edges. */
+/** The graph: triggers lead through conditions to steps along edges. */
 export const workflowGraph = z.strictObject({
   version: z.literal(1).default(1),
   nodes: z.array(workflowNode).max(100),

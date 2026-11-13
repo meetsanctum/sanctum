@@ -2,11 +2,8 @@ import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
 
 import type { PressPlace } from "../presses/presses.js";
 
-// The lights a press can be for, on its Which lights page: ported from v1's
-// light picker for button bindings (buildButtonLightOptions,
-// groupLightOptions and targetKey, button-actions.ts, Pragmata v1-final),
-// which offered the lights by room and kept a choice of them each once and
-// in a stable order.
+// The lights a press can be for, on its Which lights page: offered by
+// room, with a choice of them kept each once and in a stable order.
 
 export type ChosenLight = { device: string; capability: string };
 
@@ -24,7 +21,7 @@ export type LightGroup = { id: string; name: string; lights: LightOption[] };
 export const lightKey = (light: ChosenLight) =>
   `${light.device}/${light.capability}`;
 
-/** Chosen lights each once, in a stable order, as v1's targetKey kept them. */
+/** Chosen lights each once, in a stable order. */
 export function chosenLights(lights: Iterable<ChosenLight>): ChosenLight[] {
   const byKey = new Map<string, ChosenLight>();
   for (const light of lights) {
@@ -73,8 +70,7 @@ export function lightOptions(devices: readonly DeviceInfo[]): LightOption[] {
 
 /**
  * The lights by room, each by name: the remote's room first, then the
- * home's other rooms in order, then those in no room (v1's
- * groupLightOptions).
+ * home's other rooms in order, then those in no room.
  */
 export function lightGroups(
   devices: readonly DeviceInfo[],

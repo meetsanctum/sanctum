@@ -5,11 +5,9 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-// Natural light's own database: the lights that follow the curve, ported
-// from v1's natural_lighting_targets. v1 kept a row for every light it had
-// seen, with a flag and a pause state; here a light has a row while it
-// follows, and whether it is paused is mostly read from who last set it
-// (lights.ts).
+// Natural light's own database: the lights that follow the curve. A light
+// has a row while it follows, and whether it is paused is mostly read from
+// who last set it (lights.ts).
 
 /** What natural light sets a light to: a colour temperature in mireds, and a brightness where the light dims. */
 export type Look = { colorTemperature: number; brightness?: number };

@@ -11,9 +11,6 @@ import {
 } from "../../src/ui/mood-draft";
 import { light } from "../moods/home";
 
-// The mood editor's draft, ported from v1's mood-settings.test.ts
-// (web-nuxt, Pragmata v1-final).
-
 const lamp = light(
   "lamp",
   {

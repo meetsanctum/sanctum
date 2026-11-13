@@ -18,10 +18,9 @@ import { preview, previewOf } from "./preview.js";
 import { followedLights } from "./schema.js";
 import { targetState } from "./target.js";
 
-// Natural light's actions, from v1's natural-lighting routes and its
-// reactivation: which lights follow the curve, pausing and resuming one, and
-// today's curve. Lights are household things, so every client may use them
-// all, shared ones too.
+// Natural light's actions: which lights follow the curve, pausing and
+// resuming one, and today's curve. Lights are household things, so every
+// client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
 
@@ -81,7 +80,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
           });
         }
         const row = (await followedRow(ctx, input.device, input.capability))!;
-        // A light that begins following takes the curve at once (v1).
+        // A light that begins following takes the curve at once.
         try {
           return await followOne(
             ctx,
@@ -186,7 +185,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     },
   });
 
-  // v1's interval automations, as the app's job (index.ts).
+  // The app's job (index.ts).
   const check = defineAction({
     id: "naturalLight.check",
     title: "Bring lights to natural light",

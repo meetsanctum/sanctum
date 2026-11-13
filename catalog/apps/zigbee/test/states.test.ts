@@ -12,9 +12,7 @@ import {
 } from "../src/states.js";
 import { lightExpose, switchExpose } from "./pretend-bridge.js";
 
-// Messages onto states and commands onto <device>/set, from v1's
-// stateFromPayload and commandPayload (zigbee2mqtt-model.ts) and the states
-// in its core-zigbee-*.test.ts.
+// Messages onto states and commands onto <device>/set.
 
 function mapping(expose: Parameters<typeof capabilityMappings>[0][number]) {
   return capabilityMappings([expose])[0] as LightMapping | SwitchMapping;
@@ -29,7 +27,7 @@ const colourOnly = mapping(lightExpose({ color: "color_xy" }));
 
 describe("a light's state", () => {
   it("is read from a message, brightness in percent", () => {
-    // v1's desk lamp report.
+    // A desk lamp's report.
     expect(
       stateFromPayload(lamp, {
         state: "ON",
@@ -148,7 +146,7 @@ describe("a command", () => {
   });
 
   it("asks a light for what the core prepared, brightness from percent", () => {
-    // v1's set_light_state.
+    // A light's state.
     expect(
       commandPayload(lamp, {
         on: true,
@@ -157,7 +155,7 @@ describe("a command", () => {
         transitionSeconds: 2,
       }),
     ).toEqual({ state: "ON", brightness: 102, color_temp: 280, transition: 2 });
-    // v1's set_light_color.
+    // A light's colour.
     expect(commandPayload(lamp, { hue: 42, saturation: 60 })).toEqual({
       color: { hue: 42, saturation: 60 },
     });

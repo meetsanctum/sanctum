@@ -3,17 +3,16 @@ import type { MoodIcon } from "./icons.js";
 import { keyOf, lightKey, type MoodLight } from "./light-states.js";
 import type { Mood } from "./store.js";
 
-// Smart moods, ported from v1 (smart-moods.ts and smart-moods/catalog.json
-// in the core, Pragmata v1-final): a definition from Moods' catalog,
-// assigned to a room with a brightness and the lights it leaves off. It
-// works out each light's state from the room's lights as they are, so a
-// light added to the room joins in. Moods' actions and its pages share
-// it, so it imports nothing at run time.
+// Smart moods: a definition from Moods' catalog, assigned to a room with a
+// brightness and the lights it leaves off. It works out each light's state
+// from the room's lights as they are, so a light added to the room joins
+// in. Moods' actions and its pages share it, so it imports nothing at run
+// time.
 
 export type SmartColour = { hue: number; saturation: number };
 
 export type SmartDefinition = {
-  /** Permanent: an assignment names it. v1's ids, kept as they were. */
+  /** Permanent: an assignment names it. */
   id: string;
   name: string;
   icon: MoodIcon;
@@ -29,7 +28,7 @@ export type SmartGroup = {
   moods: readonly SmartDefinition[];
 };
 
-/** The catalog, v1's own, its names in sentence case. */
+/** The catalog, its names in sentence case. */
 export const smartCatalog: readonly SmartGroup[] = [
   {
     id: "color",
@@ -133,7 +132,7 @@ export const smartCatalog: readonly SmartGroup[] = [
 export const smartDefinitions: readonly SmartDefinition[] =
   smartCatalog.flatMap((group) => group.moods);
 
-/** A definition by its id (v1's smartMoodDefinition). */
+/** A definition by its id. */
 export const smartDefinition = (id: string) =>
   smartDefinitions.find((definition) => definition.id === id);
 
@@ -143,19 +142,17 @@ export type SmartSettings = {
   off: { device: string; capability: string }[];
 };
 
-// v1's order: by name, then by id, so the same light takes the same colour
-// each time.
+// By name, then by id, so the same light takes the same colour each time.
 const byName = (a: Light, b: Light) =>
   a.device.name.localeCompare(b.device.name) ||
   a.capability.id.localeCompare(b.capability.id) ||
   a.device.id.localeCompare(b.device.id);
 
 /**
- * What a smart mood sets each of a room's lights to (v1's
- * smartMoodCommandsForDefinition): the lights it leaves off, off; the rest
- * on at its brightness, each taking the definition's colours in turn, by
- * name. A light that cannot show a colour takes only the brightness, and
- * one that cannot dim only turns on.
+ * What a smart mood sets each of a room's lights to: the lights it leaves
+ * off, off; the rest on at its brightness, each taking the definition's
+ * colours in turn, by name. A light that cannot show a colour takes only
+ * the brightness, and one that cannot dim only turns on.
  */
 export function smartLights(
   definition: SmartDefinition,

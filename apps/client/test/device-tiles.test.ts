@@ -238,7 +238,7 @@ describe("sectionsByRoom", () => {
   });
 });
 
-// v1's office button: a remote with a button and nothing to switch.
+// A remote with a button and nothing to switch.
 function remote(id: string, name: string, roomId: string | null) {
   return device(id, name, roomId, [
     {

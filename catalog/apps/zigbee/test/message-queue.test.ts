@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { MessageQueue, messageQueueCapacity } from "../src/message-queue.js";
 
-// Ported from v1's zigbee2mqtt-message-queue.test.ts.
-
 describe("the message queue", () => {
   it("coalesces replaceable bridge and availability topics with latest payloads", () => {
     const queue = new MessageQueue("zigbee2mqtt");
@@ -20,8 +18,8 @@ describe("the message queue", () => {
     ).toEqual({ coalesced: 1, dropped: 0 });
 
     expect(queue.size).toBe(4);
-    // In the order they came: a retained message is not older than one
-    // that came after it, so it is not put behind it (unlike v1).
+    // In the order they came: retained messages arrived before the live
+    // availability message, so they stay ahead of it.
     expectPayload(queue.next(), { revision: 2 });
     expectPayload(queue.next(), "online");
     expectPayload(queue.next(), { version: 2 });

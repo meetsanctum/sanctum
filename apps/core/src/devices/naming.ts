@@ -6,15 +6,13 @@ import type { PlacesModule } from "../places/places.js";
 import { deviceType } from "./classification.js";
 import { deviceCapabilities, devices } from "./schema.js";
 
-// Automatic device names, ported from v1's resolveDeviceName and
-// uniqueDeviceName (device-derived-state-db.ts, Pragmata v1-final): a device
-// the household has not named is called after its room and what it is,
-// "Office light", or "Light" while it is in no room, and numbered from 2
-// when another device has that name: "Office light 2". Names are compared
-// as v1 did, ignoring case and spacing. v1 wrote them in title case; here
-// they are sentence case like the rest of the interface. Unlike v1, a
-// device keeps a number that is still free, so removing "Office light"
-// does not rename "Office light 2".
+// Automatic device names: a device the household has not named is called
+// after its room and what it is, "Office light", or "Light" while it is in
+// no room, and numbered from 2 when another device has that name:
+// "Office light 2". Names are compared ignoring case and spacing, and are
+// in sentence case like the rest of the interface. A device keeps a number
+// that is still free, so removing "Office light" does not rename
+// "Office light 2".
 
 const words = new Map<DeviceType, string>(
   deviceTypes.map((type) => [type.id, type.noun]),

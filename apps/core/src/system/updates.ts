@@ -3,7 +3,7 @@ import type { Channel, UpdateJournal, VersionList } from "../manager.js";
 import { relay, SystemError } from "./errors.js";
 
 // Updates from Settings → System. The manager carries them out (pull, back
-// up, swap, check, roll back); the core passes an admin's request on over
+// up, swap, check, roll back); the core passes someone's request on over
 // its socket and reports the manager's progress back. Clients never reach
 // the manager themselves.
 

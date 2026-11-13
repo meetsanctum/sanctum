@@ -4,12 +4,10 @@ import type {
   HistoryField,
 } from "@meetsanctum/app-sdk";
 
-// History's roll-ups, ported from v1's recorder: each value of a capability
-// over 5 minutes, and the hour from its twelve 5 minutes, as a mean with its
-// least and greatest. v1 averaged the reports within a period and so had to
-// record unchanged ones too; a light reports only when it changes, so here a
-// value holds from one change to the next and the mean is weighed by how
-// long it held.
+// History's roll-ups: each value of a capability over 5 minutes, and the
+// hour from its twelve 5 minutes, as a mean with its least and greatest. A
+// light reports only when it changes, so a value holds from one change to
+// the next and the mean is weighed by how long it held.
 
 /** A value from `at` until the next sample; null while it is not known. */
 export type Sample = { at: number; value: number | null };

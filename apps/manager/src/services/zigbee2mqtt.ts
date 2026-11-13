@@ -3,12 +3,11 @@ import { stacked } from "../stack.js";
 import { mosquittoUrl } from "./mosquitto.js";
 import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
 
-// The Zigbee bridge, for the Zigbee driver app. Ported from v1's
-// docker-zigbee2mqtt, with one change: Zigbee2MQTT keeps its own
+// The Zigbee bridge, for the Zigbee driver app. Zigbee2MQTT keeps its own
 // configuration.yaml in its data volume, where it writes the network key it
 // generates on first start, and the manager sets what it owns through
 // ZIGBEE2MQTT_CONFIG_* variables, which Zigbee2MQTT applies (and saves) on
-// every start. v1 rewrote the whole file each time.
+// every start.
 
 export const zigbee2mqttImage = "ghcr.io/koenkk/zigbee2mqtt:2.14.2";
 export const zigbee2mqttBaseTopic = "zigbee2mqtt";

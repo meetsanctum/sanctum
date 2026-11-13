@@ -7,10 +7,9 @@ import type { MoodLight } from "./light-states.js";
 import { moodLights, moods } from "./schema.js";
 import { smartDefinition, type SmartSettings } from "./smart.js";
 
-// Moods in the app's own database, ported from v1's moods-db.ts (Pragmata
-// v1-final). A mood belongs to one room and sits in its room's order,
-// custom and smart ones alike; deleting it deletes its lights, and a room's
-// moods go with the room.
+// Moods in the app's own database. A mood belongs to one room and sits in
+// its room's order, custom and smart ones alike; deleting it deletes its
+// lights, and a room's moods go with the room.
 
 type Db = AppContext["storage"]["db"];
 
@@ -114,7 +113,7 @@ export async function insertMood(
       .where(eq(moods.roomId, input.roomId))
       .get();
     if (input.smart) {
-      // v1's assertSmartMoodAssignmentIsUnique.
+      // A definition once per room.
       const taken = await tx
         .select({ id: moods.id })
         .from(moods)
@@ -150,7 +149,7 @@ export async function insertMood(
   return mood;
 }
 
-/** Changes a smart mood's brightness or the lights it leaves off (v1's updateSmartMoodAssignment). */
+/** Changes a smart mood's brightness or the lights it leaves off. */
 export async function changeSmartMood(
   db: Db,
   id: string,
@@ -236,9 +235,8 @@ export async function keepRoomMoods(db: Db, roomIds: readonly string[]) {
 }
 
 /**
- * Puts a room's moods in order (v1's saveMoodTargetOrder): those named
- * first, as named, then the rest as they were. Each must be one of the
- * room's moods.
+ * Puts a room's moods in order: those named first, as named, then the rest
+ * as they were. Each must be one of the room's moods.
  */
 export async function reorderMoods(
   db: Db,

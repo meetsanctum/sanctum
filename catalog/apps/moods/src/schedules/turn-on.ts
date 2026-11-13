@@ -24,23 +24,20 @@ import {
 } from "./store.js";
 import { day, minuteIn, spanAt } from "./times.js";
 
-// What turning a room's lights on brings, ported from v1's
-// lightTurnOnCommands (system-action-runner.ts, Pragmata v1-final). The core
-// turns a room, a zone or the home on, so Moods publishes each room's rule
-// as a standard lights.turnOn entity, which the core reads by type at the
-// press:
+// What turning a room's lights on brings. The core turns a room, a zone or
+// the home on, so Moods publishes each room's rule as a standard
+// lights.turnOn entity, which the core reads by type at the press:
 //
-// - Following the schedule (v1's smart, the default): the scheduled mood
-//   while one holds, its lights as it sets them and the room's others
-//   off, until its end. Otherwise the lights that were on when the room
-//   last went dark come back, each as it remembers itself, so a look the
-//   core holds for one, such as natural light's, wins. v1 brought back
-//   only the lights natural light followed there; Moods cannot know them.
-// - As they were (v1's restore previous): those lights with exactly the
-//   look they had, schedule or not.
+// - Following the schedule (the default): the scheduled mood while one
+//   holds, its lights as it sets them and the room's others off, until
+//   its end. Otherwise the lights that were on when the room last went
+//   dark come back, each as it remembers itself, so a look the core holds
+//   for one, such as natural light's, wins.
+// - As they were: those lights with exactly the look they had, schedule
+//   or not.
 //
 // A rule that would turn no light on is none, so the core switches the
-// room on as it remembers its lights, as v1 did with no snapshot.
+// room on as it remembers its lights.
 
 /** The instant a minute of the day next comes after now, in a time zone. */
 export function nextAt(minute: number, timeZone: string, now: Date) {

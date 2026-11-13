@@ -11,11 +11,9 @@ import {
 import { naturalLightSettings } from "./settings.js";
 import type { HomeSun } from "./sun.js";
 
-// Today's curve as the app's page draws it, ported from v1's
-// natural-lighting-preview.ts: points every 15 minutes from an hour before
-// sunrise to an hour after sunset, with the moments that shape it. v1
-// formatted each point's time on the core; here the page writes times as
-// its device does.
+// Today's curve as the app's page draws it: points every 15 minutes from an
+// hour before sunrise to an hour after sunset, with the moments that shape
+// it. The page writes times as its device does.
 
 const instant = z.iso.datetime();
 

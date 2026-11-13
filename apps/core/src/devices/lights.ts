@@ -27,25 +27,21 @@ import type { View } from "./views.js";
 
 // The lights of a room, a zone or the whole home together: a room's and
 // Lights' button, and the lights condition and step of workflows, so they
-// work with no lighting app. They moved here from the Rooms app, now Moods,
-// ported from v1's system light actions (system-actions.ts,
-// system-action-runner.ts) and target lights card (condition.target_lights,
-// Pragmata v1-final). Toggling turns them all off while any is on, and on
-// otherwise. A light that is offline is left alone and does not count, and
-// "all off" means none is on: a light that has yet to report counts as not
-// on. Each light's command passes the gate as the caller, like any other.
-// What turning a room on brings is an app's rule, such as Moods' scheduled
-// mood or what the room was before it went dark (v1's turn-on behaviour and
-// snapshots): the app publishes it as the room's lights.turnOn entity, which
-// the core reads by type here, so no app code runs at the press. A zone or
-// the home go room by room, as v1 split them. Without one, a light comes
-// back as the core remembers it. A workflow whose place is a room or a zone
-// that was removed is broken. Chosen lights are a place of their own, as
-// v1's button bindings chose them (toggle_lights' entity targets), and a
-// workflow with one of them removed is broken too. The step also makes lights
-// brighter or dimmer by a fifth of their range, and brightens or dims them
-// while the remote's button that ran it is held (holds.ts); lights that
-// cannot dim are left alone by both.
+// work with no lighting app. Toggling turns them all off while any is on,
+// and on otherwise. A light that is offline is left alone and does not
+// count, and "all off" means none is on: a light that has yet to report
+// counts as not on. Each light's command passes the gate as the caller,
+// like any other. What turning a room on brings is an app's rule, such as
+// Moods' scheduled mood or what the room was before it went dark: the app
+// publishes it as the room's lights.turnOn entity, which the core reads by
+// type here, so no app code runs at the press. A zone or the home go room
+// by room. Without one, a light comes back as the core remembers it. A
+// workflow whose place is a room or a zone that was removed is broken.
+// Chosen lights are a place of their own, and a workflow with one of them
+// removed is broken too. The step also makes lights brighter or dimmer by a
+// fifth of their range, and brightens or dims them while the remote's
+// button that ran it is held (holds.ts); lights that cannot dim are left
+// alone by both.
 
 // A place's schema says `place`, so Automations' editor offers one picker
 // for the room, the zone or the home rather than a field for each part.

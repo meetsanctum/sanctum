@@ -8,9 +8,7 @@ import { aqaraMotionSensor } from "./motion-sensors.js";
 import { climateExposes, zigbeeDevice } from "./pretend-bridge.js";
 
 // A climate sensor's readings, a light level and a device's battery
-// (sensors.ts), from v1's sensor entities and room status
-// (zigbee2mqtt-model.ts, room-status.ts), with its diagnostics left out by
-// property rather than sorted out later.
+// (sensors.ts), with a device's diagnostics left out by property.
 
 const temperature: SensorMapping = {
   kind: "sensor",

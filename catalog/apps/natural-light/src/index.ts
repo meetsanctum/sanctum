@@ -11,19 +11,18 @@ import { naturalLightSettings } from "./settings.js";
 import { targetType } from "./target.js";
 
 // Natural light: lights that follow the sun through the day, warm and dim at
-// night and cooler and brighter towards noon, ported from v1's natural
-// lighting. It works out the sun itself from where the home is, so it needs
-// no other app, controls the lights a household picks, and brings a
-// `naturalLight.target` entity for each. Workflows can have a light follow
-// it, pause or resume. Its UI is in ./ui, which the shell bundles.
+// night and cooler and brighter towards noon. It works out the sun itself
+// from where the home is, so it needs no other app, controls the lights a
+// household picks, and brings a `naturalLight.target` entity for each.
+// Workflows can have a light follow it, pause or resume. Its UI is in ./ui,
+// which the shell bundles.
 //
-// v1 ran its ticks as system automations every 5 minutes for lights that
-// are on and every 15 for those that are off. Here the check is the app's
-// job every 5 minutes, and those intervals decide when a light is due
-// (lights.ts). The core logs every run, so a shorter beat would fill the
-// activity log; a light switched on through the core comes back at the curve
-// without waiting for one, and so does every light once the household
-// changes the curve (follower.ts).
+// The check is the app's job every 5 minutes; a light that is on is due
+// every 5 minutes and one that is off every 15 (lights.ts). The core logs
+// every run, so a shorter beat would fill the activity log; a light
+// switched on through the core comes back at the curve without waiting for
+// one, and so does every light once the household changes the curve
+// (follower.ts).
 
 export const checkJob = "check";
 
@@ -71,7 +70,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       entities: [targetType],
       steps: [follow, pause, resume],
     },
-    // The curve (settings.ts): v1's preferences, with v1's defaults.
+    // The curve (settings.ts).
     settings: naturalLightSettings,
     migrations: "migrations",
     actions: [follow, resume, pause, preview, check],

@@ -190,7 +190,7 @@ describe("moods.mood entities", () => {
 
     await changeDevice("desk", showing({ on: true, brightness: 80 }));
     expect(active()).toEqual({ Reading: false, Bright: false, Aurora: false });
-    // Within a level of 2, as v1 allowed.
+    // Within a level of 2.
     await changeDevice("desk", showing({ on: true, brightness: 41 }));
     expect(active()).toEqual({ Reading: true, Bright: false, Aurora: false });
 

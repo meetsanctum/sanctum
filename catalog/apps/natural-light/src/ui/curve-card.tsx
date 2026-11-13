@@ -1,11 +1,11 @@
 import type { Preview } from "../preview.js";
 import { kelvinLabel, timeOfDay } from "./use-natural-light";
 
-// Today's curve, from v1's preview banner: frosted Carbon glass, its title
-// in Sun, what lights that follow it show now as its headline, sunrise, peak
-// and sunset, and the day drawn as a line in Sun with a mark for now. Colour
-// temperature and brightness ease alike between their ends, so one line
-// draws both. Before the home has a location it says where to set one.
+// Today's curve: frosted Carbon glass, its title in Sun, what lights that
+// follow it show now as its headline, sunrise, peak and sunset, and the day
+// drawn as a line in Sun with a mark for now. Colour temperature and
+// brightness ease alike between their ends, so one line draws both. Before
+// the home has a location it says where to set one.
 
 const muted = "text-[13px] leading-[18px] font-medium text-(--glass-secondary)";
 const width = 320;

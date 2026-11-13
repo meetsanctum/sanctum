@@ -8,8 +8,7 @@ import { isRecord, stringValue } from "./values.js";
 // on bridge/event that a device joined and how its interview goes, and its
 // device list then has it. Once the list has a device whose interview
 // succeeded, the driver has registered it (ready) or cannot use it
-// (unsupported). Rewritten from v1's discoveryStatusFromZigbeeDevice and its
-// pairing overlay (Pragmata v1-final), which read the same events.
+// (unsupported).
 
 export type SayJoining = (
   key: string,

@@ -7,9 +7,8 @@ import {
   versionOf,
 } from "../src/firmware.js";
 
-// What Zigbee2MQTT says of a device's firmware, ported from v1's OTA tests
-// (core-zigbee-ota.test.ts, Pragmata v1-final: availability, progress and
-// errors) onto the Drivers contract's states.
+// What Zigbee2MQTT says of a device's firmware (availability, progress and
+// errors), onto the Drivers contract's states.
 
 describe("a device's firmware, from its state's update", () => {
   it("says whether an update is available", () => {

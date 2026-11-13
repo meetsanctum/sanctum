@@ -8,16 +8,14 @@ import { access, type ZigbeeExpose } from "./types.js";
 import { numericValue } from "./values.js";
 
 // A climate sensor's readings, a motion sensor's light level and a
-// device's battery, as Zigbee2MQTT publishes them. v1 made a sensor entity
-// of every numeric expose and then sorted the diagnostics out by name
-// (battery, link quality, voltage, a chip's own temperature); here only
-// the room's readings become `sensor` capabilities, by their exact
-// property, so a plug's device_temperature or a thermostat's
-// local_temperature never passes for a room's. The light level is in lux:
-// Zigbee2MQTT 1.x says it as illuminance_lux beside a raw illuminance, 2.x
-// as illuminance in lx; a raw reading, a dim-or-bright illumination and
-// IKEA's illuminance_above_threshold are not one. The battery is the
-// device's own, so it goes into the report rather than a capability.
+// device's battery, as Zigbee2MQTT publishes them. Only the room's readings
+// become `sensor` capabilities, by their exact property, so a plug's
+// device_temperature or a thermostat's local_temperature never passes for a
+// room's. The light level is in lux: Zigbee2MQTT 1.x says it as
+// illuminance_lux beside a raw illuminance, 2.x as illuminance in lx; a raw
+// reading, a dim-or-bright illumination and IKEA's
+// illuminance_above_threshold are not one. The battery is the device's own,
+// so it goes into the report rather than a capability.
 
 export type SensorMapping = {
   kind: "sensor";

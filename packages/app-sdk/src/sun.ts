@@ -8,13 +8,12 @@ import type { SunDay, SunTimes } from "./weather.js";
 //
 // The times are NOAA's Solar Calculator's
 // (https://gml.noaa.gov/grad/solcalc/), which match published tables to
-// within seconds. The date handling is ported from v1's home-sun-cache.ts:
-// each day is worked out around the home's local noon, so its times are
-// those of the home's own days, whatever the host's time zone.
+// within seconds. Each day is worked out around the home's local noon, so
+// its times are those of the home's own days, whatever the host's time zone.
 //
-// Unlike v1, it counts the home's elevation, as published tables do: from
-// higher up the horizon dips, so the sun rises earlier and sets later, by
-// about five minutes at 500 m. A home below sea level counts as at it.
+// It counts the home's elevation, as published tables do: from higher up the
+// horizon dips, so the sun rises earlier and sets later, by about five
+// minutes at 500 m. A home below sea level counts as at it.
 
 /** Yesterday's, today's and tomorrow's sun at the home, as the `sun` type keeps it. */
 export function sunTimes(location: HomeLocation, now: Date): SunTimes {

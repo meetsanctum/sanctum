@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { combine, rollUps, samplesOf } from "../src/history/statistics.js";
 import { floorTime } from "../src/history/time.js";
 
-// History's roll-ups, ported from v1's recorder and weighed by time: a value
-// holds from one change to the next.
+// History's roll-ups, weighed by time: a value holds from one change to
+// the next.
 
 const minute = 60_000;
 const at = (minutes: number) => minutes * minute;
@@ -127,7 +127,7 @@ describe("history's roll-ups", () => {
     });
   });
 
-  it("start periods on the 5 minutes and the hour, as v1 did", () => {
+  it("start periods on the 5 minutes and the hour", () => {
     const time = Date.parse("2026-10-30T10:47:12Z");
 
     expect(new Date(floorTime(time, 5 * minute)).toISOString()).toBe(

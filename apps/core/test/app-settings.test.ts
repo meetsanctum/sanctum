@@ -20,8 +20,8 @@ import {
 } from "./support.js";
 
 // Apps' settings: an app declares its preferences as a schema, the core keeps
-// what admins choose and fills in the defaults, every client of the home reads
-// them and the app reads its own with ctx.settings.get().
+// what the household chooses and fills in the defaults, every client of the
+// home reads them and the app reads its own with ctx.settings.get().
 
 const unit = (options: Record<string, string>) =>
   z
@@ -88,7 +88,7 @@ function activity(core: TestCore) {
 }
 
 describe("an app's settings", () => {
-  it("are its schema's defaults until an admin changes them", async () => {
+  it("are its schema's defaults until someone changes them", async () => {
     const { core, maya } = await home();
     const defaults = { temperatureUnit: "celsius", days: 7 };
 
@@ -111,7 +111,7 @@ describe("an app's settings", () => {
     expect(apps.find((app) => app.id === "test.plain")?.settings).toBeNull();
   });
 
-  it("are what an admin chose, for the app and every client", async () => {
+  it("are what someone chose, for the app and every client", async () => {
     const { core, maya } = await home();
 
     const changed = await change(core, maya.token, {
@@ -148,7 +148,7 @@ describe("an app's settings", () => {
     ).toBe(400);
   });
 
-  it("go back to the default when an admin clears one", async () => {
+  it("go back to the default when someone clears one", async () => {
     const { core, maya } = await home();
     await change(core, maya.token, { temperatureUnit: "fahrenheit", days: 3 });
 
@@ -226,7 +226,7 @@ describe("an app's settings", () => {
     );
   });
 
-  it("reach every live client when an admin changes them", async () => {
+  it("reach every live client when someone changes them", async () => {
     const { core, maya } = await home();
     const kitchen = sharedClient(core);
     const mine = await openLive(core, maya.token);

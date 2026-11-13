@@ -26,13 +26,13 @@ import { whiteOf } from "./tiles";
 import { usePreview } from "./use-preview";
 import { useThrottledSend } from "./use-throttled-send";
 
-// A light's colour and white, as v1 drew them: eight colours on a ring with
-// the current one in the middle, which opens its shades and then a colour
-// wheel; eight whites across the light's own range, whose middle opens a
-// white wheel. Picking one turns the light on. A drag on a wheel goes out
-// once it ends; keys step a wheel at most every 300 ms. Below the ring,
-// Colour and White switch between the two, each only where the light has it,
-// and a button switches the light.
+// A light's colour and white: eight colours on a ring with the current one
+// in the middle, which opens its shades and then a colour wheel; eight
+// whites across the light's own range, whose middle opens a white wheel.
+// Picking one turns the light on. A drag on a wheel goes out once it ends;
+// keys step a wheel at most every 300 ms. Below the ring, Colour and White
+// switch between the two, each only where the light has it, and a button
+// switches the light.
 
 type Colour = { hue: number; saturation: number };
 type Range = { min: number; max: number };

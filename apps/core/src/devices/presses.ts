@@ -20,17 +20,15 @@ import type { Devices } from "./devices.js";
 // A remote's presses: a driver says one of its devices was pressed, and the
 // core hands the press on once, as it happens, to live clients, running apps
 // and workflows. A press is never state, so nothing compares it with the
-// last one, which v1 did with press times. The end of a hold, a release,
-// only ends what the hold set going, such as lights brightening (holds.ts):
-// it is not a press and goes nowhere else. A capture holds a remote's
-// presses back from apps and workflows while someone picks one, as v1's
-// runtime suppression `button_action_capture` did, for five minutes at most;
-// captures live in memory, so a restart ends them. Each belongs to the
-// client that asked and, when an app's page asked, to the app, which must be
-// running and read remotes' buttons: it ends when the app pauses or loses
-// that permission, and only its client stops it. Each press goes to the
-// activity log, a held button's repeats as one, and what it sets off has it
-// as its cause.
+// last one. The end of a hold, a release, only ends what the hold set going,
+// such as lights brightening (holds.ts): it is not a press and goes nowhere
+// else. A capture holds a remote's presses back from apps and workflows
+// while someone picks one, for five minutes at most; captures live in
+// memory, so a restart ends them. Each belongs to the client that asked and,
+// when an app's page asked, to the app, which must be running and read
+// remotes' buttons: it ends when the app pauses or loses that permission,
+// and only its client stops it. Each press goes to the activity log, a held
+// button's repeats as one, and what it sets off has it as its cause.
 
 /** A press as the core hands it on. */
 export type Press = {

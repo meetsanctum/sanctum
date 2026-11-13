@@ -134,7 +134,7 @@ export function createFiring(options: {
 
     /**
      * A device's change: `device` triggers compare what each capability
-     * reported before and after (v1's entity_state_changed rules).
+     * reported before and after.
      */
     deviceChanged(change: DeviceChange) {
       motionChanged(change);

@@ -21,7 +21,6 @@ const places: Places = {
   zones: [{ id: "upstairs", name: "Upstairs", roomIds: ["office"] }],
 };
 
-// v1's office button.
 const remote: DeviceInfo = {
   id: "remote",
   name: "Office button",
@@ -468,7 +467,7 @@ describe("a remote's presses", () => {
   });
 });
 
-// v1's office dimmer, a Hue dimmer switch gen 1, and the lights it can
+// An office dimmer, a Hue dimmer switch gen 1, and the lights it can
 // choose from: two in the office, one that cannot dim, and one in the
 // living room.
 const dimmer: DeviceInfo = {

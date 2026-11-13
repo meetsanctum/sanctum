@@ -15,7 +15,7 @@ export type HomeSun = SunDay & {
 
 /**
  * Today's sunrise, sunset and solar noon at the home, or null on a day
- * without both, as in a polar summer or winter, when v1 left lights alone.
+ * without both, as in a polar summer or winter, when lights are left alone.
  */
 export function sunToday(location: HomeLocation, now: Date): HomeSun | null {
   const today = sunDay(sunTimes(location, now));
