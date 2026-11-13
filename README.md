@@ -2,7 +2,7 @@
   <img src="assets/brand/readme-hero.jpg" alt="Sanctum" width="100%">
 </p>
 
-<h3>Home automation that stays at home.</h3>
+<h3>A smart home for everyone</h3>
 
 Sanctum runs your home's lights, sensors and automations on a small computer
 in your home, such as a Raspberry Pi. It works without the internet and needs
