@@ -429,7 +429,9 @@ wait_until_running`,
   });
 });
 
-describe("host installer, removing", () => {
+// A removal asks the stand-in Docker some forty questions, each a process of
+// its own, which takes a slow machine longer than a test's five seconds.
+describe("host installer, removing", { timeout: 30_000 }, () => {
   it("removes what Sanctum made, in order, and nothing of a development stack", async () => {
     const host = await installation();
     await host.save("stable");
