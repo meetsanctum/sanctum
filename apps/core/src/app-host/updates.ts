@@ -491,6 +491,21 @@ export function createAppUpdates(options: {
       return true;
     },
 
+    /**
+     * Why an app that says hello is not the one the core waits for: its
+     * update has not begun, so what runs is the build before, which a new
+     * build of the same version can't be told from by what it says. Taking
+     * it would start that build in the new one's place, and its update
+     * would never be asked for again. Refused, it ends, as one of another
+     * version does, and the update begins with nothing of the app running.
+     */
+    holdsBack(appId: string) {
+      const row = rowOf(appId);
+      return row?.status === "waiting"
+        ? `its update to ${row.toVersion} hasn't begun, so it is the build before`
+        : undefined;
+    },
+
     /** Its socket is listening: an update's next step, or it simply runs. */
     arrive(entry: InstalledApp) {
       const { id: appId, version } = entry.manifest;
