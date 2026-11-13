@@ -63,6 +63,10 @@ export function createFollower(
       await publishAll(ctx, await followOptionsFor(ctx, timing), runForLight);
       void run();
     },
+    /** After the core restarted: all it owns, said again for the home now. */
+    async resume() {
+      await publishAll(ctx, await followOptionsFor(ctx, timing), runForLight);
+    },
     stop() {
       isStopped = true;
       wake?.();

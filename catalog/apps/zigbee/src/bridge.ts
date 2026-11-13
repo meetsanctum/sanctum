@@ -14,20 +14,15 @@ import mqtt, { type MqttClient } from "mqtt";
 
 import { deviceEntries, type ZigbeeDeviceEntry } from "./devices.js";
 import { createFirstList } from "./first-list.js";
-import { firmwareOf } from "./firmware.js";
 import { createFirmwareUpdates, firmwareRequests } from "./firmware-updates.js";
 import { createJoining } from "./joining.js";
 import { MessageQueue } from "./message-queue.js";
 import { createMotionTiming } from "./motion-timing.js";
-import {
-  occupancyPayload,
-  occupancyState,
-  type OccupancyMapping,
-} from "./occupancy.js";
-import { createHolds, type Heard } from "./presses.js";
+import { occupancyPayload, type OccupancyMapping } from "./occupancy.js";
+import { createHolds } from "./presses.js";
+import { createDeviceReporter } from "./reports.js";
 import { bridgeResponse, createPendingRequests } from "./requests.js";
-import { batteryOf, sensorState } from "./sensors.js";
-import { commandPayload, movePayload, stateFromPayload } from "./states.js";
+import { commandPayload, movePayload } from "./states.js";
 import {
   defaultBaseTopic,
   type ZigbeeDevice,
@@ -124,6 +119,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   let client: MqttClient | undefined;
   let closed = false;
   let draining = false;
+  let handling = Promise.resolve();
   let needsStateRefresh = false;
   let lastError: string | undefined;
   let droppedLoggedAt = 0;
@@ -162,6 +158,15 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     request,
     registerAgain,
   });
+  const reportState = createDeviceReporter({ ctx, timing, holds, firmware });
+
+  // A resume catches up between messages, so an older list cannot finish
+  // after a newer one or report a device the newer list no longer has.
+  function inOrder(work: () => Promise<void>) {
+    const next = handling.then(work);
+    handling = next.catch(() => undefined);
+    return next;
+  }
 
   const topic = (...parts: string[]) => [base, ...parts].join("/");
   const deviceTopics = (name: string) => [
@@ -317,6 +322,7 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     // The start waits for the first list. A device the core wouldn't take
     // stays out, as on any list; a core that can't hear which are here fails it.
     firstList.taken(unsaid);
+    return unsaid;
   }
 
   // Forgets a device Zigbee2MQTT no longer has, so nothing it said late
@@ -345,64 +351,6 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
     devices.set(entry.key, entry);
     byName.set(entry.friendlyName, entry);
     return entry;
-  }
-
-  async function reportState(found: ZigbeeDeviceEntry, payload: Buffer) {
-    const raw = parseJson(payload);
-    if (!isRecord(raw)) {
-      return;
-    }
-    const device = await timing.said(found, raw);
-    const states: Record<string, unknown> = {};
-    const heard: { capability: string; heard: NonNullable<Heard> }[] = [];
-    for (const capability of device.capabilities) {
-      if (capability.kind === "button") {
-        const said = holds.heard(device.key, capability, raw);
-        if (said) heard.push({ capability: capability.id, heard: said });
-        continue;
-      }
-      if (capability.kind === "occupancy") {
-        const state = occupancyState(
-          capability,
-          raw,
-          timing.timingOf(device.key),
-        );
-        if (state) {
-          states[capability.id] = state;
-          timing.reported(device.key, capability, state);
-        }
-        continue;
-      }
-      const state =
-        capability.kind === "sensor"
-          ? sensorState(capability, raw)
-          : stateFromPayload(capability, raw);
-      if (state) {
-        states[capability.id] = state;
-      }
-    }
-    // A message from the device means it answers. A battery-powered one
-    // says its charge with its state.
-    const battery = batteryOf(raw);
-    await ctx.devices.report({
-      key: device.key,
-      availability: "online",
-      states,
-      ...(battery === undefined ? {} : { battery }),
-    });
-    // Each press is said once: Zigbee2MQTT never keeps a device's action
-    // in the state it publishes again, and retained messages never get here.
-    // A release says the button was let go.
-    for (const { capability, heard: said } of heard) {
-      await ("press" in said
-        ? ctx.devices.press({ key: device.key, capability, action: said.press })
-        : ctx.devices.release({ key: device.key, capability }));
-    }
-    // Zigbee2MQTT publishes what it knows of the firmware with every state.
-    const said = firmwareOf(raw.update);
-    if (said) {
-      await firmware.say(device, said);
-    }
   }
 
   // Changes a motion sensor's settings: Zigbee2MQTT's option first, which
@@ -521,7 +469,8 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
         message = queue?.next()
       ) {
         try {
-          await handle(message);
+          const current = message;
+          await inOrder(() => handle(current));
         } catch (error) {
           ctx.log(`could not handle ${message.topic} (${messageOf(error)})`);
         }
@@ -650,6 +599,19 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
 
     /** Once its first device list is registered and said to the core. */
     listed: () => firstList.wait(),
+
+    /** After the core restarted: its latest list, which are here and their states. */
+    async resume() {
+      await inOrder(async () => {
+        needsStateRefresh = true;
+        if (listed) {
+          const unsaid = await syncDevices(latestList);
+          if (unsaid !== undefined) {
+            throw new Error(`could not say which devices are here (${unsaid})`);
+          }
+        }
+      });
+    },
 
     /**
      * Moves a light's brightness up or down at a rate, or stops it, with

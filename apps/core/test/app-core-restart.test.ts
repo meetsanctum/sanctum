@@ -33,9 +33,10 @@ const sockets = async () => {
 };
 
 // A core with this app's package on these sockets, as each core starts.
-async function coreOn(folder: string, app: AppDefinition) {
+async function coreOn(folder: string, app: AppDefinition, dataDir?: string) {
   const text = JSON.stringify(toStaticManifest(app));
   const core = await testCore({
+    ...(dataDir ? { dataDir } : {}),
     appSockets: folder,
     appTimeoutMs: 2_000,
     supervision: { restartPausesMs: [1] },
@@ -135,6 +136,44 @@ describe("an app apart through a core restart", () => {
     gates.get("after")!();
     expect((await answer).statusCode).toBe(200);
     void session;
+  });
+
+  it("goes on with a resume, hearing what it follows from the next core", async () => {
+    const seen: string[] = [];
+    const definition = defineApp({
+      ...app(seen),
+      settings: z.object({
+        days: z.number().int().min(1).default(7).meta({ title: "Days" }),
+      }),
+      start: async (ctx, info) => {
+        seen.push(`start ${info.reason}`);
+        await ctx.events.on("settings.changed", async ({ settings }) => {
+          seen.push(`days ${(settings as { days: number }).days}`);
+        });
+      },
+      resume: async (_ctx, info) => void seen.push(`resume ${info.reason}`),
+    });
+    const folder = await sockets();
+    // The core's own data, which a restart keeps.
+    const data = await sockets();
+    const first = await coreOn(folder, definition, data);
+    containerFor(folder, definition);
+    await running(first, definition.id);
+
+    await first.apps.close();
+    const next = await coreOn(folder, definition, data);
+    await running(next, definition.id);
+    const maya = await claimed(next);
+    await post(
+      next,
+      `/api/apps/${definition.id}/settings/update`,
+      { days: 3 },
+      maya,
+    );
+
+    await vi.waitFor(() => expect(seen.at(-1)).toBe("days 3"));
+    expect(seen).toEqual([seen[0], "resume started", "days 3"]);
+    expect(seen[0]).toMatch(/^start /);
   });
 
   it("answers nothing of one core's calls to the next, whose calls may have the same ids", async () => {

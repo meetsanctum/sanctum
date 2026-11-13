@@ -260,3 +260,94 @@ describe("Zigbee's start", () => {
     expect(core.presented).toEqual([]);
   });
 });
+
+describe("Zigbee's resume", () => {
+  it("fails when the core cannot hear which devices are here", async () => {
+    let isResuming = false;
+    const { core } = zigbee({
+      onContext(ctx) {
+        const present = ctx.devices.present;
+        vi.spyOn(ctx.devices, "present").mockImplementation(async (input) => {
+          if (isResuming) throw new Error("The core did not answer");
+          return present(input);
+        });
+      },
+    });
+    await core.start();
+    isResuming = true;
+
+    await expect(core.resume()).rejects.toThrow(
+      "could not say which devices are here",
+    );
+  });
+
+  it("keeps a new device list ahead of the list it was resuming", async () => {
+    const lamp = fresh("bulb");
+    let isAway = true;
+    let isRegistering = false;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => (release = resolve));
+    onTestFinished(() => release());
+    const { core } = zigbee({
+      onContext(ctx) {
+        const register = ctx.devices.register;
+        vi.spyOn(ctx.devices, "register").mockImplementation(async (input) => {
+          if (isAway) throw new Error("The core is away");
+          isRegistering = true;
+          await waiting;
+          return register(input);
+        });
+      },
+    });
+    await core.start();
+    await bridge.add(zigbeeDevice(lamp.key, lamp.name, [lightExpose()]), {
+      state: "ON",
+    });
+    await core.until(
+      () => core.presented.some((keys) => keys.includes(lamp.key)),
+      "the list received while the core was away",
+    );
+    isAway = false;
+    const said = core.presented.length;
+    const resuming = core.resume();
+    await core.until(() => isRegistering, "its registration on resume");
+    await bridge.leave(lamp.name);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    await resuming;
+    await core.until(
+      () => core.presented.length >= said + 2,
+      "both lists to finish",
+    );
+
+    await expect(
+      core.command(lamp.key, "light", "light", { on: true }),
+    ).rejects.toThrow();
+  });
+
+  it("says its devices, which are here and their states again, without reconnecting", async () => {
+    const lamp = fresh("bulb");
+    await bridge.add(zigbeeDevice(lamp.key, lamp.name, [lightExpose()]), {
+      state: "ON",
+      brightness: 200,
+    });
+    const { core, status } = zigbee();
+    await core.start();
+    await core.until(
+      () => core.reports.some(({ key }) => key === lamp.key),
+      "its first state",
+    );
+    const said = core.presented.length;
+    const reported = core.reports.length;
+
+    await core.resume();
+
+    expect(core.presented).toHaveLength(said + 1);
+    expect(core.presented.at(-1)).toContain(lamp.key);
+    await core.until(
+      () => core.reports.length > reported,
+      "its state, read again",
+    );
+    expect(await status()).toMatchObject({ broker: "connected" });
+  });
+});

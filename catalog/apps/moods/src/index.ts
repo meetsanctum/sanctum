@@ -51,6 +51,11 @@ import { lightsInRoom } from "./targets.js";
 // motion, which Moods keeps as a workflow each from the core's motion pieces
 // (motion/). Its UI is in ./ui, which the shell bundles.
 
+// What its start keeps of the home, which a resume catches up.
+let running:
+  | { snapshots: Snapshots; snapshotDevices: Map<string, DeviceInfo> }
+  | undefined;
+
 export default defineApp({
   id: "sanctum.moods",
   name: "Moods",
@@ -150,6 +155,7 @@ export default defineApp({
   async start(ctx) {
     const snapshots = createSnapshots();
     const snapshotDevices = new Map<string, DeviceInfo>();
+    running = { snapshots, snapshotDevices };
     await ctx.events.on("place.deleted", async ({ place }) => {
       if (place.kind === "room") {
         await removeRoomMoods(ctx.storage.db, place.id);
@@ -210,21 +216,42 @@ export default defineApp({
         await syncMotion(ctx);
       }
     });
-    const { rooms } = await ctx.places.list();
-    const roomIds = rooms.map((room) => room.id);
-    await keepRoomMoods(ctx.storage.db, roomIds);
-    await keepRoomSchedules(ctx.storage.db, roomIds);
-    await keepRoomMotion(ctx.storage.db, roomIds);
-    await publishMoods(ctx);
-    for (const device of await ctx.devices.list())
-      snapshotDevices.set(device.id, device);
-    await followLights(ctx, snapshots, roomIds, [...snapshotDevices.values()]);
-    await syncJobs(ctx, { all: true });
-    await publishTurnOn(ctx);
-    await syncPresses(ctx);
-    await syncMotion(ctx);
+    await catchUp(ctx, running);
+  },
+  // After the core restarted, what may have changed while it was away, as its
+  // start catches up; what it follows stays.
+  async resume(ctx) {
+    if (running) await catchUp(ctx, running);
+  },
+  async stop() {
+    running = undefined;
   },
 });
+
+// Everything it owns in the core, said again from its own database and the
+// home as it is now.
+async function catchUp(
+  ctx: AppContext,
+  {
+    snapshots,
+    snapshotDevices,
+  }: { snapshots: Snapshots; snapshotDevices: Map<string, DeviceInfo> },
+) {
+  const { rooms } = await ctx.places.list();
+  const roomIds = rooms.map((room) => room.id);
+  await keepRoomMoods(ctx.storage.db, roomIds);
+  await keepRoomSchedules(ctx.storage.db, roomIds);
+  await keepRoomMotion(ctx.storage.db, roomIds);
+  await publishMoods(ctx);
+  snapshotDevices.clear();
+  for (const device of await ctx.devices.list())
+    snapshotDevices.set(device.id, device);
+  await followLights(ctx, snapshots, roomIds, [...snapshotDevices.values()]);
+  await syncJobs(ctx, { all: true });
+  await publishTurnOn(ctx);
+  await syncPresses(ctx);
+  await syncMotion(ctx);
+}
 
 // Follows the lights of these rooms, and keeps the snapshot of each that
 // has just gone dark; the rooms that did.

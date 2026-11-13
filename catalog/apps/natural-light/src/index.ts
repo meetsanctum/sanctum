@@ -87,6 +87,10 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       follower = createFollower(ctx, timing, runForLight);
       await follower.start();
     },
+    // Its job is the core's, and its loop waits for the next change.
+    async resume() {
+      await follower?.resume();
+    },
     async stop() {
       follower?.stop();
       follower = undefined;

@@ -216,6 +216,8 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     storage,
     state,
     start: () => moodsApp.start!(context(itself), { reason: "started" }),
+    // As the core does once it restarted while Moods ran on.
+    resume: () => moodsApp.resume!(context(itself), { reason: "started" }),
     // A context acting as Moods itself, as its jobs and syncs run.
     context: () => context(itself),
     // As the core calls an action: its input and output checked.

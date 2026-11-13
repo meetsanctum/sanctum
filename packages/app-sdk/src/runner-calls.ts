@@ -143,6 +143,10 @@ export function createCallHost(options: {
   // A start hook under way, which a stop never overlaps.
   let starting: Promise<unknown> | undefined;
   let connection = 0;
+  // It went on through a lost core, with a resume to catch up, and waits for
+  // the next core's start; one that doesn't come stops it.
+  let suspended = false;
+  let resumeTimer: NodeJS.Timeout | undefined;
 
   // Nothing reaches the app before `start` returns or its time runs out: calls
   // wait here, within their own time limit.
@@ -155,6 +159,9 @@ export function createCallHost(options: {
         method,
         async (...params: unknown[]) => {
           const scope = current();
+          if (!scope.id) {
+            throw new Error("The connection to the core has gone");
+          }
           const hasEnded = () =>
             scope.storage.ended || lifetime?.storage.ended === true;
           if (hasEnded()) {
@@ -214,6 +221,21 @@ export function createCallHost(options: {
     }
     if (on !== connection)
       return failureOf("The connection to the core has gone");
+    if (running && suspended) {
+      suspended = false;
+      clearTimeout(resumeTimer);
+      // The core restarted: the app goes on.
+      if (info.reason === "started" && !update) {
+        return resume(id, deadlineMs - (Date.now() - arrived), info);
+      }
+      // Anything else is a start afresh, once what ran has stopped.
+      const stopped = await stop(deadlineMs - (Date.now() - arrived), {
+        reason: "restarting",
+      });
+      if (!stopped.ok) return stopped;
+      if (on !== connection)
+        return failureOf("The connection to the core has gone");
+    }
     if (running) {
       return failureOf(`${appId} has already started`);
     }
@@ -252,6 +274,33 @@ export function createCallHost(options: {
     return outcome;
   }
 
+  // The context its start was given goes on under this start's call: the events
+  // it follows are followed again, from this start's snapshot, and its resume
+  // catches up. One that fails stops, so a later start begins afresh.
+  async function resume(id: string, deadlineMs: number, info: StartInfo) {
+    const current = running!;
+    const open = opened;
+    current.lifetime.id = id;
+    const timer = setTimeout(open, deadlineMs);
+    const core = callsOf(() => current.lifetime, current.lifetime);
+    const work = outcomeOf(async () => {
+      for (const name of current.handlers.keys()) {
+        await core.follow(name);
+      }
+      await app.resume!(current.ctx, info);
+    });
+    starting = work;
+    const outcome = await work;
+    if (starting === work) starting = undefined;
+    clearTimeout(timer);
+    if (!outcome.ok) {
+      await stop(deadlineMs, { reason: "restarting" });
+      return outcome;
+    }
+    open();
+    return outcome;
+  }
+
   function stop(deadlineMs: number, info: StopInfo) {
     const current = running;
     if (!current) {
@@ -270,6 +319,20 @@ export function createCallHost(options: {
       stopping = undefined;
     });
     return stopping;
+  }
+
+  async function stopWithin(capMs: number) {
+    const stopped = running
+      ? stop(capMs, { reason: "restarting" })
+      : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
+    let isStopped = false;
+    const settled = await within(
+      stopped.then((outcome) => {
+        isStopped = outcome.ok;
+      }),
+      capMs,
+    );
+    return settled && isStopped;
   }
 
   async function action(
@@ -411,8 +474,9 @@ export function createCallHost(options: {
     /**
      * The connection to the core has gone, with every call on it: what they
      * left open rolls back, and nothing of theirs reaches the next core, whose
-     * calls may have the same ids. The app stops as for a restart, and starts
-     * again when that core calls its start. Whether it stopped within `capMs`
+     * calls may have the same ids. An app with a resume goes on, to resume
+     * when that core calls its start; any other stops as for a restart, and
+     * starts again then. Whether it stopped, or went on, within `capMs`
      * without failing.
      */
     async lost(capMs: number) {
@@ -426,23 +490,38 @@ export function createCallHost(options: {
       // A start the core no longer waits for finishes first, so the stop that
       // follows finds what it set going.
       if (starting && !(await within(starting, capMs))) return false;
-      const left = deadline - Date.now();
-      const stopped = running
-        ? stop(left, { reason: "restarting" })
-        : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
-      let outcome: Outcome | undefined;
-      const settled = await within(
-        stopped.then((each) => {
-          outcome = each;
-        }),
-        left,
-      );
-      return settled && outcome?.ok === true;
+      // One that can resume goes on. Until the next core starts it, its calls
+      // fail, and those of its start context name no call of the next core's.
+      if (running && app.resume) {
+        running.lifetime.id = "";
+        suspended = true;
+        return true;
+      }
+      return stopWithin(deadline - Date.now());
+    },
+
+    /**
+     * The next core is there. One that went on to resume stops if that core
+     * hasn't started it within `withinMs`, as when it keeps the app stopped,
+     * giving its stop `capMs`.
+     */
+    resumesWithin(withinMs: number, capMs: number, failed: () => void) {
+      if (!suspended) return;
+      clearTimeout(resumeTimer);
+      const on = connection;
+      resumeTimer = setTimeout(() => {
+        if (!suspended || on !== connection) return;
+        suspended = false;
+        void stopWithin(capMs).then((isStopped) => {
+          if (!isStopped) failed();
+        });
+      }, withinMs);
     },
 
     // A stop nobody called for, as when the container is stopped: its hook is a
     // courtesy, given `capMs` before the process goes.
     async shutdown(capMs: number) {
+      clearTimeout(resumeTimer);
       const stopped = running ? stop(capMs, { reason: "shutdown" }) : stopping;
       if (stopped) {
         await within(stopped, capMs);

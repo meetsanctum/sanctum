@@ -1,9 +1,17 @@
-import { defineAction, type AppDefinition } from "@meetsanctum/app-sdk";
+import {
+  defineAction,
+  type AppContext,
+  type AppDefinition,
+} from "@meetsanctum/app-sdk";
 import { runSession } from "@meetsanctum/app-sdk/runner-session";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { createCorePeer, type CorePeer } from "../src/core-peer.js";
+import {
+  createCorePeer,
+  type CorePeer,
+  type PeerCalls,
+} from "../src/core-peer.js";
 import { createRunnerFixture, digest, testApp } from "./runner-fixture.js";
 
 // A runner whose core goes, as when it restarts or updates: the app stops
@@ -31,10 +39,15 @@ const waits = defineAction({
 // The app's container, once its first core has started it.
 async function running(
   app: AppDefinition,
-  options: { awayWithinMs?: number; stopWithinMs?: number } = {},
+  options: {
+    awayWithinMs?: number;
+    stopWithinMs?: number;
+    resumeWithinMs?: number;
+  } = {},
+  calls: PeerCalls = {},
 ) {
   const load = vi.fn(async () => ({ app }));
-  fixture.peer = await createCorePeer({ socket: fixture.socket });
+  fixture.peer = await createCorePeer({ socket: fixture.socket, calls });
   fixture.session = runSession({
     appId: app.id,
     socket: fixture.socket,
@@ -52,10 +65,19 @@ async function running(
 }
 
 // The core goes, and the next one listens on the same socket.
-async function nextCore(): Promise<CorePeer> {
+async function nextCore(calls: PeerCalls = {}): Promise<CorePeer> {
   await fixture.peer!.close();
-  fixture.peer = await createCorePeer({ socket: fixture.socket });
+  fixture.peer = await createCorePeer({ socket: fixture.socket, calls });
   return fixture.peer;
+}
+
+// The next core, once it has the app's connection ready.
+async function readyNextCore(calls: PeerCalls = {}) {
+  const next = await nextCore(calls);
+  await next.hello;
+  next.welcome();
+  await next.prepared;
+  return next;
 }
 
 describe("an app's runner when the core goes", () => {
@@ -252,5 +274,186 @@ describe("an app's runner when the core goes", () => {
       code: 1,
       reason: expect.stringContaining("expects 1.3.0"),
     });
+  });
+});
+
+describe("an app with a resume when the core goes", () => {
+  const home = { home: { id: "home" }, floors: [], rooms: [], zones: [] };
+  // An app that follows the home's changes, and whose start's context the test
+  // keeps, as an app's loops do.
+  function resumable(
+    seen: string[],
+    hooks: { resume?: () => Promise<void> } = {},
+  ) {
+    let kept: AppContext | undefined;
+    const app = testApp([], {
+      start: async (ctx, info) => {
+        kept = ctx;
+        seen.push(`start ${info.reason}`);
+        await ctx.events.on("place.changed", async () => {
+          seen.push("place.changed");
+        });
+      },
+      resume: async (_ctx, info) => {
+        seen.push(`resume ${info.reason}`);
+        await hooks.resume?.();
+      },
+      stop: async (_ctx, info) => void seen.push(`stop ${info.reason}`),
+    });
+    return { app, ctx: () => kept! };
+  }
+
+  it("goes on, its calls failing meanwhile, and resumes for the next core", async () => {
+    const seen: string[] = [];
+    const { app, ctx } = resumable(seen);
+    const { load } = await running(app, {}, { follow: async () => undefined });
+
+    await fixture.peer!.close();
+    await vi.waitFor(async () =>
+      expect(await ctx().places.list().catch(String)).toContain(
+        "connection to the core has gone",
+      ),
+    );
+    const next = await readyNextCore({
+      follow: async () => undefined,
+      places: async () => home as never,
+    });
+    const started = next.issue({ kind: "start", reason: "started" });
+
+    expect(await started.answer).toMatchObject({ ok: true });
+    expect(seen).toEqual(["start started", "resume started"]);
+    // What it followed, followed again by the start it resumed in.
+    expect(next.requests).toContainEqual({
+      call: started.id,
+      method: "follow",
+      params: ["place.changed"],
+    });
+    // Its start's context goes on, now as the next core's.
+    expect(await ctx().places.list()).toEqual(home);
+    await next.call({
+      kind: "event",
+      event: { name: "place.changed" } as never,
+    });
+    expect(seen.at(-1)).toBe("place.changed");
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts afresh, once what ran has stopped, for a start that isn't a restart", async () => {
+    const seen: string[] = [];
+    await running(resumable(seen).app, {}, { follow: async () => undefined });
+    await fixture.peer!.close();
+    const next = await readyNextCore({ follow: async () => undefined });
+
+    expect(
+      await next.call({ kind: "start", reason: "updated", from: "1.2.2" }),
+    ).toMatchObject({ ok: true });
+
+    expect(seen).toEqual(["start started", "stop restarting", "start updated"]);
+  });
+
+  it("keeps its calls off the next connection until that core starts it", async () => {
+    const { app, ctx } = resumable([]);
+    await running(app, {}, { follow: async () => undefined });
+    const next = await readyNextCore({ follow: async () => undefined });
+
+    const failure = ctx().places.list().catch(String);
+    await next.beat();
+
+    expect(next.violations).toEqual([]);
+    expect(next.requests).toEqual([]);
+    expect(await failure).toContain("connection to the core has gone");
+    expect(await next.call({ kind: "start", reason: "started" })).toMatchObject(
+      { ok: true },
+    );
+  });
+
+  it("stops when its resume fails, so the next start begins afresh", async () => {
+    const seen: string[] = [];
+    const { app } = resumable(seen, {
+      resume: async () => {
+        throw new Error("It can't catch up");
+      },
+    });
+    await running(app, {}, { follow: async () => undefined });
+    await fixture.peer!.close();
+    const next = await readyNextCore({ follow: async () => undefined });
+
+    expect(await next.call({ kind: "start", reason: "started" })).toMatchObject(
+      { ok: false, message: expect.stringContaining("catch up") },
+    );
+    expect(await next.call({ kind: "start", reason: "started" })).toMatchObject(
+      { ok: true },
+    );
+
+    expect(seen).toEqual([
+      "start started",
+      "resume started",
+      "stop restarting",
+      "start started",
+    ]);
+  });
+
+  it("stops when the next core doesn't start it in time, as one it keeps stopped", async () => {
+    const seen: string[] = [];
+    await running(
+      resumable(seen).app,
+      { resumeWithinMs: 50 },
+      { follow: async () => undefined },
+    );
+    await fixture.peer!.close();
+
+    await readyNextCore();
+
+    await vi.waitFor(() => expect(seen.at(-1)).toBe("stop restarting"));
+    expect(seen).toEqual(["start started", "stop restarting"]);
+  });
+
+  it.each(["throws", "hangs"] as const)(
+    "ends when its stop %s after the next core keeps it stopped",
+    async (failure) => {
+      await running(
+        testApp([], {
+          resume: async () => undefined,
+          stop: async () => {
+            if (failure === "throws") throw new Error("Could not stop");
+            await new Promise<void>(() => undefined);
+          },
+        }),
+        { resumeWithinMs: 50, stopWithinMs: 50 },
+      );
+      await readyNextCore();
+
+      expect(await fixture.session!.finished).toMatchObject({ code: 1 });
+    },
+  );
+
+  it("discards a fresh start whose connection goes while the old run stops", async () => {
+    const seen: string[] = [];
+    let finishStop!: () => void;
+    const stopping = new Promise<void>((done) => (finishStop = done));
+    await running(
+      testApp([], {
+        start: async (_ctx, info) => void seen.push(`start ${info.reason}`),
+        resume: async () => undefined,
+        stop: async () => {
+          seen.push("stop");
+          await stopping;
+        },
+      }),
+    );
+    const next = await readyNextCore();
+    next.issue({ kind: "start", reason: "updated", from: "1.2.2" });
+    await vi.waitFor(() => expect(seen.at(-1)).toBe("stop"));
+
+    const third = await nextCore();
+    finishStop();
+    await third.hello;
+    third.welcome();
+    await third.prepared;
+
+    expect(seen).toEqual(["start started", "stop"]);
+    expect(
+      await third.call({ kind: "start", reason: "started" }),
+    ).toMatchObject({ ok: true });
   });
 });

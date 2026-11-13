@@ -405,9 +405,10 @@ describe("the official apps' moves, for real", () => {
     );
   }, 60_000);
 
-  it("stays on its own in the container it ran in, its store of what it owns as it was, when the core starts again", async () => {
+  it("goes on in the container it ran in, its store of what it owns as it was, when the core starts again", async () => {
     const before = (await entities()).map(({ key }) => key);
     const containers = await containerIds();
+    const restarted = new Date().toISOString();
 
     await docker("restart", name("core"));
     await coreIsUp();
@@ -416,8 +417,15 @@ describe("the official apps' moves, for real", () => {
     expect((await entities()).map(({ key }) => key)).toEqual(
       expect.arrayContaining(before),
     );
-    // Each went on in its own container, the app stopping and starting there.
+    // Each went on in its own container, and resumed there: Zigbee kept its
+    // session with the broker.
     expect(await containerIds()).toEqual(containers);
+    expect(
+      await run("sh", [
+        "-c",
+        `docker logs --since ${restarted} ${name("core")} 2>&1`,
+      ]),
+    ).not.toContain("sanctum.zigbee: connected to the broker");
     const since = await docker(
       "inspect",
       "-f",

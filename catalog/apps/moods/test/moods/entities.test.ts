@@ -402,6 +402,38 @@ describe("moods.mood entities", () => {
     expect(entity(cook.id)?.state.active).toBe(true);
   });
 
+  it("catch up on resume with what the core missed while it was away", async () => {
+    const { start, resume, call, state, entity } = home();
+    await start();
+    const read = await call(createMood, {
+      roomId: "office",
+      name: "Reading",
+      lights: reading,
+    });
+    const cook = await call(createMood, {
+      roomId: "kitchen",
+      name: "Cooking",
+      lights: cooking,
+    });
+    const followed = [...state.followed];
+    // While the core was away: the desk changed unheard, and the next core
+    // lacks Cooking.
+    state.devices[0]!.capabilities = [
+      lightCapability({ on: true, brightness: 100 }),
+    ];
+    state.entities.delete(cook.id);
+
+    await resume();
+
+    expect([...state.entities.keys()].sort()).toEqual(
+      [read.id, cook.id].sort(),
+    );
+    expect(entity(read.id)?.state.active).toBe(false);
+    expect(entity(cook.id)?.state.active).toBe(true);
+    // What it follows stays as its start left it.
+    expect(state.followed).toEqual(followed);
+  });
+
   it("never land a room read before a change after one read since", async () => {
     const { start, call, changeDevice, holdDevices, entity } = home();
     await start();

@@ -57,6 +57,9 @@ export function createWeatherApp(options: WeatherOptions = {}) {
       running = createWeather(ctx, options);
       await running.start();
     },
+    async resume() {
+      running?.resume();
+    },
     async stop() {
       running?.stop();
       running = undefined;

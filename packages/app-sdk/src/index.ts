@@ -336,6 +336,17 @@ export interface AppDefinition extends AppManifestFields {
    * throw NotReady to be tried again later.
    */
   start?(ctx: AppContext, info: StartInfo): Promise<void>;
+  /**
+   * Runs instead of `start` when the core restarted while the app ran, as for
+   * an update of the core. With it, the app goes on through the restart: what
+   * its start set going keeps running, though its calls into the core fail
+   * while no core is there, and the events it follows come again. It catches
+   * up with what may have changed, from one snapshot of the home as a start
+   * reads, through the same context its start was given. Without it, the app
+   * stops as the core goes and starts again for the next. One that fails, or
+   * throws NotReady, is stopped.
+   */
+  resume?(ctx: AppContext, info: StartInfo): Promise<void>;
   /** Runs when the core stops or removes the app. */
   stop?(ctx: AppContext, info: StopInfo): Promise<void>;
   /**
@@ -422,7 +433,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   if (pages.length > 0 && !app.icon) {
     throw new Error("An app with pages has an icon");
   }
-  for (const hook of ["start", "stop"] as const) {
+  for (const hook of ["start", "resume", "stop"] as const) {
     if (app[hook] !== undefined && typeof app[hook] !== "function") {
       throw new Error(`An app's ${hook} must be a function`);
     }

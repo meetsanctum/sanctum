@@ -101,6 +101,10 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
         throw error;
       }
     },
+    // Its broker session goes on; what the core missed meanwhile is said again.
+    async resume() {
+      await bridge?.resume();
+    },
     async stop() {
       const stopping = bridge;
       bridge = undefined;

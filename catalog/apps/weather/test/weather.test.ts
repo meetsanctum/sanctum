@@ -371,6 +371,24 @@ describe("when the home moves", () => {
   });
 });
 
+describe("after the core restarted", () => {
+  it("looks again at once, without waiting for its next look", async () => {
+    const { ctx, state } = fakeCore(app);
+    state.internet = async () => answer(openMeteoAnswer);
+    const weatherApp = createWeatherApp({ checkMs: 60_000 });
+    await weatherApp.start!(ctx, { reason: "started" });
+    expect(state.entities.size).toBe(0);
+    // As the next core has it, which the app hasn't heard.
+    state.location = zurich;
+
+    await weatherApp.resume!(ctx, { reason: "started" });
+
+    await expect.poll(() => state.entities.size).toBe(3);
+    expect(state.requests).toHaveLength(1);
+    await weatherApp.stop!(ctx, { reason: "shutdown" });
+  });
+});
+
 describe("Weather's manifest", () => {
   it("declares what it brings and the one host it reaches", () => {
     const manifest = toStaticManifest(defineApp(app));

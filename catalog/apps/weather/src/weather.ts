@@ -144,6 +144,13 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
     }
   }
 
+  // Wakes the loop started below for a check now: work launched by a handler
+  // loses its access to the core as soon as that handler returns.
+  function askAgain() {
+    isAskedAgain = true;
+    wake?.();
+  }
+
   async function run() {
     while (!isStopped) {
       isAskedAgain = false;
@@ -175,12 +182,7 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
      * doesn't wait for Open-Meteo.
      */
     async start() {
-      await ctx.events.on("location.changed", () => {
-        // Wake the loop started below: work launched by a handler loses its
-        // access to the core as soon as that handler returns.
-        isAskedAgain = true;
-        wake?.();
-      });
+      await ctx.events.on("location.changed", askAgain);
       await load();
       const location = await ctx.places.location();
       if (location) {
@@ -199,6 +201,8 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
       }
       void run();
     },
+    /** After the core restarted: what it missed meanwhile, in a check now. */
+    resume: askAgain,
     stop() {
       isStopped = true;
       clearTimeout(timer);
