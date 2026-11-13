@@ -47,6 +47,10 @@ const ofAction = (page: ActivityPage, action: string) =>
 
 const minute = 60_000;
 
+// How long a test waits for what a 20 ms confirmation deadline leads to: far
+// longer than it takes, and short of the test's own time.
+const realClock = { timeout: 3_000 };
+
 describe("a device's activity", () => {
   it("says what each command asked for and who sent it", async () => {
     const { core, maya, lamp } = await lampsCore();
@@ -137,13 +141,16 @@ describe("a device's activity", () => {
     const { core, maya, lamp } = await lampsCore({ confirmMs: 20 });
     radio.confirms = false;
     await command(core, maya.token, lamp, "light", { on: true });
-    await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const entries = ofAction(
-      await activityOf(core, maya.token, { device: lamp }),
-      "device.command",
-    );
-    expect(entries).toEqual([
+    // Both deadlines and the send between them run on the real clock, and
+    // the entry says it went again before it says it failed: the test waits
+    // for the outcome, however long a slow runner takes.
+    const entries = async () =>
+      ofAction(
+        await activityOf(core, maya.token, { device: lamp }),
+        "device.command",
+      );
+    await expect.poll(entries, realClock).toEqual([
       expect.objectContaining({
         outcome: "failed",
         reason: "no_answer",
@@ -158,7 +165,12 @@ describe("a device's activity", () => {
     radio.confirms = false;
     await command(core, maya.token, lamp, "light", { on: true });
     radio.confirms = true;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // The deadline and the send after it run on the real clock: the lamp's
+    // answer to the second ends the wait, and the log has all of it by then.
+    await expect
+      .poll(() => core.devices.get(lamp)!.capabilities[0], realClock)
+      .toMatchObject({ sync: "synced", state: { on: true } });
 
     const page = await activityOf(core, maya.token, { device: lamp });
     expect(ofAction(page, "device.command")).toEqual([
@@ -169,10 +181,6 @@ describe("a device's activity", () => {
     ]);
     // Its answer to the second is not a change outside Sanctum.
     expect(ofAction(page, "device.changed")).toEqual([]);
-    expect(core.devices.get(lamp)!.capabilities[0]).toMatchObject({
-      sync: "synced",
-      state: { on: true },
-    });
   });
 
   it("says when a light was switched outside Sanctum, and not when a command explains it", async () => {
