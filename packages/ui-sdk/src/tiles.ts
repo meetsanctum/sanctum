@@ -1,6 +1,7 @@
 import type { LightState, SensorMeasure } from "@meetsanctum/app-sdk";
 
-// The home's lights, switches, remotes, sensors and motion sensors as tiles:
+// The home's lights, switches, remotes, sensors and motion sensors as tiles,
+// and a tile for a device Sanctum cannot use:
 // what a tile shows, which the shell works out from the core's devices and
 // an app's page from its own draft, such as a mood's lights. The tiles draw
 // it and say what was pressed; they hold no device state.
@@ -12,9 +13,11 @@ export type Tile = {
   /**
    * A remote's tile switches nothing: it shows its latest press. Nor does a
    * sensor's, one for each device, which shows its readings, or a motion
-   * sensor's (occupancy), which says whether it sees motion.
+   * sensor's (occupancy), which says whether it sees motion. An unknown
+   * device's, one for a device with nothing Sanctum can use, says what its
+   * driver calls it; its `capabilityId` is empty.
    */
-  kind: "light" | "switch" | "button" | "sensor" | "occupancy";
+  kind: "light" | "switch" | "button" | "sensor" | "occupancy" | "unknown";
   /** The room it is in, or null when it is in none the home has. */
   roomId: string | null;
   name: string;

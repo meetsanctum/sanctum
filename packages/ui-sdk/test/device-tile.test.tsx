@@ -563,3 +563,55 @@ describe("a sensor's tile", () => {
     expect(climate.querySelector("svg.lucide-thermometer")).not.toBeNull();
   });
 });
+
+describe("an unknown device's tile", () => {
+  const purifier: Tile = {
+    key: "purifier/",
+    deviceId: "purifier",
+    capabilityId: "",
+    kind: "unknown",
+    roomId: null,
+    name: "Unknown device",
+    status: "STARKVIND air purifier",
+    on: false,
+    look: "off",
+    dims: false,
+    disabled: false,
+  };
+
+  it("has the general icon and what its driver calls it, and switches nothing", async () => {
+    const button = await render(purifier);
+    expect(button.querySelector("svg.lucide-radio")).not.toBeNull();
+    expect(button.textContent).toBe("Unknown deviceSTARKVIND air purifier");
+    // Nothing to press where the tile opens nothing.
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBeNull();
+    expect(container.querySelector("input")).toBeNull();
+  });
+
+  it("opens its device where the tile opens one, with no switch of its own", async () => {
+    const onOpen = vi.fn();
+    await act(async () => {
+      root.render(
+        <DeviceTile
+          tile={purifier}
+          onToggle={onToggle}
+          onDim={onDim}
+          onOpen={onOpen}
+        />,
+      );
+    });
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.getAttribute("aria-label")).toBe(
+      "Unknown device, STARKVIND air purifier",
+    );
+    await act(async () => {
+      buttons[0]!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, detail: 1 }),
+      );
+    });
+    expect(onOpen).toHaveBeenCalledWith(purifier);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+});

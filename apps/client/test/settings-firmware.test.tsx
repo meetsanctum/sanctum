@@ -293,6 +293,10 @@ describe("a device's line", () => {
       ],
     };
     expect(whyNot(sensor, "probe")).toBe("It sleeps between readings");
+    // A device with nothing Sanctum can use is neither: it can't be asked.
+    const unknown = { ...button, type: "unknown" as const, capabilities: [] };
+    expect(whyNot(unknown, "probe")).toBe("It can't be asked how it is");
+    expect(whyNot(unknown, "update")).toBe("No updates are offered for it");
     expect(whyNot(available, "update")).toBeNull();
     expect(whyNot(available, "probe")).toBeNull();
   });

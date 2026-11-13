@@ -14,6 +14,7 @@ import {
   readingsText,
   sectionsByCategory,
   sectionsByRoom,
+  sectionsOfRoom,
   sensorReadings,
   tilesOf,
 } from "../src/device-tiles";
@@ -384,6 +385,73 @@ const climate = (
     [reading("temperature", temperature), reading("humidity", humidity)],
     availability,
   );
+
+describe("a device with nothing Sanctum can use", () => {
+  const purifier = (
+    roomId: string | null,
+    availability: DeviceInfo["availability"] = "online",
+  ): DeviceInfo => ({
+    ...device("p", "Unknown device", roomId, [], availability),
+    driverName: "STARKVIND air purifier",
+  });
+
+  it("has one tile of its own, which says what its driver calls it", () => {
+    expect(tilesOf([purifier("living")], places)).toEqual([
+      {
+        key: "p/",
+        deviceId: "p",
+        capabilityId: "",
+        kind: "unknown",
+        roomId: "living",
+        name: "Unknown device",
+        status: "STARKVIND air purifier",
+        look: "off",
+        on: false,
+        dims: false,
+        disabled: false,
+      },
+    ]);
+  });
+
+  it("says when it is offline or not paired any more, like any tile", () => {
+    const [offline] = tilesOf([purifier(null, "offline")], places);
+    expect(offline).toMatchObject({ status: "Offline", disabled: true });
+    const [left] = tilesOf(
+      [{ ...purifier(null, "offline"), leftAt: "2026-10-31T12:00:00Z" }],
+      places,
+    );
+    expect(left).toMatchObject({ status: "Not paired", disabled: true });
+  });
+
+  it("is last on its room's page, under no category", () => {
+    const tiles = tilesOf(
+      [
+        purifier("living"),
+        device("b", "Floor lamp", "living", [light({ on: false })]),
+        remote("d", "Living room button", "living"),
+      ],
+      places,
+    );
+    const titles = (sections: { title: string; tiles: { name: string }[] }[]) =>
+      sections.map((section) => [
+        section.title,
+        section.tiles.map((tile) => tile.name),
+      ]);
+    expect(titles(sectionsOfRoom(tiles))).toEqual([
+      ["Lights", ["Floor lamp"]],
+      ["Buttons", ["Living room button"]],
+      ["Unknown devices", ["Unknown device"]],
+    ]);
+    expect(titles(sectionsByCategory(tiles))).toEqual([
+      ["Lights", ["Floor lamp"]],
+      ["Buttons", ["Living room button"]],
+    ]);
+    // A room with none has no such section.
+    expect(
+      sectionsOfRoom(tiles.filter((tile) => tile.kind !== "unknown")),
+    ).toHaveLength(2);
+  });
+});
 
 describe("a sensor's tile", () => {
   it("is one for its device, with what it reads now", () => {

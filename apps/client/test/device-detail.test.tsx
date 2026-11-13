@@ -1,19 +1,13 @@
 // @vitest-environment jsdom
-import type { AppInfo, DeviceInfo } from "@meetsanctum/app-sdk";
-import {
-  createLiveFeed,
-  DeviceSections,
-  useAppClient,
-  type AppClient,
-  type DevicePageProps,
-  type Tile,
-} from "@meetsanctum/ui-sdk";
+import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import { createLiveFeed, DeviceSections, type Tile } from "@meetsanctum/ui-sdk";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
 import { alex, entry } from "./activity-fixtures";
+import { pressesApp } from "./device-detail-app-fixtures";
 import { coreJson } from "../src/core-fetch";
 import { useDashboards } from "../src/dashboards";
 import { DeviceDetail } from "../src/device-detail";
@@ -33,47 +27,6 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 // A device's detail: opened from its tile's body, its controls send through
 // core Devices as the tiles do.
 
-// An app that adds a page to remotes' details, drawn in its own scope.
-function PressesPage(props: DevicePageProps) {
-  const client = useAppClient();
-  return (
-    <p>
-      {client.app.id} for {props.device.name}:{" "}
-      {props.device.capabilities.map((each) => each.kind).join(", ")}
-    </p>
-  );
-}
-function pressesApp(permissions: string[]): HostedApp {
-  const info: AppInfo = {
-    id: "test.presses",
-    name: "Presses",
-    version: "0.1.0",
-    icon: null,
-    pages: [],
-    permissions,
-    requests: [],
-    state: "running",
-    settings: null,
-    provides: {
-      entities: [],
-      widgets: [],
-      roomSections: [],
-      devicePages: [
-        { id: "test.presses", title: "Presses", kinds: ["button"] },
-      ],
-    },
-  };
-  return {
-    info,
-    ui: {
-      id: "test.presses",
-      version: "1.0.0",
-      pages: {},
-      devicePages: { "test.presses": PressesPage },
-    },
-    client: { app: info } as AppClient,
-  };
-}
 let apps: HostedApp[] = [];
 
 // Core History's answers: the lamp came on at 40% three hours ago, and
@@ -634,6 +587,47 @@ describe("a remote's detail", () => {
     expect(dialog()?.textContent).toContain("Last press");
     expect(dialog()?.textContent).not.toContain("From apps");
     expect(dialog()!.querySelectorAll('[role="tab"]')).toHaveLength(0);
+  });
+});
+
+describe("the detail of a device Sanctum cannot use", () => {
+  const purifier: DeviceInfo = {
+    ...lamp,
+    id: "purifier",
+    name: "Unknown device",
+    driverName: "STARKVIND air purifier",
+    type: "unknown",
+    roomId: null,
+    capabilities: [],
+  };
+
+  it("opens from its tile with its name, its place and what its driver calls it, on its Activity alone", async () => {
+    devices = [purifier];
+    await show();
+
+    await click(button("Unknown device, STARKVIND air purifier"));
+
+    expect(dialog()?.querySelector("h2")?.textContent).toBe("Unknown device");
+    expect(dialog()?.textContent).toContain("No room · STARKVIND air purifier");
+    expect(dialog()?.textContent).toContain("Last change");
+    // Nothing of it to control, and no other page.
+    expect(dialog()!.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect(dialog()!.querySelector('[role="slider"]')).toBeNull();
+    expect(posted()).toEqual([]);
+  });
+
+  it("goes on Home from its header, and closes when it is removed", async () => {
+    devices = [purifier];
+    await show();
+    await click(button("Unknown device, STARKVIND air purifier"));
+
+    await click(button("Add to Home", dialog()!));
+    expect(onHome).toEqual(["lamp", "purifier"]);
+
+    await act(async () => {
+      live.publish({ type: "device", id: "purifier", device: null });
+    });
+    expect(dialog()).toBeNull();
   });
 });
 

@@ -4,6 +4,7 @@ import {
   Lightbulb,
   LightbulbOff,
   Plug,
+  Radio,
   Sun,
   Thermometer,
 } from "lucide-react";
@@ -219,21 +220,24 @@ export function DeviceTile(props: {
   // The round icon switches it only where the rest opens the detail.
   const iconSwitches = onOpen !== undefined && switches;
   const Icon =
-    tile.kind === "button"
-      ? CircleDot
-      : tile.kind === "sensor"
-        ? // A sensor that only reads the light level, such as a motion
-          // sensor's, has the light level's sun.
-          tile.measures?.every((measure) => measure === "illuminance")
-          ? Sun
-          : Thermometer
-        : tile.kind === "occupancy"
-          ? Footprints
-          : tile.kind === "switch"
-            ? Plug
-            : on
-              ? Lightbulb
-              : LightbulbOff;
+    tile.kind === "unknown"
+      ? // The general icon, as an unknown device has in Settings.
+        Radio
+      : tile.kind === "button"
+        ? CircleDot
+        : tile.kind === "sensor"
+          ? // A sensor that only reads the light level, such as a motion
+            // sensor's, has the light level's sun.
+            tile.measures?.every((measure) => measure === "illuminance")
+            ? Sun
+            : Thermometer
+          : tile.kind === "occupancy"
+            ? Footprints
+            : tile.kind === "switch"
+              ? Plug
+              : on
+                ? Lightbulb
+                : LightbulbOff;
   const iconLook =
     "grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) data-[look=lit]:bg-white/55 data-[look=on]:bg-(--tile-on-ink)/8";
 
