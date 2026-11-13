@@ -26,7 +26,7 @@ import type { AppUsage } from "./usage.js";
 //                                    this route answers 404, which means nothing
 //   GET    /api/apps/containers      every app's container and its state
 //   GET    /api/apps/:app/container  one app's
-//   PUT    /api/apps/:app/container  start it: { folder, memoryMb }
+//   PUT    /api/apps/:app/container  start it: { folder, memoryMb, keep? }
 //   POST   /api/apps/:app/container/stop  stop it, keeping why it stopped
 //   DELETE /api/apps/:app/container  remove it, keeping its data
 //   GET    /api/apps/:app/usage      what it holds and uses now, for its settings
@@ -51,6 +51,8 @@ const startBody = z.object({
   folder: z.string().regex(packageFolderPattern).max(128),
   memoryMb: z.number().int().min(smallestMemoryMb).max(largestMemoryMb),
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb).optional(),
+  // One already running as this would make it goes on.
+  keep: z.boolean().optional(),
 });
 const growBody = z.object({
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb),
@@ -157,7 +159,8 @@ export function registerAppRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: "Invalid container request" });
       }
-      return apps.start({ app: id, ...parsed.data });
+      const { keep, ...spec } = parsed.data;
+      return apps.start({ app: id, ...spec }, { keep });
     }),
   );
 

@@ -24,8 +24,13 @@ import { openAppStorage, type AppStorage } from "./storage.js";
 // One app's connection to the core, from its runner. The core hears the
 // app's version and manifest before anything else happens: a version it
 // refuses never runs its code or its migrations. Then the database opens and
-// migrates, and the core learns the app is ready for calls. A lost
-// connection ends the process, and the core starts it again.
+// migrates, and the core learns the app is ready for calls. A core that goes,
+// as when it restarts or updates, takes every call on its connection with it:
+// the app stops as for a restart, its process and database stay, and the
+// runner says hello to the next core, which starts it again there. Nothing
+// from one connection is answered on the next. One that finds no core for
+// 5 minutes ends the process, as does a stop that doesn't finish, and the
+// core starts it afresh.
 
 /** What a runner hosts: an app's package as it found it. */
 export type RunnerPackage = {
@@ -39,6 +44,11 @@ export type RunnerPackage = {
 export type RunnerEnd = { code: number; reason: string };
 
 const retryMs = 250;
+// How long it looks for the next core, which an update may keep away while it
+// checks it.
+const defaultAwayWithinMs = 5 * 60_000;
+// What a stop may take once the core has gone.
+const defaultStopWithinMs = 8_000;
 
 // How the core refused one of the app's calls, as its code sees it: an
 // ActionError for the codes apps tell apart.
@@ -84,6 +94,10 @@ export function runSession(options: {
   package: RunnerPackage;
   /** How long the core may take to appear. */
   connectWithinMs?: number;
+  /** How long it looks for the next core once one has gone. */
+  awayWithinMs?: number;
+  /** What the app's stop may take once the core has gone. */
+  stopWithinMs?: number;
   log?: (message: string) => void;
 }) {
   const { appId } = options;
@@ -94,6 +108,9 @@ export function runSession(options: {
   let host: ReturnType<typeof createCallHost> | undefined;
   let welcomed = false;
   let ended = false;
+  // Each connection in turn, so nothing of one reaches the next.
+  let connection = 0;
+  let isConnected = false;
   let finish!: (end: RunnerEnd) => void;
   const finished = new Promise<RunnerEnd>((resolve) => (finish = resolve));
 
@@ -107,18 +124,26 @@ export function runSession(options: {
   let underWay = 0;
   let lastRequest = 0;
 
+  // Every call of the app's into the core on that connection has failed, and
+  // those waiting for a place fail as they wake.
+  function failRequests() {
+    for (const { reject } of pending.values()) {
+      reject(new Error("The connection to the core has gone"));
+    }
+    pending.clear();
+    underWay = 0;
+    for (const wake of waiting.splice(0)) {
+      wake();
+    }
+  }
+
   function end(code: number, reason: string) {
     if (ended) {
       return;
     }
     ended = true;
-    for (const { reject } of pending.values()) {
-      reject(new Error("The connection to the core has gone"));
-    }
-    pending.clear();
-    for (const wake of waiting.splice(0)) {
-      wake();
-    }
+    isConnected = false;
+    failRequests();
     socket?.destroy();
     storage?.close();
     finish({ code, reason });
@@ -134,6 +159,11 @@ export function runSession(options: {
     params: unknown[],
     hasEnded: () => boolean,
   ) {
+    // While no core is there, nothing waits for one.
+    if (ended || !isConnected) {
+      throw new Error("The connection to the core has gone");
+    }
+    const on = connection;
     lastRequest += 1;
     const id = lastRequest;
     // One that would not fit fails its caller, and the connection goes on.
@@ -143,7 +173,8 @@ export function runSession(options: {
     } else {
       underWay += 1;
     }
-    if (ended) {
+    // Woken because its connection went, which freed every place.
+    if (ended || on !== connection || !isConnected) {
       throw new Error("The connection to the core has gone");
     }
     // Waiting for a slot may outlast the call that made the request.
@@ -176,7 +207,7 @@ export function runSession(options: {
   }
 
   function answer(call: string, outcome: Outcome) {
-    if (ended) {
+    if (ended || !isConnected) {
       return;
     }
     try {
@@ -236,15 +267,21 @@ export function runSession(options: {
       case "welcome":
         if (!welcomed) {
           welcomed = true;
-          void prepare();
+          // One that ran for a core before has its database open already.
+          if (host) send({ type: "ready" });
+          else void prepare();
         }
         return;
       case "refused":
         end(1, `The core refused ${appId}: ${message.reason}`);
         return;
       case "call":
-        if (host) host.take(message);
-        else answer(message.id, failureOf(`${appId} is not ready`));
+        if (host) {
+          const on = connection;
+          host.take(message, (outcome) => {
+            if (on === connection) answer(message.id, outcome);
+          });
+        } else answer(message.id, failureOf(`${appId} is not ready`));
         return;
       case "reply":
         replied(message.id, message.outcome);
@@ -254,28 +291,33 @@ export function runSession(options: {
     }
   }
 
-  void (async () => {
+  // Says hello on the core's socket, once it listens within `withinMs`.
+  async function attach(withinMs: number) {
+    let next: Socket;
     try {
-      socket = await connectToCore(
-        options.socket,
-        options.connectWithinMs ?? 60_000,
-        () => ended,
-      );
+      next = await connectToCore(options.socket, withinMs, () => ended);
     } catch (error) {
       end(1, `${appId} could not reach the core: ${String(error)}`);
       return;
     }
     if (ended) {
-      socket.destroy();
+      next.destroy();
       return;
     }
+    socket = next;
+    isConnected = true;
+    const on = connection;
     const read = createMessageReader({
-      message: received,
+      message: (value) => {
+        if (on === connection) received(value);
+      },
       violation: (reason) => end(1, reason),
     });
-    socket.on("data", read);
-    socket.on("error", (error) => log(`The socket failed: ${String(error)}`));
-    socket.on("close", () => end(1, "The connection to the core has gone"));
+    next.on("data", read);
+    next.on("error", (error) => log(`The socket failed: ${String(error)}`));
+    next.on("close", () => {
+      if (on === connection) lostCore();
+    });
     send({
       type: "hello",
       protocol: protocolVersion,
@@ -283,7 +325,33 @@ export function runSession(options: {
       version: options.package.version,
       manifest: options.package.manifest,
     });
-  })();
+  }
+
+  // The core went with every call on its connection. An app that was ready
+  // waits for the next core, stopped; before that there's nothing to keep.
+  function lostCore() {
+    if (ended) return;
+    const ready = host;
+    if (!ready) {
+      end(1, "The connection to the core has gone");
+      return;
+    }
+    connection += 1;
+    isConnected = false;
+    welcomed = false;
+    socket = undefined;
+    failRequests();
+    log(`${appId} lost the core, and waits for the next`);
+    void (async () => {
+      if (!(await ready.lost(options.stopWithinMs ?? defaultStopWithinMs))) {
+        end(1, `${appId} didn't stop in time once the core had gone`);
+        return;
+      }
+      if (!ended) await attach(options.awayWithinMs ?? defaultAwayWithinMs);
+    })();
+  }
+
+  void attach(options.connectWithinMs ?? 60_000);
 
   return {
     finished,

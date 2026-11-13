@@ -255,6 +255,74 @@ describe("starting one", () => {
     expect(status.folder).toBe("0.4.0+aaaa");
   });
 
+  describe("keeping the one that runs, as after the core restarted", () => {
+    it("keeps one running that package, made as it would make it now", async () => {
+      const { apps, docker } = await setup();
+      await apps.start(start);
+      const first = docker.container(appContainerName(app))!.id;
+      docker.events.length = 0;
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status).toMatchObject({ state: "running", folder, kept: true });
+      expect(docker.container(appContainerName(app))!.id).toBe(first);
+      expect(docker.events).toEqual([]);
+    });
+
+    it.each([
+      ["another package", { folder: "0.4.0+aaaa" }],
+      ["another memory limit", { memoryMb: 256 }],
+    ])("starts another for %s", async (_what, change) => {
+      const { apps, dataDir, docker } = await setup();
+      await apps.start(start);
+      const first = docker.container(appContainerName(app))!.id;
+      await staged(dataDir, app, "0.4.0+aaaa");
+
+      const status = await apps.start({ ...start, ...change }, { keep: true });
+
+      expect(status.kept).toBeUndefined();
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+    });
+
+    it("starts another for one a manager before this one made otherwise", async () => {
+      const { apps, docker } = await setup();
+      docker.onCreate = (options) => {
+        options.Env = [...(options.Env ?? []), "LEFT=by an older manager"];
+        options.Cmd = ["node", "an-older-runner.js"];
+      };
+      await apps.start(start);
+      docker.onCreate = null;
+      const first = docker.container(appContainerName(app))!.id;
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status.kept).toBeUndefined();
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+    });
+
+    it("starts one that has stopped again", async () => {
+      const { apps, docker } = await setup();
+      await apps.start(start);
+      await apps.stop(app);
+
+      const status = await apps.start(start, { keep: true });
+
+      expect(status).toMatchObject({ state: "running" });
+      expect(status.kept).toBeUndefined();
+      expect(docker.events).toContain(`start ${appContainerName(app)}`);
+    });
+
+    it("replaces it unless asked to keep it", async () => {
+      const { apps, docker } = await setup();
+      await apps.start(start);
+      const first = docker.container(appContainerName(app))!.id;
+
+      await apps.start(start);
+
+      expect(docker.container(appContainerName(app))!.id).not.toBe(first);
+    });
+  });
+
   describe("when it can't replace the one that runs", () => {
     it("keeps that one running if Docker can't create the new one", async () => {
       const { apps, docker } = await setup();

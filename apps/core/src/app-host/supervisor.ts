@@ -49,6 +49,10 @@ export type Supervision = {
   // started can reach this one's socket, and goes with that, so it isn't started and
   // its going is no failure of the app.
   isReplacing: boolean;
+  // Its first start in this core, which takes over a container a core before
+  // this one left running as the manager would make it: its runner says hello
+  // again, and it starts there.
+  mayKeep: boolean;
   // Container changes finish in order, including before removal.
   containerWork?: Promise<void>;
   timer?: NodeJS.Timeout;
@@ -87,6 +91,7 @@ export function newSupervision(now: Date): Supervision {
     attention: false,
     isEnded: false,
     isReplacing: false,
+    mayKeep: true,
     generation: 0,
     endingConnection: false,
     waiters: new Set(),
@@ -280,12 +285,18 @@ export function createSupervisor(options: {
       await manage(entry, async () => {
         if (!isCurrent(entry, generation)) return;
         of(entry).isReplacing = true;
+        // Only the first: a later one follows a failure, or a change that
+        // needs a container of its own.
+        const keep = of(entry).mayKeep;
+        of(entry).mayKeep = false;
         try {
-          await manager.startAppContainer(app.id, {
+          const { kept } = await manager.startAppContainer(app.id, {
             folder: apartIn,
             memoryMb: manifest.runtime.memory,
             dataMb: manifest.runtime.data,
+            ...(keep ? { keep } : {}),
           });
+          if (kept) log(`apps: ${app.id} goes on in its container`);
         } finally {
           of(entry).isReplacing = false;
         }

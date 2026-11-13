@@ -138,6 +138,10 @@ export function createCallHost(options: {
   const delivering = new AsyncLocalStorage<Scope>();
   let running: Running | undefined;
   let stopping: Promise<Outcome> | undefined;
+  // The calls under way, which end with the connection they came on.
+  const open = new Set<Scope>();
+  // A start hook under way, which a stop never overlaps.
+  let starting: Promise<unknown> | undefined;
 
   // Nothing reaches the app before `start` returns or its time runs out: calls
   // wait here, within their own time limit.
@@ -175,12 +179,14 @@ export function createCallHost(options: {
     work: (scope: Scope) => Promise<T>,
   ) {
     const scope = { id, storage: storage.call() };
+    open.add(scope);
     const timer = setTimeout(() => scope.storage.end(), deadlineMs);
     try {
       return await work(scope);
     } finally {
       clearTimeout(timer);
       scope.storage.end();
+      open.delete(scope);
     }
   }
 
@@ -219,7 +225,7 @@ export function createCallHost(options: {
     });
     running = { ctx, lifetime, handlers };
     const timer = setTimeout(open, deadlineMs - (Date.now() - arrived));
-    const outcome = await outcomeOf(async () => {
+    const work = outcomeOf(async () => {
       await app.start?.(ctx, info);
       // The core commits an update on this, so it has to be on the disk first.
       if (update) {
@@ -227,6 +233,9 @@ export function createCallHost(options: {
         return { synced: update };
       }
     });
+    starting = work;
+    const outcome = await work;
+    if (starting === work) starting = undefined;
     clearTimeout(timer);
     // One that isn't ready hasn't started: nothing reaches it, and the core
     // calls this again when it tries again.
@@ -371,11 +380,46 @@ export function createCallHost(options: {
   }
 
   return {
-    /** Takes one call from the core, and answers it whenever it ends. */
-    take(message: CallMessage) {
+    /**
+     * Takes one call from the core, and answers it whenever it ends, on the
+     * connection it came by.
+     */
+    take(
+      message: CallMessage,
+      answer: (outcome: Outcome) => void = (outcome) =>
+        options.answer(message.id, outcome),
+    ) {
       void handle(message)
         .catch((error: unknown) => failureOf(error))
-        .then((outcome) => options.answer(message.id, outcome));
+        .then(answer);
+    },
+
+    /**
+     * The connection to the core has gone, with every call on it: what they
+     * left open rolls back, and nothing of theirs reaches the next core, whose
+     * calls may have the same ids. The app stops as for a restart, and starts
+     * again when that core calls its start. Whether it stopped within `capMs`
+     * without failing.
+     */
+    async lost(capMs: number) {
+      const deadline = Date.now() + capMs;
+      for (const scope of open) scope.storage.end();
+      open.clear();
+      // A start the core no longer waits for finishes first, so the stop that
+      // follows finds what it set going.
+      if (starting && !(await within(starting, capMs))) return false;
+      const left = deadline - Date.now();
+      const stopped = running
+        ? stop(left, { reason: "restarting" })
+        : (stopping ?? Promise.resolve<Outcome>({ ok: true }));
+      let outcome: Outcome | undefined;
+      const settled = await within(
+        stopped.then((each) => {
+          outcome = each;
+        }),
+        left,
+      );
+      return settled && outcome?.ok === true;
     },
 
     // A stop nobody called for, as when the container is stopped: its hook is a

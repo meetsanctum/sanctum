@@ -132,6 +132,7 @@ export function runnerApps(options: {
     async startAppContainer(appId, spec) {
       if (!runs.has(appId)) return manager.startAppContainer(appId, spec);
       await startSession(appId, spec.folder);
+      return { kept: false };
     },
     async stopAppContainer(appId) {
       if (!runs.has(appId)) return manager.stopAppContainer(appId);

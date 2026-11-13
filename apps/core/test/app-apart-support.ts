@@ -127,6 +127,7 @@ export async function supervised(
         });
         container = session;
         cleanUps.push(() => session.shutdown(50));
+        return { kept: false };
       },
       async stopAppContainer() {
         await options.beforeStop?.();

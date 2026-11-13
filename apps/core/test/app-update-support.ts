@@ -45,9 +45,12 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
   let unreadable = 0;
   const containers: string[] = [];
   let container: ReturnType<typeof runSession> | undefined;
+  // The package the manager started it from.
+  let runsFrom: string | undefined;
   const stopContainer = async () => {
     const session = container;
     container = undefined;
+    runsFrom = undefined;
     await session?.shutdown(50);
   };
 
@@ -76,10 +79,20 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
   };
   const manager = {
     ...fake.manager,
-    async startAppContainer(_app: string, spec: { folder: string }) {
+    // One running that package goes on when the core asks, as the manager keeps
+    // one it would make the same way.
+    async startAppContainer(
+      _app: string,
+      spec: { folder: string; keep?: boolean },
+    ) {
+      if (spec.keep && container && runsFrom === spec.folder) {
+        return { kept: true };
+      }
       await stopContainer();
       containers.push(spec.folder);
       runContainer(staged.get(spec.folder)!);
+      runsFrom = spec.folder;
+      return { kept: false };
     },
     async stopAppContainer() {
       await stopContainer();

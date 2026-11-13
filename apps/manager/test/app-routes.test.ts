@@ -126,6 +126,19 @@ describe("the apps' containers API", () => {
     expect(refused.statusCode).toBe(400);
   });
 
+  it("keeps one that runs as it would make it, when the core asks", async () => {
+    const { docker, server } = await manager();
+    const start = (payload: object) =>
+      server.inject({ method: "PUT", url: path, payload });
+    await start({ folder, memoryMb: 128 });
+    const first = docker.container(appContainerName(app))!.id;
+
+    const kept = await start({ folder, memoryMb: 128, keep: true });
+
+    expect(kept.json()).toMatchObject({ state: "running", kept: true });
+    expect(docker.container(appContainerName(app))!.id).toBe(first);
+  });
+
   it("starts, reports, stops and removes one", async () => {
     const { docker, server } = await manager();
 

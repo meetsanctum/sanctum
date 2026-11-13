@@ -14,7 +14,7 @@ afterEach(() => {
 
 describe("an app's supervised startup", () => {
   it("asks for its container, by its running version and limits", async () => {
-    const startAppContainer = vi.fn(async () => undefined);
+    const startAppContainer = vi.fn(async () => ({ kept: false }));
     const { entry, supervisor, phase } = setUp({ startAppContainer });
 
     await supervisor.launch(entry);
@@ -23,8 +23,24 @@ describe("an app's supervised startup", () => {
       folder: "1.0.0+test",
       memoryMb: 128,
       dataMb: 256,
+      keep: true,
     });
     expect(phase()).toBe("starting");
+  });
+
+  it("keeps a running container only for its first start, not once it has failed", async () => {
+    const startAppContainer = vi.fn(async () => ({ kept: true }));
+    const { entry, supervisor } = setUp({ startAppContainer });
+    await supervisor.launch(entry);
+
+    supervisor.startFailed(entry);
+    await passes(1_000);
+
+    expect(startAppContainer).toHaveBeenCalledTimes(2);
+    expect(startAppContainer.mock.calls[1]).toEqual([
+      manifest.id,
+      { folder: "1.0.0+test", memoryMb: 128, dataMb: 256 },
+    ]);
   });
 
   it("starts it once its connection is ready, and it runs once its start returns", async () => {

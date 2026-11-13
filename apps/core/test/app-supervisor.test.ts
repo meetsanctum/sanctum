@@ -244,7 +244,7 @@ describe("an app's supervisor", () => {
     });
 
     it("waits for the manager when it can't run apps yet, without counting", async () => {
-      const startAppContainer = vi.fn(async () => undefined);
+      const startAppContainer = vi.fn(async () => ({ kept: false }));
       let can = false;
       const { entry, supervisor, phase } = setUp({
         startAppContainer,
@@ -426,7 +426,7 @@ describe("an app's supervisor", () => {
         resolveStarting = resolve;
       });
       const { entry, supervisor, reconciled } = setUp({
-        startAppContainer: () => starting,
+        startAppContainer: () => starting.then(() => ({ kept: false })),
       });
       entry.link = { isReady: () => true } as InstalledApp["link"];
       supervisor.ready(entry);
@@ -447,7 +447,7 @@ describe("an app's supervisor", () => {
         resolveStarting = resolve;
       });
       const { entry, supervisor, phase } = setUp({
-        startAppContainer: () => starting,
+        startAppContainer: () => starting.then(() => ({ kept: false })),
       });
       const launched = supervisor.launch(entry);
       await passes(0);
@@ -489,7 +489,7 @@ describe("an app's supervisor", () => {
           rejectStarting = reject;
         });
         const { entry, supervisor } = setUp({
-          startAppContainer: () => starting,
+          startAppContainer: () => starting.then(() => ({ kept: false })),
         });
         const launched = supervisor.launch(entry);
         await passes(0);

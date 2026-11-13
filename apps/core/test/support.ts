@@ -143,7 +143,7 @@ export function fakeManager() {
   >();
   const manager: TestManager = {
     capabilities: () => ({ appContainers: true, memoryLimits: true }),
-    async startAppContainer() {},
+    startAppContainer: async () => ({ kept: false }),
     async stopAppContainer() {},
     async removeAppContainer() {},
     appContainer: async () => ({ state: "stopped" }),

@@ -360,7 +360,7 @@ describe("an app that really fails, in its real container", () => {
     expect((await container()).state).toBe("running");
   }, 120_000);
 
-  it("gets no container while a core update is on trial, and starts at the commit", async () => {
+  it("waits stopped in its container while a core update is on trial, and starts there at the commit", async () => {
     await freshCore();
     const health = async () => {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);
@@ -368,24 +368,31 @@ describe("an app that really fails, in its real container", () => {
         ? ((await response.json()) as { updatePending?: boolean })
         : undefined;
     };
-    const container = async () =>
-      (await api("GET", `/api/apps/${app}/container`)).body as {
-        state?: string;
-      };
+    const containerId = () =>
+      docker("inspect", "-f", "{{.Id}}", name(`app-${app}`));
+    const before = await containerId();
 
     // What a core update does: the marker, then a new core. Stopping the core
-    // takes the app's connection, and with it its container.
+    // takes the app's connection: its runner stops it there and waits.
     await docker("exec", name("core"), "touch", "/data/update-pending");
+    const since = new Date().toISOString();
     await docker("restart", name("core"));
     await waitFor("the core on trial", async () =>
       (await health())?.updatePending === true ? true : undefined,
     );
-    await waitFor("the app's container to end", async () =>
-      (await container()).state === "running" ? undefined : true,
+    await waitFor("the app to wait for the next core", async () =>
+      (
+        await run("sh", [
+          "-c",
+          `docker logs --since ${since} ${name(`app-${app}`)} 2>&1`,
+        ])
+      ).includes("waits for the next")
+        ? true
+        : undefined,
     );
     // Long enough for a launch to have shown.
     await new Promise((done) => setTimeout(done, 5_000));
-    expect((await container()).state).not.toBe("running");
+    expect(await containerId()).toBe(before);
 
     await docker("exec", name("core"), "unlink", "/data/update-pending");
     await waitFor("the commit", async () =>
@@ -394,6 +401,7 @@ describe("an app that really fails, in its real container", () => {
 
     await until("it to run", ({ state }) => state === "running");
     expect(await act("ping")).toMatchObject({ status: 200, body: "pong" });
+    expect(await containerId()).toBe(before);
   }, 120_000);
 
   it("stops it for good with the stack, leaving nothing", async () => {
