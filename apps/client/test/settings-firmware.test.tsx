@@ -62,6 +62,7 @@ function light(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     id,
     name,
     driverName: "Hue Essential White and Color Ambiance A60",
+    type: "light",
     driver: "sanctum.zigbee",
     manufacturer: "Philips",
     model: "LCA016",
@@ -99,6 +100,7 @@ const button = {
     leftAt: null,
   }),
   driverName: "Wireless mini switch",
+  type: "button",
   capabilities: [
     {
       id: "button",

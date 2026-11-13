@@ -52,6 +52,7 @@ export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
 export * from "./device-pages.js";
+export * from "./device-types.js";
 export * from "./devices.js";
 export * from "./entities.js";
 export * from "./firmware.js";

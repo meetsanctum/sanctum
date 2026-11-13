@@ -39,6 +39,7 @@ describe("a driver app's devices", () => {
         model: "Plug",
         roomId: null,
         driverName: "Kettle plug",
+        type: "plug",
         availability: "online",
         lastSeenAt: "2026-10-26T12:00:00.000Z",
         capabilities: [
@@ -73,6 +74,7 @@ describe("a driver app's devices", () => {
       expect.objectContaining({
         name: "Light",
         driverName: "Kitchen lamp",
+        type: "light",
         capabilities: [
           expect.objectContaining({
             id: "light",

@@ -41,6 +41,7 @@ const device = (on: boolean): DeviceInfo => ({
   id: "device",
   name: "Switch",
   driverName: "Switch",
+  type: "switch",
   driver: "test",
   manufacturer: null,
   model: null,

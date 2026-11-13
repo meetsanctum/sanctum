@@ -252,6 +252,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         model: null,
         roomId: null,
         driverName: name,
+        type: "light",
         availability: "online",
         lastSeenAt: null,
         firmware: null,

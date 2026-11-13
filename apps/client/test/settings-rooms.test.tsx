@@ -29,6 +29,7 @@ function device(id: string, name: string, roomId: string | null) {
     id,
     name,
     driverName: name,
+    type: "unknown",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

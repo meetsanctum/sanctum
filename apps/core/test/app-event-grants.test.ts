@@ -23,6 +23,7 @@ const device: DeviceInfo = {
   name: "Remote",
   driver: "test.driver",
   driverName: "Remote",
+  type: "button",
   manufacturer: null,
   model: null,
   roomId: null,

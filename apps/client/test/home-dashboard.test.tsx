@@ -5,6 +5,7 @@ import type {
   EntityInfo,
   Places,
 } from "@meetsanctum/app-sdk";
+import { deviceTypeOf } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,6 +46,7 @@ function device(
     id,
     name,
     driverName: name,
+    type: deviceTypeOf(capabilities.map((each) => each.kind)),
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

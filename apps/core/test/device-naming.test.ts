@@ -32,7 +32,7 @@ describe("what a device is", () => {
     ).toBe("switch");
     expect(
       deviceType({ driverName: "Remote", model: null, capabilities: [] }),
-    ).toBe("device");
+    ).toBe("unknown");
   });
 
   it("is a sensor when all it has are readings, and a button before that", () => {
@@ -78,7 +78,7 @@ describe("an automatic name", () => {
   it("is the room and what the device is, or just what it is", () => {
     expect(baseName("light", "Office")).toBe("Office light");
     expect(baseName("plug", null)).toBe("Plug");
-    expect(baseName("device", "Hall")).toBe("Hall device");
+    expect(baseName("unknown", "Hall")).toBe("Hall device");
   });
 
   it("is numbered from 2 when another device has it, whatever its case or spacing", () => {

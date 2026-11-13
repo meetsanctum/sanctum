@@ -49,6 +49,7 @@ function light(
     id,
     name,
     driverName: name,
+    type: "light",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,

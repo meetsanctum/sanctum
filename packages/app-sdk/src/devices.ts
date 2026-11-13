@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { DeviceType } from "./device-types.js";
 import type { FirmwareInfo } from "./firmware.js";
 import type { Actor, Tier } from "./index.js";
 
@@ -551,6 +552,8 @@ export type DeviceInfo = {
   roomId: string | null;
   /** What its driver calls it, such as its model's name. */
   driverName: string;
+  /** What it is, by all its capabilities, whichever of them a view shows. */
+  type: DeviceType;
   availability: Availability;
   lastSeenAt: string | null;
   capabilities: CapabilityInfo[];

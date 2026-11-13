@@ -18,6 +18,7 @@ export const lamp: DeviceInfo = {
   id: "lamp",
   name: "Lamp",
   driverName: "Lamp",
+  type: "light",
   driver: "sanctum.zigbee",
   manufacturer: null,
   model: null,

@@ -5,6 +5,7 @@ import type {
   EntityInfo,
   LiveMessage,
 } from "@meetsanctum/app-sdk";
+import { deviceTypeOf } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -45,6 +46,7 @@ const device = (id: string, capabilities: CapabilityInfo[]): DeviceInfo => ({
   id,
   name: id,
   driverName: id,
+  type: deviceTypeOf(capabilities.map((each) => each.kind)),
   driver: "sanctum.zigbee",
   manufacturer: null,
   model: null,

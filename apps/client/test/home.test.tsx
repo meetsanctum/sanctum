@@ -740,6 +740,7 @@ describe("the home's dashboards", () => {
           id: "unknown",
           name: "Unknown device",
           driverName: "Unknown device",
+          type: "unknown",
           driver: "sanctum.zigbee",
           manufacturer: null,
           model: null,

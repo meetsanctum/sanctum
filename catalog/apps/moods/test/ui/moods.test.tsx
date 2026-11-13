@@ -33,6 +33,7 @@ function lightDevice(id: string, name: string, state: LightState): DeviceInfo {
     id,
     name,
     driverName: name,
+    type: "light",
     driver: "sanctum.zigbee",
     manufacturer: null,
     model: null,
