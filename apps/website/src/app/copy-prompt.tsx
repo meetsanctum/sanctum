@@ -15,20 +15,22 @@ export function CopyPrompt(props: { children: ReactNode }) {
     return () => clearTimeout(restore);
   }, [isCopied]);
 
-  function copy() {
+  async function copy() {
     const element = line.current;
     if (!element) return;
     const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
-    navigator.clipboard.writeText(text).then(
-      () => setCopied(true),
-      () => getSelection()?.selectAllChildren(element),
-    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      getSelection()?.selectAllChildren(element);
+    }
   }
 
   return (
     <div className="prompt">
       <p ref={line}>{props.children}</p>
-      <button className="outline" type="button" onClick={copy}>
+      <button className="outline" type="button" onClick={() => void copy()}>
         {isCopied ? "Copied" : "Copy"}
       </button>
     </div>

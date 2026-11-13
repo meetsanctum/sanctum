@@ -2,6 +2,8 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { isEmailAddress } from "../waitlist/join";
+
 type Stage = "asking" | "sending" | "joined";
 
 // The waitlist's form. It checks the address itself, so what is wrong shows
@@ -24,7 +26,7 @@ export function WaitlistForm() {
     const field = email.current;
     if (!field) return;
     const address = field.value.trim();
-    if (!address || !field.checkValidity()) {
+    if (!isEmailAddress(address) || !field.checkValidity()) {
       setInvalid(true);
       setNote("Enter an email address, like name@example.com.");
       field.focus();

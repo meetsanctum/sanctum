@@ -153,10 +153,6 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.stars[hidden] {
-  display: none;
-}
-
 .stars svg {
   fill: none;
   stroke: currentColor;
@@ -243,10 +239,6 @@ h1 {
   margin-top: 12px;
 }
 
-.waitlist[hidden] {
-  display: none;
-}
-
 .waitlist input {
   flex: 999 1 220px;
   min-width: 0;
@@ -303,10 +295,6 @@ h1 {
   font-size: 19px;
   line-height: 30px;
   font-weight: 500;
-}
-
-.joined[hidden] {
-  display: none;
 }
 
 /* Focused by the page once the form is gone, never by a person. */
