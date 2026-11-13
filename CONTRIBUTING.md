@@ -115,8 +115,9 @@ The Images workflow publishes multi-architecture images (`linux/amd64`,
 (`gh workflow run images.yml`), as `:edge`.
 
 A host runs the released images. [`deploy/install.sh`](deploy/install.sh)
-sets one up on Raspberry Pi OS (64-bit), Debian or Ubuntu, and
-[the install guide](docs/install.md) has the steps a person takes, from a
+sets one up on Raspberry Pi OS (64-bit), Debian or Ubuntu, and with
+`--uninstall` removes it again, the home's data included.
+[The install guide](docs/install.md) has the steps a person takes, from a
 blank card to a first device.
 
 On a machine that already has Docker, the same by hand is
