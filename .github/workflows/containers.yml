@@ -33,7 +33,7 @@ concurrency:
 jobs:
   # Whether the stacks run, and in which groups. Any of the paths above runs
   # them, but the lockfile only when it changes what they install: a
-  # dependency of the website alone changes nothing there.
+  # dependency of the website's own changes nothing there.
   plan:
     runs-on: ubuntu-24.04-arm
     defaults:
@@ -64,10 +64,12 @@ jobs:
             git archive "$1" | tar -x -C "$dir" || return
             # Keep each package's dependency tree: changing which version one
             # uses matters even when another already installs that version.
+            # The root's tools count too: every package compiles with its
+            # TypeScript, and Turbo runs the tests.
             (cd "$dir" && pnpm list -r --lockfile-only --depth Infinity --json \
-              --filter './apps/core...' --filter './apps/manager...' \
+              --filter '{.}' --filter './apps/core...' --filter './apps/manager...' \
               --filter './catalog/apps/*...' --filter './deploy/dev/apps/*...') |
-              jq -S --arg dir "$dir/" \
+              jq -S --arg dir "$dir" \
                 'walk(if type == "string" then ltrimstr($dir) else . end) | sort_by(.path)'
           }
           # Whatever this can't tell runs them.
