@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import {
+  assertDriverProblems,
   appManifestSchema,
   standardEntityTypes,
   tierSchema,
@@ -413,6 +414,7 @@ const manifestShape = z.looseObject({
   version: z.string(),
   oldestPage: appManifestSchema.shape.version.optional(),
   pages: z.array(z.string()),
+  driver: z.looseObject({ hooks: z.array(z.string()) }).nullable(),
   settings: z
     .looseObject({ properties: z.record(z.string(), schema) })
     .nullable(),
@@ -458,6 +460,12 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
   if (!shape.success) {
     throw new Error(
       `its manifest is incomplete: ${z.prettifyError(shape.error)}`,
+    );
+  }
+  if (manifest.driver) {
+    assertDriverProblems(
+      manifest.driver,
+      manifest.driver.hooks.includes("repair"),
     );
   }
   checkPieces(manifest);

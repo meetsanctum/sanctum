@@ -63,6 +63,10 @@ describe("a driver's problems", () => {
       { problems: { long: { words: "x".repeat(101) } } },
     ],
     [
+      "words padded past 100 characters",
+      { problems: { long: { words: " ".repeat(100) + "x" } } },
+    ],
+    [
       "an id that isn't camelCase",
       { problems: { "key-mismatch": { words: "No" } } },
     ],
@@ -70,6 +74,15 @@ describe("a driver's problems", () => {
       "a repair asking what it doesn't declare",
       {
         problems: { broken: { words: "Broken", repair: { asks: ["code"] } } },
+        repair,
+      },
+    ],
+    [
+      "a repair asking an inherited property instead of a declared question",
+      {
+        problems: {
+          broken: { words: "Broken", repair: { asks: ["toString"] } },
+        },
         repair,
       },
     ],

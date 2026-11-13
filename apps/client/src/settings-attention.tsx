@@ -179,6 +179,7 @@ export function NeedsAttentionSection(props: {
       .filter(
         (device) =>
           (done[device.id] ||
+            repairing?.id === device.id ||
             moving[device.id] ||
             results[device.id]?.kind === "probing") &&
           !needing.some((each) => each.device.id === device.id),
@@ -306,6 +307,9 @@ export function NeedsAttentionSection(props: {
       return { text: result.text, tone: "problem" };
     }
     if (answers(row)) return { text: row.done!.text, tone: "done" };
+    if (row.reasons.length === 0 && repairing?.id === row.device.id) {
+      return { text: repairing.problem!.words, tone: "problem" };
+    }
     const lead = row.reasons[0]!;
     if (lead === "offline" && result?.kind === "probed") {
       return { text: noAnswer, tone: "problem" };

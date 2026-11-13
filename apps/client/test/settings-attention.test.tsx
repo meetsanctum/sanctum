@@ -447,9 +447,16 @@ describe("Needs attention", () => {
     expect(field.value).toBe("a wrong key");
 
     const repaired = { ...kettle, problem: null };
-    answer = () => ({ repaired });
+    let finish!: (value: { repaired: DeviceInfo }) => void;
+    answer = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
     await act(async () => buttonIn(dialog, "Repair").click());
-    await show([repaired, heater]);
+    await show([repaired]);
+    expect(rowOf("Kettle plug")).toBeDefined();
+    expect(document.querySelector("[role=dialog]")).not.toBeNull();
+    await act(async () => finish({ repaired }));
     expect(document.querySelector("[role=dialog]")).toBeNull();
     expect(rowOf("Kettle plug").textContent).toContain("Repaired");
     expect(status()).toBe("Kettle plug is repaired.");

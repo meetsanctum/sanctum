@@ -12,6 +12,7 @@ import {
   deviceReport,
   isDeclaredRefusal,
   permissionIds,
+  repairAnswers,
   shownProblem,
   type Actor,
   type AppContext,
@@ -361,6 +362,7 @@ export function createDriverCore(
       }
       registered.delete(key);
       availability.delete(key);
+      problems.delete(key);
     },
 
     /** Hands the driver a client's firmware call for one of its devices. */
@@ -395,13 +397,20 @@ export function createDriverCore(
       if (!repair || !problem?.repair) {
         throw new Error(`${key} has nothing to repair`);
       }
+      const checked = repairAnswers(problem, answers);
+      if (!checked) {
+        refuse(new Error("Repair's answers are invalid"));
+      }
       const result = await repair(person(), {
         key,
         device: `device:${key}`,
         problem: problem.id,
-        answers,
+        answers: checked,
       });
-      if (result && !isDeclaredRefusal(problem, result.refused)) {
+      if (
+        result !== undefined &&
+        (!result || !isDeclaredRefusal(problem, result.refused))
+      ) {
         refuse(
           new Error(`${app.id} refused a repair in words it doesn't declare`),
         );

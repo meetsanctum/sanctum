@@ -151,7 +151,7 @@ export function createProblems(options: {
           log(id, "refused", who, "invalid_request");
           throw new ActionCallError("invalid_request");
         }
-        let result: DriverRepairResult;
+        let result: unknown;
         try {
           result = await drivers.repair(
             row.driver,
@@ -171,12 +171,16 @@ export function createProblems(options: {
           );
           throw failure;
         }
-        if (result && "refused" in result) {
-          if (!isDeclaredRefusal(problem, result.refused)) {
+        if (result !== undefined) {
+          const parsed = z.object({ refused: z.unknown() }).safeParse(result);
+          if (
+            !parsed.success ||
+            !isDeclaredRefusal(problem, parsed.data.refused)
+          ) {
             log(id, "failed", who, "app_failed");
             throw new ActionCallError("app_failed");
           }
-          const { question, refusal } = result.refused;
+          const { question, refusal } = parsed.data.refused;
           log(id, "refused", who, refusal);
           return { refused: { question, refusal } };
         }

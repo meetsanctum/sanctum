@@ -102,7 +102,7 @@ const maxProblems = 32;
 const maxQuestions = 8;
 const maxRefusals = 8;
 
-const words = (max: number) => z.string().trim().min(1).max(max);
+const words = (max: number) => z.string().max(max).trim().min(1);
 const ids = <T extends z.ZodType>(value: T, max: number) =>
   z
     .record(z.string().regex(problemId), value)
@@ -139,7 +139,11 @@ type DriverWithProblems = {
  * words, a repair asking only questions it declares, and driver.repair
  * there exactly when some problem has a repair.
  */
-export function assertDriverProblems(driver: DriverWithProblems) {
+export function assertDriverProblems(
+  driver: DriverWithProblems,
+  // A static manifest names the hook rather than carrying its function.
+  hasRepair = driver.repair !== undefined,
+) {
   const problems = ids(problemShape, maxProblems).safeParse(
     driver.problems ?? {},
   );
@@ -163,7 +167,7 @@ export function assertDriverProblems(driver: DriverWithProblems) {
       throw new Error(`The repair of ${id} asks a question twice`);
     }
     for (const question of asks) {
-      if (!(question in questions.data)) {
+      if (!Object.hasOwn(questions.data, question)) {
         throw new Error(
           `The repair of ${id} asks ${question}, which the driver doesn't declare`,
         );
@@ -173,7 +177,7 @@ export function assertDriverProblems(driver: DriverWithProblems) {
   if (driver.repair !== undefined && typeof driver.repair !== "function") {
     throw new Error("A driver's repair must be a function");
   }
-  if (repairs !== (driver.repair !== undefined)) {
+  if (repairs !== hasRepair) {
     throw new Error(
       "A driver has a repair function exactly when one of its problems has a repair",
     );

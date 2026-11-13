@@ -33,6 +33,7 @@ function setup(refusal = "wrongKey") {
       },
       driver: {
         async command() {},
+        async remove() {},
         problems: {
           keyMismatch: {
             words: "Its key doesn't match",
@@ -85,5 +86,30 @@ describe("the suite's device problems", () => {
       "words it doesn't declare",
     );
     expect(core.refused).toHaveLength(2);
+  });
+
+  it.each<Record<string, string>>([
+    {},
+    { key: "" },
+    { key: "right", extra: "answer" },
+  ])("rejects answers the real core would refuse (%j)", async (answers) => {
+    const { core, context } = setup();
+    await core.start();
+    await context().devices.problem({ key: "plug", problem: "keyMismatch" });
+
+    await expect(core.repair("plug", answers)).rejects.toThrow(
+      "Repair's answers are invalid",
+    );
+    expect(core.problems.has("plug")).toBe(true);
+  });
+
+  it("forgets a device's problem when the device is removed", async () => {
+    const { core, context } = setup();
+    await core.start();
+    await context().devices.problem({ key: "plug", problem: "keyMismatch" });
+
+    await core.remove("plug");
+
+    expect(core.problems.has("plug")).toBe(false);
   });
 });

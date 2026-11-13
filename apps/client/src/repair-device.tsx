@@ -59,23 +59,29 @@ export function RepairDevice(props: {
   const [working, setWorking] = useState(false);
   const current = useRef(props.device);
   current.current = props.device;
+  const request = useRef(0);
 
   // Opening and closing both start afresh, so no answer outlives the dialog.
   useEffect(() => {
+    request.current += 1;
     setAnswers({});
     setRefused(undefined);
     setFailure(undefined);
     setWorking(false);
+    return () => {
+      request.current += 1;
+    };
   }, [props.device?.id, !!props.device]);
 
-  const complete = asks.every(
-    (question) => (answers[question.id] ?? "") !== "",
-  );
+  const answerTo = (id: string) =>
+    Object.hasOwn(answers, id) ? answers[id]! : "";
+  const complete = asks.every((question) => answerTo(question.id) !== "");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const repairing = props.device;
-    if (!repairing || !complete) return;
+    if (!repairing || !complete || working) return;
+    const pending = ++request.current;
     setWorking(true);
     setRefused(undefined);
     setFailure(undefined);
@@ -84,7 +90,7 @@ export function RepairDevice(props: {
         method: "POST",
         json: { id: repairing.id, answers },
       });
-      if (current.current !== repairing) return;
+      if (current.current !== repairing || request.current !== pending) return;
       setWorking(false);
       if ("refused" in result) {
         setRefused(result.refused);
@@ -93,7 +99,7 @@ export function RepairDevice(props: {
       props.onRepaired(result.repaired);
       props.onClose();
     } catch (error) {
-      if (current.current !== repairing) return;
+      if (current.current !== repairing || request.current !== pending) return;
       setWorking(false);
       setFailure(repairProblem(error, props.appName));
     }
@@ -128,7 +134,8 @@ export function RepairDevice(props: {
                 </label>
                 <Input
                   id={id}
-                  value={answers[question.id] ?? ""}
+                  type={question.kind === "secret" ? "password" : "text"}
+                  value={answerTo(question.id)}
                   placeholder={question.placeholder ?? undefined}
                   autoComplete="off"
                   autoCapitalize="none"

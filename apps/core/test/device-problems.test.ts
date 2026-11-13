@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { devicesSeenBy, lampsCore } from "./devices-support.js";
 import { radio } from "./fixtures/apps/lamps/index.js";
@@ -9,6 +9,8 @@ import { post, sharedClient, type TestCore } from "./support.js";
 // and Repair hands the driver the key someone types, once.
 
 const secret = "c2VjcmV0IGtleSBvZiB0aGUga2l0Y2hlbiBsYW1w";
+
+afterEach(() => vi.restoreAllMocks());
 
 function entries(core: TestCore, action: string) {
   return core.activity.recent().filter((entry) => entry.action === action);
@@ -206,4 +208,29 @@ describe("Repair", () => {
       "remove lamp-1",
     ]);
   });
+
+  it.each([secret, {}, false, null])(
+    "rejects a malformed driver result without logging its contents (%j)",
+    async (result) => {
+      const { core, maya, lamp } = await lampsCore();
+      await radio.rekey("lamp-1", secret);
+      vi.spyOn(radio, "repair").mockResolvedValue(result as never);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const failed = await repair(core, maya, {
+        id: lamp,
+        answers: { key: secret },
+      });
+
+      expect(failed.statusCode).toBe(500);
+      expect(failed.json()).toEqual({ error: "app_failed" });
+      expect(entries(core, "device.repair")).toMatchObject([
+        { outcome: "failed", reason: "app_failed" },
+      ]);
+      expect(errors).not.toHaveBeenCalled();
+      expect(
+        JSON.stringify(core.activity.recent()) + core.logs.join("\n"),
+      ).not.toContain(secret);
+    },
+  );
 });
