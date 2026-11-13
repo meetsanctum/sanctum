@@ -145,6 +145,40 @@ describe("an app's supervisor", () => {
       expect(entry.supervision!.lastFailure).toBe("out_of_memory");
     });
 
+    it("waits a moment for the kernel's word on one killed outright", async () => {
+      let outOfMemory = false;
+      const { entry, supervisor } = setUp({
+        appContainer: async () => ({
+          state: "stopped",
+          exitCode: 137,
+          outOfMemory,
+        }),
+      });
+      supervisor.started(entry);
+
+      supervisor.lost(entry, false);
+      await passes(0);
+      expect(entry.supervision!.lastFailure).toBeUndefined();
+      outOfMemory = true;
+      await passes(100);
+
+      expect(entry.supervision!.lastFailure).toBe("out_of_memory");
+    });
+
+    it("says one killed outright by anything else crashed, once that moment has passed", async () => {
+      const { entry, supervisor } = setUp({
+        appContainer: async () => ({ state: "stopped", exitCode: 137 }),
+      });
+      supervisor.started(entry);
+
+      supervisor.lost(entry, false);
+      await passes(1_900);
+      expect(entry.supervision!.lastFailure).toBeUndefined();
+      await passes(200);
+
+      expect(entry.supervision!.lastFailure).toBe("crashed");
+    });
+
     it("says it crashed otherwise, and waits a little for how it stopped", async () => {
       let state: "running" | "stopped" = "running";
       const { entry, supervisor } = setUp({

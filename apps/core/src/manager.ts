@@ -294,6 +294,7 @@ const serviceGrant = z.object({
 // How an app's container stands.
 const appContainer = z.object({
   state: z.enum(["running", "stopped", "none"]),
+  exitCode: z.number().optional(),
   outOfMemory: z.boolean().optional(),
 });
 

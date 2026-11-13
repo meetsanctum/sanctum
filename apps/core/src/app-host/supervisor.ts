@@ -78,6 +78,9 @@ const defaultQuietMs = 30_000;
 const defaultAttentionMs = 5 * 60_000;
 // How long the manager may take to see that a container has stopped.
 const howItStoppedWithinMs = 2_000;
+// The exit of a process killed outright, as the kernel kills one that ran out
+// of memory: 128 and SIGKILL's 9.
+const killedExitCode = 137;
 
 export function newSupervision(now: Date): Supervision {
   return {
@@ -365,7 +368,8 @@ export function createSupervisor(options: {
   }
 
   // What stopped it, which the kernel told the manager. It may not know yet just
-  // as the socket closes.
+  // as the socket closes, and Docker may say a process was killed a moment
+  // before it says the kernel killed it for its memory.
   async function howItStopped(
     entry: InstalledApp,
     generation: number,
@@ -379,7 +383,8 @@ export function createSupervisor(options: {
         .appContainer(entry.app.id)
         .catch(() => undefined);
       if (container?.state === "stopped") {
-        return container.outOfMemory ? "out_of_memory" : "crashed";
+        if (container.outOfMemory) return "out_of_memory";
+        if (container.exitCode !== killedExitCode) return "crashed";
       }
       await new Promise((done) => setTimeout(done, 100));
     }
