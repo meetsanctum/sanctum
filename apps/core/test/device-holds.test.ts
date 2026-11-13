@@ -188,7 +188,9 @@ describe("holding a remote's button", () => {
     radio.confirms = false;
 
     await press(core, "hold");
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    // The wake's time to be confirmed runs out on the real clock: the test
+    // waits for it to have, however long a slow runner takes.
+    await expect.poll(() => lightOf(core, lamp).sync).toBe("conflict");
 
     expect(movesOf("lamp-1")).toEqual([{ move: "up", percentPerSecond: 25 }]);
     expect(
@@ -196,7 +198,6 @@ describe("holding a remote's button", () => {
         .filter(({ command }) => command.key === "lamp-1")
         .map(({ command }) => command.command),
     ).toEqual([{ on: true, brightness: 1 }]);
-    expect(lightOf(core, lamp).sync).toBe("conflict");
     await release();
   });
 

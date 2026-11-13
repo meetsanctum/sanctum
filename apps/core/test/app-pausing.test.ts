@@ -16,9 +16,12 @@ const lamp = {
   said: [] as string[],
   // While set, Ping waits for it.
   hold: undefined as Promise<void> | undefined,
+  // How many Pings have reached the app.
+  pings: 0,
   reset() {
     this.said.length = 0;
     this.hold = undefined;
+    this.pings = 0;
   },
 };
 
@@ -31,6 +34,7 @@ const ping = defineAction({
   input: z.object({}),
   output: z.object({ places: z.number() }),
   async run(ctx) {
+    lamp.pings += 1;
     await lamp.hold;
     return { places: (await ctx.places.list()).rooms.length };
   },
@@ -128,8 +132,17 @@ async function lampInfo(core: TestCore, token: string) {
   return listed.find((app) => app.id === "test.lamp")!;
 }
 
-// Lets the app's start or stop settle.
-const settled = () => new Promise((resolve) => setTimeout(resolve, 10));
+// A grant is answered before the app has stopped or runs again, so the tests
+// wait for the one they go on from, however long a slow runner takes: its
+// stop hook has run, or it takes calls again, which is after its start hook.
+// Its listed state would not do for that: with the permission back on, it
+// says running while a stop from before is still under way.
+const stopped = () => expect.poll(() => lamp.said.at(-1)).toBe("stop");
+const running = (core: TestCore, appId = "test.lamp") =>
+  expect.poll(() => core.apps.isRunning(appId)).toBe(true);
+
+// Long enough for a stop that must not come to have come.
+const aMoment = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe("switching off a permission an app needs", () => {
   it("pauses it: it stops, and its actions are refused, those that would change something logged", async () => {
@@ -137,7 +150,7 @@ describe("switching off a permission an app needs", () => {
     expect(lamp.said).toEqual(["start"]);
 
     const answered = await grant(core, maya.token, "places.read", false);
-    await settled();
+    await stopped();
 
     expect(answered.statusCode).toBe(200);
     expect(answered.json()).toMatchObject({
@@ -166,7 +179,7 @@ describe("switching off a permission an app needs", () => {
   it("starts it again once the permission is back on", async () => {
     const { core, maya } = await lampCore();
     await grant(core, maya.token, "places.read", false);
-    await settled();
+    await stopped();
 
     const answered = await grant(core, maya.token, "places.read", true);
 
@@ -186,15 +199,15 @@ describe("switching off a permission an app needs", () => {
     lamp.hold = new Promise((resolve) => (release = resolve));
     // Ping waits for the hold, then reads places, which it still holds.
     const pinging = call(core, maya.token, "lamp.ping");
-    await settled();
+    await expect.poll(() => lamp.pings).toBe(1);
 
     await grant(core, maya.token, "workflows.manage", false);
-    await settled();
+    await aMoment();
     expect(lamp.said).toEqual(["start"]);
     release();
 
     expect((await pinging).json()).toEqual({ places: 0 });
-    await settled();
+    await stopped();
     expect(lamp.said).toEqual(["start", "stop"]);
   });
 
@@ -202,7 +215,7 @@ describe("switching off a permission an app needs", () => {
     const { core, maya } = await lampCore();
     const { workflow } = (await call(core, maya.token, "lamp.plan")).json();
     await grant(core, maya.token, "workflows.manage", false);
-    await settled();
+    await stopped();
 
     core.advance(2 * 60_000);
     core.workflows.tick();
@@ -225,7 +238,7 @@ describe("switching off a permission an app needs", () => {
 
     // Both waited for it: the job and the workflow's 12:01.
     await grant(core, maya.token, "workflows.manage", true);
-    await settled();
+    await running(core);
     core.workflows.tick();
     await core.workflows.settled();
     expect(lamp.said).toEqual(["start", "stop", "start", "glow", "glow"]);
@@ -234,7 +247,7 @@ describe("switching off a permission an app needs", () => {
   it("keeps it paused across restarts, without starting it", async () => {
     const first = await lampCore();
     await grant(first.core, first.maya.token, "places.read", false);
-    await settled();
+    await stopped();
     lamp.reset();
 
     const again = await testCore({
@@ -258,7 +271,7 @@ describe("switching off a permission an app may do without", () => {
     const { core, maya } = await lampCore();
 
     const answered = await grant(core, maya.token, "people.read", false);
-    await settled();
+    await aMoment();
 
     expect(answered.json()).toMatchObject({ state: "running" });
     expect(lamp.said).toEqual(["start"]);
@@ -322,7 +335,7 @@ describe("a paused driver", () => {
       permission: "devices.register",
       granted: false,
     });
-    await settled();
+    await expect.poll(() => radio.stopped).toBe(1);
 
     expect((await command()).json()).toEqual({ error: "unavailable" });
     expect(core.apps.pairingDrivers()).toEqual([]);
@@ -333,7 +346,7 @@ describe("a paused driver", () => {
       permission: "devices.register",
       granted: true,
     });
-    await settled();
+    await running(core, "test.lamps");
 
     expect((await command()).statusCode).toBe(200);
     expect(radio.received.at(-1)?.command).toMatchObject({ key: "lamp-1" });
