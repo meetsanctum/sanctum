@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash -s -- --channel edge
+#   curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash -s -- --uninstall
 #
 # It installs Docker where it is missing (on Raspberry Pi OS, Debian and
 # Ubuntu), turns on the memory limits a Raspberry Pi leaves off, keeps a
@@ -11,6 +12,9 @@
 #
 # Running it again is safe: it finishes an install that was cut short and
 # leaves a running one alone.
+#
+# With --uninstall it removes what it set up, the home's data included, after
+# asking. Docker stays.
 set -euo pipefail
 
 dir=/opt/sanctum
@@ -18,6 +22,11 @@ owner="${SANCTUM_IMAGE_OWNER:-meetsanctum}"
 script="${BASH_SOURCE[0]:-}"
 channel=""
 restart_needed=""
+uninstall=""
+unasked=""
+# Where a person answers: the script itself may arrive on standard input.
+terminal=/dev/tty
+sleep_settings=/etc/systemd/logind.conf.d/sanctum.conf
 
 say() {
   printf '\n==> %s\n' "$*"
@@ -31,9 +40,12 @@ die() {
 usage() {
   cat <<'EOF'
 Usage: install.sh [--channel stable|edge]
+       install.sh --uninstall [--yes]
 
   --channel stable   tagged releases (the default)
   --channel edge     the latest build from main
+  --uninstall        remove Sanctum from this machine, with the home's data
+  --yes              with --uninstall, remove without asking
 EOF
 }
 
@@ -48,6 +60,14 @@ parse() {
         }
         shift 2
         ;;
+      --uninstall)
+        uninstall=1
+        shift
+        ;;
+      --yes)
+        unasked=1
+        shift
+        ;;
       -h | --help)
         usage
         exit 0
@@ -58,6 +78,10 @@ parse() {
         ;;
     esac
   done
+  if [[ -n "$uninstall" && -n "$channel" ]] || [[ -z "$uninstall" && -n "$unasked" ]]; then
+    usage >&2
+    exit 1
+  fi
 }
 
 check_machine() {
@@ -71,7 +95,7 @@ check_machine() {
     aarch64 | arm64 | x86_64 | amd64) ;;
     *) die "Sanctum runs on 64-bit ARM and 64-bit Intel or AMD machines, not on $(uname -m)." ;;
   esac
-  [[ $EUID -eq 0 ]] || die "Run the installer as root: add sudo before bash."
+  [[ $EUID -eq 0 ]] || die "Run this as root: add sudo before bash."
 }
 
 # Docker comes from Docker's own package repository, which carries the Compose
@@ -141,8 +165,8 @@ keep_awake() {
   compgen -G '/proc/acpi/button/lid/*' >/dev/null || return 0
   command -v systemctl >/dev/null || return 0
   say "Keeping this laptop awake with its lid closed"
-  mkdir -p /etc/systemd/logind.conf.d
-  cat >/etc/systemd/logind.conf.d/sanctum.conf <<'EOF'
+  mkdir -p "$(dirname "$sleep_settings")"
+  cat >"$sleep_settings" <<'EOF'
 # Sanctum runs on this laptop with its lid closed.
 [Login]
 HandleLidSwitch=ignore
@@ -159,15 +183,21 @@ kept_setting() {
   sed -n "s/^${1}=//p" "$dir/.env" | tail -n 1
 }
 
+# Whether the manager here is the one this installer started. Compose's labels
+# survive the manager replacing itself on update.
+manager_is_the_installers() {
+  [[ -f "$dir/compose.yml" && -f "$dir/.env" &&
+    "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' sanctum-manager)" == sanctum &&
+    "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' sanctum-manager)" == manager &&
+    "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' sanctum-manager)" == "$dir/compose.yml" ]]
+}
+
 # Refuse a different installation before changing the machine's boot or sleep
-# settings. Compose's labels survive the manager replacing itself on update.
+# settings.
 check_installation() {
   local kept saved_owner
   if docker inspect sanctum-manager >/dev/null 2>&1; then
-    [[ -f "$dir/compose.yml" && -f "$dir/.env" &&
-      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' sanctum-manager)" == sanctum &&
-      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' sanctum-manager)" == manager &&
-      "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' sanctum-manager)" == "$dir/compose.yml" ]] ||
+    manager_is_the_installers ||
       die "Sanctum already runs here, set up another way than by this installer. Nothing was changed."
   fi
   kept="$(kept_setting SANCTUM_CHANNEL)"
@@ -260,10 +290,180 @@ finish() {
   systemctl reboot
 }
 
+# Sanctum's own of one kind in Docker, by name: what its manager labelled and
+# what Compose made for its project. On this machine none of it carries a
+# stack's label, and everything of a development stack on the same Docker does.
+# Docker can't filter on a label being absent, so each is listed with it.
+listed() {
+  local kind="$1" label name=Name
+  shift
+  [[ "$kind" != container ]] || name=Names
+  for label in sanctum.managed=true com.docker.compose.project=sanctum; do
+    docker "$kind" ls "$@" --filter "label=${label}" \
+      --format "{{if .Label \"sanctum.stack\"}}{{else}}{{.${name}}}{{end}}"
+  done | awk 'NF && !seen[$0]++'
+}
+
+# The images Sanctum is built into, and those the given containers run.
+images_of() {
+  local each
+  for each in $(docker image ls -q --filter label=sanctum.service); do
+    [[ -n "$(docker image inspect -f '{{index .Config.Labels "sanctum.stack"}}' "$each")" ]] ||
+      echo "$each"
+  done
+  for each in "$@"; do
+    docker inspect -f '{{.Image}}' "$each" 2>/dev/null || true
+  done
+}
+
+# Only what this installer set up, whole or cut short: its manager, or with no
+# manager its files in /opt/sanctum. Returns 1 where there is no Sanctum.
+check_removal() {
+  local kept
+  if docker inspect sanctum-manager >/dev/null 2>&1; then
+    manager_is_the_installers ||
+      die "Sanctum here was set up another way than by this installer, which removes only what it set up. Nothing was changed."
+  elif [[ ! -f "$dir/compose.yml" && ! -f "$dir/.env" ]]; then
+    [[ -z "$(listed container -a)$(listed volume)$(listed network)" ]] ||
+      die "Sanctum here was set up another way than by this installer, which removes only what it set up. Nothing was changed."
+    return 1
+  fi
+  kept="$(kept_setting SANCTUM_CHANNEL)"
+  [[ -z "$kept" || "$kept" == stable || "$kept" == edge ]] ||
+    die "Sanctum here is on the ${kept} channel, set up another way than by this installer. Nothing was changed."
+}
+
+confirm_removal() {
+  local answer=""
+  cat <<'EOF'
+
+This removes Sanctum from this machine, with your home's data: its people,
+rooms, devices, automations, history and backups. None of it can be brought
+back.
+
+Lights, switches and sensors stay joined to a Zigbee network that will be
+gone. Each needs a reset before it can join another.
+
+Docker stays installed.
+
+EOF
+  [[ -z "$unasked" ]] || return 0
+  { : <"$terminal"; } 2>/dev/null ||
+    die "There is no terminal to ask on. To remove Sanctum without being asked, add --yes. Nothing was changed."
+  printf 'Type "remove" to go on: '
+  read -r answer <"$terminal" || true
+  [[ "$answer" == remove ]] || die "Sanctum stays. Nothing was changed."
+}
+
+# Each app's data is an image file in the manager's volume, attached to a loop
+# device that outlives the volume and holds on to the file's space until the
+# machine restarts. Only ever those files': a loop device can also be
+# something else's.
+detach_images() {
+  local folder file
+  folder="$(docker volume inspect -f '{{.Mountpoint}}' sanctum-manager-data)/images"
+  for file in "$folder"/*.img; do
+    [[ -e "$file" ]] || continue
+    losetup -j "$file" -n -O NAME | xargs -r losetup -d
+  done
+}
+
+remove_from_docker() {
+  local containers volumes networks images each
+  containers="$(listed container -a)"
+  if [[ -n "$containers" ]]; then
+    say "Stopping Sanctum"
+    # The updater first, so it can't put a manager back, and the manager
+    # before its core and services, or it would start them again.
+    for each in sanctum-manager-updater sanctum-manager; do
+      grep -qx "$each" <<<"$containers" || continue
+      docker stop "$each" >/dev/null
+    done
+    # With whatever the manager made while it stopped.
+    containers="$(listed container -a)"
+  fi
+  say "Removing Sanctum and your home's data"
+  # shellcheck disable=SC2086
+  images="$(images_of $containers | sort -u)"
+  if [[ -n "$containers" ]]; then
+    # shellcheck disable=SC2086
+    docker rm -f -v $containers >/dev/null
+  fi
+  volumes="$(listed volume)"
+  if grep -qx sanctum-manager-data <<<"$volumes"; then
+    detach_images
+  fi
+  if [[ -n "$volumes" ]]; then
+    # shellcheck disable=SC2086
+    docker volume rm $volumes >/dev/null
+  fi
+  networks="$(listed network)"
+  if [[ -n "$networks" ]]; then
+    # shellcheck disable=SC2086
+    docker network rm $networks >/dev/null
+  fi
+  # An image something else's container runs stays.
+  for each in $images; do
+    [[ -z "$(docker ps -aq --filter "ancestor=${each}")" ]] || continue
+    docker image rm -f "$each" >/dev/null 2>&1 || true
+  done
+}
+
+# The file says this installer masked the targets, so it goes after them.
+let_sleep() {
+  [[ -f "$sleep_settings" ]] || return 0
+  say "Letting this laptop sleep again"
+  if command -v systemctl >/dev/null; then
+    systemctl unmask --quiet sleep.target suspend.target hibernate.target hybrid-sleep.target
+  fi
+  rm -f "$sleep_settings"
+  if command -v systemctl >/dev/null; then
+    systemctl kill --signal=HUP systemd-logind 2>/dev/null || true
+  fi
+}
+
+not_installed() {
+  say "Sanctum is not installed on this machine"
+}
+
+# Running it again finishes a removal that was cut short: the files in
+# /opt/sanctum, which say this installer set Sanctum up, go last.
+remove() {
+  local cmdline
+  if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
+    if [[ ! -f "$dir/compose.yml" && ! -f "$dir/.env" ]]; then
+      not_installed
+      return 0
+    fi
+    die "Sanctum's containers and data are in Docker, which is not running. Start it (sudo systemctl start docker), then run this again. Nothing was changed."
+  fi
+  if ! check_removal; then
+    not_installed
+    return 0
+  fi
+  confirm_removal
+  remove_from_docker
+  let_sleep
+  rm -f "$dir/compose.yml" "$dir/compose.yml.download" "$dir/.env" "$dir/.env.download"
+  rmdir "$dir" 2>/dev/null || true
+  say "Sanctum is removed"
+  echo "Docker stays installed."
+  for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    [[ -f "$cmdline" ]] || continue
+    if grep -qw 'cgroup_enable=memory' "$cmdline"; then
+      echo "So does cgroup_enable=memory in ${cmdline}, which gives containers memory limits."
+    fi
+  done
+}
+
 # All in a function, so a download cut short runs none of it.
 main() {
   parse "$@"
   check_machine
+  if [[ -n "$uninstall" ]]; then
+    remove
+    return
+  fi
   install_docker
   docker info >/dev/null 2>&1 ||
     die "Docker is installed but not running. Start it (sudo systemctl enable --now docker), then run this again."
