@@ -103,7 +103,8 @@ packages/auth-protocol     Auth's routes, sign-in binding and rules
 packages/typescript-config shared TypeScript settings
 catalog/apps/*             Sanctum's apps, driver apps included
 assets/brand               the brand's files, under their own licence
-deploy/                    the compose file for a host; deploy/dev for development
+deploy/                    a host's installer and compose file; deploy/dev for development
+docs/                      the install guide
 ```
 
 ## Running a host
@@ -113,19 +114,10 @@ The Images workflow publishes multi-architecture images (`linux/amd64`,
 `:X.Y.Z` and `:stable`, and `main`, when the workflow is run by hand
 (`gh workflow run images.yml`), as `:edge`.
 
-A host runs the released images. On a Raspberry Pi with Raspberry Pi OS
-(64-bit), or another 64-bit machine with Debian or Ubuntu,
-[`deploy/install.sh`](deploy/install.sh) sets one up:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/meetsanctum/sanctum/main/deploy/install.sh | sudo bash
-```
-
-It installs Docker where it is missing, turns on the memory limits a
-Raspberry Pi leaves off (the Pi restarts once), keeps a laptop awake with its
-lid closed, and starts Sanctum from `/opt/sanctum`. Add `-s -- --channel edge`
-after `bash` for the latest build from `main` instead of a release. Running
-it again is safe.
+A host runs the released images. [`deploy/install.sh`](deploy/install.sh)
+sets one up on Raspberry Pi OS (64-bit), Debian or Ubuntu, and
+[the install guide](docs/install.md) has the steps a person takes, from a
+blank card to a first device.
 
 On a machine that already has Docker, the same by hand is
 [`deploy/compose.yml`](deploy/compose.yml):
@@ -136,9 +128,12 @@ docker compose -f deploy/compose.yml up -d
 ```
 
 Compose starts only the manager, which creates and updates the core's
-container and updates itself. To run your own builds on a Raspberry Pi
-through the same update path, use `pnpm host:setup` once and then
-`pnpm host:push` (settings in `deploy/dev/.env.example`).
+container and updates itself.
+
+To run your own builds on a Raspberry Pi through the same update path, use
+`pnpm host:setup` once and then `pnpm host:push` (settings in
+`deploy/dev/.env.example`). A dev host is set up this way, not with the
+installer, which refuses one.
 
 ## Licences
 
