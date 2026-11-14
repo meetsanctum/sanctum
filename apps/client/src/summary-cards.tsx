@@ -22,6 +22,10 @@ export type SummaryAction = {
   onPress: () => Promise<string>;
 };
 
+// How long a card keeps what its action did where a screen reader finds
+// it: long enough to be read out, short enough not to be met as news later.
+const saidForMs = 10_000;
+
 /** One card: what it sums up, what it says, and whether that needs a look. */
 export type Summary = {
   id: string;
@@ -63,12 +67,17 @@ export function SummaryCards(props: {
 function SummaryCard(props: { card: Summary }) {
   const { card } = props;
   // What its action last did, for a screen reader: said once it answers,
-  // and gone when the action runs again or there is something for it to do
-  // again, so it is never read as how things are now.
+  // and gone a little later or when the action runs again, so it is never
+  // read as how things are now. It goes by the clock and not by what the
+  // card counts: while a press waits for its answer the lights already show
+  // as asked, and come back on if it fails, so a light coming on cannot
+  // tell a failed press from a later change.
   const [did, setDid] = useState<string>();
   useEffect(() => {
-    if (card.active) setDid(undefined);
-  }, [card.active]);
+    if (did === undefined) return;
+    const timer = window.setTimeout(() => setDid(undefined), saidForMs);
+    return () => window.clearTimeout(timer);
+  }, [did]);
   const action = card.action;
   return (
     <li

@@ -104,6 +104,7 @@ afterEach(async () => {
     root.unmount();
   });
   container.remove();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -130,33 +131,37 @@ describe("Lights' card", () => {
     expect(did?.textContent).toBe("Lights turned off");
   });
 
-  it("says which lights did not turn off, and stops saying what it did once a light is on again", async () => {
+  it("says which lights did not turn off, and stops saying what it did after a while", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    failed = [{ device: "lamp", capability: "light" }];
+    await show("lights");
+    await click(card()!.querySelector("button"));
+    const did = card()!.querySelector("[role=status]");
+    expect(did?.textContent).toBe("1 light did not turn off");
+    // The light that stayed on is back on the card, which keeps its button.
+    expect(said(card()!)).toEqual(["Lights", "1 on"]);
+    expect(card()!.querySelector("button")).not.toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(9_000);
+    });
+    expect(did?.textContent).toBe("1 light did not turn off");
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(did?.textContent).toBe("");
+  });
+
+  it("says each press's own answer", async () => {
     failed = [{ device: "lamp", capability: "light" }];
     await show("lights");
     await click(card()!.querySelector("button"));
     const did = card()!.querySelector("[role=status]");
     expect(did?.textContent).toBe("1 light did not turn off");
 
-    await act(async () => {
-      live.publish({
-        type: "device",
-        id: "lamp",
-        device: {
-          ...lamp,
-          capabilities: lamp.capabilities.map((each) => ({
-            ...each,
-            state: { on: false },
-            observed: { on: false },
-          })) as DeviceInfo["capabilities"],
-        },
-      });
-    });
-    expect(said(card()!)).toEqual(["Lights", "All off"]);
-    await act(async () => {
-      live.publish({ type: "device", id: "lamp", device: lamp });
-    });
-    expect(said(card()!)).toEqual(["Lights", "1 on"]);
-    expect(did?.textContent).toBe("");
+    failed = [];
+    await click(card()!.querySelector("button"));
+    expect(did?.textContent).toBe("Lights turned off");
   });
 
   it("has no button while every light is off: the home's lights are never all turned on", async () => {
