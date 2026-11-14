@@ -81,6 +81,7 @@ export function placeContacts(tiles: readonly Tile[]) {
   const open = contacts.open > 0;
   return {
     open,
+    isUnknown: !open && contacts.closed === 0,
     text: open
       ? `${contacts.open} open`
       : closedText(contacts, contacts.closed === 1 ? "Closed" : "All closed"),

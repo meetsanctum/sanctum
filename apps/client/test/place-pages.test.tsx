@@ -601,6 +601,49 @@ describe("contact sensors", () => {
       "header [data-slot=readings]",
     ) as HTMLElement | null;
 
+  it.each(["unread", "offline", "quiet"] as const)(
+    "keeps a room's contact icon unknown while its sensors are %s",
+    async (state) => {
+      const unknown: DeviceInfo = {
+        ...contactSensor(
+          "front",
+          "Front door",
+          "office",
+          state === "unread" ? null : false,
+        ),
+        availability: state === "offline" ? "offline" : "unknown",
+        lastSeenAt:
+          state === "quiet"
+            ? new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString()
+            : null,
+      };
+      devices = [unknown];
+      await show("room", "office");
+
+      expect(readingsLine()?.textContent).toBe("Contact sensors No readings");
+      expect(
+        readingsLine()?.querySelector("svg")?.getAttribute("stroke-dasharray"),
+      ).toBe("3 3");
+
+      for (const open of [false, true]) {
+        devices = [unknown, contactSensor("back", "Back door", "office", open)];
+        await act(async () => {
+          live.refresh();
+        });
+        expect(readingsLine()?.textContent).toBe(
+          `Contact sensors ${open ? "1 open" : "1 closed"}`,
+        );
+        const icon = readingsLine()?.querySelector("svg");
+        expect(icon?.hasAttribute("stroke-dasharray")).toBe(false);
+        expect(
+          icon?.classList.contains(
+            open ? "lucide-contact-open" : "lucide-contact-closed",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+
   it("say in their room's line whether any is open, and have a section under Security", async () => {
     devices = [
       lamp,

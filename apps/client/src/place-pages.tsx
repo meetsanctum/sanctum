@@ -151,7 +151,7 @@ function PlaceHeader(props: {
 }
 
 /** A place's contact sensors as its line says them (contact.ts). */
-export type PlaceContact = { text: string; open: boolean };
+export type PlaceContact = { text: string; open: boolean; isUnknown: boolean };
 
 /**
  * A place's motion, whether its contact sensors are open and what its
@@ -180,7 +180,11 @@ export function PlaceReadings(props: {
       )}
       {contact && (
         <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <Contact aria-hidden="true" className="text-white/65" />
+          <Contact
+            aria-hidden="true"
+            className="text-white/65"
+            strokeDasharray={contact.isUnknown ? "3 3" : undefined}
+          />
           <span className="sr-only">Contact sensors </span>
           {contact.text}
         </span>

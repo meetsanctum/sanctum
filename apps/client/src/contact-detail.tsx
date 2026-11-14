@@ -1,4 +1,8 @@
-import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
+import {
+  maintenanceOf,
+  type CapabilityInfo,
+  type DeviceInfo,
+} from "@meetsanctum/app-sdk";
 
 import { contactText } from "./contact";
 import { width } from "./device-history";
@@ -12,7 +16,10 @@ type Contact = Extract<CapabilityInfo, { kind: "contact" }>;
 
 /** What it says now, as its tile does. */
 function nowText(device: DeviceInfo, capability: Contact, now: number) {
-  if (device.availability === "offline") return "Offline";
+  if (device.availability === "offline") {
+    return device.leftAt === null ? "Offline" : "Not paired";
+  }
+  if (maintenanceOf(device, now) === "quiet") return "Not heard from";
   if (!capability.state) return "Waiting for a reading";
   return contactText(capability.state.open, capability.changedAt, now);
 }
