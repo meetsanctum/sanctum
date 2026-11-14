@@ -22,6 +22,7 @@ export const permissionIcons = [
   "workflow",
   "globe",
   "radio-tower",
+  "radar",
   "share-2",
   "shield",
 ] as const;
@@ -103,6 +104,9 @@ export function permissionWords(id: string): PermissionWords {
     return words(...controls[rest as CapabilityKind]);
   }
   if (kind === "net" && rest) return words(`Reach ${rest}`, "globe");
+  if (kind === "discover" && rest.startsWith("mdns:")) {
+    return words("Find devices on your network", "radar");
+  }
   if (kind === "services" && rest) {
     const name = Object.hasOwn(serviceNames, rest) ? serviceNames[rest]! : rest;
     return words(`Use ${name}`, "radio-tower", "Only Sanctum's own apps");

@@ -7,6 +7,7 @@ import {
   type AppInfo,
   type Job,
   type JobRequest,
+  type Sighting,
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
@@ -63,6 +64,7 @@ import {
 } from "./supervisor.js";
 import type { AppsOff } from "./off.js";
 import { createApartStarts } from "./apart-starts.js";
+import { createDiscoveryHandOut } from "./discovered.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -144,6 +146,8 @@ export function createAppHost(options: {
   settings: AppSettingsStore;
   // Apps' own secrets, sealed by the core.
   secrets: AppSecrets;
+  // What the manager found on the home's network (discovery/sightings.ts).
+  sightings?: () => readonly Sighting[];
   grants: AppGrants;
   commits: AppCommits;
   updates: AppUpdates;
@@ -183,8 +187,13 @@ export function createAppHost(options: {
   const announceNow = announcerOf(options.onApp, log, ({ manifest }) =>
     options.updates.shownFor(manifest.id),
   );
-  const announce = (entry: InstalledApp) =>
-    installed.get(entry.app.id) === entry && announceNow(entry);
+  // What drivers hear of the home's network follows whether each runs.
+  let handOut: ReturnType<typeof createDiscoveryHandOut> | undefined;
+  const announce = (entry: InstalledApp) => {
+    if (installed.get(entry.app.id) !== entry) return;
+    announceNow(entry);
+    handOut?.sync();
+  };
 
   // Counts a call under way until it settles.
   function track<T>(entry: InstalledApp, call: Promise<T>): Promise<T> {
@@ -434,6 +443,9 @@ export function createAppHost(options: {
           options.presses().endCaptures(entry.app.id);
         }
       }
+      // Granted to look, or no longer: it hears of what that finds, or that
+      // it's gone.
+      handOut?.sync();
       const settled = reconcile(
         entry,
         service ? { restartFor: "its changed services" } : {},
@@ -495,6 +507,13 @@ export function createAppHost(options: {
     contextFor,
     track,
     timeoutMs,
+    log,
+  });
+  handOut = createDiscoveryHandOut({
+    installed,
+    accepts,
+    sightings: () => options.sightings?.() ?? [],
+    discovered: (appId, discovery) => drivers.discovered(appId, discovery),
     log,
   });
 
@@ -699,6 +718,11 @@ export function createAppHost(options: {
       return entry ? { app: appId, granted: [...entry.granted] } : null;
     },
 
+    // The services the drivers that may look for devices are looking for,
+    // and handing each what changed (discovered.ts).
+    discoveryServices: () => handOut!.services(),
+    discoveryChanged: () => handOut!.sync(),
+
     /** Whether an app is installed and takes calls now: not paused. */
     isRunning(appId: string) {
       const entry = installed.get(appId);
@@ -754,6 +778,7 @@ export function createAppHost(options: {
     // and says hello to the next core, which starts it again in the same
     // container. A host that shuts down stops the containers themselves.
     async close() {
+      handOut?.close();
       options.updates.close();
       const replacementsEnded = apartStarts.close();
       const entries = [...installed.values()];

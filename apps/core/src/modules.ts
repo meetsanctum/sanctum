@@ -32,6 +32,10 @@ import type { CoreDatabase } from "./database.js";
 import { createDevices, type DeviceChange } from "./devices/devices.js";
 import { createFirmware } from "./devices/firmware.js";
 import { createProblems } from "./devices/problems.js";
+import {
+  createSightings,
+  type SightingsManager,
+} from "./discovery/sightings.js";
 import { createHolds } from "./devices/holds.js";
 import { createLights } from "./devices/lights.js";
 import { createMotion } from "./devices/motion.js";
@@ -76,6 +80,9 @@ export async function createModules(
         // The manager's audit after an entry (activity/manager-audit.ts);
         // tests may leave it out.
         audit?: (after: number) => Promise<ManagerAudit>;
+        // What it found on the home's network (discovery/sightings.ts); tests
+        // may leave it out.
+        discovery?: SightingsManager["discovery"];
       };
     // The host's id, which the manager keeps.
     hostId: () => string | undefined;
@@ -400,6 +407,7 @@ export async function createModules(
     entities,
     settings: appSettingsStore,
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
+    sightings: () => sightings?.list() ?? [],
     updates: appUpdates,
     grants: createAppGrants(db, { now }),
     commits: createAppCommits({
@@ -420,6 +428,21 @@ export async function createModules(
     supervision: options.supervision,
     now,
   });
+  // What the manager finds on the home's network for the drivers that look
+  // for it, which they hear of as it changes.
+  const lookFor = options.manager.discovery;
+  const sightings = lookFor
+    ? createSightings({
+        manager: {
+          capabilities: () => options.manager.capabilities(),
+          discovery: (after, services) => lookFor(after, services),
+        },
+        services: () => apps.discoveryServices(),
+        onChange: () => apps.discoveryChanged(),
+        log,
+      })
+    : undefined;
+  sightings?.start();
   host = apps;
   workflows = createWorkflows(db, {
     host: apps,
@@ -498,6 +521,7 @@ export async function createModules(
     // is known from then on, and the timers waiting for devices. Nothing
     // goes to a device again while the apps stop.
     async close() {
+      sightings?.close();
       managerAudit?.close();
       devices.closing();
       workflows!.close();

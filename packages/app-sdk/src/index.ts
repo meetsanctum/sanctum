@@ -28,6 +28,11 @@ import {
   type DriverRepair,
   type DriverRepairResult,
 } from "./device-problems.js";
+import {
+  discoveredServices,
+  isMalformedDiscover,
+  type DriverDiscovery,
+} from "./discovery.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
 import {
@@ -67,6 +72,7 @@ export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
 export * from "./device-problems.js";
+export * from "./discovery.js";
 export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";
@@ -421,6 +427,13 @@ export interface AppDefinition extends AppManifestFields {
      * repair asks, resolving once done or with the answer it refuses.
      */
     repair?(ctx: AppContext, repair: DriverRepair): Promise<DriverRepairResult>;
+    /**
+     * What it finds on the home's network, of the services it holds
+     * discover:mdns:<service> for: every sighting as it starts, then each one
+     * found, changed or lost, in order (discovery.ts). It resolves once it
+     * has taken them in.
+     */
+    discovered?(ctx: AppContext, discovery: DriverDiscovery): Promise<void>;
   };
 }
 
@@ -508,6 +521,25 @@ export function defineApp(app: AppDefinition): AppDefinition {
     throw new Error("A driver's probe must be a function");
   }
   if (app.driver) assertDriverProblems(app.driver);
+  // A driver hears of what it looks for on the network; only it looks.
+  const malformed = asked.find(isMalformedDiscover);
+  if (malformed) {
+    throw new Error(
+      `${malformed} must name an mDNS service, such as discover:mdns:_example._tcp`,
+    );
+  }
+  const looks = discoveredServices(asked).length > 0;
+  if (
+    app.driver?.discovered !== undefined &&
+    typeof app.driver.discovered !== "function"
+  ) {
+    throw new Error("A driver's discovered must be a function");
+  }
+  if (looks !== (app.driver?.discovered !== undefined)) {
+    throw new Error(
+      "A driver has a discovered function exactly when it asks for a discover:mdns: permission",
+    );
+  }
   return app;
 }
 
@@ -520,6 +552,7 @@ const driverHooks = [
   "firmware",
   "probe",
   "repair",
+  "discovered",
 ] as const;
 
 /**
