@@ -225,6 +225,31 @@ describe("finding devices", () => {
     });
   });
 
+  it("keeps a device as it was when it moves to another host without addresses", async () => {
+    const { discovery, browsers } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    const browser = browsers.get("_example._tcp")!;
+    browser.services = [kitchen];
+    discovery.take();
+    const found = await discovery.poll(first.after, ["_example._tcp"]);
+
+    browser.services = [{ ...kitchen, host: "new.local", addresses: [] }];
+    discovery.take();
+    const unchanged = await discovery.poll(found.after, ["_example._tcp"]);
+    expect(unchanged).toMatchObject({ found: [], lost: [] });
+
+    browser.services = [
+      { ...kitchen, host: "new.local", addresses: ["192.168.1.50"] },
+    ];
+    discovery.take();
+    expect(
+      await discovery.poll(unchanged.after, ["_example._tcp"]),
+    ).toMatchObject({
+      found: [{ host: "new.local", addresses: ["192.168.1.50"] }],
+      lost: [],
+    });
+  });
+
   it("answers everything afresh when more changed while it waited than it keeps", async () => {
     const { discovery, browsers } = pretend();
     const first = await discovery.poll(null, ["_example._tcp"]);

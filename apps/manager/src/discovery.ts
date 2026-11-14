@@ -266,10 +266,19 @@ export function createDiscovery(
       for (const found of browser.services) {
         if (at - found.lastSeen >= stale) continue;
         // An answer that changes its port or TXT record may leave out its
-        // addresses: it keeps those it had.
+        // addresses: it keeps those it had. One that moves it to another host
+        // without them keeps it as it was until its new addresses come, as
+        // the old host's aren't the new one's.
         const before = found.name
           ? sightings.get(sightingKey({ service, name: found.name }))
           : undefined;
+        if ((found.addresses ?? []).length === 0 && before) {
+          if (found.host !== before.sighting.host) {
+            seen.add(sightingKey(before.sighting));
+            before.seenAt = found.lastSeen;
+            continue;
+          }
+        }
         const answered =
           (found.addresses ?? []).length === 0 && before
             ? { ...found, addresses: before.sighting.addresses }
