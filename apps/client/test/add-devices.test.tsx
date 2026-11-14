@@ -336,6 +336,25 @@ describe("Add devices, with what drivers found", () => {
     expect(dialog.textContent).toContain("Living room plug");
   });
 
+  it("keeps a live update that arrives before an older read of its own", async () => {
+    let finish!: (info: PairingInfo) => void;
+    const answered = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/devices/pairing"
+        ? new Promise((done) => (finish = done as never))
+        : answered(path, init),
+    );
+    const dialog = await show(undefined, false);
+
+    await act(async () => live.refresh());
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: { ...adding, found: [plug] } }),
+    );
+    await act(async () => finish({ ...adding, found: [] }));
+
+    expect(dialog.textContent).toContain("Living room plug");
+  });
+
   it("offers Look again when a radio starts after opening without one", async () => {
     adding = { ...adding, drivers: [] };
     vi.mocked(coreJson).mockImplementationOnce(async () => {

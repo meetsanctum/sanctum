@@ -261,18 +261,25 @@ export function AddDevices(props: {
   useEffect(() => {
     if (!props.open) return;
     const current = session.current;
+    // A read the live feed or a later read has overtaken is out of date.
+    let revision = 0;
     const received = (next: PairingInfo) => {
       setPairing(next);
       if (next.drivers?.length) setUnavailable(false);
     };
     return props.live.subscribe({
       message(message) {
-        if (message.type === "pairing") received(message.pairing);
+        if (message.type !== "pairing") return;
+        revision += 1;
+        received(message.pairing);
       },
       refresh() {
+        const requested = ++revision;
         void coreJson<PairingInfo>("/api/devices/pairing")
           .then((next) => {
-            if (current === session.current) received(next);
+            if (current === session.current && requested === revision) {
+              received(next);
+            }
           })
           .catch(() => undefined);
       },
