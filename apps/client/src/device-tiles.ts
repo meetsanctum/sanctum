@@ -17,18 +17,21 @@ import {
   type TileSection,
 } from "@meetsanctum/ui-sdk";
 
+import { contactText } from "./contact";
 import { motionText } from "./motion";
 
 // The home's lights, switches, remotes and sensors as tiles: one tile for
-// each light, switch, button or motion sensor a device has, and one for each
-// device with sensors, grouped in sections by room or by category. Each tile
+// each light, switch, button, motion sensor or contact sensor a device has,
+// and one for each device with sensors, grouped in sections by room or by
+// category. Each tile
 // shows what the core shows: a command waiting for the device, a colour held
 // for a light that is off, a device that did not answer, and one that is
 // offline or not paired any more. A remote's shows its latest press for a
 // few seconds; a sensor's its readings, in the unit the home shows
 // temperatures in; a motion sensor's whether it sees motion, or for how long
-// it has not. A remote or sensor on a battery gone quiet says "Not heard
-// from" (maintenance.ts), not what it said days ago.
+// it has not; a contact sensor's whether it is open, and for how long. A
+// remote or sensor on a battery gone quiet says "Not heard from"
+// (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
 
@@ -280,6 +283,50 @@ function motionTile(
   };
 }
 
+type Contact = Extract<CapabilityInfo, { kind: "contact" }>;
+
+const isContact = (capability: CapabilityInfo): capability is Contact =>
+  capability.kind === "contact";
+
+// A contact sensor's tile: White while it is open, saying for how long by
+// `now`. One that is offline, has gone quiet or has said nothing yet is
+// not known, which its tile never shows as closed.
+function contactTile(
+  device: DeviceInfo,
+  capability: Contact,
+  several: boolean,
+  roomId: string | null,
+  now: number,
+  isQuiet: boolean,
+): Tile {
+  const base = {
+    key: tileKey(device.id, capability.id),
+    deviceId: device.id,
+    capabilityId: capability.id,
+    kind: "contact" as const,
+    roomId,
+    // A device with several contacts names each.
+    name: several ? `${device.name} ${capability.id}` : device.name,
+    look: "off" as const,
+    on: false,
+    dims: false,
+    disabled: false,
+  };
+  if (device.availability === "offline") {
+    return { ...base, status: offline(device), disabled: true };
+  }
+  if (isQuiet) return { ...base, status: quiet };
+  if (!capability.state) return { ...base, status: "Waiting for a reading" };
+  const { open } = capability.state;
+  return {
+    ...base,
+    status: contactText(open, capability.changedAt, now),
+    on: open,
+    look: open ? "on" : "off",
+    contact: { open, changedAt: capability.changedAt },
+  };
+}
+
 /** One measure of some sensors: its value, or its lowest and highest across them. */
 export type Reading = {
   measure: SensorMeasure;
@@ -354,11 +401,11 @@ export const sensorReadings = (tiles: readonly Tile[]) =>
   );
 
 /**
- * Every light, switch, button, sensor and motion sensor the devices have,
- * as tiles, and one for each device with none of them, with each button's
- * press of the last few seconds by its tile's key, and how long motion
- * sensors have been quiet by `now`, which also says which devices on a
- * battery have gone quiet.
+ * Every light, switch, button, sensor, motion sensor and contact sensor
+ * the devices have, as tiles, and one for each device with none of them,
+ * with each button's press of the last few seconds by its tile's key, and
+ * how long motion sensors have been quiet and contact sensors open by
+ * `now`, which also says which devices on a battery have gone quiet.
  */
 export function tilesOf(
   devices: DeviceInfo[],
@@ -378,6 +425,7 @@ export function tilesOf(
     );
     const sensors = device.capabilities.filter(isSensor);
     const motion = device.capabilities.filter(isOccupancy);
+    const contacts = device.capabilities.filter(isContact);
     const tiles = [
       ...controls.map((capability) =>
         tileOf(device, capability, controls.length > 1, roomId),
@@ -395,6 +443,16 @@ export function tilesOf(
       // A motion sensor that measures has both tiles, its motion's first.
       ...motion.map((capability) =>
         motionTile(device, capability, motion.length > 1, roomId, now, isQuiet),
+      ),
+      ...contacts.map((capability) =>
+        contactTile(
+          device,
+          capability,
+          contacts.length > 1,
+          roomId,
+          now,
+          isQuiet,
+        ),
       ),
       ...(sensors.length > 0
         ? [sensorTile(device, sensors, roomId, unit, isQuiet)]

@@ -18,6 +18,7 @@ import { useDevices } from "../src/use-devices";
 import {
   alarms,
   awnings,
+  contactSensor,
   entity,
   hallLight,
   lamp,
@@ -591,6 +592,97 @@ describe("a room's page", () => {
       });
     });
     expect(back).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("contact sensors", () => {
+  const readingsLine = () =>
+    container.querySelector(
+      "header [data-slot=readings]",
+    ) as HTMLElement | null;
+
+  it.each(["unread", "offline", "quiet"] as const)(
+    "keeps a room's contact icon unknown while its sensors are %s",
+    async (state) => {
+      const unknown: DeviceInfo = {
+        ...contactSensor(
+          "front",
+          "Front door",
+          "office",
+          state === "unread" ? null : false,
+        ),
+        availability: state === "offline" ? "offline" : "unknown",
+        lastSeenAt:
+          state === "quiet"
+            ? new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString()
+            : null,
+      };
+      devices = [unknown];
+      await show("room", "office");
+
+      expect(readingsLine()?.textContent).toBe("Contact sensors No readings");
+      expect(
+        readingsLine()?.querySelector("svg")?.getAttribute("stroke-dasharray"),
+      ).toBe("3 3");
+
+      for (const open of [false, true]) {
+        devices = [unknown, contactSensor("back", "Back door", "office", open)];
+        await act(async () => {
+          live.refresh();
+        });
+        expect(readingsLine()?.textContent).toBe(
+          `Contact sensors ${open ? "1 open" : "1 closed"}`,
+        );
+        const icon = readingsLine()?.querySelector("svg");
+        expect(icon?.hasAttribute("stroke-dasharray")).toBe(false);
+        expect(
+          icon?.classList.contains(
+            open ? "lucide-contact-open" : "lucide-contact-closed",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("say in their room's line whether any is open, and have a section under Security", async () => {
+    devices = [
+      lamp,
+      contactSensor("front", "Front door", "office", true),
+      contactSensor("letterbox", "Letterbox", "office", false),
+    ];
+    await show("room", "office");
+
+    expect(readingsLine()?.textContent).toBe("Contact sensors 1 open");
+    expect(headings()).toEqual(["Moods", "Lights", "Security"]);
+    expect(tile("Front door")?.textContent).toBe("Front doorOpen");
+    // Its tile switches nothing: one button, which opens its detail.
+    await click(tile("Letterbox"));
+    expect(openDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "letterbox/contact" }),
+    );
+    expect(posted("/api/devices/command")).toEqual([]);
+  });
+
+  it("have Security's page, their tiles by room, which the sidebar lists", async () => {
+    devices = [
+      lamp,
+      contactSensor("front", "Front door", "hall", true),
+      contactSensor("letterbox", "Letterbox", "hall", false),
+      contactSensor("window", "Window", "office", null),
+    ];
+    await show("category", "security");
+
+    expect(container.querySelector("h1")?.textContent).toBe("Security");
+    // Nothing sums them up under its name: the tiles say it.
+    expect(container.querySelector("header p")).toBeNull();
+    expect(tile("Front door")?.textContent).toBe("Front doorOpen");
+    // The page's sections, then the sidebar's own headings.
+    expect(headings()).toEqual(["Office", "Hall", "Categories", "Rooms"]);
+    expect(
+      [...container.querySelectorAll("nav button")].map(
+        (each) => each.textContent,
+      ),
+    ).toEqual(["Lights1 on", "Security", "Office", "Hall", "Attic"]);
   });
 });
 

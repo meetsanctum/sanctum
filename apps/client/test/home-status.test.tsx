@@ -9,6 +9,7 @@ import { coreJson } from "../src/core-fetch";
 import { HomeStatus } from "../src/place-pages";
 import { useDevices } from "../src/use-devices";
 import {
+  contactSensor,
   hallLight,
   lamp,
   light,
@@ -105,6 +106,42 @@ describe("the home's status", () => {
     );
     await click(tiles()[0] as HTMLElement);
     expect(openCategory).toHaveBeenCalledWith("environment");
+  });
+
+  it("counts the contact sensors that are open after Presence, and opens Security", async () => {
+    openCategory.mockReset();
+    devices = [
+      lamp,
+      contactSensor("front", "Front door", "hall", true),
+      contactSensor("letterbox", "Letterbox", "hall", false),
+    ];
+    await showStatus();
+
+    expect(tiles().map((each) => each.textContent)).toEqual([
+      "Security1 open",
+      "Lights1 on",
+    ]);
+    expect(tiles()[0]?.getAttribute("aria-label")).toBe("Security, 1 open");
+    await click(tiles()[0] as HTMLElement);
+    expect(openCategory).toHaveBeenCalledWith("security");
+  });
+
+  it("says all are closed only when each contact sensor has said so", async () => {
+    devices = [
+      contactSensor("front", "Front door", "hall", false),
+      contactSensor("letterbox", "Letterbox", "hall", false),
+    ];
+    await showStatus();
+    expect(tiles()[0]?.textContent).toBe("SecurityAll closed");
+
+    devices = [
+      contactSensor("front", "Front door", "hall", false),
+      contactSensor("letterbox", "Letterbox", "hall", null),
+    ];
+    await act(async () => {
+      live.refresh();
+    });
+    expect(tiles()[0]?.textContent).toBe("Security1 closed");
   });
 
   it("ends with Batteries while a battery is to replace, which opens Maintenance", async () => {

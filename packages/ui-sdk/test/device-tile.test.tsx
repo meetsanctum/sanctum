@@ -534,6 +534,73 @@ describe("a motion sensor's tile", () => {
   });
 });
 
+describe("a contact sensor's tile", () => {
+  const contact: Tile = {
+    key: "front/contact",
+    deviceId: "front",
+    capabilityId: "contact",
+    kind: "contact",
+    roomId: null,
+    name: "Front door",
+    status: "Open for 12 min",
+    on: true,
+    look: "on",
+    dims: false,
+    disabled: false,
+    contact: { open: true, changedAt: "2026-10-31T12:00:00.000Z" },
+  };
+  const icon = () => container.querySelector("svg")!;
+
+  it("is White while it is open and opens its detail from anywhere, switching nothing", async () => {
+    const onOpen = vi.fn();
+    await act(async () => {
+      root.render(
+        <DeviceTile
+          tile={contact}
+          onToggle={onToggle}
+          onDim={onDim}
+          onOpen={onOpen}
+        />,
+      );
+    });
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.dataset.look).toBe("on");
+    expect(buttons[0]!.getAttribute("aria-label")).toBe(
+      "Front door, Open for 12 min",
+    );
+    expect(buttons[0]!.hasAttribute("aria-pressed")).toBe(false);
+    expect(icon().classList.contains("lucide-contact-open")).toBe(true);
+    await act(async () => {
+      buttons[0]!.click();
+    });
+    expect(onOpen).toHaveBeenCalledWith(contact);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("draws it closed, and dashed while nothing is known of it", async () => {
+    await render({
+      ...contact,
+      status: "Closed",
+      on: false,
+      look: "off",
+      contact: { open: false, changedAt: null },
+    });
+    expect(icon().classList.contains("lucide-contact-closed")).toBe(true);
+    expect(icon().hasAttribute("stroke-dasharray")).toBe(false);
+
+    await render({
+      ...contact,
+      status: "Waiting for a reading",
+      on: false,
+      look: "off",
+      contact: undefined,
+    });
+    expect(icon().classList.contains("lucide-contact-closed")).toBe(true);
+    expect(icon().getAttribute("stroke-dasharray")).toBe("3 3");
+  });
+});
+
 describe("a sensor's tile", () => {
   const sensor: Tile = {
     key: "office/illuminance",

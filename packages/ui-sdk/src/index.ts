@@ -4,6 +4,7 @@
 
 export * from "./app-ui";
 export * from "./client";
+export * from "./contact-icons";
 export * from "./device-tile";
 export { HomeTimeZoneProvider } from "./home-time-zone";
 export * from "./light-controls";

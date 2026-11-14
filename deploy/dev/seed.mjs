@@ -1,16 +1,16 @@
 // `pnpm dev:seed` (deploy/dev/stack.sh): claims a new development home and
-// puts its fake lights in rooms. It runs in the core's container, where its
-// dependencies are. The login is only ever for a stack, which listens on this
-// Mac alone.
+// puts its fake lights and contact sensors in rooms. It runs in the core's
+// container, where its dependencies are. The login is only ever for a
+// stack, which listens on this Mac alone.
 import { keyStretching } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
 const base = process.env.SEED_CORE_URL;
 const login = { username: "dev", password: "sanctum-dev-stack" };
 const rooms = {
-  "Living room": ["Floor lamp", "Shelf light"],
+  "Living room": ["Floor lamp", "Shelf light", "Balcony door"],
   Office: ["Desk lamp"],
-  Bedroom: ["Bedside lamp"],
+  Bedroom: ["Bedside lamp", "Bedroom window"],
 };
 
 async function call(path, body, token) {
@@ -57,7 +57,7 @@ const { token } = await call("/api/auth/claim/finish", {
   client: { name: "pnpm dev:seed", platform: "macos" },
 });
 
-// The driver registers its lights as it starts, a moment after the core does.
+// The driver registers its devices as it starts, a moment after the core does.
 let devices = [];
 const names = Object.values(rooms).flat();
 for (let tries = 0; tries < 30; tries++) {
@@ -82,5 +82,5 @@ for (const [room, lights] of Object.entries(rooms)) {
 }
 
 console.log(
-  `Seeded: ${Object.keys(rooms).length} rooms and ${names.length} fake lights. Sign in as ${login.username}, password ${login.password}.`,
+  `Seeded: ${Object.keys(rooms).length} rooms and ${names.length} fake devices. Sign in as ${login.username}, password ${login.password}.`,
 );

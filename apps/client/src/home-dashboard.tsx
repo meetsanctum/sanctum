@@ -1,6 +1,7 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 
+import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
 import { placeMotionText } from "./motion";
 import {
@@ -65,8 +66,9 @@ export function HomeRooms(props: {
         )
       : undefined;
     const motion = room ? placeMotionText(own, now) : null;
+    const contact = room ? placeContacts(own) : null;
     const readings = room ? readingsOf(sensorReadings(own), unit) : [];
-    const hasLine = !!lights || !!motion || readings.length > 0;
+    const hasLine = !!lights || !!motion || !!contact || readings.length > 0;
     return hasLine || roomSections.length > 0 || onHome.length > 0
       ? [
           {
@@ -74,6 +76,7 @@ export function HomeRooms(props: {
             sections: roomSections,
             lights,
             motion,
+            contact,
             readings,
             hasLine,
           },
@@ -117,6 +120,7 @@ export function HomeRooms(props: {
                 {lights && <LightsButton lights={lights} />}
                 <PlaceReadings
                   motion={place.motion}
+                  contact={place.contact}
                   readings={place.readings}
                   className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
                 />

@@ -17,6 +17,7 @@ import {
 } from "react";
 
 import { showFailed } from "./show-failed";
+import { ContactClosed, ContactOpen } from "./contact-icons";
 import type { Tile } from "./tiles";
 import { useThrottledSend } from "./use-throttled-send";
 
@@ -54,8 +55,9 @@ const levelAt = (at: Drag, clientX: number) =>
 // comes back at. Keyboards and screen readers get the same as a slider
 // beside the tile's button. A remote's tile switches nothing: it turns white
 // with its press for a moment, and tapping anywhere opens its detail, as it
-// does a sensor's, which shows its readings, and a motion sensor's, white
-// while it sees motion.
+// does a sensor's, which shows its readings, a motion sensor's, white while
+// it sees motion, and a contact sensor's, white while it is open; its icon
+// is dashed while nothing is known of it, since a closed one would say more.
 export function DeviceTile(props: {
   tile: Tile;
   onToggle: (tile: Tile) => void;
@@ -233,11 +235,16 @@ export function DeviceTile(props: {
             : Thermometer
           : tile.kind === "occupancy"
             ? Footprints
-            : tile.kind === "switch"
-              ? Plug
-              : on
-                ? Lightbulb
-                : LightbulbOff;
+            : tile.kind === "contact"
+              ? tile.contact?.open
+                ? ContactOpen
+                : ContactClosed
+              : tile.kind === "switch"
+                ? Plug
+                : on
+                  ? Lightbulb
+                  : LightbulbOff;
+  const dashed = tile.kind === "contact" && !tile.contact ? "3 3" : undefined;
   const iconLook =
     "grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) data-[look=lit]:bg-white/55 data-[look=on]:bg-(--tile-on-ink)/8";
 
@@ -283,7 +290,11 @@ export function DeviceTile(props: {
           <span aria-hidden="true" className="size-10 shrink-0" />
         ) : (
           <span data-look={look} className={`relative ${iconLook}`}>
-            <Icon aria-hidden="true" className="size-[18px]" />
+            <Icon
+              aria-hidden="true"
+              className="size-[18px]"
+              strokeDasharray={dashed}
+            />
           </span>
         )}
         <span className="relative flex min-w-0 flex-col gap-px leading-tight">
