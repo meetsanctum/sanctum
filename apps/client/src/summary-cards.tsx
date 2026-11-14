@@ -30,6 +30,8 @@ export function SummaryCards(props: {
   if (props.cards.length === 0) return null;
   return (
     <ul
+      // Keep list semantics in Safari when the markers are hidden.
+      role="list"
       aria-label={props.label}
       className="m-0 grid shrink-0 list-none grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) p-0"
     >

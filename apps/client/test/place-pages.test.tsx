@@ -673,6 +673,11 @@ describe("contact sensors", () => {
     await show("category", "security");
 
     expect(container.querySelector("h1")?.textContent).toBe("Security");
+    expect(
+      container
+        .querySelector("ul[aria-label='Security summary']")
+        ?.getAttribute("role"),
+    ).toBe("list");
     // A card sums them up, White while any is open; it is no button.
     const cards = [
       ...container.querySelectorAll("ul[aria-label='Security summary'] > li"),
