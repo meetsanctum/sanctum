@@ -179,7 +179,7 @@ describe("a light level", () => {
       aqaraMotionSensor("0x00158d0002b3c4d5", "Hall motion"),
     ]);
     expect(entry?.registration.capabilities).toEqual([
-      expect.objectContaining({ id: "occupancy", kind: "occupancy" }),
+      expect.objectContaining({ id: "occupancy", kind: "motion" }),
       {
         id: "illuminance",
         kind: "sensor",

@@ -31,7 +31,7 @@ const places: Places = {
 
 const capability = (
   id: string,
-  kind: "sensor" | "occupancy",
+  kind: "sensor" | "motion",
   features: object,
   state: object | null,
   changedAt: string | null = null,
@@ -75,14 +75,13 @@ function motionSensor(
     capabilities: [
       capability(
         "occupancy",
-        "occupancy",
+        "motion",
         {
-          senses: "motion",
           sensitivity: null,
           clearAfter: null,
           indicator: false,
         },
-        { occupied: false },
+        { motion: false },
         new Date(now - 12 * minute).toISOString(),
       ),
       ...Object.entries(readings).map(([measure, value]) =>
@@ -97,13 +96,13 @@ function motionSensor(
 const at = (hours: number, minutes = 0) =>
   new Date(2026, 9, 31, hours, minutes).toISOString();
 const states = [
-  { at: at(-9), availability: "online", state: { occupied: false } },
-  { at: at(9, 5), availability: "online", state: { occupied: true } },
-  { at: at(10, 40), availability: "online", state: { occupied: false } },
-  { at: at(12), availability: "offline", state: { occupied: false } },
-  { at: at(12, 30), availability: "online", state: { occupied: false } },
-  { at: at(14, 10), availability: "online", state: { occupied: true } },
-  { at: at(14, 48), availability: "online", state: { occupied: false } },
+  { at: at(-9), availability: "online", state: { motion: false } },
+  { at: at(9, 5), availability: "online", state: { motion: true } },
+  { at: at(10, 40), availability: "online", state: { motion: false } },
+  { at: at(12), availability: "offline", state: { motion: false } },
+  { at: at(12, 30), availability: "online", state: { motion: false } },
+  { at: at(14, 10), availability: "online", state: { motion: true } },
+  { at: at(14, 48), availability: "online", state: { motion: false } },
 ];
 
 function historyAnswer(path: string) {
@@ -111,20 +110,20 @@ function historyAnswer(path: string) {
   const common = {
     device: query.get("device"),
     capability: query.get("capability"),
-    kind: query.get("capability") === "occupancy" ? "occupancy" : "sensor",
+    kind: query.get("capability") === "occupancy" ? "motion" : "sensor",
     from: query.get("from"),
     to: query.get("to"),
     kept: true,
   };
   if (path.startsWith("/api/history/states")) return { ...common, states };
-  if (query.get("period") === "hour" && common.kind === "occupancy") {
+  if (query.get("period") === "hour" && common.kind === "motion") {
     // Yesterday, motion for 3 of its hours.
     const yesterday = new Date(2026, 9, 30, 8).getTime();
     return {
       ...common,
       period: "hour",
       fields: {
-        occupied: [0, 1, 2].map((each) => ({
+        motion: [0, 1, 2].map((each) => ({
           start: new Date(yesterday + each * hour).toISOString(),
           mean: 1,
           min: 1,
@@ -348,14 +347,13 @@ describe("a motion sensor's detail", () => {
           ...sensor.capabilities,
           capability(
             "occupancy_2",
-            "occupancy",
+            "motion",
             {
-              senses: "motion",
               sensitivity: null,
               clearAfter: null,
               indicator: false,
             },
-            { occupied: true },
+            { motion: true },
             new Date(now - 3 * minute).toISOString(),
           ),
         ],

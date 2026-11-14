@@ -1,5 +1,6 @@
 import {
   capabilityOf,
+  isCapabilityKind,
   type CapabilityInfo,
   type CapabilityKind,
   type DeviceInfo,
@@ -46,11 +47,18 @@ function featuresOf(capability: CapabilityRow) {
   return parsed.success ? parsed.data : capability.features;
 }
 
-/** A device and its capabilities as the core keeps them, for whoever may see all of it. */
+/**
+ * A device and its capabilities as the core keeps them, for whoever may see
+ * all of it. A capability of a kind this build doesn't have, as one stored by
+ * a build that had it, is left out until its driver registers it again.
+ */
 export function deviceInfo(
   device: DeviceRow,
-  capabilities: CapabilityRow[],
+  stored: CapabilityRow[],
 ): DeviceInfo {
+  const capabilities = stored.filter((capability) =>
+    isCapabilityKind(capability.kind),
+  );
   return {
     id: device.id,
     name: device.name ?? device.driverName,

@@ -483,7 +483,7 @@ describe("a motion sensor's tile", () => {
     key: "hall/occupancy",
     deviceId: "hall",
     capabilityId: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     roomId: null,
     name: "Hall motion sensor",
     status: "Motion now",
@@ -491,7 +491,7 @@ describe("a motion sensor's tile", () => {
     look: "on",
     dims: false,
     disabled: false,
-    motion: { occupied: true, changedAt: "2026-10-31T12:00:00.000Z" },
+    motion: { motion: true, changedAt: "2026-10-31T12:00:00.000Z" },
   };
 
   it("is White while it sees motion and opens its detail from anywhere, switching nothing", async () => {

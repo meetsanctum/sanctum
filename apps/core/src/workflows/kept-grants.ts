@@ -77,7 +77,7 @@ export function createKeptGrants(options: {
       case "trigger.noMotion":
       case "condition.motion":
       case "condition.noMotion":
-        return read("occupancy");
+        return read("motion");
       case "condition.lightLevel":
         return read("sensor");
       case "condition.lights":

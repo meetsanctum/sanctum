@@ -15,7 +15,7 @@ import {
   device,
   illuminanceCapability,
   lightCapability,
-  occupancyCapability,
+  motionCapability,
 } from "../moods/home";
 import { fakeClient } from "./support";
 
@@ -42,28 +42,28 @@ const homeDevices = (): DeviceInfo[] => [
   ...places.rooms.map((room) => lampIn(room.id)),
   named(
     device("office-motion", "office", [
-      occupancyCapability(false),
+      motionCapability(false),
       illuminanceCapability(318),
     ]),
     "Office motion sensor",
   ),
   named(
-    device("stairs-motion", "stairs", [occupancyCapability(false)]),
+    device("stairs-motion", "stairs", [motionCapability(false)]),
     "Stairs motion sensor",
   ),
   named(
     device("hall-motion", "hall", [
-      occupancyCapability(false),
+      motionCapability(false),
       illuminanceCapability(40),
     ]),
     "Hall motion sensor",
   ),
-  named(device("hall-2", "hall", [occupancyCapability(true)]), "Hall sensor 2"),
+  named(device("hall-2", "hall", [motionCapability(true)]), "Hall sensor 2"),
   named(
     device(
       "bedroom-motion",
       "bedroom",
-      [occupancyCapability(false), illuminanceCapability(3)],
+      [motionCapability(false), illuminanceCapability(3)],
       "offline",
     ),
     "Bedroom motion sensor",
@@ -250,7 +250,7 @@ describe("a room's Motion section", () => {
     const unseen = homeDevices().filter(
       (device) =>
         !device.capabilities.some(
-          (each) => each.kind === "occupancy" || each.kind === "sensor",
+          (each) => each.kind === "motion" || each.kind === "sensor",
         ),
     );
     await show(RoomMoodsPage, { placeId: "office" }, unseen, [
@@ -267,7 +267,7 @@ describe("a room's Motion section", () => {
     client.ask.mockResolvedValueOnce(false);
     await press(turningOn());
     expect(client.ask).toHaveBeenCalledWith([
-      "devices.read:occupancy",
+      "devices.read:motion",
       "workflows.manage",
     ]);
     expect(calls()).toEqual([]);
@@ -312,7 +312,7 @@ describe("a room's Motion section", () => {
       await show(RoomMoodsPage, { placeId: "office" }, homeDevices(), [
         "places.read",
         "devices.control:light",
-        "devices.read:occupancy",
+        "devices.read:motion",
         "devices.read:sensor",
       ]);
       const toggle = direction === "on" ? turningOn : turningOff;
@@ -320,7 +320,7 @@ describe("a room's Motion section", () => {
 
       await press(toggle());
       expect(client.ask).toHaveBeenCalledWith([
-        "devices.read:occupancy",
+        "devices.read:motion",
         "workflows.manage",
       ]);
       expect(calls()).toEqual([]);

@@ -8,7 +8,7 @@ import type { View } from "./views.js";
 // Motion and the light level in a room, a zone or the whole home, as the
 // core's motion triggers and conditions and its light-level condition read
 // them. A place has motion while any of its motion sensors that answer sees
-// someone, and is quiet once every one that answers has said no motion,
+// motion, and is quiet once every one that answers has said no motion,
 // since the last of them did. A sensor that is offline or has yet to report
 // does not count, so a place with none answering is neither. Its light level
 // is the highest any of its light sensors that answer reads, so a dark
@@ -31,8 +31,8 @@ export type MotionPlace = z.output<typeof motionPlace>;
 export type PlaceMotion = {
   /** Whether any of its motion sensors answers. */
   answering: boolean;
-  /** Whether any of those sees someone now. */
-  occupied: boolean;
+  /** Whether any of those sees motion now. */
+  motion: boolean;
   /**
    * While it is quiet, since when: the time the last of its sensors said no
    * motion, or null while a sensor has said so but not when (before the
@@ -43,7 +43,7 @@ export type PlaceMotion = {
 
 const nobody: PlaceMotion = {
   answering: false,
-  occupied: false,
+  motion: false,
   quietSince: null,
 };
 
@@ -84,21 +84,21 @@ export function motionOf(
 ): PlaceMotion {
   const sensors = answeringIn(devices, rooms).flatMap((device) =>
     device.capabilities.flatMap((capability) =>
-      capability.kind === "occupancy" && capability.observed
-        ? [{ occupied: capability.observed.occupied, at: capability.changedAt }]
+      capability.kind === "motion" && capability.observed
+        ? [{ motion: capability.observed.motion, at: capability.changedAt }]
         : [],
     ),
   );
   if (sensors.length === 0) return nobody;
-  if (sensors.some((sensor) => sensor.occupied)) {
-    return { answering: true, occupied: true, quietSince: null };
+  if (sensors.some((sensor) => sensor.motion)) {
+    return { answering: true, motion: true, quietSince: null };
   }
   const times = sensors.map((sensor) =>
     sensor.at === null ? NaN : Date.parse(sensor.at),
   );
   return {
     answering: true,
-    occupied: false,
+    motion: false,
     quietSince: times.some(Number.isNaN) ? null : new Date(Math.max(...times)),
   };
 }

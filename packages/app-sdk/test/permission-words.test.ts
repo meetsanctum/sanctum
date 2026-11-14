@@ -13,7 +13,7 @@ describe("a permission's words", () => {
     ["devices.control:light", "Control your lights", "lightbulb"],
     ["devices.read:switch", "See your switches", "toggle-right"],
     ["devices.read:button", "See your remotes' presses", "circle-dot"],
-    ["devices.read:occupancy", "Know when there's motion", "activity"],
+    ["devices.read:motion", "Know when there's motion", "activity"],
     ["devices.read:sensor", "See what your sensors read", "thermometer"],
     ["devices.register", "Bring devices into your home", "square-plus"],
     ["workflows.manage", "Keep its own automations", "workflow"],

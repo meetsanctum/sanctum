@@ -451,7 +451,7 @@ export function cardOf(
 // core's Motion.
 const firstGroups = ["Time", "Sunrise and sunset", "Motion"];
 const deviceGroup = (kind: string) =>
-  kind === "occupancy" ? "Motion" : deviceCategoryOf(kind)?.title;
+  kind === "motion" ? "Motion" : deviceCategoryOf(kind)?.title;
 const deviceGroups = new Set(capabilityKinds.map(deviceGroup));
 const lastGroup = "By hand";
 

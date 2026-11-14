@@ -233,7 +233,7 @@ export function DeviceTile(props: {
             tile.measures?.every((measure) => measure === "illuminance")
             ? Sun
             : Thermometer
-          : tile.kind === "occupancy"
+          : tile.kind === "motion"
             ? Footprints
             : tile.kind === "contact"
               ? tile.contact?.open

@@ -18,7 +18,7 @@ const categories = [
   { id: "lights", title: "Lights", holds: [{ kind: "light" }] },
   { id: "switches", title: "Switches", holds: [{ kind: "switch" }] },
   { id: "environment", title: "Environment", holds: [{ kind: "sensor" }] },
-  { id: "presence", title: "Presence", holds: [{ kind: "occupancy" }] },
+  { id: "presence", title: "Presence", holds: [{ kind: "motion" }] },
   { id: "security", title: "Security", holds: [{ kind: "contact" }] },
   { id: "buttons", title: "Buttons", holds: [{ kind: "button" }] },
 ] as const satisfies readonly DeviceCategoryDefinition[];

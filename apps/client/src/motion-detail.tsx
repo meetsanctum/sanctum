@@ -38,7 +38,7 @@ import { Battery } from "./sensor-detail";
 // keys show a readout of a span or a day, and screen readers get each as a
 // list. Its battery is at the foot, as on a sensor's Readings.
 
-type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
+type Motion = Extract<CapabilityInfo, { kind: "motion" }>;
 
 // How near a span of motion the pointer has to be to show it, in px: a
 // minute of motion is narrower than a pixel.
@@ -51,22 +51,19 @@ const motionWords: ColumnWords = {
 };
 
 /** What it says now, as its tile does. */
-function nowText(device: DeviceInfo, capability: Occupancy, now: number) {
+function nowText(device: DeviceInfo, capability: Motion, now: number) {
   if (device.availability === "offline") return "Offline";
   if (!capability.state) return "Waiting for a reading";
-  return motionText(capability.state.occupied, capability.changedAt, now);
+  return motionText(capability.state.motion, capability.changedAt, now);
 }
 
-export function MotionPage(props: {
-  device: DeviceInfo;
-  capability: Occupancy;
-}) {
+export function MotionPage(props: { device: DeviceInfo; capability: Motion }) {
   const { device, capability } = props;
   const { loaded, failed, now, live } = useDayAndWeek(device, capability);
   const dayId = useId();
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
-  const days = loaded ? daysOf(loaded.statistics, spans, now, "occupied") : [];
+  const days = loaded ? daysOf(loaded.statistics, spans, now, "motion") : [];
 
   return (
     <div

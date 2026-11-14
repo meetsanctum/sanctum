@@ -610,16 +610,15 @@ describe("light level", () => {
   });
 });
 
-function occupancy(
-  occupied: boolean | null,
+function motionCapability(
+  motion: boolean | null,
   changedAt: string | null = null,
 ): CapabilityInfo {
-  const state = occupied === null ? null : { occupied };
+  const state = motion === null ? null : { motion };
   return {
     id: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     features: {
-      senses: "motion",
       sensitivity: null,
       clearAfter: null,
       indicator: false,
@@ -642,10 +641,10 @@ describe("a motion sensor's tile", () => {
     const tiles = tilesOf(
       [
         device("hall", "Hall motion sensor", "living", [
-          occupancy(true, ago(1)),
+          motionCapability(true, ago(1)),
         ]),
         device("stairs", "Stairs motion sensor", "living", [
-          occupancy(false, ago(12)),
+          motionCapability(false, ago(12)),
         ]),
       ],
       places,
@@ -656,21 +655,23 @@ describe("a motion sensor's tile", () => {
     expect(
       tiles.map((tile) => [tile.kind, tile.status, tile.look, tile.on]),
     ).toEqual([
-      ["occupancy", "Motion now", "on", true],
-      ["occupancy", "Quiet for 12 min", "off", false],
+      ["motion", "Motion now", "on", true],
+      ["motion", "Quiet for 12 min", "off", false],
     ]);
-    expect(tiles[1]?.motion).toEqual({ occupied: false, changedAt: ago(12) });
+    expect(tiles[1]?.motion).toEqual({ motion: false, changedAt: ago(12) });
   });
 
   it("waits for its first report, and says when it is offline", () => {
     const tiles = tilesOf(
       [
-        device("hall", "Hall motion sensor", "living", [occupancy(null)]),
+        device("hall", "Hall motion sensor", "living", [
+          motionCapability(null),
+        ]),
         device(
           "stairs",
           "Stairs motion sensor",
           "living",
-          [occupancy(true, ago(1))],
+          [motionCapability(true, ago(1))],
           "offline",
         ),
       ],
@@ -689,7 +690,7 @@ describe("a motion sensor's tile", () => {
       [
         {
           ...device("hall", "Hall motion sensor", "living", [
-            occupancy(false, ago(4 * 24 * 60)),
+            motionCapability(false, ago(4 * 24 * 60)),
           ]),
           availability: "unknown",
           lastSeenAt: ago(4 * 24 * 60),
@@ -708,7 +709,7 @@ describe("a motion sensor's tile", () => {
     const tiles = tilesOf(
       [
         device("office", "Office motion sensor", "living", [
-          occupancy(false, ago(3)),
+          motionCapability(false, ago(3)),
           reading("temperature", 21),
           reading("illuminance", 320),
         ]),

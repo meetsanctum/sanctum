@@ -29,7 +29,7 @@ function history(
   states: [number, "online" | "offline", object | null][],
 ): Pick<DeviceHistory, "kind" | "states"> {
   return {
-    kind: "occupancy",
+    kind: "motion",
     states: states.map(([at, availability, state]) => ({
       at: new Date(at).toISOString(),
       availability,
@@ -41,19 +41,19 @@ function history(
 describe("a motion sensor's day", () => {
   const day = spansOf(
     history([
-      [from - hour, "online", { occupied: false }],
-      [from + hour, "online", { occupied: true, sensitivity: "medium" }],
+      [from - hour, "online", { motion: false }],
+      [from + hour, "online", { motion: true, sensitivity: "medium" }],
       // Its settings changed during the motion.
       [
         from + hour + 10 * minute,
         "online",
-        { occupied: true, sensitivity: "high" },
+        { motion: true, sensitivity: "high" },
       ],
-      [from + 2 * hour, "online", { occupied: false, sensitivity: "high" }],
-      [from + 5 * hour, "offline", { occupied: false, sensitivity: "high" }],
-      [from + 6 * hour, "online", { occupied: false, sensitivity: "high" }],
-      [now - 2 * hour - 4 * minute, "online", { occupied: true }],
-      [now - 2 * hour + 30 * minute, "online", { occupied: false }],
+      [from + 2 * hour, "online", { motion: false, sensitivity: "high" }],
+      [from + 5 * hour, "offline", { motion: false, sensitivity: "high" }],
+      [from + 6 * hour, "online", { motion: false, sensitivity: "high" }],
+      [now - 2 * hour - 4 * minute, "online", { motion: true }],
+      [now - 2 * hour + 30 * minute, "online", { motion: false }],
     ]),
     from,
     now,
@@ -85,10 +85,10 @@ describe("a motion sensor's day", () => {
   it("says since when while there is motion now", () => {
     const moving = spansOf(
       history([
-        [from - hour, "online", { occupied: false }],
-        [now - 25 * minute, "online", { occupied: true }],
+        [from - hour, "online", { motion: false }],
+        [now - 25 * minute, "online", { motion: true }],
         // A settings report must not restart the current motion span.
-        [now - 5 * minute, "online", { occupied: true, sensitivity: "high" }],
+        [now - 5 * minute, "online", { motion: true, sensitivity: "high" }],
       ]),
       from,
       now,
@@ -100,7 +100,7 @@ describe("a motion sensor's day", () => {
 
   it("says when there was none, or nothing was heard", () => {
     const quiet = spansOf(
-      history([[from - hour, "online", { occupied: false }]]),
+      history([[from - hour, "online", { motion: false }]]),
       from,
       now,
     );
@@ -121,20 +121,20 @@ describe("a room's day", () => {
   it("is motion while any of its sensors saw it, and quiet while none did", () => {
     const door = spansOf(
       history([
-        [from - hour, "online", { occupied: false }],
-        [at(60), "online", { occupied: true }],
-        [at(90), "online", { occupied: false }],
+        [from - hour, "online", { motion: false }],
+        [at(60), "online", { motion: true }],
+        [at(90), "online", { motion: false }],
       ]),
       from,
       now,
     );
     const desk = spansOf(
       history([
-        [from - hour, "online", { occupied: false }],
-        [at(80), "online", { occupied: true }],
-        [at(120), "online", { occupied: false }],
-        [at(600), "online", { occupied: true }],
-        [at(610), "online", { occupied: false }],
+        [from - hour, "online", { motion: false }],
+        [at(80), "online", { motion: true }],
+        [at(120), "online", { motion: false }],
+        [at(600), "online", { motion: true }],
+        [at(610), "online", { motion: false }],
       ]),
       from,
       now,
@@ -151,9 +151,9 @@ describe("a room's day", () => {
   it("knows a time while one sensor knew it, and is offline only while all were", () => {
     const door = spansOf(
       history([
-        [from - hour, "online", { occupied: false }],
-        [at(100), "offline", { occupied: false }],
-        [at(200), "online", { occupied: false }],
+        [from - hour, "online", { motion: false }],
+        [at(100), "offline", { motion: false }],
+        [at(200), "online", { motion: false }],
       ]),
       from,
       now,
@@ -161,8 +161,8 @@ describe("a room's day", () => {
     // Its first report came at 150 minutes, and it went offline at 180.
     const desk = spansOf(
       history([
-        [at(150), "online", { occupied: true }],
-        [at(180), "offline", { occupied: true }],
+        [at(150), "online", { motion: true }],
+        [at(180), "offline", { motion: true }],
       ]),
       from,
       now,
@@ -179,17 +179,17 @@ describe("a room's day", () => {
 });
 
 describe("a motion sensor's week", () => {
-  it("counts motion from the hourly roll-ups of occupied", () => {
+  it("counts motion from the hourly roll-ups of motion", () => {
     const start = new Date(midnight(now, 1) + 9 * hour).toISOString();
     const days = daysOf(
       {
         fields: {
-          occupied: [{ start, mean: 0.5, min: 0, max: 1, seconds: 3600 }],
+          motion: [{ start, mean: 0.5, min: 0, max: 1, seconds: 3600 }],
         },
       },
       [],
       now,
-      "occupied",
+      "motion",
     );
     expect(days.at(-2)).toEqual({
       start: midnight(now, 1),

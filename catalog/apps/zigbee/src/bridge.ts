@@ -6,7 +6,7 @@ import {
   type DriverMove,
   type DriverRemoval,
   type LightCommand,
-  type OccupancyCommand,
+  type MotionCommand,
   type SwitchCommand,
 } from "@meetsanctum/app-sdk";
 import { randomUUID } from "node:crypto";
@@ -18,7 +18,7 @@ import { createFirmwareUpdates, firmwareRequests } from "./firmware-updates.js";
 import { createJoining } from "./joining.js";
 import { MessageQueue } from "./message-queue.js";
 import { createMotionTiming } from "./motion-timing.js";
-import { occupancyPayload, type OccupancyMapping } from "./occupancy.js";
+import { motionPayload, type MotionMapping } from "./motion.js";
 import { createHolds } from "./presses.js";
 import { createDeviceReporter } from "./reports.js";
 import { bridgeResponse, createPendingRequests } from "./requests.js";
@@ -371,12 +371,12 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
   // Changes a motion sensor's settings: Zigbee2MQTT's option first, which
   // it may refuse, then the sensor's own on <device>/set, which its report
   // confirms.
-  async function setOccupancy(
+  async function setMotion(
     device: ZigbeeDeviceEntry,
-    capability: OccupancyMapping,
-    command: OccupancyCommand,
+    capability: MotionMapping,
+    command: MotionCommand,
   ) {
-    const { set, option } = occupancyPayload(capability, command);
+    const { set, option } = motionPayload(capability, command);
     if (option !== null) {
       await timing.set(device, option);
     }
@@ -673,12 +673,8 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
         );
       }
       // The capability is of the command's kind (above).
-      if (capability.kind === "occupancy") {
-        await setOccupancy(
-          device,
-          capability,
-          command.command as OccupancyCommand,
-        );
+      if (capability.kind === "motion") {
+        await setMotion(device, capability, command.command as MotionCommand);
         return;
       }
       await publish(

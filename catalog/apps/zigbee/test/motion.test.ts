@@ -1,13 +1,13 @@
-import { occupancy } from "@meetsanctum/app-sdk";
+import { motion } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { deviceEntries } from "../src/devices.js";
 import { capabilityMappings } from "../src/exposes.js";
 import {
-  occupancyPayload,
-  occupancyState,
-  type OccupancyMapping,
-} from "../src/occupancy.js";
+  motionPayload,
+  motionState,
+  type MotionMapping,
+} from "../src/motion.js";
 import type { ZigbeeDevice, ZigbeeExpose } from "../src/types.js";
 import {
   aqaraMotionSensor,
@@ -16,16 +16,16 @@ import {
   vallhorn,
 } from "./motion-sensors.js";
 
-// A motion sensor's occupancy and settings (occupancy.ts), for the motion
-// sensors the household has.
+// A motion sensor's motion and settings (motion.ts), for the motion sensors
+// the household has.
 
-function occupancyOf(device: ZigbeeDevice, detectionInterval?: number) {
+function motionOf(device: ZigbeeDevice, detectionInterval?: number) {
   const mapping = capabilityMappings(device.definition?.exposes ?? [], {
     model: device.definition?.model ?? null,
     detectionInterval,
-  }).find((each): each is OccupancyMapping => each.kind === "occupancy");
+  }).find((each): each is MotionMapping => each.kind === "motion");
   if (!mapping) {
-    throw new Error(`${device.friendly_name} has no occupancy`);
+    throw new Error(`${device.friendly_name} has no motion`);
   }
   return mapping;
 }
@@ -57,9 +57,8 @@ describe("a motion sensor's exposes", () => {
         },
         {
           id: "occupancy",
-          kind: "occupancy",
+          kind: "motion",
           features: {
-            senses: "motion",
             sensitivity: ["low", "medium", "high"],
             clearAfter: { min: 0, max: 65535 },
             indicator: true,
@@ -75,22 +74,21 @@ describe("a motion sensor's exposes", () => {
       probe: false,
     });
     expect(
-      occupancy.features.safeParse(
-        entry?.registration.capabilities[1]?.features,
-      ).success,
+      motion.features.safeParse(entry?.registration.capabilities[1]?.features)
+        .success,
     ).toBe(true);
   });
 
   it("give an SML003 its five levels", () => {
     expect(
-      occupancyOf(hueMotionSensor("0x01", "Hall motion", "SML003")).features
+      motionOf(hueMotionSensor("0x01", "Hall motion", "SML003")).features
         .sensitivity,
     ).toEqual(["low", "medium", "high", "very_high", "max"]);
   });
 
   it("put a sensitivity's levels in the kind's order, leaving out any it does not know", () => {
     const levels = (values: string[]) =>
-      occupancyOf({
+      motionOf({
         definition: { exposes: hueMotionExposes(values) },
       }).features.sensitivity;
 
@@ -109,9 +107,8 @@ describe("a motion sensor's exposes", () => {
     expect(entry?.registration.capabilities).toEqual([
       {
         id: "occupancy",
-        kind: "occupancy",
+        kind: "motion",
         features: {
-          senses: "motion",
           sensitivity: null,
           clearAfter: null,
           indicator: false,
@@ -126,10 +123,9 @@ describe("a motion sensor's exposes", () => {
   });
 
   it("give an Aqara RTCGQ11LM Zigbee2MQTT's wait, from its blind minute to an hour", () => {
-    const mapping = occupancyOf(aqaraMotionSensor("0x03", "Office motion"));
+    const mapping = motionOf(aqaraMotionSensor("0x03", "Office motion"));
 
     expect(mapping.features).toEqual({
-      senses: "motion",
       sensitivity: null,
       clearAfter: { min: 60, max: 3600 },
       indicator: false,
@@ -140,14 +136,13 @@ describe("a motion sensor's exposes", () => {
   it("give a P1 its sensitivity and blinking, and a shortest wait of its detection_interval", () => {
     const p1 = aqaraMotionSensor("0x04", "Office motion", "RTCGQ14LM");
 
-    expect(occupancyOf(p1).features).toEqual({
-      senses: "motion",
+    expect(motionOf(p1).features).toEqual({
       sensitivity: ["low", "medium", "high"],
       // 30 s, until it says its own.
       clearAfter: { min: 30, max: 3600 },
       indicator: true,
     });
-    expect(occupancyOf(p1, 90).features.clearAfter).toEqual({
+    expect(motionOf(p1, 90).features.clearAfter).toEqual({
       min: 90,
       max: 3600,
     });
@@ -156,10 +151,9 @@ describe("a motion sensor's exposes", () => {
         .capabilities[0],
     ).toMatchObject({ features: { clearAfter: { min: 45, max: 3600 } } });
     // An option below its blind time would have no effect.
-    expect(occupancyOf(p1, 7200).features.clearAfter).toBeNull();
+    expect(motionOf(p1, 7200).features.clearAfter).toBeNull();
     expect(
-      occupancyOf(aqaraMotionSensor("0x05", "Hall motion", "RTCGQ12LM"))
-        .features,
+      motionOf(aqaraMotionSensor("0x05", "Hall motion", "RTCGQ12LM")).features,
     ).toMatchObject({
       sensitivity: null,
       clearAfter: { min: 60, max: 3600 },
@@ -168,7 +162,7 @@ describe("a motion sensor's exposes", () => {
   });
 
   it("leave out a setting it cannot be told or does not publish, and motion it does not publish", () => {
-    const mapping = occupancyOf({
+    const mapping = motionOf({
       definition: {
         exposes: [
           occupancyExpose(),
@@ -185,7 +179,6 @@ describe("a motion sensor's exposes", () => {
     });
 
     expect(mapping.features).toEqual({
-      senses: "motion",
       sensitivity: null,
       clearAfter: { min: 0, max: 65535 },
       indicator: false,
@@ -195,11 +188,11 @@ describe("a motion sensor's exposes", () => {
 });
 
 describe("a motion sensor's state", () => {
-  const hue = occupancyOf(hueMotionSensor("0x06", "Office motion"));
+  const hue = motionOf(hueMotionSensor("0x06", "Office motion"));
 
   it("says whether it sees motion, with the settings it says", () => {
     expect(
-      occupancyState(hue, {
+      motionState(hue, {
         occupancy: true,
         illuminance: 320,
         motion_sensitivity: "high",
@@ -207,7 +200,7 @@ describe("a motion sensor's state", () => {
         led_indication: false,
       }),
     ).toEqual({
-      occupied: true,
+      motion: true,
       sensitivity: "high",
       clearAfter: 30,
       indicator: false,
@@ -215,32 +208,30 @@ describe("a motion sensor's state", () => {
   });
 
   it("is none while its message says nothing of motion, and leaves out a setting it cannot take", () => {
-    expect(occupancyState(hue, { illuminance: 320 })).toBeNull();
+    expect(motionState(hue, { illuminance: 320 })).toBeNull();
     expect(
-      occupancyState(hue, {
+      motionState(hue, {
         occupancy: false,
         motion_sensitivity: "sometimes",
         occupancy_timeout: -5,
         led_indication: "blink",
       }),
-    ).toEqual({ occupied: false });
+    ).toEqual({ motion: false });
   });
 
   it("has an Aqara's wait as Zigbee2MQTT's option, or what it waits without one", () => {
-    const rtcgq11lm = occupancyOf(aqaraMotionSensor("0x07", "Office motion"));
-    const p1 = occupancyOf(
-      aqaraMotionSensor("0x08", "Hall motion", "RTCGQ14LM"),
-    );
+    const rtcgq11lm = motionOf(aqaraMotionSensor("0x07", "Office motion"));
+    const p1 = motionOf(aqaraMotionSensor("0x08", "Hall motion", "RTCGQ14LM"));
 
-    expect(occupancyState(rtcgq11lm, { occupancy: true })).toEqual({
-      occupied: true,
+    expect(motionState(rtcgq11lm, { occupancy: true })).toEqual({
+      motion: true,
       clearAfter: 90,
     });
     expect(
-      occupancyState(rtcgq11lm, { occupancy: true }, { option: 300 }),
-    ).toEqual({ occupied: true, clearAfter: 300 });
+      motionState(rtcgq11lm, { occupancy: true }, { option: 300 }),
+    ).toEqual({ motion: true, clearAfter: 300 });
     expect(
-      occupancyState(
+      motionState(
         p1,
         {
           occupancy: false,
@@ -250,42 +241,42 @@ describe("a motion sensor's state", () => {
         { detectionInterval: 30 },
       ),
     ).toEqual({
-      occupied: false,
+      motion: false,
       sensitivity: "low",
       clearAfter: 32,
       indicator: true,
     });
     // Before it reports, Zigbee2MQTT uses the model's default interval.
-    expect(occupancyState(p1, { occupancy: false })).toEqual({
-      occupied: false,
+    expect(motionState(p1, { occupancy: false })).toEqual({
+      motion: false,
       clearAfter: 32,
     });
     expect(
-      occupancyState(
+      motionState(
         p1,
         { occupancy: false },
         { detectionInterval: 90, option: 30 },
       ),
-    ).toEqual({ occupied: false, clearAfter: 92 });
+    ).toEqual({ motion: false, clearAfter: 92 });
     expect(
-      occupancyState(
+      motionState(
         p1,
         { occupancy: false },
         { detectionInterval: 90, option: 90 },
       ),
-    ).toEqual({ occupied: false, clearAfter: 90 });
+    ).toEqual({ motion: false, clearAfter: 90 });
     expect(
-      occupancyState(p1, { occupancy: false }, { detectionInterval: 65535 }),
-    ).toEqual({ occupied: false });
+      motionState(p1, { occupancy: false }, { detectionInterval: 65535 }),
+    ).toEqual({ motion: false });
   });
 });
 
 describe("a motion sensor's command", () => {
   it("sets a Hue sensor's own settings", () => {
-    const hue = occupancyOf(hueMotionSensor("0x09", "Office motion"));
+    const hue = motionOf(hueMotionSensor("0x09", "Office motion"));
 
     expect(
-      occupancyPayload(hue, {
+      motionPayload(hue, {
         sensitivity: "high",
         clearAfter: 120,
         indicator: true,
@@ -301,12 +292,12 @@ describe("a motion sensor's command", () => {
   });
 
   it("has Zigbee2MQTT's option set for an Aqara's wait", () => {
-    const p1 = occupancyOf(
+    const p1 = motionOf(
       aqaraMotionSensor("0x0a", "Office motion", "RTCGQ14LM"),
     );
 
     expect(
-      occupancyPayload(p1, {
+      motionPayload(p1, {
         sensitivity: "low",
         clearAfter: 120,
         indicator: false,
@@ -318,7 +309,7 @@ describe("a motion sensor's command", () => {
   });
 
   it("says its light's blinking as its expose does", () => {
-    const mapping = occupancyOf({
+    const mapping = motionOf({
       definition: {
         exposes: [
           occupancyExpose(),
@@ -333,11 +324,11 @@ describe("a motion sensor's command", () => {
       },
     });
 
-    expect(occupancyPayload(mapping, { indicator: false }).set).toEqual({
+    expect(motionPayload(mapping, { indicator: false }).set).toEqual({
       led_indication: "OFF",
     });
     expect(
-      occupancyState(mapping, { occupancy: true, led_indication: "ON" }),
-    ).toEqual({ occupied: true, indicator: true });
+      motionState(mapping, { occupancy: true, led_indication: "ON" }),
+    ).toEqual({ motion: true, indicator: true });
   });
 });

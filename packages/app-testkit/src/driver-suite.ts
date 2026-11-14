@@ -55,29 +55,27 @@ export function sampleCommands(
   if (kind === "switch") {
     return [{ on: true }, { on: false }];
   }
-  if (kind === "occupancy") {
+  if (kind === "motion") {
     // Each setting it has, changed and back again.
-    const occupancy = capabilityOf("occupancy").features.parse(features) as {
+    const motion = capabilityOf("motion").features.parse(features) as {
       sensitivity: string[] | null;
       clearAfter: { min: number; max: number } | null;
       indicator: boolean;
     };
     return [
-      ...(occupancy.sensitivity
+      ...(motion.sensitivity
         ? [
-            { sensitivity: occupancy.sensitivity.at(-1) },
-            { sensitivity: occupancy.sensitivity[0] },
+            { sensitivity: motion.sensitivity.at(-1) },
+            { sensitivity: motion.sensitivity[0] },
           ]
         : []),
-      ...(occupancy.clearAfter
+      ...(motion.clearAfter
         ? [
-            { clearAfter: occupancy.clearAfter.max },
-            { clearAfter: occupancy.clearAfter.min },
+            { clearAfter: motion.clearAfter.max },
+            { clearAfter: motion.clearAfter.min },
           ]
         : []),
-      ...(occupancy.indicator
-        ? [{ indicator: false }, { indicator: true }]
-        : []),
+      ...(motion.indicator ? [{ indicator: false }, { indicator: true }] : []),
     ];
   }
   const light = capabilityOf("light").features.parse(features) as {

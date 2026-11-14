@@ -330,17 +330,16 @@ export function createEngine(options: {
         return lights.are(config as LightsConditionConfig, view);
       }
       if (node.piece === "motion") {
-        return motion.at((config as MotionConditionConfig).place, view)
-          .occupied;
+        return motion.at((config as MotionConditionConfig).place, view).motion;
       }
       if (node.piece === "noMotion") {
         const { place, forMinutes } = config as NoMotionConditionConfig;
-        const { answering, occupied, quietSince } = motion.at(place, view);
+        const seen = motion.at(place, view);
         return (
-          answering &&
-          !occupied &&
-          quietSince !== null &&
-          now().getTime() - quietSince.getTime() >= forMinutes * 60_000
+          seen.answering &&
+          !seen.motion &&
+          seen.quietSince !== null &&
+          now().getTime() - seen.quietSince.getTime() >= forMinutes * 60_000
         );
       }
       if (node.piece === "lightLevel") {

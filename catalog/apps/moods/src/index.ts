@@ -59,7 +59,7 @@ let running:
 export default defineApp({
   id: "sanctum.moods",
   name: "Moods",
-  version: "0.9.0",
+  version: "0.10.0",
   core: "^1.0.0",
   summary:
     "Moods for each room, and what remotes and motion do with its lights.",
@@ -90,7 +90,7 @@ export default defineApp({
       asked: "when you choose what a remote's press does",
     },
     {
-      id: "devices.read:occupancy",
+      id: "devices.read:motion",
       reason: "To turn a room's lights on when someone comes in.",
       asked: "when you turn on lights for motion",
     },

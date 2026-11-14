@@ -38,7 +38,7 @@ const places: Places = {
 
 const capability = (
   id: string,
-  kind: "sensor" | "occupancy",
+  kind: "sensor" | "motion",
   features: object,
   state: object | null,
   changedAt: string | null = null,
@@ -59,7 +59,7 @@ const capability = (
 function motionSensor(
   id: string,
   roomId: string | null,
-  motion: { occupied: boolean; minutesAgo: number } | null,
+  motion: { motion: boolean; minutesAgo: number } | null,
   readings: { temperature?: number; illuminance?: number } = {},
   availability: DeviceInfo["availability"] = "online",
 ): DeviceInfo {
@@ -82,14 +82,13 @@ function motionSensor(
     capabilities: [
       capability(
         "occupancy",
-        "occupancy",
+        "motion",
         {
-          senses: "motion",
           sensitivity: null,
           clearAfter: null,
           indicator: false,
         },
-        motion && { occupied: motion.occupied },
+        motion && { motion: motion.motion },
         motion &&
           new Date(Date.now() - motion.minutesAgo * minute).toISOString(),
       ),
@@ -141,14 +140,14 @@ function historyOf(path: string): DeviceHistory {
   return {
     device,
     capability: query.get("capability")!,
-    kind: "occupancy",
+    kind: "motion",
     from: query.get("from")!,
     to: query.get("to")!,
     kept: true,
-    states: (recorded[device] ?? []).map(([at, occupied]) => ({
+    states: (recorded[device] ?? []).map(([at, motion]) => ({
       at: new Date(at).toISOString(),
       availability: "online",
-      state: { occupied },
+      state: { motion },
     })),
   };
 }
@@ -265,7 +264,7 @@ describe("a room's line", () => {
       motionSensor(
         "office",
         "office",
-        { occupied: true, minutesAgo: 1 },
+        { motion: true, minutesAgo: 1 },
         { temperature: 21, illuminance: 318 },
       ),
       climate("desk", "office", 21.5, 48),
@@ -284,19 +283,19 @@ describe("a room's line", () => {
       motionSensor(
         "hall",
         "office",
-        { occupied: false, minutesAgo: 12 },
+        { motion: false, minutesAgo: 12 },
         { illuminance: 40 },
       ),
       motionSensor(
         "stairs",
         "office",
-        { occupied: false, minutesAgo: 3 },
+        { motion: false, minutesAgo: 3 },
         { illuminance: 320 },
       ),
       motionSensor(
         "door",
         "office",
-        { occupied: true, minutesAgo: 1 },
+        { motion: true, minutesAgo: 1 },
         { illuminance: 5_000 },
         "offline",
       ),
@@ -310,7 +309,7 @@ describe("a room's line", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date("2026-10-31T12:00:00Z"));
     devices = [
-      motionSensor("hall", "office", { occupied: false, minutesAgo: 12 }),
+      motionSensor("hall", "office", { motion: false, minutesAgo: 12 }),
     ];
     await show("room", "office");
     expect(readingsLine()).toBe("Quiet for 12 min");
@@ -333,9 +332,8 @@ describe("the Presence category", () => {
     capabilities: [
       capability(
         "occupancy",
-        "occupancy",
+        "motion",
         {
-          senses: "motion",
           sensitivity: null,
           clearAfter: null,
           indicator: false,
@@ -350,10 +348,10 @@ describe("the Presence category", () => {
       motionSensor(
         "office",
         "office",
-        { occupied: true, minutesAgo: 1 },
+        { motion: true, minutesAgo: 1 },
         { temperature: 21 },
       ),
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
+      motionSensor("hall", "hall", { motion: false, minutesAgo: 30 }),
       loose(),
     ];
     await show("category", "presence");
@@ -378,7 +376,7 @@ describe("the Presence category", () => {
   it("leaves out rooms without a motion sensor", async () => {
     devices = [
       climate("desk", "office", 21.5, 48),
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
+      motionSensor("hall", "hall", { motion: false, minutesAgo: 30 }),
     ];
     await show("category", "presence");
     expect(overviewRows()).toEqual(["HallQuiet for 30 min"]);
@@ -386,9 +384,7 @@ describe("the Presence category", () => {
 
   it("measures the times when rooms arrive after the page mounts", async () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
-    devices = [
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
-    ];
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 30 })];
     await show("category", "presence");
 
     const ticks = container.querySelector<HTMLElement>(
@@ -405,9 +401,7 @@ describe("the Presence category", () => {
         ? { ...historyOf(path), kept: false }
         : request(path, init),
     );
-    devices = [
-      motionSensor("hall", "hall", { occupied: true, minutesAgo: 120 }),
-    ];
+    devices = [motionSensor("hall", "hall", { motion: true, minutesAgo: 120 })];
     await show("category", "presence");
 
     expect(overviewRows()).toEqual(["HallMotion now"]);
@@ -418,14 +412,12 @@ describe("the Presence category", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date(2026, 9, 31, 12));
     recorded = { hall: [[Date.now() - 60 * minute, false]] };
-    devices = [
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
-    ];
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 60 })];
     await show("category", "presence");
     vi.mocked(coreJson).mockImplementation(() => new Promise(() => {}));
     vi.setSystemTime(Date.now() + 30_000);
     const moving = motionSensor("hall", "hall", {
-      occupied: true,
+      motion: true,
       minutesAgo: 10 / 60,
     });
     await act(async () => {
@@ -441,7 +433,7 @@ describe("the Presence category", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date(2026, 9, 31, 12));
     const moving = motionSensor("hall", "hall", {
-      occupied: true,
+      motion: true,
       minutesAgo: 10,
     });
     recorded = { hall: [[Date.now() - 10 * minute, true]] };
@@ -481,8 +473,8 @@ describe("the Presence category", () => {
       ],
     };
     devices = [
-      motionSensor("office", "office", { occupied: false, minutesAgo: 60 }),
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 30 }),
+      motionSensor("office", "office", { motion: false, minutesAgo: 60 }),
+      motionSensor("hall", "hall", { motion: false, minutesAgo: 30 }),
     ];
     const request = vi.mocked(coreJson).getMockImplementation()!;
     vi.mocked(coreJson).mockImplementation((path, init) =>
@@ -500,9 +492,7 @@ describe("the Presence category", () => {
   it("keeps the newer history when periodic responses arrive out of order", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date(2026, 9, 31, 12));
-    devices = [
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
-    ];
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 60 })];
     await show("category", "presence");
     let answerOlder!: (history: DeviceHistory) => void;
     let answerNewer!: (history: DeviceHistory) => void;
@@ -513,12 +503,12 @@ describe("the Presence category", () => {
         {
           at: new Date(Date.now() - 60 * minute).toISOString(),
           availability: "online",
-          state: { occupied: true },
+          state: { motion: true },
         },
         {
           at: new Date(Date.now() - 30 * minute).toISOString(),
           availability: "online",
-          state: { occupied: false },
+          state: { motion: false },
         },
       ],
     };
@@ -545,14 +535,14 @@ describe("the Presence category", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date(2026, 9, 31, 12));
     devices = [
-      motionSensor("office", "office", { occupied: false, minutesAgo: 60 }),
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 60 }),
+      motionSensor("office", "office", { motion: false, minutesAgo: 60 }),
+      motionSensor("hall", "hall", { motion: false, minutesAgo: 60 }),
     ];
     await show("category", "presence");
     vi.mocked(coreJson).mockClear();
     await act(async () => vi.advanceTimersByTime(4 * minute));
     const moving = motionSensor("office", "office", {
-      occupied: true,
+      motion: true,
       minutesAgo: 0,
     });
     await act(async () => {
@@ -585,8 +575,8 @@ describe("the Presence category", () => {
       ],
     };
     devices = [
-      motionSensor("door", "office", { occupied: false, minutesAgo: 300 }),
-      motionSensor("desk", "office", { occupied: false, minutesAgo: 240 }),
+      motionSensor("door", "office", { motion: false, minutesAgo: 300 }),
+      motionSensor("desk", "office", { motion: false, minutesAgo: 240 }),
     ];
     await show("category", "presence");
 
@@ -603,7 +593,7 @@ describe("the Presence category", () => {
       motionSensor(
         "hall",
         "hall",
-        { occupied: true, minutesAgo: 2 },
+        { motion: true, minutesAgo: 2 },
         {},
         "offline",
       ),
@@ -635,10 +625,10 @@ describe("the home's status", () => {
       motionSensor(
         "office",
         "office",
-        { occupied: true, minutesAgo: 1 },
+        { motion: true, minutesAgo: 1 },
         { temperature: 21, illuminance: 900 },
       ),
-      motionSensor("hall", "hall", { occupied: true, minutesAgo: 2 }),
+      motionSensor("hall", "hall", { motion: true, minutesAgo: 2 }),
     ];
     await show("status");
 
@@ -654,9 +644,7 @@ describe("the home's status", () => {
   });
 
   it("says Quiet, or No readings while no motion sensor answers", async () => {
-    devices = [
-      motionSensor("hall", "hall", { occupied: false, minutesAgo: 2 }),
-    ];
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 2 })];
     await show("status");
     expect(statusTiles()).toEqual(["PresenceQuiet"]);
 
@@ -664,7 +652,7 @@ describe("the home's status", () => {
       motionSensor(
         "hall",
         "hall",
-        { occupied: true, minutesAgo: 2 },
+        { motion: true, minutesAgo: 2 },
         {},
         "offline",
       ),

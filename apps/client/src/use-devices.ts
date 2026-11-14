@@ -461,7 +461,7 @@ export function useDevices(live: LiveFeed) {
   const ticks = devices.some(
     (device) =>
       device.capabilities.some(
-        (each) => each.kind === "occupancy" || each.kind === "contact",
+        (each) => each.kind === "motion" || each.kind === "contact",
       ) ||
       (onBattery(device) && device.availability === "unknown"),
   );

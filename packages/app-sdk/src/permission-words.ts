@@ -41,7 +41,7 @@ const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
   switch: ["See your switches", "toggle-right"],
   button: ["See your remotes' presses", "circle-dot"],
   sensor: ["See what your sensors read", "thermometer"],
-  occupancy: ["Know when there's motion", "activity"],
+  motion: ["Know when there's motion", "activity"],
   contact: [
     "Know whether your doors, windows and contact sensors are open",
     "door-closed",
@@ -53,7 +53,7 @@ const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
   switch: ["Control your switches", "toggle-right"],
   button: ["Use your remotes", "circle-dot"],
   sensor: ["Change your sensors", "thermometer"],
-  occupancy: ["Change your motion sensors", "activity"],
+  motion: ["Change your motion sensors", "activity"],
   contact: ["Change your contact sensors", "door-closed"],
 };
 

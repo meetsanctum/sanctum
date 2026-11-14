@@ -101,7 +101,7 @@ function registered(capability: CapabilityMapping) {
       return { id, kind: capability.kind, features: capability.features };
     case "sensor":
       return { id, kind: capability.kind, features: capability.features };
-    case "occupancy":
+    case "motion":
       return { id, kind: capability.kind, features: capability.features };
     case "switch":
       return { id, kind: capability.kind };

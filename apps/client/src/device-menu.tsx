@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { whyNot, type CheckResult } from "./device-firmware";
-import { hasMotionSettings, occupancyOf } from "./motion-settings";
+import { hasMotionSettings, motionOf } from "./motion-settings";
 
 // A device's menu in Settings → Devices: its firmware's version, then
 // renaming it, its room, whether it shows on Home, whether its history is
@@ -66,7 +66,7 @@ export function DeviceMenu(props: {
   const noProbe = whyNot(device, "probe");
   const state = device.firmware?.state;
   const isRunning = state === "updating" || state === "waiting";
-  const motion = occupancyOf(device);
+  const motion = motionOf(device);
   const noMotionSettings =
     motion && !hasMotionSettings(motion.features)
       ? "It has none to change"

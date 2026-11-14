@@ -1,10 +1,6 @@
 import type { ButtonFeatures, LightFeatures } from "@meetsanctum/app-sdk";
 
-import {
-  mapOccupancy,
-  type DeviceFacts,
-  type OccupancyMapping,
-} from "./occupancy.js";
+import { mapMotion, type DeviceFacts, type MotionMapping } from "./motion.js";
 import {
   isActionExpose,
   isHold,
@@ -18,8 +14,8 @@ import { numericValue } from "./values.js";
 
 // A device's exposes onto the core's capability kinds. Lights, switches, a
 // remote's buttons, a climate sensor's temperature and humidity and a motion
-// sensor's light level (sensors.ts) and its occupancy with its settings
-// (occupancy.ts): an expose of any other kind is left out rather than
+// sensor's light level (sensors.ts) and its motion with its settings
+// (motion.ts): an expose of any other kind is left out rather than
 // guessed at, and so is a light or switch that cannot be switched and an
 // action expose with no presses. The driver brings no device with none of
 // these.
@@ -63,11 +59,7 @@ export type ButtonMapping = {
 };
 
 export type CapabilityMapping =
-  | LightMapping
-  | SwitchMapping
-  | ButtonMapping
-  | SensorMapping
-  | OccupancyMapping;
+  LightMapping | SwitchMapping | ButtonMapping | SensorMapping | MotionMapping;
 
 // The colour temperature range when a light gives none.
 const defaultColorTemperature = { min: 153, max: 500 };
@@ -139,7 +131,7 @@ function mapOne(
     return mapSensor(expose, exposes);
   }
   if (expose.type === "binary") {
-    return mapOccupancy(expose, exposes, facts);
+    return mapMotion(expose, exposes, facts);
   }
   const kind = expose.type;
   if (kind !== "light" && kind !== "switch") {

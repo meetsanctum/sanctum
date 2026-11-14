@@ -106,7 +106,7 @@ export const deviceCapabilities = sqliteTable(
     // if any, the actor behind it, the fields it asked for and when.
     setBy: text("set_by", { mode: "json" }).$type<StoredSetBy>(),
     // When what it reports last changed: its kind's history fields, such as
-    // whether a motion sensor sees someone. Commands, settings and reports
+    // whether a motion sensor sees motion. Commands, settings and reports
     // that say the same again leave it, unlike updatedAt.
     changedAt: integer("changed_at", { mode: "timestamp_ms" }),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

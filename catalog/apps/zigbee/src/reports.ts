@@ -4,7 +4,7 @@ import type { ZigbeeDeviceEntry } from "./devices.js";
 import { firmwareOf } from "./firmware.js";
 import type { createFirmwareUpdates } from "./firmware-updates.js";
 import type { createMotionTiming } from "./motion-timing.js";
-import { occupancyState } from "./occupancy.js";
+import { motionState } from "./motion.js";
 import type { createHolds, Heard } from "./presses.js";
 import { batteryOf, sensorState } from "./sensors.js";
 import { stateFromPayload } from "./states.js";
@@ -37,12 +37,8 @@ export function createDeviceReporter({
         if (said) heard.push({ capability: capability.id, heard: said });
         continue;
       }
-      if (capability.kind === "occupancy") {
-        const state = occupancyState(
-          capability,
-          raw,
-          timing.timingOf(device.key),
-        );
+      if (capability.kind === "motion") {
+        const state = motionState(capability, raw, timing.timingOf(device.key));
         if (state) {
           states[capability.id] = state;
           timing.reported(device.key, capability, state);

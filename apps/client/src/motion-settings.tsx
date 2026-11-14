@@ -1,10 +1,10 @@
 import type {
   CapabilityInfo,
   DeviceInfo,
-  OccupancyCommand,
-  OccupancyFeatures,
-  OccupancySensitivity,
-  OccupancyState,
+  MotionCommand,
+  MotionFeatures,
+  MotionSensitivity,
+  MotionState,
 } from "@meetsanctum/app-sdk";
 import { Button, Switch } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
@@ -39,19 +39,19 @@ import { deviceProblem } from "./device-parts";
 // control back on what the sensor says, in red, with Try again. A screen
 // reader hears how each change ended.
 
-type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
-type Setting = keyof OccupancyCommand;
-type Asked = Partial<Pick<OccupancyState, Setting>>;
+type Motion = Extract<CapabilityInfo, { kind: "motion" }>;
+type Setting = keyof MotionCommand;
+type Asked = Partial<Pick<MotionState, Setting>>;
 
 /** A device's motion sensor, if it has one. */
-export function occupancyOf(device: DeviceInfo): Occupancy | undefined {
+export function motionOf(device: DeviceInfo): Motion | undefined {
   return device.capabilities.find(
-    (capability): capability is Occupancy => capability.kind === "occupancy",
+    (capability): capability is Motion => capability.kind === "motion",
   );
 }
 
 /** Whether a motion sensor has any settings to change. */
-export function hasMotionSettings(features: OccupancyFeatures) {
+export function hasMotionSettings(features: MotionFeatures) {
   return (
     features.sensitivity !== null ||
     features.clearAfter !== null ||
@@ -59,7 +59,7 @@ export function hasMotionSettings(features: OccupancyFeatures) {
   );
 }
 
-const sensitivityLabels: Record<OccupancySensitivity, string> = {
+const sensitivityLabels: Record<MotionSensitivity, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
@@ -68,7 +68,7 @@ const sensitivityLabels: Record<OccupancySensitivity, string> = {
 };
 
 /** A sensitivity as the household reads it, such as Very high. */
-export const sensitivityLabel = (level: OccupancySensitivity) =>
+export const sensitivityLabel = (level: MotionSensitivity) =>
   sensitivityLabels[level];
 
 const plural = (count: number, word: string) =>
@@ -103,7 +103,7 @@ export function clearAfterOptions(
 
 // What a screen reader hears once the sensor has a change.
 const takenWords = {
-  sensitivity: (value: OccupancySensitivity) =>
+  sensitivity: (value: MotionSensitivity) =>
     `Sensitivity set to ${sensitivityLabel(value)}`,
   clearAfter: (value: number) =>
     `It says no motion after ${clearAfterWords(value)}`,
@@ -118,7 +118,7 @@ type Standing =
   | { kind: "problem"; text: string };
 
 function standingOf(
-  capability: Occupancy,
+  capability: Motion,
   setting: Setting,
   asked: Asked,
   sending: ReadonlySet<Setting>,
@@ -186,14 +186,14 @@ export function MotionSettings(props: {
   onCommand: (
     device: DeviceInfo,
     capability: string,
-    command: OccupancyCommand,
+    command: MotionCommand,
   ) => Promise<void>;
 }) {
   // What the dialog showed stays while it closes.
   const last = useRef<DeviceInfo>(undefined);
   if (props.device) last.current = props.device;
   const device = last.current;
-  const capability = device && occupancyOf(device);
+  const capability = device && motionOf(device);
   const open = props.device !== undefined;
 
   // What was last sent from here for each setting, until the sensor has it.
@@ -267,7 +267,7 @@ export function MotionSettings(props: {
     }
   });
 
-  const send = async (command: OccupancyCommand) => {
+  const send = async (command: MotionCommand) => {
     if (!device || !capability) return;
     const [setting] = Object.keys(command) as Setting[];
     if (!setting) return;
@@ -303,7 +303,7 @@ export function MotionSettings(props: {
 
   // What a control shows: the change on its way, or, once the sensor
   // didn't take it, what the sensor says.
-  function shown<S extends Setting>(setting: S): OccupancyState[S] | undefined {
+  function shown<S extends Setting>(setting: S): MotionState[S] | undefined {
     const standing = standings[setting];
     if (standing !== null && standing !== "taken") {
       return standing.kind === "pending"
@@ -372,7 +372,7 @@ export function MotionSettings(props: {
                 onValueChange={(value: string) =>
                   value &&
                   value !== shown("sensitivity") &&
-                  void send({ sensitivity: value as OccupancySensitivity })
+                  void send({ sensitivity: value as MotionSensitivity })
                 }
                 spacing={1}
                 className="w-full rounded-md bg-foreground/8 p-0.75"

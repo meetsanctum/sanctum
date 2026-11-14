@@ -37,7 +37,7 @@ const moods: AppInfo = {
       "So a press of a remote can run the mood you chose.",
     ),
     request(
-      "devices.read:occupancy",
+      "devices.read:motion",
       "To turn a room's lights on when someone comes in.",
     ),
     request(
@@ -105,7 +105,7 @@ describe("the sheet that asks for a permission", () => {
   it("asks for one in Sanctum's words, with the app's reason, and Allow turns it on", async () => {
     let answer: boolean | undefined;
     await act(async () => {
-      void ask("sanctum.moods", ["devices.read:occupancy"]).then(
+      void ask("sanctum.moods", ["devices.read:motion"]).then(
         (granted) => (answer = granted),
       );
     });
@@ -122,10 +122,10 @@ describe("the sheet that asks for a permission", () => {
 
     await press("Allow");
     expect(granted()).toEqual([
-      { permission: "devices.read:occupancy", granted: true },
+      { permission: "devices.read:motion", granted: true },
     ]);
     // The shell takes the core's answer for everything that shows Moods.
-    expect(changed.at(-1)?.permissions).toContain("devices.read:occupancy");
+    expect(changed.at(-1)?.permissions).toContain("devices.read:motion");
     expect(answer).toBe(true);
     expect(dialog()).toBeNull();
   });
@@ -185,7 +185,7 @@ describe("the sheet that asks for a permission", () => {
     expect(answer).toBeUndefined();
     // Another ask meanwhile waits, and leaves this sheet as it is.
     await act(async () => {
-      void ask("sanctum.moods", ["devices.read:occupancy"]);
+      void ask("sanctum.moods", ["devices.read:motion"]);
     });
     expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
 
@@ -222,7 +222,7 @@ describe("the sheet that asks for a permission", () => {
   it("asks one thing at a time", async () => {
     const answers: boolean[] = [];
     await act(async () => {
-      void ask("sanctum.moods", ["devices.read:occupancy"]).then((each) =>
+      void ask("sanctum.moods", ["devices.read:motion"]).then((each) =>
         answers.push(each),
       );
       void ask("sanctum.moods", ["devices.read:button"]).then((each) =>

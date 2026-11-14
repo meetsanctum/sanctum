@@ -41,7 +41,7 @@ export function quietDue(
   minutes: number,
   after: Date,
 ): Date | null {
-  if (!motion.answering || motion.occupied || !motion.quietSince) return null;
+  if (!motion.answering || motion.motion || !motion.quietSince) return null;
   const due = new Date(motion.quietSince.getTime() + minutes * 60_000);
   return due > after ? due : null;
 }
@@ -109,7 +109,7 @@ export function createTimers(
     const now = motion.at(place);
     return (
       now.answering &&
-      !now.occupied &&
+      !now.motion &&
       now.quietSince !== null &&
       at.getTime() - now.quietSince.getTime() >= forMinutes * 60_000
     );

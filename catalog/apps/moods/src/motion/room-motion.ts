@@ -62,7 +62,7 @@ export function motionSensorsIn(
   return devices.filter(
     (device) =>
       device.roomId === roomId &&
-      device.capabilities.some((capability) => capability.kind === "occupancy"),
+      device.capabilities.some((capability) => capability.kind === "motion"),
   );
 }
 
