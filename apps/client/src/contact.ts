@@ -3,7 +3,7 @@ import type { Tile } from "@meetsanctum/ui-sdk";
 import { midnight, timeText } from "./device-history-data";
 
 // What contact sensors say, in words: on a sensor's tile, in a room's line
-// under its name and in the home's status. A sensor is
+// under its name, in the home's status and on Security's summary card. A sensor is
 // open, closed or not known: one that is offline, has gone quiet on its
 // battery or has said nothing yet is not known, and is never counted as
 // closed. So "All closed" needs a closed reading from every sensor, and
@@ -85,5 +85,24 @@ export function placeContacts(tiles: readonly Tile[]) {
     text: open
       ? `${contacts.open} open`
       : closedText(contacts, contacts.closed === 1 ? "Closed" : "All closed"),
+  };
+}
+
+/**
+ * Contact sensors as a summary card says them: how many are open, "All
+ * closed" once each has said so, how many are closed while others are not
+ * known, or "No readings"; under it, how many are not known while any
+ * other is known, since a count must not hide a sensor nobody can vouch
+ * for; and whether any is open.
+ */
+export function contactsSummary(contacts: Contacts) {
+  const known = contacts.open + contacts.closed;
+  return {
+    open: contacts.open > 0,
+    status: contactsStatus(contacts),
+    note:
+      contacts.unknown > 0 && known > 0
+        ? `${contacts.unknown} not known`
+        : null,
   };
 }
