@@ -147,6 +147,9 @@ export function createSupervisor(options: {
   const waitPauses = options.waitPausesMs ?? defaultWaitPausesMs;
   const connectWithinMs = options.connectWithinMs ?? defaultConnectWithinMs;
   const connectCheckMs = options.connectCheckMs ?? defaultConnectCheckMs;
+  // The apps that reach devices stopped while they wait for a manager that
+  // can give them their network.
+  const stoppedToWait = new WeakSet<InstalledApp>();
 
   const of = (entry: InstalledApp) => entry.supervision;
   const isCurrent = (entry: InstalledApp, generation: number) =>
@@ -298,14 +301,25 @@ export function createSupervisor(options: {
     // running, as after the core restarted under it, stops as it starts
     // waiting.
     if (reachesDevices(entry) && !manager.capabilities().lan) {
-      if (of(entry).waitingFor !== lanWaitingFor) {
+      // Asked again with each try until the manager has stopped it.
+      if (!stoppedToWait.has(entry)) {
         of(entry).endingConnection = entry.link.isConnected();
-        await stopContainer(entry);
+        const isStopped = await manage(entry, () =>
+          manager.stopAppContainer(app.id),
+        ).then(
+          () => true,
+          (error: unknown) => {
+            log(`apps: ${app.id}'s container didn't stop (${String(error)})`);
+            return false;
+          },
+        );
         if (!isCurrent(entry, generation)) return;
+        if (isStopped) stoppedToWait.add(entry);
       }
       waiting(entry, lanWaitingFor, () => void launch(entry));
       return;
     }
+    stoppedToWait.delete(entry);
     try {
       await manage(entry, async () => {
         if (!isCurrent(entry, generation)) return;

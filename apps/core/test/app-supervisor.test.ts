@@ -475,6 +475,25 @@ describe("an app's supervisor", () => {
       supervisor.end(entry);
     });
 
+    it("asks again to stop one waiting for its network, until the manager has", async () => {
+      let tries = 0;
+      const { entry, supervisor, phase } = setUp({
+        async stopAppContainer() {
+          tries += 1;
+          if (tries === 1) throw new ManagerUnavailable("No answer");
+        },
+      });
+      entry.granted = ["lan:tcp:6053"];
+
+      await supervisor.launch(entry);
+      expect(tries).toBe(1);
+      await passes(60_000);
+
+      expect(phase()).toBe("waiting");
+      expect(tries).toBe(2);
+      supervisor.end(entry);
+    });
+
     it("keeps retrying an unconfirmed network when its connection gets ready late", async () => {
       const start = vi.fn(async () => {
         throw new ManagerUnavailable("No answer");
