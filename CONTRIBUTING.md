@@ -21,7 +21,7 @@ coding agents alike.
 ```sh
 pnpm install
 pnpm dev          # the manager and core in Docker, client on :5173, website on :5174
-pnpm dev:seed     # a claimed home with rooms and fake lights
+pnpm dev:seed     # a claimed home with rooms, fake lights and contact sensors
 pnpm dev:status   # the core's address, and any other stacks
 pnpm dev:stop     # stop this worktree's stack
 pnpm dev:down     # remove this worktree's stack and its data

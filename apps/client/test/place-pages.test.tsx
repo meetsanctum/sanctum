@@ -18,6 +18,7 @@ import { useDevices } from "../src/use-devices";
 import {
   alarms,
   awnings,
+  contactSensor,
   entity,
   hallLight,
   lamp,
@@ -591,6 +592,54 @@ describe("a room's page", () => {
       });
     });
     expect(back).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("contact sensors", () => {
+  const readingsLine = () =>
+    container.querySelector(
+      "header [data-slot=readings]",
+    ) as HTMLElement | null;
+
+  it("say in their room's line whether any is open, and have a section under Security", async () => {
+    devices = [
+      lamp,
+      contactSensor("front", "Front door", "office", true),
+      contactSensor("letterbox", "Letterbox", "office", false),
+    ];
+    await show("room", "office");
+
+    expect(readingsLine()?.textContent).toBe("Contact sensors 1 open");
+    expect(headings()).toEqual(["Moods", "Lights", "Security"]);
+    expect(tile("Front door")?.textContent).toBe("Front doorOpen");
+    // Its tile switches nothing: one button, which opens its detail.
+    await click(tile("Letterbox"));
+    expect(openDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "letterbox/contact" }),
+    );
+    expect(posted("/api/devices/command")).toEqual([]);
+  });
+
+  it("head Security's page with whether all are closed, above their tiles by room", async () => {
+    devices = [
+      lamp,
+      contactSensor("front", "Front door", "hall", true),
+      contactSensor("letterbox", "Letterbox", "hall", false),
+      contactSensor("window", "Window", "office", null),
+    ];
+    await show("category", "security");
+
+    expect(container.querySelector("h1")?.textContent).toBe("Security");
+    expect(container.querySelector("main p, p")?.textContent).toBe(
+      "Contact sensorsFront door is open",
+    );
+    // The page's sections, then the sidebar's own headings.
+    expect(headings()).toEqual(["Office", "Hall", "Categories", "Rooms"]);
+    expect(
+      [...container.querySelectorAll("nav button")].map(
+        (each) => each.textContent,
+      ),
+    ).toEqual(["Lights1 on", "Security", "Office", "Hall", "Attic"]);
   });
 });
 

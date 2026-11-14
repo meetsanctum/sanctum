@@ -189,3 +189,33 @@ export function sensor(
     ],
   };
 }
+
+// A contact sensor in a room: open, closed, or yet to say (null), and when
+// that last changed.
+export function contactSensor(
+  id: string,
+  name: string,
+  roomId: string | null,
+  open: boolean | null,
+  changedAt: string | null = null,
+): DeviceInfo {
+  const state = open === null ? null : { open };
+  return {
+    ...light(id, name, roomId, false),
+    type: "contact",
+    battery: 95,
+    capabilities: [
+      {
+        id: "contact",
+        kind: "contact",
+        features: {},
+        state,
+        observed: state,
+        desired: null,
+        sync: "synced",
+        setBy: null,
+        changedAt,
+      },
+    ],
+  };
+}

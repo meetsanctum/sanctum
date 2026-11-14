@@ -5,7 +5,7 @@
 #
 #   pnpm dev           start this worktree's stack and rebuild what changes
 #   pnpm dev:stop      stop it and keep its data
-#   pnpm dev:seed      claim a new home and put its fake lights in rooms
+#   pnpm dev:seed      claim a new home and put its fake devices in rooms
 #   pnpm dev:down      remove it and its data
 #   pnpm dev:status    its address, port and containers, and any other stacks
 #   pnpm dev:logs      follow a container's log: core (default), manager or a service

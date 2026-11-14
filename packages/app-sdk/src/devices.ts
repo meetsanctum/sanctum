@@ -244,6 +244,11 @@ const occupancyCommand = z
     "a command asks for something",
   );
 
+// A contact sensor's parts, described where the kind is defined below.
+const contactFeatures = z.strictObject({});
+const contactState = z.strictObject({ open: z.boolean() });
+const contactCommand = z.never();
+
 export type LightFeatures = z.output<typeof lightFeatures>;
 export type LightState = z.output<typeof lightState>;
 export type LightCommand = z.output<typeof lightCommand>;
@@ -256,6 +261,8 @@ export type SensorState = z.output<typeof sensorState>;
 export type OccupancyFeatures = z.output<typeof occupancyFeatures>;
 export type OccupancyState = z.output<typeof occupancyState>;
 export type OccupancyCommand = z.output<typeof occupancyCommand>;
+export type ContactFeatures = z.output<typeof contactFeatures>;
+export type ContactState = z.output<typeof contactState>;
 
 export interface CapabilityDefinition<
   Kind extends string = string,
@@ -432,6 +439,27 @@ export const occupancy = {
   OccupancyCommand
 >;
 
+/**
+ * Whether what a contact sensor sits on is open, such as a door or a
+ * window: its state says so, it has no features, and it takes no commands.
+ */
+export const contact = {
+  kind: "contact",
+  version: 1,
+  features: contactFeatures,
+  state: contactState,
+  command: contactCommand,
+  // It takes no commands, so nothing is ever asked of it.
+  desired: (command: never) => command,
+  supports: () => false,
+  tier: "read",
+} as const satisfies CapabilityDefinition<
+  "contact",
+  ContactFeatures,
+  ContactState,
+  never
+>;
+
 /** Every capability kind the core knows. Climate, cover and the rest join here. */
 export const capabilities = {
   light,
@@ -439,6 +467,7 @@ export const capabilities = {
   button,
   sensor,
   occupancy,
+  contact,
 } as const;
 
 export type CapabilityKind = keyof typeof capabilities;
@@ -458,6 +487,7 @@ type Kinds = {
     state: OccupancyState;
     command: OccupancyCommand;
   };
+  contact: { features: ContactFeatures; state: ContactState; command: never };
 };
 export type FeaturesOf<K extends CapabilityKind> = Kinds[K]["features"];
 export type StateOf<K extends CapabilityKind> = Kinds[K]["state"];
@@ -631,6 +661,11 @@ const capabilityRegistration = z.discriminatedUnion("kind", [
     id: capabilityId,
     kind: z.literal("occupancy"),
     features: occupancyFeatures,
+  }),
+  z.strictObject({
+    id: capabilityId,
+    kind: z.literal("contact"),
+    features: contactFeatures.default({}),
   }),
 ]);
 

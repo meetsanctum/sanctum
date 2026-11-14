@@ -45,6 +45,14 @@ const types = [
     noun: "motion sensor",
     needs: ["occupancy"],
   },
+  // A sensor that says whether what it sits on is open, which may measure
+  // too.
+  {
+    id: "contact",
+    title: "Contact sensor",
+    noun: "contact sensor",
+    needs: ["contact"],
+  },
   { id: "sensor", title: "Sensor", noun: "sensor", needs: ["sensor"] },
   // What none of the above fits: a device with no capability Sanctum has,
   // which it cannot use. A room's name before it would promise more than

@@ -37,8 +37,8 @@ export type HistoryPeriod = (typeof historyPeriods)[number];
 /**
  * The values each capability kind rolls up: whether a light or a switch was
  * on, as 1 or 0, a light's brightness while it was on, a sensor's reading
- * in its measure's standard unit, and whether a motion sensor saw someone,
- * as 1 or 0.
+ * in its measure's standard unit, whether a motion sensor saw someone and
+ * whether a contact sensor was open, each as 1 or 0.
  */
 export const historyFields = {
   light: ["on", "brightness"],
@@ -46,6 +46,7 @@ export const historyFields = {
   button: [],
   sensor: ["value"],
   occupancy: ["occupied"],
+  contact: ["open"],
 } as const satisfies Record<CapabilityKind, readonly string[]>;
 export type HistoryField = (typeof historyFields)[CapabilityKind][number];
 

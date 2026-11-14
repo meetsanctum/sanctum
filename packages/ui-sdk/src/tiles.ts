@@ -1,7 +1,7 @@
 import type { LightState, SensorMeasure } from "@meetsanctum/app-sdk";
 
-// The home's lights, switches, remotes, sensors and motion sensors as tiles,
-// and a tile for a device Sanctum cannot use:
+// The home's lights, switches, remotes, sensors, motion sensors and contact
+// sensors as tiles, and a tile for a device Sanctum cannot use:
 // what a tile shows, which the shell works out from the core's devices and
 // an app's page from its own draft, such as a mood's lights. The tiles draw
 // it and say what was pressed; they hold no device state.
@@ -13,11 +13,19 @@ export type Tile = {
   /**
    * A remote's tile switches nothing: it shows its latest press. Nor does a
    * sensor's, one for each device, which shows its readings, or a motion
-   * sensor's (occupancy), which says whether it sees motion. An unknown
+   * sensor's (occupancy), which says whether it sees motion, or a contact
+   * sensor's, which says whether what it sits on is open. An unknown
    * device's, one for a device with nothing Sanctum can use, says what its
    * driver calls it; its `capabilityId` is empty.
    */
-  kind: "light" | "switch" | "button" | "sensor" | "occupancy" | "unknown";
+  kind:
+    | "light"
+    | "switch"
+    | "button"
+    | "sensor"
+    | "occupancy"
+    | "contact"
+    | "unknown";
   /** The room it is in, or null when it is in none the home has. */
   roomId: string | null;
   name: string;
@@ -43,6 +51,12 @@ export type Tile = {
    * when the core has not said), while it answers and has said either.
    */
   motion?: { occupied: boolean; changedAt: string | null };
+  /**
+   * Whether a contact sensor is open, and when that last changed (null when
+   * the core has not said), while it answers and has said either. Without
+   * it nothing is known of the sensor, which is never the same as closed.
+   */
+  contact?: { open: boolean; changedAt: string | null };
   /** How many commands to it have failed here, so its tile shows each. */
   failures?: number;
 };

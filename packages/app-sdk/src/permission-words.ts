@@ -42,6 +42,10 @@ const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
   button: ["See your remotes' presses", "circle-dot"],
   sensor: ["See what your sensors read", "thermometer"],
   occupancy: ["Know when there's motion", "activity"],
+  contact: [
+    "Know whether your doors, windows and contact sensors are open",
+    "door-closed",
+  ],
 };
 
 const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
@@ -50,6 +54,7 @@ const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
   button: ["Use your remotes", "circle-dot"],
   sensor: ["Change your sensors", "thermometer"],
   occupancy: ["Change your motion sensors", "activity"],
+  contact: ["Change your contact sensors", "door-closed"],
 };
 
 // The services the manager runs, by the names their makers give them.

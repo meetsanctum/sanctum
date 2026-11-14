@@ -14,8 +14,9 @@ import {
 } from "@meetsanctum/app-sdk";
 
 // A driver app for the tests, loaded from its package like a catalog app. It
-// brings lamps, plugs, remotes, climate sensors and motion sensors (motion,
-// light level and temperature, with their settings) from a pretend radio, the
+// brings lamps, plugs, remotes, climate sensors, motion sensors (motion,
+// light level and temperature, with their settings) and contact sensors
+// from a pretend radio, the
 // way the Zigbee app brings them from Zigbee2MQTT: it registers them when it
 // starts and says those are all it has, carries out the commands the core hands
 // it, and reports what the devices say back, remotes' presses and releases, and
@@ -28,7 +29,14 @@ import {
 
 type Gadget = {
   // A purifier does nothing the core has a capability for.
-  kind: "light" | "switch" | "button" | "sensor" | "occupancy" | "purifier";
+  kind:
+    | "light"
+    | "switch"
+    | "button"
+    | "sensor"
+    | "occupancy"
+    | "contact"
+    | "purifier";
   name: string;
   // What the driver says it is, if it says.
   type?: string;
@@ -51,6 +59,7 @@ const models = {
   button: "Remote",
   sensor: "Climate sensor",
   occupancy: "Motion sensor",
+  contact: "Contact sensor",
   purifier: "Air purifier",
 };
 // A climate sensor's two readings and its battery, as it first says them.
@@ -139,7 +148,9 @@ class Radio {
             ? { ...climate }
             : kind === "occupancy"
               ? { ...motion }
-              : { on: false },
+              : kind === "contact"
+                ? { open: false, battery: 95 }
+                : { on: false },
       answers: true,
     });
     if (this.ctx) {
@@ -434,28 +445,30 @@ class Radio {
             ? sensorCapabilities
             : gadget.kind === "occupancy"
               ? motionCapabilities
-              : [
-                  gadget.kind === "light"
-                    ? {
-                        id: capabilityIds.light,
-                        kind: "light",
-                        features: {
-                          brightness: true,
-                          colorTemperature: { min: 153, max: 500 },
-                          color: true,
-                        },
-                      }
-                    : gadget.kind === "button"
+              : gadget.kind === "contact"
+                ? [{ id: "contact", kind: "contact" }]
+                : [
+                    gadget.kind === "light"
                       ? {
-                          id: capabilityIds.button,
-                          kind: "button",
+                          id: capabilityIds.light,
+                          kind: "light",
                           features: {
-                            actions: remoteActions,
-                            holds: remoteHolds,
+                            brightness: true,
+                            colorTemperature: { min: 153, max: 500 },
+                            color: true,
                           },
                         }
-                      : { id: capabilityIds.switch, kind: "switch" },
-                ],
+                      : gadget.kind === "button"
+                        ? {
+                            id: capabilityIds.button,
+                            kind: "button",
+                            features: {
+                              actions: remoteActions,
+                              holds: remoteHolds,
+                            },
+                          }
+                        : { id: capabilityIds.switch, kind: "switch" },
+                  ],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)
@@ -481,7 +494,8 @@ const sleeps = (gadget: Gadget) =>
   gadget.kind === "purifier" ||
   gadget.kind === "button" ||
   gadget.kind === "sensor" ||
-  gadget.kind === "occupancy";
+  gadget.kind === "occupancy" ||
+  gadget.kind === "contact";
 
 // A motion sensor's motion, with its settings, and its two readings.
 const motionCapabilities: DeviceRegistration["capabilities"] = [
@@ -519,6 +533,10 @@ function reportOf(gadget: Gadget) {
       },
       battery: battery as number,
     };
+  }
+  if (gadget.kind === "contact") {
+    const { open, battery } = gadget.state;
+    return { states: { contact: { open } }, battery: battery as number };
   }
   if (gadget.kind === "sensor") {
     const { temperature, humidity, battery } = gadget.state;

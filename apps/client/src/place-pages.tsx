@@ -6,6 +6,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import {
   Button,
+  ContactClosed,
+  ContactOpen,
   DeviceSections,
   icons,
   PageBar,
@@ -17,6 +19,7 @@ import {
 import { useEffect } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
+import { contactsOf, contactsStatus, placeContacts } from "./contact";
 import {
   climateMeasures,
   measureNames,
@@ -39,19 +42,22 @@ import {
   type AppSection,
   type SectionEntities,
 } from "./room-sections";
+import { SecurityOverview } from "./security-overview";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import type { HostProblem } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
-// complete and fixed. A room's page opens with its name, its motion and what
-// its sensors read under it, and a button for all its lights, then apps'
+// complete and fixed. A room's page opens with its name, its motion, whether
+// its contact sensors are open and what its sensors read under it, and a
+// button for all its lights, then apps'
 // sections by their weight, Moods first, then its devices in a section for
 // each category, and last the devices Sanctum cannot use. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
-// light in the home, Environment with what every sensor reads, and Presence
+// light in the home, Environment with what every sensor reads, Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
-// above its sensors. The devices in no room have a page too, last among
+// above its sensors, and Security with whether everything is closed
+// (security-overview.tsx). The devices in no room have a page too, last among
 // the rooms while there are any. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).
 // They look the same on every device, shared ones too: lights, switches
@@ -72,6 +78,8 @@ const categoryLooks: Record<
   switches: { icon: icons.Plug, colour: "var(--ember-text)" },
   environment: { icon: icons.Thermometer, colour: "var(--sky-text)" },
   presence: { icon: icons.Footprints, colour: "var(--leaf-text)" },
+  // An open window is a fact and no warning, so Security is never red.
+  security: { icon: icons.Shield, colour: "var(--iris-text)" },
   buttons: { icon: icons.CircleDot, colour: "var(--graphite-text)" },
 };
 
@@ -107,12 +115,17 @@ function PlaceHeader(props: {
   subtitle?: string;
   /** Its motion in words, first in the line of readings. */
   motion?: string | null;
+  /** Its contact sensors in words, after its motion. */
+  contact?: PlaceContact | null;
   readings?: Reading[];
   lights?: LightsSwitch;
 }) {
   const { lights } = props;
   const hasLine =
-    !!props.subtitle || !!props.motion || !!props.readings?.length;
+    !!props.subtitle ||
+    !!props.motion ||
+    !!props.contact ||
+    !!props.readings?.length;
   if (!hasLine && !lights) return <PageBar title={props.title} />;
   return (
     <header className="flex shrink-0 flex-col gap-2.5">
@@ -125,6 +138,7 @@ function PlaceHeader(props: {
         )}
         <PlaceReadings
           motion={props.motion}
+          contact={props.contact}
           readings={props.readings}
           className="text-[15px] leading-[22px] [&_svg]:size-4"
         />
@@ -138,16 +152,23 @@ function PlaceHeader(props: {
   );
 }
 
+/** A place's contact sensors as its line says them (contact.ts). */
+export type PlaceContact = { text: string; open: boolean };
+
 /**
- * A place's motion and what its sensors read, in a line: under a room
- * page's name, and beside a room's lights on Home. Nothing without either.
+ * A place's motion, whether its contact sensors are open and what its
+ * sensors read, in a line: under a room page's name, and beside a room's
+ * lights on Home. Nothing without any.
  */
 export function PlaceReadings(props: {
   motion?: string | null;
+  contact?: PlaceContact | null;
   readings?: Reading[];
   className: string;
 }) {
-  if (!props.motion && !props.readings?.length) return null;
+  const { contact } = props;
+  const Contact = contact?.open ? ContactOpen : ContactClosed;
+  if (!props.motion && !contact && !props.readings?.length) return null;
   return (
     <p
       data-slot="readings"
@@ -157,6 +178,13 @@ export function PlaceReadings(props: {
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           <icons.Footprints aria-hidden="true" className="text-white/65" />
           {props.motion}
+        </span>
+      )}
+      {contact && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Contact aria-hidden="true" className="text-white/65" />
+          <span className="sr-only">Contact sensors </span>
+          {contact.text}
         </span>
       )}
       {props.readings?.map((each) => {
@@ -237,6 +265,7 @@ export function lightsButton(
 const statusOrder = [
   "environment",
   "presence",
+  "security",
   "lights",
   "switches",
 ] as const satisfies DeviceCategory[];
@@ -254,7 +283,8 @@ type StatusTile = {
 
 /**
  * The home's status on the dashboard: a tile for what the sensors read,
- * where there is motion, how many lights and switches are on, each opening
+ * where there is motion, how many contact sensors are open, how many
+ * lights and switches are on, each opening
  * its category, and last, while Sanctum or any device needs attention, one
  * that opens Settings, where they show first, or Status when only Sanctum
  * does, then, while a battery is to replace, Batteries, in Graphite, which
@@ -289,6 +319,10 @@ export function HomeStatus(props: {
     } else if (category.id === "presence") {
       const motion = homeMotion(own, devices.places);
       value = motion.answering ? motionWhere(motion) : "No readings";
+      label = value;
+    } else if (category.id === "security") {
+      const contacts = contactsOf(own);
+      value = contacts ? contactsStatus(contacts) : "No readings";
       label = value;
     } else {
       value = onMeta(own);
@@ -421,6 +455,7 @@ export function RoomPage(props: {
       <PlaceHeader
         title={room.name}
         motion={placeMotionText(own, Date.now())}
+        contact={placeContacts(own)}
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
         lights={lightsButton(
           own.filter((tile) => tile.kind === "light"),
@@ -502,7 +537,9 @@ export function CategoryPage(props: {
         <PlaceHeader
           title={category.title}
           subtitle={
-            category.id === "buttons" || category.id === "presence"
+            category.id === "buttons" ||
+            category.id === "presence" ||
+            category.id === "security"
               ? undefined
               : category.id === "environment"
                 ? readingsText(
@@ -517,6 +554,7 @@ export function CategoryPage(props: {
       {category.id === "presence" && (
         <PresenceOverview devices={devices} openRoom={props.openRoom} />
       )}
+      {category.id === "security" && <SecurityOverview tiles={own} />}
       <Sections
         sections={sectionsByRoom(own, devices.places)}
         devices={devices}
