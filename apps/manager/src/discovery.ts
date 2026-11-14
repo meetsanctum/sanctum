@@ -265,9 +265,21 @@ export function createDiscovery(
       const seen = new Set<string>();
       for (const found of browser.services) {
         if (at - found.lastSeen >= stale) continue;
-        const sighting = sightingOf(service, found, nets);
+        // An answer that changes its port or TXT record may leave out its
+        // addresses: it keeps those it had.
+        const before = found.name
+          ? sightings.get(sightingKey({ service, name: found.name }))
+          : undefined;
+        const answered =
+          (found.addresses ?? []).length === 0 && before
+            ? { ...found, addresses: before.sighting.addresses }
+            : found;
+        const sighting = sightingOf(service, answered, nets);
         if (!sighting) {
-          if (found.name) lose(sightingKey({ service, name: found.name }));
+          // Only addresses no app may reach: it's gone from here at once.
+          if (found.name && (found.addresses ?? []).length > 0) {
+            lose(sightingKey({ service, name: found.name }));
+          }
           continue;
         }
         const key = sightingKey(sighting);

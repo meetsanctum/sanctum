@@ -206,6 +206,25 @@ describe("finding devices", () => {
     });
   });
 
+  it("keeps a device's addresses when an answer that changes it leaves them out", async () => {
+    const { discovery, browsers } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    const browser = browsers.get("_example._tcp")!;
+    browser.services = [kitchen];
+    discovery.take();
+    const found = await discovery.poll(first.after, ["_example._tcp"]);
+
+    browser.services = [{ ...kitchen, port: 8081, addresses: [] }];
+    discovery.take();
+
+    expect(await discovery.poll(found.after, ["_example._tcp"])).toMatchObject({
+      found: [
+        { name: "kitchen-sensor", port: 8081, addresses: ["192.168.1.40"] },
+      ],
+      lost: [],
+    });
+  });
+
   it("answers everything afresh when more changed while it waited than it keeps", async () => {
     const { discovery, browsers } = pretend();
     const first = await discovery.poll(null, ["_example._tcp"]);
