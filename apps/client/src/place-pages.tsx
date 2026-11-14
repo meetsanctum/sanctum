@@ -286,7 +286,11 @@ export function lightsButton(
     disabled: lights.every((tile) => tile.disabled),
     onToggle: () =>
       void devices
-        .switchLights({ kind: "room", id: room.id }, lights)
+        .switchLights(
+          { kind: "room", id: room.id },
+          lights,
+          on > 0 ? "off" : "on",
+        )
         .catch(() => undefined),
   };
 }

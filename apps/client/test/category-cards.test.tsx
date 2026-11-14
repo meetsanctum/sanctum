@@ -166,9 +166,11 @@ describe("a room's lights on Lights' page", () => {
     expect(hall.textContent).toBe("Turn lights on");
     expect(hall.dataset.on).toBeUndefined();
 
+    await click(office);
     await click(hall);
     expect(posted("/api/devices/lights")).toEqual([
-      { place: { kind: "room", id: "hall" }, to: "toggle" },
+      { place: { kind: "room", id: "office" }, to: "off" },
+      { place: { kind: "room", id: "hall" }, to: "on" },
     ]);
   });
 

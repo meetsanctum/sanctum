@@ -226,7 +226,7 @@ describe("all the lights of a room", () => {
     expect(all.dataset.on).toBe("");
     await click(all);
     expect(posted("/api/devices/lights")).toEqual([
-      { place: { kind: "room", id: "office" }, to: "toggle" },
+      { place: { kind: "room", id: "office" }, to: "off" },
     ]);
   });
 
