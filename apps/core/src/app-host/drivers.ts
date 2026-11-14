@@ -24,6 +24,9 @@ import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 // Adding a device may give it its key first, then reach it again with it.
 const addWithinMs = 60_000;
 
+// What a device's turn holds on to (devices/turns.ts).
+type Hold = (running: Promise<unknown>) => void;
+
 type Driving = { app: AppDefinition; storage: AppStorage };
 
 function message(error: unknown) {
@@ -59,7 +62,8 @@ export function createDriverCalls<Entry extends Driving>(options: {
   // timeout. A refusal reaches the caller with its code; anything else the
   // driver throws is its failure, which is logged, by its words unless the
   // call carries answers they could repeat. A call may take longer than
-  // most.
+  // most, and `hold` is handed the driver's own work, which goes on after
+  // its time is up until it answers or its connection is dropped.
   async function toDriver<T>(
     driverId: string,
     actor: Actor,
@@ -71,7 +75,12 @@ export function createDriverCalls<Entry extends Driving>(options: {
     {
       quiet = false,
       withinMs: callMs = timeoutMs,
-    }: { quiet?: boolean; withinMs?: number } = {},
+      hold,
+    }: {
+      quiet?: boolean;
+      withinMs?: number;
+      hold?: (running: Promise<unknown>) => void;
+    } = {},
   ): Promise<T> {
     const deadline = Date.now() + callMs;
     let entry = driving(driverId);
@@ -93,13 +102,9 @@ export function createDriverCalls<Entry extends Driving>(options: {
     const storage = entry.storage.call();
     const ctx = options.contextFor(entry, actor, storage, { withinMs });
     try {
-      return await options.track(
-        entry,
-        withTimeout(
-          Promise.resolve().then(() => call(driver, ctx)),
-          withinMs,
-        ),
-      );
+      const running = Promise.resolve().then(() => call(driver, ctx));
+      hold?.(running);
+      return await options.track(entry, withTimeout(running, withinMs));
     } catch (error) {
       if (error instanceof ActionCallError) {
         throw error;
@@ -175,13 +180,24 @@ export function createDriverCalls<Entry extends Driving>(options: {
 
     // Has the driver take one of its devices off its network. A driver
     // that cannot is unavailable for it, as one that is not running is.
-    removeDevice(driverId: string, removal: DriverRemoval, actor: Actor) {
-      return toDriver(driverId, actor, "remove a device", (driver, ctx) => {
-        if (!driver.remove) {
-          throw new ActionCallError("unavailable");
-        }
-        return driver.remove(ctx, removal);
-      });
+    removeDevice(
+      driverId: string,
+      removal: DriverRemoval,
+      actor: Actor,
+      hold?: Hold,
+    ) {
+      return toDriver(
+        driverId,
+        actor,
+        "remove a device",
+        (driver, ctx) => {
+          if (!driver.remove) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.remove(ctx, removal);
+        },
+        { hold },
+      );
     },
 
     // Hands a driver someone's firmware check, update or stop for one of
@@ -229,7 +245,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
     // Hands a driver someone's answers to add one of the devices it found,
     // with a minute to do it. A failure is logged without its words, which
     // could repeat an answer.
-    add(driverId: string, add: DriverAdd, actor: Actor) {
+    add(driverId: string, add: DriverAdd, actor: Actor, hold?: Hold) {
       return toDriver(
         driverId,
         actor,
@@ -240,13 +256,13 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.add(ctx, add);
         },
-        { quiet: true, withinMs: addWithinMs },
+        { quiet: true, withinMs: addWithinMs, hold },
       );
     },
 
     // Hands a driver someone's answers to set one of its devices right. A
     // failure is logged without its words, which could repeat an answer.
-    repair(driverId: string, repair: DriverRepair, actor: Actor) {
+    repair(driverId: string, repair: DriverRepair, actor: Actor, hold?: Hold) {
       return toDriver(
         driverId,
         actor,
@@ -257,7 +273,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.repair(ctx, repair);
         },
-        { quiet: true },
+        { quiet: true, hold },
       );
     },
   };

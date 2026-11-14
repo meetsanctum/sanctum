@@ -18,6 +18,7 @@ import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
 import type { Who } from "./activity.js";
 import type { Devices } from "./devices.js";
+import type { Hold } from "./turns.js";
 
 // The devices drivers found and could add, and adding one. A driver lists all
 // of them at once, and its list lasts as long as the run that said it: a
@@ -43,7 +44,12 @@ export const addRequest = z.object({
 export type AddDrivers = {
   /** Which run of a driver app takes calls now, or nothing while none does. */
   run(driver: string): number | undefined;
-  add(driver: string, add: DriverAdd, actor: Actor): Promise<DriverAddResult>;
+  add(
+    driver: string,
+    add: DriverAdd,
+    actor: Actor,
+    hold?: Hold,
+  ): Promise<DriverAddResult>;
 };
 
 /** What the core knows of the driver that lists devices, from the version running. */
@@ -144,7 +150,7 @@ export function createFound(options: {
         throw new ActionCallError("invalid_request");
       }
       const { driver, key } = parsed.data;
-      return devices.turns.take({ driver, key }, async () => {
+      return devices.turns.take({ driver, key }, async (hold) => {
         // As it is once its turn comes: an add before may have added it.
         const had = devices.idFor(driver, key);
         const device = had ? devices.get(had) : null;
@@ -157,7 +163,7 @@ export function createFound(options: {
         }
         let result: unknown;
         try {
-          result = await drivers.add(driver, { key, answers }, actor);
+          result = await drivers.add(driver, { key, answers }, actor, hold);
         } catch (error) {
           const failure =
             error instanceof ActionCallError

@@ -391,6 +391,27 @@ describe("Needs attention", () => {
     expect(status()).toBe("Hall plug is removed.");
   });
 
+  it("leaves another device's Remove open when an earlier removal ends late", async () => {
+    const other = { ...lamp, leftAt: "2026-10-31T12:00:00.000Z" };
+    let finish!: () => void;
+    answer = (path) =>
+      path === "/api/devices/remove"
+        ? new Promise((done) => (finish = () => done({ id: "plug" })))
+        : {};
+    await show([plug, other]);
+    const dialog = () => document.querySelector("[role=dialog]")!;
+
+    await act(async () => buttonIn(rowOf("Hall plug"), "Remove").click());
+    await act(async () => buttonIn(dialog(), "Remove").click());
+    // Closed while it's under way, and another device's opened.
+    await act(async () => buttonIn(dialog(), "Cancel").click());
+    await act(async () => buttonIn(rowOf("Office lamp"), "Remove").click());
+    await act(async () => finish());
+
+    expect(dialog().textContent).toContain("Remove Office lamp?");
+    expect(status()).toBe("Hall plug is removed.");
+  });
+
   it("repairs a device in its driver's words, showing a refused answer under its field", async () => {
     const problem = {
       id: "keyMismatch",

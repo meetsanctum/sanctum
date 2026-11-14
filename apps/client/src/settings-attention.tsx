@@ -447,10 +447,16 @@ export function NeedsAttentionSection(props: {
         appName={removing ? appName(removing.device) : null}
         onClose={() => setRemoving(undefined)}
         onChanged={() => undefined}
-        onRemoved={() => {
-          if (removing) setAnnouncement(`${removing.device.name} is removed.`);
-          // Its row may have been the last, so nothing waits to reopen.
-          setRemoving(undefined);
+        onRemoved={(id) => {
+          if (removing?.device.id === id) {
+            setAnnouncement(`${removing.device.name} is removed.`);
+          }
+          // Its row may have been the last, so nothing waits to reopen. A
+          // removal that ends after its dialog closed leaves another
+          // device's dialog open.
+          setRemoving((current) =>
+            current?.device.id === id ? undefined : current,
+          );
         }}
         onForgotten={() => undefined}
       />

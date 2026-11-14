@@ -255,8 +255,8 @@ export async function createModules(
     activity,
     deliver: (driver, command, actor) => host!.deliver(driver, command, actor),
     driverRun: (driver) => host!.driverRun(driver),
-    removeFromDriver: (driver, removal, actor) =>
-      host!.removeDevice(driver, removal, actor),
+    removeFromDriver: (driver, removal, actor, hold) =>
+      host!.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
     beforeCommand: (device, capability) => holds.interrupt(device, capability),
     onChange(change) {
@@ -310,7 +310,8 @@ export async function createModules(
     db,
     devices,
     drivers: {
-      repair: (driver, repair, actor) => host!.repair(driver, repair, actor),
+      repair: (driver, repair, actor, hold) =>
+        host!.repair(driver, repair, actor, hold),
     },
     record: activity.for("devices"),
   });
@@ -321,7 +322,7 @@ export async function createModules(
     drivers: {
       run: (driver) =>
         host?.isRunning(driver) ? host.driverRun(driver) : undefined,
-      add: (driver, add, actor) => host!.add(driver, add, actor),
+      add: (driver, add, actor, hold) => host!.add(driver, add, actor, hold),
     },
     record: activity.for("devices"),
     onChange: () => pairing.refresh(),

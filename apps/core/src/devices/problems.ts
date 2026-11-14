@@ -19,6 +19,7 @@ import type { CoreDatabase } from "../database.js";
 import type { Who } from "./activity.js";
 import type { Devices } from "./devices.js";
 import { devices as deviceTable } from "./schema.js";
+import type { Hold } from "./turns.js";
 
 // What's wrong with a device, as its driver says in the words it declares,
 // and Repair. The core keeps a problem with its device, through restarts,
@@ -42,6 +43,7 @@ export type RepairDrivers = {
     driver: string,
     repair: DriverRepair,
     actor: Actor,
+    hold?: Hold,
   ): Promise<DriverRepairResult>;
 };
 
@@ -136,7 +138,7 @@ export function createProblems(options: {
       if (!device) {
         throw new ActionCallError("not_found");
       }
-      return devices.turns.take(device, async () => {
+      return devices.turns.take(device, async (hold) => {
         // As it is once its turn comes: a repair before may have set it right.
         const row = devices.row(id);
         if (!row) {
@@ -161,6 +163,7 @@ export function createProblems(options: {
             row.driver,
             { key: row.key, device: id, problem: problem.id, answers },
             actor,
+            hold,
           );
         } catch (error) {
           const failure =

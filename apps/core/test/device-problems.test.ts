@@ -209,6 +209,27 @@ describe("Repair", () => {
     ]);
   });
 
+  it("keeps its turn past its time, until the driver's repair has ended", async () => {
+    const { core, maya, lamp } = await lampsCore({ appTimeoutMs: 300 });
+    await radio.rekey("lamp-1", secret);
+    radio.repairMs = 600;
+
+    const repaired = await repair(core, maya, {
+      id: lamp,
+      answers: { key: secret },
+    });
+    expect(repaired.json()).toEqual({ error: "timeout" });
+    // The driver is still repairing it: removing it waits until it's done.
+    const removed = await post(core, "/api/devices/remove", { id: lamp }, maya);
+
+    expect(removed.statusCode).toBe(200);
+    expect(radio.turns).toEqual([
+      "repair lamp-1",
+      "repaired lamp-1",
+      "remove lamp-1",
+    ]);
+  });
+
   it.each([secret, {}, false, null])(
     "rejects a malformed driver result without logging its contents (%j)",
     async (result) => {
