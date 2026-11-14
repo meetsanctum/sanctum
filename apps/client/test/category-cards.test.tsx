@@ -27,6 +27,8 @@ let root: Root;
 let container: HTMLDivElement;
 let live: ReturnType<typeof createLiveFeed>;
 let devices: DeviceInfo[];
+// The lights the core could not switch, as its answer names them.
+let failed: { device: string; capability: string }[];
 
 function Page(props: { id: string }) {
   const shown = useDevices(live);
@@ -83,12 +85,13 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   live = createLiveFeed();
   devices = [lamp, plug, hallLight, loose];
+  failed = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path) => {
     if (path === "/api/devices") return devices;
     if (path === "/api/places") return places;
     if (path === "/api/devices/lights") {
-      return { on: false, switched: 1, failed: [] };
+      return { on: false, switched: 1, failed };
     }
     throw new Error(`Unexpected ${path}`);
   });
@@ -116,10 +119,44 @@ describe("Lights' card", () => {
     ).toBe(true);
     const off = card()!.querySelector("button");
     expect(off?.textContent).toBe("Turn all off");
+    // What it did is said where a screen reader already listens.
+    const did = card()!.querySelector("[role=status]");
+    expect(did?.textContent).toBe("");
     await click(off);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "home" }, to: "off" },
     ]);
+    expect(card()!.querySelector("[role=status]")).toBe(did);
+    expect(did?.textContent).toBe("Lights turned off");
+  });
+
+  it("says which lights did not turn off, and stops saying what it did once a light is on again", async () => {
+    failed = [{ device: "lamp", capability: "light" }];
+    await show("lights");
+    await click(card()!.querySelector("button"));
+    const did = card()!.querySelector("[role=status]");
+    expect(did?.textContent).toBe("1 light did not turn off");
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "lamp",
+        device: {
+          ...lamp,
+          capabilities: lamp.capabilities.map((each) => ({
+            ...each,
+            state: { on: false },
+            observed: { on: false },
+          })) as DeviceInfo["capabilities"],
+        },
+      });
+    });
+    expect(said(card()!)).toEqual(["Lights", "All off"]);
+    await act(async () => {
+      live.publish({ type: "device", id: "lamp", device: lamp });
+    });
+    expect(said(card()!)).toEqual(["Lights", "1 on"]);
+    expect(did?.textContent).toBe("");
   });
 
   it("has no button while every light is off: the home's lights are never all turned on", async () => {

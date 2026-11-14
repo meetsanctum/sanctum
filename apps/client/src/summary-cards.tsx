@@ -1,4 +1,5 @@
 import { Button, type LucideIcon } from "@meetsanctum/ui-sdk";
+import { useEffect, useState } from "react";
 
 // What a category's page opens with: a card for each type of thing the
 // category sums up, with the type's icon and name above what it says now,
@@ -8,10 +9,18 @@ import { Button, type LucideIcon } from "@meetsanctum/ui-sdk";
 // is as wide as a tile and as tall as its words, and only tells: the tiles
 // below open each device. A card may hold the one action that goes with
 // what it says, as a button of its own beside it, which goes under it where
-// the two no longer fit side by side.
+// the two no longer fit side by side. The button goes once there is nothing
+// left for it to do, so what it did is said to a screen reader as it
+// happens, which would otherwise have to find the card's new words.
 
-/** A card's one action, such as turning off what it counts. */
-export type SummaryAction = { label: string; onPress: () => void };
+/**
+ * A card's one action, such as turning off what it counts. It answers with
+ * what it did, in words for a screen reader, such as "Lights turned off".
+ */
+export type SummaryAction = {
+  label: string;
+  onPress: () => Promise<string>;
+};
 
 /** One card: what it sums up, what it says, and whether that needs a look. */
 export type Summary = {
@@ -45,40 +54,67 @@ export function SummaryCards(props: {
       className="m-0 grid shrink-0 list-none grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) p-0"
     >
       {props.cards.map((card) => (
-        <li
-          key={card.id}
-          data-active={card.active ? "" : undefined}
-          className="col-span-3 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-(--tile) px-3.5 pt-3 pb-3.5 text-(--tile-ink) backdrop-blur-[24px] data-active:bg-(--tile-on) data-active:text-(--tile-on-ink)"
-        >
-          <span className="flex min-w-0 flex-col">
-            <span className="flex items-center gap-2 text-[13px] leading-[18px] font-medium">
-              <card.icon aria-hidden="true" className="size-[18px] shrink-0" />
-              {card.title}
-            </span>
-            {/* A pause between its lines, which a screen reader runs together. */}
-            <span className="sr-only">, {card.spoken}</span>
-            <span
-              aria-hidden={card.spoken ? true : undefined}
-              className="mt-1 text-2xl leading-8 font-light tabular-nums"
-            >
-              {card.status}
-            </span>
-            {card.note && (
-              <>
-                <span className="sr-only">, </span>
-                <span className="mt-0.5 text-[13px] leading-[18px] font-medium">
-                  {card.note}
-                </span>
-              </>
-            )}
-          </span>
-          {card.active && card.action && (
-            <Button variant="on-tile" size="chip" onClick={card.action.onPress}>
-              {card.action.label}
-            </Button>
-          )}
-        </li>
+        <SummaryCard key={card.id} card={card} />
       ))}
     </ul>
+  );
+}
+
+function SummaryCard(props: { card: Summary }) {
+  const { card } = props;
+  // What its action last did, for a screen reader: said once it answers,
+  // and gone when the action runs again or there is something for it to do
+  // again, so it is never read as how things are now.
+  const [did, setDid] = useState<string>();
+  useEffect(() => {
+    if (card.active) setDid(undefined);
+  }, [card.active]);
+  const action = card.action;
+  return (
+    <li
+      data-active={card.active ? "" : undefined}
+      className="col-span-3 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-(--tile) px-3.5 pt-3 pb-3.5 text-(--tile-ink) backdrop-blur-[24px] data-active:bg-(--tile-on) data-active:text-(--tile-on-ink)"
+    >
+      <span className="flex min-w-0 flex-col">
+        <span className="flex items-center gap-2 text-[13px] leading-[18px] font-medium">
+          <card.icon aria-hidden="true" className="size-[18px] shrink-0" />
+          {card.title}
+        </span>
+        {/* A pause between its lines, which a screen reader runs together. */}
+        <span className="sr-only">, {card.spoken}</span>
+        <span
+          aria-hidden={card.spoken ? true : undefined}
+          className="mt-1 text-2xl leading-8 font-light tabular-nums"
+        >
+          {card.status}
+        </span>
+        {card.note && (
+          <>
+            <span className="sr-only">, </span>
+            <span className="mt-0.5 text-[13px] leading-[18px] font-medium">
+              {card.note}
+            </span>
+          </>
+        )}
+      </span>
+      {card.active && action && (
+        <Button
+          variant="on-tile"
+          size="chip"
+          onClick={() => {
+            setDid(undefined);
+            void action.onPress().then(setDid);
+          }}
+        >
+          {action.label}
+        </Button>
+      )}
+      {/* Always there for a card with an action, so the answer is heard. */}
+      {action && (
+        <span role="status" className="sr-only">
+          {did}
+        </span>
+      )}
+    </li>
   );
 }

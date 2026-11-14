@@ -558,9 +558,13 @@ function lightsCards(tiles: readonly Tile[], devices: Devices): Summary[] {
       action: {
         label: "Turn all off",
         onPress: () =>
-          void devices
-            .switchLights({ kind: "home" }, [...tiles], "off")
-            .catch(() => undefined),
+          devices.switchLights({ kind: "home" }, [...tiles], "off").then(
+            ({ failed }) =>
+              failed.length === 0
+                ? "Lights turned off"
+                : `${failed.length} ${failed.length === 1 ? "light" : "lights"} did not turn off`,
+            () => "The lights could not be turned off",
+          ),
       },
     },
   ];
