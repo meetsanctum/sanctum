@@ -4,6 +4,7 @@ import {
   deviceRegistration,
   deviceReport,
   historyFields,
+  isCapabilityKind,
   type Actor,
   type CapabilityInfo,
   type CapabilityKind,
@@ -184,8 +185,9 @@ export function createDevices(
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  // One of a kind this build doesn't have counts as none, as in deviceInfo.
   function capabilityRow(deviceId: string, capabilityId: string) {
-    return db
+    const row = db
       .select()
       .from(deviceCapabilities)
       .where(
@@ -195,6 +197,7 @@ export function createDevices(
         ),
       )
       .get();
+    return row && isCapabilityKind(row.kind) ? row : undefined;
   }
 
   // Writes a capability's target, and who set it when that changes too.

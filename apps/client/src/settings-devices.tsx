@@ -7,7 +7,7 @@ import {
   type DeviceInfo,
   type FirmwareState,
   type HistoryKept,
-  type OccupancyCommand,
+  type MotionCommand,
   type Places,
   type ProbeResult,
 } from "@meetsanctum/app-sdk";
@@ -332,7 +332,7 @@ export function DevicesSection(props: {
   const command = async (
     device: DeviceInfo,
     capability: string,
-    asked: OccupancyCommand,
+    asked: MotionCommand,
   ) => {
     const key = `${device.id}/${capability}`;
     const attempt = Symbol();

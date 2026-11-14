@@ -39,7 +39,7 @@ type Gadget = {
     | "switch"
     | "button"
     | "sensor"
-    | "occupancy"
+    | "motion"
     | "contact"
     | "purifier";
   name: string;
@@ -63,7 +63,7 @@ const models = {
   switch: "Plug",
   button: "Remote",
   sensor: "Climate sensor",
-  occupancy: "Motion sensor",
+  motion: "Motion sensor",
   contact: "Contact sensor",
   purifier: "Air purifier",
 };
@@ -72,7 +72,7 @@ const climate = { temperature: 21.5, humidity: 48, battery: 87 };
 // A motion sensor's first report: no motion, its settings, its light level,
 // its temperature and its battery.
 const motion = {
-  occupied: false,
+  motion: false,
   sensitivity: "medium",
   clearAfter: 60,
   indicator: true,
@@ -158,7 +158,7 @@ class Radio {
             }
           : kind === "sensor"
             ? { ...climate }
-            : kind === "occupancy"
+            : kind === "motion"
               ? { ...motion }
               : kind === "contact"
                 ? { open: false, battery: 95 }
@@ -483,7 +483,7 @@ class Radio {
           ? []
           : gadget.kind === "sensor"
             ? sensorCapabilities
-            : gadget.kind === "occupancy"
+            : gadget.kind === "motion"
               ? motionCapabilities
               : gadget.kind === "contact"
                 ? [{ id: "contact", kind: "contact" }]
@@ -534,16 +534,15 @@ const sleeps = (gadget: Gadget) =>
   gadget.kind === "purifier" ||
   gadget.kind === "button" ||
   gadget.kind === "sensor" ||
-  gadget.kind === "occupancy" ||
+  gadget.kind === "motion" ||
   gadget.kind === "contact";
 
 // A motion sensor's motion, with its settings, and its two readings.
 const motionCapabilities: DeviceRegistration["capabilities"] = [
   {
     id: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     features: {
-      senses: "motion",
       sensitivity: ["low", "medium", "high"],
       clearAfter: { min: 10, max: 3600 },
       indicator: true,
@@ -563,11 +562,11 @@ const sensorCapabilities: DeviceRegistration["capabilities"] = [
 // sensor says its readings and its battery.
 function reportOf(gadget: Gadget) {
   if (gadget.kind === "button" || gadget.kind === "purifier") return {};
-  if (gadget.kind === "occupancy") {
-    const { illuminance, temperature, battery, ...occupancy } = gadget.state;
+  if (gadget.kind === "motion") {
+    const { illuminance, temperature, battery, ...sensed } = gadget.state;
     return {
       states: {
-        occupancy,
+        occupancy: sensed,
         illuminance: { value: illuminance },
         temperature: { value: temperature },
       },

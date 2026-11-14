@@ -46,7 +46,7 @@ const kindGlyphs: Record<string, LucideIcon> = {
   light: Lightbulb,
   switch: ToggleRight,
   button: CircleDot,
-  occupancy: Footprints,
+  motion: Footprints,
   sensor: Thermometer,
 };
 

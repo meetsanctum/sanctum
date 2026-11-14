@@ -21,15 +21,15 @@ import type { Devices } from "./use-devices";
 // while any of its sensors saw it. Rooms without one are left out, and so are
 // sensors in no room. A row opens its room's page.
 
-type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
-type Sensor = { device: DeviceInfo; capability: Occupancy };
+type Motion = Extract<CapabilityInfo, { kind: "motion" }>;
+type Sensor = { device: DeviceInfo; capability: Motion };
 type LiveChanges = { version: string; changes: Live[] };
 
 const minute = 60_000;
 const refreshMs = 5 * minute;
 
-const isOccupancy = (capability: CapabilityInfo): capability is Occupancy =>
-  capability.kind === "occupancy";
+const isMotion = (capability: CapabilityInfo): capability is Motion =>
+  capability.kind === "motion";
 
 /**
  * The last 24 hours of each sensor, by its tile's key: read when shown,
@@ -173,7 +173,7 @@ export function PresenceOverview(props: {
   const sensors = devices.devices.flatMap((device) =>
     device.roomId && placed.has(device.roomId)
       ? device.capabilities
-          .filter(isOccupancy)
+          .filter(isMotion)
           .map((capability) => ({ device, capability }))
       : [],
   );
@@ -202,7 +202,7 @@ export function PresenceOverview(props: {
         room,
         spans,
         status: roomStatus(tiles, now),
-        active: tiles.some((tile) => !tile.disabled && tile.motion?.occupied),
+        active: tiles.some((tile) => !tile.disabled && tile.motion?.motion),
       },
     ];
   });

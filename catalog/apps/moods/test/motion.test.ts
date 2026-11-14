@@ -13,7 +13,7 @@ import {
   device,
   illuminanceCapability,
   lightCapability,
-  occupancyCapability,
+  motionCapability,
 } from "./moods/home.js";
 
 // What motion does to a room's lights (motion/): the choices in Moods'
@@ -26,9 +26,9 @@ const lamp = () =>
   device("lamp", "office", [lightCapability({ on: false, brightness: 60 })]);
 // A motion sensor, and one that reads the light level too.
 const sensor = (id: string, room: string) =>
-  device(id, room, [occupancyCapability(false)]);
+  device(id, room, [motionCapability(false)]);
 const sensorWithLight = (id: string, room: string, lux: number | null = 320) =>
-  device(id, room, [occupancyCapability(false), illuminanceCapability(lux)]);
+  device(id, room, [motionCapability(false), illuminanceCapability(lux)]);
 
 function home(devices = [lamp(), sensorWithLight("office-motion", "office")]) {
   const started = startableHome({ devices });
@@ -464,7 +464,7 @@ describe("motion while a permission is off", () => {
     await call(setMotion, { roomId: "office", turnOn: true, turnOffAfter: 5 });
     expect(keys()).toEqual(["motion-off:office", "motion-on:office"]);
 
-    await grant("devices.read:occupancy", false);
+    await grant("devices.read:motion", false);
     expect(keys()).toEqual([]);
     expect(
       (await call(listMotion, {})).find((room) => room.roomId === "office"),
@@ -475,7 +475,7 @@ describe("motion while a permission is off", () => {
       turnOffAfter: 5,
     });
 
-    await grant("devices.read:occupancy", true);
+    await grant("devices.read:motion", true);
     expect(keys()).toEqual(["motion-off:office", "motion-on:office"]);
   });
 

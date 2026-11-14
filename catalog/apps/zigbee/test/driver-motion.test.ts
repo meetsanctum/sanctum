@@ -71,9 +71,8 @@ async function joined(
 }
 
 const featuresOf = (core: Core, key: string) =>
-  core.registered
-    .get(key)
-    ?.capabilities.find((each) => each.kind === "occupancy")?.features;
+  core.registered.get(key)?.capabilities.find((each) => each.kind === "motion")
+    ?.features;
 
 describe("a Hue motion sensor", () => {
   it("reports its motion, readings and settings, and its battery", async () => {
@@ -96,7 +95,7 @@ describe("a Hue motion sensor", () => {
       states: {
         temperature: { value: 21.4 },
         occupancy: {
-          occupied: false,
+          motion: false,
           sensitivity: "medium",
           clearAfter: 60,
           indicator: false,
@@ -108,7 +107,7 @@ describe("a Hue motion sensor", () => {
     // It sleeps, so it is never asked: motion comes as it happens.
     await bridge.say(name, { occupancy: true, illuminance: 335 });
     await core.until(
-      () => core.latest(key, "occupancy")?.occupied === true,
+      () => core.latest(key, "occupancy")?.motion === true,
       "motion",
     );
     expect(core.latest(key, "illuminance")).toEqual({ value: 335 });
@@ -128,14 +127,14 @@ describe("a Hue motion sensor", () => {
       sensitivity: ["low", "medium", "high", "very_high", "max"],
     });
 
-    await core.command(key, "occupancy", "occupancy", {
+    await core.command(key, "occupancy", "motion", {
       sensitivity: "very_high",
     });
     await core.until(
       () => core.latest(key, "occupancy")?.sensitivity === "very_high",
       "very high",
     );
-    await core.command(key, "occupancy", "occupancy", {
+    await core.command(key, "occupancy", "motion", {
       clearAfter: 120,
       indicator: true,
     });
@@ -145,7 +144,7 @@ describe("a Hue motion sensor", () => {
     );
 
     expect(core.latest(key, "occupancy")).toEqual({
-      occupied: false,
+      motion: false,
       sensitivity: "very_high",
       clearAfter: 120,
       indicator: true,
@@ -173,13 +172,12 @@ describe("IKEA's VALLHORN", () => {
     });
 
     expect(featuresOf(core, key)).toEqual({
-      senses: "motion",
       sensitivity: null,
       clearAfter: null,
       indicator: false,
     });
     expect(core.reports.at(-1)?.states).toEqual({
-      occupancy: { occupied: true },
+      occupancy: { motion: true },
       illuminance: { value: 12 },
     });
   });
@@ -208,19 +206,18 @@ describe("an Aqara motion sensor", () => {
     const core = await running();
     const { key, name } = await added(core);
     expect(featuresOf(core, key)).toEqual({
-      senses: "motion",
       sensitivity: null,
       clearAfter: { min: 60, max: 3600 },
       indicator: false,
     });
     // Without the option Zigbee2MQTT waits 90 s.
     expect(core.latest(key, "occupancy")).toEqual({
-      occupied: true,
+      motion: true,
       clearAfter: 90,
     });
 
     const from = core.reports.length;
-    await core.command(key, "occupancy", "occupancy", { clearAfter: 300 });
+    await core.command(key, "occupancy", "motion", { clearAfter: 300 });
 
     expect(bridge.received).toEqual([
       {
@@ -238,16 +235,16 @@ describe("an Aqara motion sensor", () => {
     );
     // Once, though Zigbee2MQTT's configuration and its answer both say it.
     expect(core.reports.slice(from)).toEqual([
-      { key, states: { occupancy: { occupied: true, clearAfter: 300 } } },
+      { key, states: { occupancy: { motion: true, clearAfter: 300 } } },
     ]);
     // What the sensor says next carries it too.
     await bridge.say(name, { occupancy: false });
     await core.until(
-      () => core.latest(key, "occupancy")?.occupied === false,
+      () => core.latest(key, "occupancy")?.motion === false,
       "no motion",
     );
     expect(core.latest(key, "occupancy")).toEqual({
-      occupied: false,
+      motion: false,
       clearAfter: 300,
     });
   });
@@ -275,7 +272,7 @@ describe("an Aqara motion sensor", () => {
     const from = core.reports.length;
 
     await expect(
-      core.command(key, "occupancy", "occupancy", { clearAfter: 300 }),
+      core.command(key, "occupancy", "motion", { clearAfter: 300 }),
     ).rejects.toThrow("Failed to change options");
     expect(core.reports.slice(from)).toEqual([]);
   });
@@ -289,13 +286,13 @@ describe("an Aqara motion sensor", () => {
       detection_interval: 30,
     });
     expect(core.latest(key, "occupancy")).toEqual({
-      occupied: false,
+      motion: false,
       sensitivity: "medium",
       clearAfter: 32,
       indicator: true,
     });
 
-    await core.command(key, "occupancy", "occupancy", {
+    await core.command(key, "occupancy", "motion", {
       sensitivity: "high",
       clearAfter: 120,
     });
@@ -305,7 +302,7 @@ describe("an Aqara motion sensor", () => {
     );
 
     expect(core.latest(key, "occupancy")).toEqual({
-      occupied: false,
+      motion: false,
       sensitivity: "high",
       clearAfter: 120,
       indicator: true,

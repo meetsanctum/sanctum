@@ -53,8 +53,7 @@ function spanOf(
 ): Span {
   const { state } = recorded;
   const known = recorded.availability !== "offline" && state !== null;
-  const on =
-    known && (kind === "occupancy" ? state.occupied : state.on) === true;
+  const on = known && (kind === "motion" ? state.motion : state.on) === true;
   return {
     from,
     to,
@@ -137,7 +136,7 @@ export function daysOf(
   statistics: Pick<DeviceStatistics, "fields"> | null,
   spans: readonly Span[],
   now: number,
-  field: "on" | "occupied" = "on",
+  field: "on" | "motion" = "on",
 ): Day[] {
   const hours = statistics?.fields[field] ?? [];
   const rolledUpTo = hours.reduce(

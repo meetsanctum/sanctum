@@ -29,7 +29,7 @@ describe("Moods", () => {
       ["devices.read:button", false, true],
       // A room's motion sensors and light level, for what motion does,
       // asked for as someone turns it on.
-      ["devices.read:occupancy", false, false],
+      ["devices.read:motion", false, false],
       ["devices.read:sensor", false, false],
       ["workflows.manage", false, true],
     ]);

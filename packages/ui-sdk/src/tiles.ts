@@ -13,19 +13,13 @@ export type Tile = {
   /**
    * A remote's tile switches nothing: it shows its latest press. Nor does a
    * sensor's, one for each device, which shows its readings, or a motion
-   * sensor's (occupancy), which says whether it sees motion, or a contact
+   * sensor's, which says whether it sees motion, or a contact
    * sensor's, which says whether what it sits on is open. An unknown
    * device's, one for a device with nothing Sanctum can use, says what its
    * driver calls it; its `capabilityId` is empty.
    */
   kind:
-    | "light"
-    | "switch"
-    | "button"
-    | "sensor"
-    | "occupancy"
-    | "contact"
-    | "unknown";
+    "light" | "switch" | "button" | "sensor" | "motion" | "contact" | "unknown";
   /** The room it is in, or null when it is in none the home has. */
   roomId: string | null;
   name: string;
@@ -50,7 +44,7 @@ export type Tile = {
    * Whether a motion sensor sees motion, and when that last changed (null
    * when the core has not said), while it answers and has said either.
    */
-  motion?: { occupied: boolean; changedAt: string | null };
+  motion?: { motion: boolean; changedAt: string | null };
   /**
    * Whether a contact sensor is open, and when that last changed (null when
    * the core has not said), while it answers and has said either. Without

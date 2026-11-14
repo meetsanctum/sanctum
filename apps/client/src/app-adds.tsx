@@ -66,7 +66,7 @@ const kindNouns: Record<CapabilityKind, [string, string]> = {
   switch: ["switch", "switches"],
   button: ["remote", "remotes"],
   sensor: ["sensor", "sensors"],
-  occupancy: ["motion sensor", "motion sensors"],
+  motion: ["motion sensor", "motion sensors"],
   contact: ["contact sensor", "contact sensors"],
 };
 

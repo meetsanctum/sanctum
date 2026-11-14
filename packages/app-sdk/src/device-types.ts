@@ -43,7 +43,7 @@ const types = [
     id: "motion",
     title: "Motion sensor",
     noun: "motion sensor",
-    needs: ["occupancy"],
+    needs: ["motion"],
   },
   // A sensor that says whether what it sits on is open, which may measure
   // too.

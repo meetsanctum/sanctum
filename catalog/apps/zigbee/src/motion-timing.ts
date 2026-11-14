@@ -1,4 +1,4 @@
-import type { AppContext, OccupancyState } from "@meetsanctum/app-sdk";
+import type { AppContext, MotionState } from "@meetsanctum/app-sdk";
 
 import type { ZigbeeDeviceEntry } from "./devices.js";
 import {
@@ -6,15 +6,15 @@ import {
   isTimedByZigbee2mqtt,
   secondsOf,
   timedClearAfter,
-  type OccupancyMapping,
-  type TimedOccupancyMapping,
+  type MotionMapping,
+  type TimedMotionMapping,
   type Timing,
-} from "./occupancy.js";
+} from "./motion.js";
 import type { BridgeResponse } from "./requests.js";
 import { isRecord } from "./values.js";
 
 // How Zigbee2MQTT times the motion sensors it says no motion for, Aqara's
-// (occupancy.ts), by key: each one's occupancy_timeout device option, from
+// (motion.ts), by key: each one's occupancy_timeout device option, from
 // its configuration in bridge/info and the driver's requests to change it
 // (bridge/request/device/options), and the detection_interval each says,
 // for which it is blind after it sees motion. The option is Zigbee2MQTT's,
@@ -38,11 +38,11 @@ export type TimingBridge = {
   registerAgain(key: string): Promise<ZigbeeDeviceEntry | undefined>;
 };
 
-// The occupancy of a sensor Zigbee2MQTT times.
-function timedOccupancy(device: ZigbeeDeviceEntry | undefined) {
+// The motion of a sensor Zigbee2MQTT times.
+function timedMotion(device: ZigbeeDeviceEntry | undefined) {
   return device?.capabilities.find(
-    (each): each is TimedOccupancyMapping =>
-      each.kind === "occupancy" && isTimedByZigbee2mqtt(each),
+    (each): each is TimedMotionMapping =>
+      each.kind === "motion" && isTimedByZigbee2mqtt(each),
   );
 }
 
@@ -50,9 +50,9 @@ export function createMotionTiming(bridge: TimingBridge) {
   const { ctx } = bridge;
   let timeouts = new Map<string, number>();
   const intervals = new Map<string, number>();
-  // What the driver last reported of each one's occupancy, and the
+  // What the driver last reported of each one's motion, and the
   // sensors whose option it asked for and has yet to report.
-  const occupancies = new Map<string, OccupancyState>();
+  const motionStates = new Map<string, MotionState>();
   const asked = new Set<string>();
 
   const timingOf = (key: string): Timing => ({
@@ -66,12 +66,12 @@ export function createMotionTiming(bridge: TimingBridge) {
   // sensor has said whether it sees motion there is nothing to report it
   // with, and its next message says it.
   async function report(key: string, always = false) {
-    const capability = timedOccupancy(bridge.device(key));
-    const last = occupancies.get(key);
+    const capability = timedMotion(bridge.device(key));
+    const last = motionStates.get(key);
     if (!capability || !last) {
       return;
     }
-    const state: OccupancyState = { ...last };
+    const state: MotionState = { ...last };
     const clearAfter = timedClearAfter(capability.clearAfter, timingOf(key));
     if (clearAfter === undefined) {
       delete state.clearAfter;
@@ -81,7 +81,7 @@ export function createMotionTiming(bridge: TimingBridge) {
     if (!always && state.clearAfter === last.clearAfter) {
       return;
     }
-    occupancies.set(key, state);
+    motionStates.set(key, state);
     asked.delete(key);
     await ctx.devices.report({ key, states: { [capability.id]: state } });
   }
@@ -101,7 +101,7 @@ export function createMotionTiming(bridge: TimingBridge) {
     async said(device: ZigbeeDeviceEntry, payload: Record<string, unknown>) {
       const seconds = detectionIntervalOf(payload);
       if (
-        !timedOccupancy(device) ||
+        !timedMotion(device) ||
         seconds === null ||
         intervals.get(device.key) === seconds
       ) {
@@ -111,10 +111,10 @@ export function createMotionTiming(bridge: TimingBridge) {
       return (await bridge.registerAgain(device.key)) ?? device;
     },
 
-    /** What the driver reported of a device's occupancy. */
-    reported(key: string, capability: OccupancyMapping, state: OccupancyState) {
+    /** What the driver reported of a device's motion. */
+    reported(key: string, capability: MotionMapping, state: MotionState) {
       if (isTimedByZigbee2mqtt(capability)) {
-        occupancies.set(key, state);
+        motionStates.set(key, state);
       }
     },
 
@@ -172,7 +172,7 @@ export function createMotionTiming(bridge: TimingBridge) {
     /** Forgets a device Zigbee2MQTT no longer has, but not its option. */
     forget(key: string) {
       intervals.delete(key);
-      occupancies.delete(key);
+      motionStates.delete(key);
     },
   };
 }

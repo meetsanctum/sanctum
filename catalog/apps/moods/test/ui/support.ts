@@ -14,7 +14,7 @@ export function fakeClient() {
       "places.read",
       "devices.control:light",
       "devices.read:button",
-      "devices.read:occupancy",
+      "devices.read:motion",
       "devices.read:sensor",
       "workflows.manage",
     ],

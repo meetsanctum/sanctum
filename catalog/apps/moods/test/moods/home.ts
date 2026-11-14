@@ -88,14 +88,13 @@ export function light(
   };
 }
 
-/** A motion sensor's occupancy, seeing someone or not; null before its first report. */
-export function occupancyCapability(occupied: boolean | null): CapabilityInfo {
-  const state = occupied === null ? null : { occupied };
+/** A motion sensor's motion, seeing it or not; null before its first report. */
+export function motionCapability(motion: boolean | null): CapabilityInfo {
+  const state = motion === null ? null : { motion };
   return {
     id: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     features: {
-      senses: "motion",
       sensitivity: null,
       clearAfter: null,
       indicator: false,

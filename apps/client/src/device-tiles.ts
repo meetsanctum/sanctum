@@ -240,16 +240,16 @@ function sensorTile(
     : { ...base, status: "Waiting for a reading" };
 }
 
-type Occupancy = Extract<CapabilityInfo, { kind: "occupancy" }>;
+type Motion = Extract<CapabilityInfo, { kind: "motion" }>;
 
-const isOccupancy = (capability: CapabilityInfo): capability is Occupancy =>
-  capability.kind === "occupancy";
+const isMotion = (capability: CapabilityInfo): capability is Motion =>
+  capability.kind === "motion";
 
 // A motion sensor's tile: White while it sees motion, as a remote's after a
 // press, otherwise how long it has seen none, by `now`.
 function motionTile(
   device: DeviceInfo,
-  capability: Occupancy,
+  capability: Motion,
   several: boolean,
   roomId: string | null,
   now: number,
@@ -259,7 +259,7 @@ function motionTile(
     key: tileKey(device.id, capability.id),
     deviceId: device.id,
     capabilityId: capability.id,
-    kind: "occupancy" as const,
+    kind: "motion" as const,
     roomId,
     // A device that senses in several places names each.
     name: several ? `${device.name} ${capability.id}` : device.name,
@@ -273,13 +273,13 @@ function motionTile(
   }
   if (isQuiet) return { ...base, status: quiet };
   if (!capability.state) return { ...base, status: "Waiting for a reading" };
-  const { occupied } = capability.state;
+  const { motion } = capability.state;
   return {
     ...base,
-    status: motionText(occupied, capability.changedAt, now),
-    on: occupied,
-    look: occupied ? "on" : "off",
-    motion: { occupied, changedAt: capability.changedAt },
+    status: motionText(motion, capability.changedAt, now),
+    on: motion,
+    look: motion ? "on" : "off",
+    motion: { motion, changedAt: capability.changedAt },
   };
 }
 
@@ -424,7 +424,7 @@ export function tilesOf(
       (each) => each.kind === "button",
     );
     const sensors = device.capabilities.filter(isSensor);
-    const motion = device.capabilities.filter(isOccupancy);
+    const motion = device.capabilities.filter(isMotion);
     const contacts = device.capabilities.filter(isContact);
     const tiles = [
       ...controls.map((capability) =>

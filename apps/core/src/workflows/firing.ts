@@ -58,7 +58,7 @@ export function createFiring(options: {
   // whether its places' motion triggers fire, and their no-motion timers.
   function motionChanged(change: DeviceChange) {
     const senses = (device: DeviceChange["before"]) =>
-      device?.capabilities.some((each) => each.kind === "occupancy") ?? false;
+      device?.capabilities.some((each) => each.kind === "motion") ?? false;
     if (!senses(change.before) && !senses(change.after)) {
       return;
     }
@@ -74,7 +74,7 @@ export function createFiring(options: {
           // must not clear a due timer before the next tick runs it.
           if (
             was.answering !== now.answering ||
-            was.occupied !== now.occupied ||
+            was.motion !== now.motion ||
             was.quietSince?.getTime() !== now.quietSince?.getTime()
           ) {
             options.timers.quiet(workflow, node, now, config.forMinutes);
@@ -87,7 +87,7 @@ export function createFiring(options: {
         return false;
       }
       const { was, now } = options.motion.around(config.place, change);
-      return !was.occupied && now.occupied;
+      return !was.motion && now.motion;
     });
     for (const { workflow, nodes } of fired) {
       engine.fire(workflow, {

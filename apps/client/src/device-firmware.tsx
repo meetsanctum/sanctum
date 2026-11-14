@@ -235,8 +235,7 @@ export function whyNot(device: DeviceInfo, check: "update" | "probe") {
     // said how full the battery is.
     return kinds.length > 0 &&
       kinds.every(
-        (kind) =>
-          kind === "sensor" || kind === "occupancy" || kind === "contact",
+        (kind) => kind === "sensor" || kind === "motion" || kind === "contact",
       ) &&
       device.firmware?.sleeps === true
       ? "It sleeps between readings"

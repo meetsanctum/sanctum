@@ -280,7 +280,7 @@ export const deviceTrigger = piece({
       title: "Detects motion",
       sentence: "{device} detects motion",
       card: { name: "{device}", specifics: "Detects motion" },
-      config: { kind: "occupancy", field: "occupied", operator: "is_on" },
+      config: { kind: "motion", field: "motion", operator: "is_on" },
     },
   ],
   config: {
@@ -290,7 +290,7 @@ export const deviceTrigger = piece({
       capability: { type: "string", partOf: "device" },
       kind: {
         type: "string",
-        enum: ["light", "switch", "button", "sensor", "occupancy"],
+        enum: ["light", "switch", "button", "sensor", "motion"],
       },
       field: { type: "string" },
       operator,
@@ -313,7 +313,7 @@ export const deviceCondition = piece({
     {
       title: "Sees motion",
       sentence: "{device} sees motion",
-      config: { field: "occupied", operator: "is_on" },
+      config: { field: "motion", operator: "is_on" },
     },
   ],
   config: {
@@ -346,14 +346,13 @@ export const motionSensor = {
   capabilities: [
     {
       id: "occupancy",
-      kind: "occupancy",
+      kind: "motion",
       features: {
-        senses: "motion",
         sensitivity: null,
         clearAfter: null,
         indicator: false,
       },
-      observed: { occupied: false },
+      observed: { motion: false },
     },
     {
       id: "illuminance",

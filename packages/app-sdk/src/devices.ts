@@ -177,37 +177,35 @@ const sensorCommand = z.never();
  * How readily a motion sensor sees motion, lowest first. A sensor declares
  * the levels it has, in this order, such as low, medium and high.
  */
-export const occupancySensitivities = [
+export const motionSensitivities = [
   "low",
   "medium",
   "high",
   "very_high",
   "max",
 ] as const;
-export type OccupancySensitivity = (typeof occupancySensitivities)[number];
+export type MotionSensitivity = (typeof motionSensitivities)[number];
 
-const sensitivity = z.enum(occupancySensitivities);
+const sensitivity = z.enum(motionSensitivities);
 // How long after the last movement it says no motion, in seconds.
 const clearAfter = z.number().int().min(0).max(65_535);
 
-// Whether someone is there, and what senses it: motion, from a PIR sensor.
-// Its settings are the device's own, each only where the sensor has it: its
-// sensitivity's levels, the range of how long it waits after the last
-// movement before it says no motion, and whether its light blinks when it
-// sees motion.
-const occupancyFeatures = z.strictObject({
-  senses: z.enum(["motion"]),
+// A motion sensor's settings are the device's own, each only where the
+// sensor has it: its sensitivity's levels, the range of how long it waits
+// after the last movement before it says no motion, and whether its light
+// blinks when it sees motion.
+const motionFeatures = z.strictObject({
   sensitivity: z
     .array(sensitivity)
     .min(2)
-    .max(occupancySensitivities.length)
+    .max(motionSensitivities.length)
     .refine(
       (levels) =>
         levels.every(
           (level, index) =>
             index === 0 ||
-            occupancySensitivities.indexOf(level) >
-              occupancySensitivities.indexOf(levels[index - 1]!),
+            motionSensitivities.indexOf(level) >
+              motionSensitivities.indexOf(levels[index - 1]!),
         ),
       "each level once, lowest first",
     )
@@ -221,16 +219,18 @@ const occupancyFeatures = z.strictObject({
   indicator: z.boolean().default(false),
 });
 
-// Whether it sees someone now, with its settings as it last reported them.
-const occupancyState = z.strictObject({
-  occupied: z.boolean(),
+// Whether it sees motion now, with its settings as it last reported them.
+// Motion is movement: no motion says nothing moved for its wait, not that
+// nobody is there.
+const motionState = z.strictObject({
+  motion: z.boolean(),
   sensitivity: sensitivity.optional(),
   clearAfter: clearAfter.optional(),
   indicator: z.boolean().optional(),
 });
 
-// A command changes its settings, never whether it sees someone.
-const occupancyCommand = z
+// A command changes its settings, never whether it sees motion.
+const motionCommand = z
   .strictObject({
     sensitivity: sensitivity.optional(),
     clearAfter: clearAfter.optional(),
@@ -258,9 +258,9 @@ export type SwitchCommand = z.output<typeof switchCommand>;
 export type ButtonFeatures = z.output<typeof buttonFeatures>;
 export type SensorFeatures = z.output<typeof sensorFeatures>;
 export type SensorState = z.output<typeof sensorState>;
-export type OccupancyFeatures = z.output<typeof occupancyFeatures>;
-export type OccupancyState = z.output<typeof occupancyState>;
-export type OccupancyCommand = z.output<typeof occupancyCommand>;
+export type MotionFeatures = z.output<typeof motionFeatures>;
+export type MotionState = z.output<typeof motionState>;
+export type MotionCommand = z.output<typeof motionCommand>;
 export type ContactFeatures = z.output<typeof contactFeatures>;
 export type ContactState = z.output<typeof contactState>;
 
@@ -392,19 +392,18 @@ export const sensor = {
 >;
 
 /**
- * Whether someone is in a sensor's sight, as a motion sensor sees it: its
- * features say what it senses and which settings it has, its state whether
- * it sees someone now, and its commands change those settings, which its
- * report confirms.
+ * Whether a motion sensor sees movement: its features say which settings it
+ * has, its state whether it sees motion now, and its commands change those
+ * settings, which its report confirms.
  */
-export const occupancy = {
-  kind: "occupancy",
+export const motion = {
+  kind: "motion",
   version: 1,
-  features: occupancyFeatures,
-  state: occupancyState,
-  command: occupancyCommand,
+  features: motionFeatures,
+  state: motionState,
+  command: motionCommand,
   desired(command) {
-    const desired: Partial<OccupancyState> = {};
+    const desired: Partial<MotionState> = {};
     if (command.sensitivity !== undefined)
       desired.sensitivity = command.sensitivity;
     if (command.clearAfter !== undefined)
@@ -433,10 +432,10 @@ export const occupancy = {
   },
   tier: "write",
 } as const satisfies CapabilityDefinition<
-  "occupancy",
-  OccupancyFeatures,
-  OccupancyState,
-  OccupancyCommand
+  "motion",
+  MotionFeatures,
+  MotionState,
+  MotionCommand
 >;
 
 /**
@@ -466,7 +465,7 @@ export const capabilities = {
   switch: switchCapability,
   button,
   sensor,
-  occupancy,
+  motion,
   contact,
 } as const;
 
@@ -482,10 +481,10 @@ type Kinds = {
   };
   button: { features: ButtonFeatures; state: never; command: never };
   sensor: { features: SensorFeatures; state: SensorState; command: never };
-  occupancy: {
-    features: OccupancyFeatures;
-    state: OccupancyState;
-    command: OccupancyCommand;
+  motion: {
+    features: MotionFeatures;
+    state: MotionState;
+    command: MotionCommand;
   };
   contact: { features: ContactFeatures; state: ContactState; command: never };
 };
@@ -562,7 +561,7 @@ type CapabilityInfoOf<K extends CapabilityKind> = {
   setBy: SetBy<StateOf<K>> | null;
   /**
    * When what it reports last changed (its kind's history fields, such as
-   * a light's on and brightness or a motion sensor's occupied), or null
+   * a light's on and brightness or a motion sensor's motion), or null
    * before its first report: "No motion for 12 min".
    */
   changedAt: string | null;
@@ -659,8 +658,8 @@ const capabilityRegistration = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     id: capabilityId,
-    kind: z.literal("occupancy"),
-    features: occupancyFeatures,
+    kind: z.literal("motion"),
+    features: motionFeatures,
   }),
   z.strictObject({
     id: capabilityId,
