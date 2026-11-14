@@ -37,7 +37,8 @@ export function createRemoval(
   db: CoreDatabase,
   options: {
     record: ReturnType<Activity["for"]>;
-    // Removing a device waits for a repair under way, and the other way round.
+    // Removing a device waits for an add or a repair under way, and the
+    // other way round.
     turns: Turns;
     removeFromDriver?: RemoveFromDriver;
     // Its name now, for its entry once it is gone.
@@ -65,10 +66,11 @@ export function createRemoval(
         throw new ActionCallError("invalid_request");
       }
       const { id, force } = parsed.data;
-      if (!db.select().from(devices).where(eq(devices.id, id)).get()) {
+      const device = db.select().from(devices).where(eq(devices.id, id)).get();
+      if (!device) {
         throw new ActionCallError("not_found");
       }
-      await options.turns.take(id, () => removeNow(actor, who, id, force));
+      await options.turns.take(device, () => removeNow(actor, who, id, force));
     },
   };
 

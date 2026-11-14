@@ -601,8 +601,8 @@ const capabilityId = z
 // The driver's own id for a device, such as a Zigbee IEEE address.
 export const deviceKey = z.string().min(1).max(128);
 const label = z.string().trim().min(1).max(120);
-// A device type's id, whether or not this version has the type yet.
-const deviceTypeId = z
+/** A device type's id, whether or not this version has the type yet. */
+export const deviceTypeId = z
   .string()
   .regex(/^[a-z][a-z0-9-]{0,31}$/, "use a device type's id such as plug");
 

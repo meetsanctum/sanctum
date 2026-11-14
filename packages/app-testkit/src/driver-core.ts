@@ -10,10 +10,12 @@ import {
   deviceRelease,
   deviceProblemReport,
   deviceReport,
+  answersTo,
+  foundDevices,
   isDeclaredRefusal,
   permissionIds,
-  repairAnswers,
   shownProblem,
+  shownQuestions,
   type Actor,
   type AppContext,
   type AppDefinition,
@@ -24,6 +26,7 @@ import {
   type DeviceProblem,
   type DriverDiscovery,
   type DriverDevice,
+  type FoundDevice,
   type DriverRemoval,
   type LightMove,
   type JoiningStage,
@@ -37,9 +40,9 @@ import { createSecretCalls } from "./secret-calls.js";
 // reports, presses and releases, what it says of joining devices and of
 // firmware, and which devices it still has exactly as the core does, with
 // the same schemas, remembers them, and hands the driver commands, moves,
-// pairing, removals, firmware calls, probes and repairs, and keeps its
-// secrets and what it says is wrong with its devices. Nothing else of the
-// core is there.
+// pairing, removals, firmware calls, probes, repairs and adding the devices
+// it found, and keeps its secrets, what it says is wrong with its devices and
+// which devices it could add. Nothing else of the core is there.
 
 type Registered = z.output<typeof deviceRegistration>;
 
@@ -94,6 +97,9 @@ export function createDriverCore(
   // What the driver says is wrong with each of its devices, as the core
   // shows it.
   const problems = new Map<string, DeviceProblem>();
+  // The devices it last said it could add, as Add devices shows them, those
+  // it has left out.
+  let found: FoundDevice[] = [];
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -263,6 +269,33 @@ export function createDriverCore(
       }
       problems.set(key, shown);
     },
+    async found(input) {
+      const parsed = foundDevices.safeParse(input);
+      if (!parsed.success) {
+        refuse(new Error(`Found refused: ${z.prettifyError(parsed.error)}`));
+      }
+      if (!app.driver?.add) {
+        refuse(new Error(`${app.id} lists devices it found but cannot add`));
+      }
+      found = parsed.data
+        .filter((each) => !registered.has(each.key))
+        .map((each) => {
+          const asks = shownQuestions(app.driver, each.asks);
+          if (asks.length !== each.asks.length) {
+            refuse(
+              new Error(`${app.id} asks something adding it doesn't declare`),
+            );
+          }
+          return {
+            driver: app.id,
+            key: each.key,
+            name: each.name,
+            description: each.description,
+            type: each.type,
+            asks,
+          };
+        });
+    },
     ...secretCalls,
     log() {},
   };
@@ -296,6 +329,10 @@ export function createDriverCore(
     presented,
     secrets,
     problems,
+    /** The devices the driver last said it could add, but those it has registered. */
+    get found() {
+      return found.filter((each) => !registered.has(each.key));
+    },
 
     start: async () => app.start?.(own, { reason: "started" }),
     /** As the core does once it restarted while the driver ran on. */
@@ -398,7 +435,7 @@ export function createDriverCore(
       if (!repair || !problem?.repair) {
         throw new Error(`${key} has nothing to repair`);
       }
-      const checked = repairAnswers(problem, answers);
+      const checked = answersTo(problem.repair.asks, answers);
       if (!checked) {
         refuse(new Error("Repair's answers are invalid"));
       }
@@ -410,11 +447,44 @@ export function createDriverCore(
       });
       if (
         result !== undefined &&
-        (!result || !isDeclaredRefusal(problem, result.refused))
+        (!result || !isDeclaredRefusal(problem.repair.asks, result.refused))
       ) {
         refuse(
           new Error(`${app.id} refused a repair in words it doesn't declare`),
         );
+      }
+      return result;
+    },
+
+    /**
+     * Has the driver add one of the devices it found with someone's answers
+     * to what adding it asks, as Add devices does: once it resolves, the
+     * device must be registered, unless it refused an answer in words the
+     * question declares.
+     */
+    async add(key: string, answers: Record<string, string> = {}) {
+      const add = driver().add;
+      const listed = found.find((each) => each.key === key);
+      if (!add || !listed) {
+        throw new Error(`${app.id} found no device ${key} to add`);
+      }
+      const checked = answersTo(listed.asks, answers);
+      if (!checked) {
+        refuse(new Error("Adding's answers are invalid"));
+      }
+      const result = await add(person(), { key, answers: checked });
+      if (result !== undefined) {
+        if (!result || !isDeclaredRefusal(listed.asks, result.refused)) {
+          refuse(
+            new Error(
+              `${app.id} refused an answer in words it doesn't declare`,
+            ),
+          );
+        }
+        return result;
+      }
+      if (!registered.has(key)) {
+        refuse(new Error(`${app.id} added ${key} without registering it`));
       }
       return result;
     },

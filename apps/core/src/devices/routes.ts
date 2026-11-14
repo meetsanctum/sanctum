@@ -1,4 +1,5 @@
 import type {
+  AddResult,
   CapabilityInfo,
   DeviceInfo,
   LightsResult,
@@ -17,6 +18,7 @@ import type { Principal } from "../auth/clients.js";
 import type { Devices } from "./devices.js";
 import { removalRule } from "./removal.js";
 import { firmwareRules, type Firmware } from "./firmware.js";
+import { addRule, type Found } from "./found.js";
 import { repairRule, type Problems, type RepairResult } from "./problems.js";
 import type { Lights } from "./lights.js";
 import { pairingRules, type Pairing } from "./pairing.js";
@@ -30,7 +32,8 @@ import type { Presses } from "./presses.js";
 // remote's presses while someone picks one, as they change workflows, for an
 // app's page or its own, and only it stops that capture (presses.ts). Every
 // client checks for firmware updates, starts and stops them, and checks a
-// device's connection (firmware.ts).
+// device's connection (firmware.ts). Every client adds the devices drivers
+// found, which GET /api/devices/pairing lists (found.ts).
 //
 //   GET  /api/devices                DeviceInfo[] the caller may see
 //   POST /api/devices/command        { device, capability, command } → CapabilityInfo
@@ -47,6 +50,7 @@ import type { Presses } from "./presses.js";
 //   POST /api/devices/firmware/stop  { id } → DeviceInfo
 //   POST /api/devices/probe          { id } → ProbeResult
 //   POST /api/devices/repair         { id, answers } → RepairResult
+//   POST /api/devices/add            { driver, key, answers } → AddResult
 
 export function registerDeviceRoutes(
   app: FastifyInstance,
@@ -57,6 +61,7 @@ export function registerDeviceRoutes(
     presses: Presses;
     firmware: Firmware;
     problems: Problems;
+    found: Found;
     gate: Gate;
     activity: Activity;
   },
@@ -183,6 +188,12 @@ export function registerDeviceRoutes(
       "device.repair",
     );
     return options.problems.repair(actor, who, request.body);
+  });
+
+  // Answers go in the body, never the address, and reach only the driver.
+  app.post("/api/devices/add", async (request): Promise<AddResult> => {
+    const { actor, who } = admitted(request.principal!, addRule, "device.add");
+    return options.found.add(actor, who, request.body);
   });
 
   app.get("/api/devices/pairing", async (request): Promise<PairingInfo> => {

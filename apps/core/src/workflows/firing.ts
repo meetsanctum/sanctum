@@ -1,6 +1,6 @@
 import type { WorkflowNode } from "@meetsanctum/app-sdk";
 
-import type { AppEvent } from "../app-host/host.js";
+import type { AppEvent } from "../app-host/app-work.js";
 import type { DeviceChange } from "../devices/devices.js";
 import type { Motion } from "../devices/motion.js";
 import type { Press } from "../devices/presses.js";

@@ -1,6 +1,5 @@
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
-import { CircleAlert } from "lucide-react";
+import { Button } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -13,6 +12,7 @@ import {
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem } from "./device-parts";
+import { QuestionField, type Refused } from "./device-questions";
 
 // Repair: what a device's driver asks to set it right, in the words it
 // declares. The answers go to the core once, in the body of one request, and
@@ -20,7 +20,6 @@ import { deviceProblem } from "./device-parts";
 // refused answer says why under its field, which keeps what was typed so it
 // can be corrected.
 
-type Refused = { question: string; refusal: string };
 type RepairResult = { repaired: DeviceInfo } | { refused: Refused };
 
 function repairProblem(error: unknown, appName: string | null) {
@@ -120,60 +119,19 @@ export function RepairDevice(props: {
               {repair?.help ?? device?.problem?.words}
             </DialogDescription>
           </DialogHeader>
-          {asks.map((question, index) => {
-            const id = `${ids}-${question.id}`;
-            const why =
-              refused?.question === question.id
-                ? question.refusals[refused.refusal]
-                : undefined;
-            const said = why ? `${id}-refused` : `${id}-help`;
-            return (
-              <div key={question.id} className="flex flex-col gap-2">
-                <label htmlFor={id} className="text-sm font-medium">
-                  {question.label}
-                </label>
-                <Input
-                  id={id}
-                  type={question.kind === "secret" ? "password" : "text"}
-                  value={answerTo(question.id)}
-                  placeholder={question.placeholder ?? undefined}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  autoFocus={index === 0}
-                  aria-invalid={why ? true : undefined}
-                  aria-describedby={why || question.help ? said : undefined}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setAnswers((before) => ({
-                      ...before,
-                      [question.id]: value,
-                    }));
-                  }}
-                />
-                {why ? (
-                  <p
-                    id={said}
-                    role="alert"
-                    className="m-0 flex items-start gap-1.5 text-sm text-destructive"
-                  >
-                    <CircleAlert
-                      aria-hidden="true"
-                      className="mt-0.5 size-3.5 shrink-0"
-                    />
-                    <span>{why}</span>
-                  </p>
-                ) : (
-                  question.help && (
-                    <p id={said} className="m-0 text-sm text-muted-foreground">
-                      {question.help}
-                    </p>
-                  )
-                )}
-              </div>
-            );
-          })}
+          {asks.map((question, index) => (
+            <QuestionField
+              key={question.id}
+              id={`${ids}-${question.id}`}
+              question={question}
+              value={answerTo(question.id)}
+              refused={refused}
+              autoFocus={index === 0}
+              onChange={(value) =>
+                setAnswers((before) => ({ ...before, [question.id]: value }))
+              }
+            />
+          ))}
           {failure && (
             <p role="alert" className="m-0 text-sm text-destructive">
               {failure}

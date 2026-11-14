@@ -31,6 +31,8 @@ describe("adding devices", () => {
     expect(opened.json()).toEqual({
       until: "2026-10-26T12:04:00.000Z",
       since: "2026-10-26T12:00:00.000Z",
+      drivers: ["test.lamps"],
+      found: [],
       joined: [],
     });
     expect(radio.pairing).toEqual([
@@ -54,6 +56,8 @@ describe("adding devices", () => {
           joinedAt: "2026-10-26T12:00:00.000Z",
         },
       ],
+      drivers: ["test.lamps"],
+      found: [],
     });
     // Named after what it is, next to the light the home has already.
     expect(desk.name).toBe("Light 2");
@@ -140,7 +144,12 @@ describe("adding devices", () => {
     await post(core, "/api/devices/pairing/open", {}, maya);
 
     const closed = await post(core, "/api/devices/pairing/close", {}, maya);
-    expect(closed.json()).toEqual({ until: null, joined: [] });
+    expect(closed.json()).toEqual({
+      until: null,
+      joined: [],
+      drivers: ["test.lamps"],
+      found: [],
+    });
     expect(radio.pairing.at(-1)).toEqual({
       seconds: 0,
       actor: { kind: "user", id: maya.person.id },
@@ -155,9 +164,22 @@ describe("adding devices", () => {
     expect(live.messages.filter((each) => each.type === "pairing")).toEqual([
       {
         type: "pairing",
-        pairing: { until: "2026-10-26T12:00:00.020Z", joined: [] },
+        pairing: {
+          until: "2026-10-26T12:00:00.020Z",
+          joined: [],
+          drivers: ["test.lamps"],
+          found: [],
+        },
       },
-      { type: "pairing", pairing: { until: null, joined: [] } },
+      {
+        type: "pairing",
+        pairing: {
+          until: null,
+          joined: [],
+          drivers: ["test.lamps"],
+          found: [],
+        },
+      },
     ]);
   });
 

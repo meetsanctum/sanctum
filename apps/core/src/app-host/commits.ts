@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { durably, type CoreDatabase } from "../database.js";
 import type { Entities } from "../entities/entities.js";
-import type { JobCalls, KeptWorkflowCalls } from "./host.js";
+import type { JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { InstalledApp } from "./installed.js";
 import type { AppUpdates } from "./updates.js";
 import type { AppVersions } from "./versions.js";

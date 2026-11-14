@@ -23,6 +23,7 @@ const deviceActions = new Set([
   "device.probe",
   "device.problem",
   "device.repair",
+  "device.add",
 ]);
 
 // An app's id is reverse DNS; the core's modules are single words.

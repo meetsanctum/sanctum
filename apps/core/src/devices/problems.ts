@@ -1,7 +1,7 @@
 import {
+  answersTo,
   deviceProblemReport,
   isDeclaredRefusal,
-  repairAnswers,
   type Actor,
   type DeviceInfo,
   type DeviceProblem,
@@ -132,10 +132,11 @@ export function createProblems(options: {
         throw new ActionCallError("invalid_request");
       }
       const { id } = parsed.data;
-      if (!devices.row(id)) {
+      const device = devices.row(id);
+      if (!device) {
         throw new ActionCallError("not_found");
       }
-      return devices.turns.take(id, async () => {
+      return devices.turns.take(device, async () => {
         // As it is once its turn comes: a repair before may have set it right.
         const row = devices.row(id);
         if (!row) {
@@ -146,7 +147,10 @@ export function createProblems(options: {
           log(id, "refused", who, "conflict");
           throw new ActionCallError("conflict");
         }
-        const answers = repairAnswers(problem, parsed.data.answers ?? {});
+        const answers = answersTo(
+          problem.repair.asks,
+          parsed.data.answers ?? {},
+        );
         if (!answers) {
           log(id, "refused", who, "invalid_request");
           throw new ActionCallError("invalid_request");
@@ -175,7 +179,7 @@ export function createProblems(options: {
           const parsed = z.object({ refused: z.unknown() }).safeParse(result);
           if (
             !parsed.success ||
-            !isDeclaredRefusal(problem, parsed.data.refused)
+            !isDeclaredRefusal(problem.repair.asks, parsed.data.refused)
           ) {
             log(id, "failed", who, "app_failed");
             throw new ActionCallError("app_failed");

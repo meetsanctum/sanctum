@@ -5,11 +5,8 @@ import {
   type AppRunning,
   type AppSettings,
   type AppInfo,
-  type Job,
-  type JobRequest,
   type Sighting,
   type StaticManifest,
-  type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { join } from "node:path";
@@ -19,6 +16,7 @@ import type { Principal } from "../auth/clients.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Firmware } from "../devices/firmware.js";
+import type { Found } from "../devices/found.js";
 import type { Problems } from "../devices/problems.js";
 import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
@@ -63,6 +61,7 @@ import {
   type AppContainerManager,
 } from "./supervisor.js";
 import type { AppsOff } from "./off.js";
+import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 
@@ -96,31 +95,6 @@ export type ApartPackage = {
 
 type Log = (message: string) => void;
 
-/** An event an app emitted, as the core hands it on. */
-export type AppEvent = {
-  id: string;
-  app: string;
-  event: string;
-  payload: unknown;
-  at: Date;
-};
-
-/** Apps' jobs, which the Workflows module keeps. */
-export type JobCalls = {
-  schedule(appId: string, job: JobRequest): Job;
-  cancel(appId: string, key: string): void;
-  list(appId: string): Job[];
-};
-
-/** The workflows apps keep, which the Workflows module keeps for them. */
-export type KeptWorkflowCalls = {
-  put(appId: string, workflow: unknown): WorkflowInfo;
-  remove(appId: string, key: string): void;
-  // Inside a commit's transaction; what it answers runs once that has committed.
-  sweep(appId: string, claimed: ReadonlySet<string>): () => void;
-  list(appId: string): WorkflowInfo[];
-};
-
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -138,6 +112,8 @@ export function createAppHost(options: {
   firmware: () => Pick<Firmware, "report">;
   // Where what drivers say is wrong with their devices goes.
   problems: () => Pick<Problems, "report">;
+  // Where what drivers say they found and could add goes.
+  found: () => Pick<Found, "report">;
   // Each event an app emits, once it goes out.
   onEvent?: (event: AppEvent) => void;
   jobs?: JobCalls;

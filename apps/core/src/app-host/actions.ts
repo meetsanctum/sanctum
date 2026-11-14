@@ -11,7 +11,7 @@ import { activityTimes } from "../activity/kinds.js";
 import type { Outcome } from "../activity/schema.js";
 import type { AppContract, DeclaredAction } from "./contract.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
-import type { AppEvent } from "./host.js";
+import type { AppEvent } from "./app-work.js";
 
 // Runs apps' actions for the app host and writes them to the activity log. A
 // call that may change something has its entry as it starts, and what the

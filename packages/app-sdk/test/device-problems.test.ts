@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   assertDriverProblems,
   defineApp,
+  answersTo,
   isDeclaredRefusal,
-  repairAnswers,
   shownProblem,
+  shownQuestions,
   toStaticManifest,
   type AppDefinition,
 } from "../src/index.js";
@@ -130,28 +131,39 @@ describe("a driver's problems", () => {
   });
 });
 
-describe("Repair's answers", () => {
-  const shown = shownProblem({ problems, questions }, "keyMismatch")!;
+describe("answers to what's asked", () => {
+  const asks = shownProblem({ problems, questions }, "keyMismatch")!.repair!
+    .asks;
 
   it("are one for each question asked, as typed", () => {
-    expect(repairAnswers(shown, { key: " a key= " })).toEqual({
+    expect(answersTo(asks, { key: " a key= " })).toEqual({
       key: " a key= ",
     });
-    expect(repairAnswers(shown, {})).toBeNull();
-    expect(repairAnswers(shown, { key: "" })).toBeNull();
-    expect(repairAnswers(shown, { key: "k", other: "x" })).toBeNull();
-    expect(repairAnswers(shown, { key: "x".repeat(4_097) })).toBeNull();
+    expect(answersTo(asks, {})).toBeNull();
+    expect(answersTo(asks, { key: "" })).toBeNull();
+    expect(answersTo(asks, { key: "k", other: "x" })).toBeNull();
+    expect(answersTo(asks, { key: "x".repeat(4_097) })).toBeNull();
+    expect(answersTo([], {})).toEqual({});
   });
 
   it("are refused only as the question declares", () => {
     expect(
-      isDeclaredRefusal(shown, { question: "key", refusal: "wrongKey" }),
+      isDeclaredRefusal(asks, { question: "key", refusal: "wrongKey" }),
     ).toBe(true);
     expect(
-      isDeclaredRefusal(shown, { question: "key", refusal: "tooShort" }),
+      isDeclaredRefusal(asks, { question: "key", refusal: "tooShort" }),
     ).toBe(false);
     expect(
-      isDeclaredRefusal(shown, { question: "name", refusal: "wrongKey" }),
+      isDeclaredRefusal(asks, { question: "name", refusal: "wrongKey" }),
     ).toBe(false);
+    expect(
+      isDeclaredRefusal([], { question: "key", refusal: "wrongKey" }),
+    ).toBe(false);
+  });
+
+  it("are asked in the driver's words, leaving out what it no longer declares", () => {
+    expect(shownQuestions({ questions }, ["gone", "key"])).toEqual(asks);
+    expect(shownQuestions({ questions }, ["toString"])).toEqual([]);
+    expect(shownQuestions(null, ["key"])).toEqual([]);
   });
 });

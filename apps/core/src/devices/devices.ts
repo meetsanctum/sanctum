@@ -248,7 +248,7 @@ export function createDevices(
     return result;
   }
 
-  // Removing and repairing a device take turns (turns.ts).
+  // Adding, removing and repairing a device take turns (turns.ts).
   const turns = createTurns();
   const removal = createRemoval(db, {
     record,
@@ -772,7 +772,7 @@ export function createDevices(
     // Removes a device (removal.ts).
     remove: removal.remove,
 
-    // Removing and repairing a device, which take turns.
+    // Adding, removing and repairing a device, which take turns.
     turns,
 
     // The core is stopping: nothing goes to a device again from now on.

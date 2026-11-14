@@ -24,6 +24,7 @@ import {
   type DriverRepairResult,
 } from "./device-problems.js";
 import type { DriverDiscovery } from "./discovery.js";
+import type { DriverAdd, DriverAddResult } from "./found-devices.js";
 import { assertDriver } from "./driver.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
@@ -65,6 +66,7 @@ export * from "./core-events.js";
 export * from "./dashboards.js";
 export * from "./device-problems.js";
 export * from "./discovery.js";
+export * from "./found-devices.js";
 export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";
@@ -426,6 +428,12 @@ export interface AppDefinition extends AppManifestFields {
      * has taken them in.
      */
     discovered?(ctx: AppContext, discovery: DriverDiscovery): Promise<void>;
+    /**
+     * Adds one of the devices it found (ctx.devices.found), with the answers
+     * to what adding it asks: it registers the device, then resolves, or
+     * resolves with the answer it refuses. The core gives it a minute.
+     */
+    add?(ctx: AppContext, add: DriverAdd): Promise<DriverAddResult>;
   };
 }
 
@@ -487,6 +495,7 @@ const driverHooks = [
   "probe",
   "repair",
   "discovered",
+  "add",
 ] as const;
 
 /**

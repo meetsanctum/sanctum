@@ -109,6 +109,7 @@ function home(
     workflows: async () => [],
     joining: unused,
     problem: unused,
+    found: unused,
     secret: unused,
     putSecret: unused,
     removeSecret: unused,

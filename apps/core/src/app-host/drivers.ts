@@ -5,6 +5,7 @@ import {
   type AppDefinition,
   type DriverCommand,
   type DriverDevice,
+  type DriverAdd,
   type DriverMove,
   type DriverDiscovery,
   type DriverRemoval,
@@ -16,9 +17,12 @@ import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 
 // What Devices asks of driver apps, the Drivers contract: their devices'
 // commands, moving a light while a remote's button is held, letting new
-// devices join, removing one, firmware and asking a device how it is. Only a
-// driver that takes calls gets them: one that is paused or stopped is
-// unavailable for them.
+// devices join, removing one, firmware, asking a device how it is, repairing
+// one and adding one it found. Only a driver that takes calls gets them: one
+// that is paused or stopped is unavailable for them.
+
+// Adding a device may give it its key first, then reach it again with it.
+const addWithinMs = 60_000;
 
 type Driving = { app: AppDefinition; storage: AppStorage };
 
@@ -54,7 +58,8 @@ export function createDriverCalls<Entry extends Driving>(options: {
   // Hands a driver app one of the contract's calls, as `actor`, with a
   // timeout. A refusal reaches the caller with its code; anything else the
   // driver throws is its failure, which is logged, by its words unless the
-  // call carries answers they could repeat.
+  // call carries answers they could repeat. A call may take longer than
+  // most.
   async function toDriver<T>(
     driverId: string,
     actor: Actor,
@@ -63,9 +68,12 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driver: NonNullable<AppDefinition["driver"]>,
       ctx: AppContext,
     ) => Promise<T>,
-    { quiet = false }: { quiet?: boolean } = {},
+    {
+      quiet = false,
+      withinMs: callMs = timeoutMs,
+    }: { quiet?: boolean; withinMs?: number } = {},
   ): Promise<T> {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Date.now() + callMs;
     let entry = driving(driverId);
     if (!entry) {
       const waiting = installed.get(driverId);
@@ -215,6 +223,24 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.discovered(ctx, discovery);
         },
+      );
+    },
+
+    // Hands a driver someone's answers to add one of the devices it found,
+    // with a minute to do it. A failure is logged without its words, which
+    // could repeat an answer.
+    add(driverId: string, add: DriverAdd, actor: Actor) {
+      return toDriver(
+        driverId,
+        actor,
+        "add a device",
+        (driver, ctx) => {
+          if (!driver.add) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.add(ctx, add);
+        },
+        { quiet: true, withinMs: addWithinMs },
       );
     },
 

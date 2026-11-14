@@ -40,10 +40,16 @@ const typeIcons: Record<DeviceType, LucideIcon> = {
  * else, in the round a row starts with: its type's icon, and the general
  * one for a type this client has none for, as a core may serve.
  */
-export function DeviceIcon(props: { device?: DeviceInfo }) {
+// By what it is: a device's type, or what its driver says a device it found
+// is.
+export function DeviceIcon(props: {
+  device?: DeviceInfo;
+  type?: string | null;
+}) {
+  const type = props.device?.type ?? props.type;
   const Icon: LucideIcon =
-    props.device && Object.hasOwn(typeIcons, props.device.type)
-      ? typeIcons[props.device.type]
+    type && Object.hasOwn(typeIcons, type)
+      ? typeIcons[type as DeviceType]
       : Radio;
   return (
     <span

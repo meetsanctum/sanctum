@@ -196,6 +196,7 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     firmware: unused,
     joining: unused,
     problem: unused,
+    found: unused,
     secret: unused,
     putSecret: unused,
     removeSecret: unused,
