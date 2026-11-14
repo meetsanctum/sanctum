@@ -379,7 +379,7 @@ export async function managerSocket(
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   });
-  return { client, received, logs };
+  return { client, received, logs, socketPath };
 }
 
 export async function testCore(
