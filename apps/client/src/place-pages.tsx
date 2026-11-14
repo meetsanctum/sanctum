@@ -42,7 +42,6 @@ import {
   type AppSection,
   type SectionEntities,
 } from "./room-sections";
-import { SecurityOverview } from "./security-overview";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import type { HostProblem } from "./system-status";
 import type { Devices } from "./use-devices";
@@ -54,10 +53,9 @@ import type { Devices } from "./use-devices";
 // sections by their weight, Moods first, then its devices in a section for
 // each category, and last the devices Sanctum cannot use. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
-// light in the home, Environment with what every sensor reads, Presence
+// light in the home, Environment with what every sensor reads, and Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
-// above its sensors, and Security with whether everything is closed
-// (security-overview.tsx). The devices in no room have a page too, last among
+// above its sensors. The devices in no room have a page too, last among
 // the rooms while there are any. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).
 // They look the same on every device, shared ones too: lights, switches
@@ -554,7 +552,6 @@ export function CategoryPage(props: {
       {category.id === "presence" && (
         <PresenceOverview devices={devices} openRoom={props.openRoom} />
       )}
-      {category.id === "security" && <SecurityOverview tiles={own} />}
       <Sections
         sections={sectionsByRoom(own, devices.places)}
         devices={devices}

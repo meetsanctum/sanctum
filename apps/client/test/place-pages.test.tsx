@@ -620,7 +620,7 @@ describe("contact sensors", () => {
     expect(posted("/api/devices/command")).toEqual([]);
   });
 
-  it("head Security's page with whether all are closed, above their tiles by room", async () => {
+  it("have Security's page, their tiles by room, which the sidebar lists", async () => {
     devices = [
       lamp,
       contactSensor("front", "Front door", "hall", true),
@@ -630,9 +630,9 @@ describe("contact sensors", () => {
     await show("category", "security");
 
     expect(container.querySelector("h1")?.textContent).toBe("Security");
-    expect(container.querySelector("main p, p")?.textContent).toBe(
-      "Contact sensorsFront door is open",
-    );
+    // Nothing sums them up under its name: the tiles say it.
+    expect(container.querySelector("header p")).toBeNull();
+    expect(tile("Front door")?.textContent).toBe("Front doorOpen");
     // The page's sections, then the sidebar's own headings.
     expect(headings()).toEqual(["Office", "Hall", "Categories", "Rooms"]);
     expect(

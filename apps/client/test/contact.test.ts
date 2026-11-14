@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   contactsOf,
-  contactsSentence,
   contactsStatus,
   contactText,
   placeContacts,
@@ -11,9 +10,8 @@ import {
 import { sectionsByCategory, tilesOf } from "../src/device-tiles";
 import { contactSensor, places, sensor } from "./place-pages-fixtures";
 
-// What contact sensors say: words on a tile, in a room's line, in the
-// home's status and on Security's page, by one rule for open, closed and
-// not known.
+// What contact sensors say: words on a tile, in a room's line and in the
+// home's status, by one rule for open, closed and not known.
 
 const minute = 60_000;
 // 15:00 where the tests run, so the day and yesterday are local.
@@ -126,57 +124,43 @@ describe("some contact sensors", () => {
     ...door(id, false),
     availability: "offline",
   });
-  const said = (devices: DeviceInfo[]) => {
-    const contacts = contactsOf(tiles(devices))!;
-    return [
-      contactsStatus(contacts),
-      placeContacts(tiles(devices))?.text,
-      contactsSentence(contacts),
-    ];
-  };
+  // What the home's status says of them, then a room's line.
+  const said = (devices: DeviceInfo[]) => [
+    contactsStatus(contactsOf(tiles(devices))!),
+    placeContacts(tiles(devices))?.text,
+  ];
 
   it("are nothing where there is none", () => {
     expect(contactsOf(tiles([sensor("desk", "office", 21, 48)]))).toBeNull();
     expect(placeContacts(tiles([]))).toBeNull();
   });
 
-  it("count those open and name one or two, even while others are not known", () => {
+  it("count those open, even while others are not known", () => {
     expect(said([door("front", true), door("back", false)])).toEqual([
       "1 open",
       "1 open",
-      "front door is open",
     ]);
     expect(
       said([door("front", true), door("back", true), offline("side")]),
-    ).toEqual(["2 open", "2 open", "back door and front door are open"]);
-    expect(said([door("a", true), door("b", true), door("c", true)])).toEqual([
-      "3 open",
-      "3 open",
-      "3 open",
-    ]);
+    ).toEqual(["2 open", "2 open"]);
     expect(placeContacts(tiles([door("front", true)]))?.open).toBe(true);
+    expect(placeContacts(tiles([door("front", false)]))?.open).toBe(false);
   });
 
   it("are all closed only when each has said so", () => {
     expect(said([door("front", false), door("back", false)])).toEqual([
       "All closed",
       "All closed",
-      "All closed",
     ]);
     // One sensor alone in a room is closed, not "all" of them.
-    expect(said([door("front", false)])).toEqual([
-      "All closed",
-      "Closed",
-      "All closed",
-    ]);
+    expect(said([door("front", false)])).toEqual(["All closed", "Closed"]);
     expect(
       said([door("front", false), door("back", false), offline("side")]),
-    ).toEqual(["2 closed", "2 closed", "2 closed, 1 not known"]);
+    ).toEqual(["2 closed", "2 closed"]);
   });
 
   it("have no readings while none is known", () => {
     expect(said([door("new", null), offline("side")])).toEqual([
-      "No readings",
       "No readings",
       "No readings",
     ]);
