@@ -454,12 +454,15 @@ export function useDevices(live: LiveFeed) {
     [live, apply, load],
   );
 
-  // Presence's "Quiet for 12 min" counts on, and a device on a battery
-  // whose driver no longer knows whether it answers turns quiet once a day
-  // has passed (maintenance.ts), without a live message.
+  // Presence's "Quiet for 12 min" and a contact sensor's "Open for 12 min"
+  // count on, and a device on a battery whose driver no longer knows
+  // whether it answers turns quiet once a day has passed (maintenance.ts),
+  // without a live message.
   const ticks = devices.some(
     (device) =>
-      device.capabilities.some((each) => each.kind === "occupancy") ||
+      device.capabilities.some(
+        (each) => each.kind === "occupancy" || each.kind === "contact",
+      ) ||
       (onBattery(device) && device.availability === "unknown"),
   );
   // The clock only moves the tiles on; they read the time afresh each time.

@@ -6,6 +6,7 @@ import type {
 import {
   AppScope,
   Button,
+  ContactClosed,
   deviceKindsOf,
   LightControls,
   SwipePages,
@@ -18,6 +19,7 @@ import { useEffect, useId } from "react";
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
+import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
 import { historyPage } from "./device-history";
@@ -38,8 +40,9 @@ import type { Devices } from "./use-devices";
 // every device: lights and switches are household things. A sensor's first
 // page is its readings and their history, and its header says when it last
 // said something, since sensors on a battery say little (sensor-detail.tsx).
-// A motion sensor's first is its motion (motion-detail.tsx), then its
-// readings; it opens on the page of the tile it was opened from. A device
+// A motion sensor's first is its motion (motion-detail.tsx), a contact
+// sensor's what it says now (contact-detail.tsx), then its readings; it
+// opens on the page of the tile it was opened from. A device
 // with nothing of the shell's to set, such as a remote, shows the pages apps
 // add for its kind instead, each drawn by its app in the app's scope, such
 // as Moods' Presses. Every device's last page is its Activity: who did what
@@ -50,6 +53,12 @@ type Occupancy = Extract<
   DeviceInfo["capabilities"][number],
   { kind: "occupancy" }
 >;
+type Contact = Extract<DeviceInfo["capabilities"][number], { kind: "contact" }>;
+
+// The kinds whose detail is pages of what a sensor says, with nothing to
+// switch.
+const sensing = (kind: CapabilityKind) =>
+  kind === "sensor" || kind === "occupancy" || kind === "contact";
 
 // What a switch has: on and off, which its controls show as one button.
 const switchFeatures: LightFeatures = {
@@ -119,21 +128,23 @@ export function DeviceDetail(props: {
       : device?.capabilities.find(
           (each): each is Occupancy => each.kind === "occupancy",
         );
-  const sensorLike =
-    capability?.kind === "sensor" || capability?.kind === "occupancy";
+  // A contact sensor's likewise, from its contact's tile and its readings'.
+  const contact =
+    capability?.kind === "contact"
+      ? capability
+      : device?.capabilities.find(
+          (each): each is Contact => each.kind === "contact",
+        );
+  const sensorLike = capability !== undefined && sensing(capability.kind);
   const pages =
     device && capability
       ? devicePages(
           props.apps,
           device,
-          sensorLike && motion
+          sensorLike && (motion || contact)
             ? [
                 ...new Set(
-                  device.capabilities
-                    .map((each) => each.kind)
-                    .filter(
-                      (kind) => kind === "sensor" || kind === "occupancy",
-                    ),
+                  device.capabilities.map((each) => each.kind).filter(sensing),
                 ),
               ]
             : [capability.kind],
@@ -217,12 +228,20 @@ export function DeviceDetail(props: {
       {tile &&
         device &&
         capability &&
-        (capability.kind === "sensor" || capability.kind === "occupancy" ? (
+        (capability.kind === "sensor" ||
+        capability.kind === "occupancy" ||
+        capability.kind === "contact" ? (
           <SwipePages
             // Each tile's detail opens afresh, on its own page.
             key={tile.key}
             label={tile.name}
-            initial={capability.kind === "sensor" ? "readings" : undefined}
+            initial={
+              capability.kind === "sensor"
+                ? "readings"
+                : capability.kind === "contact"
+                  ? "contact"
+                  : undefined
+            }
             pages={[
               ...(motion
                 ? [
@@ -235,6 +254,23 @@ export function DeviceDetail(props: {
                           key={`${device.id}/${motion.id}`}
                           device={device}
                           capability={motion}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+              ...(contact
+                ? [
+                    {
+                      id: "contact",
+                      label: "Contact",
+                      icon: ContactClosed,
+                      content: (
+                        <ContactPage
+                          key={`${device.id}/${contact.id}`}
+                          device={device}
+                          capability={contact}
+                          now={now.getTime()}
                         />
                       ),
                     },
@@ -260,8 +296,8 @@ export function DeviceDetail(props: {
                           unit={
                             devices.places?.home.temperatureUnit ?? "celsius"
                           }
-                          // The Motion page has its battery.
-                          battery={!motion}
+                          // The Motion or Contact page has its battery.
+                          battery={!motion && !contact}
                         />
                       ),
                     },

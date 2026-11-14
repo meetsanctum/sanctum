@@ -47,9 +47,9 @@ export function sampleCommands(
   kind: CapabilityKind,
   features: unknown,
 ): Record<string, unknown>[] {
-  // A button and a sensor take no commands; a motion sensor's change its
-  // settings.
-  if (kind === "button" || kind === "sensor") {
+  // A button, a sensor and a contact sensor take no commands; a motion
+  // sensor's change its settings.
+  if (kind === "button" || kind === "sensor" || kind === "contact") {
     return [];
   }
   if (kind === "switch") {

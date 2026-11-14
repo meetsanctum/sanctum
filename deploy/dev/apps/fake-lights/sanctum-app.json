@@ -17,7 +17,7 @@
   "permissions": [
     {
       "id": "devices.register",
-      "reason": "To bring pretend lights into a development home.",
+      "reason": "To bring pretend lights and contact sensors into a development home.",
       "needed": true,
       "asked": null,
       "startsOn": false

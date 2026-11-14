@@ -378,7 +378,7 @@ describe("two stacks on one Docker", () => {
       );
     // Seed the HTTPS core from a new shell without the flag used to start it.
     expect(await other.script("seed", http)).toContain(
-      "Seeded: 3 rooms and 4 fake lights.",
+      "Seeded: 3 rooms and 6 fake devices.",
     );
     await other.script("up", { ...http, CORE_ALLOWED_ORIGINS: origins });
     expect(await coreEnv()).toContain(`CORE_ALLOWED_ORIGINS=${origins}`);
