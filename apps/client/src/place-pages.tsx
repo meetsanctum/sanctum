@@ -19,7 +19,12 @@ import {
 import { useEffect } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
-import { contactsOf, contactsStatus, placeContacts } from "./contact";
+import {
+  contactsOf,
+  contactsStatus,
+  contactsSummary,
+  placeContacts,
+} from "./contact";
 import {
   climateMeasures,
   measureNames,
@@ -43,6 +48,7 @@ import {
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
+import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem } from "./system-status";
 import type { Devices } from "./use-devices";
 
@@ -53,9 +59,10 @@ import type { Devices } from "./use-devices";
 // sections by their weight, Moods first, then its devices in a section for
 // each category, and last the devices Sanctum cannot use. A category's page shows its tiles in a section for each
 // room, devices with no room last; Lights' opens with a button for every
-// light in the home, Environment with what every sensor reads, and Presence
+// light in the home, Environment with what every sensor reads, Presence
 // with its overview, each room's last 24 hours (presence-overview.tsx),
-// above its sensors. The devices in no room have a page too, last among
+// above its sensors, and Security with a card that says how many contact
+// sensors are open (summary-cards.tsx). The devices in no room have a page too, last among
 // the rooms while there are any. The sidebar lists them, and Home shows each
 // room's header and sections with what is on Home (home-dashboard.tsx).
 // They look the same on every device, shared ones too: lights, switches
@@ -508,6 +515,23 @@ export function NoRoomPage(props: {
   );
 }
 
+// What Security's page opens with: a card for the home's contact sensors.
+function securityCards(tiles: readonly Tile[]): Summary[] {
+  const contacts = contactsOf(tiles);
+  if (!contacts) return [];
+  const { open, status, note } = contactsSummary(contacts);
+  return [
+    {
+      id: "contact",
+      icon: open ? ContactOpen : ContactClosed,
+      title: "Contact sensors",
+      status,
+      note,
+      active: open,
+    },
+  ];
+}
+
 export function CategoryPage(props: {
   id: string;
   devices: Devices;
@@ -555,6 +579,12 @@ export function CategoryPage(props: {
       )}
       {category.id === "presence" && (
         <PresenceOverview devices={devices} openRoom={props.openRoom} />
+      )}
+      {category.id === "security" && (
+        <SummaryCards
+          label={`${category.title} summary`}
+          cards={securityCards(own)}
+        />
       )}
       <Sections
         sections={sectionsByRoom(own, devices.places)}

@@ -663,7 +663,7 @@ describe("contact sensors", () => {
     expect(posted("/api/devices/command")).toEqual([]);
   });
 
-  it("have Security's page, their tiles by room, which the sidebar lists", async () => {
+  it("have Security's page, a card that says how many are open above their tiles by room, which the sidebar lists", async () => {
     devices = [
       lamp,
       contactSensor("front", "Front door", "hall", true),
@@ -673,8 +673,18 @@ describe("contact sensors", () => {
     await show("category", "security");
 
     expect(container.querySelector("h1")?.textContent).toBe("Security");
-    // Nothing sums them up under its name: the tiles say it.
-    expect(container.querySelector("header p")).toBeNull();
+    // A card sums them up, White while any is open; it is no button.
+    const cards = [
+      ...container.querySelectorAll("ul[aria-label='Security summary'] > li"),
+    ] as HTMLElement[];
+    expect(cards.map((card) => card.textContent)).toEqual([
+      "Contact sensors, 1 open, 1 not known",
+    ]);
+    expect(cards[0]?.dataset.active).toBe("");
+    expect(cards[0]?.querySelector("button, a")).toBeNull();
+    expect(
+      cards[0]?.querySelector("svg")?.classList.contains("lucide-contact-open"),
+    ).toBe(true);
     expect(tile("Front door")?.textContent).toBe("Front doorOpen");
     // The page's sections, then the sidebar's own headings.
     expect(headings()).toEqual(["Office", "Hall", "Categories", "Rooms"]);
@@ -683,6 +693,49 @@ describe("contact sensors", () => {
         (each) => each.textContent,
       ),
     ).toEqual(["Lights1 on", "Security", "Office", "Hall", "Attic"]);
+  });
+});
+
+describe("Security's card", () => {
+  const card = () =>
+    container.querySelector(
+      "ul[aria-label='Security summary'] > li",
+    ) as HTMLElement | null;
+
+  it("is frosted glass and says All closed once every contact sensor has said so", async () => {
+    devices = [
+      contactSensor("front", "Front door", "hall", false),
+      contactSensor("letterbox", "Letterbox", "hall", false),
+    ];
+    await show("category", "security");
+
+    expect(card()?.textContent).toBe("Contact sensors, All closed");
+    expect(card()?.dataset.active).toBeUndefined();
+    expect(
+      card()?.querySelector("svg")?.classList.contains("lucide-contact-closed"),
+    ).toBe(true);
+  });
+
+  it("follows the sensors live", async () => {
+    devices = [contactSensor("front", "Front door", "hall", false)];
+    await show("category", "security");
+    expect(card()?.textContent).toBe("Contact sensors, All closed");
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "front",
+        device: contactSensor("front", "Front door", "hall", true),
+      });
+    });
+    expect(card()?.textContent).toBe("Contact sensors, 1 open");
+    expect(card()?.dataset.active).toBe("");
+  });
+
+  it("is on no other category's page", async () => {
+    devices = [lamp, contactSensor("front", "Front door", "hall", true)];
+    await show("category", "lights");
+    expect(card()).toBeNull();
   });
 });
 

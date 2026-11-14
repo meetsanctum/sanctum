@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   contactsOf,
   contactsStatus,
+  contactsSummary,
   contactText,
   placeContacts,
 } from "../src/contact";
@@ -157,6 +158,36 @@ describe("some contact sensors", () => {
     expect(
       said([door("front", false), door("back", false), offline("side")]),
     ).toEqual(["2 closed", "2 closed"]);
+  });
+
+  it("say on their card how many are not known, while any other is known", () => {
+    const summary = (devices: DeviceInfo[]) =>
+      contactsSummary(contactsOf(tiles(devices))!);
+
+    expect(summary([door("front", true), door("back", false)])).toEqual({
+      open: true,
+      status: "1 open",
+      note: null,
+    });
+    expect(summary([door("front", true), offline("side")])).toEqual({
+      open: true,
+      status: "1 open",
+      note: "1 not known",
+    });
+    expect(summary([door("front", false), door("back", false)])).toEqual({
+      open: false,
+      status: "All closed",
+      note: null,
+    });
+    expect(
+      summary([door("front", false), door("new", null), offline("side")]),
+    ).toEqual({ open: false, status: "1 closed", note: "2 not known" });
+    // With none known, "No readings" says it all.
+    expect(summary([door("new", null), offline("side")])).toEqual({
+      open: false,
+      status: "No readings",
+      note: null,
+    });
   });
 
   it("have no readings while none is known", () => {
