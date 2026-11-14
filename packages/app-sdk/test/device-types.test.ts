@@ -49,7 +49,7 @@ describe("what a device with some kinds is", () => {
     expect(deviceTypeOf(["sensor", "light"])).toBe("light");
     expect(deviceTypeOf(["sensor", "switch"])).toBe("switch");
     expect(deviceTypeOf(["sensor", "button"])).toBe("button");
-    expect(deviceTypeOf(["sensor", "occupancy"])).toBe("motion");
+    expect(deviceTypeOf(["sensor", "motion"])).toBe("motion");
     expect(deviceTypeOf(["sensor", "sensor"])).toBe("sensor");
   });
 

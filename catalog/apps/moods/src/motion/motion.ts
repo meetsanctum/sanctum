@@ -185,7 +185,7 @@ async function sync(ctx: AppContext, roomId?: string) {
   const revision = await ctx.permissions.revision();
   const granted = await ctx.permissions.list();
   if (!granted.includes(workflowsManagePermission)) return;
-  const seesMotion = granted.includes(readPermission("occupancy"));
+  const seesMotion = granted.includes(readPermission("motion"));
   const seesLight = granted.includes(readPermission("sensor"));
   const db = ctx.storage.db;
   const [devices, places, chosen, kept] = await Promise.all([

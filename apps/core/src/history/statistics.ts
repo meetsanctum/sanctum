@@ -56,12 +56,8 @@ const values: {
         ? state.value
         : null,
   }),
-  occupancy: ({ availability, state }) => ({
-    occupied: known(availability, state)
-      ? state.occupied === true
-        ? 1
-        : 0
-      : null,
+  motion: ({ availability, state }) => ({
+    motion: known(availability, state) ? (state.motion === true ? 1 : 0) : null,
   }),
   contact: ({ availability, state }) => ({
     open: known(availability, state) ? (state.open === true ? 1 : 0) : null,

@@ -10,7 +10,7 @@ import {
   trigger,
 } from "./workflows-support.js";
 
-// Motion sensors: motion is a kind of its own, `occupancy`, with the sensor's
+// Motion sensors: motion is a kind of its own, `motion`, with the sensor's
 // settings, beside its light level and temperature as `sensor` readings. The
 // core keeps when a capability's state last changed, and its motion and
 // light-level pieces read a place's sensors together.
@@ -33,8 +33,8 @@ async function home() {
       .id as string;
   const office = await room("Office");
   const hall = await room("Hall");
-  await radio.add("motion-1", "occupancy", "Desk motion");
-  await radio.add("motion-2", "occupancy", "Door motion");
+  await radio.add("motion-1", "motion", "Desk motion");
+  await radio.add("motion-2", "motion", "Door motion");
   await settled();
   const devices = (await get(core, "/api/devices", { token })).json() as {
     id: string;
@@ -53,8 +53,8 @@ async function home() {
   return { ...context, token, office, hall, ids };
 }
 
-const sees = async (key: string, occupied: boolean) => {
-  await radio.press(key, { occupied });
+const sees = async (key: string, motion: boolean) => {
+  await radio.press(key, { motion });
   await settled();
 };
 
@@ -80,15 +80,14 @@ describe("a motion sensor", () => {
       capabilities: [
         {
           id: "occupancy",
-          kind: "occupancy",
+          kind: "motion",
           features: {
-            senses: "motion",
             sensitivity: ["low", "medium", "high"],
             clearAfter: { min: 10, max: 3600 },
             indicator: true,
           },
           state: {
-            occupied: false,
+            motion: false,
             sensitivity: "medium",
             clearAfter: 60,
             indicator: true,
@@ -127,14 +126,14 @@ describe("a motion sensor", () => {
     ).toBe(200);
     await settled();
 
-    const [occupancy] = (await deviceOf(core, token, ids.desk)).capabilities;
-    expect(occupancy).toMatchObject({
-      state: { occupied: true, sensitivity: "high" },
+    const [part] = (await deviceOf(core, token, ids.desk)).capabilities;
+    expect(part).toMatchObject({
+      state: { motion: true, sensitivity: "high" },
       sync: "synced",
       changedAt: seenAt,
     });
     expect(radio.received.at(-1)!.command).toMatchObject({
-      kind: "occupancy",
+      kind: "motion",
       command: { sensitivity: "high" },
     });
   });
@@ -144,7 +143,7 @@ describe("a motion sensor", () => {
     for (const body of [
       { sensitivity: "max" },
       { clearAfter: 5 },
-      { occupied: true },
+      { motion: true },
     ]) {
       expect(
         (await command(core, token, ids.desk, "occupancy", body)).statusCode,

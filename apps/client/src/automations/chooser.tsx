@@ -72,7 +72,7 @@ function deviceFields(piece: PieceInfo) {
   return { device, part, place };
 }
 
-// The kinds whose state has a field, such as a motion sensor's occupied.
+// The kinds whose state has a field, such as a motion sensor's motion.
 function kindsWith(field: string): string[] {
   return capabilityKinds.filter((kind) => {
     const { shape } = capabilities[kind].state as { shape?: object };
@@ -83,7 +83,7 @@ function kindsWith(field: string): string[] {
 /**
  * The kinds of device a piece's device field fits: the kind its config
  * names, else those whose state has the field a core piece compares, such
- * as occupied for "{device} sees motion", else lights and switches.
+ * as motion for "{device} sees motion", else lights and switches.
  */
 export function deviceKindsFor(
   piece: PieceInfo,

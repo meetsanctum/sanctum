@@ -252,9 +252,7 @@ export function RoomMoodsPage(props: PageProps) {
               devices={devices}
               motion={roomMotion}
               unseen={{
-                motion: !client.app.permissions.includes(
-                  "devices.read:occupancy",
-                ),
+                motion: !client.app.permissions.includes("devices.read:motion"),
                 light: !client.app.permissions.includes("devices.read:sensor"),
               }}
               ask={(permissions) => client.ask(permissions)}

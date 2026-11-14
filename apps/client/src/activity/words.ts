@@ -2,7 +2,7 @@ import type {
   ActivityInfo,
   ActivityTrigger,
   ActivityWho,
-  OccupancyCommand,
+  MotionCommand,
 } from "@meetsanctum/app-sdk";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
@@ -74,10 +74,10 @@ function verbOf(asked: Asked) {
   return "change";
 }
 
-// A motion sensor's settings a command asked for (the occupancy kind's),
-// if that is what it asked.
+// A motion sensor's settings a command asked for, if that is what it
+// asked.
 function motionSettings(asked: Record<string, unknown>) {
-  const settings = asked as OccupancyCommand;
+  const settings = asked as MotionCommand;
   return settings.sensitivity !== undefined ||
     settings.clearAfter !== undefined ||
     settings.indicator !== undefined
@@ -88,7 +88,7 @@ function motionSettings(asked: Record<string, unknown>) {
 // A motion sensor's setting changed, as "Office motion sensor's
 // sensitivity set to High" in the home's list or "Sensitivity set to High"
 // in its own, and what it didn't do when it didn't.
-function settingWords(settings: OccupancyCommand, name: string | null) {
+function settingWords(settings: MotionCommand, name: string | null) {
   // The sentence about it, with its name in the home's list.
   const said = (owned: string, plain: string) =>
     name ? `${name}${owned}` : capitalize(plain.trimStart());

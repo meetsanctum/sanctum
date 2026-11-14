@@ -33,7 +33,7 @@ import { Squircle } from "./schedule-sections";
 // household's, the same on every device.
 
 // What motion needs: seeing it, and keeping the automations it runs.
-const motionPermissions = ["devices.read:occupancy", "workflows.manage"];
+const motionPermissions = ["devices.read:motion", "workflows.manage"];
 const lightPermissions = ["devices.read:sensor"];
 
 const lineLook = "text-[13px] leading-[18px] text-muted-foreground";

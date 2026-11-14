@@ -23,7 +23,7 @@ const names = new Map<string, string>();
 
 describeDriver({
   app: createZigbeeApp({ answerMs: 500, reconnectWaitMs: 500 }),
-  kinds: ["light", "switch", "button", "sensor", "occupancy"],
+  kinds: ["light", "switch", "button", "sensor", "motion"],
   services: { zigbee2mqtt: bridge.connection },
   setUp: () => bridge.reset(),
   async add(kind) {
@@ -63,7 +63,7 @@ describeDriver({
         ),
         { temperature: 21.5, humidity: 48, linkquality: 90 },
       );
-    } else if (kind === "occupancy") {
+    } else if (kind === "motion") {
       // An Aqara P1, whose sensitivity and blinking are its own and whose
       // wait is Zigbee2MQTT's option, on mains power for the suite, so it
       // is asked what it shows and goes offline when it stops answering.

@@ -1,18 +1,18 @@
 import {
-  occupancy,
-  occupancySensitivities,
-  type OccupancyCommand,
-  type OccupancyFeatures,
-  type OccupancySensitivity,
-  type OccupancyState,
+  motion,
+  motionSensitivities,
+  type MotionCommand,
+  type MotionFeatures,
+  type MotionSensitivity,
+  type MotionState,
 } from "@meetsanctum/app-sdk";
 
 import { access, type ZigbeeExpose } from "./types.js";
 import { numericValue, powerValue, stringValue } from "./values.js";
 
-// A motion sensor's occupancy and its settings, as Zigbee2MQTT publishes
-// them. Occupancy is its own kind, and the settings a sensor has are the
-// kind's: its sensitivity, how long it waits after the last motion before it
+// A motion sensor's motion and its settings, as Zigbee2MQTT publishes
+// them: its occupancy expose, whatever the sensor senses with, is the motion
+// kind, and the settings a sensor has are the kind's: its sensitivity, how long it waits after the last motion before it
 // says none, and whether its light blinks on motion, each the device's own
 // expose by its exact property. Aqara's motion sensors only ever say motion:
 // Zigbee2MQTT says no motion itself, after its occupancy_timeout device
@@ -32,12 +32,13 @@ export type ClearAfterSetting =
   | { via: "option"; unset: number }
   | { via: "option"; unset: "detectionInterval"; defaultInterval: number };
 
-export type OccupancyMapping = {
-  kind: "occupancy";
+export type MotionMapping = {
+  kind: "motion";
+  // The expose's name, which the core knows the sensor's part by.
   id: "occupancy";
-  /** The binary its occupancy is in, and the values it takes. */
+  /** The binary its motion is in, and the values it takes. */
   state: Binary;
-  features: OccupancyFeatures;
+  features: MotionFeatures;
   /** The property of its sensitivity, such as motion_sensitivity. */
   sensitivity?: string;
   clearAfter?: ClearAfterSetting;
@@ -109,11 +110,9 @@ function binaryOf(expose: ZigbeeExpose): Binary {
 }
 
 // Its sensitivity's levels the kind knows, lowest first, if it has two.
-function levelsOf(expose: ZigbeeExpose): OccupancySensitivity[] | null {
+function levelsOf(expose: ZigbeeExpose): MotionSensitivity[] | null {
   const values = Array.isArray(expose.values) ? expose.values : [];
-  const levels = occupancySensitivities.filter((level) =>
-    values.includes(level),
-  );
+  const levels = motionSensitivities.filter((level) => values.includes(level));
   return levels.length >= 2 ? levels : null;
 }
 
@@ -135,14 +134,14 @@ function rangeOf(expose: ZigbeeExpose) {
 }
 
 /**
- * A motion sensor's occupancy, with the settings it has; null for any
- * other expose.
+ * A motion sensor's motion, with the settings it has; null for any other
+ * expose.
  */
-export function mapOccupancy(
+export function mapMotion(
   expose: ZigbeeExpose,
   exposes: readonly ZigbeeExpose[],
   facts: DeviceFacts = {},
-): OccupancyMapping | null {
+): MotionMapping | null {
   if (
     expose.type !== "binary" ||
     expose.property !== "occupancy" ||
@@ -150,12 +149,11 @@ export function mapOccupancy(
   ) {
     return null;
   }
-  const mapping: OccupancyMapping = {
-    kind: "occupancy",
+  const mapping: MotionMapping = {
+    kind: "motion",
     id: "occupancy",
     state: binaryOf(expose),
     features: {
-      senses: "motion",
       sensitivity: null,
       clearAfter: null,
       indicator: false,
@@ -211,13 +209,13 @@ export function mapOccupancy(
 }
 
 /** A sensor Zigbee2MQTT says no motion for, after its option. */
-export type TimedOccupancyMapping = OccupancyMapping & {
+export type TimedMotionMapping = MotionMapping & {
   clearAfter: Extract<ClearAfterSetting, { via: "option" }>;
 };
 
 export function isTimedByZigbee2mqtt(
-  mapping: OccupancyMapping,
-): mapping is TimedOccupancyMapping {
+  mapping: MotionMapping,
+): mapping is TimedMotionMapping {
   return mapping.clearAfter?.via === "option";
 }
 
@@ -250,16 +248,16 @@ export function detectionIntervalOf(payload: Record<string, unknown>) {
  * A motion sensor's state from its message, with the settings it says,
  * or null when it does not say whether it sees motion.
  */
-export function occupancyState(
-  mapping: OccupancyMapping,
+export function motionState(
+  mapping: MotionMapping,
   payload: Record<string, unknown>,
   timing: Timing = {},
-): OccupancyState | null {
-  const occupied = powerValue(payload[mapping.state.property], mapping.state);
-  if (occupied === null) {
+): MotionState | null {
+  const seen = powerValue(payload[mapping.state.property], mapping.state);
+  if (seen === null) {
     return null;
   }
-  const state: OccupancyState = { occupied };
+  const state: MotionState = { motion: seen };
   if (mapping.sensitivity) {
     const level = stringValue(payload[mapping.sensitivity]);
     const known = mapping.features.sensitivity?.find((each) => each === level);
@@ -286,7 +284,7 @@ export function occupancyState(
     }
   }
   // Whatever a device sends, the core never gets a state it would refuse.
-  return occupancy.state.safeParse(state).success ? state : null;
+  return motion.state.safeParse(state).success ? state : null;
 }
 
 /**
@@ -294,9 +292,9 @@ export function occupancyState(
  * <device>/set, and the wait for Zigbee2MQTT's occupancy_timeout option
  * for a sensor it times.
  */
-export function occupancyPayload(
-  mapping: OccupancyMapping,
-  command: OccupancyCommand,
+export function motionPayload(
+  mapping: MotionMapping,
+  command: MotionCommand,
 ): { set: Record<string, unknown>; option: number | null } {
   const set: Record<string, unknown> = {};
   let option: number | null = null;

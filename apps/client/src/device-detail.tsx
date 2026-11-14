@@ -49,16 +49,13 @@ import type { Devices } from "./use-devices";
 // to it (activity/device-page.tsx). For a device Sanctum cannot use it is
 // the only page: there is nothing of it to show or set.
 
-type Occupancy = Extract<
-  DeviceInfo["capabilities"][number],
-  { kind: "occupancy" }
->;
+type Motion = Extract<DeviceInfo["capabilities"][number], { kind: "motion" }>;
 type Contact = Extract<DeviceInfo["capabilities"][number], { kind: "contact" }>;
 
 // The kinds whose detail is pages of what a sensor says, with nothing to
 // switch.
 const sensing = (kind: CapabilityKind) =>
-  kind === "sensor" || kind === "occupancy" || kind === "contact";
+  kind === "sensor" || kind === "motion" || kind === "contact";
 
 // What a switch has: on and off, which its controls show as one button.
 const switchFeatures: LightFeatures = {
@@ -123,10 +120,10 @@ export function DeviceDetail(props: {
   // A motion sensor's detail is the same from its motion's tile and from
   // its readings', and shows the motion whose tile opened it.
   const motion =
-    capability?.kind === "occupancy"
+    capability?.kind === "motion"
       ? capability
       : device?.capabilities.find(
-          (each): each is Occupancy => each.kind === "occupancy",
+          (each): each is Motion => each.kind === "motion",
         );
   // A contact sensor's likewise, from its contact's tile and its readings'.
   const contact =
@@ -229,7 +226,7 @@ export function DeviceDetail(props: {
         device &&
         capability &&
         (capability.kind === "sensor" ||
-        capability.kind === "occupancy" ||
+        capability.kind === "motion" ||
         capability.kind === "contact" ? (
           <SwipePages
             // Each tile's detail opens afresh, on its own page.

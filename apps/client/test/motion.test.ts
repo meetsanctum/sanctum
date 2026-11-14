@@ -37,11 +37,11 @@ function sensor(
     key: `${roomId}/occupancy`,
     deviceId: String(roomId),
     capabilityId: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     roomId,
     name: `${roomId} motion sensor`,
     status: "",
-    on: motion?.occupied ?? false,
+    on: motion?.motion ?? false,
     look: "off",
     dims: false,
     disabled,
@@ -84,8 +84,8 @@ describe("a room's motion", () => {
     expect(
       placeMotionText(
         [
-          sensor("office", { occupied: false, changedAt: ago(3 * minute) }),
-          sensor("office", { occupied: true, changedAt: ago(minute) }),
+          sensor("office", { motion: false, changedAt: ago(3 * minute) }),
+          sensor("office", { motion: true, changedAt: ago(minute) }),
         ],
         now,
       ),
@@ -96,9 +96,9 @@ describe("a room's motion", () => {
     expect(
       placeMotionText(
         [
-          sensor("office", { occupied: false, changedAt: ago(40 * minute) }),
-          sensor("office", { occupied: false, changedAt: ago(3 * minute) }),
-          sensor("office", { occupied: true, changedAt: ago(minute) }, true),
+          sensor("office", { motion: false, changedAt: ago(40 * minute) }),
+          sensor("office", { motion: false, changedAt: ago(3 * minute) }),
+          sensor("office", { motion: true, changedAt: ago(minute) }, true),
         ],
         now,
       ),
@@ -109,8 +109,8 @@ describe("a room's motion", () => {
     expect(
       placeMotionText(
         [
-          sensor("office", { occupied: false, changedAt: ago(40 * minute) }),
-          sensor("office", { occupied: false, changedAt: null }),
+          sensor("office", { motion: false, changedAt: ago(40 * minute) }),
+          sensor("office", { motion: false, changedAt: null }),
         ],
         now,
       ),
@@ -125,9 +125,9 @@ describe("a room's motion", () => {
 
 describe("where there is motion in the home", () => {
   const seeing = (roomId: string | null) =>
-    sensor(roomId, { occupied: true, changedAt: ago(minute) });
+    sensor(roomId, { motion: true, changedAt: ago(minute) });
   const quiet = (roomId: string | null) =>
-    sensor(roomId, { occupied: false, changedAt: ago(minute) });
+    sensor(roomId, { motion: false, changedAt: ago(minute) });
 
   it("names a room or two, in the home's order, and counts more", () => {
     const one = homeMotion([seeing("office"), quiet("hall")], places);
@@ -152,7 +152,7 @@ describe("where there is motion in the home", () => {
   });
 
   it("knows when no motion sensor answers", () => {
-    const offline = sensor("office", { occupied: true, changedAt: null }, true);
+    const offline = sensor("office", { motion: true, changedAt: null }, true);
     expect(homeMotion([offline], places)).toEqual({
       answering: false,
       rooms: [],

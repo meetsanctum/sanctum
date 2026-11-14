@@ -229,8 +229,8 @@ describe("Automations' words for motion and light", () => {
           {
             config: {
               device: "motion",
-              kind: "occupancy",
-              field: "occupied",
+              kind: "motion",
+              field: "motion",
               operator: "is_on",
             },
           },
@@ -238,8 +238,8 @@ describe("Automations' words for motion and light", () => {
         ),
       ),
     ).toBe("Office motion sensor detects motion");
-    expect(deviceKindsFor(deviceCondition, { field: "occupied" })).toEqual([
-      "occupancy",
+    expect(deviceKindsFor(deviceCondition, { field: "motion" })).toEqual([
+      "motion",
     ]);
     expect(deviceKindsFor(deviceCondition, { field: "value" })).toEqual([
       "sensor",
@@ -248,16 +248,16 @@ describe("Automations' words for motion and light", () => {
       "light",
       "switch",
     ]);
-    expect(deviceKindsFor(deviceTrigger, { kind: "occupancy" })).toEqual([
-      "occupancy",
+    expect(deviceKindsFor(deviceTrigger, { kind: "motion" })).toEqual([
+      "motion",
     ]);
   });
 
   it("list motion among the core's named groups, a motion sensor's device trigger too", () => {
     expect(groupOf(motion, { config: {} }, names)).toBe("Motion");
-    expect(
-      groupOf(deviceTrigger, { config: { kind: "occupancy" } }, names),
-    ).toBe("Motion");
+    expect(groupOf(deviceTrigger, { config: { kind: "motion" } }, names)).toBe(
+      "Motion",
+    );
     expect(groupOf(deviceTrigger, { config: { kind: "sensor" } }, names)).toBe(
       "Environment",
     );

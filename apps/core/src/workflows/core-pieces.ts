@@ -137,15 +137,15 @@ export const corePieces = {
             title: "Detects motion",
             sentence: "{device} detects motion",
             card: { name: "{device}", specifics: "Detects motion" },
-            config: { kind: "occupancy", field: "occupied", operator: "is_on" },
+            config: { kind: "motion", field: "motion", operator: "is_on" },
           },
           {
             title: "Motion stops",
             sentence: "{device}'s motion stops",
             card: { name: "{device}", specifics: "Motion stops" },
             config: {
-              kind: "occupancy",
-              field: "occupied",
+              kind: "motion",
+              field: "motion",
               operator: "is_off",
             },
           },
@@ -228,7 +228,7 @@ export const corePieces = {
           {
             title: "Sees motion",
             sentence: "{device} sees motion",
-            config: { field: "occupied", operator: "is_on" },
+            config: { field: "motion", operator: "is_on" },
           },
         ],
       },

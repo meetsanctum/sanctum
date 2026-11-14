@@ -3,8 +3,8 @@ import type {
   AppInfo,
   CapabilityInfo,
   DeviceInfo,
-  OccupancyFeatures,
-  OccupancyState,
+  MotionFeatures,
+  MotionState,
   Places,
 } from "@meetsanctum/app-sdk";
 import type { Me } from "@meetsanctum/auth-protocol";
@@ -40,21 +40,20 @@ const places: Places = {
 };
 
 // A Hue motion sensor: three levels, how long it waits, its light.
-const hue: OccupancyFeatures = {
-  senses: "motion",
+const hue: MotionFeatures = {
   sensitivity: ["low", "medium", "high"],
   clearAfter: { min: 0, max: 65_535 },
   indicator: true,
 };
 
-function occupancy(
-  observed: OccupancyState,
-  extra: Partial<Extract<CapabilityInfo, { kind: "occupancy" }>> = {},
-  features: OccupancyFeatures = hue,
+function motionCapability(
+  observed: MotionState,
+  extra: Partial<Extract<CapabilityInfo, { kind: "motion" }>> = {},
+  features: MotionFeatures = hue,
 ) {
   return {
     id: "occupancy",
-    kind: "occupancy",
+    kind: "motion",
     features,
     state: observed,
     observed,
@@ -66,15 +65,15 @@ function occupancy(
   } satisfies CapabilityInfo;
 }
 
-const settled: OccupancyState = {
-  occupied: false,
+const settled: MotionState = {
+  motion: false,
   sensitivity: "medium",
   clearAfter: 60,
   indicator: true,
 };
 
 function sensor(
-  capability: CapabilityInfo = occupancy(settled),
+  capability: CapabilityInfo = motionCapability(settled),
   extra: Partial<DeviceInfo> = {},
 ): DeviceInfo {
   return {
@@ -154,7 +153,6 @@ describe("a motion sensor's settings' words", () => {
     expect(hasMotionSettings(hue)).toBe(true);
     expect(
       hasMotionSettings({
-        senses: "motion",
         sensitivity: null,
         clearAfter: null,
         indicator: false,
@@ -300,8 +298,8 @@ describe("Settings → Devices' motion settings", () => {
       }),
     );
   // What the core answers a command with: the asked-for setting pending.
-  const pendingAnswer = (asked: Partial<OccupancyState>) =>
-    occupancy(settled, {
+  const pendingAnswer = (asked: Partial<MotionState>) =>
+    motionCapability(settled, {
       state: { ...settled, ...asked },
       desired: asked,
       sync: "pending",
@@ -336,11 +334,10 @@ describe("Settings → Devices' motion settings", () => {
   it("dims it, with why, for a sensor with none to change", async () => {
     devices = [
       sensor(
-        occupancy(
-          { occupied: false },
+        motionCapability(
+          { motion: false },
           {},
           {
-            senses: "motion",
             sensitivity: null,
             clearAfter: null,
             indicator: false,
@@ -404,7 +401,7 @@ describe("Settings → Devices' motion settings", () => {
       "Waiting for it to wake. Press its button to send it now.",
     );
 
-    await update(occupancy({ ...settled, sensitivity: "high" }));
+    await update(motionCapability({ ...settled, sensitivity: "high" }));
     expect(dialog().textContent).not.toContain("Waiting for it to wake");
     expect(dialog().textContent).toContain("Higher notices smaller movements");
     expect(pressed()).toEqual(["High"]);
@@ -418,7 +415,7 @@ describe("Settings → Devices' motion settings", () => {
     await openSettings();
     await act(async () => inDialog("High").click());
 
-    await update(occupancy(settled, { sync: "conflict" }));
+    await update(motionCapability(settled, { sync: "conflict" }));
     const conflict =
       "It didn't take High, so it stays on Medium. Press its button, then try again.";
     expect(dialog().textContent).toContain(conflict);
@@ -473,7 +470,7 @@ describe("Settings → Devices' motion settings", () => {
     await openSettings();
     await act(async () => inDialog("High").click());
     answers["/api/devices/command"] = () =>
-      occupancy({ ...settled, sensitivity: "low" });
+      motionCapability({ ...settled, sensitivity: "low" });
     await act(async () => inDialog("Low").click());
     await act(async () => finishFirst(pendingAnswer({ sensitivity: "high" })));
     expect(pressed()).toEqual(["Low"]);
@@ -503,11 +500,10 @@ describe("Settings → Devices' motion settings", () => {
     answers["/api/devices/command"] = () => pendingAnswer({ clearAfter: 120 });
     devices = [
       sensor(
-        occupancy(
-          { occupied: false, clearAfter: 90 },
+        motionCapability(
+          { motion: false, clearAfter: 90 },
           {},
           {
-            senses: "motion",
             sensitivity: null,
             clearAfter: { min: 60, max: 65_535 },
             indicator: false,

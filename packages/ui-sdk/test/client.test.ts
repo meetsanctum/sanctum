@@ -444,7 +444,7 @@ describe("an app's client", () => {
         request("devices.control:light", true),
         request("devices.read:button"),
         request("places.read"),
-        request("devices.read:occupancy"),
+        request("devices.read:motion"),
         request("workflows.manage"),
       ],
     );
@@ -473,8 +473,8 @@ describe("an app's client", () => {
 
     // Not now is not remembered: the next use asks again.
     ask.mockResolvedValueOnce(false);
-    expect(await client.ask("devices.read:occupancy")).toBe(false);
-    expect(await client.ask("devices.read:occupancy")).toBe(true);
+    expect(await client.ask("devices.read:motion")).toBe(false);
+    expect(await client.ask("devices.read:motion")).toBe(true);
     expect(ask).toHaveBeenCalledTimes(3);
 
     // One it needs is granted, never asked; one it doesn't list, never.

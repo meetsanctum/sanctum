@@ -26,11 +26,11 @@ const date = new Intl.DateTimeFormat("en-GB", {
  * the core kept the time, says only "Quiet".
  */
 export function motionText(
-  occupied: boolean,
+  motion: boolean,
   changedAt: string | null,
   now: number,
 ) {
-  if (occupied) return "Motion now";
+  if (motion) return "Motion now";
   const since = changedAt === null ? NaN : Date.parse(changedAt);
   if (Number.isNaN(since) || now - since < minute) return "Quiet";
   if (now - since < hour) {
@@ -44,7 +44,7 @@ export function motionText(
 /** The motion of the motion sensors among some tiles that answer and have said something. */
 const answering = (tiles: readonly Tile[]) =>
   tiles.flatMap((tile) =>
-    tile.kind === "occupancy" && tile.motion && !tile.disabled
+    tile.kind === "motion" && tile.motion && !tile.disabled
       ? [tile.motion]
       : [],
   );
@@ -57,7 +57,7 @@ const answering = (tiles: readonly Tile[]) =>
 export function placeMotionText(tiles: readonly Tile[], now: number) {
   const sensors = answering(tiles);
   if (sensors.length === 0) return null;
-  if (sensors.some((sensor) => sensor.occupied)) return "Motion now";
+  if (sensors.some((sensor) => sensor.motion)) return "Motion now";
   const times = sensors.map((sensor) =>
     sensor.changedAt === null ? NaN : Date.parse(sensor.changedAt),
   );
@@ -82,9 +82,7 @@ export function homeMotion(
   places: Places | undefined,
 ): HomeMotion {
   const seeing = (tile: Tile) =>
-    tile.kind === "occupancy" &&
-    !tile.disabled &&
-    tile.motion?.occupied === true;
+    tile.kind === "motion" && !tile.disabled && tile.motion?.motion === true;
   return {
     answering: answering(tiles).length > 0,
     rooms: (places?.rooms ?? [])
