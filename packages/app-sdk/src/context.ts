@@ -16,6 +16,7 @@ import type {
   DeviceRelease,
   DeviceReport,
 } from "./devices.js";
+import type { DeviceProblemReport } from "./device-problems.js";
 import type { EntityInfo, EntityPublication } from "./entities.js";
 import { entityTypeOf, type AppDefinition } from "./index.js";
 import { settingsAsRead } from "./settings.js";
@@ -115,6 +116,7 @@ export interface CoreCalls {
   entities(type: string): Promise<EntityInfo[]>;
   fetch(request: NetRequest): Promise<NetResponse>;
   joining(joining: DeviceJoining): Promise<void>;
+  problem(problem: DeviceProblemReport): Promise<void>;
   /** One of the app's own secrets by its name, or null when it has none by that name. */
   secret(name: string): Promise<string | null>;
   /** Keeps one of the app's own secrets, replacing what it kept by that name. */
@@ -220,6 +222,13 @@ export interface AppContext {
      * `devices.register`.
      */
     joining(joining: DeviceJoining): Promise<void>;
+    /**
+     * Says what's wrong with one of the driver app's devices, by its key: one
+     * of the problems it declares (driver.problems), or null once nothing
+     * is. The core keeps it with the device, through restarts, and Needs
+     * attention leads the device's row with it; needs `devices.register`.
+     */
+    problem(problem: DeviceProblemReport): Promise<void>;
   };
   readonly events: {
     /**
@@ -411,6 +420,7 @@ export function createAppContext(options: {
       release: (release) => core.release(release),
       firmware: (firmware) => core.firmware(firmware),
       joining: (joining) => core.joining(joining),
+      problem: (problem) => core.problem(problem),
     },
     events: {
       emit: async (event, payload) =>

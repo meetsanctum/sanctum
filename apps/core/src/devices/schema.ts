@@ -2,6 +2,7 @@ import type {
   Actor,
   Availability,
   CapabilityKind,
+  DeviceProblem,
   FirmwareInfo,
   SyncStatus,
 } from "@meetsanctum/app-sdk";
@@ -64,6 +65,9 @@ export const devices = sqliteTable(
     // When its driver said its network no longer has it, as after a reset,
     // until a list of the network has it again.
     leftAt: integer("left_at", { mode: "timestamp_ms" }),
+    // What its driver says is wrong with it, in the words and with the
+    // questions its manifest declares, until it says nothing is.
+    problem: text("problem", { mode: "json" }).$type<DeviceProblem>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

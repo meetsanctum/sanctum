@@ -239,6 +239,13 @@
       "when": 1794602157728,
       "tag": "0033_app-secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794608701928,
+      "tag": "0034_device-problems",
+      "breakpoints": true
     }
   ]
 }

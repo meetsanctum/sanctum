@@ -31,6 +31,7 @@ import { createDashboards } from "./dashboards/dashboards.js";
 import type { CoreDatabase } from "./database.js";
 import { createDevices, type DeviceChange } from "./devices/devices.js";
 import { createFirmware } from "./devices/firmware.js";
+import { createProblems } from "./devices/problems.js";
 import { createHolds } from "./devices/holds.js";
 import { createLights } from "./devices/lights.js";
 import { createMotion } from "./devices/motion.js";
@@ -298,6 +299,15 @@ export async function createModules(
     now,
   });
   const motion = createMotion({ devices, places });
+  // What drivers say is wrong with their devices, and Repair.
+  const problems = createProblems({
+    db,
+    devices,
+    drivers: {
+      repair: (driver, repair, actor) => host!.repair(driver, repair, actor),
+    },
+    record: activity.for("devices"),
+  });
   const firmware = createFirmware({
     db,
     devices,
@@ -386,6 +396,7 @@ export async function createModules(
     workflows: keptWorkflows,
     pairing: () => pairing,
     firmware: () => firmware,
+    problems: () => problems,
     entities,
     settings: appSettingsStore,
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
@@ -478,6 +489,7 @@ export async function createModules(
     pairing,
     presses,
     firmware,
+    problems,
     entities,
     apps,
     workflows,

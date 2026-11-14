@@ -20,6 +20,14 @@ import {
   type DriverMove,
 } from "./devices.js";
 import type { EntityTypeDefinition, Provides } from "./entities.js";
+import {
+  assertDriverProblems,
+  staticProblems,
+  type DriverProblem,
+  type DriverQuestion,
+  type DriverRepair,
+  type DriverRepairResult,
+} from "./device-problems.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
 import {
@@ -58,6 +66,7 @@ export * from "./app-manifest.js";
 export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
+export * from "./device-problems.js";
 export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";
@@ -400,6 +409,18 @@ export interface AppDefinition extends AppManifestFields {
      * device's report answers (Check connection).
      */
     probe?(ctx: AppContext, device: DriverDevice): Promise<void>;
+    /**
+     * What can be wrong with its devices, by id, in its own words, which it
+     * names for a device with ctx.devices.problem (device-problems.ts).
+     */
+    readonly problems?: Readonly<Record<string, DriverProblem>>;
+    /** What repairing one of its devices may ask, by id. */
+    readonly questions?: Readonly<Record<string, DriverQuestion>>;
+    /**
+     * Sets one of its devices right, with the answers to what its problem's
+     * repair asks, resolving once done or with the answer it refuses.
+     */
+    repair?(ctx: AppContext, repair: DriverRepair): Promise<DriverRepairResult>;
   };
 }
 
@@ -486,6 +507,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   ) {
     throw new Error("A driver's probe must be a function");
   }
+  if (app.driver) assertDriverProblems(app.driver);
   return app;
 }
 
@@ -497,6 +519,7 @@ const driverHooks = [
   "remove",
   "firmware",
   "probe",
+  "repair",
 ] as const;
 
 /**
@@ -518,7 +541,10 @@ export function toStaticManifest(app: AppDefinition) {
     },
     migrations: app.migrations ?? null,
     driver: app.driver
-      ? { hooks: driverHooks.filter((hook) => app.driver?.[hook]) }
+      ? {
+          hooks: driverHooks.filter((hook) => app.driver?.[hook]),
+          ...staticProblems(app.driver),
+        }
       : null,
     permissions: app.permissions.map(permissionInfo),
     icon: app.icon ?? null,

@@ -9,6 +9,8 @@ import {
   type DriverDevice,
   type DriverMove,
   type DriverRemoval,
+  type DriverRepair,
+  type DriverRepairResult,
 } from "@meetsanctum/app-sdk";
 
 // A driver app for the tests, loaded from its package like a catalog app. It
@@ -93,6 +95,16 @@ class Radio {
   readonly probes: { key: string; actor: Actor }[] = [];
   // Whether asking a gadget never comes back, as a radio that hangs.
   probeHangs = false;
+  // Each lamp's key, as on its label, once it changed; every repair the core
+  // asked for with the actor behind it; and what repairing and removing
+  // did, in order.
+  readonly keys = new Map<string, string>();
+  readonly repairs: { repair: DriverRepair; actor: Actor }[] = [];
+  readonly turns: string[] = [];
+  // How long a repair takes, and whether it refuses in words it doesn't
+  // declare, as a careless driver would.
+  repairMs = 0;
+  repairRefusesOddly = false;
   // How long a stopped lamp takes to say where it got to; Zigbee2MQTT reads
   // one back half a second after its stop.
   stopReportMs = 0;
@@ -188,6 +200,7 @@ class Radio {
   // forced; one the radio never had is gone already.
   async remove(removal: DriverRemoval, actor: Actor) {
     this.removals.push({ removal, actor });
+    this.turns.push(`remove ${removal.key}`);
     const gadget = this.gadgets.get(removal.key);
     if (gadget && !gadget.answers && !removal.force) {
       throw new Error(`${removal.key} does not answer`);
@@ -226,6 +239,38 @@ class Radio {
     },
   ) {
     return this.ctx!.devices.firmware({ key, ...firmware } as never);
+  }
+
+  // A lamp's key changed, as when someone set it up elsewhere, so it no
+  // longer answers to the one the radio has.
+  rekey(key: string, to: string) {
+    this.keys.set(key, to);
+    return this.sayProblem(key, "keyMismatch");
+  }
+
+  // Says what's wrong with a gadget, or that nothing is.
+  sayProblem(key: string, problem: string | null) {
+    return this.ctx!.devices.problem({ key, problem });
+  }
+
+  // Sets a lamp right with the key someone typed, or refuses it.
+  async repair(
+    repair: DriverRepair,
+    actor: Actor,
+  ): Promise<DriverRepairResult> {
+    this.repairs.push({ repair, actor });
+    this.turns.push(`repair ${repair.key}`);
+    if (this.repairMs > 0) {
+      await new Promise((done) => setTimeout(done, this.repairMs));
+    }
+    this.turns.push(`repaired ${repair.key}`);
+    if (this.repairRefusesOddly) {
+      return { refused: { question: "key", refusal: "tooShort" } };
+    }
+    if (repair.answers.key !== this.keys.get(repair.key)) {
+      return { refused: { question: "key", refusal: "wrongKey" } };
+    }
+    await this.sayProblem(repair.key, null);
   }
 
   // Asks a gadget how it is: one that answers says so a moment later.
@@ -361,6 +406,11 @@ class Radio {
     this.firmwareCalls.length = 0;
     this.probes.length = 0;
     this.probeHangs = false;
+    this.keys.clear();
+    this.repairs.length = 0;
+    this.turns.length = 0;
+    this.repairMs = 0;
+    this.repairRefusesOddly = false;
     this.stopReportMs = 0;
     this.moves.length = 0;
     this.heard.length = 0;
@@ -522,6 +572,24 @@ export default defineApp({
     },
     async move(ctx, move) {
       await radio.moveLight(move, ctx.actor);
+    },
+    problems: {
+      keyMismatch: {
+        words: "Its key doesn't match",
+        repair: { help: "Enter the key on its label.", asks: ["key"] },
+      },
+      loose: { words: "Its plug is loose" },
+    },
+    questions: {
+      key: {
+        label: "Key",
+        kind: "secret",
+        placeholder: "On its label",
+        refusals: { wrongKey: "That key doesn't match. Check its label." },
+      },
+    },
+    async repair(ctx, repair) {
+      return radio.repair(repair, ctx.actor);
     },
   },
 });

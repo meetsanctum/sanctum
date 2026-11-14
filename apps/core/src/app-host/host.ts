@@ -18,6 +18,7 @@ import type { Principal } from "../auth/clients.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Firmware } from "../devices/firmware.js";
+import type { Problems } from "../devices/problems.js";
 import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
 import type { People } from "../people/people.js";
@@ -133,6 +134,8 @@ export function createAppHost(options: {
   presses: () => Pick<Presses, "press" | "released" | "endCaptures">;
   // Where what drivers say of firmware goes.
   firmware: () => Pick<Firmware, "report">;
+  // Where what drivers say is wrong with their devices goes.
+  problems: () => Pick<Problems, "report">;
   // Each event an app emits, once it goes out.
   onEvent?: (event: AppEvent) => void;
   jobs?: JobCalls;

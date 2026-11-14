@@ -71,6 +71,7 @@ function motionSensor(
     probe: false,
     battery: 87,
     leftAt: null,
+    problem: null,
     capabilities: [
       capability(
         "occupancy",

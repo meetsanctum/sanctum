@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { DeviceProblem } from "./device-problems.js";
 import type { DeviceType } from "./device-types.js";
 import type { FirmwareInfo } from "./firmware.js";
 import type { Actor, Tier } from "./index.js";
@@ -571,6 +572,11 @@ export type DeviceInfo = {
    * (ctx.devices.present); null while its network has it.
    */
   leftAt: string | null;
+  /**
+   * What its driver says is wrong with it, in the driver's declared words,
+   * with what Repair asks (ctx.devices.problem); null while nothing is.
+   */
+  problem: DeviceProblem | null;
 };
 
 /**

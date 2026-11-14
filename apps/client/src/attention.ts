@@ -31,8 +31,9 @@ export type Attention = { device: DeviceInfo; reasons: AttentionReason[] };
 
 const rank: Record<AttentionReason, number> = {
   left: 0,
-  offline: 1,
-  room: 2,
+  problem: 1,
+  offline: 2,
+  room: 3,
 };
 
 /** Which reasons are problems, in red with a sign; a room to choose is not. */
@@ -139,11 +140,17 @@ export function appAttentionSpoken(app: AppInfo) {
     : `${app.name} is paused`;
 }
 
+// What its driver says is wrong with it, in the words it declares.
+const problemWords = (device: DeviceInfo) =>
+  device.problem?.words ?? "Something is wrong with it";
+
 /** What leads a device's line for a reason: what is wrong and what to do. */
-export function attentionText(reason: AttentionReason) {
+export function attentionText(reason: AttentionReason, device: DeviceInfo) {
   switch (reason) {
     case "left":
       return "Not paired any more: add it again or remove it";
+    case "problem":
+      return problemWords(device);
     case "offline":
       return "Offline: check it's switched on and in range";
     case "room":
@@ -152,10 +159,12 @@ export function attentionText(reason: AttentionReason) {
 }
 
 // What a reason says after the one that leads.
-function following(reason: AttentionReason) {
+function following(reason: AttentionReason, device: DeviceInfo) {
   switch (reason) {
     case "left":
       return "Not paired any more";
+    case "problem":
+      return problemWords(device);
     case "offline":
       return "Offline";
     case "room":
@@ -170,7 +179,7 @@ export function attentionDetail(
   rooms: readonly Room[],
 ) {
   return [
-    ...reasons.map(following),
+    ...reasons.map((reason) => following(reason, device)),
     roomName(rooms, device.roomId),
     device.driverName !== device.name ? device.driverName : null,
   ]
@@ -179,10 +188,12 @@ export function attentionDetail(
 }
 
 /** A reason in a word or two, for the Attention tile. */
-export function attentionShort(reason: AttentionReason) {
+export function attentionShort(reason: AttentionReason, device: DeviceInfo) {
   switch (reason) {
     case "left":
       return "Not paired";
+    case "problem":
+      return device.problem?.repair ? "Needs repair" : "Not working";
     case "offline":
       return "Offline";
     case "room":
@@ -195,6 +206,8 @@ export function attentionSpoken(reason: AttentionReason, device: DeviceInfo) {
   switch (reason) {
     case "left":
       return `${device.name} isn't paired any more`;
+    case "problem":
+      return `${device.name}: ${problemWords(device)}`;
     case "offline":
       return `${device.name} is offline`;
     case "room":
@@ -259,7 +272,7 @@ export function attentionTile(
     const [{ device, reasons }] = needing as [Attention];
     return {
       title: device.name,
-      value: attentionShort(reasons[0]!),
+      value: attentionShort(reasons[0]!, device),
       label: spoken[0]!,
       problem,
       opens: "settings" as const,

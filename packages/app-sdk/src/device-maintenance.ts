@@ -48,10 +48,11 @@ export function maintenanceOf(
 
 /**
  * Why a device needs someone, the most pressing first: its network no longer
- * has it, it stopped answering, or it is in no room yet. Upkeep, such as a
- * battery to replace, is not among them.
+ * has it, its driver says something is wrong with it, it stopped answering,
+ * or it is in no room yet. Upkeep, such as a battery to replace, is not
+ * among them.
  */
-export type AttentionReason = "left" | "offline" | "room";
+export type AttentionReason = "left" | "problem" | "offline" | "room";
 
 /**
  * What a device needs someone to do, the most pressing first, or nothing.
@@ -66,6 +67,7 @@ export function attentionOf(
 ): AttentionReason[] {
   if (device.leftAt !== null) return ["left"];
   const reasons: AttentionReason[] = [];
+  if (device.problem) reasons.push("problem");
   if (device.availability === "offline") reasons.push("offline");
   if (homeHasRooms && device.roomId === null) reasons.push("room");
   return reasons;

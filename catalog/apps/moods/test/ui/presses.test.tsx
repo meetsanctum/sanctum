@@ -36,6 +36,7 @@ const remote: DeviceInfo = {
   probe: false,
   battery: null,
   leftAt: null,
+  problem: null,
   capabilities: [
     {
       id: "button",

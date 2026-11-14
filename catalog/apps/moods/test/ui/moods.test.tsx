@@ -44,6 +44,7 @@ function lightDevice(id: string, name: string, state: LightState): DeviceInfo {
     probe: false,
     battery: null,
     leftAt: null,
+    problem: null,
     capabilities: [
       {
         id: "light",

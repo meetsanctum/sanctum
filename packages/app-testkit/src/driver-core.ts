@@ -8,8 +8,12 @@ import {
   devicePress,
   deviceRegistration,
   deviceRelease,
+  deviceProblemReport,
   deviceReport,
+  isDeclaredRefusal,
   permissionIds,
+  repairAnswers,
+  shownProblem,
   type Actor,
   type AppContext,
   type AppDefinition,
@@ -17,6 +21,7 @@ import {
   type CapabilityKind,
   type CoreCalls,
   type DriverCommand,
+  type DeviceProblem,
   type DriverDevice,
   type DriverRemoval,
   type LightMove,
@@ -31,8 +36,9 @@ import { createSecretCalls } from "./secret-calls.js";
 // reports, presses and releases, what it says of joining devices and of
 // firmware, and which devices it still has exactly as the core does, with
 // the same schemas, remembers them, and hands the driver commands, moves,
-// pairing, removals, firmware calls and probes, and keeps its secrets.
-// Nothing else of the core is there.
+// pairing, removals, firmware calls, probes and repairs, and keeps its
+// secrets and what it says is wrong with its devices. Nothing else of the
+// core is there.
 
 type Registered = z.output<typeof deviceRegistration>;
 
@@ -84,6 +90,9 @@ export function createDriverCore(
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
   const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
+  // What the driver says is wrong with each of its devices, as the core
+  // shows it.
+  const problems = new Map<string, DeviceProblem>();
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -234,6 +243,25 @@ export function createDriverCore(
       }
       joining.push(parsed.data);
     },
+    async problem(input) {
+      const parsed = deviceProblemReport.safeParse(input);
+      if (!parsed.success) {
+        refuse(new Error(`Problem refused: ${z.prettifyError(parsed.error)}`));
+      }
+      const { key, problem } = parsed.data;
+      if (!registered.has(key)) {
+        refuse(new ActionError("not_found", `No device ${key}`));
+      }
+      if (problem === null) {
+        problems.delete(key);
+        return;
+      }
+      const shown = shownProblem(app.driver, problem);
+      if (!shown) {
+        refuse(new Error(`${app.id} declares no problem ${problem}`));
+      }
+      problems.set(key, shown);
+    },
     ...secretCalls,
     log() {},
   };
@@ -266,6 +294,7 @@ export function createDriverCore(
     refused,
     presented,
     secrets,
+    problems,
 
     start: async () => app.start?.(own, { reason: "started" }),
     /** As the core does once it restarted while the driver ran on. */
@@ -333,6 +362,7 @@ export function createDriverCore(
       }
       registered.delete(key);
       availability.delete(key);
+      problems.delete(key);
     },
 
     /** Hands the driver a client's firmware call for one of its devices. */
@@ -354,6 +384,38 @@ export function createDriverCore(
         throw new Error(`${app.id} cannot probe devices`);
       }
       return probe(person(), { key, device: `device:${key}` });
+    },
+
+    /**
+     * Has the driver set one of its devices right with someone's answers to
+     * what its problem's repair asks, as Repair does. A refusal must be one
+     * the question it names declares.
+     */
+    async repair(key: string, answers: Record<string, string>) {
+      const repair = driver().repair;
+      const problem = problems.get(key);
+      if (!repair || !problem?.repair) {
+        throw new Error(`${key} has nothing to repair`);
+      }
+      const checked = repairAnswers(problem, answers);
+      if (!checked) {
+        refuse(new Error("Repair's answers are invalid"));
+      }
+      const result = await repair(person(), {
+        key,
+        device: `device:${key}`,
+        problem: problem.id,
+        answers: checked,
+      });
+      if (
+        result !== undefined &&
+        (!result || !isDeclaredRefusal(problem, result.refused))
+      ) {
+        refuse(
+          new Error(`${app.id} refused a repair in words it doesn't declare`),
+        );
+      }
+      return result;
     },
 
     /** What the driver last said of a device's firmware, if anything. */

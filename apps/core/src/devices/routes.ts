@@ -17,6 +17,7 @@ import type { Principal } from "../auth/clients.js";
 import type { Devices } from "./devices.js";
 import { removalRule } from "./removal.js";
 import { firmwareRules, type Firmware } from "./firmware.js";
+import { repairRule, type Problems, type RepairResult } from "./problems.js";
 import type { Lights } from "./lights.js";
 import { pairingRules, type Pairing } from "./pairing.js";
 import type { Presses } from "./presses.js";
@@ -45,6 +46,7 @@ import type { Presses } from "./presses.js";
 //   POST /api/devices/firmware/update { id } → DeviceInfo
 //   POST /api/devices/firmware/stop  { id } → DeviceInfo
 //   POST /api/devices/probe          { id } → ProbeResult
+//   POST /api/devices/repair         { id, answers } → RepairResult
 
 export function registerDeviceRoutes(
   app: FastifyInstance,
@@ -54,6 +56,7 @@ export function registerDeviceRoutes(
     pairing: Pairing;
     presses: Presses;
     firmware: Firmware;
+    problems: Problems;
     gate: Gate;
     activity: Activity;
   },
@@ -170,6 +173,16 @@ export function registerDeviceRoutes(
       "device.probe",
     );
     return options.firmware.probe(actor, who, request.body);
+  });
+
+  // Answers go in the body, never the address, and reach only the driver.
+  app.post("/api/devices/repair", async (request): Promise<RepairResult> => {
+    const { actor, who } = admitted(
+      request.principal!,
+      repairRule,
+      "device.repair",
+    );
+    return options.problems.repair(actor, who, request.body);
   });
 
   app.get("/api/devices/pairing", async (request): Promise<PairingInfo> => {

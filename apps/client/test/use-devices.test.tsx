@@ -52,6 +52,7 @@ const device = (on: boolean): DeviceInfo => ({
   probe: false,
   battery: null,
   leftAt: null,
+  problem: null,
   capabilities: [capability(on)],
 });
 function deferred<T>() {

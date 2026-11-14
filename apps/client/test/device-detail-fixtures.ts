@@ -29,6 +29,7 @@ export const lamp: DeviceInfo = {
   probe: false,
   battery: null,
   leftAt: null,
+  problem: null,
   capabilities: [
     {
       id: "light",

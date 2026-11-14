@@ -686,6 +686,7 @@ describe("the home's dashboards", () => {
           probe: false,
           battery: null,
           leftAt: null,
+          problem: null,
           capabilities: [],
         },
       }),

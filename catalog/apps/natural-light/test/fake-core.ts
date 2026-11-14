@@ -148,6 +148,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       },
       firmware: absent,
       joining: absent,
+      problem: absent,
       secret: absent,
       putSecret: absent,
       removeSecret: absent,
@@ -262,6 +263,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         probe: false,
         battery: null,
         leftAt: null,
+        problem: null,
         capabilities: [
           {
             id: "light",

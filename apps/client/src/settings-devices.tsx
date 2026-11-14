@@ -25,6 +25,7 @@ import {
 import { AddDevices } from "./add-devices";
 import { attentionText } from "./attention";
 import { productName } from "./brand";
+import { RepairDevice } from "./repair-device";
 import { Section } from "./components";
 import {
   Dialog,
@@ -98,9 +99,9 @@ export function deviceDetail(
 }
 
 /**
- * What leads a device's line: that its network no longer has it, its
- * firmware's or a check's news, or else that it went quiet or its battery
- * is low.
+ * What leads a device's line: that its network no longer has it or what its
+ * driver says is wrong with it, its firmware's or a check's news, or else
+ * that it went quiet or its battery is low.
  */
 export function deviceStatus(
   device: DeviceInfo,
@@ -108,7 +109,10 @@ export function deviceStatus(
   now: number,
 ): Status | null {
   if (device.leftAt !== null) {
-    return { text: attentionText("left"), tone: "problem" };
+    return { text: attentionText("left", device), tone: "problem" };
+  }
+  if (device.problem) {
+    return { text: attentionText("problem", device), tone: "problem" };
   }
   if (firmware) return firmware;
   const need = maintenanceOf(device, now);
@@ -140,6 +144,8 @@ export function DevicesSection(props: {
   // Whether each device with a history keeps it.
   const [kept, setKept] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Editing>();
+  // The device someone is repairing.
+  const [repairing, setRepairing] = useState<DeviceInfo>();
   const [adding, setAdding] = useState(props.adding ?? false);
   // The device whose update someone is about to start.
   const [updating, setUpdating] = useState<DeviceInfo>();
@@ -517,6 +523,7 @@ export function DevicesSection(props: {
                     onCheck={() => void check(device)}
                     onProbe={() => void probe(device)}
                     onStop={() => void stop(device)}
+                    onRepair={() => setRepairing(device)}
                   />
                 </li>
               );
@@ -541,6 +548,14 @@ export function DevicesSection(props: {
         appName={tuned ? appName(tuned) : null}
         onClose={() => setTuning(undefined)}
         onCommand={command}
+      />
+      <RepairDevice
+        device={repairing}
+        appName={repairing ? appName(repairing) : null}
+        onClose={() => setRepairing(undefined)}
+        // The device's live updates bring its state, which a reply that
+        // arrives later must not undo.
+        onRepaired={(device) => setAnnouncement(`${device.name} is repaired.`)}
       />
       <EditDevice
         editing={editing}

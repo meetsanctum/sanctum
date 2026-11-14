@@ -7,6 +7,7 @@ import {
   type DriverDevice,
   type DriverMove,
   type DriverRemoval,
+  type DriverRepair,
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
@@ -51,7 +52,8 @@ export function createDriverCalls<Entry extends Driving>(options: {
 
   // Hands a driver app one of the contract's calls, as `actor`, with a
   // timeout. A refusal reaches the caller with its code; anything else the
-  // driver throws is its failure, which is logged.
+  // driver throws is its failure, which is logged, by its words unless the
+  // call carries answers they could repeat.
   async function toDriver<T>(
     driverId: string,
     actor: Actor,
@@ -60,6 +62,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driver: NonNullable<AppDefinition["driver"]>,
       ctx: AppContext,
     ) => Promise<T>,
+    { quiet = false }: { quiet?: boolean } = {},
   ): Promise<T> {
     const deadline = Date.now() + timeoutMs;
     let entry = driving(driverId);
@@ -96,7 +99,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
         throw new ActionCallError(error.code);
       }
       log(
-        `apps: ${driverId} did not ${what} (${error instanceof TimedOut ? "timed out" : message(error)})`,
+        `apps: ${driverId} did not ${what} (${error instanceof TimedOut ? "timed out" : quiet ? "failed" : message(error)})`,
       );
       throw new ActionCallError(
         error instanceof TimedOut ? "timeout" : "app_failed",
@@ -196,6 +199,23 @@ export function createDriverCalls<Entry extends Driving>(options: {
         }
         return driver.probe(ctx, device);
       });
+    },
+
+    // Hands a driver someone's answers to set one of its devices right. A
+    // failure is logged without its words, which could repeat an answer.
+    repair(driverId: string, repair: DriverRepair, actor: Actor) {
+      return toDriver(
+        driverId,
+        actor,
+        "repair a device",
+        (driver, ctx) => {
+          if (!driver.repair) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.repair(ctx, repair);
+        },
+        { quiet: true },
+      );
     },
   };
 }

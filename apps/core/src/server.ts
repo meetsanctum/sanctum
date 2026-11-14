@@ -48,6 +48,7 @@ export function createServer(
     | "pairing"
     | "presses"
     | "firmware"
+    | "problems"
     | "entities"
     | "history"
     | "gate"
@@ -166,6 +167,7 @@ export function createServer(
         pairing,
         presses: options.presses,
         firmware: options.firmware,
+        problems: options.problems,
         gate,
         activity,
       });
