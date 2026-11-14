@@ -459,6 +459,22 @@ describe("an app's supervisor", () => {
   });
 
   describe("work that outlives its run", () => {
+    it("stops one that reaches devices once, as it waits for a manager that can give it its network", async () => {
+      const { entry, supervisor, started, stopped, phase } = setUp();
+      entry.granted = ["lan:tcp:6053"];
+
+      await supervisor.launch(entry);
+      await passes(60_000);
+
+      expect(phase()).toBe("waiting");
+      expect(entry.supervision!.waitingFor).toBe(
+        "Waiting for an update that lets it reach your devices",
+      );
+      expect(started).toEqual([]);
+      expect(stopped).toEqual([entry.app.id]);
+      supervisor.end(entry);
+    });
+
     it("keeps retrying an unconfirmed network when its connection gets ready late", async () => {
       const start = vi.fn(async () => {
         throw new ManagerUnavailable("No answer");

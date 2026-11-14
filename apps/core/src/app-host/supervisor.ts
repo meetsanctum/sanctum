@@ -294,8 +294,15 @@ export function createSupervisor(options: {
       return;
     }
     // A manager that can't give it a network with Sanctum's rules keeps it
-    // stopped, saying why, until an update brings one that can.
+    // stopped, saying why, until an update brings one that can. One still
+    // running, as after the core restarted under it, stops as it starts
+    // waiting.
     if (reachesDevices(entry) && !manager.capabilities().lan) {
+      if (of(entry).waitingFor !== lanWaitingFor) {
+        of(entry).endingConnection = entry.link.isConnected();
+        await stopContainer(entry);
+        if (!isCurrent(entry, generation)) return;
+      }
       waiting(entry, lanWaitingFor, () => void launch(entry));
       return;
     }

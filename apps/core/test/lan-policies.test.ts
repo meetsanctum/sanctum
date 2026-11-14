@@ -90,7 +90,30 @@ describe("confirming an app's network policies", () => {
     },
   );
 
-  it.each(["core", "count", "manager", "holder"] as const)(
+  it("takes in a restarted manager's run for the same holder, and names it next", async () => {
+    const { entry, policies, apply, setSightings } = setUp();
+    apply.mockImplementationOnce(async (_app, policy) => ({
+      ...policy,
+      manager: "manager-again",
+    }));
+
+    setSightings([{ ...kitchen, addresses: ["192.168.1.41"] }]);
+    await vi.waitFor(() =>
+      expect([...policies.reachable(entry)!]).toEqual(["192.168.1.41"]),
+    );
+    setSightings([{ ...kitchen, addresses: ["192.168.1.42"] }]);
+
+    await vi.waitFor(() =>
+      expect(apply.mock.calls.at(-1)![1]).toMatchObject({
+        manager: "manager-again",
+        holder: "holder-1",
+        addresses: ["192.168.1.42"],
+      }),
+    );
+    policies.close();
+  });
+
+  it.each(["core", "count", "holder"] as const)(
     "rejects a confirmation for a different %s and waits before retrying",
     async (field) => {
       vi.useFakeTimers();

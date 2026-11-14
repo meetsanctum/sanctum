@@ -403,18 +403,13 @@ export function createAppHost(options: {
     // confirm the narrower policy, which cuts its connections first.
     beforeOff(entry, permission) {
       const service = serviceOf(permission);
-      const revoking = service
-        ? appServices.revoke(entry.app.id, entry.services, service)
-        : undefined;
-      const narrowing = lan.taking(entry, permission);
-      return revoking && narrowing
-        ? Promise.all([revoking, narrowing])
-            .then(() => undefined)
-            .catch((error: unknown) => {
-              lan.cancelTaking(entry, permission);
-              throw error;
-            })
-        : (revoking ?? narrowing);
+      return lan.switchingOff(
+        entry,
+        permission,
+        service
+          ? appServices.revoke(entry.app.id, entry.services, service)
+          : undefined,
+      );
     },
     // What it set going under a permission that is off ends, a service
     // switched back on gets a new login, and it pauses, starts or restarts.

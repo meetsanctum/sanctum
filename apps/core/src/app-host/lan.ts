@@ -195,11 +195,9 @@ export function createLanPolicies(options: {
       .applyLanPolicy(appId, { ...policy, ...at })
       .then((version) => {
         if (!isCurrent()) return;
-        if (
-          version.manager !== at.manager ||
-          version.holder !== at.holder ||
-          !confirm(state, policy, version)
-        ) {
+        // Its rules are the holder's, which a restarted manager keeps: its
+        // new run confirms them as well, and the next policy names it.
+        if (version.holder !== at.holder || !confirm(state, policy, version)) {
           throw new ManagerUnavailable("The network's rules weren't confirmed");
         }
         state.sending = undefined;
@@ -232,7 +230,7 @@ export function createLanPolicies(options: {
       });
   }
 
-  return {
+  const policies = {
     /** Every app's policy, as their grants and what was found say now. */
     sync() {
       for (const [appId, state] of states) {
@@ -363,6 +361,30 @@ export function createLanPolicies(options: {
 
     close() {
       for (const appId of [...states.keys()]) forget(appId);
+    },
+  };
+  return {
+    ...policies,
+
+    /**
+     * Someone is switching off one of an app's permissions: it goes off once
+     * what else it takes back, such as a service's account, and what it
+     * narrows of the app's reach are both done, or nothing when neither has
+     * anything to do. When either fails it stays on, with its reach.
+     */
+    switchingOff(
+      entry: InstalledApp,
+      permission: string,
+      revoking: Promise<void> | undefined,
+    ) {
+      const narrowing = policies.taking(entry, permission);
+      if (!revoking || !narrowing) return revoking ?? narrowing;
+      return Promise.all([revoking, narrowing])
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          policies.cancelTaking(entry, permission);
+          throw error;
+        });
     },
   };
 }
