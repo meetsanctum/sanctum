@@ -36,6 +36,7 @@ LABEL sanctum.service="manager" \
 WORKDIR /app
 COPY --from=build /out ./
 COPY LICENSE ./
-# What checks, attaches and grows apps' images (src/apps/images.ts).
-RUN apk add --no-cache e2fsprogs e2fsprogs-extra losetup util-linux-misc
+# What checks, attaches and grows apps' images (src/apps/images.ts), and loads
+# the rules of the network of an app that reaches devices (src/apps/lan.ts).
+RUN apk add --no-cache e2fsprogs e2fsprogs-extra losetup util-linux-misc nftables
 CMD ["node", "dist/index.js"]

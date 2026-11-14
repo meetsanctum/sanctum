@@ -42,6 +42,8 @@ type FakeContainer = {
   exitCode?: number;
   oomKilled?: boolean;
   finishedAt?: Date;
+  // What it printed, for one that runs and ends (FakeDocker.onRun).
+  output?: string;
 };
 
 function bindsOf(container: FakeContainer) {
@@ -117,6 +119,14 @@ export class FakeDocker implements DockerClientLike {
   onCreate: ((options: ContainerCreateOptions) => void) | null = null;
   // Called when a container starts, e.g. to have a new core migrate its data.
   onStart: ((name: string, version: string | undefined) => void) | null = null;
+  // Plays a container that runs and ends, such as a helper: what it prints
+  // and how it exits, or null for one that goes on running.
+  onRun:
+    | ((options: ContainerCreateOptions) => {
+        code: number;
+        output: string;
+      } | null)
+    | null = null;
 
   modem = {
     followProgress: (
@@ -346,7 +356,16 @@ export class FakeDocker implements DockerClientLike {
           container.name,
           image.labels["org.opencontainers.image.version"],
         );
+        const ran = this.onRun?.(container.options);
+        if (ran) {
+          container.running = false;
+          container.exitCode = ran.code;
+          container.output = ran.output;
+          container.finishedAt = new Date();
+        }
       },
+      wait: async () => ({ StatusCode: get().exitCode ?? 0 }),
+      logs: async () => Buffer.from(get().output ?? ""),
       stop: async () => {
         const container = get();
         if (container.running) {

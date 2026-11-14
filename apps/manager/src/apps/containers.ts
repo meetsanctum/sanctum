@@ -24,11 +24,13 @@ import {
   usesBroker,
 } from "./broker.js";
 import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
+import type { LanHolders, LanPolicy, LanVersion } from "./lan.js";
 import { AppRefusal } from "./refusal.js";
 
 // An app's own container, beside the core: the official Node image, the app's
 // staged package read-only, its socket's folder, and no network but the
-// broker's, for an app that uses it (broker.ts). The core
+// broker's, for an app that uses it (broker.ts), or its holder's, for one that
+// reaches the devices it found (lan.ts). The core
 // decides when each starts, and Docker never restarts one by itself, so whoever
 // supervises it hears why it stopped. What runs in it comes with the app's own
 // copy of the SDK.
@@ -79,6 +81,8 @@ export type AppContainerStatus = {
   state: "running" | "stopped" | "none";
   // A start that found this one running as it would make it, and left it.
   kept?: boolean;
+  // Which policy its network's rules hold, for an app that reaches devices.
+  lan?: LanVersion;
   folder?: string;
   memoryMb?: number;
   // Why it stopped, as Docker saw it.
@@ -282,8 +286,11 @@ export function createAppContainers(options: {
   images: Pick<AppImages, "ensure">;
   // Clears maintenance left behind by a previous manager, inside the queue.
   prepareImage?: (app: string) => Promise<void>;
+  // Gives an app that reaches devices its network's holder and rules, when
+  // this manager can.
+  lan?: LanHolders;
 }) {
-  const { docker, dataDir, log, images, prepareImage } = options;
+  const { docker, dataDir, log, images, prepareImage, lan } = options;
   const totalMemory = options.totalMemory ?? totalmem;
   const ownFolder =
     options.ownFolder ??
@@ -397,13 +404,23 @@ export function createAppContainers(options: {
     }
   }
 
-  // The app's running container, when it's the one a start would make now.
-  async function keptAsMade(spec: AppContainerSpec, packageDir: string) {
+  // The app's running container, when it's the one a start would make now:
+  // one that reaches devices shares its running holder's network, whose rules
+  // take the new core's policy.
+  async function keptAsMade(
+    spec: AppContainerSpec,
+    packageDir: string,
+    policy: LanPolicy | undefined,
+  ) {
     const existing = await inspectApp(spec.app);
     if (!existing?.State.Running) return undefined;
-    const network = (await usesBroker(packageDir))
-      ? brokerNetworkName(spec.app)
-      : undefined;
+    const holder = policy ? await lan?.running(spec.app) : undefined;
+    if (policy && !holder) return undefined;
+    const network = holder
+      ? `container:${holder.Id}`
+      : (await usesBroker(packageDir))
+        ? brokerNetworkName(spec.app)
+        : undefined;
     const desired = appContainerOptions(
       spec,
       imageVolumeName(spec.app),
@@ -424,8 +441,21 @@ export function createAppContainers(options: {
       )
     )
       return undefined;
+    // One whose rules can't take it is made again, holder and all.
+    const version =
+      holder && policy
+        ? await lan!.keep(spec.app, holder, policy).catch((error: unknown) => {
+            log(`${spec.app}'s network is made again (${String(error)})`);
+            return null;
+          })
+        : undefined;
+    if (version === null) return undefined;
     log(`Keeping ${desired.name} on ${spec.folder}`);
-    return { ...statusOf(spec.app, existing), kept: true };
+    return {
+      ...statusOf(spec.app, existing),
+      kept: true,
+      ...(version ? { lan: version } : {}),
+    };
   }
 
   async function releaseImage(app: string) {
@@ -449,10 +479,18 @@ export function createAppContainers(options: {
       return core !== null && hasOnlyAppFolders(core);
     },
 
+    // Whether it gives an app that reaches devices a network of its own.
+    reachesDevices: () => lan !== undefined,
+
     // Starts the app's container, replacing any it had: the core restarts each
     // through this. With `keep`, one already running as this would make it goes
-    // on, as after the core restarted: its app is said to be found again.
-    start(spec: AppContainerSpec, { keep = false }: { keep?: boolean } = {}) {
+    // on, as after the core restarted: its app is said to be found again. One
+    // that reaches devices comes with its first policy, whose rules its new
+    // holder's network takes before its container starts.
+    start(
+      spec: AppContainerSpec,
+      { keep = false, lan: policy }: { keep?: boolean; lan?: LanPolicy } = {},
+    ) {
       return inTurn(async () => {
         const packageDir = join(dataDir, packagesFolder, spec.app, spec.folder);
         await access(join(packageDir, "package.json")).catch(() => {
@@ -461,8 +499,21 @@ export function createAppContainers(options: {
             404,
           );
         });
+        if (policy && !lan) {
+          throw new AppRefusal(
+            "This manager can't give an app a network of its own",
+            409,
+          );
+        }
+        const brokers = await usesBroker(packageDir);
+        if (policy && brokers) {
+          throw new AppRefusal(
+            `${spec.app} can't both reach devices and use the broker`,
+            409,
+          );
+        }
         if (keep) {
-          const kept = await keptAsMade(spec, packageDir);
+          const kept = await keptAsMade(spec, packageDir, policy);
           if (kept) return kept;
         }
         await assertFits(spec);
@@ -478,35 +529,85 @@ export function createAppContainers(options: {
         await ensureImage(docker, nodeImage);
         await removeNext(spec.app);
 
-        const network = (await usesBroker(packageDir))
-          ? await brokerNetworkFor(docker, spec.app, log)
-          : undefined;
+        // Its rules are in place before anything of the app runs.
+        const holder = policy ? await lan!.make(spec.app, policy) : undefined;
+        const network = holder
+          ? `container:${holder.id}`
+          : brokers
+            ? await brokerNetworkFor(docker, spec.app, log)
+            : undefined;
 
         // The one it replaces keeps running until this one is sure to start.
         const desired = appContainerOptions(spec, dataVolume, network);
-        const { id } = await docker.createContainer({
-          ...desired,
-          name: nextContainerName(spec.app),
-        });
-        const container = docker.getContainer(id);
-        const differences = effectiveDifferences(
-          desired,
-          await container.inspect(),
-          await memoryLimits(),
-        );
-        if (differences.length > 0) {
-          await container.remove({ force: true, v: true });
-          throw new AppRefusal(
-            `Docker would not give ${spec.app} ${differences.join(", ")}`,
-            500,
+        let container;
+        try {
+          const { id } = await docker.createContainer({
+            ...desired,
+            name: nextContainerName(spec.app),
+          });
+          container = docker.getContainer(id);
+          const differences = effectiveDifferences(
+            desired,
+            await container.inspect(),
+            await memoryLimits(),
           );
+          if (differences.length > 0) {
+            await container.remove({ force: true, v: true });
+            throw new AppRefusal(
+              `Docker would not give ${spec.app} ${differences.join(", ")}`,
+              500,
+            );
+          }
+        } catch (error) {
+          if (holder) await lan!.discard(spec.app);
+          throw error;
         }
         await remove(spec.app);
+        // Its new holder takes the old one's place, or one it no longer
+        // needs goes with its network.
+        if (holder) await lan!.settle(spec.app);
+        else await lan?.remove(spec.app);
         await container.rename({ name: desired.name });
         log(`Starting ${desired.name} from ${spec.folder}`);
         await container.start();
-        return statusOf(spec.app, await container.inspect());
+        return {
+          ...statusOf(spec.app, await container.inspect()),
+          ...(holder ? { lan: holder.version } : {}),
+        };
       });
+    },
+
+    // Replaces what an app's network may reach (lan.ts).
+    applyLan(app: string, change: Parameters<LanHolders["apply"]>[1]) {
+      if (!lan) {
+        throw new AppRefusal(
+          "This manager can't give an app a network of its own",
+          409,
+        );
+      }
+      return lan.apply(app, change);
+    },
+
+    // One that reaches devices whose holder has stopped stops too: its
+    // network went with its holder, and it's never left running without.
+    async stopStranded() {
+      for (const container of await all()) {
+        const mode = String(container.HostConfig.NetworkMode ?? "");
+        if (!container.State.Running || !mode.startsWith("container:")) {
+          continue;
+        }
+        const holder = await inspectContainer(
+          docker,
+          mode.slice("container:".length),
+        );
+        if (holder?.State.Running) continue;
+        const app = container.Config.Labels![appLabel]!;
+        log(`Stopping ${appContainerName(app)}: its network's holder stopped`);
+        await docker
+          .getContainer(container.Id)
+          .stop({ t: 10 })
+          .catch(() => undefined);
+      }
     },
 
     // Work on its image, in turn with starting it. Unless it may go on running,
@@ -539,6 +640,7 @@ export function createAppContainers(options: {
             if ((await inspectApp(app))?.State.Running !== false) throw error;
           }
         }
+        await lan?.stop(app);
         return statusOf(app, await inspectApp(app));
       });
     },
@@ -549,6 +651,7 @@ export function createAppContainers(options: {
         await removeNext(app);
         await remove(app);
         await removeBrokerNetwork(docker, app, log);
+        await lan?.remove(app);
       });
     },
 
