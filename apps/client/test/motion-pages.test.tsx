@@ -604,7 +604,7 @@ describe("the Presence category", () => {
 });
 
 describe("the Environment category", () => {
-  it("leaves the light level out of Environment's range", async () => {
+  it("leaves the light level out of Environment's cards", async () => {
     devices = [
       motionSensor("office", "office", null, {
         temperature: 21,
@@ -613,9 +613,21 @@ describe("the Environment category", () => {
       climate("desk", "hall", 19.5, 58),
     ];
     await show("category", "environment");
-    expect(container.querySelector("header p")?.textContent).toBe(
-      "19.5–21° · 58%",
+    // A card for the temperature and one for the humidity, none for the
+    // light level.
+    const cards = [
+      ...container.querySelectorAll(
+        "ul[aria-label='Environment summary'] > li",
+      ),
+    ].map((card) =>
+      [...card.querySelectorAll(":scope > span > span:not(.sr-only)")].map(
+        (line) => line.textContent,
+      ),
     );
+    expect(cards).toEqual([
+      ["Temperature", "19.5–21°"],
+      ["Humidity", "58%"],
+    ]);
   });
 });
 

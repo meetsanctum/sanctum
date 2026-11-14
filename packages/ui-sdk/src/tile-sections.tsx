@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { DeviceTile } from "./device-tile";
 import type { Tile, TileSection } from "./tiles";
 
@@ -13,12 +15,14 @@ export function SectionHeading(props: { id: string; children: string }) {
 
 // Tiles on the grid, in their sections, each tile a row three cells wide.
 // Given `onOpen`, each tile opens its device's detail and its icon switches
-// it.
+// it. Given `lead`, a section has what it returns between its heading and
+// its tiles, such as a button for the whole section.
 export function DeviceSections(props: {
   sections: TileSection[];
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
   onOpen?: (tile: Tile) => void;
+  lead?: (section: TileSection) => ReactNode;
 }) {
   return props.sections.map((section) => (
     <section
@@ -27,6 +31,7 @@ export function DeviceSections(props: {
       className="flex flex-col gap-3"
     >
       <SectionHeading id={`room-${section.id}`}>{section.title}</SectionHeading>
+      {props.lead?.(section)}
       <div className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)">
         {section.tiles.map((tile) => (
           <DeviceTile
