@@ -256,6 +256,7 @@ export function createAppHost(options: {
     commits: options.commits,
     updates: options.updates,
     supervisor: () => supervisor,
+    canStart: (entry) => lan.canRun(entry),
     timeoutMs,
     log,
   });
@@ -407,7 +408,12 @@ export function createAppHost(options: {
         : undefined;
       const narrowing = lan.taking(entry, permission);
       return revoking && narrowing
-        ? Promise.all([revoking, narrowing]).then(() => undefined)
+        ? Promise.all([revoking, narrowing])
+            .then(() => undefined)
+            .catch((error: unknown) => {
+              lan.cancelTaking(entry, permission);
+              throw error;
+            })
         : (revoking ?? narrowing);
     },
     // What it set going under a permission that is off ends, a service

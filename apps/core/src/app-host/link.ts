@@ -385,6 +385,11 @@ export function createAppLink(options: {
     /** Whether it said hello; preparing its database has its own deadline. */
     isConnected: () => current !== undefined,
 
+    /** Ends the old connection before its container is replaced. */
+    disconnect() {
+      if (current) drop(current, "its container is being replaced");
+    },
+
     /**
      * Calls the app, with the core's calls this one may make. It settles with
      * the app's answer or when the connection goes; its caller stops waiting at

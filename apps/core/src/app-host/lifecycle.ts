@@ -52,6 +52,7 @@ export function createAppLifecycle(options: {
   updates: Pick<AppUpdates, "startOf">;
   commits: AppCommits;
   supervisor: () => Supervisor;
+  canStart?: (entry: InstalledApp) => boolean;
   timeoutMs: number;
   log: (message: string) => void;
 }) {
@@ -104,6 +105,7 @@ export function createAppLifecycle(options: {
     if (
       !link.isReady() ||
       entry.supervision.isEnded ||
+      options.canStart?.(entry) === false ||
       isInSupervisorsHands(entry)
     ) {
       return;

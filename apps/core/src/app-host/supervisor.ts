@@ -130,7 +130,7 @@ export function createSupervisor(options: {
   updateNotReady: (entry: InstalledApp, waitingFor: string) => boolean;
   // What an app that reaches devices may reach, whose first policy comes
   // with its container's start (lan.ts).
-  lan?: Pick<LanPolicies, "starting" | "started">;
+  lan?: Pick<LanPolicies, "starting" | "started" | "canRun">;
   log: (message: string) => void;
   now: () => Date;
   restartPausesMs?: readonly number[];
@@ -433,6 +433,7 @@ export function createSupervisor(options: {
       supervision.isEnded ||
       entry.off ||
       supervision.isReplacing ||
+      options.lan?.canRun(entry) === false ||
       supervision.phase === "failed" ||
       supervision.phase === "restarting"
     )
@@ -568,10 +569,18 @@ export function createSupervisor(options: {
      * reaches devices does: a new one replaces the one it has, unless it was
      * given up on or turned off.
      */
-    renew(entry: InstalledApp) {
+    async renew(entry: InstalledApp) {
       if (of(entry).isEnded || entry.off || of(entry).phase === "failed") {
         return;
       }
+      const generation = ++of(entry).generation;
+      await entry.lifecycle;
+      if (!isCurrent(entry, generation) || entry.off) return;
+      of(entry).endingConnection = entry.link.isConnected();
+      become(entry, "starting");
+      await stopContainer(entry);
+      if (!isCurrent(entry, generation) || entry.off) return;
+      entry.link.disconnect();
       return launch(entry);
     },
 

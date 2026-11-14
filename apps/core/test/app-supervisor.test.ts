@@ -459,6 +459,42 @@ describe("an app's supervisor", () => {
   });
 
   describe("work that outlives its run", () => {
+    it("keeps retrying an unconfirmed network when its connection gets ready late", async () => {
+      const start = vi.fn(async () => {
+        throw new ManagerUnavailable("No answer");
+      });
+      const { entry, supervisor, reconciled } = setUp(
+        {
+          capabilities: () => ({
+            appContainers: true,
+            memoryLimits: true,
+            discovery: true,
+            lan: true,
+          }),
+          startAppContainer: start,
+        },
+        {
+          starting: () => ({
+            core: "core",
+            count: 1,
+            addresses: [],
+            ports: [6053],
+          }),
+          started: () => false,
+          canRun: () => false,
+        },
+      );
+      entry.granted = ["lan:tcp:6053"];
+      await supervisor.launch(entry);
+      entry.link = { isReady: () => true } as InstalledApp["link"];
+
+      supervisor.ready(entry);
+      expect(reconciled).not.toHaveBeenCalled();
+      await passes(5_000);
+      expect(start).toHaveBeenCalledTimes(2);
+      supervisor.end(entry);
+    });
+
     it("starts one that said hello while its container was asked for, after a wait that wasn't its own", async () => {
       let resolveStarting!: () => void;
       const starting = new Promise<void>((resolve) => {

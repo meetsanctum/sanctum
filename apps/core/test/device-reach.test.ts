@@ -25,7 +25,11 @@ const kitchen: Sighting = {
   txt: {},
 };
 
-function reacher(heard: DriverDiscovery[], lanNeeded: boolean) {
+function reacher(
+  heard: DriverDiscovery[],
+  lanNeeded: boolean,
+  serviceNeeded = false,
+) {
   return defineApp({
     id: app,
     name: "Reacher",
@@ -39,6 +43,9 @@ function reacher(heard: DriverDiscovery[], lanNeeded: boolean) {
         needed: true,
       },
       { id: "lan:tcp:6053", reason: "For the test.", needed: lanNeeded },
+      ...(serviceNeeded
+        ? [{ id: "services:mqtt", reason: "For the test.", needed: true }]
+        : []),
     ],
     actions: [],
     events: [],
@@ -52,7 +59,12 @@ function reacher(heard: DriverDiscovery[], lanNeeded: boolean) {
 }
 
 async function reaching(
-  options: { can?: boolean; lanNeeded?: boolean; allowed?: boolean } = {},
+  options: {
+    can?: boolean;
+    lanNeeded?: boolean;
+    allowed?: boolean;
+    serviceNeeded?: boolean;
+  } = {},
 ) {
   const heard: DriverDiscovery[] = [];
   const fake = fakeManager();
@@ -61,7 +73,10 @@ async function reaching(
     manager: fake.manager,
     allowed: options.allowed ?? true,
     apps: [
-      { app: reacher(heard, options.lanNeeded ?? true), origin: "official" },
+      {
+        app: reacher(heard, options.lanNeeded ?? true, options.serviceNeeded),
+        origin: "official",
+      },
     ],
   });
   const maya = await claimed(core);
@@ -175,6 +190,40 @@ describe("reaching devices", () => {
       });
   });
 
+  it("restores its network when a service's revocation fails after its policy narrowed", async () => {
+    const { heard, network, manager, lan, grant, info } = await reaching({
+      serviceNeeded: true,
+    });
+    network.put(kitchen);
+    await expect.poll(() => heard.at(-1)?.found).toEqual([kitchen]);
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => (release = resolve));
+    manager.revokeService = async () => {
+      await waiting;
+      throw new ManagerUnavailable("No answer");
+    };
+
+    const switching = expect(grant("services:mqtt", false)).rejects.toThrow();
+    try {
+      await expect
+        .poll(() => lan.of(app))
+        .toMatchObject({
+          addresses: [],
+          ports: [],
+        });
+    } finally {
+      release();
+    }
+    await switching;
+    expect(info().permissions).toContain("services:mqtt");
+    await expect
+      .poll(() => lan.of(app))
+      .toMatchObject({
+        addresses: kitchen.addresses,
+        ports: [6053],
+      });
+  });
+
   it("gets a container with a network of its own once it's allowed to reach devices", async () => {
     const { lan, grant } = await reaching({ lanNeeded: false, allowed: false });
     await grant("discover:mdns:_example._tcp", true);
@@ -225,6 +274,36 @@ describe("reaching devices", () => {
       )
       .toBe(true);
     expect(heard).toEqual([]);
+  });
+
+  it("keeps a paused app from starting while its new network waits for confirmation", async () => {
+    const { heard, manager, grant, info } = await reaching({
+      lanNeeded: false,
+      allowed: false,
+    });
+    await expect.poll(() => heard.length).toBe(1);
+    await grant("discover:mdns:_example._tcp", false);
+    await expect.poll(() => info().state).toBe("paused");
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => (release = resolve));
+    let wasAsked = false;
+    const start = manager.startAppContainer;
+    manager.startAppContainer = async (appId, spec) => {
+      wasAsked = true;
+      await waiting;
+      return start(appId, spec);
+    };
+
+    try {
+      await grant("lan:tcp:6053", true);
+      await expect.poll(() => wasAsked).toBe(true);
+      await grant("discover:mdns:_example._tcp", true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(info().state).toBe("starting");
+    } finally {
+      release();
+    }
+    await expect.poll(() => info().state).toBe("running");
   });
 
   it("waits, saying why, under a manager that can't give it a network of its own", async () => {

@@ -6,7 +6,11 @@ import {
 } from "@meetsanctum/app-sdk";
 
 import type { LanVersion } from "../manager-answers.js";
-import { ManagerRefusal, type LanPolicy } from "../manager.js";
+import {
+  ManagerRefusal,
+  ManagerUnavailable,
+  type LanPolicy,
+} from "../manager.js";
 import type { InstalledApp } from "./installed.js";
 
 // What an app that holds lan:tcp: may reach: the addresses of the devices it
@@ -39,7 +43,6 @@ const both = (a: Reach, b: Reach): Reach => ({
 });
 
 type Waiter = {
-  next: Reach;
   resolve: () => void;
   reject: (error: unknown) => void;
 };
@@ -50,6 +53,8 @@ type State = {
   // through, as the manager last confirmed.
   at?: { manager: string; holder: string };
   confirmed?: Reach;
+  // A request whose answer was lost may already have changed the rules.
+  unconfirmed?: Reach;
   // The policy on its way to the manager, which may hold already.
   sending?: LanPolicy;
   // Permissions being switched off, left out of what it should reach.
@@ -137,15 +142,19 @@ export function createLanPolicies(options: {
   // its way to it.
   function mayReach(state: State): Reach {
     return both(
-      state.at ? (state.confirmed ?? nothing) : nothing,
+      both(
+        state.at ? (state.confirmed ?? nothing) : nothing,
+        state.unconfirmed ?? nothing,
+      ),
       state.sending ?? nothing,
     );
   }
 
   function settle(state: State) {
     const reach = mayReach(state);
+    const next = wanted(state);
     state.waiters = state.waiters.filter((waiter) => {
-      if (!within(reach, waiter.next)) return true;
+      if (!within(reach, next)) return true;
       waiter.resolve();
       return false;
     });
@@ -157,6 +166,7 @@ export function createLanPolicies(options: {
     }
     state.at = { manager: version.manager, holder: version.holder };
     state.confirmed = { addresses: policy.addresses, ports: policy.ports };
+    state.unconfirmed = undefined;
     options.onReach(state.entry.app.id);
     return true;
   }
@@ -168,6 +178,7 @@ export function createLanPolicies(options: {
     const next = wanted(state);
     if (
       state.confirmed &&
+      !state.unconfirmed &&
       within(state.confirmed, next) &&
       within(next, state.confirmed)
     ) {
@@ -176,22 +187,34 @@ export function createLanPolicies(options: {
     }
     const appId = state.entry.app.id;
     const policy: LanPolicy = { core: options.core, count: ++count, ...next };
+    const at = state.at;
     state.sending = policy;
-    void options.manager.applyLanPolicy(appId, { ...policy, ...state.at }).then(
-      (version) => {
-        if (states.get(appId) !== state) return;
+    const isCurrent = () =>
+      states.get(appId) === state && state.sending === policy;
+    void options.manager
+      .applyLanPolicy(appId, { ...policy, ...at })
+      .then((version) => {
+        if (!isCurrent()) return;
+        if (
+          version.manager !== at.manager ||
+          version.holder !== at.holder ||
+          !confirm(state, policy, version)
+        ) {
+          throw new ManagerUnavailable("The network's rules weren't confirmed");
+        }
         state.sending = undefined;
-        confirm(state, policy, version);
         settle(state);
         push(state);
-      },
-      (error: unknown) => {
-        if (states.get(appId) !== state) return;
+      })
+      .catch((error: unknown) => {
+        if (!isCurrent()) return;
+        state.unconfirmed = both(state.unconfirmed ?? nothing, policy);
         state.sending = undefined;
-        if (error instanceof ManagerRefusal) {
+        if (error instanceof ManagerRefusal && error.status === 409) {
           // That holder no longer has the app, and its network went with it.
           state.at = undefined;
           state.confirmed = undefined;
+          state.unconfirmed = undefined;
           options.onReach(appId);
           settle(state);
           return;
@@ -206,8 +229,7 @@ export function createLanPolicies(options: {
           push(state);
         }, options.againMs ?? againMs);
         state.retry.unref();
-      },
-    );
+      });
   }
 
   return {
@@ -231,6 +253,7 @@ export function createLanPolicies(options: {
       const state = stateOf(entry);
       clearTimeout(state.retry);
       state.retry = undefined;
+      state.unconfirmed = mayReach(state);
       state.at = undefined;
       state.confirmed = undefined;
       const policy: LanPolicy = {
@@ -254,10 +277,19 @@ export function createLanPolicies(options: {
     ) {
       const state = states.get(entry.app.id);
       if (state?.entry !== entry || state.sending !== policy) return false;
+      state.unconfirmed = both(state.unconfirmed ?? nothing, policy);
       state.sending = undefined;
       const loaded = version !== undefined && confirm(state, policy, version);
-      settle(state);
-      push(state);
+      if (loaded) {
+        settle(state);
+        push(state);
+      } else {
+        for (const waiter of state.waiters.splice(0)) {
+          waiter.reject(
+            new ManagerUnavailable("The network's rules weren't confirmed"),
+          );
+        }
+      }
       return loaded;
     },
 
@@ -277,7 +309,13 @@ export function createLanPolicies(options: {
         return undefined;
       }
       return new Promise<void>((resolve, reject) => {
-        state.waiters.push({ next, resolve, reject });
+        if (!state.at && !state.sending) {
+          reject(
+            new ManagerUnavailable("The network's rules weren't confirmed"),
+          );
+          return;
+        }
+        state.waiters.push({ resolve, reject });
         push(state);
       }).catch((error: unknown) => {
         // It stays on, so its reach comes back.
@@ -287,10 +325,25 @@ export function createLanPolicies(options: {
       });
     },
 
+    /** Another part of revocation failed, so the permission stays on. */
+    cancelTaking(entry: InstalledApp, permission: string) {
+      const state = states.get(entry.app.id);
+      if (state?.entry !== entry) return;
+      state.taking.delete(permission);
+      push(state);
+    },
+
     /** Whether its container has a network of its own, or one on its way. */
     hasNetwork(entry: InstalledApp) {
       const state = states.get(entry.app.id);
       return state?.entry === entry && (!!state.at || !!state.sending);
+    },
+
+    /** A driver starts only once its container's first policy is confirmed. */
+    canRun(entry: InstalledApp) {
+      if (!reachesDevices(entry)) return true;
+      const state = states.get(entry.app.id);
+      return state?.entry === entry && state.at !== undefined;
     },
 
     /**
