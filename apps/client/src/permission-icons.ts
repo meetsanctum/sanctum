@@ -6,6 +6,7 @@ import {
   Globe,
   Lightbulb,
   MapPin,
+  Radar,
   RadioTower,
   Share2,
   Shield,
@@ -31,6 +32,7 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   workflow: Workflow,
   globe: Globe,
   "radio-tower": RadioTower,
+  radar: Radar,
   "share-2": Share2,
   shield: Shield,
 };

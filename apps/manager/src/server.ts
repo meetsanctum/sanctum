@@ -8,6 +8,7 @@ import type { AppImages } from "./apps/images.js";
 import type { Maintenance } from "./apps/maintenance.js";
 import type { AppUpdates } from "./apps/updates.js";
 import type { Audit } from "./audit.js";
+import { mdnsService, type Discovery } from "./discovery.js";
 import type { HostAuthority } from "./certificates/host-ca.js";
 import { registerCertificateRoutes } from "./certificates/routes.js";
 import type { ManagerConfig } from "./config.js";
@@ -28,6 +29,17 @@ const updateBody = z
   .default({});
 const auditQuery = z.object({
   after: z.coerce.number().int().min(0).default(0),
+});
+// The core's question about what is on the home's network: what changed
+// after its last answer, for the services apps look for.
+const discoveryQuery = z.object({
+  after: z.string().max(100).optional(),
+  services: z
+    .string()
+    .max(4_000)
+    .default("")
+    .transform((list) => (list ? list.split(",") : []))
+    .pipe(z.array(z.string().regex(mdnsService)).max(64)),
 });
 const claimedBody = z.object({
   claimed: z.boolean(),
@@ -73,6 +85,8 @@ export type ServerOptions = {
   status?: Pick<HostStatusReporter, "status">;
   // The host's last 24 hours (host/history.ts).
   history?: Pick<HostHistory, "points">;
+  // What apps look for on the home's network (discovery.ts).
+  discovery?: Pick<Discovery, "poll">;
 };
 
 export function createServer(
@@ -204,6 +218,7 @@ export function createServer(
     host?.appUpdates,
     host?.stagedApps,
     host?.appUsage,
+    options.discovery !== undefined,
   );
   registerCertificateRoutes(app, authority, clock);
 
@@ -232,6 +247,24 @@ export function createServer(
       return reply.code(503).send({ error: "This manager reports no host" });
     }
     return { points: options.history.points() };
+  });
+
+  // What is on the home's network of the services apps look for: what
+  // changed after the core's last answer, waiting up to 30 s for news.
+  app.get("/api/discovery", async (request, reply) => {
+    if (!options.discovery) {
+      return reply
+        .code(503)
+        .send({ error: "This manager doesn't look for devices" });
+    }
+    const query = discoveryQuery.safeParse(request.query);
+    if (!query.success) {
+      return reply.code(400).send({ error: "That isn't a question it takes" });
+    }
+    return options.discovery.poll(
+      query.data.after ?? null,
+      query.data.services,
+    );
   });
 
   // Restarts or shuts down the host, a moment after answering.

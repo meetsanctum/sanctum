@@ -282,7 +282,11 @@ describe("an app's supervisor", () => {
       let can = false;
       const { entry, supervisor, phase } = setUp({
         startAppContainer,
-        capabilities: () => ({ appContainers: can, memoryLimits: true }),
+        capabilities: () => ({
+          appContainers: can,
+          memoryLimits: true,
+          discovery: false,
+        }),
       });
 
       await supervisor.launch(entry);

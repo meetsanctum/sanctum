@@ -1,3 +1,4 @@
+import { sightingLostSchema, sightingSchema } from "@meetsanctum/app-sdk";
 import { request } from "node:http";
 import { z } from "zod";
 
@@ -315,16 +316,30 @@ const appContainerPath = (app: string) =>
 const capabilities = z.object({
   appContainers: z.boolean(),
   memoryLimits: z.boolean(),
+  // Whether it looks for devices on the home's network; a manager from
+  // before it doesn't say.
+  discovery: z.boolean().default(false),
 });
 export type ManagerCapabilities = z.infer<typeof capabilities>;
 const noCapabilities: ManagerCapabilities = {
   appContainers: false,
   memoryLimits: false,
+  discovery: false,
 };
 const askForCapabilitiesEveryMs = 30_000;
 
 const appUpdatePath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/update`;
+
+// What the manager found on the home's network: what changed after the
+// core's last answer, or every sighting, and where the next question starts.
+const discoveryAnswer = z.object({
+  after: z.string().min(1).max(100),
+  full: z.boolean(),
+  found: z.array(sightingSchema).max(10_000),
+  lost: z.array(sightingLostSchema).max(10_000),
+});
+export type DiscoveryAnswer = z.infer<typeof discoveryAnswer>;
 
 const appUpdatesHeld = z.object({
   updates: z.record(z.string(), z.object({ id: z.string() })),
@@ -743,6 +758,20 @@ export function createManagerClient(options: {
       return parseBody(
         versionList,
         await once("GET", "/api/update/versions", undefined, 15_000),
+      );
+    },
+
+    // What the manager found on the home's network after its answer
+    // `after`, or everything for none, looking for `services`. It answers
+    // within 30 s, so this waits longer than a call usually does.
+    async discovery(after: string | null, services: readonly string[]) {
+      const query = new URLSearchParams({
+        ...(after ? { after } : {}),
+        services: services.join(","),
+      });
+      return parseBody(
+        discoveryAnswer,
+        await once("GET", `/api/discovery?${query}`, undefined, 40_000),
       );
     },
 

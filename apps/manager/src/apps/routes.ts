@@ -22,8 +22,9 @@ import type { AppUsage } from "./usage.js";
 
 // Apps' containers, on the manager's socket, which only the core reaches:
 //
-//   GET    /api/capabilities         what this manager can do; one too old for
-//                                    this route answers 404, which means nothing
+//   GET    /api/capabilities         what this manager can do: run apps, limit
+//                                    their memory, look for devices; one too old
+//                                    for this route answers 404, which means nothing
 //   GET    /api/apps/containers      every app's container and its state
 //   GET    /api/apps/:app/container  one app's
 //   PUT    /api/apps/:app/container  start it: { folder, memoryMb, keep? }
@@ -98,14 +99,16 @@ export function registerAppRoutes(
   updates?: AppUpdates,
   staged?: () => Promise<Record<string, { version: string; folder: string }>>,
   usage?: (app: string) => Promise<AppUsage>,
+  // Whether it looks for devices on the home's network (discovery.ts).
+  discovery = false,
 ) {
   app.get("/api/capabilities", async () => {
-    if (!apps) return { appContainers: false, memoryLimits: false };
+    if (!apps) return { appContainers: false, memoryLimits: false, discovery };
     const [appContainers, memoryLimits] = await Promise.all([
       apps.ready(),
       apps.memoryLimits(),
     ]);
-    return { appContainers, memoryLimits };
+    return { appContainers, memoryLimits, discovery };
   });
 
   app.get("/api/apps/staged", async () => ({

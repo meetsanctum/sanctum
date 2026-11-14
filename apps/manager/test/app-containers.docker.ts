@@ -187,7 +187,11 @@ describe("apps' containers on real Docker", () => {
         : undefined;
     });
 
-    expect(body).toEqual({ appContainers: true, memoryLimits: true });
+    expect(body).toEqual({
+      appContainers: true,
+      memoryLimits: true,
+      discovery: false,
+    });
   });
 
   it("starts one, and what it can do is what the standard allows", async () => {

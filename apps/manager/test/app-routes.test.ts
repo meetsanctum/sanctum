@@ -62,6 +62,7 @@ describe("what a manager can do", () => {
     expect((await ask()).json()).toEqual({
       appContainers: false,
       memoryLimits: true,
+      discovery: false,
     });
 
     docker.load("sanctum-core:1", { title: "sanctum-core", version: "1" });
@@ -70,6 +71,7 @@ describe("what a manager can do", () => {
     expect((await ask()).json()).toEqual({
       appContainers: true,
       memoryLimits: true,
+      discovery: false,
     });
   });
 
@@ -96,6 +98,7 @@ describe("what a manager can do", () => {
     expect(answer.json()).toEqual({
       appContainers: false,
       memoryLimits: false,
+      discovery: false,
     });
     expect(start.statusCode).toBe(503);
   });
