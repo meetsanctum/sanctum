@@ -286,6 +286,7 @@ describe("an app's supervisor", () => {
           appContainers: can,
           memoryLimits: true,
           discovery: false,
+          lan: false,
         }),
       });
 

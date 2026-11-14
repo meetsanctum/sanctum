@@ -1,5 +1,9 @@
 import type { ChangedBy, RecordActivity } from "../activity/activity.js";
-import type { Channel, UpdateJournal, VersionList } from "../manager.js";
+import type {
+  Channel,
+  UpdateJournal,
+  VersionList,
+} from "../manager-answers.js";
 import { relay, SystemError } from "./errors.js";
 
 // Updates from Settings → System. The manager carries them out (pull, back

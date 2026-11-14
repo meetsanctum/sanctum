@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createManagerClient, type ManagerClient } from "../src/manager.js";
+import {
+  createManagerClient,
+  ManagerRefusal,
+  type ManagerClient,
+} from "../src/manager.js";
 
 type Received = { method?: string; url?: string; body: unknown };
 
@@ -86,6 +90,7 @@ describe("what the manager can do", () => {
       appContainers: false,
       memoryLimits: false,
       discovery: false,
+      lan: false,
     });
   });
 
@@ -95,12 +100,14 @@ describe("what the manager can do", () => {
 
     client.followCapabilities(5);
 
-    // One that doesn't say whether it looks for devices doesn't.
+    // One that doesn't say whether it looks for devices, or gives apps that
+    // reach them a network of their own, does neither.
     await vi.waitFor(() =>
       expect(client.capabilities()).toEqual({
         appContainers: true,
         memoryLimits: true,
         discovery: false,
+        lan: false,
       }),
     );
     expect(logs).toContain("manager: can run apps");
@@ -417,5 +424,85 @@ describe("the manager client", () => {
 
     await vi.waitFor(() => expect(received.length).toBeGreaterThan(2));
     expect(client.hostId()).toBeUndefined();
+  });
+});
+
+describe("an app's network policy", () => {
+  // A manager that made holder h1 for the app's container, and loads the
+  // policies meant for it.
+  async function holding(socketPath: string) {
+    const received: Received[] = [];
+    const server = createServer((request, response) => {
+      let text = "";
+      request.on("data", (chunk) => (text += chunk));
+      request.on("end", () => {
+        const body = JSON.parse(text);
+        received.push({ method: request.method, url: request.url, body });
+        const started = request.url === "/api/apps/sanctum.example/container";
+        const { core, count, holder } = started ? body.lan : body;
+        if (started || holder === "h1") {
+          response.statusCode = 200;
+          const loaded = { core, count, manager: "m1", holder: "h1" };
+          response.end(
+            JSON.stringify(started ? { kept: false, lan: loaded } : loaded),
+          );
+        } else {
+          response.statusCode = 409;
+          response.end(
+            JSON.stringify({ error: "That holder isn't the app's" }),
+          );
+        }
+      });
+    });
+    open.push({ server });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    return received;
+  }
+
+  it("comes with a start, and each change goes to the holder it names", async () => {
+    const { client, socketPath } = await setUp();
+    const received = await holding(socketPath);
+    const policy = {
+      core: "c1",
+      count: 1,
+      addresses: ["192.168.1.40"],
+      ports: [6053],
+    };
+
+    expect(
+      await client.startAppContainer("sanctum.example", {
+        folder: "1.0.0+test",
+        memoryMb: 128,
+        dataMb: 64,
+        lan: policy,
+      }),
+    ).toEqual({
+      kept: false,
+      lan: { core: "c1", count: 1, manager: "m1", holder: "h1" },
+    });
+    expect(
+      await client.applyLanPolicy("sanctum.example", {
+        ...policy,
+        count: 2,
+        manager: "m1",
+        holder: "h1",
+      }),
+    ).toEqual({ core: "c1", count: 2, manager: "m1", holder: "h1" });
+    // One for a holder the app's container no longer has is refused.
+    await expect(
+      client.applyLanPolicy("sanctum.example", {
+        ...policy,
+        count: 3,
+        manager: "m1",
+        holder: "h0",
+      }),
+    ).rejects.toBeInstanceOf(ManagerRefusal);
+
+    expect(received.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      "PUT /api/apps/sanctum.example/container",
+      "PUT /api/apps/sanctum.example/container/lan",
+      "PUT /api/apps/sanctum.example/container/lan",
+    ]);
+    expect(received[0]!.body).toMatchObject({ lan: policy });
   });
 });

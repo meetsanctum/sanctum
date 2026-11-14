@@ -3,11 +3,21 @@ import { manifestDigest, manifestFileName } from "@meetsanctum/app-sdk/package";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ApartPackage, Origin } from "./host.js";
-
 // Reads apps' packages as the core knows them: by their manifests, never
 // importing their code. The core gives each the origin of where it came from,
 // never one from the package.
+
+// Decided from where a package came from, never from its manifest.
+export const origins = ["system", "official", "third-party"] as const;
+export type Origin = (typeof origins)[number];
+
+// An app, in its own container, of which the core knows its running version's
+// manifest as its folder of packages holds it: never the one bundled in the
+// core's image, which can be newer until its update starts.
+export type ApartPackage = {
+  apart: { manifest: StaticManifest; digest: string; folder: string };
+  origin: Origin;
+};
 
 type Log = (message: string) => void;
 

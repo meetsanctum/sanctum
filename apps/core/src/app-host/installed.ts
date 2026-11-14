@@ -8,7 +8,7 @@ import type {
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
 import type { AppContract } from "./contract.js";
-import type { Origin } from "./host.js";
+import type { Origin } from "./loader.js";
 import type { AppUpdate } from "./commits.js";
 import type { AppLink } from "./link.js";
 import type { RequestsUnderWay } from "./net.js";

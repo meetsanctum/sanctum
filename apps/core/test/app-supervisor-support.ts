@@ -31,6 +31,7 @@ export function setUp(manager: Partial<AppContainerManager> = {}) {
     app: { id: manifest.id },
     manifest,
     apartIn: "1.0.0+test",
+    granted: [],
     link: { isReady: () => false, isConnected: () => false },
     supervision: newSupervision(new Date()),
   } as unknown as InstalledApp;
@@ -40,12 +41,16 @@ export function setUp(manager: Partial<AppContainerManager> = {}) {
         appContainers: true,
         memoryLimits: true,
         discovery: false,
+        lan: false,
       }),
       startAppContainer: async (app) => {
         started.push(app);
         return { kept: false };
       },
       stopAppContainer: async (app) => void stopped.push(app),
+      applyLanPolicy: async () => {
+        throw new Error("No app here reaches devices");
+      },
       removeAppContainer: async () => undefined,
       appContainer: async () => ({ state: "running" }),
       appUsage: async () => ({

@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach } from "vitest";
 
-import type { ApartPackage } from "../src/app-host/host.js";
+import type { ApartPackage } from "../src/app-host/loader.js";
 import type { AppPackage } from "./runner-apps.js";
 import type { AppContainerManager } from "../src/app-host/supervisor.js";
 import type { AppUpdateManager } from "../src/app-host/updates.js";
@@ -27,11 +27,12 @@ import { defaultLimits, type Limits } from "../src/auth/limits.js";
 import { authClients, authTokens } from "../src/auth/schema.js";
 import { hashToken, newClientToken } from "../src/auth/tokens.js";
 import { openCoreDatabase } from "../src/database.js";
+import type { HostStatus } from "../src/manager-answers.js";
 import {
   createManagerClient,
   ManagerRefusal,
   ManagerUnavailable,
-  type HostStatus,
+  type LanPolicy,
 } from "../src/manager.js";
 import { createModules } from "../src/modules.js";
 import { loadHomeId } from "../src/places/places.js";
@@ -163,11 +164,28 @@ export function fakeManager() {
       for (const wake of [...network.waiting]) wake();
     },
   };
+  // The rules it loads into the network of each app that reaches devices:
+  // the holder it made for each app's container, and every policy it loaded,
+  // each answered once `answering` lets it. A test says whether it can.
+  const lan = {
+    can: false,
+    made: 0,
+    holders: new Map<string, string>(),
+    loaded: [] as { app: string; policy: LanPolicy; holder: string }[],
+    // Every policy it was handed after a start, as it arrived.
+    asked: [] as LanPolicy[],
+    answering: Promise.resolve(),
+    // What an app's rules let through now.
+    of(app: string) {
+      return [...lan.loaded].reverse().find((each) => each.app === app)?.policy;
+    },
+  };
   const manager: TestManager = {
     capabilities: () => ({
       appContainers: true,
       memoryLimits: true,
       discovery: true,
+      lan: lan.can,
     }),
     async discovery(after, services) {
       network.asked.push([...services]);
@@ -191,7 +209,24 @@ export function fakeManager() {
         lost: [],
       };
     },
-    startAppContainer: async () => ({ kept: false }),
+    async startAppContainer(app, spec) {
+      if (!spec.lan) return { kept: false };
+      const holder = `holder-${++lan.made}`;
+      lan.holders.set(app, holder);
+      lan.loaded.push({ app, policy: spec.lan, holder });
+      const { core, count } = spec.lan;
+      return { kept: false, lan: { core, count, manager: "test", holder } };
+    },
+    async applyLanPolicy(app, { manager: _, holder, ...policy }) {
+      lan.asked.push(policy);
+      await lan.answering;
+      if (lan.holders.get(app) !== holder) {
+        throw new ManagerRefusal("That holder isn't the app's", 409);
+      }
+      lan.loaded.push({ app, policy, holder });
+      const { core, count } = policy;
+      return { core, count, manager: "test", holder };
+    },
     async stopAppContainer() {},
     async removeAppContainer() {},
     appContainer: async () => ({ state: "stopped" }),
@@ -301,7 +336,7 @@ export function fakeManager() {
       return { freed: 1_300_000_000 };
     },
   };
-  return { manager, calls, kept, updates, network };
+  return { manager, calls, kept, updates, network, lan };
 }
 
 export type SocketRequest = { method: string; url: string; body: unknown };
