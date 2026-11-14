@@ -20,16 +20,20 @@ const kitchen: Sighting = {
   txt: { mac: "aabbccddeeff" },
 };
 
-function finder(heard: DriverDiscovery[], needed = true) {
+function finder(
+  heard: DriverDiscovery[],
+  needed = true,
+  { id = "test.finder", service = "_example._tcp" } = {},
+) {
   return defineApp({
-    id: "test.finder",
+    id,
     name: "Finder",
     version: "0.1.0",
     core: "^1.0.0",
     permissions: [
       { id: "devices.register", reason: "For the test.", needed: true },
       {
-        id: "discover:mdns:_example._tcp",
+        id: `discover:mdns:${service}`,
         reason: "For the test.",
         needed,
       },
@@ -99,6 +103,39 @@ describe("finding devices", () => {
       .poll(() => heard.at(-1))
       .toEqual({ found: [kitchen], lost: [] });
     expect(heard.flatMap((each) => each.found)).toEqual([kitchen]);
+  });
+
+  it("hands each of two drivers only what it looks for", async () => {
+    const heard: DriverDiscovery[] = [];
+    const others: DriverDiscovery[] = [];
+    const fake = fakeManager();
+    await testCore({
+      manager: fake.manager,
+      allowed: false,
+      apps: [
+        { app: finder(heard), origin: "official" },
+        {
+          app: finder(others, true, {
+            id: "test.other",
+            service: "_other._tcp",
+          }),
+          origin: "official",
+        },
+      ],
+    });
+    const other = { ...kitchen, service: "_other._tcp", name: "hall-plug" };
+    fake.network.put(kitchen);
+    fake.network.put(other);
+
+    await expect
+      .poll(() => fake.network.asked.at(-1))
+      .toEqual(["_example._tcp", "_other._tcp"]);
+    await expect
+      .poll(() => heard.flatMap((each) => each.found))
+      .toEqual([kitchen]);
+    await expect
+      .poll(() => others.flatMap((each) => each.found))
+      .toEqual([other]);
   });
 
   it("looks for nothing a driver hasn't been allowed to", async () => {

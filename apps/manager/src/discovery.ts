@@ -395,6 +395,8 @@ export function createDiscovery(
           const timer = setTimeout(wake, wait);
           waiting.add(wake);
         });
+        // A burst while it waited may have outrun the changes kept.
+        if (from < (changes[0]?.seq ?? seq + 1) - 1) return answer(null);
       }
       return answer(from);
     },

@@ -206,6 +206,21 @@ describe("finding devices", () => {
     });
   });
 
+  it("answers everything afresh when more changed while it waited than it keeps", async () => {
+    const { discovery, browsers } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    const waiting = discovery.poll(first.after, ["_example._tcp"]);
+    browsers.get("_example._tcp")!.services = Array.from(
+      { length: 1_001 },
+      (_, each) => ({ ...kitchen, name: `sensor-${each}` }),
+    );
+    discovery.take();
+
+    const answer = await waiting;
+    expect(answer.full).toBe(true);
+    expect(answer.found).toHaveLength(1_001);
+  });
+
   it("waits for news, and answers as soon as there is some", async () => {
     const { discovery, browsers } = pretend();
     const first = await discovery.poll(null, ["_example._tcp"]);
