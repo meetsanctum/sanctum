@@ -153,6 +153,9 @@ export function AddDevices(props: {
   // and those added here, which stay to be named and placed.
   const [shown, setShown] = useState<FoundDevice[]>([]);
   const [added, setAdded] = useState<Record<string, DeviceInfo>>({});
+  const [pendingAdds, setPendingAdds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   // A closed dialog's request must finish before a later dialog opens the
   // network, including when the first open is still waiting on a radio.
@@ -247,6 +250,7 @@ export function AddDevices(props: {
     setPairing(undefined);
     setShown([]);
     setAdded({});
+    setPendingAdds(new Set());
     void open();
     return () => {
       session.current += 1;
@@ -257,14 +261,18 @@ export function AddDevices(props: {
   useEffect(() => {
     if (!props.open) return;
     const current = session.current;
+    const received = (next: PairingInfo) => {
+      setPairing(next);
+      if (next.drivers?.length) setUnavailable(false);
+    };
     return props.live.subscribe({
       message(message) {
-        if (message.type === "pairing") setPairing(message.pairing);
+        if (message.type === "pairing") received(message.pairing);
       },
       refresh() {
         void coreJson<PairingInfo>("/api/devices/pairing")
           .then((next) => {
-            if (current === session.current) setPairing(next);
+            if (current === session.current) received(next);
           })
           .catch(() => undefined);
       },
@@ -272,8 +280,8 @@ export function AddDevices(props: {
   }, [props.open, props.live]);
 
   // Found devices keep their place: one that goes is dropped, unless it was
-  // added here, and one that comes goes last.
-  const found = props.adding?.found;
+  // added here or its Add is still waiting, and one that comes goes last.
+  const found = props.adding?.found ?? pairing?.found;
   useEffect(() => {
     if (!props.open) return;
     setShown((before) => {
@@ -283,12 +291,16 @@ export function AddDevices(props: {
         ...before.flatMap((each) => {
           const key = foundKey(each);
           const current = now.get(key);
-          return current ? [current] : Object.hasOwn(added, key) ? [each] : [];
+          return current
+            ? [current]
+            : Object.hasOwn(added, key) || pendingAdds.has(key)
+              ? [each]
+              : [];
         }),
         ...(found ?? []).filter((each) => !known.has(foundKey(each))),
       ];
     });
-  }, [props.open, found, added]);
+  }, [props.open, found, added, pendingAdds]);
 
   const until = pairing?.until ?? null;
   useEffect(() => {
@@ -319,7 +331,7 @@ export function AddDevices(props: {
   const radios = (drivers ?? []).flatMap((id) => appName(id) ?? []);
   const pairs = !unavailable && (drivers === undefined || drivers.length > 0);
   const nothing =
-    unavailable && shown.length === 0
+    !pairs && !opening && shown.length === 0
       ? "No app that adds devices is running."
       : undefined;
 
@@ -383,6 +395,14 @@ export function AddDevices(props: {
                     key={key}
                     found={each}
                     appName={appName(each.driver)}
+                    onWorkingChange={(isWorking) => {
+                      setPendingAdds((before) => {
+                        const next = new Set(before);
+                        if (isWorking) next.add(key);
+                        else next.delete(key);
+                        return next;
+                      });
+                    }}
                     onAdded={(device) => {
                       setAdded((before) => ({ ...before, [key]: device }));
                       props.onChanged(device);
@@ -473,6 +493,7 @@ export function AddDevices(props: {
 function FoundRow(props: {
   found: FoundDevice;
   appName: string | null;
+  onWorkingChange: (isWorking: boolean) => void;
   onAdded: (device: DeviceInfo) => void;
 }) {
   const ids = useId();
@@ -493,20 +514,27 @@ function FoundRow(props: {
 
   const answerTo = (id: string) =>
     Object.hasOwn(answers, id) ? answers[id]! : "";
+  const isAsking = asking && found.asks.length > 0;
   const complete = found.asks.every((question) => answerTo(question.id) !== "");
 
   const add = async () => {
     if (working) return;
     setWorking(true);
+    props.onWorkingChange(true);
     setRefused(undefined);
     setFailure(undefined);
     try {
       const result = await coreJson<AddResult>("/api/devices/add", {
         method: "POST",
-        json: { driver: found.driver, key: found.key, answers },
+        json: {
+          driver: found.driver,
+          key: found.key,
+          answers: Object.fromEntries(
+            found.asks.map((question) => [question.id, answerTo(question.id)]),
+          ),
+        },
       });
       if (!isShown.current) return;
-      setWorking(false);
       if ("refused" in result) {
         setRefused(result.refused);
         return;
@@ -515,8 +543,12 @@ function FoundRow(props: {
       props.onAdded(result.added);
     } catch (error) {
       if (!isShown.current) return;
-      setWorking(false);
       setFailure(addProblem(error, props.appName));
+    } finally {
+      if (isShown.current) {
+        setWorking(false);
+        props.onWorkingChange(false);
+      }
     }
   };
 
@@ -526,7 +558,7 @@ function FoundRow(props: {
   };
 
   const label = `Add ${found.name}`;
-  const detail = [props.appName, asking ? null : found.description]
+  const detail = [props.appName, isAsking ? null : found.description]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -541,7 +573,7 @@ function FoundRow(props: {
             </span>
           )}
         </div>
-        {!asking && (
+        {!isAsking && (
           <Button
             variant="outline"
             size="sm"
@@ -557,7 +589,7 @@ function FoundRow(props: {
           </Button>
         )}
       </div>
-      {asking && (
+      {isAsking && (
         <form onSubmit={submit} className="flex flex-col gap-2.5 ps-11">
           {found.asks.map((question, index) => (
             <QuestionField

@@ -277,24 +277,22 @@ export function createDriverCore(
       if (!app.driver?.add) {
         refuse(new Error(`${app.id} lists devices it found but cannot add`));
       }
-      found = parsed.data
-        .filter((each) => !registered.has(each.key))
-        .map((each) => {
-          const asks = shownQuestions(app.driver, each.asks);
-          if (asks.length !== each.asks.length) {
-            refuse(
-              new Error(`${app.id} asks something adding it doesn't declare`),
-            );
-          }
-          return {
-            driver: app.id,
-            key: each.key,
-            name: each.name,
-            description: each.description,
-            type: each.type,
-            asks,
-          };
-        });
+      found = parsed.data.map((each) => {
+        const asks = shownQuestions(app.driver, each.asks);
+        if (asks.length !== each.asks.length) {
+          refuse(
+            new Error(`${app.id} asks something adding it doesn't declare`),
+          );
+        }
+        return {
+          driver: app.id,
+          key: each.key,
+          name: each.name,
+          description: each.description,
+          type: each.type,
+          asks,
+        };
+      });
     },
     ...secretCalls,
     log() {},
@@ -463,6 +461,7 @@ export function createDriverCore(
      * question declares.
      */
     async add(key: string, answers: Record<string, string> = {}) {
+      if (registered.has(key)) return;
       const add = driver().add;
       const listed = found.find((each) => each.key === key);
       if (!add || !listed) {

@@ -13,16 +13,22 @@ export function useAdding(live: LiveFeed) {
   const [adding, setAdding] = useState<PairingInfo>();
   useEffect(() => {
     let isCurrent = true;
-    const read = () =>
+    let revision = 0;
+    const read = () => {
+      const requested = ++revision;
       void coreJson<PairingInfo>("/api/devices/pairing")
         .then((info) => {
-          if (isCurrent) setAdding(info);
+          if (isCurrent && requested === revision) setAdding(info);
         })
         .catch(() => undefined);
+    };
     read();
     const unsubscribe = live.subscribe({
       message(message) {
-        if (message.type === "pairing") setAdding(message.pairing);
+        if (message.type === "pairing") {
+          revision += 1;
+          setAdding(message.pairing);
+        }
       },
       refresh: read,
     });

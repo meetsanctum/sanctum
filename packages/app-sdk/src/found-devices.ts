@@ -32,7 +32,11 @@ export const foundDevice = z.strictObject({
   /** What it is, where the driver knows, by device type. */
   type: deviceTypeId.nullable().default(null),
   /** The questions adding it asks, by their ids among driver.questions. */
-  asks: z.array(z.string().regex(problemId)).max(maxQuestions).default([]),
+  asks: z
+    .array(z.string().regex(problemId))
+    .max(maxQuestions)
+    .refine((asks) => new Set(asks).size === asks.length, "each question once")
+    .default([]),
 });
 export type FoundReport = z.input<typeof foundDevice>;
 

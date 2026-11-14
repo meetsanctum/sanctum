@@ -12,6 +12,7 @@ import { createDriverCore } from "../src/index.js";
 
 function setup(options: { refusal?: string; registers?: boolean } = {}) {
   const { refusal = "wrongKey", registers = true } = options;
+  const adds: string[] = [];
   let context!: AppContext;
   const core = createDriverCore(
     defineApp({
@@ -35,6 +36,7 @@ function setup(options: { refusal?: string; registers?: boolean } = {}) {
           },
         },
         async add(ctx, { key, answers }): Promise<DriverAddResult> {
+          adds.push(key);
           if (key === "plug" && answers.key !== "right") {
             return { refused: { question: "key", refusal } };
           }
@@ -50,7 +52,7 @@ function setup(options: { refusal?: string; registers?: boolean } = {}) {
       },
     }),
   );
-  return { core, context: () => context };
+  return { core, context: () => context, adds };
 }
 
 describe("the suite's found devices", () => {
@@ -96,5 +98,36 @@ describe("the suite's found devices", () => {
     await expect(careless.core.add("sensor")).rejects.toThrow(
       /without registering it/,
     );
+  });
+
+  it("doesn't ask the driver to add a device the home already has", async () => {
+    const { core, context, adds } = setup();
+    await core.start();
+    await context().devices.found([{ key: "sensor", name: "Sensor" }]);
+    await core.add("sensor");
+    // A driver can replace its list after registering the device.
+    await context().devices.found([]);
+    await core.add("sensor");
+
+    expect(adds).toEqual(["sensor"]);
+    expect(core.refused).toEqual([]);
+  });
+
+  it("keeps listed devices so a removed device can be found again", async () => {
+    const { core, context } = setup();
+    await core.start();
+    await context().devices.register({
+      key: "sensor",
+      name: "Sensor",
+      manufacturer: null,
+      model: null,
+      capabilities: [],
+    });
+    await context().devices.found([{ key: "sensor", name: "Sensor" }]);
+    expect(core.found).toEqual([]);
+
+    core.registered.delete("sensor");
+
+    expect(core.found.map((each) => each.key)).toEqual(["sensor"]);
   });
 });

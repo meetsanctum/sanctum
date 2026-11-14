@@ -54,6 +54,10 @@ describe("found devices", () => {
       [{ key: "a", name: "A", asks: ["Key"] }],
     ],
     [
+      "asking a question twice",
+      [{ key: "a", name: "A", asks: ["key", "key"] }],
+    ],
+    [
       "more than the most",
       Array.from({ length: maxFound + 1 }, (_, n) => ({
         key: `${n}`,

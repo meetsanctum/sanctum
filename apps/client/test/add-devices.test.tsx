@@ -102,7 +102,10 @@ describe("Add devices, with what drivers found", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show(onChanged: (device: DeviceInfo) => void = () => {}) {
+  async function show(
+    onChanged: (device: DeviceInfo) => void = () => {},
+    includeAdding = true,
+  ) {
     await act(async () =>
       root.render(
         <AddDevices
@@ -111,7 +114,7 @@ describe("Add devices, with what drivers found", () => {
           devices={devices}
           rooms={[office]}
           apps={[zigbee, example]}
-          adding={adding}
+          adding={includeAdding ? adding : undefined}
           live={live}
           onChanged={onChanged}
         />,
@@ -173,6 +176,7 @@ describe("Add devices, with what drivers found", () => {
     // Gone from what was found, it keeps its place to be named.
     adding = { ...adding, found: [plug] };
     devices = [added];
+    await act(async () => live.publish({ type: "pairing", pairing: adding }));
     await show(changed);
     const rows = [
       ...dialog.querySelectorAll("section")[0]!.querySelectorAll("li"),
@@ -240,6 +244,116 @@ describe("Add devices, with what drivers found", () => {
     );
     expect(dialog.querySelector("input[type=password]")).toBeNull();
     expect(dialog.textContent).toContain("Ready");
+  });
+
+  it("keeps an add in progress when registration removes it from discovery", async () => {
+    const added = light("sensor-1", "Kitchen sensor", {
+      driver: "sanctum.example",
+      driverName: "Kitchen sensor",
+    });
+    let finish!: (result: { added: DeviceInfo }) => void;
+    answers.kitchen = () => new Promise((resolve) => (finish = resolve));
+    const changed = vi.fn();
+    const dialog = await show(changed);
+    await act(async () => named("Add Kitchen sensor").click());
+
+    // Registration reaches live clients before the add request finishes.
+    adding = { ...adding, found: [plug] };
+    devices = [added];
+    await act(async () => live.publish({ type: "pairing", pairing: adding }));
+    await show(changed);
+    expect(named("Add Kitchen sensor")?.disabled).toBe(true);
+    await act(async () => finish({ added }));
+
+    expect(changed).toHaveBeenCalledWith(added);
+    expect(
+      dialog.querySelector('input[aria-label="Name for Kitchen sensor"]'),
+    ).not.toBeNull();
+    expect(dialog.textContent).toContain("Ready");
+  });
+
+  it("sends only answers to the questions the driver currently asks", async () => {
+    answers["living-room"] = () => ({
+      refused: { question: "label", refusal: "wrongKey" },
+    });
+    const dialog = await show();
+    await act(async () => named("Add Living room plug").click());
+    await type(
+      dialog.querySelector<HTMLInputElement>("input[type=password]")!,
+      "old key",
+    );
+
+    adding = {
+      ...adding,
+      found: [{ ...plug, asks: [{ ...key, id: "label", kind: "text" }] }],
+    };
+    await show();
+    await type(
+      dialog.querySelector<HTMLInputElement>("input[type=text]")!,
+      "new answer",
+    );
+    await act(async () => named("Add Living room plug").click());
+
+    expect(requests.at(-1)).toEqual({
+      path: "/api/devices/add",
+      json: {
+        driver: "sanctum.example",
+        key: "living-room",
+        answers: { label: "new answer" },
+      },
+    });
+  });
+
+  it("can add after the driver stops asking questions", async () => {
+    answers["living-room"] = () => ({
+      added: light("plug-1", "Living room plug"),
+    });
+    const dialog = await show();
+    await act(async () => named("Add Living room plug").click());
+    await type(
+      dialog.querySelector<HTMLInputElement>("input[type=password]")!,
+      "old key",
+    );
+    adding = { ...adding, found: [{ ...plug, asks: [] }] };
+    await show();
+
+    expect(named("Add Living room plug")).not.toBeNull();
+    await act(async () => named("Add Living room plug").click());
+    expect(requests.at(-1)).toEqual({
+      path: "/api/devices/add",
+      json: { driver: "sanctum.example", key: "living-room", answers: {} },
+    });
+    expect(dialog.textContent).toContain("Ready");
+  });
+
+  it("follows found devices from its own pairing updates", async () => {
+    const dialog = await show(undefined, false);
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: { ...adding, found: [plug] } }),
+    );
+
+    expect(dialog.textContent).not.toContain("Kitchen sensor");
+    expect(dialog.textContent).toContain("Living room plug");
+  });
+
+  it("offers Look again when a radio starts after opening without one", async () => {
+    adding = { ...adding, drivers: [] };
+    vi.mocked(coreJson).mockImplementationOnce(async () => {
+      throw new CoreError(503, "unavailable");
+    });
+    const dialog = await show();
+    await act(async () =>
+      live.publish({
+        type: "pairing",
+        pairing: { ...adding, drivers: [zigbee.id] },
+      }),
+    );
+
+    expect(
+      [...dialog.querySelectorAll("button")].find(
+        (button) => button.textContent === "Look again",
+      ),
+    ).toBeDefined();
   });
 
   it("says when adding didn't work", async () => {
