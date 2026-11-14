@@ -14,25 +14,17 @@ import {
   type DevicePageDefinition,
   type DevicePageInfo,
 } from "./device-pages.js";
-import {
-  registerPermission,
-  type DriverCommand,
-  type DriverMove,
-} from "./devices.js";
+import { type DriverCommand, type DriverMove } from "./devices.js";
 import type { EntityTypeDefinition, Provides } from "./entities.js";
 import {
-  assertDriverProblems,
   staticProblems,
   type DriverProblem,
   type DriverQuestion,
   type DriverRepair,
   type DriverRepairResult,
 } from "./device-problems.js";
-import {
-  discoveredServices,
-  isMalformedDiscover,
-  type DriverDiscovery,
-} from "./discovery.js";
+import type { DriverDiscovery } from "./discovery.js";
+import { assertDriver } from "./driver.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
 import {
@@ -481,65 +473,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   assertRoomSections(app);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
-  // A driver brings devices and carries out their commands, so the two go
-  // together.
-  const isDriver = asked.includes(registerPermission);
-  if (isDriver !== (typeof app.driver?.command === "function")) {
-    throw new Error(
-      `A driver app holds ${registerPermission} and has a driver.command function`,
-    );
-  }
-  const pairing = app.driver?.pairing;
-  if (
-    pairing !== undefined &&
-    (typeof pairing?.open !== "function" ||
-      typeof pairing?.close !== "function")
-  ) {
-    throw new Error("A driver's pairing has open and close functions");
-  }
-  for (const hook of ["move", "remove"] as const) {
-    if (
-      app.driver?.[hook] !== undefined &&
-      typeof app.driver[hook] !== "function"
-    ) {
-      throw new Error(`A driver's ${hook} must be a function`);
-    }
-  }
-  const firmware = app.driver?.firmware;
-  if (
-    firmware !== undefined &&
-    (["check", "update", "stop"] as const).some(
-      (hook) => typeof firmware?.[hook] !== "function",
-    )
-  ) {
-    throw new Error("A driver's firmware has check, update and stop functions");
-  }
-  if (
-    app.driver?.probe !== undefined &&
-    typeof app.driver.probe !== "function"
-  ) {
-    throw new Error("A driver's probe must be a function");
-  }
-  if (app.driver) assertDriverProblems(app.driver);
-  // A driver hears of what it looks for on the network; only it looks.
-  const malformed = asked.find(isMalformedDiscover);
-  if (malformed) {
-    throw new Error(
-      `${malformed} must name an mDNS service, such as discover:mdns:_example._tcp`,
-    );
-  }
-  const looks = discoveredServices(asked).length > 0;
-  if (
-    app.driver?.discovered !== undefined &&
-    typeof app.driver.discovered !== "function"
-  ) {
-    throw new Error("A driver's discovered must be a function");
-  }
-  if (looks !== (app.driver?.discovered !== undefined)) {
-    throw new Error(
-      "A driver has a discovered function exactly when it asks for a discover:mdns: permission",
-    );
-  }
+  assertDriver(app, asked);
   return app;
 }
 

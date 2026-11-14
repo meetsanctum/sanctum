@@ -7,19 +7,21 @@ import {
 
 import type { InstalledApp } from "./installed.js";
 
-// What the drivers that look for devices on the home's network hear of them
-// (driver.discovered): those of the services each holds discover:mdns: for,
-// every one as it starts, then each found, changed or lost, in order. What
-// each has heard is kept for its run, so a driver that starts again hears
-// everything again, and one that couldn't take a change in hears everything
-// a little later. A driver that isn't running, or holds no such permission,
-// hears nothing.
+// Drivers hear only the services they hold permission for. Each delivery
+// follows the last completed one, taking its permissions and run afresh.
+// Changes during a call are taken in once it ends; a failed call is retried
+// with everything current and anything it may have missed losing.
 
 const againMs = 30_000;
 
 type Heard = {
+  entry: InstalledApp;
   runId: number;
-  sightings: Map<string, { said: string; service: string; name: string }>;
+  sightings: Map<string, Sighting>;
+  isPending: boolean;
+  hasHeard: boolean;
+  needsFull: boolean;
+  retry?: NodeJS.Timeout;
 };
 
 const looks = (entry: InstalledApp) =>
@@ -27,10 +29,8 @@ const looks = (entry: InstalledApp) =>
 
 export function createDiscoveryHandOut(options: {
   installed: ReadonlyMap<string, InstalledApp>;
-  // Whether it takes calls now.
   accepts: (entry: InstalledApp) => boolean;
   sightings: () => readonly Sighting[];
-  // Hands a driver what changed.
   discovered: (appId: string, discovery: DriverDiscovery) => Promise<void>;
   log: (message: string) => void;
   againMs?: number;
@@ -38,81 +38,115 @@ export function createDiscoveryHandOut(options: {
   const { installed, log } = options;
   const heard = new Map<string, Heard>();
   const turns = new Map<string, Promise<void>>();
-  let again: NodeJS.Timeout | undefined;
+  let isClosed = false;
 
-  function handOut(appId: string, discovery: DriverDiscovery) {
-    const before = turns.get(appId) ?? Promise.resolve();
-    const turn = before.then(() =>
-      options.discovered(appId, discovery).catch((error: unknown) => {
-        log(
-          `apps: ${appId} didn't take in what was found (${error instanceof Error ? error.message : String(error)})`,
-        );
-        // It hears everything afresh.
-        heard.delete(appId);
-        again ??= setTimeout(() => {
-          again = undefined;
-          sync();
-        }, options.againMs ?? againMs);
-        again.unref?.();
-      }),
+  function forget(appId: string) {
+    clearTimeout(heard.get(appId)?.retry);
+    heard.delete(appId);
+  }
+
+  function isCurrent(appId: string, state: Heard) {
+    return (
+      !isClosed &&
+      heard.get(appId) === state &&
+      installed.get(appId) === state.entry &&
+      state.entry.runId === state.runId
     );
-    turns.set(appId, turn);
-    void turn.then(() => {
-      if (turns.get(appId) === turn) turns.delete(appId);
-    });
+  }
+
+  async function handOut(appId: string, state: Heard) {
+    if (!isCurrent(appId, state)) return;
+    const services = new Set(discoveredServices(state.entry.granted));
+    if (!options.accepts(state.entry) || services.size === 0) {
+      forget(appId);
+      return;
+    }
+    const want = new Map(
+      options
+        .sightings()
+        .filter((sighting) => services.has(sighting.service))
+        .map((sighting) => [sightingKey(sighting), sighting]),
+    );
+    const found = [...want].flatMap(([key, sighting]) =>
+      !state.needsFull &&
+      JSON.stringify(state.sightings.get(key)) === JSON.stringify(sighting)
+        ? []
+        : [sighting],
+    );
+    const lost = [...state.sightings]
+      .filter(([key]) => !want.has(key))
+      .map(([, { service, name }]) => ({ service, name }));
+    if (state.hasHeard && found.length === 0 && lost.length === 0) {
+      state.isPending = false;
+      return;
+    }
+    try {
+      await options.discovered(appId, { found, lost });
+      if (!isCurrent(appId, state)) return;
+      state.sightings = want;
+      state.hasHeard = true;
+      state.needsFull = false;
+      state.isPending = false;
+      sync();
+    } catch (error) {
+      if (!isCurrent(appId, state)) return;
+      log(
+        `apps: ${appId} didn't take in what was found (${error instanceof Error ? error.message : String(error)})`,
+      );
+      // A hook may have applied part of its input before failing. Keep both
+      // sets so a sighting gone before the retry is still handed on as lost.
+      state.sightings = new Map([...state.sightings, ...want]);
+      state.needsFull = true;
+      state.isPending = false;
+      state.retry = setTimeout(() => {
+        state.retry = undefined;
+        sync();
+      }, options.againMs ?? againMs);
+      state.retry.unref();
+    }
   }
 
   function sync() {
-    const all = options.sightings();
+    if (isClosed) return;
+    for (const appId of heard.keys()) {
+      if (!installed.has(appId)) forget(appId);
+    }
     for (const entry of installed.values()) {
-      if (!looks(entry)) continue;
       const appId = entry.app.id;
-      const services = new Set(discoveredServices(entry.granted));
-      // One not running, or not allowed to look, hears nothing; one allowed
-      // again hears everything afresh.
-      if (!options.accepts(entry) || services.size === 0) {
-        heard.delete(appId);
+      if (
+        !looks(entry) ||
+        !options.accepts(entry) ||
+        discoveredServices(entry.granted).length === 0
+      ) {
+        forget(appId);
         continue;
       }
-      const want = new Map(
-        all
-          .filter((sighting) => services.has(sighting.service))
-          .map((sighting) => [sightingKey(sighting), sighting]),
-      );
-      const before = heard.get(appId);
-      const had =
-        before?.runId === entry.runId
-          ? before.sightings
-          : new Map<string, never>();
-      const found = [...want].flatMap(([key, sighting]) =>
-        had.get(key)?.said === JSON.stringify(sighting) ? [] : [sighting],
-      );
-      const lost = [...had]
-        .filter(([key]) => !want.has(key))
-        .map(([, { service, name }]) => ({ service, name }));
-      heard.set(appId, {
-        runId: entry.runId,
-        sightings: new Map(
-          [...want].map(([key, sighting]) => [
-            key,
-            {
-              said: JSON.stringify(sighting),
-              service: sighting.service,
-              name: sighting.name,
-            },
-          ]),
-        ),
-      });
-      // A driver starting with nothing found hears so too, once.
-      const starts = before?.runId !== entry.runId;
-      if (found.length > 0 || lost.length > 0 || starts) {
-        handOut(appId, { found, lost });
+      let state = heard.get(appId);
+      if (state?.entry !== entry || state.runId !== entry.runId) {
+        forget(appId);
+        state = {
+          entry,
+          runId: entry.runId,
+          sightings: new Map(),
+          isPending: false,
+          hasHeard: false,
+          needsFull: false,
+        };
+        heard.set(appId, state);
       }
+      if (state.isPending || state.retry) continue;
+      state.isPending = true;
+      // Recheck the run and permissions when this turn actually starts.
+      const before = turns.get(appId) ?? Promise.resolve();
+      const turn = before.then(() => handOut(appId, state));
+      turns.set(appId, turn);
+      void turn.then(() => {
+        if (turns.get(appId) === turn) turns.delete(appId);
+      });
     }
   }
 
   return {
-    /** The services the drivers that may look are looking for. */
     services() {
       return [
         ...new Set(
@@ -122,12 +156,10 @@ export function createDiscoveryHandOut(options: {
         ),
       ].sort();
     },
-
-    /** Hands each driver what changed for it since it last heard. */
     sync,
-
     close() {
-      clearTimeout(again);
+      isClosed = true;
+      for (const appId of heard.keys()) forget(appId);
     },
   };
 }

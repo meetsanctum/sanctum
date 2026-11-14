@@ -131,6 +131,7 @@ export function isHomeAddress(address: string, networks: HostNetworks) {
 
 /** What mDNS says of one instance, as bonjour-service gives it. */
 export type FoundService = {
+  lastSeen: number;
   name?: string;
   host?: string;
   port?: number;
@@ -142,8 +143,6 @@ export type FoundService = {
 export type ServiceBrowser = {
   readonly services: readonly FoundService[];
   on(event: string, listener: () => void): unknown;
-  update(): void;
-  expire(): void;
   stop(): void;
 };
 
@@ -246,16 +245,35 @@ export function createDiscovery(
   function take() {
     const at = now();
     const nets = networks();
+    // A network change must not leave an address the app may no longer reach.
+    for (const [key, kept] of sightings) {
+      const sighting = sightingOf(
+        kept.sighting.service,
+        {
+          ...kept.sighting,
+          lastSeen: kept.seenAt,
+        },
+        nets,
+      );
+      if (!sighting) lose(key);
+      else if (JSON.stringify(sighting) !== JSON.stringify(kept.sighting)) {
+        kept.sighting = sighting;
+        record({ key, found: sighting });
+      }
+    }
     for (const [service, browser] of browsers) {
-      browser.expire();
       const seen = new Set<string>();
       for (const found of browser.services) {
+        if (at - found.lastSeen >= stale) continue;
         const sighting = sightingOf(service, found, nets);
-        if (!sighting) continue;
+        if (!sighting) {
+          if (found.name) lose(sightingKey({ service, name: found.name }));
+          continue;
+        }
         const key = sightingKey(sighting);
         seen.add(key);
         const kept = sightings.get(key);
-        sightings.set(key, { sighting, seenAt: at });
+        sightings.set(key, { sighting, seenAt: found.lastSeen });
         if (
           !kept ||
           JSON.stringify(kept.sighting) !== JSON.stringify(sighting)
@@ -286,6 +304,17 @@ export function createDiscovery(
     }, settleMs);
   };
 
+  function browse(service: string) {
+    browsers.get(service)?.stop();
+    const [, type, protocol] = /^_(.+)\._(tcp|udp)$/.exec(service)!;
+    browsing ??= (options.browsing ?? bonjourBrowsing)();
+    const browser = browsing.browse(type!, protocol as "tcp" | "udp");
+    for (const event of ["up", "down", "srv-update", "txt-update"]) {
+      browser.on(event, settle);
+    }
+    browsers.set(service, browser);
+  }
+
   // Browses for the services asked for, and only those: one no longer asked
   // for stops, and its sightings are lost.
   function want(services: readonly string[]) {
@@ -300,20 +329,16 @@ export function createDiscovery(
     }
     for (const service of services) {
       if (browsers.has(service)) continue;
-      const [, type, protocol] = /^_(.+)\._(tcp|udp)$/.exec(service)!;
-      browsing ??= (options.browsing ?? bonjourBrowsing)();
-      const browser = browsing.browse(type!, protocol as "tcp" | "udp");
-      for (const event of ["up", "down", "srv-update", "txt-update"]) {
-        browser.on(event, settle);
-      }
-      browsers.set(service, browser);
+      browse(service);
       log(`discovery: looking for ${service}`);
     }
   }
 
   const every = setInterval(() => {
     take();
-    for (const browser of browsers.values()) browser.update();
+    // The browser keeps unchanged answers, including their old addresses
+    // and timestamp. A fresh browse asks without retaining that cache.
+    for (const service of browsers.keys()) browse(service);
   }, options.askEveryMs ?? askEveryMs);
   every.unref();
 

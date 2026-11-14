@@ -66,6 +66,23 @@ describe("looking for devices on the network", () => {
     ]);
   });
 
+  it("refuses discovery from an app that isn't a driver", () => {
+    expect(() =>
+      defineApp({
+        id: "sanctum.example",
+        name: "Example",
+        version: "0.1.0",
+        core: "^1.0.0",
+        permissions: [
+          { id: "discover:mdns:_example._tcp", reason: "For the test." },
+        ],
+        actions: [],
+        events: [],
+        driver: { discovered },
+      } as unknown as AppDefinition),
+    ).toThrow("Only a driver");
+  });
+
   it.each([
     [
       "a service that isn't one",

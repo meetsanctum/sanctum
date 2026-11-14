@@ -40,18 +40,14 @@ describe("an address handed to an app", () => {
 
 class PretendBrowser extends EventEmitter implements ServiceBrowser {
   services: FoundService[] = [];
-  updates = 0;
   stopped = false;
-  update() {
-    this.updates += 1;
-  }
-  expire() {}
   stop() {
     this.stopped = true;
   }
 }
 
 const kitchen: FoundService = {
+  lastSeen: 0,
   name: "kitchen-sensor",
   host: "kitchen-sensor.local",
   port: 8080,
@@ -67,9 +63,10 @@ describe("finding devices", () => {
 
   function pretend() {
     const browsers = new Map<string, PretendBrowser>();
+    const hostNetworks = structuredClone(networks);
     let clock = 0;
     const discovery = createDiscovery({
-      networks: () => networks,
+      networks: () => hostNetworks,
       now: () => clock,
       waitMs: 50,
       browsing: () => ({
@@ -85,6 +82,7 @@ describe("finding devices", () => {
     return {
       discovery,
       browsers,
+      networks: hostNetworks,
       advance: (ms: number) => (clock += ms),
     };
   }
@@ -154,6 +152,57 @@ describe("finding devices", () => {
     expect(await discovery.poll(still.after, ["_example._tcp"])).toMatchObject({
       found: [],
       lost: [{ service: "_example._tcp", name: "kitchen-sensor" }],
+    });
+  });
+
+  it("doesn't count a cached service as another network response", async () => {
+    const { discovery, browsers, advance } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    browsers.get("_example._tcp")!.services = [kitchen];
+    discovery.take();
+    const found = await discovery.poll(first.after, ["_example._tcp"]);
+
+    advance(9 * 60_000);
+    discovery.take();
+    advance(60_000);
+    discovery.take();
+
+    expect(await discovery.poll(found.after, ["_example._tcp"])).toMatchObject({
+      found: [],
+      lost: [{ service: "_example._tcp", name: kitchen.name }],
+    });
+  });
+
+  it("loses a sighting as soon as its address becomes the host's own", async () => {
+    const { discovery, browsers } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    const browser = browsers.get("_example._tcp")!;
+    browser.services = [kitchen];
+    discovery.take();
+    const found = await discovery.poll(first.after, ["_example._tcp"]);
+    browser.services = [{ ...kitchen, addresses: ["192.168.1.10"] }];
+    discovery.take();
+
+    expect(await discovery.poll(found.after, ["_example._tcp"])).toMatchObject({
+      found: [],
+      lost: [{ service: "_example._tcp", name: kitchen.name }],
+    });
+  });
+
+  it("removes cached addresses when the host's networks change", async () => {
+    const { discovery, browsers, networks } = pretend();
+    const first = await discovery.poll(null, ["_example._tcp"]);
+    const browser = browsers.get("_example._tcp")!;
+    browser.services = [kitchen];
+    discovery.take();
+    const found = await discovery.poll(first.after, ["_example._tcp"]);
+    browser.services = [];
+    networks.own.push("192.168.1.40");
+    discovery.take();
+
+    expect(await discovery.poll(found.after, ["_example._tcp"])).toMatchObject({
+      found: [],
+      lost: [{ service: "_example._tcp", name: kitchen.name }],
     });
   });
 

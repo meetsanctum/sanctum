@@ -40,6 +40,7 @@ export function createSightings(options: {
   const { manager, log } = options;
   const kept = new Map<string, Sighting>();
   let after: string | null = null;
+  let isBrowsing = false;
   let closed = false;
   let wake: (() => void) | undefined;
 
@@ -84,16 +85,33 @@ export function createSightings(options: {
       // Nothing to look for, or a manager that can't: nothing is found.
       const can = manager.capabilities().discovery;
       if (services.length === 0 || !can) {
+        // The last permission going away must stop the manager's browsers.
+        // Ask only on that transition, so an idle core does not keep polling.
+        if (can && isBrowsing) {
+          try {
+            await manager.discovery(null, []);
+            isBrowsing = false;
+          } catch (error) {
+            if (closed) return;
+            log(`discovery: couldn't stop looking (${String(error)})`);
+            await pause(retry);
+            continue;
+          }
+        }
+        if (closed) return;
+        after = null;
         if (kept.size > 0) {
           kept.clear();
-          after = null;
           options.onChange();
         }
         await pause(can ? idleMs : (options.notYetMs ?? notYetMs));
         continue;
       }
       try {
-        take(await manager.discovery(after, services));
+        isBrowsing = true;
+        const answer = await manager.discovery(after, services);
+        if (closed) return;
+        take(answer);
         retry = options.retryMs ?? firstRetryMs;
         if (failing) log("discovery: the manager answers again");
         failing = false;
@@ -119,11 +137,6 @@ export function createSightings(options: {
     /** What the manager last said it found, of the services asked for. */
     list(): Sighting[] {
       return [...kept.values()];
-    },
-
-    /** Asks again now rather than after a pause, as when an app starts looking. */
-    nudge() {
-      wake?.();
     },
 
     close() {
