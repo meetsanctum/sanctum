@@ -288,8 +288,10 @@ describe("Home", () => {
       { heading: "No room", groups: [["On Home", "Loose lamp"]] },
     ]);
     // The hall's light is off Home, but its room's button is there.
-    expect(button("Turn on the Hall lights").textContent).toBe("Lights off");
-    expect(button("Turn off the Office lights").textContent).toBe("1 Light on");
+    expect(button("Turn lights on in Hall").textContent).toBe("Turn lights on");
+    expect(button("Turn 1 light off in Office").textContent).toBe(
+      "Turn 1 light off",
+    );
     expect(
       container.querySelector("[data-slot=readings]")?.textContent,
     ).toContain("21.5°");

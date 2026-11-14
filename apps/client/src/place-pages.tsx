@@ -2,7 +2,6 @@ import {
   deviceCategories,
   type AppInfo,
   type DeviceCategory,
-  type LightsPlace,
 } from "@meetsanctum/app-sdk";
 import {
   Button,
@@ -16,7 +15,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -31,7 +30,6 @@ import {
   noRoomName,
   onMeta,
   readingsOf,
-  readingsText,
   sectionsByRoom,
   sectionsOfRoom,
   sensorReadings,
@@ -55,18 +53,20 @@ import type { Devices } from "./use-devices";
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, its motion, whether
 // its contact sensors are open and what its sensors read under it, and a
-// button for all its lights, then apps'
-// sections by their weight, Moods first, then its devices in a section for
-// each category, and last the devices Sanctum cannot use. A category's page shows its tiles in a section for each
-// room, devices with no room last; Lights' opens with a button for every
-// light in the home, Environment with what every sensor reads, Presence
-// with its overview, each room's last 24 hours (presence-overview.tsx),
-// above its sensors, and Security with a card that says how many contact
-// sensors are open (summary-cards.tsx). The devices in no room have a page too, last among
-// the rooms while there are any. The sidebar lists them, and Home shows each
-// room's header and sections with what is on Home (home-dashboard.tsx).
-// They look the same on every device, shared ones too: lights, switches
-// and sensors are household things.
+// button for all its lights, then apps' sections by their weight, Moods
+// first, then its devices in a section for each category, and last the
+// devices Sanctum cannot use. A category's page shows its tiles in a section
+// for each room, devices with no room last. Some open with summary cards
+// (summary-cards.tsx): Lights' with how many are on and a button that turns
+// them all off, Environment's with the range of each reading across the
+// home, Security's with how many contact sensors are open. Presence's opens
+// with its overview, each room's last 24 hours (presence-overview.tsx).
+// On Lights' page each room also has its button for all its lights, as on
+// Home. The devices in no room have a page too, last among the rooms while
+// there are any. The sidebar lists them, and Home shows each room's header
+// and sections with what is on Home (home-dashboard.tsx). They look the
+// same on every device, shared ones too: lights, switches and sensors are
+// household things.
 
 /** Where the shell's own pages are in its routes; never an app's id, which always has a dot. */
 export const placePages = "places";
@@ -99,12 +99,21 @@ export const unitOf = (devices: Devices) =>
 
 const onCount = (tiles: Tile[]) => tiles.filter((tile) => tile.on).length;
 
-export const lightsOn = (on: number) =>
-  on === 0 ? "Lights off" : on === 1 ? "1 Light on" : `${on} Lights on`;
+/**
+ * What a room's button for all its lights says: what it does, with how
+ * many lights are on, since a room's line has no other count of them.
+ */
+export const lightsWords = (on: number) =>
+  on === 0
+    ? "Turn lights on"
+    : on === 1
+      ? "Turn 1 light off"
+      : `Turn ${on} lights off`;
 
-/** A place's button for all its lights, as lightsButton makes it. */
+/** A room's button for all its lights, as lightsButton makes it. */
 export type LightsSwitch = {
   on: number;
+  /** Its words with the room's name, where several rooms' buttons are in reach. */
   label: string;
   disabled?: boolean;
   onToggle: () => void;
@@ -213,7 +222,11 @@ export function PlaceReadings(props: {
   );
 }
 
-/** A place's button for all its lights: white while any is on. */
+/**
+ * A room's button for all its lights. Its words say what it does and its
+ * look says how the room is, White while any light is on, so it is no
+ * pressed switch to a screen reader: the words already say it.
+ */
 export function LightsButton(props: { lights: LightsSwitch }) {
   const { lights } = props;
   return (
@@ -221,12 +234,12 @@ export function LightsButton(props: { lights: LightsSwitch }) {
       variant="glass"
       size="chip"
       aria-label={lights.label}
-      aria-pressed={lights.on > 0}
+      data-on={lights.on > 0 ? "" : undefined}
       disabled={lights.disabled}
       onClick={lights.onToggle}
     >
       <icons.Lightbulb aria-hidden="true" data-icon="inline-start" />
-      {lightsOn(lights.on)}
+      {lightsWords(lights.on)}
     </Button>
   );
 }
@@ -237,6 +250,8 @@ function Sections(props: {
   sections: TileSection[];
   devices: Devices;
   onOpen: (tile: Tile) => void;
+  /** What a section has between its heading and its tiles. */
+  lead?: (section: TileSection) => ReactNode;
 }) {
   const { devices } = props;
   return (
@@ -247,27 +262,32 @@ function Sections(props: {
         void devices.dim(tile, brightness).catch(() => undefined)
       }
       onOpen={props.onOpen}
+      lead={props.lead}
     />
   );
 }
 
-// The button for every light in a room or the home: white while any is on.
-// The core leaves offline lights alone, so while all of them are offline
-// the button is disabled, as their tiles are.
+// The button for every light in a room: White while any is on, and saying
+// what it does, "Turn 2 lights off" or "Turn lights on". The core leaves
+// offline lights alone, so while all of them are offline the button is
+// disabled, as their tiles are. The home has no such button: turning every
+// light in it on at once is more than one press should do, so its lights
+// can only be turned off, from Lights' card.
 export function lightsButton(
   lights: Tile[],
-  name: string,
-  place: LightsPlace,
+  room: { id: string; name: string },
   devices: Devices,
 ): LightsSwitch | undefined {
   if (lights.length === 0) return undefined;
   const on = onCount(lights);
   return {
     on,
-    label: `Turn ${on ? "off" : "on"} ${name}`,
+    label: `${lightsWords(on)} in ${room.name}`,
     disabled: lights.every((tile) => tile.disabled),
     onToggle: () =>
-      void devices.switchLights(place, lights).catch(() => undefined),
+      void devices
+        .switchLights({ kind: "room", id: room.id }, lights)
+        .catch(() => undefined),
   };
 }
 
@@ -468,8 +488,7 @@ export function RoomPage(props: {
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
         lights={lightsButton(
           own.filter((tile) => tile.kind === "light"),
-          `the ${room.name} lights`,
-          { kind: "room", id: room.id },
+          room,
           devices,
         )}
       />
@@ -515,6 +534,65 @@ export function NoRoomPage(props: {
   );
 }
 
+// What Lights' page opens with: a card that says how many lights are on,
+// with the one thing to do about them, turning them all off. A light that
+// does not answer is not counted as off: the card says how many are
+// offline, or "Offline" when none answers.
+function lightsCards(tiles: readonly Tile[], devices: Devices): Summary[] {
+  if (tiles.length === 0) return [];
+  const offline = tiles.filter((tile) => tile.disabled).length;
+  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
+  return [
+    {
+      id: "lights",
+      icon: on > 0 ? icons.Lightbulb : icons.LightbulbOff,
+      title: "Lights",
+      status:
+        on > 0 ? `${on} on` : offline === tiles.length ? "Offline" : "All off",
+      note: offline > 0 && offline < tiles.length ? `${offline} offline` : null,
+      active: on > 0,
+      action: {
+        label: "Turn all off",
+        onPress: () =>
+          void devices
+            .switchLights({ kind: "home" }, [...tiles], "off")
+            .catch(() => undefined),
+      },
+    },
+  ];
+}
+
+// What Environment's page opens with: a card for each reading the home
+// ranges across its sensors, with how many of them are not known. Nothing
+// here is on or open, so its cards are never White.
+function environmentCards(
+  tiles: readonly Tile[],
+  unit: ReturnType<typeof unitOf>,
+): Summary[] {
+  return climateMeasures.flatMap((measure) => {
+    const own = tiles.filter((tile) => tile.measures?.includes(measure));
+    if (own.length === 0) return [];
+    const [reading] = readingsOf(sensorReadings(own), unit, [measure]);
+    const known = own.filter(
+      (tile) => !tile.disabled && tile.readings?.[measure] !== undefined,
+    ).length;
+    return [
+      {
+        id: measure,
+        icon: readingIcons[measure],
+        title: measureNames[measure],
+        status: reading?.text ?? "No readings",
+        spoken: reading?.spoken,
+        note:
+          reading && known < own.length
+            ? `${own.length - known} not known`
+            : null,
+        active: false,
+      },
+    ];
+  });
+}
+
 // What Security's page opens with: a card for the home's contact sensors.
 function securityCards(tiles: readonly Tile[]): Summary[] {
   const contacts = contactsOf(tiles);
@@ -549,32 +627,22 @@ export function CategoryPage(props: {
   const own = tilesIn(category, devices.tiles);
   return (
     <>
-      {category.id === "lights" ? (
-        <PlaceHeader
-          title={category.title}
-          lights={lightsButton(
-            own,
-            "all the lights",
-            { kind: "home" },
-            devices,
-          )}
+      <PlaceHeader
+        title={category.title}
+        subtitle={
+          category.id === "switches" ? onMeta(own) || undefined : undefined
+        }
+      />
+      {category.id === "lights" && (
+        <SummaryCards
+          label={`${category.title} summary`}
+          cards={lightsCards(own, devices)}
         />
-      ) : (
-        <PlaceHeader
-          title={category.title}
-          subtitle={
-            category.id === "buttons" ||
-            category.id === "presence" ||
-            category.id === "security"
-              ? undefined
-              : category.id === "environment"
-                ? readingsText(
-                    sensorReadings(own),
-                    unitOf(devices),
-                    climateMeasures,
-                  ) || undefined
-                : onMeta(own) || undefined
-          }
+      )}
+      {category.id === "environment" && (
+        <SummaryCards
+          label={`${category.title} summary`}
+          cards={environmentCards(own, unitOf(devices))}
         />
       )}
       {category.id === "presence" && (
@@ -590,6 +658,23 @@ export function CategoryPage(props: {
         sections={sectionsByRoom(own, devices.places)}
         devices={devices}
         onOpen={props.openDevice}
+        lead={
+          category.id === "lights"
+            ? (section) => {
+                // The lights in no room are not together, so have no button.
+                const room = devices.places?.rooms.find(
+                  (each) => each.id === section.id,
+                );
+                const lights =
+                  room && lightsButton(section.tiles, room, devices);
+                return lights ? (
+                  <div className="flex">
+                    <LightsButton lights={lights} />
+                  </div>
+                ) : null;
+              }
+            : undefined
+        }
       />
     </>
   );

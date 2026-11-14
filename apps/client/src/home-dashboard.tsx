@@ -60,8 +60,7 @@ export function HomeRooms(props: {
     const lights = room
       ? lightsButton(
           own.filter((tile) => tile.kind === "light"),
-          `the ${room.name} lights`,
-          { kind: "room", id: room.id },
+          room,
           devices,
         )
       : undefined;
