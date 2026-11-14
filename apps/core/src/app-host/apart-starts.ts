@@ -1,6 +1,6 @@
 import type { StopInfo } from "@meetsanctum/app-sdk";
 
-import type { ApartPackage } from "./host.js";
+import type { ApartPackage } from "./loader.js";
 import type { InstalledApp } from "./installed.js";
 import type { Supervisor } from "./supervisor.js";
 import type { AppUpdates } from "./updates.js";

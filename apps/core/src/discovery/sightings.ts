@@ -1,6 +1,6 @@
 import { sightingKey, type Sighting } from "@meetsanctum/app-sdk";
 
-import type { DiscoveryAnswer } from "../manager.js";
+import type { DiscoveryAnswer } from "../manager-answers.js";
 
 // What the manager finds on the home's network for the apps that look for it.
 // The manager never calls the core, so the core asks: a long poll, answered

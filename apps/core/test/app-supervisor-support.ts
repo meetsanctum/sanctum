@@ -17,7 +17,10 @@ export const manifest = {
   runtime: { memory: 128, data: 256 },
 } as unknown as StaticManifest;
 
-export function setUp(manager: Partial<AppContainerManager> = {}) {
+export function setUp(
+  manager: Partial<AppContainerManager> = {},
+  lan?: Parameters<typeof createSupervisor>[0]["lan"],
+) {
   const started: string[] = [];
   const stopped: string[] = [];
   const reconciled: Mock<(entry: InstalledApp) => void> = vi.fn();
@@ -31,21 +34,27 @@ export function setUp(manager: Partial<AppContainerManager> = {}) {
     app: { id: manifest.id },
     manifest,
     apartIn: "1.0.0+test",
+    granted: [],
     link: { isReady: () => false, isConnected: () => false },
     supervision: newSupervision(new Date()),
   } as unknown as InstalledApp;
   const supervisor = createSupervisor({
+    lan,
     manager: {
       capabilities: () => ({
         appContainers: true,
         memoryLimits: true,
         discovery: false,
+        lan: false,
       }),
       startAppContainer: async (app) => {
         started.push(app);
         return { kept: false };
       },
       stopAppContainer: async (app) => void stopped.push(app),
+      applyLanPolicy: async () => {
+        throw new Error("No app here reaches devices");
+      },
       removeAppContainer: async () => undefined,
       appContainer: async () => ({ state: "running" }),
       appUsage: async () => ({

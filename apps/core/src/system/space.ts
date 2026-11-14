@@ -1,5 +1,5 @@
 import type { ChangedBy, RecordActivity } from "../activity/activity.js";
-import type { SpacePlan } from "../manager.js";
+import type { SpacePlan } from "../manager-answers.js";
 import { relay, SystemError } from "./errors.js";
 
 // Free up space, from Settings → Status: the manager removes the old

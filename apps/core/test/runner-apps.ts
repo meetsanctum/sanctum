@@ -13,7 +13,7 @@ import { runSession } from "@meetsanctum/app-sdk/runner-session";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ApartPackage, Origin } from "../src/app-host/host.js";
+import type { ApartPackage, Origin } from "../src/app-host/loader.js";
 import type { TestManager } from "./support.js";
 
 // An app a test defines: its code, and what its package declares
@@ -131,8 +131,13 @@ export function runnerApps(options: {
     }),
     async startAppContainer(appId, spec) {
       if (!runs.has(appId)) return manager.startAppContainer(appId, spec);
+      // The test's manager loads the rules of one that reaches devices first,
+      // as the manager does before its container starts.
+      const { lan } = spec.lan
+        ? await manager.startAppContainer(appId, spec)
+        : { lan: undefined };
       await startSession(appId, spec.folder);
-      return { kept: false };
+      return { kept: false, ...(lan ? { lan } : {}) };
     },
     async stopAppContainer(appId) {
       if (!runs.has(appId)) return manager.stopAppContainer(appId);

@@ -1,4 +1,5 @@
 import type { CapabilityKind } from "./devices.js";
+import { lanPort } from "./lan.js";
 import { turnOnType } from "./lights.js";
 import { forecastType, sunType } from "./weather.js";
 
@@ -23,6 +24,7 @@ export const permissionIcons = [
   "globe",
   "radio-tower",
   "radar",
+  "network",
   "share-2",
   "shield",
 ] as const;
@@ -111,6 +113,14 @@ export function permissionWords(id: string): PermissionWords {
   if (kind === "net" && rest) return words(`Reach ${rest}`, "globe");
   if (kind === "discover" && rest.startsWith("mdns:")) {
     return words("Find devices on your network", "radar");
+  }
+  const port = lanPort(id);
+  if (port !== null) {
+    return words(
+      "Talk to devices on your network",
+      "network",
+      `Port ${port}, to the devices it found`,
+    );
   }
   if (kind === "services" && rest) {
     const name = Object.hasOwn(serviceNames, rest) ? serviceNames[rest]! : rest;

@@ -1,14 +1,15 @@
 import {
   appSectionOrderFrom,
+  lanPort,
   type Actor,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
   type AppInfo,
   type Sighting,
-  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import type { Activity } from "../activity/activity.js";
@@ -42,6 +43,7 @@ import { ActionCallError, type ActionCallErrorCode } from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { AppGrants } from "./grants.js";
 import type { InstalledApp } from "./installed.js";
+import type { ApartPackage } from "./loader.js";
 import { createAppLifecycle } from "./lifecycle.js";
 import { createAppLink } from "./link.js";
 import { createRequestsUnderWay, type NetFetch } from "./net.js";
@@ -64,6 +66,7 @@ import type { AppsOff } from "./off.js";
 import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
+import { createLanPolicies } from "./lan.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -80,18 +83,6 @@ import { createDiscoveryHandOut } from "./discovered.js";
 // Where the core listens for apps apart, a folder for each app, shared with
 // their containers by the manager.
 const defaultAppSockets = "/run/sanctum-apps";
-
-// Decided from where a package came from, never from its manifest.
-export const origins = ["system", "official", "third-party"] as const;
-export type Origin = (typeof origins)[number];
-
-// An app, in its own container, of which the core knows its running version's
-// manifest as its folder of packages holds it: never the one bundled in the
-// core's image, which can be newer until its update starts.
-export type ApartPackage = {
-  apart: { manifest: StaticManifest; digest: string; folder: string };
-  origin: Origin;
-};
 
 type Log = (message: string) => void;
 
@@ -163,11 +154,21 @@ export function createAppHost(options: {
   const announceNow = announcerOf(options.onApp, log, ({ manifest }) =>
     options.updates.shownFor(manifest.id),
   );
-  // What drivers hear of the home's network follows whether each runs.
+  // What drivers hear of the home's network, and what those that reach
+  // devices may reach, follow whether each runs.
   let handOut: ReturnType<typeof createDiscoveryHandOut> | undefined;
+  const lan = createLanPolicies({
+    core: randomUUID(),
+    manager,
+    installed,
+    sightings: () => options.sightings?.() ?? [],
+    onReach: () => handOut?.sync(),
+    log,
+  });
   const announce = (entry: InstalledApp) => {
     if (installed.get(entry.app.id) !== entry) return;
     announceNow(entry);
+    lan.sync();
     handOut?.sync();
   };
 
@@ -207,6 +208,7 @@ export function createAppHost(options: {
     updateFailed: (entry, failure) => options.updates.failed(entry, failure),
     updateNotReady: (entry, waitingFor) =>
       options.updates.notReady(entry, waitingFor),
+    lan,
     log,
     now,
     ...options.supervision,
@@ -254,6 +256,7 @@ export function createAppHost(options: {
     commits: options.commits,
     updates: options.updates,
     supervisor: () => supervisor,
+    canStart: (entry) => lan.canRun(entry),
     timeoutMs,
     log,
   });
@@ -396,11 +399,17 @@ export function createAppHost(options: {
     grants: options.grants,
     coreEvents,
     onSettings: options.onSettings,
+    // A permission that narrows what it reaches waits for the manager to
+    // confirm the narrower policy, which cuts its connections first.
     beforeOff(entry, permission) {
       const service = serviceOf(permission);
-      return service
-        ? appServices.revoke(entry.app.id, entry.services, service)
-        : undefined;
+      return lan.switchingOff(
+        entry,
+        permission,
+        service
+          ? appServices.revoke(entry.app.id, entry.services, service)
+          : undefined,
+      );
     },
     // What it set going under a permission that is off ends, a service
     // switched back on gets a new login, and it pauses, starts or restarts.
@@ -420,8 +429,13 @@ export function createAppHost(options: {
         }
       }
       // Granted to look, or no longer: it hears of what that finds, or that
-      // it's gone.
+      // it's gone, within what it may reach. One given a network of its own
+      // needs a container that has one.
+      lan.sync();
       handOut?.sync();
+      if (granted && lanPort(permission) !== null && !lan.hasNetwork(entry)) {
+        void supervisor.renew(entry);
+      }
       const settled = reconcile(
         entry,
         service ? { restartFor: "its changed services" } : {},
@@ -489,6 +503,7 @@ export function createAppHost(options: {
     installed,
     accepts,
     sightings: () => options.sightings?.() ?? [],
+    reachable: (entry) => lan.reachable(entry),
     discovered: (appId, discovery) => drivers.discovered(appId, discovery),
     log,
   });
@@ -697,7 +712,10 @@ export function createAppHost(options: {
     // The services the drivers that may look for devices are looking for,
     // and handing each what changed (discovered.ts).
     discoveryServices: () => handOut!.services(),
-    discoveryChanged: () => handOut!.sync(),
+    discoveryChanged: () => {
+      lan.sync();
+      handOut!.sync();
+    },
 
     /** Whether an app is installed and takes calls now: not paused. */
     isRunning(appId: string) {
@@ -755,6 +773,7 @@ export function createAppHost(options: {
     // container. A host that shuts down stops the containers themselves.
     async close() {
       handOut?.close();
+      lan.close();
       options.updates.close();
       const replacementsEnded = apartStarts.close();
       const entries = [...installed.values()];

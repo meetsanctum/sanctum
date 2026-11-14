@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createApartStarts } from "../src/app-host/apart-starts.js";
-import type { ApartPackage } from "../src/app-host/host.js";
+import type { ApartPackage } from "../src/app-host/loader.js";
 import type { InstalledApp } from "../src/app-host/installed.js";
 import type { AppUpdates } from "../src/app-host/updates.js";
 

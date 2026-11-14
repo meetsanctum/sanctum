@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import type { Origin } from "../src/app-host/host.js";
+import type { Origin } from "../src/app-host/loader.js";
 import type { AppPackage } from "./runner-apps.js";
 import { ManagerRefusal } from "../src/manager.js";
 import {

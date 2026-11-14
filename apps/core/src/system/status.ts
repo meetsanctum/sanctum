@@ -1,13 +1,8 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  ManagerRefusal,
-  ManagerUnavailable,
-  type Channel,
-  type HostHistory,
-  type HostStatus,
-} from "../manager.js";
+import type { Channel, HostHistory, HostStatus } from "../manager-answers.js";
+import { ManagerRefusal, ManagerUnavailable } from "../manager.js";
 import { relay } from "./errors.js";
 
 // Settings → Status: what the host is and how it is doing, for every client.

@@ -3,6 +3,7 @@ import type { AppFailure, AppRunning } from "@meetsanctum/app-sdk";
 import type { ManagerClient } from "../manager.js";
 import { ManagerRefusal } from "../manager.js";
 import type { InstalledApp } from "./installed.js";
+import { reachesDevices, type LanPolicies } from "./lan.js";
 
 // Keeps an app that runs apart running. Its container starts by the
 // manager's hand, and from there: Starting until its start returns; Waiting
@@ -16,6 +17,7 @@ export type AppContainerManager = Pick<
   ManagerClient,
   | "capabilities"
   | "startAppContainer"
+  | "applyLanPolicy"
   | "stopAppContainer"
   | "removeAppContainer"
   | "appContainer"
@@ -103,6 +105,10 @@ export function newSupervision(now: Date): Supervision {
 
 const isRunning = (supervision: Supervision) => supervision.phase === "running";
 
+// What an app that reaches devices waits for under a manager that can't give
+// it its network, as its tiles and settings say it.
+const lanWaitingFor = "Waiting for an update that lets it reach your devices";
+
 // The pause for this many, or the last when there are more.
 const pauseOf = (pauses: readonly number[], count: number) =>
   pauses[Math.min(count, pauses.length - 1)]!;
@@ -122,6 +128,9 @@ export function createSupervisor(options: {
   updateFailed: (entry: InstalledApp, failure: AppFailure) => boolean;
   // A new version's first start said what it waits for, which gives the slot up.
   updateNotReady: (entry: InstalledApp, waitingFor: string) => boolean;
+  // What an app that reaches devices may reach, whose first policy comes
+  // with its container's start (lan.ts).
+  lan?: Pick<LanPolicies, "starting" | "started" | "canRun">;
   log: (message: string) => void;
   now: () => Date;
   restartPausesMs?: readonly number[];
@@ -138,6 +147,9 @@ export function createSupervisor(options: {
   const waitPauses = options.waitPausesMs ?? defaultWaitPausesMs;
   const connectWithinMs = options.connectWithinMs ?? defaultConnectWithinMs;
   const connectCheckMs = options.connectCheckMs ?? defaultConnectCheckMs;
+  // The apps that reach devices stopped while they wait for a manager that
+  // can give them their network.
+  const stoppedToWait = new WeakSet<InstalledApp>();
 
   const of = (entry: InstalledApp) => entry.supervision;
   const isCurrent = (entry: InstalledApp, generation: number) =>
@@ -284,6 +296,30 @@ export function createSupervisor(options: {
       waiting(entry, undefined, () => void launch(entry));
       return;
     }
+    // A manager that can't give it a network with Sanctum's rules keeps it
+    // stopped, saying why, until an update brings one that can. One still
+    // running, as after the core restarted under it, stops as it starts
+    // waiting.
+    if (reachesDevices(entry) && !manager.capabilities().lan) {
+      // Asked again with each try until the manager has stopped it.
+      if (!stoppedToWait.has(entry)) {
+        of(entry).endingConnection = entry.link.isConnected();
+        const isStopped = await manage(entry, () =>
+          manager.stopAppContainer(app.id),
+        ).then(
+          () => true,
+          (error: unknown) => {
+            log(`apps: ${app.id}'s container didn't stop (${String(error)})`);
+            return false;
+          },
+        );
+        if (!isCurrent(entry, generation)) return;
+        if (isStopped) stoppedToWait.add(entry);
+      }
+      waiting(entry, lanWaitingFor, () => void launch(entry));
+      return;
+    }
+    stoppedToWait.delete(entry);
     try {
       await manage(entry, async () => {
         if (!isCurrent(entry, generation)) return;
@@ -292,14 +328,28 @@ export function createSupervisor(options: {
         // needs a container of its own.
         const keep = of(entry).mayKeep;
         of(entry).mayKeep = false;
+        const lan = options.lan?.starting(entry);
         try {
-          const { kept } = await manager.startAppContainer(app.id, {
-            folder: apartIn,
-            memoryMb: manifest.runtime.memory,
-            dataMb: manifest.runtime.data,
-            ...(keep ? { keep } : {}),
-          });
-          if (kept) log(`apps: ${app.id} goes on in its container`);
+          let started: Awaited<ReturnType<typeof manager.startAppContainer>>;
+          try {
+            started = await manager.startAppContainer(app.id, {
+              folder: apartIn,
+              memoryMb: manifest.runtime.memory,
+              dataMb: manifest.runtime.data,
+              ...(keep ? { keep } : {}),
+              ...(lan ? { lan } : {}),
+            });
+          } catch (error) {
+            if (lan) options.lan?.started(entry, lan, undefined);
+            throw error;
+          }
+          if (started.kept) log(`apps: ${app.id} goes on in its container`);
+          // Never running without its rules: one the manager didn't load
+          // stops again, and is tried again in a while.
+          if (lan && !options.lan?.started(entry, lan, started.lan)) {
+            await manager.stopAppContainer(app.id);
+            throw new Error("its network's rules weren't loaded");
+          }
         } finally {
           of(entry).isReplacing = false;
         }
@@ -404,6 +454,7 @@ export function createSupervisor(options: {
       supervision.isEnded ||
       entry.off ||
       supervision.isReplacing ||
+      options.lan?.canRun(entry) === false ||
       supervision.phase === "failed" ||
       supervision.phase === "restarting"
     )
@@ -532,6 +583,26 @@ export function createSupervisor(options: {
       for (const wake of supervision.waiters) wake();
       supervision.waiters.clear();
       return stopContainer(entry);
+    },
+
+    /**
+     * What it's granted needs a container of its own, as a network that
+     * reaches devices does: a new one replaces the one it has, unless it was
+     * given up on or turned off.
+     */
+    async renew(entry: InstalledApp) {
+      if (of(entry).isEnded || entry.off || of(entry).phase === "failed") {
+        return;
+      }
+      const generation = ++of(entry).generation;
+      await entry.lifecycle;
+      if (!isCurrent(entry, generation) || entry.off) return;
+      of(entry).endingConnection = entry.link.isConnected();
+      become(entry, "starting");
+      await stopContainer(entry);
+      if (!isCurrent(entry, generation) || entry.off) return;
+      entry.link.disconnect();
+      return launch(entry);
     },
 
     /** Someone asked for it again after it was given up on. */

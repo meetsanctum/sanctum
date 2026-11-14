@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { loadAppPackages } from "./runner-apps.js";
-import { ManagerUnavailable, type HostStatus } from "../src/manager.js";
+import type { HostStatus } from "../src/manager-answers.js";
+import { ManagerUnavailable } from "../src/manager.js";
 import { createStatus, type SystemStatus } from "../src/system/status.js";
 import { personWithClient } from "./devices-support.js";
 import {

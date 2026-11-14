@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSightings } from "../src/discovery/sightings.js";
-import type { DiscoveryAnswer } from "../src/manager.js";
+import type { DiscoveryAnswer } from "../src/manager-answers.js";
 
 const answer: DiscoveryAnswer = {
   after: "run:1",

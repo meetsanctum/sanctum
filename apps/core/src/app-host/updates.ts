@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
-import type { ApartPackage } from "./host.js";
+import type { ApartPackage } from "./loader.js";
 import type { InstalledApp } from "./installed.js";
 import { appUpdates } from "./schema.js";
 import type { AppSettingsStore } from "./settings.js";

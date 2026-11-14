@@ -7,7 +7,8 @@ import {
 
 import type { InstalledApp } from "./installed.js";
 
-// Drivers hear only the services they hold permission for. Each delivery
+// Drivers hear only the services they hold permission for, and one that
+// reaches devices only the addresses its network's rules let through. Each delivery
 // follows the last completed one, taking its permissions and run afresh.
 // Changes during a call are taken in once it ends; a failed call is retried
 // with everything current and anything it may have missed losing.
@@ -31,6 +32,9 @@ export function createDiscoveryHandOut(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   accepts: (entry: InstalledApp) => boolean;
   sightings: () => readonly Sighting[];
+  // The addresses an app may hear of, as its network's rules let it reach
+  // them, or null for one that hears of every address.
+  reachable?: (entry: InstalledApp) => ReadonlySet<string> | null;
   discovered: (appId: string, discovery: DriverDiscovery) => Promise<void>;
   log: (message: string) => void;
   againMs?: number;
@@ -61,11 +65,20 @@ export function createDiscoveryHandOut(options: {
       forget(appId);
       return;
     }
+    const reach = options.reachable?.(state.entry) ?? null;
     const want = new Map(
       options
         .sightings()
         .filter((sighting) => services.has(sighting.service))
-        .map((sighting) => [sightingKey(sighting), sighting]),
+        .flatMap((sighting): [string, Sighting][] => {
+          if (!reach) return [[sightingKey(sighting), sighting]];
+          const addresses = sighting.addresses.filter((each) =>
+            reach.has(each),
+          );
+          return addresses.length > 0
+            ? [[sightingKey(sighting), { ...sighting, addresses }]]
+            : [];
+        }),
     );
     const found = [...want].flatMap(([key, sighting]) =>
       !state.needsFull &&

@@ -1,6 +1,31 @@
-import { sightingLostSchema, sightingSchema } from "@meetsanctum/app-sdk";
 import { request } from "node:http";
 import { z } from "zod";
+
+import {
+  appContainer,
+  appUpdatesHeld,
+  appUsage,
+  capabilities,
+  discoveryAnswer,
+  heldServices,
+  hostBody,
+  hostHistory,
+  hostStatus,
+  keptCopy,
+  lanVersion,
+  managerAudit,
+  noCapabilities,
+  serviceGrant,
+  signedCertificate,
+  spaceFreed,
+  spacePlan,
+  stagedApps,
+  startedBody,
+  startedUpdate,
+  updateStatus,
+  versionList,
+  type LanVersion,
+} from "./manager-answers.js";
 
 // The core reaches the manager over a Unix socket that only the two of them
 // mount. The manager may be starting, or replacing itself in an update, so
@@ -100,271 +125,22 @@ function parseBody<T extends z.ZodType>(schema: T, body: string): z.output<T> {
   }
 }
 
-const hostBody = z.object({ id: z.string().min(1).max(64) });
-
-// The core's certificate and the host CA's, as PEM.
-const signedCertificate = z.object({
-  certificate: z.string().min(1),
-  ca: z.string().min(1),
-});
-
-const channel = z.enum(["stable", "edge", "dev"]);
-export type Channel = z.infer<typeof channel>;
-
-// The manager's update journal (apps/manager/src/update/journal.ts), the
-// parts the core passes on: where the update is and how it ended. Container
-// ids, images and backup paths stay with the manager.
-const updateStep = z.object({
-  status: z.string(),
-  fromVersion: z.string().optional(),
-});
-const updateJournal = z.object({
-  id: z.string(),
-  version: z.string(),
-  startedAt: z.string(),
-  finishedAt: z.string().optional(),
-  phase: z.enum(["pulling", "core", "manager", "done"]),
-  outcome: z.enum(["updated", "unchanged", "rolled-back", "failed"]).optional(),
-  error: z.string().optional(),
-  core: updateStep,
-  manager: updateStep,
-  log: z.array(z.object({ at: z.string(), message: z.string() })),
-});
-export type UpdateJournal = z.infer<typeof updateJournal>;
-
-const updateStatus = z.object({
-  channel,
-  update: updateJournal.nullable(),
-});
-const startedUpdate = z.object({ update: updateJournal });
-// The manager's audit (apps/manager/src/audit.ts): its id, and its entries
-// after the number asked.
-const managerAudit = z.object({
-  audit: z.string().min(1).max(64),
-  entries: z.array(
-    z.object({
-      n: z.number().int().positive(),
-      at: z.string(),
-      action: z.string().min(1).max(64),
-      outcome: z.enum(["ok", "refused", "failed"]),
-      reason: z.string().nullable().optional(),
-      detail: z.record(z.string(), z.unknown()).nullable().optional(),
-    }),
-  ),
-});
-const versionList = z.object({
-  channel,
-  versions: z.array(
-    z.object({ version: z.string(), builtAt: z.string().optional() }),
-  ),
-});
-export type VersionList = z.infer<typeof versionList>;
-
-// The host's status (apps/manager/src/host/status.ts), for Settings →
-// Status. Sizes and memory are in bytes.
-const hostStatus = z.object({
-  channel,
-  model: z.string().nullable(),
-  os: z.string().nullable(),
-  architecture: z.string().nullable(),
-  uptimeSeconds: z.number().nullable(),
-  hostname: z.string().nullable(),
-  // An older manager doesn't say.
-  memoryLimits: z.boolean().nullable().optional(),
-  memory: z
-    .object({
-      total: z.number(),
-      available: z.number(),
-      swapTotal: z.number(),
-      swapFree: z.number(),
-      containers: z.array(
-        z.object({
-          role: z.enum(["core", "app", "manager", "service", "registry"]),
-          service: z.string().optional(),
-          // Which apps a service is for. An older manager doesn't say.
-          apps: z.array(z.string()).optional(),
-          app: z.string().optional(),
-          bytes: z.number(),
-        }),
-      ),
-    })
-    .nullable(),
-  storage: z
-    .object({
-      total: z.number(),
-      free: z.number(),
-      software: z.number().nullable(),
-      devBuilds: z.number().nullable(),
-      backups: z.number().nullable(),
-      services: z.array(
-        z.object({
-          service: z.string(),
-          apps: z.array(z.string()),
-          bytes: z.number(),
-        }),
-      ),
-      // An older manager has none.
-      images: z
-        .array(
-          z.object({
-            app: z.string(),
-            state: z.enum(["ok", "missing", "damaged"]),
-            sizeMb: z.number(),
-            bytes: z.number(),
-          }),
-        )
-        .optional(),
-    })
-    .nullable(),
-  processor: z.object({
-    cores: z.number(),
-    usage: z.number().nullable(),
-    mhz: z.number().nullable(),
-    celsius: z.number().nullable(),
-  }),
-  power: z
-    .object({ low: z.boolean(), lastLowAt: z.string().nullable() })
-    .nullable(),
-  network: z
-    .object({
-      interface: z.string(),
-      kind: z.enum(["wifi", "ethernet", "other"]),
-      address: z.string().nullable(),
-      signalDbm: z.number().nullable(),
-      speedMbps: z.number().nullable(),
-    })
-    .nullable(),
-  clock: z.boolean().nullable(),
-  services: z.array(
-    z.object({
-      name: z.string(),
-      apps: z.array(z.string()),
-      state: z.enum(["off", "starting", "running", "waiting", "failed"]),
-      problem: z.string().optional(),
-    }),
-  ),
-});
-export type HostStatus = z.infer<typeof hostStatus>;
-
-// The host's last 24 hours (apps/manager/src/host/history.ts): each 5
-// minutes' mean, oldest first.
-const hostHistory = z.object({
-  points: z.array(
-    z.object({
-      at: z.string(),
-      usage: z.number().nullable(),
-      celsius: z.number().nullable(),
-      memoryUsed: z.number().nullable(),
-    }),
-  ),
-});
-export type HostHistory = z.infer<typeof hostHistory>;
-
-// What Free up space would remove and keep (apps/manager/src/host/space.ts).
-const spacePlan = z.object({
-  bytes: z.number(),
-  images: z.array(
-    z.object({ service: z.string(), version: z.string().nullable() }),
-  ),
-  devBuilds: z.number(),
-  keeps: z.object({
-    running: z.string(),
-    before: z.string().nullable(),
-    newest: z.string().nullable(),
-  }),
-});
-export type SpacePlan = z.infer<typeof spacePlan>;
-const spaceFreed = z.object({ freed: z.number().nullable() });
-
-// What an app gets for a service (apps/manager/src/services/services.ts):
-// its own broker account and anything else the service hands out, such as
-// Zigbee2MQTT's base topic.
-const serviceGrant = z.object({
-  connection: z.looseObject({
-    mqtt: z
-      .object({
-        url: z.string(),
-        username: z.string(),
-        password: z.string(),
-        topics: z.array(z.string()),
-      })
-      .optional(),
-  }),
-});
-
-// How an app's container stands.
-const appContainer = z.object({
-  state: z.enum(["running", "stopped", "none"]),
-  exitCode: z.number().optional(),
-  outOfMemory: z.boolean().optional(),
-});
-
-const appUsage = z.object({
-  memoryBytes: z.number().nullable(),
-  processor: z.number().nullable(),
-  dataBytes: z.number().nullable(),
-});
-
-// What a start did: whether it kept the one running.
-const startedBody = z.object({ kept: z.boolean().optional() });
+/**
+ * What an app's network may reach: its found devices' addresses, on its
+ * ports, as the core's run and its count for the app name it.
+ */
+export type LanPolicy = {
+  core: string;
+  count: number;
+  addresses: string[];
+  ports: number[];
+};
 
 const appContainerPath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/container`;
-
-// What the manager can do. An update replaces the core before the manager, so a
-// new core can find itself under an old manager, which knows no such question.
-const capabilities = z.object({
-  appContainers: z.boolean(),
-  memoryLimits: z.boolean(),
-  // Whether it looks for devices on the home's network; a manager from
-  // before it doesn't say.
-  discovery: z.boolean().default(false),
-});
-export type ManagerCapabilities = z.infer<typeof capabilities>;
-const noCapabilities: ManagerCapabilities = {
-  appContainers: false,
-  memoryLimits: false,
-  discovery: false,
-};
 const askForCapabilitiesEveryMs = 30_000;
-
 const appUpdatePath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/update`;
-
-// What the manager found on the home's network: what changed after the
-// core's last answer, or every sighting, and where the next question starts.
-const discoveryAnswer = z.object({
-  after: z.string().min(1).max(100),
-  full: z.boolean(),
-  found: z.array(sightingSchema).max(10_000),
-  lost: z.array(sightingLostSchema).max(10_000),
-});
-export type DiscoveryAnswer = z.infer<typeof discoveryAnswer>;
-
-const appUpdatesHeld = z.object({
-  updates: z.record(z.string(), z.object({ id: z.string() })),
-});
-
-const keptCopy = z.object({
-  kept: z
-    .object({
-      id: z.string(),
-      from: z.object({ version: z.string(), folder: z.string() }),
-      at: z.string(),
-    })
-    .nullable(),
-});
-
-const stagedApps = z.object({
-  apps: z.record(
-    z.string(),
-    z.object({ version: z.string(), folder: z.string() }),
-  ),
-});
-
-const heldServices = z.object({
-  services: z.array(z.object({ name: z.string(), apps: z.array(z.string()) })),
-});
 
 function servicePath(service: string, app: string) {
   return `/api/services/${encodeURIComponent(service)}/apps/${encodeURIComponent(app)}`;
@@ -575,7 +351,9 @@ export function createManagerClient(options: {
     // making or attaching its data's image first, which can take a while. With
     // `keep`, one already running as the manager would make it goes on, as after
     // the core restarted, which the answer says. A manager before that knows no
-    // such thing, and starts it afresh.
+    // such thing, and starts it afresh. An app that reaches devices comes with
+    // its first policy, whose rules the manager loads into its network before
+    // its container starts, and answers which it loaded.
     async startAppContainer(
       app: string,
       spec: {
@@ -583,14 +361,33 @@ export function createManagerClient(options: {
         memoryMb: number;
         dataMb: number;
         keep?: boolean;
+        lan?: LanPolicy;
       },
-    ) {
+    ): Promise<{ kept: boolean; lan?: LanVersion }> {
       const body = await once("PUT", appContainerPath(app), spec, 120_000);
       try {
-        return { kept: startedBody.parse(JSON.parse(body)).kept === true };
+        const started = startedBody.parse(JSON.parse(body));
+        return {
+          kept: started.kept === true,
+          ...(started.lan ? { lan: started.lan } : {}),
+        };
       } catch {
         return { kept: false };
       }
+    },
+
+    // Replaces what an app's network may reach, in the holder the policy
+    // names, and answers which policy it holds now. One that isn't newer for
+    // that holder, or names a holder the app's container no longer has, is
+    // refused.
+    async applyLanPolicy(
+      app: string,
+      policy: LanPolicy & { manager: string; holder: string },
+    ) {
+      return parseBody(
+        lanVersion,
+        await once("PUT", `${appContainerPath(app)}/lan`, policy, 15_000),
+      );
     },
 
     // Stops it, which takes up to 10 s for one that doesn't answer.

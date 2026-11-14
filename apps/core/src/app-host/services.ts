@@ -2,7 +2,7 @@ import { permissionIds, type ServiceConnection } from "@meetsanctum/app-sdk";
 
 import type { ManagerClient } from "../manager.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
-import type { Origin } from "./host.js";
+import type { Origin } from "./loader.js";
 
 // The services the manager runs for apps: an app declares one by asking for
 // its permission, services:<name>, and holds it while that permission is on.

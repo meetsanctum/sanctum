@@ -59,6 +59,7 @@ async function finding(
       appContainers: true,
       memoryLimits: true,
       discovery: false,
+      lan: false,
     });
   }
   const core = await testCore({
