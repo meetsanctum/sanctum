@@ -1,4 +1,5 @@
 import { startAnnouncing } from "./announce.js";
+import { createDiscovery } from "./discovery.js";
 import {
   createAppContainers,
   ensureAppFolders,
@@ -313,9 +314,14 @@ const setClaimed = createClaimedReports({
   announce: (report) => announcer?.setHome(report),
 });
 
+// A manager that announces Sanctum on the home's network looks for devices
+// there too, for the apps that look for them.
+const discovery = config.announce ? createDiscovery({ log }) : undefined;
+
 const server = createServer(config, {
   host,
   setClaimed,
+  discovery,
   hostId: state.hostId,
   authority,
   clock: readClock,
@@ -379,6 +385,7 @@ const shutdown = async () => {
   serviceReconciler?.stop();
   hostStatus.stop();
   await hostHistory.save();
+  discovery?.close();
   await announcer?.stop();
   await server.close();
   process.exit(0);

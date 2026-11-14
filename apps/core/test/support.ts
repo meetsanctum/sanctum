@@ -7,6 +7,7 @@ import {
   type HostView,
   type SignedIn,
 } from "@meetsanctum/auth-protocol";
+import { sightingKey, type Sighting } from "@meetsanctum/app-sdk";
 import * as opaque from "@serenity-kit/opaque";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -37,6 +38,7 @@ import { loadHomeId } from "../src/places/places.js";
 import { createServer, type CoreHttps } from "../src/server.js";
 import type { PowerManager } from "../src/system/power.js";
 import type { SpaceManager } from "../src/system/space.js";
+import type { SightingsManager } from "../src/discovery/sightings.js";
 import type { StatusManager } from "../src/system/status.js";
 import type { UpdateManager } from "../src/system/updates.js";
 import type { SunDays } from "../src/workflows/jobs.js";
@@ -122,7 +124,7 @@ export type TestManager = ServiceManager &
   UpdateManager &
   StatusManager &
   PowerManager &
-  SpaceManager;
+  SpaceManager & { discovery?: SightingsManager["discovery"] };
 
 // A manager that runs every service it is asked for, and remembers what it
 // was asked. It has never updated the host, and cannot now. It restarts and
@@ -141,8 +143,54 @@ export function fakeManager() {
     string,
     { id: string; from: { version: string; folder: string }; at: string }
   >();
+  // The home's network as it looks for devices on it: what a test puts there
+  // is found by the services the core asks for, every answer whole.
+  const network = {
+    asked: [] as string[][],
+    sightings: new Map<string, Sighting>(),
+    seq: 0,
+    waiting: new Set<() => void>(),
+    put(sighting: Sighting) {
+      network.sightings.set(sightingKey(sighting), sighting);
+      network.changed();
+    },
+    take(sighting: { service: string; name: string }) {
+      network.sightings.delete(sightingKey(sighting));
+      network.changed();
+    },
+    changed() {
+      network.seq += 1;
+      for (const wake of [...network.waiting]) wake();
+    },
+  };
   const manager: TestManager = {
-    capabilities: () => ({ appContainers: true, memoryLimits: true }),
+    capabilities: () => ({
+      appContainers: true,
+      memoryLimits: true,
+      discovery: true,
+    }),
+    async discovery(after, services) {
+      network.asked.push([...services]);
+      if (after === `test:${network.seq}`) {
+        await new Promise<void>((resolve) => {
+          const wake = () => {
+            network.waiting.delete(wake);
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(wake, 100);
+          network.waiting.add(wake);
+        });
+      }
+      return {
+        after: `test:${network.seq}`,
+        full: true,
+        found: [...network.sightings.values()].filter((sighting) =>
+          services.includes(sighting.service),
+        ),
+        lost: [],
+      };
+    },
     startAppContainer: async () => ({ kept: false }),
     async stopAppContainer() {},
     async removeAppContainer() {},
@@ -253,7 +301,7 @@ export function fakeManager() {
       return { freed: 1_300_000_000 };
     },
   };
-  return { manager, calls, kept, updates };
+  return { manager, calls, kept, updates, network };
 }
 
 export type SocketRequest = { method: string; url: string; body: unknown };

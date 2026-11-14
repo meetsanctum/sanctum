@@ -85,6 +85,7 @@ describe("what the manager can do", () => {
     expect(client.capabilities()).toEqual({
       appContainers: false,
       memoryLimits: false,
+      discovery: false,
     });
   });
 
@@ -94,10 +95,12 @@ describe("what the manager can do", () => {
 
     client.followCapabilities(5);
 
+    // One that doesn't say whether it looks for devices doesn't.
     await vi.waitFor(() =>
       expect(client.capabilities()).toEqual({
         appContainers: true,
         memoryLimits: true,
+        discovery: false,
       }),
     );
     expect(logs).toContain("manager: can run apps");

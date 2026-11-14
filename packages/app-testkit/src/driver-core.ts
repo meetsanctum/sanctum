@@ -22,6 +22,7 @@ import {
   type CoreCalls,
   type DriverCommand,
   type DeviceProblem,
+  type DriverDiscovery,
   type DriverDevice,
   type DriverRemoval,
   type LightMove,
@@ -416,6 +417,18 @@ export function createDriverCore(
         );
       }
       return result;
+    },
+
+    /**
+     * Hands the driver what changed on the home's network of what it looks
+     * for, as itself, as the core does.
+     */
+    discovered(discovery: DriverDiscovery) {
+      const discovered = driver().discovered;
+      if (!discovered) {
+        throw new Error(`${app.id} looks for nothing on the network`);
+      }
+      return discovered(own, discovery);
     },
 
     /** What the driver last said of a device's firmware, if anything. */

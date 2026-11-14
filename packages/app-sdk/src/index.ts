@@ -14,20 +14,17 @@ import {
   type DevicePageDefinition,
   type DevicePageInfo,
 } from "./device-pages.js";
-import {
-  registerPermission,
-  type DriverCommand,
-  type DriverMove,
-} from "./devices.js";
+import { type DriverCommand, type DriverMove } from "./devices.js";
 import type { EntityTypeDefinition, Provides } from "./entities.js";
 import {
-  assertDriverProblems,
   staticProblems,
   type DriverProblem,
   type DriverQuestion,
   type DriverRepair,
   type DriverRepairResult,
 } from "./device-problems.js";
+import type { DriverDiscovery } from "./discovery.js";
+import { assertDriver } from "./driver.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
 import {
@@ -67,6 +64,7 @@ export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
 export * from "./device-problems.js";
+export * from "./discovery.js";
 export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";
@@ -421,6 +419,13 @@ export interface AppDefinition extends AppManifestFields {
      * repair asks, resolving once done or with the answer it refuses.
      */
     repair?(ctx: AppContext, repair: DriverRepair): Promise<DriverRepairResult>;
+    /**
+     * What it finds on the home's network, of the services it holds
+     * discover:mdns:<service> for: every sighting as it starts, then each one
+     * found, changed or lost, in order (discovery.ts). It resolves once it
+     * has taken them in.
+     */
+    discovered?(ctx: AppContext, discovery: DriverDiscovery): Promise<void>;
   };
 }
 
@@ -468,46 +473,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   assertRoomSections(app);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
-  // A driver brings devices and carries out their commands, so the two go
-  // together.
-  const isDriver = asked.includes(registerPermission);
-  if (isDriver !== (typeof app.driver?.command === "function")) {
-    throw new Error(
-      `A driver app holds ${registerPermission} and has a driver.command function`,
-    );
-  }
-  const pairing = app.driver?.pairing;
-  if (
-    pairing !== undefined &&
-    (typeof pairing?.open !== "function" ||
-      typeof pairing?.close !== "function")
-  ) {
-    throw new Error("A driver's pairing has open and close functions");
-  }
-  for (const hook of ["move", "remove"] as const) {
-    if (
-      app.driver?.[hook] !== undefined &&
-      typeof app.driver[hook] !== "function"
-    ) {
-      throw new Error(`A driver's ${hook} must be a function`);
-    }
-  }
-  const firmware = app.driver?.firmware;
-  if (
-    firmware !== undefined &&
-    (["check", "update", "stop"] as const).some(
-      (hook) => typeof firmware?.[hook] !== "function",
-    )
-  ) {
-    throw new Error("A driver's firmware has check, update and stop functions");
-  }
-  if (
-    app.driver?.probe !== undefined &&
-    typeof app.driver.probe !== "function"
-  ) {
-    throw new Error("A driver's probe must be a function");
-  }
-  if (app.driver) assertDriverProblems(app.driver);
+  assertDriver(app, asked);
   return app;
 }
 
@@ -520,6 +486,7 @@ const driverHooks = [
   "firmware",
   "probe",
   "repair",
+  "discovered",
 ] as const;
 
 /**

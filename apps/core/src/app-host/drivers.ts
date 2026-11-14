@@ -6,6 +6,7 @@ import {
   type DriverCommand,
   type DriverDevice,
   type DriverMove,
+  type DriverDiscovery,
   type DriverRemoval,
   type DriverRepair,
 } from "@meetsanctum/app-sdk";
@@ -199,6 +200,22 @@ export function createDriverCalls<Entry extends Driving>(options: {
         }
         return driver.probe(ctx, device);
       });
+    },
+
+    // Hands a driver what changed on the home's network of what it looks
+    // for, as itself.
+    discovered(driverId: string, discovery: DriverDiscovery) {
+      return toDriver(
+        driverId,
+        { kind: "app", id: driverId },
+        "take in what was found",
+        (driver, ctx) => {
+          if (!driver.discovered) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.discovered(ctx, discovery);
+        },
+      );
     },
 
     // Hands a driver someone's answers to set one of its devices right. A
