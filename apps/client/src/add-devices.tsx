@@ -1,14 +1,25 @@
 import type {
+  AddResult,
+  AppInfo,
   DeviceInfo,
+  FoundDevice,
   JoinedDevice,
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
 import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { CircleAlert, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { productName } from "./brand";
+import { Section } from "./components";
 import {
   Dialog,
   DialogContent,
@@ -24,15 +35,21 @@ import {
   RoomPicker,
   updateDevice,
 } from "./device-parts";
+import { QuestionField, type Refused } from "./device-questions";
 import { KnotLoader } from "./knot-loader";
 
-// Adding devices: the core's pairing flow, which the shell brings for
-// everyone, whatever the radio. Opening the dialog lets new devices join for
-// four minutes, with the time left and a way to stop; each device that joins
-// shows as it gets on, and once it is ready it is named and put in a room
-// right here. Closing the dialog stops new devices joining.
+// Adding devices, for everyone, whatever the radio: the devices drivers
+// found, as on the home's network, and the core's pairing flow. Found devices
+// come first, each with an Add that asks in place what its driver needs, such
+// as its key, a refused answer saying why under its field. Then the radios
+// that let devices join: opening the dialog lets new devices join for four
+// minutes, with the time left and a way to stop, and each device that joins
+// shows as it gets on. A device added or ready is named and put in a room
+// right here. Closing the dialog stops new devices joining and empties every
+// answer typed in it.
 
 type Opened = PairingInfo & { since: string };
+type Changes = { name?: string | null; roomId?: string | null };
 
 /** Minutes and seconds, as a countdown shows them: 3:52. */
 export function countdown(seconds: number) {
@@ -62,15 +79,38 @@ export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
   }
 }
 
+/** Names in a sentence: Zigbee, Zigbee or Thread. */
+function either(names: readonly string[]) {
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}
+
 function openProblem(error: unknown) {
-  if (error instanceof CoreError && error.code === "unavailable") {
-    return "No app that adds devices is running.";
-  }
   if (error instanceof CoreError && error.status >= 500) {
     return `${productName} could not let devices join. Try again.`;
   }
   return deviceProblem(error);
 }
+
+function addProblem(error: unknown, appName: string | null) {
+  if (error instanceof CoreError) {
+    switch (error.code) {
+      case "unavailable":
+        return `${appName ?? "Its app"} isn't running, so it can't add it now.`;
+      case "timeout":
+        return "It didn't answer in time. Check it's switched on, then try again.";
+      case "not_found":
+        return "It's no longer on your network.";
+      case "app_failed":
+        return `${appName ?? "Its app"} couldn't add it. Try again.`;
+    }
+  }
+  return deviceProblem(error);
+}
+
+const foundKey = (found: { driver: string; key: string }) =>
+  `${found.driver}\u0000${found.key}`;
 
 const closePairing = () =>
   coreJson<PairingInfo>("/api/devices/pairing/close", {
@@ -83,13 +123,20 @@ export function AddDevices(props: {
   onOpenChange: (open: boolean) => void;
   devices: readonly DeviceInfo[];
   rooms: readonly Room[];
+  apps: readonly AppInfo[];
+  // Adding devices as the core last said it: what drivers found, and which
+  // let devices join. An older core says neither.
+  adding?: PairingInfo;
   live: LiveFeed;
   onChanged: (device: DeviceInfo) => void;
 }) {
+  const ids = useId();
   const [pairing, setPairing] = useState<PairingInfo>();
   // What joined from the first time this dialog opened the network.
   const [since, setSince] = useState<string>();
   const [problem, setProblem] = useState<string>();
+  // Whether no app could let devices join when the dialog opened.
+  const [unavailable, setUnavailable] = useState(false);
   const [opening, setOpening] = useState(false);
   // The core's clock less this one's, so the countdown keeps the core's time.
   const offset = useRef(0);
@@ -102,6 +149,13 @@ export function AddDevices(props: {
   // dialog anyway, since each network closes by itself when its time is up.
   const [stopFailed, setStopFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // The found devices the dialog shows, in the order it first showed them,
+  // and those added here, which stay to be named and placed.
+  const [shown, setShown] = useState<FoundDevice[]>([]);
+  const [added, setAdded] = useState<Record<string, DeviceInfo>>({});
+  const [pendingAdds, setPendingAdds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   // A closed dialog's request must finish before a later dialog opens the
   // network, including when the first open is still waiting on a radio.
@@ -118,6 +172,7 @@ export function AddDevices(props: {
     needsClose.current = true;
     setOpening(true);
     setProblem(undefined);
+    setUnavailable(false);
     try {
       let startedAt = Date.now();
       const opened = await sequence(() => {
@@ -134,7 +189,12 @@ export function AddDevices(props: {
       setSince((first) => first ?? opened.since);
       setPairing(opened);
     } catch (error) {
-      if (current === session.current) setProblem(openProblem(error));
+      if (current !== session.current) return;
+      if (error instanceof CoreError && error.code === "unavailable") {
+        setUnavailable(true);
+      } else {
+        setProblem(openProblem(error));
+      }
     } finally {
       if (current === session.current) setOpening(false);
     }
@@ -188,6 +248,9 @@ export function AddDevices(props: {
     setStopFailed(false);
     setSince(undefined);
     setPairing(undefined);
+    setShown([]);
+    setAdded({});
+    setPendingAdds(new Set());
     void open();
     return () => {
       session.current += 1;
@@ -198,19 +261,53 @@ export function AddDevices(props: {
   useEffect(() => {
     if (!props.open) return;
     const current = session.current;
+    // A read the live feed or a later read has overtaken is out of date.
+    let revision = 0;
+    const received = (next: PairingInfo) => {
+      setPairing(next);
+      if (next.drivers?.length) setUnavailable(false);
+    };
     return props.live.subscribe({
       message(message) {
-        if (message.type === "pairing") setPairing(message.pairing);
+        if (message.type !== "pairing") return;
+        revision += 1;
+        received(message.pairing);
       },
       refresh() {
+        const requested = ++revision;
         void coreJson<PairingInfo>("/api/devices/pairing")
           .then((next) => {
-            if (current === session.current) setPairing(next);
+            if (current === session.current && requested === revision) {
+              received(next);
+            }
           })
           .catch(() => undefined);
       },
     });
   }, [props.open, props.live]);
+
+  // Found devices keep their place: one that goes is dropped, unless it was
+  // added here or its Add is still waiting, and one that comes goes last.
+  const found = props.adding?.found ?? pairing?.found;
+  useEffect(() => {
+    if (!props.open) return;
+    setShown((before) => {
+      const now = new Map((found ?? []).map((each) => [foundKey(each), each]));
+      const known = new Set(before.map(foundKey));
+      return [
+        ...before.flatMap((each) => {
+          const key = foundKey(each);
+          const current = now.get(key);
+          return current
+            ? [current]
+            : Object.hasOwn(added, key) || pendingAdds.has(key)
+              ? [each]
+              : [];
+        }),
+        ...(found ?? []).filter((each) => !known.has(foundKey(each))),
+      ];
+    });
+  }, [props.open, found, added, pendingAdds]);
 
   const until = pairing?.until ?? null;
   useEffect(() => {
@@ -233,10 +330,19 @@ export function AddDevices(props: {
       )
     : [];
 
-  const save = async (
-    device: DeviceInfo,
-    changes: { name?: string | null; roomId?: string | null },
-  ) => {
+  const appName = (id: string) =>
+    props.apps.find((app) => app.id === id)?.name ?? null;
+  // The apps that let devices join, or nothing known of them from an older
+  // core, which lets them join all the same.
+  const drivers = pairing?.drivers ?? props.adding?.drivers;
+  const radios = (drivers ?? []).flatMap((id) => appName(id) ?? []);
+  const pairs = !unavailable && (drivers === undefined || drivers.length > 0);
+  const nothing =
+    !pairs && !opening && shown.length === 0
+      ? "No app that adds devices is running."
+      : undefined;
+
+  const save = async (device: DeviceInfo, changes: Changes) => {
     setProblem(undefined);
     try {
       props.onChanged(await updateDevice(device.id, changes));
@@ -244,6 +350,13 @@ export function AddDevices(props: {
       setProblem(deviceProblem(error));
     }
   };
+
+  const status =
+    opening && !pairing
+      ? "Getting ready…"
+      : isOpen
+        ? "Looking for new devices…"
+        : "New devices can no longer join";
 
   return (
     <Dialog
@@ -257,58 +370,120 @@ export function AddDevices(props: {
         <DialogHeader>
           <DialogTitle>Add devices</DialogTitle>
           <DialogDescription>
-            Switch a new device on, or reset one, and it shows up here as it
-            joins. Then name it and choose its room.
+            Switch a new device on, or reset one, and it shows up here. Then
+            name it and choose its room.
           </DialogDescription>
         </DialogHeader>
-        <p className="m-0 text-sm" aria-live="polite">
-          {opening && !pairing
-            ? "Getting ready…"
-            : isOpen
-              ? `New devices can join for ${countdown(secondsLeft)}.`
-              : "New devices can no longer join."}
-        </p>
-        {joined.length > 0 ? (
-          <ul className="m-0 flex max-h-80 list-none flex-col gap-4 overflow-y-auto p-0">
-            {joined.map((each) => (
-              <JoinedRow
-                key={`${each.driver}:${each.key}`}
-                joined={each}
-                device={props.devices.find(
-                  (device) => device.id === each.deviceId,
-                )}
-                rooms={props.rooms}
-                onSave={save}
-              />
-            ))}
-          </ul>
-        ) : (
-          isOpen && (
-            <p className="m-0 flex items-center gap-3 text-sm text-muted-foreground">
-              <KnotLoader className="size-7 shrink-0" />
-              Looking for new devices…
-            </p>
-          )
+        {shown.length > 0 && (
+          <Section
+            id={`${ids}-found`}
+            level={3}
+            title="Found on your network"
+            hint={`${shown.length} ${shown.length === 1 ? "device" : "devices"}`}
+          >
+            <ul className="m-0 flex max-h-72 list-none flex-col gap-4 overflow-y-auto p-0">
+              {shown.map((each) => {
+                const key = foundKey(each);
+                const device = Object.hasOwn(added, key)
+                  ? (props.devices.find(
+                      (device) => device.id === added[key]!.id,
+                    ) ?? added[key])
+                  : undefined;
+                return device ? (
+                  <ReadyRow
+                    key={key}
+                    device={device}
+                    detail="Ready"
+                    rooms={props.rooms}
+                    onSave={save}
+                  />
+                ) : (
+                  <FoundRow
+                    key={key}
+                    found={each}
+                    appName={appName(each.driver)}
+                    onWorkingChange={(isWorking) => {
+                      setPendingAdds((before) => {
+                        const next = new Set(before);
+                        if (isWorking) next.add(key);
+                        else next.delete(key);
+                        return next;
+                      });
+                    }}
+                    onAdded={(device) => {
+                      setAdded((before) => ({ ...before, [key]: device }));
+                      props.onChanged(device);
+                    }}
+                  />
+                );
+              })}
+            </ul>
+          </Section>
         )}
-        {problem && (
+        {pairs && (
+          <Section
+            id={`${ids}-joining`}
+            level={3}
+            title={radios.length > 0 ? radios.join(" and ") : "New devices"}
+            hint={isOpen ? `${countdown(secondsLeft)} left` : undefined}
+          >
+            <ul className="m-0 flex max-h-80 list-none flex-col gap-4 overflow-y-auto p-0">
+              <li className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex size-8 shrink-0 items-center justify-center"
+                >
+                  {isOpen && <KnotLoader className="size-7" />}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-sm font-medium" aria-live="polite">
+                    {status}
+                  </span>
+                  <span className="text-[13px] font-medium text-muted-foreground">
+                    {`Put a ${radios.length > 0 ? either(radios) : "new"} device in pairing mode`}
+                  </span>
+                </div>
+                {isOpen ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => void stop()}
+                  >
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={opening}
+                    onClick={() => void open()}
+                  >
+                    Look again
+                  </Button>
+                )}
+              </li>
+              {joined.map((each) => (
+                <JoinedRow
+                  key={foundKey(each)}
+                  joined={each}
+                  device={props.devices.find(
+                    (device) => device.id === each.deviceId,
+                  )}
+                  rooms={props.rooms}
+                  onSave={save}
+                />
+              ))}
+            </ul>
+          </Section>
+        )}
+        {(problem ?? nothing) && (
           <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
+            {problem ?? nothing}
           </p>
         )}
         <DialogFooter>
-          {isOpen ? (
-            <Button variant="outline" onClick={() => void stop()}>
-              Stop
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              disabled={opening}
-              onClick={() => void open()}
-            >
-              Look again
-            </Button>
-          )}
           <Button onClick={() => void dismiss()}>
             {stopFailed ? "Close anyway" : "Done"}
           </Button>
@@ -318,17 +493,186 @@ export function AddDevices(props: {
   );
 }
 
+// A device someone could add. Add sends at once what needs nothing asked;
+// otherwise it opens the driver's questions under the row, and the answers
+// go once, in the body of one request. The fields empty once it's added or
+// the dialog closes.
+function FoundRow(props: {
+  found: FoundDevice;
+  appName: string | null;
+  onWorkingChange: (isWorking: boolean) => void;
+  onAdded: (device: DeviceInfo) => void;
+}) {
+  const ids = useId();
+  const { found } = props;
+  const [asking, setAsking] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [refused, setRefused] = useState<Refused>();
+  const [failure, setFailure] = useState<string>();
+  const [working, setWorking] = useState(false);
+  // An answer that arrives once the row is gone goes nowhere.
+  const isShown = useRef(true);
+  useEffect(() => {
+    isShown.current = true;
+    return () => {
+      isShown.current = false;
+    };
+  }, []);
+
+  const answerTo = (id: string) =>
+    Object.hasOwn(answers, id) ? answers[id]! : "";
+  const isAsking = asking && found.asks.length > 0;
+  const complete = found.asks.every((question) => answerTo(question.id) !== "");
+
+  const add = async () => {
+    if (working) return;
+    setWorking(true);
+    props.onWorkingChange(true);
+    setRefused(undefined);
+    setFailure(undefined);
+    try {
+      const result = await coreJson<AddResult>("/api/devices/add", {
+        method: "POST",
+        json: {
+          driver: found.driver,
+          key: found.key,
+          answers: Object.fromEntries(
+            found.asks.map((question) => [question.id, answerTo(question.id)]),
+          ),
+        },
+      });
+      if (!isShown.current) return;
+      if ("refused" in result) {
+        setRefused(result.refused);
+        return;
+      }
+      setAnswers({});
+      props.onAdded(result.added);
+    } catch (error) {
+      if (!isShown.current) return;
+      setFailure(addProblem(error, props.appName));
+    } finally {
+      if (isShown.current) {
+        setWorking(false);
+        props.onWorkingChange(false);
+      }
+    }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (complete) void add();
+  };
+
+  const label = `Add ${found.name}`;
+  const detail = [props.appName, isAsking ? null : found.description]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <li className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-3">
+        <DeviceIcon type={found.type} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium">{found.name}</span>
+          {detail && (
+            <span className="truncate text-[13px] font-medium text-muted-foreground">
+              {detail}
+            </span>
+          )}
+        </div>
+        {!isAsking && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            disabled={working}
+            aria-label={label}
+            onClick={() => {
+              if (found.asks.length > 0) setAsking(true);
+              else void add();
+            }}
+          >
+            {working ? "Adding…" : "Add"}
+          </Button>
+        )}
+      </div>
+      {isAsking && (
+        <form onSubmit={submit} className="flex flex-col gap-2.5 ps-11">
+          {found.asks.map((question, index) => (
+            <QuestionField
+              key={question.id}
+              id={`${ids}-${question.id}`}
+              question={question}
+              value={answerTo(question.id)}
+              refused={refused}
+              autoFocus={index === 0}
+              onChange={(value) =>
+                setAnswers((before) => ({ ...before, [question.id]: value }))
+              }
+              beside={
+                index === found.asks.length - 1 && (
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={working || !complete}
+                    aria-label={label}
+                  >
+                    {working ? "Adding…" : "Add"}
+                  </Button>
+                )
+              }
+            />
+          ))}
+        </form>
+      )}
+      {failure && (
+        <p role="alert" className="m-0 ps-11 text-sm text-destructive">
+          {failure}
+        </p>
+      )}
+    </li>
+  );
+}
+
+// A device added or ready, named and placed right here.
+function ReadyRow(props: {
+  device: DeviceInfo;
+  detail: string;
+  rooms: readonly Room[];
+  onSave: (device: DeviceInfo, changes: Changes) => Promise<void>;
+}) {
+  const { device } = props;
+  return (
+    <li className="flex items-start gap-3">
+      <DeviceIcon device={device} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <NameField
+            device={device}
+            onSave={(name) => void props.onSave(device, { name })}
+          />
+          <RoomPicker
+            device={device}
+            rooms={props.rooms}
+            onChange={(roomId) => void props.onSave(device, { roomId })}
+          />
+        </div>
+        <span className="text-[13px] font-medium text-muted-foreground">
+          {props.detail}
+        </span>
+      </div>
+    </li>
+  );
+}
+
 function JoinedRow(props: {
   joined: JoinedDevice;
   device?: DeviceInfo;
   rooms: readonly Room[];
-  onSave: (
-    device: DeviceInfo,
-    changes: { name?: string | null; roomId?: string | null },
-  ) => Promise<void>;
+  onSave: (device: DeviceInfo, changes: Changes) => Promise<void>;
 }) {
   const { joined, device } = props;
-  const ready = joined.stage === "ready" && device;
   const working = joined.stage === "joined" || joined.stage === "interviewing";
   const detail = [
     device && joined.description !== device.name ? joined.description : null,
@@ -336,41 +680,33 @@ function JoinedRow(props: {
   ]
     .filter(Boolean)
     .join(" · ");
+  if (joined.stage === "ready" && device) {
+    return (
+      <ReadyRow
+        device={device}
+        detail={detail}
+        rooms={props.rooms}
+        onSave={props.onSave}
+      />
+    );
+  }
   return (
     <li className="flex items-start gap-3">
-      {ready ? (
-        <DeviceIcon device={device} />
-      ) : (
-        <span
-          aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/12"
-        >
-          {working ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <CircleAlert className="size-4" />
-          )}
-        </span>
-      )}
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        {ready ? (
-          <div className="flex items-center gap-2">
-            <NameField
-              device={device}
-              onSave={(name) => void props.onSave(device, { name })}
-            />
-            <RoomPicker
-              device={device}
-              rooms={props.rooms}
-              onChange={(roomId) => void props.onSave(device, { roomId })}
-            />
-          </div>
+      <span
+        aria-hidden="true"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/12"
+      >
+        {working ? (
+          <LoaderCircle className="size-4 animate-spin" />
         ) : (
-          // A device the home has goes by its name while it joins again.
-          <span className="truncate text-sm font-medium">
-            {device?.name ?? joined.description ?? "New device"}
-          </span>
+          <CircleAlert className="size-4" />
         )}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        {/* A device the home has goes by its name while it joins again. */}
+        <span className="truncate text-sm font-medium">
+          {device?.name ?? joined.description ?? "New device"}
+        </span>
         <span className="text-[13px] font-medium text-muted-foreground">
           {detail}
         </span>

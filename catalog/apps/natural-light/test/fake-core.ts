@@ -149,6 +149,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       firmware: absent,
       joining: absent,
       problem: absent,
+      found: absent,
       secret: absent,
       putSecret: absent,
       removeSecret: absent,

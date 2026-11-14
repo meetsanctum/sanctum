@@ -237,7 +237,10 @@ describe("an app's client", () => {
     live.publish({ type: "device", id: "lamp", device: lamp });
     live.publish({ type: "places", places });
     // Adding devices and the home's dashboards are the shell's.
-    live.publish({ type: "pairing", pairing: { until: null, joined: [] } });
+    live.publish({
+      type: "pairing",
+      pairing: { until: null, joined: [], drivers: [], found: [] },
+    });
     live.publish({
       type: "dashboards",
       dashboards: [

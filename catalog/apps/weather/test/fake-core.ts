@@ -61,6 +61,7 @@ export function fakeCore(app: AppDefinition) {
     firmware: absent,
     joining: absent,
     problem: absent,
+    found: absent,
     secret: absent,
     putSecret: absent,
     removeSecret: absent,

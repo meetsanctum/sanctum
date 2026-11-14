@@ -49,6 +49,7 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     firmware: unused,
     joining: unused,
     problem: unused,
+    found: unused,
     secret: unused,
     putSecret: unused,
     removeSecret: unused,

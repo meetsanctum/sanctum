@@ -5,12 +5,15 @@ import {
   type AppContext,
   type DeviceJoining,
   type DeviceRegistration,
+  type DriverAdd,
+  type DriverAddResult,
   type DriverCommand,
   type DriverDevice,
   type DriverMove,
   type DriverRemoval,
   type DriverRepair,
   type DriverRepairResult,
+  type FoundReport,
 } from "@meetsanctum/app-sdk";
 
 // A driver app for the tests, loaded from its package like a catalog app. It
@@ -25,7 +28,9 @@ import {
 // the core lets devices join, gadgets join it and say how they are getting on,
 // and it takes gadgets off the air when the core removes them. Lamps' firmware
 // can be updated and every gadget but a remote and a sensor can be asked how it
-// is. Tests play the radio's side through the `radio` export.
+// is. It lists lamps it heard nearby as found, and adds one when asked, with
+// the key on its label where it has one. Tests play the radio's side through
+// the `radio` export.
 
 type Gadget = {
   // A purifier does nothing the core has a capability for.
@@ -114,6 +119,13 @@ class Radio {
   // declare, as a careless driver would.
   repairMs = 0;
   repairRefusesOddly = false;
+  // The lamps it last said it found, every add the core asked for with the
+  // actor behind it, how long one takes, and whether it answers without
+  // registering the lamp, as a careless driver would.
+  found: FoundReport[] = [];
+  readonly adds: { add: DriverAdd; actor: Actor }[] = [];
+  addMs = 0;
+  addForgets = false;
   // How long a stopped lamp takes to say where it got to; Zigbee2MQTT reads
   // one back half a second after its stop.
   stopReportMs = 0;
@@ -284,6 +296,30 @@ class Radio {
     await this.sayProblem(repair.key, null);
   }
 
+  // Says which lamps it heard nearby and could add.
+  sayFound(found: FoundReport[]) {
+    this.found = found;
+    return this.ctx!.devices.found(found);
+  }
+
+  // Adds a lamp it found, once its key matches the one on its label where
+  // it has one.
+  async addFound(add: DriverAdd, actor: Actor): Promise<DriverAddResult> {
+    this.adds.push({ add, actor });
+    this.turns.push(`add ${add.key}`);
+    if (this.addMs > 0) {
+      await new Promise((done) => setTimeout(done, this.addMs));
+    }
+    this.turns.push(`added ${add.key}`);
+    const key = this.keys.get(add.key);
+    if (key !== undefined && add.answers.key !== key) {
+      return { refused: { question: "key", refusal: "wrongKey" } };
+    }
+    if (this.addForgets) return;
+    const listed = this.found.find((each) => each.key === add.key);
+    await this.add(add.key, "light", listed?.name ?? add.key);
+  }
+
   // Asks a gadget how it is: one that answers says so a moment later.
   probe({ key }: DriverDevice, actor: Actor): Promise<void> {
     this.probes.push({ key, actor });
@@ -422,6 +458,10 @@ class Radio {
     this.turns.length = 0;
     this.repairMs = 0;
     this.repairRefusesOddly = false;
+    this.found = [];
+    this.adds.length = 0;
+    this.addMs = 0;
+    this.addForgets = false;
     this.stopReportMs = 0;
     this.moves.length = 0;
     this.heard.length = 0;
@@ -608,6 +648,9 @@ export default defineApp({
     },
     async repair(ctx, repair) {
       return radio.repair(repair, ctx.actor);
+    },
+    async add(ctx, add) {
+      return radio.addFound(add, ctx.actor);
     },
   },
 });

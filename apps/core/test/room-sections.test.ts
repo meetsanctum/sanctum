@@ -231,6 +231,7 @@ describe("room sections", () => {
         presses: core.presses,
         firmware: core.firmware,
         problems: { report() {} },
+        found: { report() {} },
         emit() {},
         entities: core.entities,
         // A type looser than its section, as no install would let through.

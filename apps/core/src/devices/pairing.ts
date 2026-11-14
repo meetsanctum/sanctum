@@ -1,6 +1,7 @@
 import {
   deviceJoining,
   type Actor,
+  type FoundDevice,
   type JoinedDevice,
   type PairingInfo,
 } from "@meetsanctum/app-sdk";
@@ -15,7 +16,8 @@ import type { Rule } from "../app-host/gate.js";
 // lets new devices join for a while; the core asks every running driver app
 // that can pair to open its network, and the drivers say how each device
 // that joins is getting on until it is ready. Each driver's network closes
-// by itself when its time is up, so nothing of this outlives the core.
+// by itself when its time is up, so nothing of this outlives the core. What
+// drivers found and could add shows beside it (found.ts).
 
 // Every client adds devices, shared ones too: anything nearby may join
 // meanwhile.
@@ -31,6 +33,7 @@ export const pairingRequest = z.object({
 
 /** The driver apps that can pair, through the app host. */
 export type PairingDrivers = {
+  // Those running now.
   list(): string[];
   open(
     driver: string,
@@ -56,6 +59,8 @@ export function createPairing(options: {
   drivers: PairingDrivers;
   // The core's id for a driver's device, if it has it.
   deviceId: (driver: string, key: string) => string | null;
+  // The devices drivers found and could add.
+  found?: () => FoundDevice[];
   record: RecordActivity;
   // Called after every change, so live clients can follow.
   onChange?: (pairing: PairingInfo) => void;
@@ -69,6 +74,8 @@ export function createPairing(options: {
   let pending: Promise<unknown> = Promise.resolve();
   let timer: NodeJS.Timeout | undefined;
   let joined: JoinedDevice[] = [];
+  // Which drivers and found devices clients last heard of.
+  let told = "";
 
   const isOpen = (driver: string) =>
     opening.has(driver) || (deadlines.get(driver) ?? 0) > now().getTime();
@@ -92,11 +99,18 @@ export function createPairing(options: {
     return {
       until: until > now().getTime() ? new Date(until).toISOString() : null,
       joined: joined.map((each) => ({ ...each })),
+      drivers: drivers.list(),
+      found: options.found?.() ?? [],
     };
   }
 
+  const toldOf = ({ drivers, found }: PairingInfo) =>
+    JSON.stringify({ drivers, found });
+
   function changed() {
-    options.onChange?.(info());
+    const now = info();
+    told = toldOf(now);
+    options.onChange?.(now);
   }
 
   function end() {
@@ -299,6 +313,13 @@ export function createPairing(options: {
         entry.known = false;
       }
       if (naming.length > 0) changed();
+    },
+
+    // A driver started or stopped, found devices, or the home gained or lost
+    // a device: clients hear of it when that changes which drivers let
+    // devices join or what was found.
+    refresh() {
+      if (toldOf(info()) !== told) changed();
     },
 
     // Forgets the timer, as when the core stops.

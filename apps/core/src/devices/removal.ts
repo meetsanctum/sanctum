@@ -9,7 +9,7 @@ import type { Rule } from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
 import type { Who } from "./activity.js";
 import { deviceCapabilities, devices } from "./schema.js";
-import type { Turns } from "./turns.js";
+import type { Hold, Turns } from "./turns.js";
 
 // Removing a device: its driver takes it off its network, then the core
 // forgets it, what it was asked included. A device whose driver is not
@@ -21,6 +21,7 @@ export type RemoveFromDriver = (
   driver: string,
   removal: DriverRemoval,
   actor: Actor,
+  hold?: Hold,
 ) => Promise<void>;
 
 // Removing a device cannot be undone from Sanctum, since the device has to
@@ -37,7 +38,8 @@ export function createRemoval(
   db: CoreDatabase,
   options: {
     record: ReturnType<Activity["for"]>;
-    // Removing a device waits for a repair under way, and the other way round.
+    // Removing a device waits for an add or a repair under way, and the
+    // other way round.
     turns: Turns;
     removeFromDriver?: RemoveFromDriver;
     // Its name now, for its entry once it is gone.
@@ -65,14 +67,23 @@ export function createRemoval(
         throw new ActionCallError("invalid_request");
       }
       const { id, force } = parsed.data;
-      if (!db.select().from(devices).where(eq(devices.id, id)).get()) {
+      const device = db.select().from(devices).where(eq(devices.id, id)).get();
+      if (!device) {
         throw new ActionCallError("not_found");
       }
-      await options.turns.take(id, () => removeNow(actor, who, id, force));
+      await options.turns.take(device, (hold) =>
+        removeNow(actor, who, id, force, hold),
+      );
     },
   };
 
-  async function removeNow(actor: Actor, who: Who, id: string, force: boolean) {
+  async function removeNow(
+    actor: Actor,
+    who: Who,
+    id: string,
+    force: boolean,
+    hold: Hold,
+  ) {
     // As it is once its turn comes.
     const device = db.select().from(devices).where(eq(devices.id, id)).get();
     if (!device) {
@@ -98,6 +109,7 @@ export function createRemoval(
         device.driver,
         { key: device.key, device: id, force },
         actor,
+        hold,
       );
     } catch (error) {
       const failure =

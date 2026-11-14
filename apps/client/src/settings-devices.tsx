@@ -11,33 +11,18 @@ import {
   type Places,
   type ProbeResult,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, pressLabel, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, pressLabel, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AddDevices } from "./add-devices";
 import { attentionText } from "./attention";
-import { productName } from "./brand";
 import { RepairDevice } from "./repair-device";
 import { Section } from "./components";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./components/ui/dialog";
 import { Progress } from "./components/ui/progress";
 import { coreDevice, coreDevices } from "./core-devices";
-import { CoreError, coreJson } from "./core-fetch";
+import { coreJson } from "./core-fetch";
 import type { OnHome } from "./dashboards";
 import {
   firmwareProblem,
@@ -49,14 +34,11 @@ import {
   type CheckResult,
   type Status,
 } from "./device-firmware";
-import { DeviceMenu, type EditAction } from "./device-menu";
+import { DeviceMenu } from "./device-menu";
+import { EditDevice, keepHistory, type Editing } from "./edit-device";
+import { foundHint, useAdding } from "./found-devices";
 import { lowBatteryText, quietText } from "./maintenance";
-import {
-  DeviceIcon,
-  deviceProblem,
-  roomName,
-  updateDevice,
-} from "./device-parts";
+import { DeviceIcon, roomName, updateDevice } from "./device-parts";
 import { MotionSettings } from "./motion-settings";
 
 // Settings → Devices, where the household manages its hardware: every device
@@ -126,11 +108,6 @@ export function deviceStatus(
 
 const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
 
-export type Editing = {
-  action: EditAction;
-  device: DeviceInfo;
-};
-
 export function DevicesSection(props: {
   apps: AppInfo[];
   live: LiveFeed;
@@ -144,6 +121,8 @@ export function DevicesSection(props: {
   // Whether each device with a history keeps it.
   const [kept, setKept] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Editing>();
+  // What drivers found and could add, which the heading says.
+  const addable = useAdding(props.live);
   // The device someone is repairing.
   const [repairing, setRepairing] = useState<DeviceInfo>();
   const [adding, setAdding] = useState(props.adding ?? false);
@@ -448,7 +427,13 @@ export function DevicesSection(props: {
     <Section
       id="settings-devices"
       title="Devices"
-      hint={devices && updatesHint(devices)}
+      hint={
+        devices &&
+        ([updatesHint(devices), foundHint(addable?.found)]
+          .filter(Boolean)
+          .join(" · ") ||
+          undefined)
+      }
       action={
         <Button size="sm" onClick={() => setAdding(true)}>
           Add devices
@@ -572,6 +557,8 @@ export function DevicesSection(props: {
         onOpenChange={setAdding}
         devices={devices ?? []}
         rooms={rooms}
+        apps={props.apps}
+        adding={addable}
         live={props.live}
         onChanged={changed}
       />
@@ -632,171 +619,5 @@ export function DeviceLine(props: {
         />
       )}
     </span>
-  );
-}
-
-function keepHistory(device: string, kept: boolean) {
-  return coreJson<HistoryKept>("/api/history/keep", {
-    method: "POST",
-    json: { device, kept },
-  });
-}
-
-// Renaming a device, no longer keeping its history or removing it, after
-// saying what that does. When its driver cannot take it off its network, as
-// when the device does not answer, the dialog offers to remove it anyway.
-// One its network no longer has is only forgotten.
-export function EditDevice(props: {
-  editing?: Editing;
-  appName: string | null;
-  onClose: () => void;
-  onChanged: (device: DeviceInfo) => void;
-  onRemoved: (id: string) => void;
-  onForgotten: (id: string) => void;
-}) {
-  // What the dialog showed stays while it closes.
-  const last = useRef<Editing>(undefined);
-  const current = useRef(props.editing);
-  current.current = props.editing;
-  useEffect(
-    () => () => {
-      current.current = undefined;
-    },
-    [],
-  );
-  if (props.editing) last.current = props.editing;
-  const editing = last.current;
-  const [name, setName] = useState("");
-  const [problem, setProblem] = useState<string>();
-  // Why removing it needs force, once a removal could not take it off.
-  const [stuck, setStuck] = useState<"unanswered" | "unavailable">();
-  const [working, setWorking] = useState(false);
-
-  useEffect(() => {
-    setName(props.editing?.device.name ?? "");
-    setProblem(undefined);
-    setStuck(undefined);
-    setWorking(false);
-  }, [props.editing]);
-
-  const device = editing?.device;
-  const network = props.appName
-    ? `the ${props.appName} network`
-    : "its network";
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!editing || !device) return;
-    setWorking(true);
-    setProblem(undefined);
-    try {
-      if (editing.action === "rename") {
-        props.onChanged(
-          await updateDevice(device.id, { name: name.trim() || null }),
-        );
-      } else if (editing.action === "forget") {
-        await keepHistory(device.id, false);
-        props.onForgotten(device.id);
-      } else {
-        await coreJson("/api/devices/remove", {
-          method: "POST",
-          json: { id: device.id, force: stuck !== undefined },
-        });
-        props.onRemoved(device.id);
-      }
-      if (current.current === editing) props.onClose();
-    } catch (error) {
-      if (current.current !== editing) return;
-      setWorking(false);
-      if (
-        editing.action === "remove" &&
-        !stuck &&
-        error instanceof CoreError &&
-        error.status >= 500
-      ) {
-        setStuck(error.code === "unavailable" ? "unavailable" : "unanswered");
-        return;
-      }
-      setProblem(deviceProblem(error));
-    }
-  };
-
-  const title =
-    editing?.action === "rename"
-      ? "Rename this device"
-      : editing?.action === "forget"
-        ? `Stop keeping ${device?.name}'s history?`
-        : stuck === "unanswered"
-          ? `${device?.name} did not answer`
-          : stuck === "unavailable"
-            ? `${device?.name} cannot leave ${network}`
-            : `Remove ${device?.name}?`;
-  const description =
-    editing?.action === "rename"
-      ? "Left empty, it is named after its room."
-      : editing?.action === "forget"
-        ? `${productName} deletes what it has kept of it, and keeps nothing more until you turn this on again.`
-        : stuck
-          ? `${
-              stuck === "unanswered"
-                ? "It may be switched off or out of range."
-                : `${props.appName ?? "Its app"} is not running.`
-            } Remove it anyway? ${productName} forgets it, but the device may still try to join until it is reset.`
-          : device?.leftAt
-            ? `It isn't paired with ${network} any more, as after a reset, so nothing reaches it. ${productName} forgets it, with its room and name. To keep it instead, reset it and add it again.`
-            : `It leaves ${network} and ${productName} forgets it, with its room and name. To use it again, reset it and add it again.`;
-
-  return (
-    <Dialog
-      open={!!props.editing}
-      onOpenChange={(open) => {
-        if (!open) props.onClose();
-      }}
-    >
-      <DialogContent>
-        <form onSubmit={submit} className="flex flex-col gap-5">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          {editing?.action === "rename" && (
-            <Input
-              aria-label="Name"
-              value={name}
-              maxLength={120}
-              onChange={(event) => setName(event.target.value)}
-              autoFocus
-            />
-          )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={props.onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant={editing?.action === "rename" ? "default" : "destructive"}
-              disabled={working}
-            >
-              {editing?.action === "rename"
-                ? "Save"
-                : editing?.action === "forget"
-                  ? working
-                    ? "Deleting…"
-                    : "Delete history"
-                  : working
-                    ? "Removing…"
-                    : stuck
-                      ? "Remove anyway"
-                      : "Remove"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

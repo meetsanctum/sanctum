@@ -7,12 +7,8 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createGate } from "./app-host/gate.js";
-import {
-  createAppHost,
-  type AppHost,
-  type JobCalls,
-  type KeptWorkflowCalls,
-} from "./app-host/host.js";
+import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
+import { createAppHost, type AppHost } from "./app-host/host.js";
 import { createNet } from "./app-host/net.js";
 import { publicInternet } from "./app-host/public-internet.js";
 import type { ServiceManager } from "./app-host/services.js";
@@ -32,6 +28,7 @@ import type { CoreDatabase } from "./database.js";
 import { createDevices, type DeviceChange } from "./devices/devices.js";
 import { createFirmware } from "./devices/firmware.js";
 import { createProblems } from "./devices/problems.js";
+import { createFound } from "./devices/found.js";
 import {
   createSightings,
   type SightingsManager,
@@ -258,14 +255,16 @@ export async function createModules(
     activity,
     deliver: (driver, command, actor) => host!.deliver(driver, command, actor),
     driverRun: (driver) => host!.driverRun(driver),
-    removeFromDriver: (driver, removal, actor) =>
-      host!.removeDevice(driver, removal, actor),
+    removeFromDriver: (driver, removal, actor, hold) =>
+      host!.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
     beforeCommand: (device, capability) => holds.interrupt(device, capability),
     onChange(change) {
       live.device(change);
       host?.deviceChanged(change);
       if (change.after === null) pairing.removed(change.id);
+      // A device added or removed leaves or rejoins what was found.
+      if (change.before === null || change.after === null) pairing.refresh();
       following(change.id, () => workflows?.deviceChanged(change));
       updateHome(change);
       try {
@@ -311,9 +310,22 @@ export async function createModules(
     db,
     devices,
     drivers: {
-      repair: (driver, repair, actor) => host!.repair(driver, repair, actor),
+      repair: (driver, repair, actor, hold) =>
+        host!.repair(driver, repair, actor, hold),
     },
     record: activity.for("devices"),
+  });
+  // What drivers found and could add, and adding it, in its turn with
+  // repairing and removing the device.
+  const found = createFound({
+    devices,
+    drivers: {
+      run: (driver) =>
+        host?.isRunning(driver) ? host.driverRun(driver) : undefined,
+      add: (driver, add, actor, hold) => host!.add(driver, add, actor, hold),
+    },
+    record: activity.for("devices"),
+    onChange: () => pairing.refresh(),
   });
   const firmware = createFirmware({
     db,
@@ -347,12 +359,13 @@ export async function createModules(
   });
   const pairing = createPairing({
     drivers: {
-      list: () => host!.pairingDrivers(),
+      list: () => host?.pairingDrivers() ?? [],
       open: (driver, seconds, actor) =>
         host!.openPairing(driver, seconds, actor),
       close: (driver, actor) => host!.closePairing(driver, actor),
     },
     deviceId: (driver, key) => devices.idFor(driver, key),
+    found: () => found.list(),
     record: activity.for("devices"),
     onChange: live.pairing,
     log,
@@ -404,6 +417,7 @@ export async function createModules(
     pairing: () => pairing,
     firmware: () => firmware,
     problems: () => problems,
+    found: () => found,
     entities,
     settings: appSettingsStore,
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
@@ -420,7 +434,12 @@ export async function createModules(
     }),
     off: createAppsOff(db, { now }),
     onSettings: live.settings,
-    onApp: live.app,
+    onApp(app) {
+      live.app(app);
+      // A driver that starts or stops lets devices join, or lists what it
+      // found, or no longer does.
+      pairing.refresh();
+    },
     net: createNet(options.fetch ?? publicInternet()),
     log,
     timeoutMs: options.appTimeoutMs,
@@ -513,6 +532,7 @@ export async function createModules(
     presses,
     firmware,
     problems,
+    found,
     entities,
     apps,
     workflows,

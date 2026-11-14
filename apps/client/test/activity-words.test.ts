@@ -259,6 +259,28 @@ describe("an entry's words", () => {
     });
   });
 
+  it.each([
+    ["ok", "Kitchen sensor added", false],
+    ["refused", "Kitchen sensor couldn't be added", true],
+  ] as const)(
+    "says a found device was added (%s)",
+    (outcome, title, problem) => {
+      const added = entry({
+        kind: "devices",
+        action: "device.add",
+        outcome,
+        detail: { name: "Kitchen sensor" },
+        subject: {
+          type: "device",
+          id: "sensor",
+          name: "Kitchen sensor",
+          gone: false,
+        },
+      });
+      expect(activityWords(added, "home")).toMatchObject({ title, problem });
+    },
+  );
+
   it("says what a press did", () => {
     const pressed = (fields: Partial<ActivityInfo>) =>
       activityWords(

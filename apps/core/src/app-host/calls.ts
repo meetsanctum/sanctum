@@ -34,7 +34,7 @@ import type { Entities } from "../entities/entities.js";
 import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
 import { ActionCallError } from "./errors.js";
-import type { JobCalls, KeptWorkflowCalls } from "./host.js";
+import type { JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { NetFetch, NetHolds } from "./net.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
@@ -135,6 +135,8 @@ export function createCoreCalls(options: {
   // What's wrong with the driver's devices, in the words of the problems its
   // manifest declares.
   problems: { report: (problem: unknown) => void };
+  // Which devices the driver found and could add.
+  found: { report: (found: unknown) => void };
   // Checks one of the app's own events and hands it on.
   emit: (event: unknown) => void;
   // Has the core hand the app one of its events; the start context's only.
@@ -326,6 +328,11 @@ export function createCoreCalls(options: {
     async problem(problem) {
       need(registerPermission);
       options.problems.report(problem);
+    },
+
+    async found(found) {
+      need(registerPermission);
+      options.found.report(found);
     },
 
     async emit(event) {

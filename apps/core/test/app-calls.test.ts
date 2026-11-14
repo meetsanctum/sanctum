@@ -28,6 +28,7 @@ describe("service connections from ended contexts", () => {
         presses: core.presses,
         firmware: core.firmware,
         problems: { report() {} },
+        found: { report() {} },
         emit() {},
         entities: core.entities,
         entityType: () => undefined,

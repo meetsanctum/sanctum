@@ -132,12 +132,15 @@ export function Sheet(props: {
 export function Section(props: {
   id: string;
   title: string;
+  // Its heading's level, such as 3 inside a dialog with its own title.
+  level?: 2 | 3;
   hint?: string;
   // The hint says a problem, in red.
   problem?: boolean;
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const Heading = props.level === 3 ? "h3" : "h2";
   return (
     <section
       aria-labelledby={props.id}
@@ -145,9 +148,12 @@ export function Section(props: {
     >
       <div className="flex min-h-7 items-center justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 id={props.id} className="m-0 text-[15px] leading-5 font-medium">
+          <Heading
+            id={props.id}
+            className="m-0 text-[15px] leading-5 font-medium"
+          >
             {props.title}
-          </h2>
+          </Heading>
           {props.hint && (
             <span
               className={cn(

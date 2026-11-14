@@ -17,6 +17,7 @@ import type {
   DeviceReport,
 } from "./devices.js";
 import type { DeviceProblemReport } from "./device-problems.js";
+import type { FoundReport } from "./found-devices.js";
 import type { EntityInfo, EntityPublication } from "./entities.js";
 import { entityTypeOf, type AppDefinition } from "./index.js";
 import { settingsAsRead } from "./settings.js";
@@ -117,6 +118,7 @@ export interface CoreCalls {
   fetch(request: NetRequest): Promise<NetResponse>;
   joining(joining: DeviceJoining): Promise<void>;
   problem(problem: DeviceProblemReport): Promise<void>;
+  found(found: FoundReport[]): Promise<void>;
   /** One of the app's own secrets by its name, or null when it has none by that name. */
   secret(name: string): Promise<string | null>;
   /** Keeps one of the app's own secrets, replacing what it kept by that name. */
@@ -229,6 +231,13 @@ export interface AppContext {
      * attention leads the device's row with it; needs `devices.register`.
      */
     problem(problem: DeviceProblemReport): Promise<void>;
+    /**
+     * Says which devices the driver app could add, all of them, replacing
+     * what it said before: Add devices lists them, with what adding each
+     * asks, until someone adds one (driver.add). One the home has is left
+     * out. Needs `devices.register`.
+     */
+    found(found: FoundReport[]): Promise<void>;
   };
   readonly events: {
     /**
@@ -421,6 +430,7 @@ export function createAppContext(options: {
       firmware: (firmware) => core.firmware(firmware),
       joining: (joining) => core.joining(joining),
       problem: (problem) => core.problem(problem),
+      found: (found) => core.found(found),
     },
     events: {
       emit: async (event, payload) =>

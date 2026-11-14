@@ -1,13 +1,15 @@
 import { z } from "zod";
 
 import { deviceKey } from "./devices.js";
+import type { FoundDevice } from "./found-devices.js";
 
 // Adding and removing devices. Pairing is the core's flow, whatever the
 // radio: someone lets new devices join for a while, the core asks every
 // driver app that can pair to open its network, and each driver says how
 // every device that joins is getting on until it is ready, which the shell
-// shows as it happens. Removing a device goes through its driver too, which
-// takes it off its network.
+// shows as it happens. Devices a driver found, as on the home's network, wait
+// beside them to be added (found-devices.ts). Removing a device goes through
+// its driver too, which takes it off its network.
 
 /**
  * How far a device that joins has come: it `joined`, its driver is
@@ -53,6 +55,10 @@ export type PairingInfo = {
   until: string | null;
   /** The devices that joined lately, in the order they joined. */
   joined: JoinedDevice[];
+  /** The running driver apps that let new devices join, by id. */
+  drivers: string[];
+  /** The devices running drivers found and could add, which the home doesn't have. */
+  found: FoundDevice[];
 };
 
 /** What the core asks of a driver app to remove one of its devices (driver.remove). */

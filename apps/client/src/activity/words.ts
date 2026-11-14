@@ -583,6 +583,9 @@ function deviceEntry(
       };
     case "device.repair":
       return said(entry.outcome === "ok" ? "Repaired" : "Couldn't be repaired");
+    // One someone added from what its driver found.
+    case "device.add":
+      return said(entry.outcome === "ok" ? "Added" : "Couldn't be added");
     // Home by its name then.
     case "device.home.add":
       return said(`Added to ${String(entry.detail?.dashboard ?? "Home")}`);

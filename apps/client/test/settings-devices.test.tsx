@@ -68,7 +68,12 @@ describe("Settings → Devices", () => {
     vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
     devices = [light("desk", "Light")];
     kept = true;
-    pairing = { until: null, joined: [] };
+    pairing = {
+      until: null,
+      joined: [],
+      drivers: ["sanctum.zigbee"],
+      found: [],
+    };
     requests = [];
     removal = () => undefined;
     vi.mocked(coreJson).mockReset();
@@ -195,6 +200,27 @@ describe("Settings → Devices", () => {
       person: null,
     } as unknown as Me);
     expect(container.textContent).toContain("Add devices");
+  });
+
+  it("says on its heading what waits to be added, and follows it live", async () => {
+    const found = {
+      driver: "sanctum.zigbee",
+      key: "0x1",
+      name: "Kitchen sensor",
+      description: null,
+      type: null,
+      asks: [],
+    };
+    pairing = { ...pairing, found: [found, { ...found, key: "0x2" }] };
+    await show(admin);
+    const heading = () =>
+      document.querySelector("#settings-devices")!.parentElement!.textContent;
+    expect(heading()).toBe("Devices2 found on your network");
+
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: { ...pairing, found: [] } }),
+    );
+    expect(heading()).toBe("Devices");
   });
 
   it("lists the devices and follows them live", async () => {
@@ -531,6 +557,7 @@ describe("Settings → Devices", () => {
             onOpenChange={() => undefined}
             devices={devices}
             rooms={[office]}
+            apps={[zigbee]}
             live={live}
             onChanged={() => undefined}
           />,
@@ -543,8 +570,8 @@ describe("Settings → Devices", () => {
     await render(true);
     await act(async () =>
       answer.resolve({
+        ...pairing,
         until: "2026-10-29T12:04:00.000Z",
-        joined: [],
         since: "2026-10-29T12:00:00.000Z",
       }),
     );
@@ -583,10 +610,13 @@ describe("Settings → Devices", () => {
       path: "/api/devices/pairing/open",
       json: {},
     });
-    expect(dialog.textContent).toContain("New devices can join for 4:00.");
+    // The radio that lets them join, with the time left.
+    expect(dialog.querySelector("h3")?.textContent).toBe("Zigbee");
+    expect(dialog.textContent).toContain("4:00 left");
     expect(dialog.textContent).toContain("Looking for new devices…");
+    expect(dialog.textContent).toContain("Put a Zigbee device in pairing mode");
     await act(async () => vi.advanceTimersByTime(8_000));
-    expect(dialog.textContent).toContain("New devices can join for 3:52.");
+    expect(dialog.textContent).toContain("3:52 left");
 
     const joining: JoinedDevice = {
       driver: "sanctum.zigbee",
@@ -611,7 +641,8 @@ describe("Settings → Devices", () => {
     );
     expect(dialog.textContent).toContain("New device");
     expect(dialog.textContent).toContain("Setting up…");
-    expect(dialog.querySelectorAll("li")).toHaveLength(1);
+    // The radio's own row, and the one joining.
+    expect(dialog.querySelectorAll("li")).toHaveLength(2);
 
     const added = light("bulb", "Light 2");
     devices = [...devices, added];
@@ -654,7 +685,8 @@ describe("Settings → Devices", () => {
     });
 
     await act(async () => button("Stop").click());
-    expect(dialog.textContent).toContain("New devices can no longer join.");
+    expect(dialog.textContent).toContain("New devices can no longer join");
+    expect(dialog.textContent).not.toContain("left");
     expect(button("Look again")).toBeDefined();
     await act(async () => button("Done").click());
     expect(
@@ -687,7 +719,7 @@ describe("Settings → Devices", () => {
       }),
     );
 
-    expect(dialog.querySelector("li")!.textContent).toBe(
+    expect(dialog.querySelectorAll("li")[1]!.textContent).toBe(
       "LightHue Essential White and Color Ambiance A60 · Setting up…",
     );
   });
@@ -713,13 +745,13 @@ describe("Settings → Devices", () => {
     await act(async () => vi.advanceTimersByTime(3000));
     await act(async () =>
       answer.resolve({
+        ...pairing,
         until: "2026-10-29T12:04:00.000Z",
-        joined: [],
         since: "2026-10-29T12:00:00.000Z",
       }),
     );
     expect(document.querySelector("[role=dialog]")!.textContent).toContain(
-      "New devices can join for 3:57.",
+      "3:57 left",
     );
   });
 });

@@ -8,11 +8,12 @@ import { deviceKey } from "./devices.js";
 // device, and Needs attention leads the device's row with its words. Where
 // the problem says how, Repair asks the driver's declared questions and
 // hands the answers to driver.repair, which sets the device right or
-// refuses an answer by one of that question's declared refusals. The words
-// are all declared, never made up as the driver goes, so an answer typed into
-// a field can't end up in a message, a log or the activity log.
+// refuses an answer by one of that question's declared refusals. Adding a
+// device the driver found asks its questions the same way (found-devices.ts).
+// The words are all declared, never made up as the driver goes, so an answer
+// typed into a field can't end up in a message, a log or the activity log.
 
-/** What a driver may ask someone repairing one of its devices, such as a device's encryption key. */
+/** What a driver may ask someone adding or repairing one of its devices, such as a device's encryption key. */
 export type DriverQuestion = {
   /** What the field is called: "Encryption key". */
   readonly label: string;
@@ -66,7 +67,7 @@ export type DriverRepairResult = void | {
   refused: { question: string; refusal: string };
 };
 
-/** A question as the core shows it with a device's problem. */
+/** A question as the core shows it with a device's problem or a found device. */
 export type DeviceQuestion = {
   id: string;
   label: string;
@@ -97,9 +98,10 @@ export const problemId = /^[a-z][A-Za-z0-9]{0,63}$/;
 export const maxProblemWords = 100;
 /** The longest an answer is, in bytes of UTF-8. */
 export const maxAnswerBytes = 4_096;
+/** The most questions a driver declares, and so the most one thing asks. */
+export const maxQuestions = 8;
 
 const maxProblems = 32;
-const maxQuestions = 8;
 const maxRefusals = 8;
 
 const words = (max: number) => z.string().max(max).trim().min(1);
@@ -201,6 +203,35 @@ export function staticProblems(driver: DriverWithProblems) {
 }
 
 /**
+ * The questions a driver declares by these ids, as the core shows them, in
+ * that order, from what its static manifest says. One it declares no more,
+ * as after a version that dropped it, is left out.
+ */
+export function shownQuestions(
+  driver: DriverWithProblems | null | undefined,
+  ids: readonly string[],
+): DeviceQuestion[] {
+  const questions = driver?.questions ?? {};
+  return ids.flatMap((question) => {
+    const asked = Object.hasOwn(questions, question)
+      ? questions[question]
+      : undefined;
+    return asked
+      ? [
+          {
+            id: question,
+            label: asked.label,
+            kind: asked.kind,
+            help: asked.help ?? null,
+            placeholder: asked.placeholder ?? null,
+            refusals: { ...asked.refusals },
+          },
+        ]
+      : [];
+  });
+}
+
+/**
  * One of a driver's declared problems as the core shows it with a device,
  * from what its static manifest says, or null when it declares none by that
  * id, as after a version that dropped it.
@@ -213,42 +244,25 @@ export function shownProblem(
     ? driver!.problems![id]
     : undefined;
   if (!problem) return null;
-  const questions = driver?.questions ?? {};
   return {
     id,
     words: problem.words,
     repair: problem.repair
       ? {
           help: problem.repair.help ?? null,
-          asks: problem.repair.asks.flatMap((question) => {
-            const asked = Object.hasOwn(questions, question)
-              ? questions[question]
-              : undefined;
-            return asked
-              ? [
-                  {
-                    id: question,
-                    label: asked.label,
-                    kind: asked.kind,
-                    help: asked.help ?? null,
-                    placeholder: asked.placeholder ?? null,
-                    refusals: { ...asked.refusals },
-                  },
-                ]
-              : [];
-          }),
+          asks: shownQuestions(driver, problem.repair.asks),
         }
       : null,
   };
 }
 
 /**
- * The answers to what a problem's repair asks: one for each question, and
- * nothing else. Answers are taken as typed, never trimmed, as a key's every
- * character counts.
+ * The answers to what is asked: one for each question, and nothing else.
+ * Answers are taken as typed, never trimmed, as a key's every character
+ * counts.
  */
-export function repairAnswers(problem: DeviceProblem, answers: unknown) {
-  const asked = problem.repair?.asks.map((question) => question.id) ?? [];
+export function answersTo(asks: readonly DeviceQuestion[], answers: unknown) {
+  const asked = asks.map((question) => question.id);
   const parsed = z
     .record(
       z.string(),
@@ -269,18 +283,16 @@ export function repairAnswers(problem: DeviceProblem, answers: unknown) {
   return parsed.data;
 }
 
-/** Whether a driver's refusal is one the question it names declares, among those the repair asks. */
+/** Whether a driver's refusal is one the question it names declares, among those asked. */
 export function isDeclaredRefusal(
-  problem: DeviceProblem,
+  asks: readonly DeviceQuestion[],
   refused: unknown,
 ): refused is { question: string; refusal: string } {
   const parsed = z
     .object({ question: z.string(), refusal: z.string() })
     .safeParse(refused);
   if (!parsed.success) return false;
-  const question = problem.repair?.asks.find(
-    (each) => each.id === parsed.data.question,
-  );
+  const question = asks.find((each) => each.id === parsed.data.question);
   return (
     question !== undefined &&
     Object.hasOwn(question.refusals, parsed.data.refusal)

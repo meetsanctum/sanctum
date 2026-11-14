@@ -1,6 +1,7 @@
 import {
   createAppContext,
   shownProblem,
+  shownQuestions,
   type Actor,
   type AppContext,
   type CoreCalls,
@@ -10,6 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Devices } from "../devices/devices.js";
 import type { Firmware } from "../devices/firmware.js";
+import type { Found } from "../devices/found.js";
 import type { Problems } from "../devices/problems.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Presses } from "../devices/presses.js";
@@ -20,7 +22,7 @@ import { createCoreCalls } from "./calls.js";
 import { issuesText } from "./contract.js";
 import type { CoreEvents } from "./core-events.js";
 import { ActionCallError } from "./errors.js";
-import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./host.js";
+import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
@@ -47,6 +49,7 @@ export function createAppContexts(options: {
   presses: () => Pick<Presses, "press" | "released">;
   firmware: () => Pick<Firmware, "report">;
   problems: () => Pick<Problems, "report">;
+  found: () => Pick<Found, "report">;
   onEvent?: (event: AppEvent) => void;
   jobs?: JobCalls;
   workflows?: KeptWorkflowCalls;
@@ -169,6 +172,14 @@ export function createAppContexts(options: {
             .report(appId, said, (id) =>
               shownProblem(entry.manifest.driver, id),
             ),
+      },
+      found: {
+        report: (said) =>
+          options.found().report(appId, said, {
+            run: entry.runId,
+            canAdd: entry.manifest.driver?.hooks.includes("add") === true,
+            questionsOf: (ids) => shownQuestions(entry.manifest.driver, ids),
+          }),
       },
       emit(input) {
         const event = emitted(entry, input);

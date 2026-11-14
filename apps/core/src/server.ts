@@ -49,6 +49,7 @@ export function createServer(
     | "presses"
     | "firmware"
     | "problems"
+    | "found"
     | "entities"
     | "history"
     | "gate"
@@ -168,6 +169,7 @@ export function createServer(
         presses: options.presses,
         firmware: options.firmware,
         problems: options.problems,
+        found: options.found,
         gate,
         activity,
       });
