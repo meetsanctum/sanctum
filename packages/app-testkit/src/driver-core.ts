@@ -22,6 +22,10 @@ import {
   type Availability,
   type CapabilityKind,
   type CoreCalls,
+  type CoreEvent,
+  type CoreEventHandlers,
+  type DeviceInfo,
+  type DeviceType,
   type DriverCommand,
   type DeviceProblem,
   type DriverDiscovery,
@@ -35,6 +39,7 @@ import {
 import { z } from "zod";
 
 import { createSecretCalls } from "./secret-calls.js";
+import { createTestStorage } from "./storage.js";
 
 // A fake core for one driver app: it takes the driver's registrations,
 // reports, presses and releases, what it says of joining devices and of
@@ -42,7 +47,10 @@ import { createSecretCalls } from "./secret-calls.js";
 // the same schemas, remembers them, and hands the driver commands, moves,
 // pairing, removals, firmware calls, probes, repairs and adding the devices
 // it found, and keeps its secrets, what it says is wrong with its devices and
-// which devices it could add. Nothing else of the core is there.
+// which devices it could add. It lists the driver's own devices whole, with
+// their keys, as the core does for a driver, hands it the events it follows,
+// such as a device's removal, and keeps its own database when given its
+// migrations. Nothing else of the core is there.
 
 type Registered = z.output<typeof deviceRegistration>;
 
@@ -75,6 +83,8 @@ export function createDriverCore(
     services?: Record<string, ServiceConnection>;
     // Calls the core doesn't answer, failing as when it can't be reached.
     unanswered?: (keyof CoreCalls)[];
+    // The app's migrations, for its own database.
+    migrationsFolder?: string;
   } = {},
 ) {
   const registered = new Map<string, Registered>();
@@ -100,6 +110,70 @@ export function createDriverCore(
   // The devices it last said it could add, as Add devices shows them, those
   // it has left out.
   let found: FoundDevice[] = [];
+  const storage = options.migrationsFolder
+    ? createTestStorage({ migrationsFolder: options.migrationsFolder })
+    : null;
+  // The events the driver follows, and its handlers for them.
+  const followed = new Set<string>();
+  const handlers: CoreEventHandlers = new Map();
+
+  // One of its devices as the driver reads it: whole, with its key.
+  function infoOf(device: Registered): DeviceInfo {
+    return {
+      id: `device:${device.key}`,
+      name: device.name,
+      driver: app.id,
+      manufacturer: device.manufacturer,
+      model: device.model,
+      roomId: null,
+      driverName: device.name,
+      type: (device.type ?? "unknown") as DeviceType,
+      availability: availability.get(device.key) ?? "unknown",
+      lastSeenAt: null,
+      capabilities: device.capabilities.map((each) => {
+        const state = latestOf(device.key, each.id) ?? null;
+        return {
+          ...each,
+          state,
+          observed: state,
+          desired: null,
+          sync: "synced",
+          setBy: null,
+          changedAt: null,
+        };
+      }) as DeviceInfo["capabilities"],
+      firmware: device.firmware && {
+        ...device.firmware,
+        state: null,
+        progress: null,
+        remainingSeconds: null,
+        problem: null,
+        checkedAt: null,
+      },
+      probe: device.probe,
+      battery: null,
+      leftAt: null,
+      problem: problems.get(device.key) ?? null,
+      key: device.key,
+    } as DeviceInfo;
+  }
+
+  function latestOf(key: string, capability: string) {
+    for (const report of [...reports].reverse()) {
+      if (report.key === key && report.states[capability]) {
+        return report.states[capability];
+      }
+    }
+    return undefined;
+  }
+
+  // Hands the driver one of the core's events, if it follows it.
+  async function deliver(event: CoreEvent) {
+    if (!followed.has(event.name)) return;
+    for (const handler of handlers.get(event.name) ?? []) {
+      await handler(event);
+    }
+  }
 
   function refuse(error: Error): never {
     refused.push(error);
@@ -107,7 +181,7 @@ export function createDriverCore(
   }
 
   const core: CoreCalls = {
-    query: absent,
+    query: storage ? (query) => storage.query(query) : absent,
     settings: absent,
     // Every permission it asks for: this core grants them all.
     permissions: async () => permissionIds(app.permissions),
@@ -119,8 +193,14 @@ export function createDriverCore(
     unpublish: absent,
     entities: absent,
     fetch: absent,
-    devices: absent,
-    device: absent,
+    devices: async () => [...registered.values()].map(infoOf),
+    async device(id) {
+      const device = [...registered.values()].find(
+        (each) => `device:${each.key}` === id,
+      );
+      if (!device) refuse(new ActionError("not_found", `No device ${id}`));
+      return infoOf(device);
+    },
     command: absent,
     async serviceConnection(name) {
       const connection = options.services?.[name];
@@ -236,7 +316,9 @@ export function createDriverCore(
       firmware.push(parsed.data);
     },
     emit: absent,
-    follow: absent,
+    async follow(name) {
+      followed.add(name);
+    },
     scheduleJob: absent,
     cancelJob: absent,
     jobs: absent,
@@ -305,7 +387,13 @@ export function createDriverCore(
 
   const context = (actor: Actor): AppContext =>
     createAppContext({ appId: app.id, actor, core });
-  const own = context({ kind: "app", id: app.id });
+  // The start hook's, which keeps the handlers of the events it follows.
+  const own = createAppContext({
+    appId: app.id,
+    actor: { kind: "app", id: app.id },
+    core,
+    handlers,
+  });
   const person = () => context({ kind: "user", id: "suite" });
 
   function driver() {
@@ -396,9 +484,33 @@ export function createDriverCore(
       } finally {
         removing.delete(key);
       }
+      const device = registered.get(key);
       registered.delete(key);
       availability.delete(key);
       problems.delete(key);
+      if (device) {
+        await deliver({ name: "device.deleted", device: infoOf(device) });
+      }
+    },
+
+    /** Hands the driver one of the core's events, if it follows it. */
+    deliver,
+
+    /** Runs one of the app's actions for someone, as a client's call does. */
+    async call(id: string, input: unknown) {
+      const action = app.actions.find((each) => each.id === id);
+      if (!action) throw new Error(`${app.id} has no action ${id}`);
+      return action.output.parse(
+        await action.run(person(), action.input.parse(input)),
+      );
+    },
+
+    /** Its own devices as it reads them, whole with their keys. */
+    devices: () => [...registered.values()].map(infoOf),
+
+    /** Closes the app's own database, once the test is done with it. */
+    close() {
+      storage?.close();
     },
 
     /** Hands the driver a client's firmware call for one of its devices. */
@@ -511,14 +623,7 @@ export function createDriverCore(
     },
 
     /** The latest state reported for one capability, if any. */
-    latest(key: string, capability: string) {
-      for (const report of [...reports].reverse()) {
-        if (report.key === key && report.states[capability]) {
-          return report.states[capability];
-        }
-      }
-      return undefined;
-    },
+    latest: latestOf,
 
     /** Waits until `check` holds, or fails after `timeoutMs`. */
     async until(check: () => boolean, what: string, timeoutMs = 2_000) {

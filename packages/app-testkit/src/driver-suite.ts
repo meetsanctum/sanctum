@@ -23,15 +23,18 @@ export type DriverHarness = {
   kinds: readonly CapabilityKind[];
   /**
    * After the driver has started, makes one device of this kind appear to
-   * it, the way pairing would. Resolves to the driver's key for it.
+   * it, the way pairing would, or as someone adds one it found through the
+   * suite's core. Resolves to the driver's key for it.
    */
-  add(kind: CapabilityKind): Promise<string>;
+  add(kind: CapabilityKind, core: DriverCore): Promise<string>;
   /** Makes the device stop answering, as if it was unplugged. */
   unplug(key: string): Promise<void>;
   /** Presses one of a button's actions on the device, for drivers that bring buttons. */
   press?(key: string, action: string): Promise<void>;
   /** The services the driver asks for, such as its broker account. */
   services?: Record<string, ServiceConnection>;
+  /** The app's migrations, for a driver with its own database. */
+  migrationsFolder?: string;
   /** Sets up and tears down the protocol side around each test. */
   setUp?(): Promise<void>;
   tearDown?(): Promise<void>;
@@ -120,12 +123,16 @@ export function describeDriver(harness: DriverHarness) {
 
     beforeEach(async () => {
       await harness.setUp?.();
-      core = createDriverCore(app, { services: harness.services });
+      core = createDriverCore(app, {
+        services: harness.services,
+        migrationsFolder: harness.migrationsFolder,
+      });
       await core.start();
     });
 
     afterEach(async () => {
       await core.stop();
+      core.close();
       await harness.tearDown?.();
       // Even when it does not wait for the answer, a driver never sends
       // the core something it refuses.
@@ -141,7 +148,7 @@ export function describeDriver(harness: DriverHarness) {
       describe(`a ${kind}`, () => {
         // Adds one and waits for the driver to register it.
         async function bring() {
-          const key = await harness.add(kind);
+          const key = await harness.add(kind, core);
           const capabilityOfKind = () =>
             core.registered
               .get(key)

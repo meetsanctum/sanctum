@@ -17,6 +17,7 @@ COPY packages/typescript-config/package.json packages/typescript-config/package.
 # none of it.
 COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
 # The catalog apps the image ships, one line each.
+COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json
 COPY catalog/apps/natural-light/package.json catalog/apps/natural-light/package.json
 COPY catalog/apps/weather/package.json catalog/apps/weather/package.json

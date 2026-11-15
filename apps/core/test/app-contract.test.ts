@@ -613,6 +613,7 @@ describe("the catalog's apps, from their packages", () => {
     const packages = await loadAppPackages(catalog, "official");
 
     expect(packages.map(({ app }) => app.id).sort()).toEqual([
+      "sanctum.esphome",
       "sanctum.moods",
       "sanctum.natural-light",
       "sanctum.weather",

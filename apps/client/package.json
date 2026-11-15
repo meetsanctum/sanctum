@@ -18,6 +18,7 @@
     "@meetsanctum/app-sdk": "workspace:*",
     "@meetsanctum/auth-protocol": "workspace:*",
     "@meetsanctum/brand": "workspace:*",
+    "@meetsanctum/esphome": "workspace:*",
     "@meetsanctum/moods": "workspace:*",
     "@meetsanctum/natural-light": "workspace:*",
     "@meetsanctum/ui-sdk": "workspace:*",
