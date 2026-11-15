@@ -7,15 +7,24 @@ import { deviceType } from "./classification.js";
 import { deviceCapabilities, devices } from "./schema.js";
 
 // Automatic device names: a device the household has not named is called
-// after its room and what it is, "Office light", or "Light" while it is in
+// after its room and what it is, "Office Light", or "Light" while it is in
 // no room, and numbered from 2 when another device has that name:
-// "Office light 2". Names are compared ignoring case and spacing, and are
-// in sentence case like the rest of the interface. A device keeps a number
-// that is still free, so removing "Office light" does not rename
-// "Office light 2". A device Sanctum cannot use is an "Unknown device" in
+// "Office Light 2". Each word starts with a capital, as a name's words do,
+// and names are compared ignoring case and spacing. A device keeps a number
+// that is still free, so removing "Office Light" does not rename
+// "Office Light 2". A device Sanctum cannot use is an "Unknown Device" in
 // any room, since its type has no word to follow a room's name.
 
 const words = new Map(deviceTypes.map((type) => [type.id, type]));
+
+// "living room light" as "Living Room Light". A word with a capital of its
+// own, "TV" or "iPad", stays as it is.
+const capitalized = (name: string) =>
+  name.replace(/\S+/g, (word) =>
+    /\p{Lu}/u.test(word)
+      ? word
+      : word.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase()),
+  );
 
 /**
  * What a device of this type is called in this room, before any number: its
@@ -23,7 +32,7 @@ const words = new Map(deviceTypes.map((type) => [type.id, type]));
  */
 export function baseName(type: DeviceType, room: string | null) {
   const { title, noun } = words.get(type)!;
-  return room && noun ? `${room} ${noun}` : title;
+  return capitalized(room && noun ? `${room} ${noun}` : title);
 }
 
 const normal = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();

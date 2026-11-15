@@ -174,7 +174,7 @@ describe("a device with no capabilities", () => {
 
     const [purifier] = await purifiers(core, maya.token);
     expect(purifier).toMatchObject({
-      name: "Unknown device",
+      name: "Unknown Device",
       driverName: "STARKVIND",
       type: "unknown",
       capabilities: [],
@@ -207,8 +207,8 @@ describe("a device with no capabilities", () => {
         ],
       ),
     ).toEqual([
-      ["Unknown device 2", null],
-      ["Unknown device", hall.id],
+      ["Unknown Device 2", null],
+      ["Unknown Device", hall.id],
     ]);
   });
 
@@ -258,7 +258,7 @@ describe("a device with no capabilities", () => {
     const before = (await devicesSeenBy(core, maya.token)).find(
       (device: { driverName: string }) => device.driverName === "Relay",
     );
-    expect(before.name).toBe("Unknown device");
+    expect(before.name).toBe("Unknown Device");
 
     await radio.add("gadget-1", "switch", "Relay");
     const after = (await devicesSeenBy(core, maya.token)).find(
@@ -275,39 +275,58 @@ describe("a device with no capabilities", () => {
 
 describe("an automatic name", () => {
   it("is the room and what the device is, or just what it is", () => {
-    expect(baseName("light", "Office")).toBe("Office light");
+    expect(baseName("light", "Office")).toBe("Office Light");
     expect(baseName("plug", null)).toBe("Plug");
     // What Sanctum cannot use is an unknown device wherever it is.
-    expect(baseName("unknown", "Hall")).toBe("Unknown device");
-    expect(baseName("unknown", null)).toBe("Unknown device");
-    expect(baseName("motion", null)).toBe("Motion sensor");
+    expect(baseName("unknown", "Hall")).toBe("Unknown Device");
+    expect(baseName("unknown", null)).toBe("Unknown Device");
+    expect(baseName("motion", null)).toBe("Motion Sensor");
+  });
+
+  it("starts each word with a capital, but keeps a word's own capitals", () => {
+    expect(baseName("contact", "living room")).toBe(
+      "Living Room Contact Sensor",
+    );
+    expect(baseName("light", "über den Wolken")).toBe("Über Den Wolken Light");
+    expect(baseName("plug", "TV room")).toBe("TV Room Plug");
+    expect(baseName("switch", "iPad corner")).toBe("iPad Corner Switch");
+    expect(baseName("sensor", "2nd floor")).toBe("2nd Floor Sensor");
+  });
+
+  it("follows the capitals of a name a device was given before", () => {
+    expect(automaticName("Office Light", [], "Office light 2")).toBe(
+      "Office Light 2",
+    );
+    expect(
+      automaticName("Office Light", ["Office light 2"], "Office light"),
+    ).toBe("Office Light");
   });
 
   it("is numbered from 2 when another device has it, whatever its case or spacing", () => {
-    expect(automaticName("Office light", [])).toBe("Office light");
-    expect(automaticName("Office light", ["office  light"])).toBe(
-      "Office light 2",
+    expect(automaticName("Office Light", [])).toBe("Office Light");
+    expect(automaticName("Office Light", ["office  light"])).toBe(
+      "Office Light 2",
     );
     expect(
-      automaticName("Office light", ["Office light", "Office light 2"]),
-    ).toBe("Office light 3");
+      automaticName("Office Light", ["Office Light", "Office Light 2"]),
+    ).toBe("Office Light 3");
   });
 
   it("keeps a number that is still free, and drops one that is not its own", () => {
-    expect(automaticName("Office light", [], "Office light 3")).toBe(
-      "Office light 3",
+    expect(automaticName("Office Light", [], "Office Light 3")).toBe(
+      "Office Light 3",
     );
     expect(
-      automaticName("Office light", ["Office light 3"], "Office light 3"),
-    ).toBe("Office light");
-    expect(automaticName("Office light", [], "Hall light 2")).toBe(
-      "Office light",
+      automaticName("Office Light", ["Office Light 3"], "Office Light 3"),
+    ).toBe("Office Light");
+    expect(automaticName("Office Light", [], "Hall Light 2")).toBe(
+      "Office Light",
     );
-    expect(automaticName("Office light", [], "Office light 1")).toBe(
-      "Office light",
+    expect(automaticName("Office Light", [], "Office Light 1")).toBe(
+      "Office Light",
     );
-    expect(automaticName("Office light", [], "office light 3")).toBe(
-      "Office light 3",
+    expect(automaticName("Office Light", [], "office light 3")).toBe(
+      "Office Light 3",
     );
   });
 });
@@ -344,9 +363,9 @@ describe("devices the household has not named", () => {
     );
     // Desk lamp, Kettle plug, Kitchen lamp
     expect(await names(core, maya.token)).toEqual([
-      "Office light 2",
+      "Office Light 2",
       "Plug",
-      "Office light",
+      "Office Light",
     ]);
 
     const live = await openLive(core, maya.token);
@@ -357,21 +376,21 @@ describe("devices the household has not named", () => {
       maya,
     );
     expect(await names(core, maya.token)).toEqual([
-      "Study light 2",
+      "Study Light 2",
       "Plug",
-      "Study light",
+      "Study Light",
     ]);
     expect(live.messages).toContainEqual(
       expect.objectContaining({
         type: "device",
         id: desk,
-        device: expect.objectContaining({ name: "Study light 2" }),
+        device: expect.objectContaining({ name: "Study Light 2" }),
       }),
     );
 
     // Removing the first leaves the second its number.
     await post(core, "/api/devices/remove", { id: lamp }, maya);
-    expect(await names(core, maya.token)).toEqual(["Study light 2", "Plug"]);
+    expect(await names(core, maya.token)).toEqual(["Study Light 2", "Plug"]);
 
     // A removed room leaves them in no room, named after what they are.
     await post(core, "/api/places/rooms/remove", { id: office.id }, maya);
@@ -402,7 +421,7 @@ describe("devices the household has not named", () => {
       { id: lamp, name: null },
       maya,
     );
-    expect(named.json().name).toBe("Office light");
+    expect(named.json().name).toBe("Office Light");
   });
 
   it("are not named after another device's own name", async () => {

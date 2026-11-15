@@ -34,7 +34,7 @@ describe("a contact sensor", () => {
 
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
       type: "contact",
-      name: "Contact sensor",
+      name: "Contact Sensor",
       battery: 95,
       capabilities: [
         {
@@ -61,7 +61,7 @@ describe("a contact sensor", () => {
     );
 
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
-      name: "Hall contact sensor",
+      name: "Hall Contact Sensor",
       roomId: hall.id,
     });
   });
@@ -87,7 +87,7 @@ describe("a contact sensor", () => {
             device.driverName === "Door and window sensor",
         );
     const before = await byDriverName();
-    expect(before).toMatchObject({ type: "unknown", name: "Unknown device" });
+    expect(before).toMatchObject({ type: "unknown", name: "Unknown Device" });
     await post(
       core,
       "/api/devices/update",
@@ -104,7 +104,7 @@ describe("a contact sensor", () => {
     expect(await byDriverName()).toMatchObject({
       id: before.id,
       type: "contact",
-      name: "Hall contact sensor",
+      name: "Hall Contact Sensor",
       roomId: hall.id,
       capabilities: [{ id: "contact", kind: "contact", state: null }],
     });

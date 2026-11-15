@@ -132,7 +132,7 @@ describe("the core's events", () => {
         {
           name: "device.changed",
           before: { id: plug, roomId: null },
-          device: { id: plug, roomId: room, name: "Hall plug" },
+          device: { id: plug, roomId: room, name: "Hall Plug" },
         },
       ]);
     expect(
@@ -188,8 +188,8 @@ describe("the core's events", () => {
       .toMatchObject([
         {
           name: "device.changed",
-          before: { id: lamp, roomId: room.id, name: "Office light" },
-          device: { id: lamp, roomId: null, name: "Office light" },
+          before: { id: lamp, roomId: room.id, name: "Office Light" },
+          device: { id: lamp, roomId: null, name: "Office Light" },
         },
         { name: "place.removed", place: { kind: "room", id: room.id } },
         {
@@ -199,7 +199,7 @@ describe("the core's events", () => {
         },
         {
           name: "device.changed",
-          before: { id: lamp, roomId: null, name: "Office light" },
+          before: { id: lamp, roomId: null, name: "Office Light" },
           device: { id: lamp, roomId: null, name: "Light" },
         },
       ]);
