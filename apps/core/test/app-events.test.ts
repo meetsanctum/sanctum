@@ -1,6 +1,8 @@
 import {
+  coreEventNames,
   defineAction,
   defineApp,
+  defineEvent,
   forecastType,
   sunType,
   type CoreEvent,
@@ -9,13 +11,24 @@ import {
   type Place,
   type Places,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { createCoreEvents } from "../src/app-host/core-events.js";
+import {
+  createEventsForApps,
+  type EventsForApps,
+} from "../src/app-host/events-for-apps.js";
+import { createEventBus } from "../src/event-bus.js";
 import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, personWithClient, settled } from "./devices-support.js";
 import { claimed, post, testCore } from "./support.js";
+
+// The bus as the core sets it, with the events for apps its only follower.
+function busFor(events: EventsForApps) {
+  const bus = createEventBus({ log: () => undefined });
+  bus.setFollowers([["events for apps", events.follower]]);
+  return bus;
+}
 
 // The core's events for apps: a running app follows what happens to devices,
 // places, people and the standard entities from its start context, each event
@@ -429,6 +442,63 @@ describe("the core's events", () => {
     );
   });
 
+  it("never carry what another app emits, which only workflows hear", async () => {
+    const said = defineEvent({
+      id: "emits.said",
+      payload: z.object({ word: z.string() }),
+    });
+    const emitter = defineApp({
+      id: "test.emits",
+      name: "Emits",
+      version: "0.1.0",
+      core: "^1.0.0",
+      permissions: [],
+      events: [said],
+      actions: [
+        defineAction({
+          id: "emits.say",
+          title: "Says",
+          tier: "write",
+          input: z.object({}),
+          output: z.unknown(),
+          run: (ctx) => ctx.events.emit(said, { word: "hello" }),
+        }),
+      ],
+    });
+    const everything = listener(
+      "test.everything",
+      [
+        "devices.read:button",
+        "places.read",
+        "places.location",
+        "people.read",
+        `entities.read:${sunType.id}`,
+      ],
+      coreEventNames,
+    );
+    const core = await testCore({
+      apps: [{ app: emitter, origin: "system" }, everything.pkg],
+    });
+    const maya = await claimed(core);
+    await settled();
+    everything.heard.length = 0;
+    const heardByWorkflows = vi.spyOn(core.workflows, "appEvent");
+
+    const asked = await post(
+      core,
+      "/api/apps/test.emits/actions/emits.say",
+      {},
+      maya,
+    );
+    expect(asked.statusCode).toBe(200);
+    await settled();
+
+    expect(heardByWorkflows.mock.calls.map(([event]) => event.payload)).toEqual(
+      [{ word: "hello" }],
+    );
+    expect(everything.heard).toEqual([]);
+  });
+
   it("are followed from the start context, never an action's", async () => {
     const core = await testCore({
       apps: [
@@ -536,7 +606,8 @@ describe("delivering the core's events", () => {
     };
 
   it("waits for the start hook to catch up", async () => {
-    const events = createCoreEvents({ timeoutMs: 1000, log() {} });
+    const events = createEventsForApps({ timeoutMs: 1000, log() {} });
+    const bus = busFor(events);
     const following = events.start(
       "test.places",
       () => ["places.read"],
@@ -548,7 +619,7 @@ describe("delivering the core's events", () => {
     ]);
     following.follow("place.added");
 
-    events.places(before, withRoom("office"));
+    bus.publish({ name: "places.changed", before, after: withRoom("office") });
     await settled();
     expect(heard).toEqual([]);
     following.started();
@@ -559,10 +630,11 @@ describe("delivering the core's events", () => {
 
   it("logs a handler that fails or takes too long and goes on to the next", async () => {
     const logs: string[] = [];
-    const events = createCoreEvents({
+    const events = createEventsForApps({
       timeoutMs: 20,
       log: (message) => logs.push(message),
     });
+    const bus = busFor(events);
     const following = events.start(
       "test.places",
       () => ["places.read"],
@@ -580,9 +652,9 @@ describe("delivering the core's events", () => {
     following.follow("place.added");
     following.started();
 
-    events.places(before, withRoom("office"));
-    events.places(before, withRoom("attic"));
-    events.places(before, withRoom("hall"));
+    bus.publish({ name: "places.changed", before, after: withRoom("office") });
+    bus.publish({ name: "places.changed", before, after: withRoom("attic") });
+    bus.publish({ name: "places.changed", before, after: withRoom("hall") });
     await expect.poll(() => heard).toEqual(["hall"]);
 
     expect(logs).toEqual([

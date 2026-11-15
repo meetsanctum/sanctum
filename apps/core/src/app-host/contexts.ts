@@ -20,9 +20,9 @@ import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
 import { createCoreCalls } from "./calls.js";
 import { issuesText } from "./contract.js";
-import type { CoreEvents } from "./core-events.js";
+import type { EventsForApps } from "./events-for-apps.js";
 import { ActionCallError } from "./errors.js";
-import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
+import type { EmittedEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
@@ -35,7 +35,7 @@ import type { ReadSnapshot } from "./snapshot.js";
 
 // Where a running app's start context keeps its handlers for the core's
 // events, and how it follows one.
-export type Following = ReturnType<CoreEvents["start"]>;
+export type Following = ReturnType<EventsForApps["start"]>;
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -50,7 +50,7 @@ export function createAppContexts(options: {
   firmware: () => Pick<Firmware, "report">;
   problems: () => Pick<Problems, "report">;
   found: () => Pick<Found, "report">;
-  onEvent?: (event: AppEvent) => void;
+  onEvent?: (event: EmittedEvent) => void;
   jobs?: JobCalls;
   workflows?: KeptWorkflowCalls;
   settings: AppSettingsStore;
@@ -87,7 +87,7 @@ export function createAppContexts(options: {
 
   // Checks an event an app emits against its declared schema, as the core
   // hands it on.
-  function emitted(entry: InstalledApp, input: unknown): AppEvent {
+  function emitted(entry: InstalledApp, input: unknown): EmittedEvent {
     const { event: id, payload } = (input ?? {}) as {
       event?: unknown;
       payload?: unknown;
@@ -112,7 +112,7 @@ export function createAppContexts(options: {
     };
   }
 
-  function deliver(events: readonly AppEvent[]) {
+  function deliver(events: readonly EmittedEvent[]) {
     for (const event of events) {
       try {
         options.onEvent?.(event);
@@ -137,7 +137,7 @@ export function createAppContexts(options: {
       snapshot,
       withinMs,
     }: {
-      held?: AppEvent[];
+      held?: EmittedEvent[];
       following?: Following;
       snapshot?: ReadSnapshot;
       withinMs?: number;
