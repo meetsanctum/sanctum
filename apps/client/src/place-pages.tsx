@@ -41,6 +41,8 @@ import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
 import {
+  buttonsIn,
+  RoomButtons,
   RoomSection,
   sectionsInOrder,
   type AppSection,
@@ -124,7 +126,8 @@ export type LightsSwitch = {
 // dashboard and an app's page do, and on a phone opening the page
 // (PageBar). A room's opens with its motion and what its sensors read,
 // offline ones left out, and a button for all its lights, white while any
-// is on; a category's with its status.
+// is on, followed by apps' buttons for the room; a category's with its
+// status.
 function PlaceHeader(props: {
   title: string;
   subtitle?: string;
@@ -134,14 +137,16 @@ function PlaceHeader(props: {
   contact?: PlaceContact | null;
   readings?: Reading[];
   lights?: LightsSwitch;
+  /** Apps' buttons for the room, after its lights button. */
+  buttons?: ReactNode;
 }) {
-  const { lights } = props;
+  const { lights, buttons } = props;
   const hasLine =
     !!props.subtitle ||
     !!props.motion ||
     !!props.contact ||
     !!props.readings?.length;
-  if (!hasLine && !lights) return <PageBar title={props.title} />;
+  if (!hasLine && !lights && !buttons) return <PageBar title={props.title} />;
   return (
     <header className="flex shrink-0 flex-col gap-2.5">
       <PageBar title={props.title} />
@@ -158,9 +163,10 @@ function PlaceHeader(props: {
           className="text-[15px] leading-[22px] [&_svg]:size-4"
         />
       </div>
-      {lights && (
+      {(lights || buttons) && (
         <div className="flex flex-wrap gap-2">
-          <LightsButton lights={lights} />
+          {lights && <LightsButton lights={lights} />}
+          {buttons}
         </div>
       )}
     </header>
@@ -475,7 +481,12 @@ export function RoomPage(props: {
       .filter((device) => device.roomId === room.id)
       .flatMap((device) => device.capabilities.map((each) => each.kind)),
   );
-  const sections = sectionsInOrder(props.apps);
+  const sections = sectionsInOrder(props.apps, "tiles");
+  const buttons = buttonsIn(
+    sectionsInOrder(props.apps, "buttons"),
+    entities,
+    room.id,
+  );
   const appSection = ({ app, section }: AppSection) => (
     <RoomSection
       key={app.id}
@@ -504,6 +515,15 @@ export function RoomPage(props: {
           room,
           devices,
         )}
+        buttons={
+          buttons.length > 0 ? (
+            <RoomButtons
+              buttons={buttons}
+              roomName={room.name}
+              entities={entities}
+            />
+          ) : undefined
+        }
       />
       {sections.map(appSection)}
       <Sections
