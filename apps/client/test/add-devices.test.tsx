@@ -134,7 +134,16 @@ describe("Add devices, with what drivers found", () => {
             onOpenChange={() => undefined}
             devices={[]}
             rooms={[office]}
-            apps={[zigbee]}
+            apps={[
+              {
+                ...zigbee,
+                state: "waiting",
+                run: {
+                  since: "2026-10-29T12:00:00.000Z",
+                  waitingFor: "Waiting for Zigbee2MQTT",
+                },
+              },
+            ]}
             adding={adding}
             notSetUp={notSetUp}
             live={live}
@@ -163,6 +172,49 @@ describe("Add devices, with what drivers found", () => {
     );
     expect(shown().textContent).not.toContain("Plug in a Zigbee adapter");
   });
+
+  it.each(["off", "paused", "failed", "stopped", "waiting"] as const)(
+    "does not suggest an adapter when the app is %s for another reason",
+    async (state) => {
+      adding = { until: null, joined: [], drivers: [], found: [] };
+      await act(async () =>
+        root.render(
+          <AddDevices
+            open
+            onOpenChange={() => undefined}
+            devices={[]}
+            rooms={[office]}
+            apps={[
+              {
+                ...zigbee,
+                state,
+                run: {
+                  since: "2026-10-29T12:00:00.000Z",
+                  waitingFor: "Waiting for its data to come back",
+                },
+              },
+            ]}
+            adding={adding}
+            notSetUp={[
+              {
+                service: "zigbee2mqtt",
+                problem: "No Zigbee coordinator is plugged in",
+                apps: [zigbee.id],
+              },
+            ]}
+            live={live}
+            onChanged={() => {}}
+          />,
+        ),
+      );
+
+      const shown = document.querySelector("[role=dialog]")!;
+      expect(shown.querySelector("[role=alert]")?.textContent).toBe(
+        "No app that adds devices is running.",
+      );
+      expect(shown.textContent).not.toContain("Plug in a Zigbee adapter");
+    },
+  );
 
   function named(label: string) {
     return document.querySelector<HTMLButtonElement>(

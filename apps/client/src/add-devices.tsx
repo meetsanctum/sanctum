@@ -315,7 +315,9 @@ export function AddDevices(props: {
   const cannotAdd = !pairs && !opening && shown.length === 0;
   // What to plug in, where that is all that is missing; else that nothing
   // can add any.
-  const hint = cannotAdd ? addDevicesHint(props.notSetUp) : undefined;
+  const hint = cannotAdd
+    ? addDevicesHint(props.apps, props.notSetUp)
+    : undefined;
   const nothing =
     cannotAdd && !hint ? "No app that adds devices is running." : undefined;
 
