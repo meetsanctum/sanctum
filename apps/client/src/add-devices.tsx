@@ -315,7 +315,9 @@ export function AddDevices(props: {
   const cannotAdd = !pairs && !opening && shown.length === 0;
   // What to plug in, where that is all that is missing; else that nothing
   // can add any.
-  const hint = cannotAdd ? addDevicesHint(props.notSetUp) : undefined;
+  const hint = cannotAdd
+    ? addDevicesHint(props.apps, props.notSetUp)
+    : undefined;
   const nothing =
     cannotAdd && !hint ? "No app that adds devices is running." : undefined;
 
@@ -470,6 +472,10 @@ export function AddDevices(props: {
         {hint && !problem && (
           <p className="m-0 text-sm text-muted-foreground">{hint}</p>
         )}
+        {/* There before the hint is, so it is heard when looking ends. */}
+        <p role="status" className="sr-only">
+          {problem ? "" : hint}
+        </p>
         {(problem ?? nothing) && (
           <p role="alert" className="m-0 text-sm text-destructive">
             {problem ?? nothing}

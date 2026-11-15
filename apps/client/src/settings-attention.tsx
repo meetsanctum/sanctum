@@ -42,7 +42,7 @@ import { RepairDevice } from "./repair-device";
 import { EditDevice, type Editing } from "./edit-device";
 import { DeviceLine } from "./settings-devices";
 import { SanctumAttentionRow } from "./settings-status";
-import { waitingForSetUp, type SystemStatus } from "./system-status";
+import type { SystemStatus } from "./system-status";
 
 // Settings' Needs attention: first on the page while Sanctum itself, any app
 // or any device needs someone. Sanctum leads, with its first problem, and
@@ -204,10 +204,7 @@ export function NeedsAttentionSection(props: {
     props.status && props.status.problems.length > 0 && props.onOpenStatus
       ? props.status
       : null;
-  const apps = appsNotRunning(
-    props.apps,
-    waitingForSetUp(props.status?.notSetUp),
-  );
+  const apps = appsNotRunning(props.apps, props.status?.notSetUp);
   if (rows.length === 0 && !sanctum && apps.length === 0) {
     // The last row's outcome is still heard once the section has gone.
     return announcement ? (

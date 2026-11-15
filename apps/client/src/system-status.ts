@@ -1,4 +1,4 @@
-import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
 import { formatTemperature } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
@@ -327,17 +327,35 @@ export function notSetUpWords(waiting: ServiceNotSetUp) {
   };
 }
 
-/** The apps that only wait for a service the home never set up: nothing is wrong with them. */
-export function waitingForSetUp(notSetUp: readonly ServiceNotSetUp[] = []) {
-  return new Set(notSetUp.flatMap((each) => each.apps));
+/**
+ * Whether the app only waits for a service the home never set up: its own
+ * start says it waits, and it asked for such a service. A wait of the core's,
+ * for its container or its data, needs attention whatever the app uses.
+ */
+export function isWaitingForSetUp(
+  app: AppInfo,
+  notSetUp: readonly ServiceNotSetUp[],
+) {
+  return (
+    app.state === "waiting" &&
+    app.run?.ownWait === true &&
+    notSetUp.some((each) => each.apps.includes(app.id))
+  );
 }
 
 /**
  * What Add devices says while no app can add any because the home never
  * set up what one needs: what to plug in.
  */
-export function addDevicesHint(notSetUp: readonly ServiceNotSetUp[] = []) {
-  return notSetUp.some((each) => each.service === "zigbee2mqtt")
+export function addDevicesHint(
+  apps: readonly AppInfo[],
+  notSetUp: readonly ServiceNotSetUp[] = [],
+) {
+  return notSetUp.some(
+    (each) =>
+      each.service === "zigbee2mqtt" &&
+      apps.some((app) => isWaitingForSetUp(app, [each])),
+  )
     ? "Plug in a Zigbee adapter to add Zigbee devices."
     : undefined;
 }

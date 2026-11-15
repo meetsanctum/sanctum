@@ -18,7 +18,13 @@ import {
 } from "./app-state";
 import { productName } from "./brand";
 import { roomName } from "./device-parts";
-import { problemTile, problemTitle, type HostProblem } from "./system-status";
+import {
+  isWaitingForSetUp,
+  problemTile,
+  problemTitle,
+  type HostProblem,
+  type ServiceNotSetUp,
+} from "./system-status";
 
 // What needs attention: the apps that aren't running and the devices that
 // need someone to do something, the most pressing first, in the words
@@ -83,7 +89,7 @@ const wentBackFor = (app: AppInfo) => {
  * Whether Needs attention lists it: one that needs someone, one paused, and one
  * that has been waiting a while. One on its way back is news to nobody.
  */
-function worthTelling(app: AppInfo, notSetUp: ReadonlySet<string>) {
+function worthTelling(app: AppInfo, notSetUp: readonly ServiceNotSetUp[]) {
   // It runs, but someone may want to know it isn't on the version it should be.
   if (wentBackFor(app)?.triesAgain === false) return true;
   if (looksRunning(app)) return false;
@@ -94,18 +100,17 @@ function worthTelling(app: AppInfo, notSetUp: ReadonlySet<string>) {
     // adapter nobody has plugged in, waits for nothing that went wrong.
     (app.state === "waiting" &&
       app.run?.attention === true &&
-      !notSetUp.has(app.id))
+      !isWaitingForSetUp(app, notSetUp))
   );
 }
 
 /**
  * The installed apps that aren't running, those that stopped first, then by
- * name; without those that only wait for a service the home never set up
- * (`waitingForSetUp`).
+ * name; without those that only wait for a service the home never set up.
  */
 export function appsNotRunning(
   apps: readonly AppInfo[],
-  notSetUp: ReadonlySet<string> = new Set(),
+  notSetUp: readonly ServiceNotSetUp[] = [],
 ): AppInfo[] {
   const rank = (app: AppInfo) => (isGivenUp(app) ? 0 : 1);
   return apps

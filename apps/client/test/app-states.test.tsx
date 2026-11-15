@@ -24,7 +24,6 @@ import {
   blockedWords,
 } from "../src/automations/blocked";
 import { productName } from "../src/brand";
-import { waitingForSetUp } from "../src/system-status";
 import { coreJson } from "../src/core-fetch";
 
 // An app's states from its supervisor, said the same everywhere it shows.
@@ -338,18 +337,19 @@ describe("Needs attention", () => {
       ...app("waiting", {
         since,
         waitingFor: "Waiting for Zigbee2MQTT",
+        ownWait: true,
         attention: true,
       }),
       id: "sanctum.zigbee",
       name: "Zigbee",
     };
-    const notSetUp = waitingForSetUp([
+    const notSetUp = [
       {
         service: "zigbee2mqtt",
         problem: "No Zigbee coordinator is plugged in",
         apps: ["sanctum.zigbee"],
       },
-    ]);
+    ];
 
     // Nobody plugged an adapter in: nothing is wrong, and nothing asks.
     expect(appsNotRunning([zigbee], notSetUp)).toEqual([]);
@@ -364,6 +364,14 @@ describe("Needs attention", () => {
     // And another app's wait is its own.
     const other = app("waiting", { since, attention: true });
     expect(appsNotRunning([other, zigbee], notSetUp)).toEqual([other]);
+    // Using that service does not make a wait of the core's harmless.
+    for (const waitingFor of [undefined, "Waiting for its data to come back"]) {
+      const restoring = {
+        ...zigbee,
+        run: { since, attention: true as const, waitingFor },
+      };
+      expect(appsNotRunning([restoring], notSetUp)).toEqual([restoring]);
+    }
   });
 
   it("says one stopped for good is a problem", () => {

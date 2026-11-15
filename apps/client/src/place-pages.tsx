@@ -48,11 +48,7 @@ import {
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import { SummaryCards, type Summary } from "./summary-cards";
-import {
-  waitingForSetUp,
-  type HostProblem,
-  type ServiceNotSetUp,
-} from "./system-status";
+import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
@@ -396,7 +392,7 @@ export function HomeStatus(props: {
     needingAttention(devices.devices, devices.places?.rooms ?? [], props.apps),
     props.problems ?? [],
     unit,
-    appsNotRunning(props.apps, waitingForSetUp(props.notSetUp)),
+    appsNotRunning(props.apps, props.notSetUp),
   );
   if (attention) {
     shown.push({
