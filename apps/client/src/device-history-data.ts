@@ -10,8 +10,8 @@ import { lightColour } from "@meetsanctum/ui-sdk";
 // What a device's History page shows, from core History: its last day as
 // spans, each what it was from one change to the next, and its last week day
 // by day, from the hourly roll-ups and the spans for the hour not yet rolled
-// up. A motion sensor's Motion page reads them as well, motion counting as
-// on.
+// up. A motion sensor's and a contact sensor's pages read them as well,
+// motion and being open counting as on.
 
 const hourMs = 60 * 60_000;
 export const dayMs = 24 * hourMs;
@@ -23,7 +23,7 @@ export type Span = {
   /** Nothing is known of it while it is offline, or before it reports. */
   known: boolean;
   offline: boolean;
-  /** On, or for a motion sensor, seeing motion. */
+  /** On; for a motion sensor, seeing motion; for a contact sensor, open. */
   on: boolean;
   /** A dimmable light's brightness while on. */
   brightness: number | null;
@@ -45,6 +45,12 @@ export type Live = {
   since: number;
 };
 
+// The field of a kind's state that counts as on, where it is not `on`.
+const onFields: Partial<Record<CapabilityInfo["kind"], string>> = {
+  motion: "motion",
+  contact: "open",
+};
+
 function spanOf(
   kind: CapabilityInfo["kind"],
   recorded: Recorded,
@@ -53,7 +59,7 @@ function spanOf(
 ): Span {
   const { state } = recorded;
   const known = recorded.availability !== "offline" && state !== null;
-  const on = known && (kind === "motion" ? state.motion : state.on) === true;
+  const on = known && state[onFields[kind] ?? "on"] === true;
   return {
     from,
     to,
@@ -103,6 +109,35 @@ export function spansOf(
   return spans;
 }
 
+/**
+ * The spans as a band draws them: one for each stretch of on, of off or of
+ * nothing known, however often something else about it changed meanwhile,
+ * such as a motion sensor's settings.
+ */
+export function joinedSpans(spans: readonly Span[]): Span[] {
+  const joined: Span[] = [];
+  for (const span of spans) {
+    const last = joined.at(-1);
+    if (
+      last &&
+      last.to === span.from &&
+      last.known === span.known &&
+      last.offline === span.offline &&
+      last.on === span.on
+    ) {
+      joined[joined.length - 1] = { ...last, to: span.to };
+    } else {
+      joined.push(span);
+    }
+  }
+  return joined;
+}
+
+/** When a span was, such as "09:05–10:40", or to now. */
+export function spanTimes(span: Span, now: number) {
+  return `${timeText(span.from)}–${span.to >= now ? "now" : timeText(span.to)}`;
+}
+
 /** How long the spans were on and known from `from` until `to`, in seconds. */
 export function onWithin(spans: readonly Span[], from: number, to: number) {
   let on = 0;
@@ -129,14 +164,14 @@ export function midnight(at: number, daysBack = 0) {
 
 /**
  * The last 7 local days, today last: the hourly roll-ups of whether it was
- * on, or for a motion sensor whether it saw motion, and the spans for the
- * time since the last of them.
+ * on, saw motion or was open, by `field`, and the spans for the time since
+ * the last of them.
  */
 export function daysOf(
   statistics: Pick<DeviceStatistics, "fields"> | null,
   spans: readonly Span[],
   now: number,
-  field: "on" | "motion" = "on",
+  field: "on" | "motion" | "open" = "on",
 ): Day[] {
   const hours = statistics?.fields[field] ?? [];
   const rolledUpTo = hours.reduce(
@@ -223,6 +258,50 @@ export function weekHeadline(days: readonly Day[], now: number) {
   return known[0]!.start === today
     ? "Off today"
     : `Off since ${weekday.format(known[0]!.start)}`;
+}
+
+/** The words a sensor's week comes to, for what counts as on. */
+export type WeekWords = {
+  /** About how long a day, from "about 40 min": "About 40 min a day". */
+  aDay: (about: string) => string;
+  /** How long today, until a day has ended: "14 min today". */
+  today: (duration: string) => string;
+  /** While it never was, before "all week", "today" and "since Mon". */
+  none: string;
+};
+
+/**
+ * What a sensor's last 7 days come to: about how long a day it saw motion
+ * or was open, over the days that have ended; until one has, how long
+ * today; or since when not at all.
+ */
+export function sensedWeekHeadline(
+  days: readonly Day[],
+  now: number,
+  words: WeekWords,
+) {
+  const today = midnight(now);
+  const known = days.filter((day) => day.known > 0);
+  if (known.length === 0) return "Not known yet";
+  const ended = known.filter((day) => day.start !== today);
+  const average =
+    ended.reduce((sum, day) => sum + day.on, 0) / Math.max(1, ended.length);
+  if (average > 0) {
+    const minutes = Math.round(average / 60);
+    return words.aDay(
+      minutes < 1
+        ? "under a minute"
+        : minutes < 60
+          ? `about ${minutes} min`
+          : `about ${Math.round(average / 3600)} h`,
+    );
+  }
+  const onToday = known.find((day) => day.start === today)?.on ?? 0;
+  if (onToday > 0) return words.today(durationText(onToday));
+  if (known.length === days.length) return `${words.none} all week`;
+  return known[0]!.start === today
+    ? `${words.none} today`
+    : `${words.none} since ${weekday.format(known[0]!.start)}`;
 }
 
 /** A time of day as Automations writes it, such as 07:30. */
