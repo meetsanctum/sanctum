@@ -208,6 +208,43 @@ describe("a workflow that starts when a contact sensor opens", () => {
       opened: true,
     });
   });
+
+  it("does not describe a first reading as an opening in Activity", async () => {
+    const { core, token } = await home();
+    core.devices.register("test.lamps", {
+      key: "new-door",
+      name: "New door",
+      capabilities: [{ id: "contact", kind: "contact" }],
+    });
+    const sensor = await sensorOf(core, token, "New door");
+    const { id } = await addWorkflow(core, token, {
+      graph: {
+        version: 1,
+        nodes: [
+          trigger("door", "device", { device: sensor, kind: "contact" }),
+          lightsOn,
+        ],
+        edges: [{ from: "door", to: "on" }],
+      },
+    });
+
+    core.devices.report("test.lamps", {
+      key: "new-door",
+      availability: "online",
+      states: { contact: { open: true } },
+    });
+    await core.workflows.settled();
+    await settled();
+
+    expect(await runsOf(core, token, id)).toHaveLength(1);
+    const { entries } = (
+      await get(core, "/api/activity?limit=50", { token })
+    ).json() as {
+      entries: { action: string; detail: { trigger?: object } | null }[];
+    };
+    const run = entries.find((each) => each.action === "workflow.run");
+    expect(run?.detail?.trigger).toEqual({ piece: "device", app: null });
+  });
 });
 
 describe("asking whether a contact sensor is open or closed", () => {

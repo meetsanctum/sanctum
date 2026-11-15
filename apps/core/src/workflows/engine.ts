@@ -223,14 +223,13 @@ export function createEngine(options: {
     track(options.activity ? options.activity.within(entry, run) : run());
   }
 
-  // What started a run, for its entry: the first trigger that fired, with
-  // what its words need.
   // What a device trigger says of a contact sensor that started a run: the
   // sensor by its name at the time, and whether it opened or closed.
   function contactChange(node: WorkflowNode | undefined, firing: Firing) {
     const data = (firing.data ?? {}) as {
       device?: unknown;
       kind?: unknown;
+      before?: { open?: unknown };
       after?: { open?: unknown };
     };
     if (
@@ -238,7 +237,9 @@ export function createEngine(options: {
       node.app ||
       data.kind !== "contact" ||
       typeof data.device !== "string" ||
-      typeof data.after?.open !== "boolean"
+      typeof data.before?.open !== "boolean" ||
+      typeof data.after?.open !== "boolean" ||
+      data.before.open === data.after.open
     ) {
       return {};
     }
@@ -248,6 +249,8 @@ export function createEngine(options: {
     };
   }
 
+  // What started a run, for its entry: the first trigger that fired, with
+  // what its words need.
   function triggerOf(workflow: WorkflowRow, firing: Firing) {
     const node = workflow.graph.nodes.find(
       (each) => each.id === firing.nodes[0],

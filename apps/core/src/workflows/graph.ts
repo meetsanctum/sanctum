@@ -209,7 +209,7 @@ export function changeFires(
   }
   if (!predicate.field) {
     return before === null || before === undefined
-      ? true
+      ? !predicate.fromKnown
       : !sameValue(before, after);
   }
   const current = stateField(after, predicate.field);

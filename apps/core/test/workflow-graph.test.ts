@@ -169,6 +169,14 @@ describe("changeFires", () => {
     ).toBe(true);
   });
 
+  it("requires a known state without a selected field too", () => {
+    const predicate = { fromKnown: true };
+    expect(changeFires(predicate, null, now)).toBe(false);
+    expect(changeFires(predicate, undefined, now)).toBe(false);
+    expect(changeFires(predicate, wasOff, now)).toBe(true);
+    expect(changeFires(predicate, now, { ...now })).toBe(false);
+  });
+
   it("fires below and above as a number crosses into them, not on every reading past it", () => {
     const below = { field: "value", operator: "below", value: 30 } as const;
     const above = { field: "value", operator: "above", value: 30 } as const;
