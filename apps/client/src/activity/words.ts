@@ -151,6 +151,12 @@ function triggerWords(trigger: ActivityTrigger, at: string) {
         ? `no motion${place} for ${durationText(trigger.forMinutes * 60)}`
         : `after no motion${place}`;
     }
+    case "device":
+      // A contact sensor's change, by the sensor's name then and which way
+      // it went; any other device's is a change.
+      return trigger.opened === undefined
+        ? "after a change"
+        : `after ${trigger.device ?? "a contact sensor"} ${trigger.opened ? "opened" : "closed"}`;
     default:
       return "after a change";
   }
