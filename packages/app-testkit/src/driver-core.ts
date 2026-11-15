@@ -153,6 +153,7 @@ export function createDriverCore(
       },
       probe: device.probe,
       battery: null,
+      batteryLow: null,
       leftAt: null,
       problem: problems.get(device.key) ?? null,
       key: device.key,
