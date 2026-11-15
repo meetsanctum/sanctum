@@ -8,9 +8,9 @@ import {
   createCoreCertificates,
   type CoreCertificates,
 } from "../src/certificate.js";
-import { renewCertificate } from "../src/server.js";
 import { testCa } from "./certificates.js";
-import { claimed, managerSocket, testCore } from "./support.js";
+import { managerSocket } from "./manager-support.js";
+import { claimed, testCore } from "./support.js";
 
 const dayMs = 24 * 60 * 60_000;
 const watching: CoreCertificates[] = [];
@@ -221,7 +221,7 @@ describe("the core over HTTPS", () => {
     });
     watching.push(certificates);
     const first = await certificates.first();
-    const core = await testCore({ pin: first.pin, https: first });
+    const core = await testCore({ certificates });
     const { token } = await claimed(core);
     await core.server.listen({ host: "127.0.0.1", port: 0 });
     const { port } = core.server.server.address() as { port: number };
@@ -248,13 +248,9 @@ describe("the core over HTTPS", () => {
 
     // Two minutes into three: the core asks for a new one and swaps it in.
     clock.now += 2 * 60_000;
-    const renewed = new Promise<string>((resolve) =>
-      certificates.watch((next) => {
-        renewCertificate(core.server, next);
-        resolve(new X509Certificate(next.cert).serialNumber);
-      }),
-    );
-    const nextSerial = await renewed;
+    await vi.waitFor(() => expect(certificates.current()).not.toBe(first));
+    const nextSerial = new X509Certificate(certificates.current()!.cert)
+      .serialNumber;
     expect(nextSerial).not.toBe(firstSerial);
 
     const after = await getOverHttps(`${base}/api/health`, ca.certificate);

@@ -5,7 +5,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { fakeManager, testCore } from "./support.js";
+import { fakeManager } from "./manager-support.js";
+import { testCore } from "./support.js";
 
 // What a driver hears of the home's network: the manager finds what the
 // core asks for, and the core hands each driver the sightings of the

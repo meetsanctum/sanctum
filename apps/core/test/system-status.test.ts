@@ -8,13 +8,11 @@ import type { HostStatus } from "../src/manager-answers.js";
 import { ManagerUnavailable } from "../src/manager.js";
 import { createStatus, type SystemStatus } from "../src/system/status.js";
 import { personWithClient } from "./devices-support.js";
+import { fakeManager, managerSocket, piStatus } from "./manager-support.js";
 import {
   claimed,
-  fakeManager,
   fixtureApps,
   get,
-  managerSocket,
-  piStatus,
   sharedClient,
   testCore,
 } from "./support.js";

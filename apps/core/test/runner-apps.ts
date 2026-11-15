@@ -14,7 +14,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ApartPackage, Origin } from "../src/app-host/loader.js";
-import type { TestManager } from "./support.js";
+import type { TestManager } from "./manager-support.js";
 
 // An app a test defines: its code, and what its package declares
 // (sanctum-app.json), worked out from the code when it has none.

@@ -11,7 +11,7 @@ import { testCore } from "./support.js";
 
 describe("an uncommitted update", () => {
   it("lets the core answer only its health check", async () => {
-    const { server } = await testCore({ updatePending: () => true });
+    const { server } = await testCore({ onTrial: true });
 
     const health = await server.inject({ method: "GET", url: "/api/health" });
     const other = await server.inject({
@@ -20,7 +20,11 @@ describe("an uncommitted update", () => {
     });
 
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toMatchObject({ status: "ok", updatePending: true });
+    expect(health.json()).toMatchObject({
+      status: "ok",
+      updatePending: true,
+      readiness: "healthOnly",
+    });
     expect(other.statusCode).toBe(503);
     expect(other.json()).toEqual({ error: "update_pending" });
     expect(other.headers["retry-after"]).toBe("5");

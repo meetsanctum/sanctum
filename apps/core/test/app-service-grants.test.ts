@@ -5,13 +5,8 @@ import { z } from "zod";
 import { createActivity } from "../src/activity/activity.js";
 import type { AppPackage } from "./runner-apps.js";
 import { openLive } from "./devices-support.js";
-import {
-  claimed,
-  fakeManager,
-  post,
-  testCore,
-  type TestCore,
-} from "./support.js";
+import { fakeManager } from "./manager-support.js";
+import { claimed, post, testCore, type TestCore } from "./support.js";
 
 // The services an app holds follow its grants: the core asks the manager only
 // for the ones that are on, a service switched off loses the app's broker

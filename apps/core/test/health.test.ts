@@ -14,6 +14,8 @@ describe("core health", () => {
       status: "ok",
       version: "1.2.3",
       updatePending: false,
+      phase: "running",
+      readiness: "everyone",
     });
   });
 });
