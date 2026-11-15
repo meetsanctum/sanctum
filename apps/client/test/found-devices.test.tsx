@@ -21,6 +21,7 @@ const found: PairingInfo = {
       description: null,
       type: null,
       asks: [],
+      refusals: {},
     },
   ],
 };

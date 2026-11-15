@@ -2,6 +2,7 @@ import {
   createAppContext,
   shownProblem,
   shownQuestions,
+  shownRefusals,
   type Actor,
   type AppContext,
   type CoreCalls,
@@ -179,6 +180,7 @@ export function createAppContexts(options: {
             run: entry.runId,
             canAdd: entry.manifest.driver?.hooks.includes("add") === true,
             questionsOf: (ids) => shownQuestions(entry.manifest.driver, ids),
+            refusals: shownRefusals(entry.manifest.driver),
           }),
       },
       emit(input) {

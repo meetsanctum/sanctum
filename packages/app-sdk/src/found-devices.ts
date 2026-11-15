@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   maxQuestions,
   problemId,
+  type AddRefusal,
   type DeviceQuestion,
 } from "./device-problems.js";
 import { deviceKey, deviceTypeId, type DeviceInfo } from "./devices.js";
@@ -59,6 +60,8 @@ export type FoundDevice = {
   type: string | null;
   /** What adding it asks, in the words its driver declares. */
   asks: DeviceQuestion[];
+  /** Why its driver may refuse adding it whatever it's asked, by id, in its words. */
+  refusals: Record<string, string>;
 };
 
 /** What the core asks of a driver to add one of the devices it found (driver.add). */
@@ -70,13 +73,11 @@ export type DriverAdd = {
 };
 
 /**
- * Nothing once the driver has registered the device, or the question whose
- * answer it refused and the refusal it declares for it.
+ * Nothing once the driver has registered the device, or the refusal it
+ * declares: for the answer to one of the questions it asked, or for adding
+ * it at all (driver.refusals).
  */
-export type DriverAddResult = void | {
-  refused: { question: string; refusal: string };
-};
+export type DriverAddResult = void | { refused: AddRefusal };
 
-/** How adding a found device ended (POST /api/devices/add): the device, or the answer its driver refused. */
-export type AddResult =
-  { added: DeviceInfo } | { refused: { question: string; refusal: string } };
+/** How adding a found device ended (POST /api/devices/add): the device, or its driver's refusal. */
+export type AddResult = { added: DeviceInfo } | { refused: AddRefusal };
