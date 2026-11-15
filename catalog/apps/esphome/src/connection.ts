@@ -61,7 +61,8 @@ export type Halt = "keyMismatch" | "keyAdded";
 export type ConnectionEvents = {
   /** A checked session, which the driver takes in before it hears its states. */
   connected(session: Session): Promise<void>;
-  state(event: TelemetryEvent): void;
+  /** What the device said in a session, read by that session's parts. */
+  state(event: TelemetryEvent, session: Session): void;
   /** Gone for longer than the device may be, or back. */
   reachable(reachable: boolean): void;
   halted(halt: Halt): void;
@@ -238,13 +239,13 @@ export function createConnection(options: {
         if (session === next) {
           pause = timings.firstPauseMs;
           say(true);
-          next.listen((event) => events.state(event));
-        } else if (session === null && !stopped) {
+          next.listen((event) => events.state(event, next));
+        } else if (!stopped) {
           // It closed while it was taken in, as a device that sleeps may,
-          // and nothing took its place: what it said meanwhile, presses
-          // too, still counts. A session that comes after is taken in only
-          // after this one, so it's heard after it.
-          next.listen((event) => events.state(event));
+          // whether or not another took its place: what it said meanwhile,
+          // presses too, still counts. A session that came after is taken
+          // in only after this one, so it's heard after it.
+          next.listen((event) => events.state(event, next));
         }
       })
       .catch(() => {

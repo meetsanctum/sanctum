@@ -387,3 +387,45 @@ it("never says a problem again once its device is repaired", async () => {
   expect(core.problems.has(key)).toBe(false);
   expect(problem.mock.calls.slice(cleared)).toEqual([]);
 });
+
+it("hears a press once when the device reconnects before its first session is taken in", async () => {
+  const button = await EmulatedDevice.start({
+    name: "button",
+    mac: nextMac(),
+    psk: newKey(),
+    ...entitiesOf("button"),
+  });
+  try {
+    await announce(core, button);
+    let release!: () => void;
+    writes.save.mockImplementationOnce(
+      () =>
+        new Promise<void>((done) => {
+          release = done;
+        }),
+    );
+    const key = await add(core, button);
+    await expect.poll(() => writes.save.mock.calls.length).toBe(1);
+    await button.followed();
+    button.fire(106, "single");
+    await new Promise((done) => setTimeout(done, 50));
+    // It goes and comes back, and its next session waits behind the first.
+    await button.unplug();
+    await core.until(() => core.availability.get(key) === "offline", "gone");
+    await button.listen();
+    await announce(core, button);
+    await button.followed();
+    release();
+
+    await core.until(
+      () => core.presses.some((each) => each.key === key),
+      "the press",
+    );
+    await expect.poll(() => writes.save.mock.calls.length).toBe(2);
+    expect(core.presses).toEqual([
+      { key, capability: "event-button", action: "single" },
+    ]);
+  } finally {
+    await button.stop();
+  }
+});

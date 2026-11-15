@@ -47,8 +47,6 @@ type Owned = {
   mac: string;
   connection: Connection;
   mapping: Mapping | null;
-  // Its Wi-Fi signal's entity, by its key.
-  signal: number | null;
   problem: string | null;
   sleeps: boolean;
   setup: Promise<void>;
@@ -133,7 +131,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     // removal waits for those writes before the core forgets the device.
     const setup = owned.setup.then(async () => {
       if (!current()) return;
-      const mapping = mapEntities(session.entities);
+      const mapping = mappingOf(session);
       const sleeps = session.info.hasDeepSleep === true;
       await ctx.devices.register(registrationOf(owned.mac, session, mapping));
       if (!current()) return;
@@ -153,16 +151,30 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         owned.problem = null;
       }
       owned.mapping = mapping;
-      owned.signal = signalOf(session.entities)?.key ?? null;
       owned.sleeps = sleeps;
     });
     owned.setup = setup.catch(() => undefined);
     return setup;
   }
 
-  function state(owned: Owned, event: TelemetryEvent) {
+  // Each session's parts, by its own entities, so what an older session
+  // said is read by the parts it had.
+  const mappings = new WeakMap<Session, Mapping>();
+  function mappingOf(session: Session) {
+    let mapping = mappings.get(session);
+    if (!mapping) {
+      mapping = mapEntities(session.entities);
+      mappings.set(session, mapping);
+    }
+    return mapping;
+  }
+
+  function state(owned: Owned, event: TelemetryEvent, session: Session) {
     // A state event names its entity by its key, which a type keeps apart.
-    if (event.type === "sensor" && event.key === owned.signal) {
+    if (
+      event.type === "sensor" &&
+      event.key === signalOf(session.entities)?.key
+    ) {
       if (
         typeof event.state === "number" &&
         Number.isFinite(event.state) &&
@@ -178,7 +190,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }
       return;
     }
-    const mapped = owned.mapping?.mapped.find(
+    const mapped = mappingOf(session).mapped.find(
       (each) =>
         each.entity.type === event.type && each.entity.key === event.key,
     );
@@ -219,7 +231,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       id: device.id,
       mac,
       mapping: null,
-      signal: null,
       problem: device.problem?.id ?? null,
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
@@ -236,7 +247,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             ctx.log(`could not take in ${mac} (${String(error)})`);
             throw error;
           }),
-        state: (event) => state(owned, event),
+        state: (event, session) => state(owned, event, session),
         reachable: (reachable) => {
           const availability = reachable
             ? "online"
