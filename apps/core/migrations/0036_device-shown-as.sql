@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `shown_as` text;

@@ -582,8 +582,16 @@ export type DeviceInfo = {
   roomId: string | null;
   /** What its driver calls it, such as its model's name. */
   driverName: string;
-  /** What it is, by all its capabilities, whichever of them a view shows. */
+  /**
+   * What it is, by all its capabilities, whichever of them a view shows,
+   * or what the household shows it as instead (`shownAs`).
+   */
   type: DeviceType;
+  /**
+   * The type the household shows it as in place of its own, as a contact
+   * sensor as a door; null for a device shown as what it is.
+   */
+  shownAs: DeviceType | null;
   availability: Availability;
   lastSeenAt: string | null;
   capabilities: CapabilityInfo[];

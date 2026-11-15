@@ -4,7 +4,7 @@ import type { Job, JobRequest, WorkflowInfo } from "@meetsanctum/app-sdk";
 // workflows follow, and the jobs and workflows the module keeps for them.
 
 /** An event an app emitted, as the core hands it on. */
-export type AppEvent = {
+export type EmittedEvent = {
   id: string;
   app: string;
   event: string;

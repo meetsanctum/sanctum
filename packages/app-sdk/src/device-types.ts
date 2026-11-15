@@ -6,6 +6,11 @@ import type { CapabilityKind } from "./devices.js";
 // brings it. A device is the first type in this order whose kinds it has,
 // so a light that also measures is a light, and a motion sensor that
 // measures is a motion sensor.
+//
+// The household may show a device as another type where its own type
+// lists it (`showAs`): a contact sensor as a door or a window, which no
+// sensor can tell of itself. Nothing asks for it, and a device is complete
+// as its own type.
 
 type DeviceTypeDefinition = {
   id: string;
@@ -24,6 +29,13 @@ type DeviceTypeDefinition = {
    * what its driver calls the device.
    */
   declaredOnly?: true;
+  /** The types the household may show a device of this type as instead. */
+  showAs?: readonly string[];
+  /**
+   * A device is one only where the household shows it as one: neither its
+   * kinds nor its driver make it one.
+   */
+  chosenOnly?: true;
 };
 
 const types = [
@@ -52,6 +64,22 @@ const types = [
     title: "Contact sensor",
     noun: "contact sensor",
     needs: ["contact"],
+    showAs: ["door", "window"],
+  },
+  // What a contact sensor sits on, where the household says so.
+  {
+    id: "door",
+    title: "Door",
+    noun: "door",
+    needs: ["contact"],
+    chosenOnly: true,
+  },
+  {
+    id: "window",
+    title: "Window",
+    noun: "window",
+    needs: ["contact"],
+    chosenOnly: true,
   },
   { id: "sensor", title: "Sensor", noun: "sensor", needs: ["sensor"] },
   // What none of the above fits: a device with no capability Sanctum has,
@@ -80,9 +108,56 @@ export function deviceTypeOf(
   const has = new Set(kinds);
   const type = deviceTypes.find(
     (each) =>
+      !each.chosenOnly &&
       each.needs.every((kind) => has.has(kind)) &&
       (!each.declaredOnly || declared(each.id)),
   );
   // The last type needs nothing, so one always fits.
   return type?.id ?? "unknown";
+}
+
+/** The types the household may show a device of this type as, besides its own. */
+export function shownAsOf(type: DeviceType): DeviceType[] {
+  const listed = deviceTypes.find((each) => each.id === type)?.showAs ?? [];
+  return deviceTypes
+    .filter((each) => listed.includes(each.id))
+    .map((each) => each.id);
+}
+
+/**
+ * What a device of this type is shown as: the household's choice while its
+ * own type lists it, and its own type otherwise, as for a choice that no
+ * longer fits or that this version does not know.
+ */
+export function shownType(
+  own: DeviceType,
+  chosen: string | null | undefined,
+): DeviceType {
+  return shownAsOf(own).find((each) => each === chosen) ?? own;
+}
+
+/**
+ * What a device is of itself, from what it is shown as: its type where the
+ * household chose none (`shownAs` null), and otherwise the one type that
+ * offers the chosen one.
+ */
+export function ownTypeOf(
+  type: DeviceType,
+  shownAs: DeviceType | null,
+): DeviceType {
+  if (shownAs === null) return type;
+  return deviceTypes.find((each) => each.showAs?.includes(shownAs))?.id ?? type;
+}
+
+/**
+ * What the household may show a device as, its own type first; nothing for
+ * a device whose own type lists no other.
+ */
+export function showAsChoices(
+  type: DeviceType,
+  shownAs: DeviceType | null,
+): DeviceType[] {
+  const own = ownTypeOf(type, shownAs);
+  const others = shownAsOf(own);
+  return others.length > 0 ? [own, ...others] : [];
 }

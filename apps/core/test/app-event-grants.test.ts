@@ -6,7 +6,18 @@ import {
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { createCoreEvents } from "../src/app-host/core-events.js";
+import {
+  createEventsForApps,
+  type EventsForApps,
+} from "../src/app-host/events-for-apps.js";
+import { createEventBus } from "../src/event-bus.js";
+
+// The bus as the core sets it, with the events for apps its only follower.
+function busFor(events: EventsForApps) {
+  const bus = createEventBus({ log: () => undefined });
+  bus.setFollowers([["events for apps", events.follower]]);
+  return bus;
+}
 
 const places: Places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
@@ -33,6 +44,7 @@ const device: DeviceInfo = {
   probe: false,
   battery: null,
   batteryLow: null,
+  shownAs: null,
   leftAt: null,
   problem: null,
   capabilities: [
@@ -64,7 +76,8 @@ const device: DeviceInfo = {
 function setup(initial: string[], appId = "test.listener") {
   let granted = initial;
   const heard: CoreEvent[] = [];
-  const events = createCoreEvents({ timeoutMs: 1000, log() {} });
+  const events = createEventsForApps({ timeoutMs: 1000, log() {} });
+  const bus = busFor(events);
   const following = events.start(
     appId,
     () => granted,
@@ -76,6 +89,7 @@ function setup(initial: string[], appId = "test.listener") {
   }
   return {
     events,
+    bus,
     following,
     heard,
     grant(next: string[]) {
@@ -92,11 +106,12 @@ function setup(initial: string[], appId = "test.listener") {
 
 describe("grants when queued events reach an app", () => {
   it("removes an own device's key from both queued snapshots when registration is revoked", async () => {
-    const { events, grant, drain, heard } = setup(
+    const { bus, grant, drain, heard } = setup(
       ["devices.register", "devices.read:switch"],
       device.driver,
     );
-    events.device({
+    bus.publish({
+      name: "device.changed",
       id: device.id,
       key: "own-remote",
       before: device,
@@ -115,13 +130,14 @@ describe("grants when queued events reach an app", () => {
   });
 
   it("leaves keys out of new events after registration is revoked", async () => {
-    const { events, grant, drain, heard } = setup(
+    const { bus, grant, drain, heard } = setup(
       ["devices.register", "devices.read:switch"],
       device.driver,
     );
     grant(["devices.read:switch"]);
     await drain();
-    events.device({
+    bus.publish({
+      name: "device.changed",
       id: device.id,
       key: "own-remote",
       before: null,
@@ -135,14 +151,15 @@ describe("grants when queued events reach an app", () => {
   });
 
   it("drops queued private data when its permission was revoked", async () => {
-    const { events, grant, drain, heard } = setup([
+    const { bus, grant, drain, heard } = setup([
       "places.read",
       "people.read",
       "entities.read:sun",
       "devices.read:button",
     ]);
-    events.places(places, withRoom);
-    events.person({
+    bus.publish({ name: "places.changed", before: places, after: withRoom });
+    bus.publish({
+      name: "person.changed",
       id: "maya",
       before: null,
       after: {
@@ -154,7 +171,8 @@ describe("grants when queued events reach an app", () => {
         updatedAt: new Date(),
       },
     });
-    events.entity({
+    bus.publish({
+      name: "entity.changed",
       app: "test.sun",
       key: "sun",
       before: null,
@@ -167,8 +185,14 @@ describe("grants when queued events reach an app", () => {
         updatedAt: new Date().toISOString(),
       },
     });
-    events.device({ id: device.id, before: null, after: device });
-    events.pressed({
+    bus.publish({
+      name: "device.changed",
+      id: device.id,
+      before: null,
+      after: device,
+    });
+    bus.publish({
+      name: "device.pressed",
       id: "press",
       device,
       capability: "button",
@@ -183,16 +207,18 @@ describe("grants when queued events reach an app", () => {
   });
 
   it("filters both device snapshots without inventing a deletion", async () => {
-    const { events, grant, drain, heard } = setup([
+    const { bus, grant, drain, heard } = setup([
       "devices.read:button",
       "devices.read:switch",
     ]);
-    events.device({
+    bus.publish({
+      name: "device.changed",
       id: device.id,
       before: device,
       after: { ...device, name: "Renamed" },
     });
-    events.pressed({
+    bus.publish({
+      name: "device.pressed",
       id: "press",
       device,
       capability: "button",
@@ -219,16 +245,16 @@ describe("grants when queued events reach an app", () => {
   });
 
   it("checks again between handlers of the same event", async () => {
-    const { events, following, grant, drain, heard } = setup(["places.read"]);
+    const { bus, following, grant, drain, heard } = setup(["places.read"]);
     following.handlers.get("place.added")!.unshift(() => grant([]));
-    events.places(places, withRoom);
+    bus.publish({ name: "places.changed", before: places, after: withRoom });
     await drain();
 
     expect(heard.map(({ name }) => name)).toEqual(["permissions.changed"]);
   });
 
   it("drops a device change that affects only a revoked capability", async () => {
-    const { events, grant, drain, heard } = setup([
+    const { bus, grant, drain, heard } = setup([
       "devices.read:button",
       "devices.read:switch",
     ]);
@@ -236,7 +262,12 @@ describe("grants when queued events reach an app", () => {
     after.capabilities = after.capabilities.filter(
       ({ kind }) => kind !== "button",
     );
-    events.device({ id: device.id, before: device, after });
+    bus.publish({
+      name: "device.changed",
+      id: device.id,
+      before: device,
+      after,
+    });
     grant(["devices.read:switch"]);
     await drain();
 
@@ -244,8 +275,13 @@ describe("grants when queued events reach an app", () => {
   });
 
   it("does not widen queued snapshots when another permission is granted", async () => {
-    const { events, grant, drain, heard } = setup(["devices.read:switch"]);
-    events.device({ id: device.id, before: null, after: device });
+    const { bus, grant, drain, heard } = setup(["devices.read:switch"]);
+    bus.publish({
+      name: "device.changed",
+      id: device.id,
+      before: null,
+      after: device,
+    });
     grant(["devices.read:switch", "devices.read:button"]);
     await drain();
 

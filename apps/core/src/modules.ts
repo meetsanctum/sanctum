@@ -8,7 +8,7 @@ import {
 import { createActivityViews } from "./activity/views.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
-import { createAppHost, type AppHost } from "./app-host/host.js";
+import { createAppHost } from "./app-host/host.js";
 import { createNet } from "./app-host/net.js";
 import { publicInternet } from "./app-host/public-internet.js";
 import type { ServiceManager } from "./app-host/services.js";
@@ -25,7 +25,7 @@ import { createAuth, loginRule } from "./auth/auth.js";
 import type { Limits } from "./auth/limits.js";
 import { createDashboards } from "./dashboards/dashboards.js";
 import type { CoreDatabase } from "./database.js";
-import { createDevices, type DeviceChange } from "./devices/devices.js";
+import { createDevices } from "./devices/devices.js";
 import { createFirmware } from "./devices/firmware.js";
 import { createProblems } from "./devices/problems.js";
 import { createFound } from "./devices/found.js";
@@ -39,7 +39,8 @@ import { createMotion } from "./devices/motion.js";
 import { createPairing } from "./devices/pairing.js";
 import { createPresses } from "./devices/presses.js";
 import { createEntities, type Entities } from "./entities/entities.js";
-import { createHistory, type History } from "./history/history.js";
+import { createEventBus } from "./event-bus.js";
+import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
 import { createLiveUpdates } from "./live-updates.js";
 import { createPeople } from "./people/people.js";
@@ -51,16 +52,19 @@ import { createSpace, type SpaceManager } from "./system/space.js";
 import { createStatus, type StatusManager } from "./system/status.js";
 import { createUpdates, type UpdateManager } from "./system/updates.js";
 import type { SunDays } from "./workflows/jobs.js";
-import { createWorkflows, type Workflows } from "./workflows/workflows.js";
+import { createWorkflows } from "./workflows/workflows.js";
 
 // The core's modules on its database, wired together: People, Auth, System,
 // Places, Devices with pairing and the lights of a place together, remotes'
 // presses and devices' history, the entities apps bring, the app host with
 // its permission gate and apps' settings, Workflows, the home's dashboards
-// and pinned apps and the activity log with the manager's audit. Clients
-// follow devices, presses, places, pairing, entities, settings, dashboards,
-// pinned apps and the activity log over Auth's live socket; running apps
-// follow devices, presses, places, people and entities through the host.
+// and pinned apps and the activity log with the manager's audit. What
+// happens to devices, presses, places, the home's location, people and
+// entities, and the events apps emit, goes on the event bus, whose followers
+// are set last (event-bus.ts). Clients follow devices, presses, places and
+// entities from it, and pairing, settings, dashboards, pinned apps and the
+// activity log directly, over Auth's live socket; running apps follow what
+// it carries of the core's nouns through the app host.
 
 export async function createModules(
   db: CoreDatabase,
@@ -124,18 +128,16 @@ export async function createModules(
   },
 ) {
   const { now, log } = options;
-  // Devices and pairing hand driver apps what they ask through the app
-  // host, which in turn gives apps their calls into Devices and the core's
-  // events. Workflows run apps' actions through the host, which hands them
-  // apps' events and jobs.
-  let host: AppHost | undefined;
-  let workflows: Workflows | undefined;
-  let history: History | undefined;
+  // The app host and Workflows are built after the modules that call them,
+  // as Devices and pairing reach driver apps through the host and the host
+  // hands apps' jobs to Workflows: those calls run only once both are built.
+  const eventBus = createEventBus({ log });
   const activity = createActivity(db, { now });
   const people = createPeople(db, {
     ...loginRule(db),
     record: activity.for("people"),
-    onChange: (change) => host?.personChanged(change),
+    onChange: (change) =>
+      eventBus.publish({ name: "person.changed", ...change }),
   });
   const auth = await createAuth(db, {
     people,
@@ -169,7 +171,7 @@ export async function createModules(
       manager: options.manager,
       dataDir: options.dataDir,
       version: options.version,
-      appIds: () => host?.list().map((app) => app.id) ?? [],
+      appIds: () => apps.list().map((app) => app.id),
       now,
     }),
     // Restart and Shut down, which every client hears of first.
@@ -186,30 +188,13 @@ export async function createModules(
   const places = createPlaces(db, {
     record: activity.for("places"),
     timeZone: options.timeZone,
-    // Devices named after their room follow it.
-    onChange(list, before) {
-      live.places(list);
-      host?.placesChanged(before, list);
-      devices.renameAll();
-    },
-    onLocationChange: (before, after) => host?.locationChanged(before, after),
-    onRoomRemoving(roomId) {
-      const affected = devices
-        .list()
-        .filter((device) => device.roomId === roomId);
-      return () => {
-        for (const before of affected) {
-          const change = {
-            id: before.id,
-            before,
-            after: devices.get(before.id),
-          };
-          live.device(change);
-          host?.deviceChanged(change);
-          updateHome(change);
-        }
-      };
-    },
+    onChange: (change) =>
+      eventBus.publish({ name: "places.changed", ...change }),
+    onLocationChange: (change) =>
+      eventBus.publish({ name: "location.changed", ...change }),
+    // A room's devices move to No room as it goes, which Devices tells once
+    // the removal has committed.
+    onRoomRemoving: (roomId) => devices.prepareRoomRemoval(roomId),
     fetch: options.fetch,
     log,
     now,
@@ -220,66 +205,27 @@ export async function createModules(
     now,
   });
   const pins = createPins(db, { onChange: live.pins });
-  function updateHome(change: DeviceChange) {
-    try {
-      dashboards.deviceChanged(change);
-    } catch (error) {
-      log(
-        `dashboards: a change of ${change.id} did not reach Home (${error instanceof Error ? error.message : String(error)})`,
-      );
-    }
-  }
-  // Workflows follow changes once they have committed; one that fails on a
-  // change must not fail the caller that made it.
-  const following = (what: string, follow: () => void) => {
-    try {
-      follow();
-    } catch (error) {
-      log(
-        `workflows: a change of ${what} was not handled (${error instanceof Error ? error.message : String(error)})`,
-      );
-    }
-  };
   const entities = createEntities(db, {
-    onChange(change) {
-      live.entity(change);
-      host?.entityChanged(change);
-      following(`${change.app}'s ${change.key}`, () =>
-        workflows?.entityChanged(change),
-      );
-    },
+    onChange: (change) =>
+      eventBus.publish({ name: "entity.changed", ...change }),
     now,
   });
   const devices = createDevices(db, {
     gate,
     places,
     activity,
-    deliver: (driver, command, actor) => host!.deliver(driver, command, actor),
-    driverRun: (driver) => host!.driverRun(driver),
+    deliver: (driver, command, actor) => apps.deliver(driver, command, actor),
+    driverRun: (driver) => apps.driverRun(driver),
     removeFromDriver: (driver, removal, actor, hold) =>
-      host!.removeDevice(driver, removal, actor, hold),
+      apps.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
     beforeCommand: (device, capability) => holds.interrupt(device, capability),
-    onChange(change) {
-      live.device(change);
-      host?.deviceChanged(change);
-      if (change.after === null) pairing.removed(change.id);
-      // A device added or removed leaves or rejoins what was found.
-      if (change.before === null || change.after === null) pairing.refresh();
-      following(change.id, () => workflows?.deviceChanged(change));
-      updateHome(change);
-      try {
-        history?.deviceChanged(change);
-      } catch (error) {
-        log(
-          `history: a change of ${change.id} was not recorded (${error instanceof Error ? error.message : String(error)})`,
-        );
-      }
-    },
+    onChange: (change) =>
+      eventBus.publish({ name: "device.changed", ...change }),
     confirmMs: options.confirmMs,
     now,
   });
-  history = createHistory(db, {
+  const history = createHistory(db, {
     devices,
     record: activity.for("history"),
     log,
@@ -290,8 +236,8 @@ export async function createModules(
   const holds = createHolds({
     devices,
     gate,
-    move: (driver, move, actor) => host!.move(driver, move, actor),
-    canMove: (driver) => host?.canMove(driver) ?? false,
+    move: (driver, move, actor) => apps.move(driver, move, actor),
+    canMove: (driver) => apps.canMove(driver),
     record: activity.for("devices"),
     limitMs: options.holdLimitMs,
     settleMs: options.holdSettleMs,
@@ -312,7 +258,7 @@ export async function createModules(
     devices,
     drivers: {
       repair: (driver, repair, actor, hold) =>
-        host!.repair(driver, repair, actor, hold),
+        apps.repair(driver, repair, actor, hold),
     },
     record: activity.for("devices"),
   });
@@ -322,8 +268,8 @@ export async function createModules(
     devices,
     drivers: {
       run: (driver) =>
-        host?.isRunning(driver) ? host.driverRun(driver) : undefined,
-      add: (driver, add, actor, hold) => host!.add(driver, add, actor, hold),
+        apps.isRunning(driver) ? apps.driverRun(driver) : undefined,
+      add: (driver, add, actor, hold) => apps.add(driver, add, actor, hold),
     },
     record: activity.for("devices"),
     onChange: () => pairing.refresh(),
@@ -333,8 +279,8 @@ export async function createModules(
     devices,
     drivers: {
       firmware: (driver, hook, device, actor) =>
-        host!.firmware(driver, hook, device, actor),
-      probe: (driver, device, actor) => host!.probe(driver, device, actor),
+        apps.firmware(driver, hook, device, actor),
+      probe: (driver, device, actor) => apps.probe(driver, device, actor),
     },
     record: activity.for("devices"),
     now,
@@ -346,24 +292,17 @@ export async function createModules(
   const presses = createPresses({
     devices,
     activity,
-    onPress(press) {
-      holds.pressed(press);
-      live.press(press);
-      if (press.isCaptured) return;
-      host?.devicePressed(press);
-      following(`${press.device.id}'s press`, () => workflows?.pressed(press));
-    },
+    onPress: (press) => eventBus.publish({ name: "device.pressed", ...press }),
     onRelease: ({ device, capability }) => holds.released(device, capability),
-    captureRefusal: (appId) =>
-      host ? host.captureRefusal(appId) : "unavailable",
+    captureRefusal: (appId) => apps.captureRefusal(appId),
     now,
   });
   const pairing = createPairing({
     drivers: {
-      list: () => host?.pairingDrivers() ?? [],
+      list: () => apps.pairingDrivers(),
       open: (driver, seconds, actor) =>
-        host!.openPairing(driver, seconds, actor),
-      close: (driver, actor) => host!.closePairing(driver, actor),
+        apps.openPairing(driver, seconds, actor),
+      close: (driver, actor) => apps.closePairing(driver, actor),
     },
     deviceId: (driver, key) => devices.idFor(driver, key),
     found: () => found.list(),
@@ -373,15 +312,15 @@ export async function createModules(
     now,
   });
   const appJobs: JobCalls = {
-    schedule: (app, job) => workflows!.jobs.schedule(app, job),
-    cancel: (app, key) => workflows!.jobs.cancel(app, key),
-    list: (app) => workflows!.jobs.list(app),
+    schedule: (app, job) => workflows.jobs.schedule(app, job),
+    cancel: (app, key) => workflows.jobs.cancel(app, key),
+    list: (app) => workflows.jobs.list(app),
   };
   const keptWorkflows: KeptWorkflowCalls = {
-    put: (app, workflow) => workflows!.kept.put(app, workflow),
-    remove: (app, key) => workflows!.kept.remove(app, key),
-    sweep: (app, claimed) => workflows!.kept.sweep(app, claimed),
-    list: (app) => workflows!.kept.list(app),
+    put: (app, workflow) => workflows.kept.put(app, workflow),
+    remove: (app, key) => workflows.kept.remove(app, key),
+    sweep: (app, claimed) => workflows.kept.sweep(app, claimed),
+    list: (app) => workflows.kept.list(app),
   };
   const appVersions = createAppVersions(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
@@ -412,7 +351,7 @@ export async function createModules(
     places,
     devices,
     presses: () => presses,
-    onEvent: (event) => workflows?.appEvent(event),
+    onEvent: (event) => eventBus.publish({ name: "app.emitted", ...event }),
     jobs: appJobs,
     workflows: keptWorkflows,
     pairing: () => pairing,
@@ -462,8 +401,7 @@ export async function createModules(
         log,
       })
     : undefined;
-  host = apps;
-  workflows = createWorkflows(db, {
+  const workflows = createWorkflows(db, {
     host: apps,
     devices,
     places,
@@ -488,7 +426,7 @@ export async function createModules(
     client: (id) => auth.clients.name(id),
     app: (id) => apps.list().find((app) => app.id === id)?.name ?? null,
     action: (app, id) => apps.actionTitle(app, id),
-    workflow: (id) => workflows!.brief(id),
+    workflow: (id) => workflows.brief(id),
     device: (id) => devices.get(id)?.name ?? null,
     room: (id) =>
       places.list().rooms.find((room) => room.id === id)?.name ?? null,
@@ -509,23 +447,73 @@ export async function createModules(
       );
     }
   });
+  // Set last, once every follower is built, in this order. Each handler
+  // calls through, so a test that replaces a module's method still reaches
+  // it.
+  eventBus.setFollowers([
+    ["holds", { "device.pressed": (press) => holds.pressed(press) }],
+    [
+      "live updates",
+      {
+        "device.changed": (change) => live.device(change),
+        "device.pressed": (press) => live.press(press),
+        "places.changed": ({ after }) => live.places(after),
+        "entity.changed": (change) => live.entity(change),
+      },
+    ],
+    ["events for apps", apps.eventsForApps],
+    [
+      "pairing",
+      {
+        "device.changed"({ id, before, after }) {
+          if (after === null) pairing.removed(id);
+          // A device added or removed leaves or rejoins what was found.
+          if (before === null || after === null) pairing.refresh();
+        },
+      },
+    ],
+    // Devices named after their room follow it.
+    ["device names", { "places.changed": () => devices.renameAll() }],
+    [
+      "workflows",
+      {
+        "device.changed": (change) => workflows.deviceChanged(change),
+        // Not one a capture holds.
+        "device.pressed"(press) {
+          if (!press.isCaptured) workflows.pressed(press);
+        },
+        "entity.changed": (change) => workflows.entityChanged(change),
+        "app.emitted": (event) => workflows.appEvent(event),
+      },
+    ],
+    [
+      "dashboards",
+      { "device.changed": (change) => dashboards.deviceChanged(change) },
+    ],
+    [
+      "history",
+      { "device.changed": (change) => history.deviceChanged(change) },
+    ],
+  ]);
+
   // No workflow run starts once the core is stopping.
   const stopNewWork = [
-    ["workflows", () => workflows!.interrupt()],
+    ["workflows", () => workflows.interrupt()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
-  // firmware's deadlines are the last that change a device, and history then
-  // records that nothing is known from then on.
+  // firmware's deadlines are the last that change a device, so the bus closes
+  // after them, and history then records that nothing is known from then on.
   const stoppingSteps = [
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop commands to devices", () => devices.closing()],
-    ["stop workflows", () => workflows!.close()],
+    ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
-    ["stop history", () => history!.close()],
+    ["close the bus", () => eventBus.close()],
+    ["stop history", () => history.close()],
     ["stop pairing", () => pairing.stop()],
   ] as const satisfies CoreSteps["stopping"];
   const audit = options.manager.audit;

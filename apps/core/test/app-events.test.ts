@@ -1,6 +1,8 @@
 import {
+  coreEventNames,
   defineAction,
   defineApp,
+  defineEvent,
   forecastType,
   sunType,
   type CoreEvent,
@@ -9,13 +11,24 @@ import {
   type Place,
   type Places,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { createCoreEvents } from "../src/app-host/core-events.js";
+import {
+  createEventsForApps,
+  type EventsForApps,
+} from "../src/app-host/events-for-apps.js";
+import { createEventBus } from "../src/event-bus.js";
 import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, personWithClient, settled } from "./devices-support.js";
 import { claimed, post, testCore } from "./support.js";
+
+// The bus as the core sets it, with the events for apps its only follower.
+function busFor(events: EventsForApps) {
+  const bus = createEventBus({ log: () => undefined });
+  bus.setFollowers([["events for apps", events.follower]]);
+  return bus;
+}
 
 // The core's events for apps: a running app follows what happens to devices,
 // places, people and the standard entities from its start context, each event
@@ -136,9 +149,9 @@ describe("the core's events", () => {
       [
         "place.added",
         "place.changed",
-        "place.deleted",
+        "place.removed",
         "device.changed",
-        "device.deleted",
+        "device.removed",
       ],
     );
     const { core, maya, lamp } = await lampsCore({ apps: [places.pkg] });
@@ -178,7 +191,7 @@ describe("the core's events", () => {
           before: { id: lamp, roomId: room.id, name: "Office light" },
           device: { id: lamp, roomId: null, name: "Office light" },
         },
-        { name: "place.deleted", place: { kind: "room", id: room.id } },
+        { name: "place.removed", place: { kind: "room", id: room.id } },
         {
           name: "place.changed",
           before: { kind: "zone", id: zone.id, roomIds: [room.id] },
@@ -244,7 +257,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     const maya = await claimed(core);
@@ -280,7 +293,7 @@ describe("the core's events", () => {
           person: expect.objectContaining({ name: "Benjamin" }),
         },
         {
-          name: "person.deleted",
+          name: "person.removed",
           person: expect.objectContaining({ id: ben.id, name: "Benjamin" }),
         },
       ]);
@@ -290,7 +303,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     expect(() =>
@@ -314,7 +327,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     const person = core.db.transaction(() =>
@@ -337,7 +350,7 @@ describe("the core's events", () => {
     const sun = listener(
       "test.sun",
       [`entities.read:${sunType.id}`],
-      ["entity.added", "entity.changed", "entity.deleted"],
+      ["entity.added", "entity.changed", "entity.removed"],
     );
     const core = await testCore({ apps: [sun.pkg] });
     const entity = { type: sunType.id, key: "home", name: "Sun" };
@@ -369,7 +382,7 @@ describe("the core's events", () => {
           before: { state: { date: "2026-10-29" } },
           entity: { state: { date: "2026-10-30" } },
         },
-        { name: "entity.deleted", entity: { type: sunType.id, key: "home" } },
+        { name: "entity.removed", entity: { type: sunType.id, key: "home" } },
       ]);
   });
 
@@ -380,7 +393,7 @@ describe("the core's events", () => {
       ["devices.read:light"],
       "does not hold devices.read:button",
     ],
-    ["place.deleted", ["devices.read:light"], "does not hold places.read"],
+    ["place.removed", ["devices.read:light"], "does not hold places.read"],
     ["location.changed", ["places.read"], "does not hold places.location"],
     ["person.added", ["places.read"], "does not hold people.read"],
     [
@@ -427,6 +440,63 @@ describe("the core's events", () => {
     expect(core.logs).toContain(
       "apps: test.eager did not start (example.itemAdded is not one of the core's events)",
     );
+  });
+
+  it("never carry what another app emits, which only workflows hear", async () => {
+    const said = defineEvent({
+      id: "emits.said",
+      payload: z.object({ word: z.string() }),
+    });
+    const emitter = defineApp({
+      id: "test.emits",
+      name: "Emits",
+      version: "0.1.0",
+      core: "^1.0.0",
+      permissions: [],
+      events: [said],
+      actions: [
+        defineAction({
+          id: "emits.say",
+          title: "Says",
+          tier: "write",
+          input: z.object({}),
+          output: z.unknown(),
+          run: (ctx) => ctx.events.emit(said, { word: "hello" }),
+        }),
+      ],
+    });
+    const everything = listener(
+      "test.everything",
+      [
+        "devices.read:button",
+        "places.read",
+        "places.location",
+        "people.read",
+        `entities.read:${sunType.id}`,
+      ],
+      coreEventNames,
+    );
+    const core = await testCore({
+      apps: [{ app: emitter, origin: "system" }, everything.pkg],
+    });
+    const maya = await claimed(core);
+    await settled();
+    everything.heard.length = 0;
+    const heardByWorkflows = vi.spyOn(core.workflows, "appEvent");
+
+    const asked = await post(
+      core,
+      "/api/apps/test.emits/actions/emits.say",
+      {},
+      maya,
+    );
+    expect(asked.statusCode).toBe(200);
+    await settled();
+
+    expect(heardByWorkflows.mock.calls.map(([event]) => event.payload)).toEqual(
+      [{ word: "hello" }],
+    );
+    expect(everything.heard).toEqual([]);
   });
 
   it("are followed from the start context, never an action's", async () => {
@@ -536,7 +606,8 @@ describe("delivering the core's events", () => {
     };
 
   it("waits for the start hook to catch up", async () => {
-    const events = createCoreEvents({ timeoutMs: 1000, log() {} });
+    const events = createEventsForApps({ timeoutMs: 1000, log() {} });
+    const bus = busFor(events);
     const following = events.start(
       "test.places",
       () => ["places.read"],
@@ -548,7 +619,7 @@ describe("delivering the core's events", () => {
     ]);
     following.follow("place.added");
 
-    events.places(before, withRoom("office"));
+    bus.publish({ name: "places.changed", before, after: withRoom("office") });
     await settled();
     expect(heard).toEqual([]);
     following.started();
@@ -559,10 +630,11 @@ describe("delivering the core's events", () => {
 
   it("logs a handler that fails or takes too long and goes on to the next", async () => {
     const logs: string[] = [];
-    const events = createCoreEvents({
+    const events = createEventsForApps({
       timeoutMs: 20,
       log: (message) => logs.push(message),
     });
+    const bus = busFor(events);
     const following = events.start(
       "test.places",
       () => ["places.read"],
@@ -580,9 +652,9 @@ describe("delivering the core's events", () => {
     following.follow("place.added");
     following.started();
 
-    events.places(before, withRoom("office"));
-    events.places(before, withRoom("attic"));
-    events.places(before, withRoom("hall"));
+    bus.publish({ name: "places.changed", before, after: withRoom("office") });
+    bus.publish({ name: "places.changed", before, after: withRoom("attic") });
+    bus.publish({ name: "places.changed", before, after: withRoom("hall") });
     await expect.poll(() => heard).toEqual(["hall"]);
 
     expect(logs).toEqual([

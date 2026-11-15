@@ -50,6 +50,9 @@ export const devices = sqliteTable(
     // it, or nothing: the core works out what the device is from this and
     // its capabilities whenever it is read (classification.ts).
     declaredType: text("declared_type"),
+    // The type the household shows it as in place of its own, or nothing:
+    // kept as chosen and used while the device's own type allows it.
+    shownAs: text("shown_as"),
     // Removing a room keeps its devices, in no room.
     roomId: text("room_id").references(() => rooms.id, {
       onDelete: "set null",

@@ -7,7 +7,7 @@ import {
 import type { Outcome } from "../activity/schema.js";
 import type { Principal } from "../auth/clients.js";
 import type { Who } from "./actions.js";
-import type { CoreEvents } from "./core-events.js";
+import type { EventsForApps } from "./events-for-apps.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule, type AppGrants } from "./grants.js";
@@ -47,7 +47,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
   // An app's settings as it reads them, which may fail as app code.
   settingsOf: (entry: Entry) => AppSettings;
   grants: AppGrants;
-  coreEvents: Pick<CoreEvents, "permissions" | "settings">;
+  eventsForApps: Pick<EventsForApps, "permissions" | "settings">;
   // Someone changed an app's settings.
   onSettings?: (appId: string, settings: AppSettings) => void;
   // Before a permission the app holds goes off, what it lets the app hold
@@ -214,7 +214,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
       const before = entry.granted;
       entry.granted = options.grants.of(entry.manifest);
       entry.grantsRevision += 1;
-      options.coreEvents.permissions(appId, before, entry.granted);
+      options.eventsForApps.permissions(appId, before, entry.granted);
       options.onPermission?.(entry, permission, granted);
     }
     return [...entry.granted];
@@ -264,7 +264,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
       }
       // A running app hears it at once, as settings.changed.
       if (JSON.stringify(before) !== JSON.stringify(settings)) {
-        options.coreEvents.settings(appId, before, settings);
+        options.eventsForApps.settings(appId, before, settings);
       }
       options.onSettings?.(appId, settings);
       return settings;

@@ -53,7 +53,7 @@ export type Places = {
  * What removing a room takes with it, for the warning read first
  * (`GET /api/places/rooms/removal?id=`): its devices, which move to No room
  * and stay paired; what apps keep for it, counted by app and type from their
- * entities in the room, which they clean up on place.deleted; and the
+ * entities in the room, which they clean up on place.removed; and the
  * workflows whose config names it.
  */
 export type RoomRemoval = {

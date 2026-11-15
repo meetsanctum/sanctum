@@ -156,7 +156,7 @@ export default defineApp({
     const snapshots = createSnapshots();
     const snapshotDevices = new Map<string, DeviceInfo>();
     running = { snapshots, snapshotDevices };
-    await ctx.events.on("place.deleted", async ({ place }) => {
+    await ctx.events.on("place.removed", async ({ place }) => {
       if (place.kind === "room") {
         await removeRoomMoods(ctx.storage.db, place.id);
         await removeRoomSchedules(ctx.storage.db, place.id);
@@ -187,11 +187,11 @@ export default defineApp({
     for (const name of [
       "device.added",
       "device.changed",
-      "device.deleted",
+      "device.removed",
     ] as const) {
       await ctx.events.on(name, async (event) => {
         const rooms = roomsOf(event);
-        if (event.name === "device.deleted") {
+        if (event.name === "device.removed") {
           snapshotDevices.delete(event.device.id);
         } else {
           snapshotDevices.set(event.device.id, event.device);
@@ -307,7 +307,7 @@ function pressesFollow(event: DeviceEvent) {
   if (event.name !== "device.changed") {
     return (
       button !== undefined ||
-      (event.name === "device.deleted" &&
+      (event.name === "device.removed" &&
         lightFeatures(event.device).length > 0)
     );
   }

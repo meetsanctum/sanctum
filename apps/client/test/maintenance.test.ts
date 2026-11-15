@@ -55,6 +55,7 @@ function device(
     probe: false,
     battery: 64,
     batteryLow: null,
+    shownAs: null,
     leftAt: null,
     problem: null,
     ...extra,

@@ -1,10 +1,7 @@
 import {
-  ActionError,
   capabilityOf,
-  deviceRegistration,
-  deviceReport,
-  historyFields,
   isCapabilityKind,
+  shownAsOf,
   type Actor,
   type CapabilityInfo,
   type CapabilityKind,
@@ -13,8 +10,6 @@ import {
   type DriverCommand,
 } from "@meetsanctum/app-sdk";
 import { and, asc, eq } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
-import { z } from "zod";
 
 import type { Activity, ChangedBy } from "../activity/activity.js";
 import { ActionCallError } from "../app-host/errors.js";
@@ -23,20 +18,18 @@ import type { Principal } from "../auth/clients.js";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { createDeviceLog, type Who } from "./activity.js";
+import { ownDeviceType } from "./classification.js";
 import { createCommandTracking } from "./commands.js";
-import { unknownFirmware } from "./firmware.js";
+import { createDriverReports } from "./driver-reports.js";
 import { createNaming } from "./naming.js";
 import { createPresence } from "./presence.js";
-import { writeCapabilities } from "./registration.js";
 import { createRemoval, type RemoveFromDriver } from "./removal.js";
 import { commandRequest, deviceChanges } from "./requests.js";
 import { createTurns } from "./turns.js";
 import { deviceCapabilities, devices, type StoredSetBy } from "./schema.js";
 import {
   confirmMs as defaultConfirmMs,
-  observe,
   prepare,
-  reconcile,
   settle,
   type Settled,
 } from "./sync.js";
@@ -45,13 +38,13 @@ import { deviceInfo, viewOf, type View } from "./views.js";
 // The Devices module: the registry of what driver apps bring in, their typed
 // capabilities, state and commands, and the Drivers contract. A driver
 // registers and reports its own devices by its own keys, so it cannot name
-// another driver's; a command passes the permission gate as its actor and
-// goes to the device's driver app, and the device's report confirms it
-// (sync.ts). Each capability says who set it last: the app that sent the
-// command and the actor behind it, so natural light can tell a mood's or a
-// person's change from its own. A new device is named after its room and
-// type until the household names it (naming.ts), and removing a device has
-// its driver take it off its network first (removal.ts).
+// another driver's (driver-reports.ts); a command passes the permission gate
+// as its actor and goes to the device's driver app, and the device's report
+// confirms it (sync.ts). Each capability says who set it last: the app that
+// sent the command and the actor behind it, so natural light can tell a
+// mood's or a person's change from its own. A new device is named after its
+// room and type until the household names it (naming.ts), and removing a
+// device has its driver take it off its network first (removal.ts).
 
 /** What a change did to a device, for live clients; null where it did not or no longer exists. */
 export type DeviceChange = {
@@ -70,27 +63,6 @@ export type Deliver = (
 ) => Promise<void>;
 
 type CapabilityRow = typeof deviceCapabilities.$inferSelect;
-
-// Whether a report changes what a capability says, by its kind's history
-// fields (CapabilityInfo.changedAt): its first report does.
-function changedFields(
-  capability: {
-    kind: CapabilityKind;
-    observed: Record<string, unknown> | null;
-  },
-  observed: Record<string, unknown>,
-) {
-  return (
-    capability.observed === null ||
-    historyFields[capability.kind].some(
-      (field: string) => capability.observed![field] !== observed[field],
-    )
-  );
-}
-
-function invalid(what: string, error: z.ZodError) {
-  return new Error(`${what}: ${z.prettifyError(error)}`);
-}
 
 export function createDevices(
   db: CoreDatabase,
@@ -132,6 +104,23 @@ export function createDevices(
     write: (device, capability, state, setBy) =>
       changing(device, () => writeSync(device, capability, state, setBy)),
   });
+
+  // Whether the household may show a device as this type: its own type
+  // lists it.
+  function mayBeShownAs(id: string, type: string) {
+    const device = db.select().from(devices).where(eq(devices.id, id)).get();
+    if (!device) {
+      throw new ActionCallError("not_found");
+    }
+    const capabilities = db
+      .select({ kind: deviceCapabilities.kind })
+      .from(deviceCapabilities)
+      .where(eq(deviceCapabilities.deviceId, id))
+      .all();
+    return shownAsOf(ownDeviceType({ ...device, capabilities })).some(
+      (each) => each === type,
+    );
+  }
 
   function load(id: string): DeviceInfo | null {
     const device = db.select().from(devices).where(eq(devices.id, id)).get();
@@ -248,6 +237,16 @@ export function createDevices(
     nameOf: (id) => load(id)?.name ?? null,
     changing,
     forget: (id, capability) => commands.forget(id, capability),
+  });
+  const reports = createDriverReports(db, {
+    record,
+    deviceLog,
+    commands,
+    capabilityRow,
+    changing,
+    rename,
+    onReport: options.onReport,
+    now,
   });
   const present = createPresence(db, {
     record,
@@ -473,176 +472,9 @@ export function createDevices(
       return run(actor, app, who, view, target, command);
     },
 
-    // A driver brings one of its devices in, or updates it, by its own key.
-    register(driver: string, input: unknown): { id: string } {
-      const parsed = deviceRegistration.safeParse(input);
-      if (!parsed.success) {
-        throw invalid(
-          `${driver} registered a device the core cannot take`,
-          parsed.error,
-        );
-      }
-      const registration = parsed.data;
-      const existing = db
-        .select({ id: devices.id, firmware: devices.firmware })
-        .from(devices)
-        .where(
-          and(eq(devices.driver, driver), eq(devices.key, registration.key)),
-        )
-        .get();
-      const id = existing?.id ?? randomUUID();
-      changing(id, () =>
-        db.transaction(() => {
-          const at = now();
-          const described = {
-            driverName: registration.name,
-            manufacturer: registration.manufacturer,
-            model: registration.model,
-            declaredType: registration.type,
-            // What an update is doing outlives the driver saying again
-            // what the device runs.
-            firmware: registration.firmware && {
-              ...(existing?.firmware ?? unknownFirmware),
-              ...registration.firmware,
-            },
-            probe: registration.probe,
-            // A device its driver registers is on its network.
-            leftAt: null,
-            updatedAt: at,
-          };
-          if (existing) {
-            db.update(devices).set(described).where(eq(devices.id, id)).run();
-          } else {
-            db.insert(devices)
-              .values({
-                id,
-                driver,
-                key: registration.key,
-                ...described,
-                autoNamed: true,
-                availability: "unknown",
-                createdAt: at,
-              })
-              .run();
-            record({ action: "device.register", outcome: "ok", subjectId: id });
-          }
-          writeCapabilities(db, id, registration.capabilities, {
-            at,
-            forget: (capability) => commands.forget(id, capability),
-          });
-          // What it is may have changed with its capabilities, or with
-          // what its driver says it is.
-          rename(id);
-        }),
-      );
-      return { id };
-    },
-
-    // A driver reports what one of its own devices said, by its own key.
-    report(driver: string, input: unknown) {
-      const parsed = deviceReport.safeParse(input);
-      if (!parsed.success) {
-        throw invalid(
-          `${driver} sent a report the core cannot take`,
-          parsed.error,
-        );
-      }
-      const {
-        key,
-        availability,
-        states = {},
-        battery,
-        batteryLow,
-      } = parsed.data;
-      const device = db
-        .select()
-        .from(devices)
-        .where(and(eq(devices.driver, driver), eq(devices.key, key)))
-        .get();
-      if (!device) {
-        throw new ActionError("not_found", `${driver} has no device ${key}`);
-      }
-      const observations = Object.entries(states).map(
-        ([capabilityId, state]) => {
-          const capability = capabilityRow(device.id, capabilityId);
-          if (!capability) {
-            throw new ActionError(
-              "not_found",
-              `${driver}'s device ${key} has no capability ${capabilityId}`,
-            );
-          }
-          const observed = capabilityOf(capability.kind).state.safeParse(state);
-          if (!observed.success) {
-            throw invalid(
-              `${driver} reported a ${capability.kind} state the core cannot take`,
-              observed.error,
-            );
-          }
-          return {
-            capability,
-            observed: observed.data as Record<string, unknown>,
-          };
-        },
-      );
-      const answered =
-        observations.length > 0 ||
-        battery !== undefined ||
-        batteryLow !== undefined ||
-        availability === "online";
-      changing(device.id, () =>
-        db.transaction(() => {
-          const at = now();
-          for (const { capability, observed: reported } of observations) {
-            const observed = observe(capability, reported);
-            deviceLog.reported(
-              device.id,
-              capability,
-              observed,
-              at,
-              commands.sentAt(device.id, capability.id),
-            );
-            const settled = reconcile(capability, observed);
-            db.update(deviceCapabilities)
-              .set({
-                observed,
-                ...settled,
-                awaiting: settled.awaiting ?? null,
-                ...(changedFields(capability, observed) && { changedAt: at }),
-                updatedAt: at,
-              })
-              .where(
-                and(
-                  eq(deviceCapabilities.deviceId, device.id),
-                  eq(deviceCapabilities.id, capability.id),
-                ),
-              )
-              .run();
-            commands.reported(device.id, capability.id, capability, observed);
-          }
-          // One its network no longer has stays offline until a list has it
-          // again or its driver registers it, whatever a late report says.
-          const left = device.leftAt !== null;
-          if (battery !== undefined || batteryLow !== undefined) {
-            deviceLog.battery(device, { battery, batteryLow }, at);
-          }
-          db.update(devices)
-            .set({
-              availability: left
-                ? "offline"
-                : (availability ?? device.availability),
-              lastSeenAt: answered ? at : device.lastSeenAt,
-              battery: battery ?? device.battery,
-              batteryLow: batteryLow ?? device.batteryLow,
-            })
-            .where(eq(devices.id, device.id))
-            .run();
-          if (availability && !left) {
-            deviceLog.availability(device, availability);
-          }
-        }),
-      );
-      if (answered) options.onReport?.(device.id);
-    },
+    // A driver brings one of its devices in, or updates it, and reports what
+    // one said, by its own key (driver-reports.ts).
+    ...reports,
 
     // A driver says which of its devices its network still has (presence.ts).
     present,
@@ -668,7 +500,8 @@ export function createDevices(
       }
     },
 
-    // What the household decides about a device: its name and its room.
+    // What the household decides about a device: its name, its room and
+    // what it is shown as.
     update(by: ChangedBy, input: unknown): DeviceInfo {
       const parsed = deviceChanges.safeParse(input);
       if (!parsed.success) {
@@ -688,6 +521,9 @@ export function createDevices(
           if (changes.roomId && !places.hasRoom(changes.roomId)) {
             throw new ActionCallError("not_found");
           }
+          if (changes.shownAs && !mayBeShownAs(id, changes.shownAs)) {
+            throw new ActionCallError("invalid_request");
+          }
           const updated = db
             .update(devices)
             .set({ ...changes, ...naming, updatedAt: now() })
@@ -698,8 +534,8 @@ export function createDevices(
             throw new ActionCallError("not_found");
           }
           rename(id);
-          // What changed: its name, which removed entries are named by, or
-          // its room.
+          // What changed: its name, which removed entries are named by,
+          // its room, or what it is shown as, with what it then is.
           record({
             action: "device.update",
             outcome: "ok",
@@ -710,6 +546,9 @@ export function createDevices(
               ...(name === undefined ? {} : { name: load(id)!.name }),
               ...("roomId" in changes
                 ? { roomId: changes.roomId ?? null }
+                : {}),
+              ...("shownAs" in changes
+                ? { shownAs: load(id)!.shownAs, type: load(id)!.type }
                 : {}),
             },
           });
@@ -731,6 +570,28 @@ export function createDevices(
         .all()) {
         changing(id, () => rename(id, rooms));
       }
+    },
+
+    // A room's removal moves its devices to No room through the database,
+    // not through Devices: this takes them as they are before it, and the
+    // returned publishMoves tells what each move did once the removal has
+    // committed.
+    prepareRoomRemoval(roomId: string) {
+      const moving = loadAll().flatMap((before) =>
+        before.roomId === roomId ? [{ before, key: keyOf(before.id) }] : [],
+      );
+      return function publishMoves() {
+        for (const { before, key } of moving) {
+          const after = load(before.id);
+          if (JSON.stringify(before) === JSON.stringify(after)) continue;
+          options.onChange?.({
+            id: before.id,
+            ...(key ? { key } : {}),
+            before,
+            after,
+          });
+        }
+      };
     },
 
     // Runs a change of a device's own row, as firmware.ts makes, then

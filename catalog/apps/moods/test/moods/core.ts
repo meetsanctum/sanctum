@@ -253,7 +253,7 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     async deleteRoom(roomId: string) {
       const room = state.places.rooms.find((each) => each.id === roomId)!;
       state.places.rooms = state.places.rooms.filter((each) => each !== room);
-      await hand({ name: "place.deleted", place: { kind: "room", ...room } });
+      await hand({ name: "place.removed", place: { kind: "room", ...room } });
     },
     // A device reports, goes offline or moves room.
     async changeDevice(id: string, change: (device: DeviceInfo) => void) {
@@ -271,7 +271,7 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     async removeDevice(id: string) {
       const device = state.devices.find((each) => each.id === id)!;
       state.devices = state.devices.filter((each) => each !== device);
-      await hand({ name: "device.deleted", device });
+      await hand({ name: "device.removed", device });
     },
     // The next read of the devices waits, once reached, until released.
     holdDevices() {

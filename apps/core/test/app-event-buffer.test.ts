@@ -1,7 +1,18 @@
 import type { CoreEvent, Places } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
-import { createCoreEvents } from "../src/app-host/core-events.js";
+import {
+  createEventsForApps,
+  type EventsForApps,
+} from "../src/app-host/events-for-apps.js";
+import { createEventBus } from "../src/event-bus.js";
+
+// The bus as the core sets it, with the events for apps its only follower.
+function busFor(events: EventsForApps) {
+  const bus = createEventBus({ log: () => undefined });
+  bus.setFollowers([["events for apps", events.follower]]);
+  return bus;
+}
 
 // What waits for an app apart: every event from the moment it began starting,
 // which its start then filters by what it followed, up to 1,000 events or 4 MB,
@@ -25,7 +36,8 @@ const rooms = (from: number, count: number, name = "Room"): Places => ({
 
 function setUp() {
   const log = vi.fn();
-  const events = createCoreEvents({ timeoutMs: 1_000, log });
+  const events = createEventsForApps({ timeoutMs: 1_000, log });
+  const bus = busFor(events);
   const overflowed = vi.fn();
   const following = events.start(
     "test.apart",
@@ -38,18 +50,26 @@ function setUp() {
       heard.push((event as { place: { name: string } }).place.name);
     }) as never,
   ]);
-  return { events, following, heard, overflowed, log };
+  return { events, bus, following, heard, overflowed, log };
 }
 
 const settled = () => new Promise((done) => setTimeout(done, 5));
 
 describe("the events waiting for an app apart", () => {
   it("keeps what happens from its start, for what it says it follows by the end", async () => {
-    const { events, following, heard } = setUp();
+    const { bus, following, heard } = setUp();
 
-    events.places(nowhere, rooms(1, 1));
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 1),
+    });
     following.follow("place.added");
-    events.places(rooms(1, 1), rooms(1, 2));
+    bus.publish({
+      name: "places.changed",
+      before: rooms(1, 1),
+      after: rooms(1, 2),
+    });
     await settled();
     expect(heard).toEqual([]);
 
@@ -60,14 +80,18 @@ describe("the events waiting for an app apart", () => {
   });
 
   it("hears nothing of what it didn't follow, which then waits no longer", async () => {
-    const { events, following, heard, overflowed } = setUp();
-    following.handlers.set("place.deleted", [
+    const { bus, following, heard, overflowed } = setUp();
+    following.handlers.set("place.removed", [
       (async (event: CoreEvent) => {
         heard.push(event.name);
       }) as never,
     ]);
-    events.places(nowhere, rooms(1, 1_000));
-    following.follow("place.deleted");
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 1_000),
+    });
+    following.follow("place.removed");
 
     following.started();
     await settled();
@@ -75,26 +99,42 @@ describe("the events waiting for an app apart", () => {
     expect(heard).toEqual([]);
     // Room for as many again, so none of them is still counted.
     following.follow("place.added");
-    events.places(nowhere, rooms(1, 1_000));
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 1_000),
+    });
     await settled();
     expect(overflowed).not.toHaveBeenCalled();
     expect(heard).toHaveLength(1_000);
   });
 
   it("holds up to 1,000, and past that drops them and says so, once", async () => {
-    const { events, following, heard, overflowed, log } = setUp();
+    const { bus, following, heard, overflowed, log } = setUp();
     following.follow("place.added");
 
-    events.places(nowhere, rooms(1, 1_000));
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 1_000),
+    });
     expect(overflowed).not.toHaveBeenCalled();
 
-    events.places(rooms(1, 1_000), rooms(1, 1_001));
+    bus.publish({
+      name: "places.changed",
+      before: rooms(1, 1_000),
+      after: rooms(1, 1_001),
+    });
     expect(overflowed).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith(
       "apps: test.apart fell behind the core's events",
     );
 
-    events.places(rooms(1, 1_001), rooms(1, 1_002));
+    bus.publish({
+      name: "places.changed",
+      before: rooms(1, 1_001),
+      after: rooms(1, 1_002),
+    });
     following.started();
     await settled();
 
@@ -103,26 +143,38 @@ describe("the events waiting for an app apart", () => {
   });
 
   it.each(["x", "界"])("holds up to 4 MB of %s, however few", (character) => {
-    const { events, following, overflowed } = setUp();
+    const { bus, following, overflowed } = setUp();
     following.follow("place.added");
     const name = character.repeat(
       Math.floor((1024 * 1024) / Buffer.byteLength(character)),
     );
 
-    events.places(nowhere, rooms(1, 3, name));
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 3, name),
+    });
     expect(overflowed).not.toHaveBeenCalled();
 
-    events.places(rooms(1, 3, name), rooms(1, 5, name));
+    bus.publish({
+      name: "places.changed",
+      before: rooms(1, 3, name),
+      after: rooms(1, 5, name),
+    });
     expect(overflowed).toHaveBeenCalledTimes(1);
   });
 
   it("counts them out as they reach it", async () => {
-    const { events, following, heard, overflowed } = setUp();
+    const { bus, following, heard, overflowed } = setUp();
     following.follow("place.added");
     following.started();
 
     for (let round = 0; round < 3; round += 1) {
-      events.places(nowhere, rooms(1, 900));
+      bus.publish({
+        name: "places.changed",
+        before: nowhere,
+        after: rooms(1, 900),
+      });
       await settled();
     }
 
@@ -131,11 +183,15 @@ describe("the events waiting for an app apart", () => {
   });
 
   it("drops what waits once it has fallen behind, and the rest finishes", async () => {
-    const { events, following, heard, overflowed } = setUp();
+    const { events, bus, following, heard, overflowed } = setUp();
     following.follow("place.added");
     following.started();
 
-    events.places(nowhere, rooms(1, 1_001));
+    bus.publish({
+      name: "places.changed",
+      before: nowhere,
+      after: rooms(1, 1_001),
+    });
     expect(overflowed).toHaveBeenCalledTimes(1);
     await events.stop("test.apart");
 

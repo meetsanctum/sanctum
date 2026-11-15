@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { capabilityKinds, deviceTypeOf, deviceTypes } from "../src/index.js";
+import {
+  capabilityKinds,
+  deviceTypeOf,
+  deviceTypes,
+  ownTypeOf,
+  showAsChoices,
+  shownAsOf,
+  shownType,
+} from "../src/index.js";
 
 // What a device is: the list every driver's devices are matched against.
 
@@ -59,5 +67,74 @@ describe("what a device with some kinds is", () => {
     // Saying so of a device without its kinds changes nothing.
     expect(deviceTypeOf(["sensor"], () => true)).toBe("sensor");
     expect(deviceTypeOf(["light", "switch"], () => true)).toBe("light");
+  });
+});
+
+describe("what a device may be shown as", () => {
+  it("is a door or a window for a contact sensor, and nothing else for the rest", () => {
+    expect(shownAsOf("contact")).toEqual(["door", "window"]);
+    for (const type of deviceTypes) {
+      if (type.id !== "contact") {
+        expect(shownAsOf(type.id), type.id).toEqual([]);
+      }
+    }
+  });
+
+  it("is a type only the household chooses, made of what the device's own type has", () => {
+    for (const type of deviceTypes) {
+      for (const id of type.showAs ?? []) {
+        const shown = deviceTypes.find((each) => each.id === id);
+        expect(shown?.chosenOnly, id).toBe(true);
+        // So what it shows and does stays the device's own.
+        expect(shown?.needs, id).toEqual(type.needs);
+      }
+    }
+    // And each such type is offered by exactly one type.
+    for (const type of deviceTypes.filter((each) => each.chosenOnly)) {
+      expect(
+        deviceTypes.filter((each) => each.showAs?.includes(type.id)),
+        type.id,
+      ).toHaveLength(1);
+    }
+  });
+
+  it("is never what a device is by its kinds, whatever says so", () => {
+    expect(deviceTypeOf(["contact"])).toBe("contact");
+    expect(deviceTypeOf(["contact"], () => true)).toBe("contact");
+    expect(deviceTypeOf(["contact", "sensor"])).toBe("contact");
+  });
+
+  it("is the choice while the device's own type lists it, and its own type otherwise", () => {
+    expect(shownType("contact", "door")).toBe("door");
+    expect(shownType("contact", "window")).toBe("window");
+    expect(shownType("contact", null)).toBe("contact");
+    expect(shownType("contact", undefined)).toBe("contact");
+    // A choice that does not fit, and one this version does not know.
+    expect(shownType("contact", "light")).toBe("contact");
+    expect(shownType("contact", "gate")).toBe("contact");
+    expect(shownType("unknown", "door")).toBe("unknown");
+    expect(shownType("light", "door")).toBe("light");
+  });
+
+  it("has its own type found again from what it is shown as", () => {
+    expect(ownTypeOf("contact", null)).toBe("contact");
+    expect(ownTypeOf("door", "door")).toBe("contact");
+    expect(ownTypeOf("window", "window")).toBe("contact");
+    expect(ownTypeOf("light", null)).toBe("light");
+  });
+
+  it("offers a device's own type first, then what it lists, and nothing where it lists none", () => {
+    expect(showAsChoices("contact", null)).toEqual([
+      "contact",
+      "door",
+      "window",
+    ]);
+    expect(showAsChoices("window", "window")).toEqual([
+      "contact",
+      "door",
+      "window",
+    ]);
+    expect(showAsChoices("light", null)).toEqual([]);
+    expect(showAsChoices("unknown", null)).toEqual([]);
   });
 });

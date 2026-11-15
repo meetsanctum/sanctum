@@ -28,7 +28,7 @@ import { createAppChoices } from "./choices.js";
 import type { AppCommits } from "./commits.js";
 import type { AppUpdates } from "./updates.js";
 import { createAppContexts } from "./contexts.js";
-import { createCoreEvents } from "./core-events.js";
+import { createEventsForApps } from "./events-for-apps.js";
 import { createDriverCalls } from "./drivers.js";
 import { ActionCallError, type ActionCallErrorCode } from "./errors.js";
 import type { Gate } from "./gate.js";
@@ -47,7 +47,7 @@ import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
 import { createSupervisor, type AppContainerManager } from "./supervisor.js";
 import type { AppsOff } from "./off.js";
-import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
+import type { EmittedEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 import { createLanPolicies } from "./lan.js";
@@ -56,7 +56,7 @@ import { createAppInstaller } from "./install.js";
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
 // (lifecycle.ts), runs their actions, hands running apps the core's events
-// they follow (core-events.ts) and hands driver apps what Devices asks of
+// they follow (events-for-apps.ts) and hands driver apps what Devices asks of
 // them (drivers.ts). Every call goes through the permission gate. Every app
 // runs apart, in its own container with its own database, and the core knows
 // it by its manifest alone, never importing its code (apart.ts). The services it holds
@@ -87,7 +87,7 @@ export function createAppHost(options: {
   // Where what drivers say they found and could add goes.
   found: () => Pick<Found, "report">;
   // Each event an app emits, once it goes out.
-  onEvent?: (event: AppEvent) => void;
+  onEvent?: (event: EmittedEvent) => void;
   jobs?: JobCalls;
   workflows?: KeptWorkflowCalls;
   entities: Entities;
@@ -126,7 +126,7 @@ export function createAppHost(options: {
   const now = options.now ?? (() => new Date());
   const installed = new Map<string, InstalledApp>();
   const removals = new Map<string, Promise<void>>();
-  const coreEvents = createCoreEvents({ timeoutMs, log });
+  const eventsForApps = createEventsForApps({ timeoutMs, log });
   const appServices = createAppServices({ manager, timeoutMs, log });
 
   const stateOf = appStateOf;
@@ -243,7 +243,7 @@ export function createAppHost(options: {
   }
   const { accepts, stopApp, reconcile, gone } = createAppLifecycle({
     installed,
-    coreEvents,
+    eventsForApps,
     contexts,
     people: options.people,
     places: options.places,
@@ -301,7 +301,7 @@ export function createAppHost(options: {
     settings: options.settings,
     settingsOf,
     grants: options.grants,
-    coreEvents,
+    eventsForApps,
     onSettings: options.onSettings,
     // A permission that narrows what it reaches waits for the manager to
     // confirm the narrower policy, which cuts its connections first.
@@ -674,14 +674,9 @@ export function createAppHost(options: {
       return installed.get(driverId)?.runId;
     },
 
-    // What happened to the core's nouns, once it has committed, for the
-    // running apps that follow it (core-events.ts).
-    deviceChanged: coreEvents.device,
-    devicePressed: coreEvents.pressed,
-    placesChanged: coreEvents.places,
-    locationChanged: coreEvents.location,
-    personChanged: coreEvents.person,
-    entityChanged: coreEvents.entity,
+    // The event bus's follower that hands running apps what happened to the
+    // core's nouns, once it has committed (events-for-apps.ts).
+    eventsForApps: eventsForApps.follower,
 
     // Ends what the core has of every app, then their connections, once an
     // install under way has stopped. Their containers go on: each runner
