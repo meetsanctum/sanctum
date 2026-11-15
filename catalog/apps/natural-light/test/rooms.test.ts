@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
+import { byHand, curveAt, moods, off, on, running } from "./running.js";
 import { zurich } from "./fake-core.js";
 
 // Natural light's button for each room: White while every light in the room
@@ -187,16 +187,17 @@ describe("a room's button", () => {
     await app.stop!(core.ctx, { reason: "shutdown" });
   });
 
-  it("waits for the home's location", async () => {
-    const { core, check, advance, button } = home();
+  it("waits for the home's location, and shows once it is set", async () => {
+    const { app, core, check, button } = home();
     core.state.location = null;
+    await app.start!(core.ctx, { reason: "started" });
 
     await check();
     expect(button("office")).toBeUndefined();
 
-    core.state.location = zurich;
-    advance(5 * minute);
-    await check();
-    expect(button("office")).toBeDefined();
+    await core.moves(zurich);
+    await vi.waitFor(() => expect(button("office")).toBeDefined());
+    expect(button("hall")).toBeDefined();
+    await app.stop!(core.ctx, { reason: "shutdown" });
   });
 });

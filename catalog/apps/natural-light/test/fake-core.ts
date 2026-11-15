@@ -162,6 +162,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         if (
           ![
             "settings.changed",
+            "location.changed",
             "device.added",
             "device.changed",
             "device.removed",
@@ -295,6 +296,14 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       const device = structuredClone(state.devices.at(-1)!);
       for (const handler of handlers.get("device.added") ?? []) {
         await handler({ name: "device.added", device });
+      }
+    },
+    /** The household sets where the home is, and the app hears of it. */
+    async moves(location: HomeLocation | null) {
+      const before = state.location;
+      state.location = location;
+      for (const handler of handlers.get("location.changed") ?? []) {
+        await handler({ name: "location.changed", location, before });
       }
     },
     /** The app hears that a light changed, as the core tells it after a report or a command. */

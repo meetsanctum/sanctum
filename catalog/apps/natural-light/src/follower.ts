@@ -25,6 +25,8 @@ import { publishRooms } from "./rooms.js";
 //   Switched off, natural light lets go of every light, which keeps the
 //   look it has, and its room buttons go; switched on again, every light
 //   that follows takes the curve at once, whatever was set while it was off.
+// - Where the home is (location.changed): the curve there reaches every
+//   light, and the rooms' buttons show once the home has a location.
 // - A light added to the home (device.added): it follows at once, unless
 //   the household left it out.
 // - A light that changed or went (device.changed, device.removed): where it
@@ -39,6 +41,7 @@ export function createFollower(
   let isStopped = false;
   let isSettingsChanged = false;
   let isDeviceAdded = false;
+  let isLocationChanged = false;
   // The devices that changed meanwhile, and the rooms they were and are in.
   const changed = new Set<string>();
   const changedRooms = new Set<string | null>();
@@ -57,6 +60,13 @@ export function createFollower(
       await followAgainFrom(ctx, options.now());
     }
     wasOn = options.isOn;
+    await followAll(ctx, { ...options, isDueNow: true }, runForLight);
+    await publishRooms(ctx, options);
+  }
+
+  // The curve where the home is now, for every light and every room.
+  async function takeNewLocation() {
+    const options = await followOptionsFor(ctx, timing);
     await followAll(ctx, { ...options, isDueNow: true }, runForLight);
     await publishRooms(ctx, options);
   }
@@ -82,7 +92,8 @@ export function createFollower(
     await publishRooms(ctx, options, { rooms });
   }
 
-  const isAsked = () => isSettingsChanged || isDeviceAdded || changed.size > 0;
+  const isAsked = () =>
+    isSettingsChanged || isLocationChanged || isDeviceAdded || changed.size > 0;
 
   async function run() {
     while (!isStopped) {
@@ -96,16 +107,19 @@ export function createFollower(
       if (isStopped) return;
       const settings = isSettingsChanged;
       const added = isDeviceAdded;
+      const moved = isLocationChanged;
       const devices = [...changed];
       const rooms = [...changedRooms];
       isSettingsChanged = false;
       isDeviceAdded = false;
+      isLocationChanged = false;
       changed.clear();
       changedRooms.clear();
       try {
         if (added) await takeInNewLights();
         if (devices.length > 0) await takeChanges(devices, rooms);
         if (settings) await takeNewSettings();
+        else if (moved) await takeNewLocation();
       } catch (error) {
         if (!isStopped) {
           ctx.log(
@@ -147,6 +161,10 @@ export function createFollower(
     async start() {
       await ctx.events.on("settings.changed", () => {
         isSettingsChanged = true;
+        wake?.();
+      });
+      await ctx.events.on("location.changed", () => {
+        isLocationChanged = true;
         wake?.();
       });
       await ctx.events.on("device.added", () => {
