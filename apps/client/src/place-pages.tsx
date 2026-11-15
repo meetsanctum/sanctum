@@ -324,6 +324,9 @@ type StatusTile = {
   label: string;
   icon: LucideIcon;
   colour: string;
+  // Three cells wide, a device tile's width, where the others have two:
+  // what needs attention has more to say than a count.
+  wide?: boolean;
   open: () => void;
 };
 
@@ -404,6 +407,7 @@ export function HomeStatus(props: {
       icon: icons.CircleAlert,
       // Red for a problem, Graphite while there are only rooms to choose.
       colour: attention.problem ? "var(--danger)" : "var(--graphite-text)",
+      wide: true,
       open:
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
@@ -433,7 +437,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className="col-span-2 flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className={`${each.wide ? "col-span-3" : "col-span-2"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"

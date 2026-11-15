@@ -18,7 +18,7 @@ import {
 } from "./app-state";
 import { productName } from "./brand";
 import { roomName } from "./device-parts";
-import { problemShort, problemTitle, type HostProblem } from "./system-status";
+import { problemTile, problemTitle, type HostProblem } from "./system-status";
 
 // What needs attention: the apps that aren't running and the devices that
 // need someone to do something, the most pressing first, in the words
@@ -272,8 +272,11 @@ export function attentionTile(
   }
   if (needing.length === 0 && apps.length === 0) {
     return {
-      title: productName,
-      value: problemShort(sanctum[0]!),
+      // One problem by what it is and how; several by their number, so the
+      // first does not stand for the rest.
+      ...(sanctum.length === 1
+        ? problemTile(sanctum[0]!)
+        : { title: productName, value: `${sanctum.length} problems` }),
       label: spoken[0]!,
       problem,
       opens: "status" as const,
