@@ -274,7 +274,6 @@ export function DeviceDetail(props: {
                           key={`${device.id}/${contact.id}`}
                           device={device}
                           capability={contact}
-                          now={now.getTime()}
                         />
                       ),
                     },

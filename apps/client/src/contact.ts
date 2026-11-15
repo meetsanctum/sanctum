@@ -38,6 +38,26 @@ export function contactText(
   return `Open since ${date.format(since)}`;
 }
 
+/**
+ * What a contact sensor's detail says now: as its tile while open, and
+ * while closed since when, which a tile leaves out: "Closed since 13:56".
+ */
+export function contactNowText(
+  open: boolean,
+  changedAt: string | null,
+  now: number,
+) {
+  if (open) return contactText(true, changedAt, now);
+  const since = changedAt === null ? NaN : Date.parse(changedAt);
+  if (Number.isNaN(since) || now - since < minute) return "Closed";
+  if (now - since < hour) {
+    return `Closed for ${Math.floor((now - since) / minute)} min`;
+  }
+  if (since >= midnight(now)) return `Closed since ${timeText(since)}`;
+  if (since >= midnight(now, 1)) return "Closed since yesterday";
+  return `Closed since ${date.format(since)}`;
+}
+
 /** How some contact sensors are: how many are open, closed and not known. */
 export type Contacts = { open: number; closed: number; unknown: number };
 

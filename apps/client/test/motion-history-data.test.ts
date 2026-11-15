@@ -3,17 +3,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   daysOf,
+  joinedSpans,
   midnight,
   spansOf,
+  spanTimes,
   type Day,
 } from "../src/device-history-data";
 import {
   motionSentence,
-  motionSpans,
   motionSpanText,
   motionWeekHeadline,
   roomSpans,
-  spanTimes,
 } from "../src/motion-history-data";
 
 // A motion sensor's Motion page: its day as spans of motion, quiet and
@@ -60,7 +60,7 @@ describe("a motion sensor's day", () => {
   );
 
   it("is motion as on, however its settings changed meanwhile", () => {
-    const spans = motionSpans(day);
+    const spans = joinedSpans(day);
     expect(
       spans.map((span) => [(span.from - from) / minute, motionSpanText(span)]),
     ).toEqual([
@@ -95,6 +95,21 @@ describe("a motion sensor's day", () => {
     );
     expect(motionSentence(moving, from, now)).toBe(
       "25 min of motion, this time since 14:35",
+    );
+  });
+
+  it("stops calling motion current when quiet arrives at the current instant", () => {
+    const spans = spansOf(
+      history([
+        [from - hour, "online", { motion: false }],
+        [now - 25 * minute, "online", { motion: true }],
+        [now, "online", { motion: false }],
+      ]),
+      from,
+      now,
+    );
+    expect(motionSentence(spans, from, now)).toBe(
+      "25 min of motion, the last at 15:00",
     );
   });
 
