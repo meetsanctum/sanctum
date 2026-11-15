@@ -488,6 +488,20 @@ describe("an app's settings page", () => {
     expect(text()).toContain("PressesIn the detail of your 2 remotes");
   });
 
+  it("says a driver's page is in the detail of the devices it brings", async () => {
+    await show({
+      ...moods,
+      provides: {
+        ...moods.provides,
+        devicePages: [
+          { id: "moods.status", title: "Status", kinds: [], devices: "own" },
+        ],
+      },
+    });
+
+    expect(text()).toContain("StatusIn the detail of the devices it brings");
+  });
+
   it("leaves a kind this build has no words for out of that line", async () => {
     const page = moods.provides.devicePages[0]!;
     const withKinds = (kinds: string[]): AppInfo => ({

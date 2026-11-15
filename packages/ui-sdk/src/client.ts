@@ -1,6 +1,7 @@
 import {
   entityReadPermission,
   knownParts,
+  registerPermission,
   standardEntityTypes,
 } from "@meetsanctum/app-sdk";
 import { capturePresses, type PressCaptureListener } from "./presses";
@@ -74,7 +75,7 @@ export interface AppClient {
   ): Promise<ActionOutput<Action>>;
   /** Needs `places.read`. */
   places(): Promise<Places>;
-  /** The devices with capabilities the app may read, showing only those. */
+  /** The kinds the app may read, and a driver's own devices whole, without registration keys. */
   devices(): Promise<DeviceInfo[]>;
   /** Needs `devices.control:<kind>`. Answers the capability as it now stands. */
   command(command: CapabilityCommand): Promise<CapabilityInfo>;
@@ -128,6 +129,7 @@ function accessOf(permissions: readonly string[]) {
   return {
     held: permissions,
     kinds: deviceKindsOf(permissions),
+    canReadOwnDevices: permissions.includes(registerPermission),
     readsPlaces: permissions.includes("places.read"),
     readsTypes: new Set(
       standardEntityTypes
@@ -161,6 +163,7 @@ export function createAppClient(
 
   // A device as the app may see it, or null when it may see none of it.
   function seen(device: DeviceInfo): DeviceInfo | null {
+    if (access.canReadOwnDevices && device.driver === app.id) return device;
     const capabilities = device.capabilities.filter((capability) =>
       access.kinds.reads.has(capability.kind),
     );
@@ -186,7 +189,10 @@ export function createAppClient(
     },
 
     async devices() {
-      need(access.kinds.reads.size > 0, "a devices.read: permission");
+      need(
+        access.canReadOwnDevices || access.kinds.reads.size > 0,
+        "a devices.read: permission or devices.register",
+      );
       const devices = await bridge.json<DeviceInfo[]>("/api/devices");
       return devices.flatMap((device) => seen(knownParts(device)) ?? []);
     },
@@ -272,7 +278,10 @@ export function createAppClient(
           }
           // Adding devices is the shell's, and so are the home's dashboards
           // and the activity log.
-          if (message.type !== "device" || access.kinds.reads.size === 0)
+          if (
+            message.type !== "device" ||
+            (!access.canReadOwnDevices && access.kinds.reads.size === 0)
+          )
             return;
           listener.message?.({
             ...message,

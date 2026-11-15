@@ -3,6 +3,7 @@ import type {
   DeviceInfo,
   LightFeatures,
 } from "@meetsanctum/app-sdk";
+import { registerPermission } from "@meetsanctum/app-sdk";
 import {
   AppScope,
   Button,
@@ -47,7 +48,7 @@ import type { Devices } from "./use-devices";
 // add for its kind instead, each drawn by its app in the app's scope, such
 // as Moods' Presses. Every device's last page is its Activity: who did what
 // to it (activity/device-page.tsx). For a device Sanctum cannot use it is
-// the only page: there is nothing of it to show or set.
+// the only page unless its driver adds one.
 
 type Motion = Extract<DeviceInfo["capabilities"][number], { kind: "motion" }>;
 type Contact = Extract<DeviceInfo["capabilities"][number], { kind: "contact" }>;
@@ -65,22 +66,35 @@ const switchFeatures: LightFeatures = {
 };
 
 // The pages apps add to the detail of a device of these kinds, in the
-// order of the apps, each with the device as its app may see it.
-function devicePages(
+// order of the apps, each with the device as its app may see it, and a
+// driver's pages on its own devices, with all of each.
+export function devicePages(
   apps: readonly HostedApp[],
   device: DeviceInfo,
   kinds: readonly CapabilityKind[],
 ) {
   return apps.flatMap((app) => {
     const reads = deviceKindsOf(app.info.permissions).reads;
-    const seen = {
-      ...device,
-      capabilities: device.capabilities.filter((each) => reads.has(each.kind)),
-    };
+    const seen =
+      device.driver === app.info.id &&
+      app.info.permissions.includes(registerPermission)
+        ? device
+        : {
+            ...device,
+            capabilities: device.capabilities.filter((each) =>
+              reads.has(each.kind),
+            ),
+          };
     if (!isShown(app.info)) return [];
     return app.info.provides.devicePages.flatMap((page) => {
       const Page = app.ui.devicePages?.[page.id];
-      return Page && page.kinds.some((kind) => kinds.includes(kind))
+      if (!Page) return [];
+      if (page.devices === "own") {
+        return device.driver === app.info.id
+          ? [{ app, id: page.id, title: page.title, Page, device: seen }]
+          : [];
+      }
+      return page.kinds.some((kind) => kinds.includes(kind))
         ? [{ app, id: page.id, title: page.title, Page, device: seen }]
         : [];
     });
@@ -134,7 +148,7 @@ export function DeviceDetail(props: {
         );
   const sensorLike = capability !== undefined && sensing(capability.kind);
   const pages =
-    device && capability
+    device && hasDetail
       ? devicePages(
           props.apps,
           device,
@@ -144,7 +158,9 @@ export function DeviceDetail(props: {
                   device.capabilities.map((each) => each.kind).filter(sensing),
                 ),
               ]
-            : [capability.kind],
+            : capability
+              ? [capability.kind]
+              : [],
         )
       : [];
   const history = device && capability ? historyPage(device, capability) : null;
@@ -219,7 +235,7 @@ export function DeviceDetail(props: {
         <SwipePages
           key={tile.key}
           label={tile.name}
-          pages={activity ? [activity] : []}
+          pages={[...fromApps, ...(activity ? [activity] : [])]}
         />
       )}
       {tile &&

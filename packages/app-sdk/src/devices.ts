@@ -606,6 +606,11 @@ export type DeviceInfo = {
    * with what Repair asks (ctx.devices.problem); null while nothing is.
    */
   problem: DeviceProblem | null;
+  /**
+   * Its driver's own id for it, which it registered it by: only in what a
+   * driver reads of its own devices (ctx.devices.list), never anyone else's.
+   */
+  key?: string;
 };
 
 /**

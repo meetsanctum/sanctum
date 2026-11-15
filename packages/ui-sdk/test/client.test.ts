@@ -162,6 +162,55 @@ describe("an app's client", () => {
     ]);
   });
 
+  it("lets a driver read its own devices whole, including one with no known capabilities", async () => {
+    const { client, json } = setup(["devices.register"]);
+    const own = [
+      { ...both, driver: client.app.id },
+      { ...drain, driver: client.app.id },
+    ];
+    json.mockResolvedValueOnce([...own, lamp]);
+
+    expect(await client.devices()).toEqual([
+      own[0],
+      { ...own[1], capabilities: [] },
+    ]);
+  });
+
+  it("keeps another driver's devices to its read kinds alongside its own", async () => {
+    const { client, json } = setup(["devices.register", "devices.read:light"]);
+    const own = { ...both, driver: client.app.id };
+    json.mockResolvedValueOnce([own, both, plug]);
+
+    expect(await client.devices()).toEqual([
+      own,
+      { ...both, capabilities: [both.capabilities[0]] },
+    ]);
+  });
+
+  it("follows a driver's own devices live without a read permission", () => {
+    const { client, live } = setup(["devices.register"]);
+    const messages: LiveMessage[] = [];
+    const own = { ...both, driver: client.app.id };
+    const unknown = { ...drain, driver: client.app.id };
+    client.subscribe({ message: (message) => messages.push(message) });
+
+    live.publish({ type: "device", id: own.id, device: own });
+    live.publish({ type: "device", id: unknown.id, device: unknown });
+    live.publish({ type: "device", id: lamp.id, device: lamp });
+    live.publish({ type: "device", id: own.id, device: null });
+
+    expect(messages).toEqual([
+      { type: "device", id: own.id, device: own },
+      {
+        type: "device",
+        id: unknown.id,
+        device: { ...unknown, capabilities: [] },
+      },
+      { type: "device", id: lamp.id, device: null },
+      { type: "device", id: own.id, device: null },
+    ]);
+  });
+
   it("skips the parts of a kind this build does not know, though the app may read it", async () => {
     const { client, json, live } = setup([
       "devices.read:light",
