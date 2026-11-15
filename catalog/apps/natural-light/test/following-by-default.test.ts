@@ -93,6 +93,39 @@ describe("following by default", () => {
 });
 
 describe("switching natural light off", () => {
+  it("keeps a delayed check from restoring the curve after it is switched off", async () => {
+    const { app, core, check, advance, sentFrom, target } = running();
+    core.addLight("lamp", "Office light", { ...off, colorTemperature: 153 });
+    await app.start!(core.ctx, { reason: "started" });
+    await check();
+    advance(15 * minute);
+
+    const context = core.as({ kind: "app", id: app.id });
+    vi.spyOn(core, "as").mockReturnValue(context);
+    const list = context.devices.list.bind(context.devices);
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => (enter = resolve));
+    const delivery = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(context.devices, "list").mockImplementation(async () => {
+      enter();
+      await delivery;
+      return list();
+    });
+
+    const checking = check();
+    await entered;
+    await core.changeSettings({ on: false });
+    await vi.waitFor(() => expect(target()).toMatchObject({ status: "off" }));
+    const sent = core.state.sent.length;
+    release();
+    await checking;
+
+    expect(target()).toMatchObject({ status: "off" });
+    expect(sentFrom(sent)).toEqual([]);
+    await app.stop!(core.ctx, { reason: "shutdown" });
+  });
+
   it("lets go of every light, and changes none with the day", async () => {
     const { app, core, check, advance, sentFrom } = running();
     core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });

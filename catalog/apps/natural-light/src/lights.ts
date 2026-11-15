@@ -297,6 +297,9 @@ export async function followOne(
   force = false,
 ): Promise<TargetState> {
   const { device, capability } = light;
+  // A check may have waited for this light while the household changed
+  // the settings. Use what stands now, once this light's turn has begun.
+  options = await followOptionsFor(ctx, options);
   if (!options.isOn) {
     await publish(ctx, light, offTarget(light));
     return offTarget(light);
