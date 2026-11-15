@@ -8,6 +8,7 @@ import {
   ensureAppFolders,
   nodeImage,
 } from "./apps/containers.js";
+import { createAppExits, type AppExits } from "./apps/exits.js";
 import { createImageHelper } from "./apps/helper.js";
 import { createLanHolders } from "./apps/lan.js";
 import { createAppImages } from "./apps/images.js";
@@ -85,6 +86,7 @@ let serviceReconciler: ReturnType<typeof createReconciler> | undefined;
 let packages: ReturnType<typeof createPackages> | undefined;
 let stackBuilds: ReturnType<typeof followStackBuilds> | undefined;
 let announcer: Awaited<ReturnType<typeof startAnnouncing>> | undefined;
+let appExits: AppExits | undefined;
 let statusDocker: StatusDockerLike | undefined;
 const readings = createHostReadings();
 // Counts what takes the space again once something frees some; set once the
@@ -226,6 +228,9 @@ if (config.supervise) {
         log,
       })
     : undefined;
+  // Listening before any app's container starts, to hear how each stops.
+  appExits = createAppExits({ docker, log });
+  appExits.start();
   const appContainers = createAppContainers({
     docker,
     dataDir: config.dataDir,
@@ -233,6 +238,7 @@ if (config.supervise) {
     images: appImages,
     prepareImage: maintenance.prepare,
     lan,
+    exits: appExits,
   });
   // An app whose network's holder stopped stops too, soon after.
   if (lan) {
@@ -417,6 +423,7 @@ const shutdown = async () => {
   reconciler?.stop();
   serviceReconciler?.stop();
   hostStatus.stop();
+  appExits?.stop();
   await hostHistory.save();
   discovery?.close();
   await announcer?.stop();
