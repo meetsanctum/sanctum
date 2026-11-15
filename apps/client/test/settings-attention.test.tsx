@@ -48,6 +48,7 @@ function device(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     firmware: null,
     probe: true,
     battery: null,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     capabilities: [],

@@ -54,7 +54,8 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     // 0.4.0: remotes' holds and releases, and moving lights while held.
     // 0.5.0: motion sensors, their light level and their settings.
     // 0.6.0: contact sensors.
-    version: "0.6.0",
+    // 0.7.0: a battery its device says is low.
+    version: "0.7.0",
     core: "^1.0.0",
     summary:
       "Brings your Zigbee lights, plugs, remotes and sensors into your home.",

@@ -54,6 +54,7 @@ function device(
     firmware: firmware({ updatable: false, sleeps: true }),
     probe: false,
     battery: 64,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     ...extra,
@@ -67,6 +68,16 @@ const quiet = device("button", "Office button", {
 });
 const low = device("hall", "Hall sensor", { battery: 8 });
 const kitchen = device("kitchen", "Kitchen button", { battery: 64 });
+// Each says itself that its battery is low: one at a charge that isn't,
+// one without a charge.
+const flagged = device("porch", "Porch door", {
+  battery: 63,
+  batteryLow: true,
+});
+const unfigured = device("shed", "Shed door", {
+  battery: null,
+  batteryLow: true,
+});
 const waiting = device("new", "Kitchen sensor", { battery: null });
 const lamp = (name: string, extra: Partial<FirmwareInfo>) =>
   device(name, name, { battery: null, firmware: firmware(extra) });
@@ -95,6 +106,54 @@ describe("batteries", () => {
     expect(
       dueBatteries([kitchen, waiting, low, quiet], now).map((each) => each.id),
     ).toEqual(["button", "hall"]);
+  });
+
+  it("count one whose device says its battery is low, after the low charges", () => {
+    expect(
+      batteryOrder([kitchen, unfigured, waiting, flagged, low, quiet], now).map(
+        (each) => each.name,
+      ),
+    ).toEqual([
+      "Office button",
+      "Hall sensor",
+      "Porch door",
+      "Shed door",
+      "Kitchen button",
+      "Kitchen sensor",
+    ]);
+    expect(
+      dueBatteries([kitchen, unfigured, flagged], now).map((each) => each.id),
+    ).toEqual(["porch", "shed"]);
+    expect(maintenanceHint([flagged, unfigured, kitchen], now)).toBe(
+      "2 batteries",
+    );
+  });
+
+  it("keep one that says its battery is no longer low, though it says nothing else of a battery", () => {
+    const recovered = device("shed", "Shed door", {
+      battery: null,
+      batteryLow: false,
+      firmware: null,
+    });
+    const mains = lamp("Desk lamp", {});
+    expect(
+      batteryOrder([mains, recovered, kitchen], now).map((each) => each.name),
+    ).toEqual(["Kitchen button", "Shed door"]);
+    expect(dueBatteries([recovered], now)).toEqual([]);
+  });
+
+  it("make a tile without a charge where the device says its battery is low", () => {
+    expect(batteriesTile([kitchen, flagged], now)).toEqual({
+      title: "Porch door",
+      value: "Battery low",
+      label: "Porch door's battery is low. Opens Maintenance",
+    });
+    expect(batteriesTile([unfigured, low], now)).toEqual({
+      title: "Batteries",
+      value: "Replace 2",
+      label:
+        "Batteries, replace 2: Hall sensor's battery is at 8%, Shed door's battery is low. Opens Maintenance",
+    });
   });
 
   it("make a tile: one device by its name, several by their number", () => {

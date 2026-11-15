@@ -15,7 +15,8 @@ import { numericValue } from "./values.js";
 // illuminance_lux beside a raw illuminance, 2.x as illuminance in lx; a raw
 // reading, a dim-or-bright illumination and IKEA's
 // illuminance_above_threshold are not one. The battery is the device's own,
-// so it goes into the report rather than a capability.
+// its charge and its battery_low alike, so both go into the report rather
+// than a capability.
 
 export type SensorMapping = {
   kind: "sensor";
@@ -111,5 +112,15 @@ export function batteryOf(payload: Record<string, unknown>) {
   const battery = numericValue(payload.battery);
   return battery !== null && battery >= 0 && battery <= 100
     ? Math.round(battery)
+    : undefined;
+}
+
+/**
+ * Whether a device says its battery is low, as its message's battery_low
+ * says it: a sensor's own word, beside its charge or instead of one.
+ */
+export function batteryLowOf(payload: Record<string, unknown>) {
+  return typeof payload.battery_low === "boolean"
+    ? payload.battery_low
     : undefined;
 }

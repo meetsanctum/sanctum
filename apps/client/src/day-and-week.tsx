@@ -113,7 +113,7 @@ export function DayAndWeek(props: {
           <Columns days={days} now={now} words={words.columns} />
         </Part>
       )}
-      <Battery level={device.battery} />
+      <Battery device={device} />
     </div>
   );
 }

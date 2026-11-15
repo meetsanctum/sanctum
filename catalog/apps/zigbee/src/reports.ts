@@ -7,7 +7,7 @@ import type { createFirmwareUpdates } from "./firmware-updates.js";
 import type { createMotionTiming } from "./motion-timing.js";
 import { motionState } from "./motion.js";
 import type { createHolds, Heard } from "./presses.js";
-import { batteryOf, sensorState } from "./sensors.js";
+import { batteryLowOf, batteryOf, sensorState } from "./sensors.js";
 import { stateFromPayload } from "./states.js";
 import { isRecord, parseJson } from "./values.js";
 
@@ -57,13 +57,15 @@ export function createDeviceReporter({
       }
     }
     // A message from the device means it answers. A battery-powered one
-    // says its charge with its state.
+    // says its charge with its state, and some whether it is low.
     const battery = batteryOf(raw);
+    const batteryLow = batteryLowOf(raw);
     await ctx.devices.report({
       key: device.key,
       availability: "online",
       states,
       ...(battery === undefined ? {} : { battery }),
+      ...(batteryLow === undefined ? {} : { batteryLow }),
     });
     // Each press is said once: Zigbee2MQTT never keeps a device's action
     // in the state it publishes again, and retained messages never get here.

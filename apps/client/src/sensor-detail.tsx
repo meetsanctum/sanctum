@@ -1,5 +1,6 @@
 import {
-  lowBattery,
+  hasLowBattery,
+  lowCharge,
   type DeviceInfo,
   type DeviceStatistics,
   type SensorMeasure,
@@ -121,23 +122,24 @@ export function SensorDetail(props: {
           />
         ))}
       </div>
-      {props.battery !== false && <Battery level={device.battery} />}
+      {props.battery !== false && <Battery device={device} />}
     </div>
   );
 }
 
-/** A sensor's battery at the foot of its page; under 20% in red with a sign. */
-export function Battery(props: { level: number | null }) {
-  const { level } = props;
-  if (level === null) return null;
+/** A sensor's battery at the foot of its page; a low one in red with a sign. */
+export function Battery(props: {
+  device: Pick<DeviceInfo, "battery" | "batteryLow">;
+}) {
+  const { device } = props;
+  const isLow = hasLowBattery(device);
+  if (device.battery === null && !isLow) return null;
   return (
     <p
-      className={`m-0 flex items-center gap-1.5 text-[13px] leading-[18px] font-medium ${level < lowBattery ? "text-(--danger)" : "text-(--silver)"}`}
+      className={`m-0 flex items-center gap-1.5 text-[13px] leading-[18px] font-medium ${isLow ? "text-(--danger)" : "text-(--silver)"}`}
     >
-      {level < lowBattery && (
-        <icons.TriangleAlert aria-hidden="true" className="size-3.5" />
-      )}
-      {level < lowBattery ? lowBatteryText(level) : `Battery ${level}%`}
+      {isLow && <icons.TriangleAlert aria-hidden="true" className="size-3.5" />}
+      {isLow ? lowBatteryText(lowCharge(device)) : `Battery ${device.battery}%`}
     </p>
   );
 }

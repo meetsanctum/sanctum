@@ -13,7 +13,9 @@ import {
   knownParts,
   light,
   lightMove,
+  hasLowBattery,
   lowBattery,
+  lowCharge,
   maintenanceOf,
   onBattery,
   pressParts,
@@ -376,6 +378,7 @@ describe("what needs attention", () => {
     firmware: null,
     probe: true,
     battery: null,
+    batteryLow: null,
     leftAt: null,
     problem: null,
   };
@@ -480,20 +483,61 @@ describe("what a device needs from the household", () => {
     availability: "online" as const,
     lastSeenAt: hoursAgo(1),
     battery: 64,
+    batteryLow: null,
     firmware: firmware({ updatable: false, sleeps: true }),
   };
+  const unsaid = { battery: null, batteryLow: null };
 
-  it("is on a battery once it says its charge, or its driver says it sleeps", () => {
+  it("is on a battery once it says its charge or whether its battery is low, or its driver says it sleeps", () => {
     expect(onBattery(remote)).toBe(true);
-    expect(onBattery({ battery: null, firmware: remote.firmware })).toBe(true);
-    expect(onBattery({ battery: null, firmware: firmware() })).toBe(false);
-    expect(onBattery({ battery: null, firmware: null })).toBe(false);
+    expect(onBattery({ ...unsaid, firmware: remote.firmware })).toBe(true);
+    expect(onBattery({ ...unsaid, firmware: firmware() })).toBe(false);
+    expect(onBattery({ ...unsaid, firmware: null })).toBe(false);
+    // Its word alone, and still once its battery is no longer low.
+    expect(onBattery({ battery: null, batteryLow: true, firmware: null })).toBe(
+      true,
+    );
+    expect(
+      onBattery({ battery: null, batteryLow: false, firmware: null }),
+    ).toBe(true);
+  });
+
+  it("goes quiet on its battery after it said its battery was no longer low", () => {
+    expect(
+      maintenanceOf(
+        {
+          availability: "unknown",
+          lastSeenAt: hoursAgo(48),
+          battery: null,
+          batteryLow: false,
+          firmware: null,
+        },
+        now,
+      ),
+    ).toBe("quiet");
   });
 
   it("has a low battery under 10%", () => {
     expect(lowBattery).toBe(10);
     expect(maintenanceOf({ ...remote, battery: 10 }, now)).toBeNull();
     expect(maintenanceOf({ ...remote, battery: 9 }, now)).toBe("battery");
+  });
+
+  it("has a low battery once the device says so, at any charge or none", () => {
+    expect(hasLowBattery({ battery: 63, batteryLow: true })).toBe(true);
+    expect(hasLowBattery({ battery: null, batteryLow: true })).toBe(true);
+    expect(hasLowBattery({ battery: 63, batteryLow: false })).toBe(false);
+    expect(hasLowBattery(unsaid)).toBe(false);
+    expect(maintenanceOf({ ...remote, batteryLow: true }, now)).toBe("battery");
+    expect(
+      maintenanceOf({ ...remote, battery: null, batteryLow: true }, now),
+    ).toBe("battery");
+  });
+
+  it("says a low battery's charge only while the charge itself is low", () => {
+    expect(lowCharge({ battery: 9 })).toBe(9);
+    expect(lowCharge({ battery: 63 })).toBeUndefined();
+    expect(lowCharge({ battery: null })).toBeUndefined();
   });
 
   it("is quiet once nothing knows whether it answers and it has said nothing for a day", () => {
@@ -519,7 +563,7 @@ describe("what a device needs from the household", () => {
         {
           availability: "unknown",
           lastSeenAt: hoursAgo(48),
-          battery: null,
+          ...unsaid,
           firmware: firmware(),
         },
         now,
@@ -531,7 +575,7 @@ describe("what a device needs from the household", () => {
     const light = {
       availability: "online" as const,
       lastSeenAt: hoursAgo(0),
-      battery: null,
+      ...unsaid,
     };
     for (const state of [
       "available",
@@ -584,6 +628,7 @@ describe("a device from a core newer than this build", () => {
     firmware: null,
     probe: false,
     battery: null,
+    batteryLow: null,
     leftAt: null,
     problem: null,
   });

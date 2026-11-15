@@ -117,12 +117,40 @@ describe("a contact sensor", () => {
       availability: "online",
       states: {},
       battery: 63,
+      batteryLow: true,
     });
     expect(core.latest(key, "contact")).toBeUndefined();
 
     await bridge.say(name, { contact: false });
     await core.until(() => !!core.latest(key, "contact"), "its contact");
     expect(core.latest(key, "contact")).toEqual({ open: true });
+  });
+
+  it("says its battery is low as the sensor does, with no charge of its own, until the sensor takes it back", async () => {
+    const core = await running();
+    const { key, name } = fresh("garage");
+    await joined(core, sonoffContactSensor(key, name), {
+      contact: true,
+      battery_low: true,
+    });
+    expect(core.reports.at(-1)).toEqual({
+      key,
+      availability: "online",
+      states: { contact: { open: false } },
+      batteryLow: true,
+    });
+
+    await bridge.say(name, { battery_low: false });
+    await core.until(
+      () => core.reports.at(-1)?.batteryLow === false,
+      "its battery no longer low",
+    );
+    expect(core.reports.at(-1)).toEqual({
+      key,
+      availability: "online",
+      states: { contact: { open: false } },
+      batteryLow: false,
+    });
   });
 
   it("takes no commands", async () => {

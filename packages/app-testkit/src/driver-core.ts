@@ -65,6 +65,7 @@ export type Reported = {
   availability?: string;
   states: Record<string, Record<string, unknown>>;
   battery?: number;
+  batteryLow?: boolean;
 };
 
 export type Pressed = { key: string; capability: string; action: string };
@@ -227,7 +228,13 @@ export function createDriverCore(
       if (!parsed.success) {
         refuse(new Error(`Report refused: ${z.prettifyError(parsed.error)}`));
       }
-      const { key, availability: said, states = {}, battery } = parsed.data;
+      const {
+        key,
+        availability: said,
+        states = {},
+        battery,
+        batteryLow,
+      } = parsed.data;
       const device = registered.get(key);
       if (!device) {
         refuse(new ActionError("not_found", `No device ${key}`));
@@ -255,6 +262,7 @@ export function createDriverCore(
         ...(said ? { availability: said } : {}),
         states: checked,
         ...(battery === undefined ? {} : { battery }),
+        ...(batteryLow === undefined ? {} : { batteryLow }),
       });
       if (said) availability.set(key, said);
     },

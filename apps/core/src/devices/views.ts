@@ -80,6 +80,7 @@ export function deviceInfo(
     firmware: device.firmware,
     probe: device.probe,
     battery: device.battery,
+    batteryLow: device.batteryLow,
     leftAt: device.leftAt?.toISOString() ?? null,
     problem: device.problem ?? null,
     capabilities: capabilities
