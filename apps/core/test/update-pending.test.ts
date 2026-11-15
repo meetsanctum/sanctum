@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   updatePendingFile,
@@ -32,6 +32,7 @@ describe("an uncommitted update", () => {
 
   it("ends when the manager removes the marker", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+    onTestFinished(() => rm(dataDir, { recursive: true, force: true }));
     await writeFile(join(dataDir, updatePendingFile), "update-1");
     const pending = watchUpdatePending(dataDir, 5);
     expect(pending.isPending()).toBe(true);
@@ -44,6 +45,7 @@ describe("an uncommitted update", () => {
 
   it("does not apply to a core started without the marker", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+    onTestFinished(() => rm(dataDir, { recursive: true, force: true }));
     const pending = watchUpdatePending(dataDir);
 
     expect(pending.isPending()).toBe(false);

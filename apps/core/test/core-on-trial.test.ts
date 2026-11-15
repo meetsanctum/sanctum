@@ -2,7 +2,7 @@ import { defineApp } from "@meetsanctum/app-sdk";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   updatePendingFile,
@@ -183,6 +183,7 @@ describe("an app that runs apart, on trial", () => {
 describe("hearing the commit", () => {
   const folder = async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+    onTestFinished(() => rm(dataDir, { recursive: true, force: true }));
     return dataDir;
   };
 
