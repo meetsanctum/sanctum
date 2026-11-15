@@ -154,16 +154,18 @@ describe("a device's exposes", () => {
     ).toEqual([]);
   });
 
-  it("leave out anything that is not a light, a switch, buttons, a room's reading or motion, rather than guess", () => {
+  it("leave out anything that is not a light, a switch, buttons, a room's reading, motion or a contact, rather than guess", () => {
     expect(
       capabilityMappings([
         // A plug's own chip and a thermostat's are not the room's.
         { type: "numeric", property: "device_temperature", unit: "°C" },
         { type: "numeric", property: "local_temperature", unit: "°C" },
         { type: "numeric", property: "pressure", unit: "hPa" },
-        // A door's contact, and a radar's presence.
-        { type: "binary", property: "contact" },
+        // A radar's presence, a leak, and a contact sensor's flags.
         { type: "binary", property: "presence" },
+        { type: "binary", property: "water_leak" },
+        { type: "binary", property: "tamper" },
+        { type: "binary", property: "battery_low" },
         { type: "enum", property: "power_on_behavior", values: ["on"] },
         { type: "cover", features: [{ name: "state", property: "state" }] },
         { type: "binary", property: "state" },

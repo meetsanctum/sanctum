@@ -103,11 +103,14 @@ describe("the device list", () => {
   });
 
   it("brings a device that exposes nothing the core has a capability for, with none", () => {
-    // A door sensor, and a repeater that exposes only its link quality.
+    // A leak sensor, and a repeater that exposes only its link quality.
     const entries = deviceEntries([
-      zigbeeDevice("0x02", "door", [{ type: "binary", property: "contact" }], {
-        power_source: "Battery",
-      }),
+      zigbeeDevice(
+        "0x02",
+        "leak",
+        [{ type: "binary", property: "water_leak" }],
+        { power_source: "Battery" },
+      ),
       zigbeeDevice("0x0b", "0x0b", [
         { type: "numeric", property: "linkquality", access: 1 },
       ]),
@@ -115,12 +118,12 @@ describe("the device list", () => {
     expect(entries).toMatchObject([
       {
         key: "0x02",
-        friendlyName: "door",
+        friendlyName: "leak",
         battery: true,
         capabilities: [],
         registration: {
           key: "0x02",
-          name: "door",
+          name: "leak",
           manufacturer: "Test Vendor",
           model: "TL-1",
           // Nothing says what it is, and nothing of it can be read.

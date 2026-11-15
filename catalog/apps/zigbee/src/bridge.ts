@@ -660,12 +660,14 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
       const capability = device?.capabilities.find(
         (each) => each.id === command.capability && each.kind === command.kind,
       );
-      // A button and a sensor take no commands, and the core sends them none.
+      // A button, a sensor and a contact sensor take no commands, and the
+      // core sends them none.
       if (
         !device ||
         !capability ||
         capability.kind === "button" ||
-        capability.kind === "sensor"
+        capability.kind === "sensor" ||
+        capability.kind === "contact"
       ) {
         throw new ActionError(
           "not_found",

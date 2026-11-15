@@ -8,8 +8,8 @@ import { stringValue } from "./values.js";
 // Zigbee2MQTT's device list (`bridge/devices`) onto the devices the driver
 // brings into the core. A device comes in once its interview has succeeded,
 // with what it exposes that the core has a capability for: a light, a
-// switch, buttons, a room's temperature, humidity or light level, or
-// motion. One that exposes none of them, such as a repeater or an air
+// switch, buttons, a room's temperature, humidity or light level, motion
+// or a contact. One that exposes none of them, such as a repeater or an air
 // purifier, comes in with no capabilities: the household has it on its
 // network, and names, places and removes it like any device, though
 // Sanctum cannot use it. The coordinator and disabled devices stay out, and
@@ -104,6 +104,8 @@ function registered(capability: CapabilityMapping) {
     case "motion":
       return { id, kind: capability.kind, features: capability.features };
     case "switch":
+      return { id, kind: capability.kind };
+    case "contact":
       return { id, kind: capability.kind };
   }
 }

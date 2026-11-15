@@ -2,6 +2,7 @@ import { describeDriver } from "@meetsanctum/app-testkit";
 import { afterAll } from "vitest";
 
 import { createZigbeeApp } from "../src/index.js";
+import { contactExpose } from "./contact-sensors.js";
 import { aqaraMotionSensor } from "./motion-sensors.js";
 import {
   actionExpose,
@@ -23,7 +24,7 @@ const names = new Map<string, string>();
 
 describeDriver({
   app: createZigbeeApp({ answerMs: 500, reconnectWaitMs: 500 }),
-  kinds: ["light", "switch", "button", "sensor", "motion"],
+  kinds: ["light", "switch", "button", "sensor", "motion", "contact"],
   services: { zigbee2mqtt: bridge.connection },
   setUp: () => bridge.reset(),
   async add(kind) {
@@ -80,6 +81,13 @@ describeDriver({
           detection_interval: 30,
           trigger_indicator: true,
         },
+      );
+    } else if (kind === "contact") {
+      // A contact sensor on mains power whose contact can be read again,
+      // so it is asked for it and goes offline when it stops answering.
+      await bridge.add(
+        zigbeeDevice(key, name, [{ ...contactExpose, access: 5 }]),
+        { contact: true, linkquality: 100 },
       );
     } else {
       await bridge.add(zigbeeDevice(key, name, [switchExpose()]), {
