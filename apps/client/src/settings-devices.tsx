@@ -146,6 +146,8 @@ export function DevicesSection(props: {
   // Live device messages received during a request take precedence over its response.
   const liveDevices = useRef(new Map<string, DeviceInfo | null>());
   const showAsAttempts = useRef(new Map<string, symbol>());
+  // Each device's latest Show as save, whatever has arrived live since.
+  const showAsLatest = useRef(new Map<string, symbol>());
   const now = useMinuteClock();
   // Each remote's press of the last few seconds, by device.
   const [pressed, setPressed] = useState<Record<string, string>>({});
@@ -299,14 +301,15 @@ export function DevicesSection(props: {
   const saveShowAs = async (device: DeviceInfo, shownAs: DeviceType | null) => {
     const attempt = Symbol();
     showAsAttempts.current.set(device.id, attempt);
+    showAsLatest.current.set(device.id, attempt);
     if (results[device.id]?.kind === "problem") found(device.id);
     try {
       const response = await updateDevice(device.id, { shownAs });
       if (showAsAttempts.current.get(device.id) === attempt) changed(response);
     } catch (error) {
-      // Unless a newer choice is on its way, which will say how it went.
-      const latest = showAsAttempts.current.get(device.id);
-      if (latest === undefined || latest === attempt) {
+      // Only the latest choice says how it went: an earlier one failing
+      // after it says nothing.
+      if (showAsLatest.current.get(device.id) === attempt) {
         const text = deviceProblem(error);
         found(device.id, { kind: "problem", text });
         setAnnouncement(text);
@@ -314,6 +317,9 @@ export function DevicesSection(props: {
     } finally {
       if (showAsAttempts.current.get(device.id) === attempt) {
         showAsAttempts.current.delete(device.id);
+      }
+      if (showAsLatest.current.get(device.id) === attempt) {
+        showAsLatest.current.delete(device.id);
       }
     }
   };

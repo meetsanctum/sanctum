@@ -37,12 +37,15 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
   let container: HTMLDivElement;
   const live = createLiveFeed();
   let replies: ((device: DeviceInfo) => void)[];
+  // Each waiting save's way to fail, beside its reply.
+  let refusals: ((error: Error) => void)[];
   // What the next save fails with, if it is to fail.
   let failure: Error | undefined;
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     replies = [];
+    refusals = [];
     failure = undefined;
     const since = new Date().toISOString();
     const pairing: PairingInfo = {
@@ -77,7 +80,10 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
           return { ...pairing, since };
         case "/api/devices/update":
           if (failure) throw failure;
-          return new Promise<DeviceInfo>((resolve) => replies.push(resolve));
+          return new Promise<DeviceInfo>((resolve, reject) => {
+            replies.push(resolve);
+            refusals.push(reject);
+          });
         default:
           throw new Error(`Unexpected request: ${path}`);
       }
@@ -193,6 +199,18 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
     expect(said()).not.toContain("Can't reach Sanctum. Try again.");
     await act(async () => replies[0]!(door));
     expect(container.textContent).toContain("Hall door");
+  });
+
+  it("says nothing of an earlier save that fails after a later one was saved", async () => {
+    await show();
+    await choose("Door");
+    await choose("Window");
+    await act(async () => replies[1]!(windowDevice));
+    await act(async () => refusals[0]!(new TypeError("Failed to fetch")));
+    expect(document.body.textContent).toContain("Hall window");
+    expect(document.body.textContent).not.toContain(
+      "Can't reach Sanctum. Try again.",
+    );
   });
 
   if (where === "Add devices") {
