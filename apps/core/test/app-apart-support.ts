@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, vi } from "vitest";
 
-import { fakeManager, testCore, type TestCore } from "./support.js";
+import { fakeManager } from "./manager-support.js";
+import { testCore, type TestCore } from "./support.js";
 
 // An app running apart, as the host sees it: the real host and the real runner
 // over a real socket, so everything the core does around a call holds for an app

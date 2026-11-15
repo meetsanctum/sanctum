@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { personWithClient } from "./devices-support.js";
+import { managerSocket, type SocketRequest } from "./manager-support.js";
 import {
   claimed,
   get,
-  managerSocket,
   post,
   sharedClient,
   testCore,
-  type SocketRequest,
   type TestCore,
 } from "./support.js";
 

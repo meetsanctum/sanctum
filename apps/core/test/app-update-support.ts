@@ -10,7 +10,8 @@ import { expect, vi } from "vitest";
 import { appUpdates, appVersions } from "../src/app-host/schema.js";
 import { createAppVersions } from "../src/app-host/versions.js";
 import { cleanUps } from "./app-apart-support.js";
-import { fakeManager, testCore, type TestCore } from "./support.js";
+import { fakeManager } from "./manager-support.js";
+import { testCore, type TestCore } from "./support.js";
 
 // Apps that run apart at several versions, with a container as a session in this
 // process: a core is started on one version, then another on the next, as a core

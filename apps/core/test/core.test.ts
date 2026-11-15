@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoreConfig } from "../src/config.js";
 import { createCore, type Core } from "../src/core.js";
 import { updatePendingFile } from "../src/update-pending.js";
-import { hostId, managerSocket, type SocketRequest } from "./support.js";
+import { managerSocket, type SocketRequest } from "./manager-support.js";
+import { hostId } from "./support.js";
 
 // A whole core as a host starts and stops it (core.ts), through the steps of
 // each phase of its lifecycle, against a manager that answers on its socket

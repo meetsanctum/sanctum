@@ -10,7 +10,8 @@ import {
 } from "../src/certificate.js";
 import { renewCertificate } from "../src/server.js";
 import { testCa } from "./certificates.js";
-import { claimed, managerSocket, testCore } from "./support.js";
+import { managerSocket } from "./manager-support.js";
+import { claimed, testCore } from "./support.js";
 
 const dayMs = 24 * 60 * 60_000;
 const watching: CoreCertificates[] = [];
