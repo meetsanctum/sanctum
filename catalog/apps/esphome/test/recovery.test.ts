@@ -517,3 +517,30 @@ it("hears a press before a later session registers the parts it has instead", as
     await button.stop();
   }
 });
+
+it("clears a problem until the core takes it, though the problem's answer was lost", async () => {
+  const key = await add(core, device);
+  await core.until(() => core.availability.get(key) === "online", "online");
+  const tell = context.devices.problem.bind(context.devices);
+  const problem = vi.spyOn(context.devices, "problem");
+  let clearings = 0;
+  // The core takes each problem, but its answer is lost; the first
+  // clearing never reaches it.
+  problem.mockImplementation(async (report) => {
+    if (report.problem === null && ++clearings === 1) {
+      throw new Error("The core did not answer");
+    }
+    await tell(report);
+    if (report.problem) throw new Error("The core's answer was lost");
+  });
+  const next = newKey();
+  await device.unplug();
+  device.psk = next;
+  await device.listen();
+  await core.until(() => core.problems.has(key), "the problem");
+
+  expect(await core.repair(key, { key: next })).toBeUndefined();
+
+  await core.until(() => !core.problems.has(key), "the problem cleared");
+  expect(clearings).toBe(2);
+});

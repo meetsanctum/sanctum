@@ -50,8 +50,9 @@ type Owned = {
   problem: string | null;
   sleeps: boolean;
   setup: Promise<void>;
-  // What the core last took of its problem, and the report that's latest.
-  told: string | null;
+  // What the core last took of its problem, unknown once an answer is
+  // lost, and the report that's latest.
+  told: string | null | undefined;
   reports: number;
   // Saying its problem again, after the core didn't take it.
   telling?: ReturnType<typeof setTimeout>;
@@ -290,6 +291,9 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (report === owned.reports) owned.told = problem;
       },
       () => {
+        // Its answer lost, whether the core has it is unknown, so the next
+        // report is said whatever it is.
+        if (report === owned.reports) owned.told = undefined;
         if (stopped || devices.get(owned.mac) !== owned) return;
         owned.telling = setTimeout(
           () => {
