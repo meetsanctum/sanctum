@@ -27,26 +27,43 @@ import { appRole } from "./containers.js";
 // stop of the manager's own, was killed by the kernel. One that started before
 // the manager listened, as across the manager's own update, has Docker's flag
 // alone.
+//
+// A container can run more than once, and one run's events can still be on
+// their way while the next starts. Docker says a run started only after its
+// inspection's StartedAt, so a run is told apart from the one before by when
+// Docker said it started.
 
 // 128 + SIGKILL.
 const killedExitCode = 137;
 // Docker reports that it died just after its inspection says it stopped.
 const diedWithinMs = 2_000;
 const listenAgainMs = 5_000;
+const nanosecondsPerMs = 1_000_000;
 
 type DockerEvent = {
   Type?: string;
   Action?: string;
   Actor?: { ID?: string; Attributes?: Record<string, string> };
+  // When Docker said so, in nanoseconds since the epoch.
+  timeNano?: number;
 };
 
 // One run of a container, from its start as Docker reported it.
 type Run = {
+  // When Docker said it started, in nanoseconds since the epoch.
+  heardAt: number;
   // Docker sent it a signal, or the manager is stopping it.
   signalled: boolean;
   died: boolean;
   onDied: Set<() => void>;
 };
+
+// When an inspection says its run started, in nanoseconds since the epoch, as
+// Docker's events give their time: both are rounded alike, which keeps their
+// order.
+function startedAt(container: Pick<ContainerInfo, "State">) {
+  return Date.parse(container.State.StartedAt ?? "") * nanosecondsPerMs;
+}
 
 export function createAppExits(options: {
   docker: EventsDockerLike;
@@ -55,9 +72,10 @@ export function createAppExits(options: {
 }) {
   const { docker, log } = options;
   const runs = new Map<string, Run>();
-  // Stops the manager asked for, kept until the run they end is heard: a stop
-  // can reach Docker before the manager hears the container started.
-  const pendingStops = new Set<string>();
+  // Stops the manager asked for, by container, with when the run each ends
+  // started: a stop can reach Docker before the manager hears that run start,
+  // and before it hears the last of the run before.
+  const pendingStops = new Map<string, number>();
   let isListening = false;
   // Said once while it can't hear them, not at each try.
   let isHearing = true;
@@ -71,23 +89,28 @@ export function createAppExits(options: {
     for (const done of run?.onDied ?? []) done();
   }
 
-  function heard({ Type, Action, Actor }: DockerEvent) {
+  function heard({ Type, Action, Actor, timeNano }: DockerEvent) {
     const id = Actor?.ID;
     if (Type !== "container" || !id || !isOurs(Actor.Attributes)) return;
     const run = runs.get(id);
     if (Action === "start") {
-      const isStopping = pendingStops.has(id);
-      forget(id);
+      for (const done of run?.onDied ?? []) done();
+      const heardAt =
+        typeof timeNano === "number" ? timeNano : Date.now() * nanosecondsPerMs;
+      const stop = pendingStops.get(id);
       runs.set(id, {
-        signalled: isStopping,
+        heardAt,
+        signalled: stop !== undefined && stop <= heardAt,
         died: false,
         onDied: new Set(),
       });
     } else if (Action === "kill") {
       if (run) run.signalled = true;
     } else if (Action === "die") {
-      pendingStops.delete(id);
       if (!run) return;
+      // Only this run's stop ends with it, not one for a run after it.
+      const stop = pendingStops.get(id);
+      if (stop !== undefined && stop <= run.heardAt) pendingStops.delete(id);
       run.died = true;
       for (const done of run.onDied) done();
     } else if (Action === "destroy") {
@@ -161,12 +184,16 @@ export function createAppExits(options: {
       pendingStops.clear();
     },
 
-    // Before the manager stops or removes a running one, whose SIGKILL is then
-    // its own.
-    stopping(id: string) {
-      pendingStops.add(id);
-      const run = runs.get(id);
-      if (run) run.signalled = true;
+    // Before the manager stops or removes a running one, as it inspected it,
+    // whose SIGKILL is then its own.
+    stopping(container: Pick<ContainerInfo, "Id" | "State">) {
+      const at = startedAt(container);
+      // One whose start can't be read holds the stop for whichever run is next
+      // to end.
+      const stop = Number.isNaN(at) ? -Infinity : at;
+      pendingStops.set(container.Id, stop);
+      const run = runs.get(container.Id);
+      if (run && stop <= run.heardAt) run.signalled = true;
     },
 
     async outOfMemory(container: ContainerInfo) {
@@ -174,7 +201,11 @@ export function createAppExits(options: {
       if (state.OOMKilled) return true;
       if (state.Running || state.ExitCode !== killedExitCode) return false;
       const run = runs.get(id);
-      if (!run || run.signalled) return false;
+      // Only the record of the run inspected tells: until Docker says that
+      // one started, there's the record of the run before, if any.
+      if (!run || !(startedAt(container) <= run.heardAt) || run.signalled) {
+        return false;
+      }
       if (!run.died) {
         await new Promise<void>((resolve) => {
           const done = () => {

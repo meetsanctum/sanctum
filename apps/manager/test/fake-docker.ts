@@ -244,6 +244,7 @@ export class FakeDocker implements DockerClientLike {
     const event = {
       Type: "container",
       Action: action,
+      timeNano: Date.now() * 1_000_000,
       Actor: {
         ID: container.id,
         Attributes: { ...labels, name: container.name, ...attributes },

@@ -165,6 +165,56 @@ describe("how an app's container stopped", () => {
     });
   });
 
+  it("keeps a stop for a container's next run through the last events of the run before", async () => {
+    const { apps, docker, exits } = await setup({ listen: false });
+    const source = await docker.getEvents();
+    listening.push(() => source.destroy());
+    const heard = new PassThrough();
+    listening.push(() => heard.destroy());
+    vi.spyOn(docker, "getEvents").mockResolvedValue(heard);
+    exits.start();
+    source.pipe(heard);
+    await apps.start(spec);
+    await delivered();
+
+    // The first run's end and the next's start are still on their way while
+    // the manager stops the next, and Docker drops what it sent.
+    source.unpipe(heard);
+    docker.exit(name, { exitCode: 137 });
+    await delivered();
+    await docker.getContainer(name).start();
+    docker.ignoresStop = true;
+    docker.unreported.add("kill");
+    await apps.stop(app);
+    source.pipe(heard);
+    await delivered();
+
+    await expect(apps.status(app)).resolves.toMatchObject({
+      exitCode: 137,
+      outOfMemory: false,
+    });
+  });
+
+  it("doesn't take the run before for one Docker hasn't said started", async () => {
+    const { apps, docker } = await started();
+    docker.exit(name, { exitCode: 137 });
+    await expect(apps.status(app)).resolves.toMatchObject({
+      outOfMemory: true,
+    });
+
+    // The next run, whose events are still on their way when it's stopped.
+    docker.unreported.add("start").add("kill").add("die");
+    await delivered();
+    await docker.getContainer(name).start();
+    docker.ignoresStop = true;
+    await docker.getContainer(name).stop();
+
+    await expect(apps.status(app)).resolves.toMatchObject({
+      exitCode: 137,
+      outOfMemory: false,
+    });
+  });
+
   it("never says so of a stop someone else asked Docker for", async () => {
     const { apps, docker } = await started();
     docker.ignoresStop = true;

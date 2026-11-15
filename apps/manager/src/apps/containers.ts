@@ -397,7 +397,7 @@ export function createAppContainers(options: {
     if (!existing) return;
     const container = docker.getContainer(existing.Id);
     if (existing.State.Running) {
-      exits?.stopping(existing.Id);
+      exits?.stopping(existing);
       await container.stop({ t: 10 }).catch(() => undefined);
     }
     await container.remove({ force: true, v: true });
@@ -614,7 +614,7 @@ export function createAppContainers(options: {
         if (holder?.State.Running) continue;
         const app = container.Config.Labels![appLabel]!;
         log(`Stopping ${appContainerName(app)}: its network's holder stopped`);
-        exits?.stopping(container.Id);
+        exits?.stopping(container);
         await docker
           .getContainer(container.Id)
           .stop({ t: 10 })
@@ -645,7 +645,7 @@ export function createAppContainers(options: {
         const existing = await inspectApp(app);
         if (existing?.State.Running) {
           log(`Stopping ${appContainerName(app)}`);
-          exits?.stopping(existing.Id);
+          exits?.stopping(existing);
           try {
             await docker.getContainer(existing.Id).stop({ t: 10 });
           } catch (error) {
