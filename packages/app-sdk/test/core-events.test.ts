@@ -72,21 +72,21 @@ describe("ctx.events.on", () => {
     const ctx = context(async (name) => void followed.push(name), handlers);
     const deleted: string[] = [];
 
-    await ctx.events.on("place.deleted", ({ place }) => {
+    await ctx.events.on("place.removed", ({ place }) => {
       expectTypeOf(place.kind).toEqualTypeOf<
         "home" | "floor" | "room" | "zone"
       >();
       deleted.push(place.kind);
     });
     const event: CoreEvent = {
-      name: "place.deleted",
+      name: "place.removed",
       place: { kind: "room", ...office },
     };
-    for (const handler of handlers.get("place.deleted") ?? []) {
+    for (const handler of handlers.get("place.removed") ?? []) {
       await handler(event);
     }
 
-    expect(followed).toEqual(["place.deleted"]);
+    expect(followed).toEqual(["place.removed"]);
     expect(deleted).toEqual(["room"]);
   });
 

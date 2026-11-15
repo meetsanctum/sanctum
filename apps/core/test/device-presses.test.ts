@@ -1,6 +1,6 @@
 import {
   defineApp,
-  type DevicePressEvent,
+  type DevicePressedEvent,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
@@ -30,7 +30,7 @@ import {
 // An app that follows remotes' presses and keeps what reaches it; it pauses
 // without the permissions it needs.
 function pressListener(permissions: string[], needed: string[] = []) {
-  const heard: DevicePressEvent[] = [];
+  const heard: DevicePressedEvent[] = [];
   const app = defineApp({
     id: "test.presses",
     name: "Presses",
