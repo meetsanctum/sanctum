@@ -123,7 +123,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return listing;
   }
 
-  function connected(owned: Owned, session: Session) {
+  function connected(owned: Owned, session: Session, hear: () => void) {
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
     // Its latest session, open or closed since with nothing in its place.
@@ -132,7 +132,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       (owned.connection.session ?? session) === session;
     // An old session finishes its writes before a new one takes over, and
     // removal waits for those writes before the core forgets the device.
-    const setup = owned.setup.then(async () => {
+    const work = async () => {
       if (!current()) return;
       const mapping = mappingOf(session);
       const sleeps = session.info.hasDeepSleep === true;
@@ -154,6 +154,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }
       owned.mapping = mapping;
       owned.sleeps = sleeps;
+    };
+    const setup = owned.setup.then(async () => {
+      await work();
+      // Heard as the last of its setup, so what it held reaches the core
+      // before a later session's setup registers what that one has.
+      if (devices.get(owned.mac) === owned) hear();
     });
     owned.setup = setup.catch(() => undefined);
     return setup;
@@ -246,8 +252,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       address: () => addressOf(mac),
       timings,
       events: {
-        connected: (session) =>
-          connected(owned, session).catch((error: unknown) => {
+        connected: (session, hear) =>
+          connected(owned, session, hear).catch((error: unknown) => {
             ctx.log(`could not take in ${mac} (${String(error)})`);
             throw error;
           }),

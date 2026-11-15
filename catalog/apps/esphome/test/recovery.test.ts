@@ -471,3 +471,49 @@ it("never says a problem again when an earlier report fails while its clearing i
 
   expect(core.problems.has(key)).toBe(false);
 });
+
+it("hears a press before a later session registers the parts it has instead", async () => {
+  const button = await EmulatedDevice.start({
+    name: "button",
+    mac: nextMac(),
+    psk: newKey(),
+    ...entitiesOf("button"),
+  });
+  try {
+    await announce(core, button);
+    let release!: () => void;
+    writes.save.mockImplementationOnce(
+      () =>
+        new Promise<void>((done) => {
+          release = done;
+        }),
+    );
+    const key = await add(core, button);
+    await expect.poll(() => writes.save.mock.calls.length).toBe(1);
+    await button.followed();
+    button.fire(106, "single");
+    await new Promise((done) => setTimeout(done, 50));
+    // Flashed without its button, it comes back as a switch, and its next
+    // session waits behind the first.
+    await button.unplug();
+    await core.until(() => core.availability.get(key) === "offline", "gone");
+    const { entities, states } = entitiesOf("switch");
+    button.options.entities = entities;
+    Object.assign(button.states, states);
+    button.options.version = "2026.11.0";
+    await button.listen();
+    await announce(core, button);
+    await button.followed();
+    release();
+
+    await core.until(
+      () => core.registered.get(key)?.capabilities[0]?.kind === "switch",
+      "registered as a switch",
+    );
+    expect(core.presses).toEqual([
+      { key, capability: "event-button", action: "single" },
+    ]);
+  } finally {
+    await button.stop();
+  }
+});

@@ -59,8 +59,12 @@ export type Session = {
 export type Halt = "keyMismatch" | "keyAdded";
 
 export type ConnectionEvents = {
-  /** A checked session, which the driver takes in before it hears its states. */
-  connected(session: Session): Promise<void>;
+  /**
+   * A checked session, which the driver takes in, then starts hearing with
+   * `hear`, as the last of taking it in: what the session held reaches the
+   * core before a later session's setup does.
+   */
+  connected(session: Session, hear: () => void): Promise<void>;
   /** What the device said in a session, read by that session's parts. */
   state(event: TelemetryEvent, session: Session): void;
   /** Gone for longer than the device may be, or back. */
@@ -233,20 +237,22 @@ export function createConnection(options: {
       else goneLater();
       later();
     });
+    // A session that closes while it's taken in, as a device that sleeps
+    // may, is heard too, whether or not another took its place: what it said
+    // meanwhile, presses too, still counts.
+    let heard = false;
+    const hear = () => {
+      if (heard || stopped) return;
+      heard = true;
+      next.listen((event) => events.state(event, next));
+    };
     void events
-      .connected(next)
+      .connected(next, hear)
       .then(() => {
-        if (session === next) {
-          pause = timings.firstPauseMs;
-          say(true);
-          next.listen((event) => events.state(event, next));
-        } else if (!stopped) {
-          // It closed while it was taken in, as a device that sleeps may,
-          // whether or not another took its place: what it said meanwhile,
-          // presses too, still counts. A session that came after is taken
-          // in only after this one, so it's heard after it.
-          next.listen((event) => events.state(event, next));
-        }
+        if (session !== next) return;
+        pause = timings.firstPauseMs;
+        say(true);
+        hear();
       })
       .catch(() => {
         if (session !== next) return;
