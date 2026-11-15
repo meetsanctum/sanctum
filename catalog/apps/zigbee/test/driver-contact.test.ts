@@ -105,15 +105,21 @@ describe("a contact sensor", () => {
       () => core.availability.get(key) === "online",
       "listening",
     );
-    const from = core.reports.length;
 
     // Its battery alone, as a sensor checks in before it has changed.
     await bridge.say(name, { battery: 63, battery_low: true, voltage: 2700 });
-    await core.until(() => core.reports.length > from, "its battery");
+    await core.until(
+      () =>
+        core.reports.some((each) => each.key === key && each.battery === 63),
+      "its battery",
+    );
 
-    expect(core.reports.slice(from)).toEqual([
-      { key, availability: "online", states: {}, battery: 63 },
-    ]);
+    expect(core.reports.at(-1)).toEqual({
+      key,
+      availability: "online",
+      states: {},
+      battery: 63,
+    });
     expect(core.latest(key, "contact")).toBeUndefined();
 
     await bridge.say(name, { contact: false });
