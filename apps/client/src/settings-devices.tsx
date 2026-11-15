@@ -505,6 +505,11 @@ export function DevicesSection(props: {
                         .then(changed)
                         .catch(() => undefined)
                     }
+                    onShowAs={(shownAs) =>
+                      void updateDevice(device.id, { shownAs })
+                        .then(changed)
+                        .catch(() => undefined)
+                    }
                     onMotion={() => setTuning(device.id)}
                     onCheck={() => void check(device)}
                     onProbe={() => void probe(device)}

@@ -2,6 +2,7 @@ import type {
   AddResult,
   AppInfo,
   DeviceInfo,
+  DeviceType,
   FoundDevice,
   JoinedDevice,
   PairingInfo,
@@ -33,6 +34,8 @@ import {
   DeviceIcon,
   deviceProblem,
   RoomPicker,
+  showAsOf,
+  ShowAsPicker,
   updateDevice,
 } from "./device-parts";
 import { QuestionField, type Refused } from "./device-questions";
@@ -49,7 +52,11 @@ import { KnotLoader } from "./knot-loader";
 // answer typed in it.
 
 type Opened = PairingInfo & { since: string };
-type Changes = { name?: string | null; roomId?: string | null };
+type Changes = {
+  name?: string | null;
+  roomId?: string | null;
+  shownAs?: DeviceType | null;
+};
 
 /** Minutes and seconds, as a countdown shows them: 3:52. */
 export function countdown(seconds: number) {
@@ -643,20 +650,42 @@ function ReadyRow(props: {
   onSave: (device: DeviceInfo, changes: Changes) => Promise<void>;
 }) {
   const { device } = props;
+  // A device that may be shown as another type has that and its room under
+  // its name, whichever is chosen, so its name keeps room to be read.
+  const stacked = showAsOf(device) !== null;
   return (
     <li className="flex items-start gap-3">
       <DeviceIcon device={device} />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex items-center gap-2">
-          <NameField
-            device={device}
-            onSave={(name) => void props.onSave(device, { name })}
-          />
-          <RoomPicker
-            device={device}
-            rooms={props.rooms}
-            onChange={(roomId) => void props.onSave(device, { roomId })}
-          />
+        <div
+          className={
+            stacked ? "flex flex-col gap-2" : "flex items-center gap-2"
+          }
+        >
+          <div className={stacked ? "flex" : "flex min-w-0 flex-1"}>
+            <NameField
+              device={device}
+              onSave={(name) => void props.onSave(device, { name })}
+            />
+          </div>
+          <div
+            className={
+              // On a phone a long room goes under what it is shown as.
+              stacked
+                ? "flex flex-wrap items-center gap-2"
+                : "flex shrink-0 items-center gap-2"
+            }
+          >
+            <ShowAsPicker
+              device={device}
+              onChange={(shownAs) => void props.onSave(device, { shownAs })}
+            />
+            <RoomPicker
+              device={device}
+              rooms={props.rooms}
+              onChange={(roomId) => void props.onSave(device, { roomId })}
+            />
+          </div>
         </div>
         <span className="text-[13px] font-medium text-muted-foreground">
           {props.detail}

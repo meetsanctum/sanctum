@@ -1,4 +1,4 @@
-import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, DeviceType, Places } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import {
   Activity,
@@ -9,6 +9,7 @@ import {
   House,
   Pencil,
   RefreshCw,
+  Shapes,
   SlidersHorizontal,
   Trash2,
   Wrench,
@@ -28,10 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { whyNot, type CheckResult } from "./device-firmware";
+import { showAsOf } from "./device-parts";
 import { hasMotionSettings, motionOf } from "./motion-settings";
 
 // A device's menu in Settings → Devices: its firmware's version, then
-// renaming it, its room, whether it shows on Home, whether its history is
+// renaming it, its room, what it is shown as where it may be shown as
+// another type, whether it shows on Home, whether its history is
 // kept, a motion sensor's settings, its checks, dimmed with why when they
 // cannot run, Repair where its driver says how to set it right, and
 // removing it.
@@ -53,6 +56,8 @@ export function DeviceMenu(props: {
   onHome: (on: boolean) => void;
   onEdit: (action: EditAction) => void;
   onRoom: (roomId: string | null) => void;
+  // What it is shown as, for a device that may be shown as another type.
+  onShowAs: (shownAs: DeviceType | null) => void;
   onMotion: () => void;
   onCheck: () => void;
   onProbe: () => void;
@@ -71,6 +76,7 @@ export function DeviceMenu(props: {
     motion && !hasMotionSettings(motion.features)
       ? "It has none to change"
       : null;
+  const showAs = showAsOf(device);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -116,6 +122,26 @@ export function DeviceMenu(props: {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {showAs && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Shapes />
+              Show as
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-44">
+              <DropdownMenuRadioGroup
+                value={showAs.current}
+                onValueChange={(value) => props.onShowAs(showAs.choice(value))}
+              >
+                {showAs.options.map((option) => (
+                  <DropdownMenuRadioItem key={option.id} value={option.id}>
+                    {option.title}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
         {props.home && (
           <DropdownMenuCheckboxItem
             checked={props.home.on}
