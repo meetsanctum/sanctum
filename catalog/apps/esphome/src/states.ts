@@ -68,7 +68,11 @@ export function lightStateOf(
     color: boolean;
   };
   const state: LightState = { on: event.state === true };
-  if (features.brightness && typeof event.brightness === "number") {
+  if (
+    features.brightness &&
+    typeof event.brightness === "number" &&
+    Number.isFinite(event.brightness)
+  ) {
     state.brightness = clamp(Math.round(event.brightness * 100), 0, 100);
   }
   const mode = event.colorMode ?? 0;
@@ -76,15 +80,18 @@ export function lightStateOf(
     (mode & colorBit) !== 0 &&
     ((mode & temperatureBits) === 0 || (event.colorBrightness ?? 0) > 0);
   if (features.color && isColor) {
-    state.colorMode = "color";
-    Object.assign(
-      state,
-      hueOf(event.red ?? 0, event.green ?? 0, event.blue ?? 0),
-    );
+    const rgb = [event.red ?? 0, event.green ?? 0, event.blue ?? 0] as const;
+    if (
+      rgb.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    ) {
+      state.colorMode = "color";
+      Object.assign(state, hueOf(...rgb));
+    }
   } else if (
     features.colorTemperature &&
     (mode & temperatureBits) !== 0 &&
-    typeof event.colorTemperature === "number"
+    typeof event.colorTemperature === "number" &&
+    Number.isFinite(event.colorTemperature)
   ) {
     state.colorMode = "temperature";
     state.colorTemperature = clamp(
@@ -117,13 +124,26 @@ export function lightCommandOf(entity: Entity, command: LightCommand) {
     options.colorTemperature = command.colorTemperature;
     // COLOR_TEMPERATURE, then the modes that have it beside colour.
     const mode = modeWith(entity, [11, 19, 47, 51]);
-    if (mode !== undefined) options.colorMode = mode;
+    if (mode !== undefined) {
+      options.colorMode = mode;
+      if ((mode & colorBit) !== 0) options.colorBrightness = 0;
+      if (mode === 47) options.white = 1;
+    }
   }
   if (command.hue !== undefined && command.saturation !== undefined) {
     options.rgb = rgbOf(command.hue, command.saturation);
     // RGB, then the modes that have white beside it.
     const mode = modeWith(entity, [35, 39, 47, 51]);
-    if (mode !== undefined) options.colorMode = mode;
+    if (mode !== undefined) {
+      options.colorMode = mode;
+      // Combined modes retain their channel levels across commands.
+      options.colorBrightness = 1;
+      if (mode === 39 || mode === 47) options.white = 0;
+      if (mode === 51) {
+        options.coldWhite = 0;
+        options.warmWhite = 0;
+      }
+    }
   }
   if (command.transitionSeconds !== undefined) {
     options.transitionLength = Math.round(command.transitionSeconds * 1000);

@@ -138,6 +138,8 @@ export class EmulatedDevice {
   }[] = [];
   /** How many connections it has had, encrypted or not. */
   connections = 0;
+  /** Whether it answers pings, so a test can model a silent connection. */
+  answersPings = true;
   private readonly server: Server;
   private readonly sockets = new Set<Socket>();
   private readonly subscribed = new Set<
@@ -441,7 +443,7 @@ export class EmulatedDevice {
       socket.on("close", () => this.subscribed.delete(send));
       for (const entity of this.options.entities) this.sendState(send, entity);
     } else if (type === message.pingRequest) {
-      send(message.pingResponse, Buffer.alloc(0));
+      if (this.answersPings) send(message.pingResponse, Buffer.alloc(0));
     } else if (type === message.disconnectRequest) {
       send(message.disconnectResponse, Buffer.alloc(0));
       socket.end();

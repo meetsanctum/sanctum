@@ -144,6 +144,34 @@ describe("adding a device", () => {
     );
   });
 
+  it("forgets an old key when adding a device without encryption", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: null });
+    const key = keyOf(device.options.mac);
+    // A forced removal while the app was stopped could not deliver its cleanup.
+    home.core.secrets.set(secretOf(key), newKey());
+    await add(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online",
+    );
+
+    await device.unplug();
+    await home.core.until(
+      () => home.core.availability.get(key) === "offline",
+      "offline",
+    );
+    await device.listen();
+    await announce(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online again",
+    );
+
+    expect(home.core.secrets.has(secretOf(key))).toBe(false);
+    expect(home.core.problems.has(key)).toBe(false);
+  });
+
   it("is the same device when it's added again", async () => {
     home = await startHome();
     const device = await home.plugIn();
@@ -265,6 +293,33 @@ describe("its key", () => {
 });
 
 describe("its connection", () => {
+  it("tries a halted device again when only its network address changes", async () => {
+    home = await startHome();
+    const device = await home.plugIn();
+    const key = await add(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online",
+    );
+    const kept = device.psk;
+    await reflash(device, newKey());
+    await home.core.until(() => home.core.problems.has(key), "key mismatch");
+    await device.unplug();
+    device.psk = kept;
+    device.port = 0;
+    await device.listen();
+    await announce(home.core, device);
+
+    await home.core.until(
+      () => !home.core.problems.has(key),
+      "the problem cleared",
+    );
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online again",
+    );
+  });
+
   it("isn't used when another device answers at its address", async () => {
     home = await startHome();
     const device = await home.plugIn({ psk: null });

@@ -172,9 +172,15 @@ export function createDriverCore(
   // Hands the driver one of the core's events, if it follows it.
   async function deliver(event: CoreEvent) {
     if (!followed.has(event.name)) return;
+    let failure: { error: unknown } | undefined;
     for (const handler of handlers.get(event.name) ?? []) {
-      await handler(event);
+      try {
+        await handler(event);
+      } catch (error) {
+        failure ??= { error };
+      }
     }
+    if (failure) throw failure.error;
   }
 
   function refuse(error: Error): never {
@@ -429,10 +435,21 @@ export function createDriverCore(
       return found.filter((each) => !registered.has(each.key));
     },
 
-    start: async () => app.start?.(own, { reason: "started" }),
+    async start() {
+      followed.clear();
+      handlers.clear();
+      await app.start?.(own, { reason: "started" });
+    },
     /** As the core does once it restarted while the driver ran on. */
     resume: async () => app.resume?.(own, { reason: "started" }),
-    stop: async () => app.stop?.(own, { reason: "shutdown" }),
+    async stop() {
+      try {
+        await app.stop?.(own, { reason: "shutdown" });
+      } finally {
+        followed.clear();
+        handlers.clear();
+      }
+    },
 
     /** Hands the driver a command, as the core does, from a person. */
     command(

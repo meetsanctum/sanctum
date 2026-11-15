@@ -3,6 +3,8 @@ import {
   EncryptionKeyMissingError,
   EncryptionRequiredError,
   EspHomeClient,
+  HeartbeatStalledError,
+  HealthState,
   type DeviceInfo,
   type Entity,
   type EspHomeLogging,
@@ -101,6 +103,7 @@ export async function connectOnce(options: {
   key: string | null;
   address: Address;
   timings: Timings;
+  signal?: AbortSignal;
 }): Promise<{ session: Session } | { halt: Halt } | { error: unknown }> {
   const { mac, key, address, timings } = options;
   let checked = false;
@@ -127,7 +130,7 @@ export async function connectOnce(options: {
     else if (held.length < heldEvents) held.push(event);
   });
   try {
-    await client.connect();
+    await client.connect({ signal: options.signal });
   } catch (error) {
     client.disconnect();
     const halt = haltOf(error, key !== null);
@@ -179,6 +182,7 @@ export function createConnection(options: {
   let stopped = false;
   let halted = false;
   let attempt: Promise<void> | null = null;
+  let connecting: AbortController | null = null;
   let pause = timings.firstPauseMs;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let gone: ReturnType<typeof setTimeout> | undefined;
@@ -212,20 +216,36 @@ export function createConnection(options: {
   }
 
   function use(next: Session) {
-    session = next;
-    pause = timings.firstPauseMs;
-    next.client.on("disconnect", () => {
-      if (session !== next) return;
-      session = null;
+    // Adding can await core calls after checking the socket; it may have
+    // closed before its disconnect listener is attached here.
+    if (next.client.health().state !== HealthState.CONNECTED) {
+      next.client.disconnect();
       goneLater();
       later();
+      return;
+    }
+    session = next;
+    next.client.on("lifecycle", (event) => {
+      if (event.kind !== "disconnect" || session !== next) return;
+      session = null;
+      if (event.cause instanceof HeartbeatStalledError) say(false);
+      else goneLater();
+      later();
     });
-    say(true);
     void events
       .connected(next)
-      .catch(() => undefined)
       .then(() => {
-        if (session === next) next.listen((event) => events.state(event));
+        if (session !== next) return;
+        pause = timings.firstPauseMs;
+        say(true);
+        next.listen((event) => events.state(event));
+      })
+      .catch(() => {
+        if (session !== next) return;
+        session = null;
+        next.client.disconnect();
+        goneLater();
+        later();
       });
   }
 
@@ -238,9 +258,18 @@ export function createConnection(options: {
       return;
     }
     const mine = ++generation;
+    const controller = new AbortController();
+    connecting = controller;
     attempt = (async () => {
       const key = await options.key();
-      const result = await connectOnce({ mac, key, address, timings });
+      if (stopped || mine !== generation) return;
+      const result = await connectOnce({
+        mac,
+        key,
+        address,
+        timings,
+        signal: controller.signal,
+      });
       if (stopped || mine !== generation) {
         if ("session" in result) result.session.client.disconnect();
         return;
@@ -257,9 +286,17 @@ export function createConnection(options: {
         return;
       }
       use(result.session);
-    })().finally(() => {
-      attempt = null;
-    });
+    })()
+      .catch(() => {
+        if (stopped || mine !== generation) return;
+        goneLater();
+        later();
+      })
+      .finally(() => {
+        attempt = null;
+        connecting = null;
+        if (mine !== generation) start();
+      });
   }
 
   return {
@@ -275,6 +312,7 @@ export function createConnection(options: {
         return;
       }
       generation += 1;
+      connecting?.abort();
       use(next);
     },
     /**
@@ -282,7 +320,13 @@ export function createConnection(options: {
      * after a halt, as when it was reflashed.
      */
     seen(anew: boolean) {
-      if (anew) halted = false;
+      if (anew) {
+        halted = false;
+        if (attempt) {
+          generation += 1;
+          connecting?.abort();
+        }
+      }
       clearTimeout(retry);
       retry = undefined;
       pause = timings.firstPauseMs;
@@ -292,6 +336,7 @@ export function createConnection(options: {
     renew() {
       halted = false;
       generation += 1;
+      connecting?.abort();
       const old = session;
       session = null;
       old?.client.disconnect();
@@ -303,6 +348,7 @@ export function createConnection(options: {
     stop() {
       stopped = true;
       generation += 1;
+      connecting?.abort();
       clearTimeout(retry);
       clearTimeout(gone);
       const old = session;

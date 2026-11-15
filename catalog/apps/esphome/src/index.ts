@@ -73,12 +73,12 @@ export function createEsphomeApp(options: DriverOptions = {}) {
         await started.start();
       } catch (error) {
         if (driver === started) driver = undefined;
-        started.stop();
+        await started.stop();
         throw error;
       }
     },
     async stop() {
-      driver?.stop();
+      await driver?.stop();
       driver = undefined;
     },
     driver: {
@@ -94,8 +94,8 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       async repair(_ctx, repair) {
         return running().repair(repair);
       },
-      async remove() {
-        await running().remove();
+      async remove(_ctx, removal) {
+        await running().remove(removal);
       },
       problems: {
         keyMismatch: {

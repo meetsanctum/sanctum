@@ -9,6 +9,7 @@ import {
   type DriverDiscovery,
   type DriverRepair,
   type DriverRepairResult,
+  type DriverRemoval,
 } from "@meetsanctum/app-sdk";
 import { entityId, type TelemetryEvent } from "esphome-client";
 
@@ -50,6 +51,7 @@ type Owned = {
   signal: number | null;
   problem: string | null;
   sleeps: boolean;
+  setup: Promise<void>;
 };
 
 /** What a session says the device is, for the core's record. */
@@ -118,30 +120,55 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return listing;
   }
 
-  async function connected(owned: Owned, session: Session) {
-    const mapping = mapEntities(session.entities);
-    owned.mapping = mapping;
-    owned.signal = signalOf(session.entities)?.key ?? null;
-    owned.sleeps = session.info.hasDeepSleep === true;
-    await ctx.devices.register(registrationOf(owned.mac, session, mapping));
-    await facts.save(owned.mac, {
-      address: `${session.address.host}:${session.address.port}`,
-      encrypted: session.encrypted,
-      version: session.info.esphomeVersion ?? null,
-      unused: mapping.unused,
-      sleeps: owned.sleeps,
+  function connected(owned: Owned, session: Session) {
+    // A new socket must not take commands using the previous firmware's map.
+    owned.mapping = null;
+    const current = () =>
+      devices.get(owned.mac) === owned && owned.connection.session === session;
+    // An old session finishes its writes before a new one takes over, and
+    // removal waits for those writes before the core forgets the device.
+    const setup = owned.setup.then(async () => {
+      if (!current()) return;
+      const mapping = mapEntities(session.entities);
+      const sleeps = session.info.hasDeepSleep === true;
+      await ctx.devices.register(registrationOf(owned.mac, session, mapping));
+      if (!current()) return;
+      await facts.save(owned.mac, {
+        address: `${session.address.host}:${session.address.port}`,
+        encrypted: session.encrypted,
+        version: session.info.esphomeVersion ?? null,
+        unused: mapping.unused,
+        sleeps,
+      });
+      if (!current()) return;
+      if (owned.problem) {
+        await ctx.devices.problem({ key: owned.mac, problem: null });
+        if (!current()) return;
+        owned.problem = null;
+      }
+      owned.mapping = mapping;
+      owned.signal = signalOf(session.entities)?.key ?? null;
+      owned.sleeps = sleeps;
     });
-    if (owned.problem) {
-      owned.problem = null;
-      await ctx.devices.problem({ key: owned.mac, problem: null });
-    }
+    owned.setup = setup.catch(() => undefined);
+    return setup;
   }
 
   function state(owned: Owned, event: TelemetryEvent) {
     // A state event names its entity by its key, which a type keeps apart.
     if (event.type === "sensor" && event.key === owned.signal) {
-      if (typeof event.state === "number" && !event.missingState) {
-        void facts.signal(owned.mac, Math.round(event.state));
+      if (
+        typeof event.state === "number" &&
+        Number.isFinite(event.state) &&
+        !event.missingState
+      ) {
+        facts
+          .signal(owned.mac, Math.round(event.state))
+          .catch((error: unknown) => {
+            ctx.log(
+              `could not save signal for ${owned.mac} (${String(error)})`,
+            );
+          });
       }
       return;
     }
@@ -189,6 +216,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       signal: null,
       problem: device.problem?.id ?? null,
       sleeps: device.firmware?.sleeps === true,
+      setup: Promise.resolve(),
       connection: undefined as unknown as Connection,
     };
     owned.connection = createConnection({
@@ -200,6 +228,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         connected: (session) =>
           connected(owned, session).catch((error: unknown) => {
             ctx.log(`could not take in ${mac} (${String(error)})`);
+            throw error;
           }),
         state: (event) => state(owned, event),
         reachable: (reachable) => {
@@ -229,6 +258,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     if (!owned) return;
     devices.delete(mac);
     owned.connection.stop();
+    return owned.setup;
   }
 
   // Connects once to check what someone typed, then lets the device's own
@@ -241,11 +271,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
 
   return {
     async start() {
+      const deleted = new Set<string>();
+      let loading = true;
       // Following first, so no removal falls between following and reading.
       await ctx.events.on("device.deleted", async ({ device }) => {
         const mac = device.key;
         if (device.driver !== ctx.appId || !mac) return;
-        forget(mac);
+        if (loading) deleted.add(mac);
+        await forget(mac);
         await ctx.secrets.delete(secretOf(mac));
         await facts.remove(mac);
         await listFound();
@@ -254,14 +287,21 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         (device): device is DeviceInfo & { key: string } =>
           device.driver === ctx.appId && typeof device.key === "string",
       );
-      await ctx.devices.present({ keys: mine.map((device) => device.key) });
-      for (const device of mine) own(device);
+      await ctx.devices.present({
+        keys: mine
+          .filter((device) => !deleted.has(device.key))
+          .map((device) => device.key),
+      });
+      for (const device of mine) {
+        if (!deleted.has(device.key)) own(device);
+      }
+      loading = false;
       await listFound();
     },
 
-    stop() {
+    async stop() {
       stopped = true;
-      for (const mac of [...devices.keys()]) forget(mac);
+      await Promise.all([...devices.keys()].map(forget));
     },
 
     async discovered({ found, lost }: DriverDiscovery) {
@@ -288,6 +328,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         // it's flashed again.
         const anew =
           !before ||
+          before.addresses[0] !== now.addresses[0] ||
+          before.port !== now.port ||
           before.encryption !== now.encryption ||
           before.version !== now.version;
         devices.get(now.mac)?.connection.seen(anew);
@@ -315,6 +357,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         // Its key is kept before the core has the device, so no device of
         // Sanctum's is ever without the key it was added with.
         if (psk !== null) await ctx.secrets.set(secretOf(key), psk);
+        else await ctx.secrets.delete(secretOf(key));
         const mapping = mapEntities(session.entities);
         const { id } = await ctx.devices.register(
           registrationOf(key, session, mapping),
@@ -342,10 +385,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       owned.connection.renew();
     },
 
-    // A key a device was flashed with stays on it, so there's nothing to
-    // take off: the core forgets the device once this returns, and its
-    // connection and key go as it does (device.deleted).
-    async remove() {},
+    // Its flashed key stays on the device. Stop registering it before the
+    // core forgets it; its saved key and facts go with device.deleted.
+    async remove({ key }: DriverRemoval) {
+      const owned = devices.get(key);
+      if (!owned) return;
+      owned.connection.stop();
+      await owned.setup;
+    },
 
     async command(command: DriverCommand) {
       const owned = devices.get(command.key);

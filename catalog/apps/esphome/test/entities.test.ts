@@ -209,6 +209,64 @@ describe("states and commands", () => {
     });
   });
 
+  it.each([Number.NaN, Infinity, -Infinity])(
+    "keeps valid light fields when another reading is %s",
+    (invalid) => {
+      const event = {
+        type: "light",
+        key: 1,
+        entity: "Part",
+        state: true,
+        brightness: 0.4,
+        colorMode: ColorMode.COLOR_TEMPERATURE,
+        colorTemperature: 300,
+      } as const;
+      expect(stateOf(light!, { ...event, brightness: invalid })).toEqual({
+        on: true,
+        colorMode: "temperature",
+        colorTemperature: 300,
+      });
+      expect(stateOf(light!, { ...event, colorTemperature: invalid })).toEqual({
+        on: true,
+        brightness: 40,
+      });
+      for (const channel of ["red", "green", "blue"] as const) {
+        expect(
+          stateOf(light!, {
+            ...event,
+            colorMode: ColorMode.RGB,
+            red: 0.2,
+            green: 1,
+            blue: 0.2,
+            [channel]: invalid,
+          }),
+        ).toEqual({ on: true, brightness: 40 });
+      }
+    },
+  );
+
+  it.each([-1, 2])(
+    "ignores RGB channels outside their range: %s",
+    (invalid) => {
+      for (const channel of ["red", "green", "blue"] as const) {
+        expect(
+          stateOf(light!, {
+            type: "light",
+            key: 1,
+            entity: "Part",
+            state: true,
+            brightness: 0.4,
+            colorMode: ColorMode.RGB,
+            red: 0.2,
+            green: 1,
+            blue: 0.2,
+            [channel]: invalid,
+          }),
+        ).toEqual({ on: true, brightness: 40 });
+      }
+    },
+  );
+
   it("read a temperature in degrees Celsius whatever unit the device says it in", () => {
     const [fahrenheit] = mapEntities([
       entity({
@@ -244,4 +302,39 @@ describe("states and commands", () => {
       } as never),
     ).toBeNull();
   });
+
+  it.each([
+    [ColorMode.RGB_WHITE, { white: 0 }],
+    [ColorMode.RGB_COLOR_TEMPERATURE, { white: 0 }],
+    [ColorMode.RGB_COLD_WARM_WHITE, { coldWhite: 0, warmWhite: 0 }],
+  ])(
+    "turns off the white channels when choosing colour in mode %s",
+    (mode, white) => {
+      const light = entity({ type: "light", supportedColorModes: [mode] });
+      expect(lightCommandOf(light, { hue: 120, saturation: 80 })).toEqual({
+        colorMode: mode,
+        colorBrightness: 1,
+        rgb: { r: expect.closeTo(0.2), g: 1, b: expect.closeTo(0.2) },
+        ...white,
+      });
+    },
+  );
+
+  it.each([
+    [ColorMode.RGB_COLOR_TEMPERATURE, { white: 1 }],
+    // The firmware derives the cold/warm channels from the temperature.
+    // Sending `white` here would also replace the master brightness.
+    [ColorMode.RGB_COLD_WARM_WHITE, {}],
+  ])(
+    "turns off RGB when choosing temperature in mode %s without changing brightness",
+    (mode, white) => {
+      const light = entity({ type: "light", supportedColorModes: [mode] });
+      expect(lightCommandOf(light, { colorTemperature: 300 })).toEqual({
+        colorMode: mode,
+        colorBrightness: 0,
+        colorTemperature: 300,
+        ...white,
+      });
+    },
+  );
 });
