@@ -253,6 +253,13 @@
       "when": 1794762297821,
       "tag": "0035_device-battery-low",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794764975691,
+      "tag": "0036_device-shown-as",
+      "breakpoints": true
     }
   ]
 }

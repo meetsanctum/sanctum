@@ -1,8 +1,9 @@
-import type {
-  ActivityInfo,
-  ActivityTrigger,
-  ActivityWho,
-  MotionCommand,
+import {
+  deviceTypes,
+  type ActivityInfo,
+  type ActivityTrigger,
+  type ActivityWho,
+  type MotionCommand,
 } from "@meetsanctum/app-sdk";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
@@ -569,6 +570,13 @@ function deviceEntry(
             ? `Moved to ${room ?? "another room"}`
             : "Taken out of its room",
         );
+      }
+      // What the household shows it as, by what it then is.
+      if (entry.detail && "shownAs" in entry.detail) {
+        const noun = deviceTypes.find(
+          (type) => type.id === entry.detail?.type,
+        )?.noun;
+        return said(noun ? `Shown as a ${noun}` : "Shown as another type");
       }
       // Its name then is the new one, so the title starts with neither.
       return {

@@ -264,6 +264,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         probe: false,
         battery: null,
         batteryLow: null,
+        shownAs: null,
         leftAt: null,
         problem: null,
         capabilities: [

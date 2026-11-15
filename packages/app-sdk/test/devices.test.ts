@@ -379,6 +379,7 @@ describe("what needs attention", () => {
     probe: true,
     battery: null,
     batteryLow: null,
+    shownAs: null,
     leftAt: null,
     problem: null,
   };
@@ -629,6 +630,7 @@ describe("a device from a core newer than this build", () => {
     probe: false,
     battery: null,
     batteryLow: null,
+    shownAs: null,
     leftAt: null,
     problem: null,
   });

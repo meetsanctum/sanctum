@@ -91,6 +91,7 @@ function sensor(
     probe: false,
     battery: 87,
     batteryLow: null,
+    shownAs: null,
     leftAt: null,
     problem: null,
     capabilities: [
@@ -120,6 +121,7 @@ const lamp: DeviceInfo = {
   probe: true,
   battery: null,
   batteryLow: null,
+  shownAs: null,
   leftAt: null,
   capabilities: [
     {

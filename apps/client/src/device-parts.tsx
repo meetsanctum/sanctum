@@ -1,8 +1,14 @@
-import type { DeviceInfo, DeviceType, Room } from "@meetsanctum/app-sdk";
-import { Button, ContactClosed } from "@meetsanctum/ui-sdk";
+import {
+  deviceTypes,
+  type DeviceInfo,
+  type DeviceType,
+  type Room,
+} from "@meetsanctum/app-sdk";
+import { Button, ContactClosed, WindowClosed } from "@meetsanctum/ui-sdk";
 import {
   ChevronDown,
   CircleDot,
+  DoorClosed,
   Footprints,
   Lightbulb,
   Power,
@@ -32,13 +38,16 @@ const typeIcons: Record<DeviceType, LucideIcon> = {
   button: CircleDot,
   motion: Footprints,
   contact: ContactClosed,
+  door: DoorClosed,
+  window: WindowClosed,
   sensor: Thermometer,
   unknown: Radio,
 };
 
 /**
- * A light, a switch, a remote, a motion sensor, a contact sensor, a sensor, or something
- * else, in the round a row starts with: its type's icon, and the general
+ * A light, a switch, a remote, a motion sensor, a contact sensor or the
+ * door or window it is shown as, a sensor, or something else, in the round
+ * a row starts with: its type's icon, and the general
  * one for a type this client has none for, as a core may serve.
  */
 // By what it is: a device's type, or what its driver says a device it found
@@ -47,7 +56,11 @@ export function DeviceIcon(props: {
   device?: DeviceInfo;
   type?: string | null;
 }) {
-  const type = props.device?.type ?? props.type;
+  // A found device has only its driver's word, which cannot choose a type
+  // reserved for the household.
+  const type =
+    props.device?.type ??
+    deviceTypes.find((each) => each.id === props.type && !each.chosenOnly)?.id;
   const Icon: LucideIcon =
     type && Object.hasOwn(typeIcons, type)
       ? typeIcons[type as DeviceType]
