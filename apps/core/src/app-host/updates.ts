@@ -119,8 +119,8 @@ export function createAppUpdates(options: {
   const staysOnNew = (row: AppUpdateRow) =>
     isMove(row) || noWayBack.has(row.id);
 
-  // Whether this core can run the version in that folder. An unreadable
-  // manifest must be tried again before deciding whether it can go back.
+  // Whether this core can run the version in that folder. One whose manifest
+  // can't be read throws, so the caller tries again before it decides.
   async function canRun(appId: string, folder: string) {
     return speaksThisCore(await options.loadPackage(appId, folder));
   }

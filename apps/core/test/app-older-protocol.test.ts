@@ -75,7 +75,7 @@ describe("a version from before this core's protocol", () => {
     expect(home.containers).not.toContain("1.0.0+test");
   });
 
-  it("offers no version until its protocol can be read", async () => {
+  it("is never offered while its manifest can't be read, until it can", async () => {
     const home = await versions();
     await running(await home.coreWith(version("1.0.0")), id);
     const core = await home.coreWith(version("2.0.0"));
@@ -92,7 +92,7 @@ describe("a version from before this core's protocol", () => {
   });
 
   it.each([0, 1])(
-    "retries a failed new version after %i temporary package read failures",
+    "isn't where a new version that fails goes back to, after %i failed reads of it: the new one is tried again",
     async (failedReads) => {
       const home = await versions();
       const one = version("1.0.0");
