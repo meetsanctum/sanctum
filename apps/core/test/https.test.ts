@@ -8,7 +8,6 @@ import {
   createCoreCertificates,
   type CoreCertificates,
 } from "../src/certificate.js";
-import { renewCertificate } from "../src/server.js";
 import { testCa } from "./certificates.js";
 import { managerSocket } from "./manager-support.js";
 import { claimed, testCore } from "./support.js";
@@ -249,13 +248,9 @@ describe("the core over HTTPS", () => {
 
     // Two minutes into three: the core asks for a new one and swaps it in.
     clock.now += 2 * 60_000;
-    const renewed = new Promise<string>((resolve) =>
-      certificates.watch((next) => {
-        renewCertificate(core.server, next);
-        resolve(new X509Certificate(next.cert).serialNumber);
-      }),
-    );
-    const nextSerial = await renewed;
+    await vi.waitFor(() => expect(certificates.current()).not.toBe(first));
+    const nextSerial = new X509Certificate(certificates.current()!.cert)
+      .serialNumber;
     expect(nextSerial).not.toBe(firstSerial);
 
     const after = await getOverHttps(`${base}/api/health`, ca.certificate);
