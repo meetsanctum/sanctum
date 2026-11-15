@@ -49,6 +49,12 @@ setup, the commands and the layout; these notes are the rules.
   network stack and hardware, and only the core talks to the manager.
 - Clients never assume the core served the page: build every core URL with
   `coreUrl()` from `apps/client/src/core-url.ts`, never a bare `/api` path.
+- The core starts and stops through named phases and steps
+  (`apps/core/src/lifecycle.ts`, with each phase's steps in
+  `apps/core/src/core.ts`): whatever starts or stops with the core is a step
+  of a phase. A module's factory builds state and starts no ongoing work:
+  timers, polls and connections begin in a step of starting and end in one of
+  stopping.
 
 ## Public Repository
 
