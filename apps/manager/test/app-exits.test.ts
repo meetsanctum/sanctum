@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -131,6 +132,36 @@ describe("how an app's container stopped", () => {
     await expect(apps.stop(app)).resolves.toMatchObject({
       exitCode: 137,
       outOfMemory: false,
+    });
+  });
+
+  it("knows its own stop before the queued start event arrives", async () => {
+    const { apps, docker, exits } = await setup({ listen: false });
+    const getEvents = docker.getEvents.bind(docker);
+    const queued = new PassThrough();
+    listening.push(() => queued.destroy());
+    const source = await getEvents();
+    listening.push(() => source.destroy());
+    vi.spyOn(docker, "getEvents").mockResolvedValue(queued);
+    exits.start();
+    await apps.start(spec);
+    docker.ignoresStop = true;
+    docker.unreported.add("kill");
+
+    await apps.stop(app);
+    source.pipe(queued);
+    await delivered();
+
+    await expect(apps.status(app)).resolves.toMatchObject({
+      exitCode: 137,
+      outOfMemory: false,
+    });
+
+    await docker.getContainer(name).start();
+    await delivered();
+    docker.exit(name, { exitCode: 137 });
+    await expect(apps.status(app)).resolves.toMatchObject({
+      outOfMemory: true,
     });
   });
 

@@ -45,7 +45,7 @@ type Run = {
   // Docker sent it a signal, or the manager is stopping it.
   signalled: boolean;
   died: boolean;
-  onDied: (() => void)[];
+  onDied: Set<() => void>;
 };
 
 export function createAppExits(options: {
@@ -55,6 +55,8 @@ export function createAppExits(options: {
 }) {
   const { docker, log } = options;
   const runs = new Map<string, Run>();
+  // A stop can reach Docker before its queued start event reaches us.
+  const pendingStops = new Set<string>();
   let isListening = false;
   // Said once while it can't hear them, not at each try.
   let isHearing = true;
@@ -64,7 +66,8 @@ export function createAppExits(options: {
   function forget(id: string) {
     const run = runs.get(id);
     runs.delete(id);
-    for (const done of run?.onDied.splice(0) ?? []) done();
+    pendingStops.delete(id);
+    for (const done of run?.onDied ?? []) done();
   }
 
   function heard({ Type, Action, Actor }: DockerEvent) {
@@ -72,14 +75,20 @@ export function createAppExits(options: {
     if (Type !== "container" || !id || !isOurs(Actor.Attributes)) return;
     const run = runs.get(id);
     if (Action === "start") {
+      const isStopping = pendingStops.has(id);
       forget(id);
-      runs.set(id, { signalled: false, died: false, onDied: [] });
+      runs.set(id, {
+        signalled: isStopping,
+        died: false,
+        onDied: new Set(),
+      });
     } else if (Action === "kill") {
       if (run) run.signalled = true;
     } else if (Action === "die") {
+      pendingStops.delete(id);
       if (!run) return;
       run.died = true;
-      for (const done of run.onDied.splice(0)) done();
+      for (const done of run.onDied) done();
     } else if (Action === "destroy") {
       forget(id);
     }
@@ -125,6 +134,7 @@ export function createAppExits(options: {
     // goes with it.
     events = undefined;
     for (const id of [...runs.keys()]) forget(id);
+    pendingStops.clear();
     if (isListening) {
       timer = setTimeout(
         () => void listen(),
@@ -147,11 +157,13 @@ export function createAppExits(options: {
       timer = undefined;
       events?.destroy();
       for (const id of [...runs.keys()]) forget(id);
+      pendingStops.clear();
     },
 
     // Before the manager stops or removes a running one, whose SIGKILL is then
     // its own.
     stopping(id: string) {
+      pendingStops.add(id);
       const run = runs.get(id);
       if (run) run.signalled = true;
     },
@@ -163,12 +175,14 @@ export function createAppExits(options: {
       const run = runs.get(id);
       if (!run || run.signalled) return false;
       if (!run.died) {
-        await new Promise<void>((done) => {
-          const timeout = setTimeout(done, diedWithinMs);
-          run.onDied.push(() => {
+        await new Promise<void>((resolve) => {
+          const done = () => {
             clearTimeout(timeout);
-            done();
-          });
+            run.onDied.delete(done);
+            resolve();
+          };
+          const timeout = setTimeout(done, diedWithinMs);
+          run.onDied.add(done);
         });
       }
       return run.died && !run.signalled;
