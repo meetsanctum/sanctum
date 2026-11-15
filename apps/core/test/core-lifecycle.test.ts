@@ -312,6 +312,70 @@ describe("the core's lifecycle", () => {
     expect(done).toEqual(["close core.db"]);
   });
 
+  it("says when its background work has ended, with work begun meanwhile", async () => {
+    const { lifecycle, done, steps } = lifecycleOf();
+    const held = () => {
+      let release!: () => void;
+      const until = new Promise<void>((resolve) => (release = resolve));
+      return { until, release };
+    };
+    const installing = held();
+    const startingWorkflows = held();
+    await lifecycle.start(
+      steps({
+        starting: [
+          [
+            "install the apps",
+            () =>
+              lifecycle.ownBackgroundTask("install the apps", async () => {
+                await installing.until;
+                done.push("installed the apps");
+                lifecycle.ownBackgroundTask("start workflows", async () => {
+                  await startingWorkflows.until;
+                  done.push("started workflows");
+                });
+              }),
+          ],
+        ],
+      }),
+    );
+    let settled = false;
+    const settling = lifecycle
+      .backgroundWorkSettled()
+      .then(() => (settled = true));
+
+    installing.release();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(done).toEqual(["installed the apps"]);
+    expect(settled).toBe(false);
+    startingWorkflows.release();
+    await settling;
+
+    expect(done).toEqual(["installed the apps", "started workflows"]);
+    expect(lifecycle.phase()).toBe("running");
+  });
+
+  it("counts background work that failed as ended", async () => {
+    const { lifecycle, steps } = lifecycleOf();
+    await lifecycle.start(
+      steps({
+        starting: [
+          [
+            "install the apps",
+            () =>
+              lifecycle.ownBackgroundTask("install the apps", async () => {
+                throw new Error("the packages are gone");
+              }),
+          ],
+        ],
+      }),
+    );
+
+    await lifecycle.backgroundWorkSettled();
+
+    expect((await lifecycle.stopped).failedSteps).toEqual(["install the apps"]);
+  });
+
   it("answers only its health check from a trial's start until the update commits", async () => {
     const { lifecycle, logs, steps } = lifecycleOf();
     expect(lifecycle.readiness()).toBe("everyone");

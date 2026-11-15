@@ -9,7 +9,7 @@ import {
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,13 +21,19 @@ import { appGrants } from "../src/app-host/schema.js";
 import { defaultLimits, type Limits } from "../src/auth/limits.js";
 import { authClients, authTokens } from "../src/auth/schema.js";
 import { hashToken, newClientToken } from "../src/auth/tokens.js";
-import { openCoreDatabase } from "../src/database.js";
-import { createModules } from "../src/modules.js";
-import { loadHomeId } from "../src/places/places.js";
-import { createServer, type CoreHttps } from "../src/server.js";
+import {
+  createCore,
+  type CoreManager,
+  type TestReplacements,
+} from "../src/core.js";
+import type { CoreDatabase } from "../src/database.js";
+import type { createModules } from "../src/modules.js";
+import { updatePendingFile } from "../src/update-pending.js";
 import type { SunDays } from "../src/workflows/jobs.js";
 import { fakeManager, type TestManager } from "./manager-support.js";
 import { firstStarts, runnerApps } from "./runner-apps.js";
+
+type ModuleOptions = Parameters<typeof createModules>[1];
 
 // A core on a fresh database, and a device that talks to it the way the
 // apps do: OPAQUE on its side, with fast key stretching for tests.
@@ -49,23 +55,31 @@ export const fixtureApps = fileURLToPath(
   new URL("./fixtures/apps", import.meta.url),
 );
 
+// A core as a host starts it (core.ts), through the same steps, with what a
+// test replaces: the manager as fakeManager() plays it, the apps the test
+// defines, its own clock, timers it ticks by hand, no start in the activity
+// log and no listening. On a fresh database unless a test gives another
+// core's. It resolves once the core runs and its background work of starting
+// has ended: the apps are installed and have had their first starts, and
+// workflows have started, unless an update is on trial.
 export async function testCore(
   options: {
     allowedOrigins?: string[];
     hostId?: string | null;
     limits?: Partial<Limits>;
-    updatePending?: () => boolean;
-    // Starts as a core does while its update is on trial, until the test commits.
+    // Starts as a core does while its update is on trial: only the health
+    // check answers, and the apps and workflows wait for a commit, which the
+    // test makes by hand.
     onTrial?: boolean;
     // How soon an app's update asks for its turn again, and where its versions are.
-    appUpdates?: Parameters<typeof createModules>[1]["appUpdates"];
+    appUpdates?: ModuleOptions["appUpdates"];
     // Apps the test defines, each run apart through the runner in this process.
     apps?: readonly AppPackage[];
     // Apps the test runs itself, each listening in its own folder under
     // `appSockets`.
     apart?: readonly ApartPackage[];
     appSockets?: string;
-    supervision?: Parameters<typeof createModules>[1]["supervision"];
+    supervision?: ModuleOptions["supervision"];
     manager?: TestManager;
     appTimeoutMs?: number;
     confirmMs?: number;
@@ -75,9 +89,9 @@ export async function testCore(
     holdSettleMs?: number;
     // Starts the core on another core's data, as after a restart.
     dataDir?: string;
-    // The host CA's pin the core binds sign-ins to, and the chain it serves.
-    pin?: string;
-    https?: CoreHttps;
+    // Certificates from a test's CA: the core serves their chain over HTTPS
+    // and binds sign-ins to the CA's pin.
+    certificates?: TestReplacements["certificates"];
     // The home's time zone, UTC unless a test says, and its sun times.
     // null: the home's own, from Places.
     timeZone?: string | null;
@@ -94,14 +108,18 @@ export async function testCore(
 ) {
   const dataDir =
     options.dataDir ?? (await mkdtemp(join(tmpdir(), "sanctum-core-")));
-  const database = openCoreDatabase(dataDir);
+  // On trial only when the test says, whatever the core before it on this
+  // data was: the manager's marker of an update it hasn't committed.
+  const marker = join(dataDir, updatePendingFile);
+  if (options.onTrial) await writeFile(marker, "test-update");
+  else await rm(marker, { force: true });
   const clock = {
     now: new Date(options.startsAt ?? "2026-10-26T12:00:00Z").getTime(),
   };
   const now = () => new Date(clock.now);
   const claims: boolean[] = [];
   const logs: string[] = [];
-  const coreHomeId = loadHomeId(database.db, now);
+  const lifecycleLogs: string[] = [];
   const sockets =
     options.appSockets ?? (await mkdtemp(join(tmpdir(), "sanctum-run-")));
   const runner = runnerApps({
@@ -110,78 +128,109 @@ export async function testCore(
     manager: options.manager ?? fakeManager().manager,
   });
   const apps = runner.add(options.apps ?? []);
-  const modules = await createModules(database.db, {
-    ...(options.appUpdates ? { appUpdates: options.appUpdates } : {}),
-    dataDir,
-    version: "1.2.3",
-    manager: runner.manager,
-    hostId: () =>
-      options.hostId === undefined ? hostId : (options.hostId ?? undefined),
-    homeId: coreHomeId,
-    pin: () => options.pin ?? null,
-    onClaimed: () => claims.push(true),
-    log: (message) => logs.push(message),
-    limits: { ...defaultLimits, ...options.limits },
-    now,
-    appTimeoutMs: options.appTimeoutMs,
-    appSockets: sockets,
-    supervision: options.supervision,
-    confirmMs: options.confirmMs,
-    firmwareStaleMs: options.firmwareStaleMs,
-    probeWaitMs: options.probeWaitMs,
-    holdLimitMs: options.holdLimitMs,
-    // Tests wait for a stopped light only when they ask to.
-    holdSettleMs: options.holdSettleMs ?? 0,
-    timeZone:
-      options.timeZone === null ? undefined : () => options.timeZone ?? "UTC",
-    sun: options.sun,
-    fetch: options.fetch ?? noInternet,
-  });
-  // What the core starts as it starts (core.ts): discovery, and the deadlines
-  // of firmware updates under way.
-  modules.discovery?.start();
-  modules.firmware.start();
-  if (options.allowed ?? true) {
-    allowEveryPermission(
-      database.db,
-      [...apps, ...(options.apart ?? [])].map(({ apart }) => apart.manifest),
-      now(),
-    );
-  }
-  if (options.onTrial) modules.workflows.hold();
-  await modules.apps.start([...apps, ...(options.apart ?? [])], {
-    onTrial: options.onTrial ?? false,
-  });
-  // Tests move the clock and tick by hand.
-  if (!options.onTrial) modules.workflows.start({ ticking: false });
-  modules.history.start({ ticking: false });
-  const server = createServer(
-    { allowedOrigins: options.allowedOrigins ?? [], version: "1.2.3" },
-    { ...modules, updatePending: options.updatePending, https: options.https },
+  const installed = [...apps, ...(options.apart ?? [])];
+  const core = createCore(
+    {
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: options.allowedOrigins ?? [],
+      dataDir,
+      plainHttp: !options.certificates,
+      officialAppsDir: join(dataDir, "no-catalog"),
+      appsApart: [],
+      packagesDir: join(dataDir, "no-packages"),
+      managerSocket: join(dataDir, "no-manager.sock"),
+      version: "1.2.3",
+    },
+    {
+      log: (message) => logs.push(message),
+      lifecycleLog: (message) => lifecycleLogs.push(message),
+      testReplacements: {
+        now,
+        manager: linkTo(runner.manager, {
+          hostId: () =>
+            options.hostId === undefined
+              ? hostId
+              : (options.hostId ?? undefined),
+          // What the core tells the manager of the claim, as it starts and
+          // once it's claimed.
+          reportClaimed: async (claimed) => void claims.push(claimed),
+          stagedApps: async () => ({}),
+          signCertificate: async () => {
+            throw new Error("A test's manager signs no certificate");
+          },
+          close: () => undefined,
+        }),
+        certificates: options.certificates,
+        async installApps({ db, modules, onTrial }) {
+          if (options.allowed ?? true) {
+            allowEveryPermission(
+              db,
+              installed.map(({ apart }) => apart.manifest),
+              now(),
+            );
+          }
+          await modules.apps.start(installed, { onTrial });
+          // Each app the test defines has had its first start, as one in the
+          // core's process has once the core starts, unless it waits for a
+          // commit.
+          if (!onTrial) await firstStarts(modules.apps, apps);
+        },
+        ticking: false,
+        recordsStarts: false,
+        listens: false,
+        moduleOptions: {
+          ...(options.appUpdates ? { appUpdates: options.appUpdates } : {}),
+          limits: { ...defaultLimits, ...options.limits },
+          appTimeoutMs: options.appTimeoutMs,
+          appSockets: sockets,
+          supervision: options.supervision,
+          confirmMs: options.confirmMs,
+          firmwareStaleMs: options.firmwareStaleMs,
+          probeWaitMs: options.probeWaitMs,
+          holdLimitMs: options.holdLimitMs,
+          // Tests wait for a stopped light only when they ask to.
+          holdSettleMs: options.holdSettleMs ?? 0,
+          timeZone:
+            options.timeZone === null
+              ? undefined
+              : () => options.timeZone ?? "UTC",
+          sun: options.sun,
+          fetch: options.fetch ?? noInternet,
+        },
+      },
+    },
   );
   open.push(async () => {
-    await server.close();
-    await modules.close();
-    database.close();
+    await core.stop();
     await runner.close();
     if (!options.appSockets) {
       await rm(sockets, { recursive: true, force: true });
     }
   });
-  // Each app the test defines has had its first start, as one in the core's
-  // process has once the core starts, unless it waits for a commit.
-  if (!options.onTrial) await firstStarts(modules.apps, apps);
+  await core.start();
+  await core.lifecycle.backgroundWorkSettled();
+  if (core.lifecycle.phase() !== "running") {
+    throw new Error(
+      `The test's core didn't start:\n${lifecycleLogs.join("\n")}`,
+    );
+  }
+  const modules = core.modules!;
   return {
     ...modules,
-    db: database.db,
-    homeId: coreHomeId,
+    db: core.db!,
+    homeId: core.homeId,
     dataDir,
-    server,
+    server: core.server!,
     logs,
+    // The lifecycle's own lines, apart from the modules' in `logs`.
+    lifecycleLogs,
     claims,
     now,
     // Moves the core's clock on.
     advance: (ms: number) => (clock.now += ms),
+    // Stops the core as a signal does, through its steps of stopping.
+    stop: () => core.stop(),
     // Installs and starts more apps the test defines, through the runner as
     // `apps` are.
     async startApps(packages: readonly AppPackage[]) {
@@ -192,12 +241,30 @@ export async function testCore(
   };
 }
 
+// The test's manager as the core reaches it, with what a host's link over the
+// manager's socket adds. The rest is as it is when asked, since a test can
+// change it after the core has started.
+function linkTo(
+  manager: TestManager,
+  link: Pick<
+    CoreManager,
+    "hostId" | "reportClaimed" | "stagedApps" | "signCertificate" | "close"
+  >,
+) {
+  return new Proxy(manager, {
+    get: (target, key, receiver) =>
+      Object.hasOwn(link, key)
+        ? link[key as keyof typeof link]
+        : Reflect.get(target, key, receiver),
+  }) as CoreManager;
+}
+
 export type TestCore = Awaited<ReturnType<typeof testCore>>;
 
 // The household's yes to each permission the apps ask for that has no
 // answer yet, before the core first sees them ask; an answer it has stays.
 function allowEveryPermission(
-  db: ReturnType<typeof openCoreDatabase>["db"],
+  db: CoreDatabase,
   apps: readonly { id: string; permissions: readonly { id: string }[] }[],
   updatedAt: Date,
 ) {

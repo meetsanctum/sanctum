@@ -280,7 +280,7 @@ describe("holding a remote's button", () => {
       graph: pressing(home, "hold", "dimWhileHeld"),
     });
     await press(home.core, "hold");
-    await home.core.close();
+    await home.core.stop();
     expect(movesOf("desk-1").at(-1)).toEqual({ move: "stop" });
     expect(radio.moving.size).toBe(0);
   });

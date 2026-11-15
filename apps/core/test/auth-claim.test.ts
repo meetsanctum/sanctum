@@ -67,7 +67,8 @@ describe("claiming the host", () => {
       homeId: core.homeId,
       claimed: true,
     });
-    expect(core.claims).toEqual([true]);
+    // The manager heard it unclaimed as the core started, then claimed.
+    expect(core.claims).toEqual([false, true]);
     expect(core.db.select().from(activity).all()).toMatchObject([
       { source: "auth", action: "host.claim", outcome: "ok" },
     ]);
@@ -115,7 +116,7 @@ describe("claiming the host", () => {
       200, 409,
     ]);
     expect(core.people.list()).toHaveLength(1);
-    expect(core.claims).toEqual([true]);
+    expect(core.claims).toEqual([false, true]);
   });
 
   it("finishes only from the address that started it, within a minute", async () => {

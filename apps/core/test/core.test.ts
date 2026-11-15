@@ -7,7 +7,7 @@ import type { CoreConfig } from "../src/config.js";
 import { createCore, type Core } from "../src/core.js";
 import { updatePendingFile } from "../src/update-pending.js";
 import { managerSocket, type SocketRequest } from "./manager-support.js";
-import { hostId } from "./support.js";
+import { hostId, testCore } from "./support.js";
 
 // A whole core as a host starts and stops it (core.ts), through the steps of
 // each phase of its lifecycle, against a manager that answers on its socket
@@ -128,6 +128,22 @@ describe("a whole core", () => {
       { version: "1.2.3", stoppedAt: expect.any(String), unexpected: false },
       { version: "1.2.3", stoppedAt: null, unexpected: false },
     ]);
+  });
+
+  it("runs the steps a test's core runs, each by the same name", async () => {
+    const dataDir = await hostFolder();
+    const { socketPath } = await managerSocket(manager);
+    const host = await serving(configOf(dataDir, socketPath));
+    const test = await testCore();
+    await host.core.stop("signal");
+    await test.stop();
+
+    const stepsOf = (lines: string[]) =>
+      lines.filter((line) => /^core: (starting|stopping): /.test(line));
+    expect(stepsOf(test.lifecycleLogs)).toEqual(stepsOf(host.logs));
+    expect(stepsOf(host.logs)).toContain("core: stopping: close core.db");
+    // The test's own log holds only the modules' lines.
+    expect(test.logs.filter((line) => line.startsWith("core: "))).toEqual([]);
   });
 
   it("answers only its health check until the manager commits its update", async () => {

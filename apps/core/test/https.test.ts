@@ -222,7 +222,7 @@ describe("the core over HTTPS", () => {
     });
     watching.push(certificates);
     const first = await certificates.first();
-    const core = await testCore({ pin: first.pin, https: first });
+    const core = await testCore({ certificates });
     const { token } = await claimed(core);
     await core.server.listen({ host: "127.0.0.1", port: 0 });
     const { port } = core.server.server.address() as { port: number };
