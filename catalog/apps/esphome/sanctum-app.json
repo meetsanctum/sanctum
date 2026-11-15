@@ -1,0 +1,160 @@
+{
+  "id": "sanctum.esphome",
+  "name": "ESPHome",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "protocol": 6,
+  "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": "migrations",
+  "driver": {
+    "hooks": [
+      "command",
+      "remove",
+      "repair",
+      "discovered",
+      "add"
+    ],
+    "problems": {
+      "keyMismatch": {
+        "words": "Its encryption key doesn't match",
+        "repair": {
+          "help": "Its key changed, as when it's flashed with a new configuration. Enter the key from that configuration, under api: encryption: key.",
+          "asks": [
+            "key"
+          ]
+        }
+      },
+      "keyAdded": {
+        "words": "It has an encryption key now",
+        "repair": {
+          "help": "It was flashed with a configuration that has one. Enter the key from that configuration, under api: encryption: key.",
+          "asks": [
+            "key"
+          ]
+        }
+      }
+    },
+    "questions": {
+      "key": {
+        "label": "Encryption key",
+        "kind": "secret",
+        "help": "From its configuration, under api: encryption: key.",
+        "refusals": {
+          "wrongKey": "That key doesn't match. Copy it again from its configuration, under api: encryption: key."
+        }
+      }
+    }
+  },
+  "permissions": [
+    {
+      "id": "devices.register",
+      "reason": "To add your ESPHome devices and keep their state.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "discover:mdns:_esphomelib._tcp",
+      "reason": "To find your ESPHome devices.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "lan:tcp:6053",
+      "reason": "To talk to the ESPHome devices it found.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "cpu",
+    "color": "graphite"
+  },
+  "pages": [],
+  "settings": null,
+  "actions": [
+    {
+      "id": "esphome.device",
+      "title": "Device",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "signal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unused": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sleeps": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address",
+          "encrypted",
+          "version",
+          "signal",
+          "unused",
+          "sleeps"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [
+      {
+        "id": "esphome.device",
+        "title": "ESPHome",
+        "kinds": [],
+        "devices": "own"
+      }
+    ],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

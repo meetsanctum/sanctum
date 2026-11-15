@@ -1,4 +1,5 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
+import esphome from "@meetsanctum/esphome/ui";
 import naturalLight from "@meetsanctum/natural-light/ui";
 import moods from "@meetsanctum/moods/ui";
 import weather from "@meetsanctum/weather/ui";
@@ -21,7 +22,13 @@ import { pageMismatch, type PageMismatch } from "./page-mismatch";
 // which of them the home has installed (GET /api/apps). Each gets a client
 // limited to its own actions and the core calls its permissions allow.
 
-const bundled: readonly AppUi[] = [moods, naturalLight, weather, zigbee];
+const bundled: readonly AppUi[] = [
+  esphome,
+  moods,
+  naturalLight,
+  weather,
+  zigbee,
+];
 
 export type HostedApp = {
   info: AppInfo;

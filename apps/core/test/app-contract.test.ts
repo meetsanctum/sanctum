@@ -8,7 +8,7 @@ import {
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { createActivity } from "../src/activity/activity.js";
@@ -608,11 +608,15 @@ describe("what an app writes", () => {
 
 describe("the catalog's apps, from their packages", () => {
   const catalog = resolve(import.meta.dirname, "../../../catalog/apps");
+  let packages: Awaited<ReturnType<typeof loadAppPackages>>;
 
-  it("have manifests whose every schema compiles", async () => {
-    const packages = await loadAppPackages(catalog, "official");
+  beforeAll(async () => {
+    packages = await loadAppPackages(catalog, "official");
+  }, 30_000);
 
+  it("have manifests whose every schema compiles", () => {
     expect(packages.map(({ app }) => app.id).sort()).toEqual([
+      "sanctum.esphome",
       "sanctum.moods",
       "sanctum.natural-light",
       "sanctum.weather",
@@ -642,7 +646,7 @@ describe("the catalog's apps, from their packages", () => {
 
   it("start and do their work against the core", async () => {
     const started = await testCore({
-      apps: await loadAppPackages(catalog, "official"),
+      apps: packages,
     });
     const { token } = await claimed(started);
     const call = (app: string, action: string, input: object) =>

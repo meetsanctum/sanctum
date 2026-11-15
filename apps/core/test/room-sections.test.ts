@@ -156,6 +156,20 @@ describe("room sections", () => {
       },
       "pressed with nook.gone, which must be one of its read or write actions",
     ],
+    [
+      "a kind the shell doesn't draw",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.kind = "rows" as "tiles";
+      },
+      "its manifest is incomplete",
+    ],
+    [
+      "buttons with a page to open",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.kind = "buttons";
+      },
+      "shows buttons, which have no heading to open a page from or show empty",
+    ],
   ])(
     "keep an app whose manifest gives its section %s from being installed",
     (_, change, refusal) => {
@@ -165,6 +179,16 @@ describe("room sections", () => {
       expect(() => checkManifest(manifest)).toThrow(refusal);
     },
   );
+
+  it("may show buttons, with no page to open and nothing shown empty", () => {
+    const manifest = toStaticManifest(defineApp(nook()));
+    const [section] = manifest.provides.roomSections;
+    Object.assign(section!, { kind: "buttons", open: null, whenEmpty: null });
+
+    expect(checkManifest(manifest).provides.roomSections).toEqual([
+      expect.objectContaining({ kind: "buttons", open: null, whenEmpty: null }),
+    ]);
+  });
 
   it("keep the places before 300 for Sanctum's own apps", async () => {
     const early = (app: AppDefinition): AppDefinition => ({
