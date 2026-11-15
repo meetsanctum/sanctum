@@ -23,15 +23,14 @@ import { motionText } from "./motion";
 // The home's lights, switches, remotes and sensors as tiles: one tile for
 // each light, switch, button, motion sensor or contact sensor a device has,
 // and one for each device with sensors, grouped in sections by room or by
-// category. Each tile
-// shows what the core shows: a command waiting for the device, a colour held
-// for a light that is off, a device that did not answer, and one that is
-// offline or not paired any more. A remote's shows its latest press for a
-// few seconds; a sensor's its readings, in the unit the home shows
-// temperatures in; a motion sensor's whether it sees motion, or for how long
-// it has not; a contact sensor's whether it is open, and for how long. A
-// remote or sensor on a battery gone quiet says "Not heard from"
-// (maintenance.ts), not what it said days ago.
+// category. Each tile shows what the core shows: a command waiting for the
+// device as it will be, a colour held for a light that is off, a device that
+// did not answer, and one that is offline or not paired any more. A remote's
+// shows its latest press for a few seconds; a sensor's its readings, in the
+// unit the home shows temperatures in; a motion sensor's whether it sees
+// motion, or for how long it has not; a contact sensor's whether it is open,
+// and for how long. A remote or sensor on a battery gone quiet says "Not
+// heard from" (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
 
@@ -50,10 +49,11 @@ export const tilesIn = (
     category.holds.some((each) => each.kind === tile.kind),
   );
 
-// What a tile says under its name. A light turning on or off says so while
-// the command is on its way, but a new level or colour shows as it will be;
-// a device that missed the last command says so until it answers; a colour
-// or brightness held for a light that is off waits for it to turn on.
+// What a tile says under its name. A command on its way shows as it will be,
+// with no word for the wait, since most land before a word could be read and
+// it would only flash; a device that missed the last command says so until
+// it answers; a colour or brightness held for a light that is off waits for
+// it to turn on.
 function statusOf(capability: Switchable, onText: string) {
   const on = capability.state?.on === true;
   const shown = on ? onText : "Off";
@@ -66,13 +66,6 @@ function statusOf(capability: Switchable, onText: string) {
           ? capability.desired?.brightness
           : undefined;
       return `Off · ${brightness === undefined ? "new colour" : `${brightness}%`} when on`;
-    }
-    case "pending": {
-      const asked = capability.desired?.on;
-      const was = capability.observed?.on;
-      if (asked === true && was !== true) return "Turning on…";
-      if (asked === false && was !== false) return "Turning off…";
-      return shown;
     }
     default:
       return shown;
