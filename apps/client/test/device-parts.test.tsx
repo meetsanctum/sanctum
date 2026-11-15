@@ -21,6 +21,9 @@ describe("a device's icon", () => {
         "switch",
         "button",
         "motion",
+        "contact",
+        "door",
+        "window",
         "sensor",
         "unknown",
       ] as const
@@ -31,9 +34,21 @@ describe("a device's icon", () => {
       "lucide-power",
       "lucide-circle-dot",
       "lucide-footprints",
+      "lucide-contact-closed",
+      "lucide-door-closed",
+      "lucide-window-closed",
       "lucide-thermometer",
       "lucide-radio",
     ]);
+  });
+
+  it.each([
+    ["contact", "lucide-contact-closed"],
+    ["plug", "lucide-power"],
+    ["door", "lucide-radio"],
+    ["window", "lucide-radio"],
+  ])("shows a driver's type %s only when a driver may say it", (type, icon) => {
+    expect(renderToStaticMarkup(<DeviceIcon type={type} />)).toContain(icon);
   });
 
   it.each(["curtain", "constructor", "toString", "__proto__"])(

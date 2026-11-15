@@ -1,4 +1,9 @@
-import type { DeviceInfo, DeviceType, Room } from "@meetsanctum/app-sdk";
+import {
+  deviceTypes,
+  type DeviceInfo,
+  type DeviceType,
+  type Room,
+} from "@meetsanctum/app-sdk";
 import { Button, ContactClosed, WindowClosed } from "@meetsanctum/ui-sdk";
 import {
   ChevronDown,
@@ -51,7 +56,11 @@ export function DeviceIcon(props: {
   device?: DeviceInfo;
   type?: string | null;
 }) {
-  const type = props.device?.type ?? props.type;
+  // A found device has only its driver's word, which cannot choose a type
+  // reserved for the household.
+  const type =
+    props.device?.type ??
+    deviceTypes.find((each) => each.id === props.type && !each.chosenOnly)?.id;
   const Icon: LucideIcon =
     type && Object.hasOwn(typeIcons, type)
       ? typeIcons[type as DeviceType]
