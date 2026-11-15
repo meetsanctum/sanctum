@@ -1,7 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 
 import { createActivity } from "../src/activity/activity.js";
 import { createDeviceLog, type Sent } from "../src/devices/activity.js";
@@ -16,9 +16,9 @@ afterEach(() => {
 });
 
 async function deviceLog() {
-  const database = openCoreDatabase(
-    await mkdtemp(join(tmpdir(), "sanctum-device-log-")),
-  );
+  const folder = await mkdtemp(join(tmpdir(), "sanctum-device-log-"));
+  onTestFinished(() => rm(folder, { recursive: true, force: true }));
+  const database = openCoreDatabase(folder);
   closing.push(database.close);
   const clock = { now: Date.parse("2026-10-01T12:00:00Z") };
   const activity = createActivity(database.db, {

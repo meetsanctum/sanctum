@@ -1,13 +1,24 @@
 import { NewerDatabaseError } from "@meetsanctum/app-sdk/storage";
-import { appendFile, cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  cp,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
 import { migrationsFolder, openCoreDatabase } from "../src/database.js";
 import { people } from "../src/people/schema.js";
 
-const tempDir = () => mkdtemp(join(tmpdir(), "sanctum-core-"));
+async function tempDir() {
+  const folder = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+  onTestFinished(() => rm(folder, { recursive: true, force: true }));
+  return folder;
+}
 
 // A copy of this build's migrations plus one more, as a newer build has.
 async function extraMigrations(isEarlier = false) {

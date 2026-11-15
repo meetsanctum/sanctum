@@ -1,16 +1,17 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { ZodError } from "zod";
 
 import { openCoreDatabase } from "../src/database.js";
 import { createPeople, PeopleError } from "../src/people/people.js";
 
 async function household(options: { claimed: boolean }) {
-  const { db } = openCoreDatabase(
-    await mkdtemp(join(tmpdir(), "sanctum-core-")),
-  );
+  const folder = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+  onTestFinished(() => rm(folder, { recursive: true, force: true }));
+  const { db, close } = openCoreDatabase(folder);
+  onTestFinished(close);
   const people = createPeople(db, { isClaimed: () => options.claimed });
   return { db, people };
 }
