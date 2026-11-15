@@ -52,7 +52,8 @@ export type WorkflowChangedBy = { personId?: string; clientId: string };
 
 export class WorkflowsError extends Error {
   constructor(
-    readonly code: "not_found" | "invalid_workflow" | "kept_by_app",
+    readonly code:
+      "not_found" | "invalid_workflow" | "kept_by_app" | "stopping",
     readonly problems: WorkflowProblem[] = [],
   ) {
     super(code);
@@ -292,6 +293,7 @@ export function createWorkflows(
 
   let timer: NodeJS.Timeout | undefined;
   let held = false;
+  let interrupted = false;
   const unlessHeld =
     <Happened extends unknown[]>(fire: (...happened: Happened) => void) =>
     (...happened: Happened) => {
@@ -451,6 +453,8 @@ export function createWorkflows(
       by: WorkflowChangedBy & { clientName?: string },
       input: z.output<typeof workflowRef>,
     ) {
+      // None starts while the core stops.
+      if (interrupted) throw new WorkflowsError("stopping");
       const workflow = row(input.id);
       // One an app keeps runs only while the app runs.
       if (workflow.app && !host.isRunning(workflow.app)) {
@@ -661,6 +665,7 @@ export function createWorkflows(
 
     /** Fires due timers and runs due jobs. */
     tick() {
+      if (interrupted) return;
       const at = now();
       try {
         timers.fire(at);
@@ -681,10 +686,24 @@ export function createWorkflows(
     },
 
     /**
+     * The core is stopping: no run starts from now on, from an event, a
+     * timer, a job, someone's press or the queue, and each run under way ends
+     * as interrupted before its next condition or step, as after a crash.
+     */
+    interrupt() {
+      interrupted = true;
+      held = true;
+      clearInterval(timer);
+      timer = undefined;
+      engine.interrupt();
+    },
+
+    /**
      * Ends the runs the core was running when it stopped, then checks the
      * timers now and every few seconds; tests tick by hand.
      */
     start(startOptions: { ticking?: boolean } = {}) {
+      if (interrupted) return;
       held = false;
       const ended = runs.interrupted();
       if (ended > 0) {

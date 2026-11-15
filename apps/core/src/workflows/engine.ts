@@ -122,6 +122,9 @@ export function createEngine(options: {
   const active = new Map<string, Set<string>>();
   const queues = new Map<string, Queued[]>();
   const cancelled = new Set<string>();
+  // The core is stopping: no run starts, and those under way end before their
+  // next condition or step.
+  let interrupting = false;
   const seen = new Set<string>();
   const started = new Map<string, number[]>();
   const working = new Set<Promise<void>>();
@@ -305,7 +308,7 @@ export function createEngine(options: {
     if (running.size > 0) {
       return;
     }
-    const next = queues.get(workflow.id)?.shift();
+    const next = interrupting ? undefined : queues.get(workflow.id)?.shift();
     if (next) {
       runs.start(next.runId);
       begin(next.workflow, next.firing, next.runId);
@@ -427,6 +430,12 @@ export function createEngine(options: {
     entry: RunEntry,
   ) {
     const graph: WorkflowGraph = workflow.graph;
+    // Cancelled by a restart or a workflow's going, or interrupted by the
+    // core stopping, as after a crash.
+    const stoppedAs = () =>
+      cancelled.has(runId) || !interrupting
+        ? { status: "cancelled" as const }
+        : { status: "failed" as const, reason: "interrupted" };
     let position = 0;
     let ran = 0;
     let failed = 0;
@@ -472,7 +481,7 @@ export function createEngine(options: {
         return;
       }
       const checked = new Map<string, boolean>();
-      const isCancelled = () => cancelled.has(runId);
+      const isCancelled = () => interrupting || cancelled.has(runId);
       const check = async (node: WorkflowNode) => {
         const known = checked.get(node.id);
         if (known !== undefined) {
@@ -501,7 +510,7 @@ export function createEngine(options: {
           continue;
         }
         if (isCancelled()) {
-          return finish(workflow, runId, { status: "cancelled" }, entry);
+          return finish(workflow, runId, stoppedAs(), entry);
         }
         logRun(workflow, firing, runId, entry);
         const row = runs.addStep(runId, position++, step, step.config);
@@ -531,7 +540,7 @@ export function createEngine(options: {
       );
     } catch (error) {
       if (error === stopped) {
-        return finish(workflow, runId, { status: "cancelled" }, entry);
+        return finish(workflow, runId, stoppedAs(), entry);
       }
       log(`workflows: a run of ${workflow.id} failed (${describe(error)})`);
       finish(
@@ -554,7 +563,7 @@ export function createEngine(options: {
      * firing it has seen before does nothing.
      */
     fire(workflow: WorkflowRow, fired: Firing): string | undefined {
-      if (duplicate(workflow.id, fired.key)) {
+      if (interrupting || duplicate(workflow.id, fired.key)) {
         return undefined;
       }
       const firing = {
@@ -627,6 +636,24 @@ export function createEngine(options: {
      */
     cancelRuns(workflowId: string) {
       for (const runId of activeRuns(workflowId)) cancelled.add(runId);
+    },
+
+    /**
+     * The core is stopping: no run starts from now on, queued ones included,
+     * which end as interrupted, and each run under way ends as interrupted
+     * before its next condition or step, letting a call it is making finish.
+     */
+    interrupt() {
+      interrupting = true;
+      for (const [workflowId, queued] of queues) {
+        for (const { runId } of queued) {
+          runs.end(runId, workflowId, {
+            status: "failed",
+            reason: "interrupted",
+          });
+        }
+      }
+      queues.clear();
     },
 
     /** Drops what waits for a workflow that changed or went. */
