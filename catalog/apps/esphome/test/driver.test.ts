@@ -32,37 +32,34 @@ async function reflash(device: EmulatedDevice, psk: string | null) {
 }
 
 describe("finding devices", () => {
-  it("lists those on the network with what adding each needs, not one waiting for a key", async () => {
+  it("lists those on the network with what adding each needs", async () => {
     home = await startHome();
     const keyed = await home.plugIn({
       name: "porch",
       friendlyName: "Porch light",
     });
     const open = await home.plugIn({ name: "fan", psk: null });
-    const waiting = await home.plugIn({ name: "new", psk: null });
-    const record = waiting.sighting();
-    await home.core.discovered({
-      found: [
-        {
-          ...record,
-          txt: {
-            ...record.txt,
-            api_encryption_supported: "Noise_NNpsk0_25519_ChaChaPoly_SHA256",
-            api_provisioning: "zero_psk",
-          },
-        },
-      ],
-      lost: [],
+    const waiting = await home.plugIn({
+      name: "new",
+      psk: null,
+      waiting: true,
+      kind: "sensor",
     });
-
-    expect(
+    const rows = () =>
       home.core.found.map(({ key, name, description, asks }) => ({
         key,
         name,
         description,
         asks: asks.map((each) => each.id),
-      })),
-    ).toEqual([
+      }));
+
+    // One waiting for a key says what it has, once a connection under the
+    // zero key has told it.
+    await home.core.until(
+      () => rows().at(-1)?.description === "temperature",
+      "what it has",
+    );
+    expect(rows()).toEqual([
       {
         key: keyOf(keyed.options.mac),
         name: "Porch light",
@@ -73,6 +70,12 @@ describe("finding devices", () => {
         key: keyOf(open.options.mac),
         name: "fan",
         description: "Not encrypted",
+        asks: [],
+      },
+      {
+        key: keyOf(waiting.options.mac),
+        name: "new",
+        description: "temperature",
         asks: [],
       },
     ]);

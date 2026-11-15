@@ -1,0 +1,14 @@
+diff --git a/dist/esphome-client.js b/dist/esphome-client.js
+index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..b5966f4501d5c9ffcb8b3a9a68dc47ba04447d08 100644
+--- a/dist/esphome-client.js
++++ b/dist/esphome-client.js
+@@ -1542,7 +1542,8 @@ export class EspHomeClient {
+             // This validator stands beside the handshake's own because the key set validates a key it sends to the device, and no handshake state exists here to validate it.
+             // It reports the fault in the connect flow's wording for the same fault.
+             const keyBuffer = Buffer.from(key, "base64");
+-            if (keyBuffer.length !== NOISE_PSK_LEN) {
++            // An empty key clears the device's own, as ESPHome takes one of no bytes.
++            if (keyBuffer.length !== NOISE_PSK_LEN && key !== "") {
+                 throw new EncryptionKeyInvalidError("The encryption key is invalid: PSK must be exactly " + String(NOISE_PSK_LEN) + " bytes, got " + String(keyBuffer.length) +
+                     ".", "INVALID_PSK_LENGTH");
+             }

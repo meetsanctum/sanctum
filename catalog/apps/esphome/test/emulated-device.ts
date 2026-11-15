@@ -29,6 +29,8 @@ export type EmulatedOptions = {
   mac: string;
   /** Its encryption key, in base64, or null for a device built without one. */
   psk: string | null;
+  /** Built to be given its key later: with no key, it waits for one. */
+  waiting?: boolean;
   version?: string;
   sleeps?: boolean;
   entities: EmulatedEntity[];
@@ -37,6 +39,8 @@ export type EmulatedOptions = {
 };
 
 const message = {
+  noiseSetKeyRequest: 124,
+  noiseSetKeyResponse: 125,
   helloRequest: 1,
   helloResponse: 2,
   disconnectRequest: 5,
@@ -142,6 +146,14 @@ export class EmulatedDevice {
   connections = 0;
   /** Whether it answers pings, so a test can model a silent connection. */
   answersPings = true;
+  /** Waiting for a key, which it takes over a connection under the zero key. */
+  waiting: boolean;
+  /** Its window for being given a key closed, as a device that waited too long. */
+  windowClosed = false;
+  /** It takes the next key it's sent, or has its own cleared, but its answer is lost. */
+  losesNextAnswer = false;
+  /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
+  readonly keysSent: { key: string; encrypted: boolean }[] = [];
   private readonly server: Server;
   private readonly sockets = new Set<Socket>();
   private readonly subscribed = new Set<
@@ -151,6 +163,7 @@ export class EmulatedDevice {
 
   private constructor(readonly options: EmulatedOptions) {
     this.psk = options.psk;
+    this.waiting = options.waiting === true && options.psk === null;
     this.states = structuredClone(options.states ?? {});
     this.server = createServer((socket) => this.serve(socket));
   }
@@ -192,6 +205,10 @@ export class EmulatedDevice {
     if (this.options.friendlyName)
       txt.friendly_name = this.options.friendlyName;
     if (this.psk) txt.api_encryption = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
+    else if (this.waiting) {
+      txt.api_encryption_supported = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
+      txt.api_provisioning = "zero_psk";
+    }
     return {
       service: "_esphomelib._tcp",
       name: this.options.name,
@@ -288,7 +305,7 @@ export class EmulatedDevice {
               );
             };
           } else {
-            if (!this.psk) {
+            if (!this.psk && !this.waiting) {
               // Built without encryption: a Noise hello ends the connection.
               socket.destroy();
               return;
@@ -315,7 +332,7 @@ export class EmulatedDevice {
             return;
           const payload = buffer.subarray(at, at + length);
           buffer = buffer.subarray(at + length);
-          this.answer(socket, send, type, payload);
+          this.answer(socket, send, type, payload, false);
           continue;
         }
         if (buffer.length < 3) return;
@@ -324,9 +341,11 @@ export class EmulatedDevice {
         const body = buffer.subarray(3, 3 + size);
         buffer = buffer.subarray(3 + size);
         if (stage === "hello") {
+          // One waiting for a key takes the zero key, which keeps listeners
+          // out but authenticates nobody.
           noise = createESPHomeHandshake({
             role: "responder",
-            psk: Buffer.from(this.psk!, "base64"),
+            psk: this.psk ? Buffer.from(this.psk, "base64") : Buffer.alloc(32),
           });
           const name = this.options.name;
           noiseFrame(
@@ -371,7 +390,7 @@ export class EmulatedDevice {
           const plain = ciphers!.receive.DecryptWithAd(Buffer.alloc(0), body);
           const type = plain.readUInt16BE(0);
           const length = plain.readUInt16BE(2);
-          this.answer(socket, send, type, plain.subarray(4, 4 + length));
+          this.answer(socket, send, type, plain.subarray(4, 4 + length), true);
         }
       }
     });
@@ -382,12 +401,44 @@ export class EmulatedDevice {
     send: (type: number, payload: Buffer) => void,
     type: number,
     payload: Buffer,
+    encrypted: boolean,
   ) {
     const text = (fieldNumber: number, value: string) =>
       field({ fieldNumber, valueType: "string" }, value);
     const flag = (fieldNumber: number, value: number | boolean) =>
       field({ fieldNumber, valueType: "varint" }, Number(value));
-    if (type === message.helloRequest) {
+    if (type === message.helloRequest && this.waiting && this.windowClosed) {
+      // Too late to be given a key: it says who it is, then asks to part.
+      send(
+        message.helloResponse,
+        Buffer.concat([flag(1, 1), flag(2, 14), text(4, this.options.name)]),
+      );
+      send(message.disconnectRequest, Buffer.alloc(0));
+      socket.end();
+    } else if (type === message.noiseSetKeyRequest) {
+      const raw = decode(payload).get(1)?.[0];
+      const key = Buffer.isBuffer(raw) ? raw : Buffer.alloc(0);
+      this.keysSent.push({ key: key.toString("base64"), encrypted });
+      const valid =
+        key.length === 0 || (key.length === 32 && key.some(Boolean));
+      if (valid) {
+        // An empty key clears its own, so it waits for one again.
+        this.psk = key.length === 0 ? null : key.toString("base64");
+        this.waiting = this.psk === null;
+      }
+      if (this.losesNextAnswer) {
+        this.losesNextAnswer = false;
+        for (const each of this.sockets) each.destroy();
+        return;
+      }
+      send(message.noiseSetKeyResponse, flag(1, valid));
+      // It applies its key by ending every connection, as ESPHome does.
+      if (valid) {
+        setTimeout(() => {
+          for (const each of this.sockets) each.destroy();
+        }, 10);
+      }
+    } else if (type === message.helloRequest) {
       send(
         message.helloResponse,
         Buffer.concat([
@@ -410,7 +461,7 @@ export class EmulatedDevice {
           ...(this.options.friendlyName
             ? [text(13, this.options.friendlyName)]
             : []),
-          flag(19, this.psk !== null),
+          flag(19, this.psk !== null || this.waiting),
         ]),
       );
     } else if (type === message.listEntitiesRequest) {

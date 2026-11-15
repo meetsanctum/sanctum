@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "core": "^1.0.0",
   "protocol": 7,
   "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
@@ -47,6 +47,9 @@
           "wrongKey": "That key doesn't match. Copy it again from its configuration, under api: encryption: key."
         }
       }
+    },
+    "refusals": {
+      "notWaiting": "It stopped waiting for a key. Turn it off and on again, then add it."
     }
   },
   "permissions": [

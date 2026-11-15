@@ -10,3 +10,8 @@ packages:
 # (ELECTRON_SKIP_BINARY_DOWNLOAD), since nothing there runs it.
 onlyBuiltDependencies:
   - electron
+# Patches to dependencies, each with its reason in the patch. An image that
+# installs one app's dependencies alone, as the manager's does, uses none.
+patchedDependencies:
+  esphome-client@2.1.0: patches/esphome-client@2.1.0.patch
+allowUnusedPatches: true
