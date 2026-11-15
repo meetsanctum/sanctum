@@ -7,7 +7,7 @@ import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, sharedClient, testCore, type TestCore } from "./support.js";
 
 // Moods on the core, end to end: a room's moods are counted before the room is
-// removed, and go with it, through place.deleted while Moods runs, and when it
+// removed, and go with it, through place.removed while Moods runs, and when it
 // starts for a room deleted while it did not; and turning a room on brings back
 // what it was when it went dark, through the lights.turnOn Moods publishes.
 

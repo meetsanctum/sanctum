@@ -44,6 +44,7 @@ import {
   type RoomSectionInfo,
 } from "./room-sections.js";
 import { turnOnType } from "./lights.js";
+import { protocolVersion } from "./protocol-version.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
 import { forecastType, sunType } from "./weather.js";
 import {
@@ -511,6 +512,9 @@ export function toStaticManifest(app: AppDefinition) {
     name: app.name,
     version: app.version,
     core: app.core,
+    // The protocol its runner speaks, so a core can tell before it starts a
+    // version it keeps whether it still speaks it.
+    protocol: protocolVersion,
     summary: app.summary?.trim() ?? null,
     runtime: {
       memory: app.runtime?.memory ?? defaultMemory,

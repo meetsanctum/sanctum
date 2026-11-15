@@ -18,16 +18,16 @@ export type Place =
   | ({ kind: "room" } & Room)
   | ({ kind: "zone" } & Zone);
 
-// Something the app may read was added, changed or deleted: a change
-// carries it before and after, a deletion it as it was last. One that
-// itself changes so that it leaves what the app may read, such as a device
-// whose last light goes, is deleted for that app. A permission switched off
-// is never such a deletion: the app hears permissions.changed, and what the
+// Something the app may read was added, changed or removed: a change
+// carries it before and after, a removal it as it was last. One that itself
+// changes so that it leaves what the app may read, such as a device whose
+// last light goes, is removed for that app. A permission switched off is
+// never such a removal: the app hears permissions.changed, and what the
 // permission covered is only out of sight.
 type Lifecycle<Noun extends string, T> =
   | ({ name: `${Noun}.added` } & Record<Noun, T>)
   | ({ name: `${Noun}.changed`; before: T } & Record<Noun, T>)
-  | ({ name: `${Noun}.deleted` } & Record<Noun, T>);
+  | ({ name: `${Noun}.removed` } & Record<Noun, T>);
 
 /**
  * A device changed: a report, a command confirmed or in conflict, going
@@ -40,7 +40,7 @@ export type DeviceEvent = Lifecycle<"device", DeviceInfo>;
  * A remote was pressed: one of its button's actions, once for each press.
  * Needs `devices.read:button`; none goes out while the remote is captured.
  */
-export type DevicePressEvent = {
+export type DevicePressedEvent = {
   name: "device.pressed";
   device: DeviceInfo;
   capability: string;
@@ -48,8 +48,8 @@ export type DevicePressEvent = {
 };
 
 /**
- * A floor, room or zone was added, changed or deleted, or the home was
- * renamed; needs `places.read`. Deleting a room moves its devices to no
+ * A floor, room or zone was added, changed or removed, or the home was
+ * renamed; needs `places.read`. Removing a room moves its devices to no
  * room, each a device.changed, and takes it out of its zones.
  */
 export type PlaceEvent = Lifecycle<"place", Place>;
@@ -70,14 +70,14 @@ export type PersonEvent = Lifecycle<"person", PersonInfo>;
 /**
  * An entity of a standard type was published, changed or removed, by
  * whichever app provides it; needs `entities.read:<type>`. A key that
- * changes type is deleted as the old type and added as the new one.
+ * changes type is removed as the old type and added as the new one.
  */
 export type EntityEvent = Lifecycle<"entity", EntityInfo>;
 
 /**
  * The household granted the app a permission it asks for, or took one
  * away: what it may do now and what it could before. Losing a permission is
- * never a deletion: what it covered is only out of sight, so the app keeps
+ * never a removal: what it covered is only out of sight, so the app keeps
  * its data about it. Needs no permission.
  */
 export type PermissionsEvent = {
@@ -99,7 +99,7 @@ export type SettingsEvent = {
 
 export type CoreEvent =
   | DeviceEvent
-  | DevicePressEvent
+  | DevicePressedEvent
   | PlaceEvent
   | LocationEvent
   | PersonEvent
@@ -110,18 +110,18 @@ export type CoreEvent =
 export const coreEventNames = [
   "device.added",
   "device.changed",
-  "device.deleted",
+  "device.removed",
   "device.pressed",
   "place.added",
   "place.changed",
-  "place.deleted",
+  "place.removed",
   "location.changed",
   "person.added",
   "person.changed",
-  "person.deleted",
+  "person.removed",
   "entity.added",
   "entity.changed",
-  "entity.deleted",
+  "entity.removed",
   "permissions.changed",
   "settings.changed",
 ] as const satisfies readonly CoreEvent["name"][];

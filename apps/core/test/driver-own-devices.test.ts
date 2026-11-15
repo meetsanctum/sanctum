@@ -51,7 +51,7 @@ function ownDriver() {
       await ctx.events.on("device.changed", async (event) => {
         heard.push(event);
       });
-      await ctx.events.on("device.deleted", async (event) => {
+      await ctx.events.on("device.removed", async (event) => {
         heard.push(event);
       });
     },
@@ -144,7 +144,7 @@ describe("a driver's own devices", () => {
     );
     await expect
       .poll(() => heard.at(-1))
-      .toMatchObject({ name: "device.deleted", device: { key: "aa:bb" } });
+      .toMatchObject({ name: "device.removed", device: { key: "aa:bb" } });
   });
 
   it("are whole for its pages, though not their keys, and other clients never see a key", async () => {

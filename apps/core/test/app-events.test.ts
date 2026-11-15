@@ -149,9 +149,9 @@ describe("the core's events", () => {
       [
         "place.added",
         "place.changed",
-        "place.deleted",
+        "place.removed",
         "device.changed",
-        "device.deleted",
+        "device.removed",
       ],
     );
     const { core, maya, lamp } = await lampsCore({ apps: [places.pkg] });
@@ -191,7 +191,7 @@ describe("the core's events", () => {
           before: { id: lamp, roomId: room.id, name: "Office light" },
           device: { id: lamp, roomId: null, name: "Office light" },
         },
-        { name: "place.deleted", place: { kind: "room", id: room.id } },
+        { name: "place.removed", place: { kind: "room", id: room.id } },
         {
           name: "place.changed",
           before: { kind: "zone", id: zone.id, roomIds: [room.id] },
@@ -257,7 +257,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     const maya = await claimed(core);
@@ -293,7 +293,7 @@ describe("the core's events", () => {
           person: expect.objectContaining({ name: "Benjamin" }),
         },
         {
-          name: "person.deleted",
+          name: "person.removed",
           person: expect.objectContaining({ id: ben.id, name: "Benjamin" }),
         },
       ]);
@@ -303,7 +303,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     expect(() =>
@@ -327,7 +327,7 @@ describe("the core's events", () => {
     const people = listener(
       "test.people",
       ["people.read"],
-      ["person.added", "person.changed", "person.deleted"],
+      ["person.added", "person.changed", "person.removed"],
     );
     const core = await testCore({ apps: [people.pkg] });
     const person = core.db.transaction(() =>
@@ -350,7 +350,7 @@ describe("the core's events", () => {
     const sun = listener(
       "test.sun",
       [`entities.read:${sunType.id}`],
-      ["entity.added", "entity.changed", "entity.deleted"],
+      ["entity.added", "entity.changed", "entity.removed"],
     );
     const core = await testCore({ apps: [sun.pkg] });
     const entity = { type: sunType.id, key: "home", name: "Sun" };
@@ -382,7 +382,7 @@ describe("the core's events", () => {
           before: { state: { date: "2026-10-29" } },
           entity: { state: { date: "2026-10-30" } },
         },
-        { name: "entity.deleted", entity: { type: sunType.id, key: "home" } },
+        { name: "entity.removed", entity: { type: sunType.id, key: "home" } },
       ]);
   });
 
@@ -393,7 +393,7 @@ describe("the core's events", () => {
       ["devices.read:light"],
       "does not hold devices.read:button",
     ],
-    ["place.deleted", ["devices.read:light"], "does not hold places.read"],
+    ["place.removed", ["devices.read:light"], "does not hold places.read"],
     ["location.changed", ["places.read"], "does not hold places.location"],
     ["person.added", ["places.read"], "does not hold people.read"],
     [

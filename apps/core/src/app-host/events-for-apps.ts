@@ -113,7 +113,7 @@ function eventsOf(change: EventChange): CoreEvent[] {
     return [{ name: `${noun}.added`, [noun]: after } as CoreEvent];
   }
   if (before && !after) {
-    return [{ name: `${noun}.deleted`, [noun]: before } as CoreEvent];
+    return [{ name: `${noun}.removed`, [noun]: before } as CoreEvent];
   }
   if (before && after && JSON.stringify(before) !== JSON.stringify(after)) {
     return [{ name: `${noun}.changed`, [noun]: after, before } as CoreEvent];
@@ -122,7 +122,7 @@ function eventsOf(change: EventChange): CoreEvent[] {
 }
 
 // A queued event may outlive its grants. Narrow its original snapshot
-// again for each handler, without turning lost access into a deletion or
+// again for each handler, without turning lost access into a removal or
 // adding data that was not visible when the event happened.
 function eventShownTo(
   event: CoreEvent,

@@ -81,7 +81,7 @@ describe("the events waiting for an app apart", () => {
 
   it("hears nothing of what it didn't follow, which then waits no longer", async () => {
     const { bus, following, heard, overflowed } = setUp();
-    following.handlers.set("place.deleted", [
+    following.handlers.set("place.removed", [
       (async (event: CoreEvent) => {
         heard.push(event.name);
       }) as never,
@@ -91,7 +91,7 @@ describe("the events waiting for an app apart", () => {
       before: nowhere,
       after: rooms(1, 1_000),
     });
-    following.follow("place.deleted");
+    following.follow("place.removed");
 
     following.started();
     await settled();

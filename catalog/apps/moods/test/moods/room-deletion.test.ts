@@ -5,7 +5,7 @@ import { assignSmartMood } from "../../src/moods/smart-actions.js";
 import { startableHome } from "./core.js";
 import { device, lightCapability } from "./home.js";
 
-// A room's moods go with the room: Moods follows place.deleted while it
+// A room's moods go with the room: Moods follows place.removed while it
 // runs, and on start removes the moods of rooms deleted while it was
 // stopped, and their entities with them.
 
@@ -54,7 +54,7 @@ describe("a room's moods", () => {
       lights: counter,
     });
 
-    expect(state.followed).toContain("place.deleted");
+    expect(state.followed).toContain("place.removed");
     await deleteRoom("office");
 
     expect(await moodsIn(call)).toEqual([["kitchen", "Cooking"]]);
@@ -75,7 +75,7 @@ describe("a room's moods", () => {
     });
 
     await hand({
-      name: "place.deleted",
+      name: "place.removed",
       place: { kind: "zone", id: "office", name: "Office", roomIds: [] },
     });
 
