@@ -163,6 +163,7 @@ export function AddDevices(props: {
   const [pendingAdds, setPendingAdds] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const saveAttempts = useRef(new Map<string, symbol>());
 
   // A closed dialog's request must finish before a later dialog opens the
   // network, including when the first open is still waiting on a radio.
@@ -265,8 +266,8 @@ export function AddDevices(props: {
     };
   }, [props.open, open, close]);
 
+  // A save can finish after the dialog closes, so keep following live devices.
   useEffect(() => {
-    if (!props.open) return;
     const current = session.current;
     // A read the live feed or a later read has overtaken is out of date.
     let revision = 0;
@@ -276,11 +277,13 @@ export function AddDevices(props: {
     };
     return props.live.subscribe({
       message(message) {
-        if (message.type !== "pairing") return;
+        if (message.type === "device") saveAttempts.current.delete(message.id);
+        if (!props.open || message.type !== "pairing") return;
         revision += 1;
         received(message.pairing);
       },
       refresh() {
+        if (!props.open) return;
         const requested = ++revision;
         void coreJson<PairingInfo>("/api/devices/pairing")
           .then((next) => {
@@ -350,11 +353,23 @@ export function AddDevices(props: {
       : undefined;
 
   const save = async (device: DeviceInfo, changes: Changes) => {
+    const attempt = Symbol();
+    const current = session.current;
+    saveAttempts.current.set(device.id, attempt);
     setProblem(undefined);
     try {
-      props.onChanged(await updateDevice(device.id, changes));
+      const response = await updateDevice(device.id, changes);
+      if (saveAttempts.current.get(device.id) === attempt)
+        props.onChanged(response);
     } catch (error) {
-      setProblem(deviceProblem(error));
+      if (
+        current === session.current &&
+        saveAttempts.current.get(device.id) === attempt
+      )
+        setProblem(deviceProblem(error));
+    } finally {
+      if (saveAttempts.current.get(device.id) === attempt)
+        saveAttempts.current.delete(device.id);
     }
   };
 

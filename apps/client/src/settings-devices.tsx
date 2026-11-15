@@ -6,6 +6,7 @@ import {
   type AppInfo,
   type CapabilityInfo,
   type DeviceInfo,
+  type DeviceType,
   type FirmwareState,
   type HistoryKept,
   type MotionCommand,
@@ -139,6 +140,7 @@ export function DevicesSection(props: {
   const [announcement, setAnnouncement] = useState("");
   // Live device messages received during a request take precedence over its response.
   const liveDevices = useRef(new Map<string, DeviceInfo | null>());
+  const showAsAttempts = useRef(new Map<string, symbol>());
   const now = useMinuteClock();
   // Each remote's press of the last few seconds, by device.
   const [pressed, setPressed] = useState<Record<string, string>>({});
@@ -265,6 +267,7 @@ export function DevicesSection(props: {
           if (pending.current) pending.current.rooms = message.places.rooms;
           setRooms(message.places.rooms);
         } else if (message.type === "device") {
+          showAsAttempts.current.delete(message.id);
           liveDevices.current.set(message.id, message.device);
           update((current) => {
             const others = current.filter((each) => each.id !== message.id);
@@ -280,6 +283,20 @@ export function DevicesSection(props: {
 
   const appName = (device: DeviceInfo) =>
     props.apps.find((app) => app.id === device.driver)?.name ?? null;
+
+  // A newer choice or live device takes precedence over a late save reply.
+  const saveShowAs = async (device: DeviceInfo, shownAs: DeviceType | null) => {
+    const attempt = Symbol();
+    showAsAttempts.current.set(device.id, attempt);
+    try {
+      const response = await updateDevice(device.id, { shownAs });
+      if (showAsAttempts.current.get(device.id) === attempt) changed(response);
+    } finally {
+      if (showAsAttempts.current.get(device.id) === attempt) {
+        showAsAttempts.current.delete(device.id);
+      }
+    }
+  };
 
   const found = (id: string, result?: CheckResult) =>
     setResults(({ [id]: _, ...rest }) =>
@@ -506,9 +523,7 @@ export function DevicesSection(props: {
                         .catch(() => undefined)
                     }
                     onShowAs={(shownAs) =>
-                      void updateDevice(device.id, { shownAs })
-                        .then(changed)
-                        .catch(() => undefined)
+                      void saveShowAs(device, shownAs).catch(() => undefined)
                     }
                     onMotion={() => setTuning(device.id)}
                     onCheck={() => void check(device)}
