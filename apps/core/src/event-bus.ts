@@ -53,7 +53,11 @@ export type EventBusState = "waitingForFollowers" | "open" | "closed";
 type Log = (message: string) => void;
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  try {
+    return String(error instanceof Error ? error.message : error);
+  } catch {
+    return "unprintable error";
+  }
 }
 
 // What the event was about, in the words a follower's failure is logged in.

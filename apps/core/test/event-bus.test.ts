@@ -79,27 +79,33 @@ describe("the core's event bus", () => {
     ]);
   });
 
-  it("goes on to the next follower when one throws, and says which in its words", () => {
-    const { bus, logs, heard, hearing } = busOf();
-    bus.setFollowers([
-      [
-        "workflows",
-        {
-          "device.changed": () => {
-            throw new Error("the rules fell over");
+  it.each([
+    { error: new Error("the rules fell over"), message: "the rules fell over" },
+    { error: Object.create(null), message: "unprintable error" },
+  ])(
+    "goes on to the next follower when one throws $message, and says which in its words",
+    ({ error, message }) => {
+      const { bus, logs, heard, hearing } = busOf();
+      bus.setFollowers([
+        [
+          "workflows",
+          {
+            "device.changed": () => {
+              throw error;
+            },
           },
-        },
-      ],
-      hearing("history", ["device.changed"]),
-    ]);
+        ],
+        hearing("history", ["device.changed"]),
+      ]);
 
-    expect(() => bus.publish(lampChanged)).not.toThrow();
+      expect(() => bus.publish(lampChanged)).not.toThrow();
 
-    expect(heard).toEqual(["history: device.changed"]);
-    expect(logs).toEqual([
-      "workflows: a change of lamp was not handled (the rules fell over)",
-    ]);
-  });
+      expect(heard).toEqual(["history: device.changed"]);
+      expect(logs).toEqual([
+        `workflows: a change of lamp was not handled (${message})`,
+      ]);
+    },
+  );
 
   it("hands on what a follower publishes once the event it handles has reached every follower", () => {
     const { bus, heard, hearing } = busOf();
@@ -205,28 +211,34 @@ describe("the core's event bus", () => {
     ]);
   });
 
-  it("doesn't wait for a handler that returns a promise, and catches its failure", async () => {
-    const { bus, logs, heard, hearing } = busOf();
-    let fail!: () => void;
-    const failing = new Promise<void>(
-      (_resolve, reject) => (fail = () => reject(new Error("too late"))),
-    );
-    bus.setFollowers([
-      ["dashboards", { "device.changed": (() => failing) as () => void }],
-      hearing("history", ["device.changed"]),
-    ]);
+  it.each([
+    { error: new Error("too late"), message: "too late" },
+    { error: Object.create(null), message: "unprintable error" },
+  ])(
+    "doesn't wait for a handler that returns a promise, and catches its failure $message",
+    async ({ error, message }) => {
+      const { bus, logs, heard, hearing } = busOf();
+      let fail!: () => void;
+      const failing = new Promise<void>(
+        (_resolve, reject) => (fail = () => reject(error)),
+      );
+      bus.setFollowers([
+        ["dashboards", { "device.changed": (() => failing) as () => void }],
+        hearing("history", ["device.changed"]),
+      ]);
 
-    bus.publish(lampChanged);
-    expect(heard).toEqual(["history: device.changed"]);
-    fail();
-    await failing.catch(() => undefined);
-    await new Promise((resolve) => setImmediate(resolve));
+      bus.publish(lampChanged);
+      expect(heard).toEqual(["history: device.changed"]);
+      fail();
+      await failing.catch(() => undefined);
+      await new Promise((resolve) => setImmediate(resolve));
 
-    expect(logs).toEqual([
-      "events: dashboards returned a promise for device.changed, which the bus doesn't wait for",
-      "dashboards: a change of lamp was not handled (too late)",
-    ]);
-  });
+      expect(logs).toEqual([
+        "events: dashboards returned a promise for device.changed, which the bus doesn't wait for",
+        `dashboards: a change of lamp was not handled (${message})`,
+      ]);
+    },
+  );
 
   it("hands on an event when its log fails", () => {
     const heard: string[] = [];
