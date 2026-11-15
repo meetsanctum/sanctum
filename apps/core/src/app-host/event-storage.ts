@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { withTimeout } from "./errors.js";
 
 // The start context's storage, which the app's handlers of the core's
-// events close over (core-events.ts). Each delivery is a call of its own,
+// events close over (events-for-apps.ts). Each delivery is a call of its own,
 // as an action is: AsyncLocalStorage follows it across awaits and the work
 // it sets off, so a handler that ran late or left a transaction open
 // cannot reach into the start context's call or the next delivery's.

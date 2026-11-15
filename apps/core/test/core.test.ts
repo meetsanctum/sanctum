@@ -144,6 +144,9 @@ describe("a whole core", () => {
     expect(stepsOf(host.logs)).toContain("core: stopping: close core.db");
     // The test's own log holds only the modules' lines.
     expect(test.logs.filter((line) => line.startsWith("core: "))).toEqual([]);
+    // Nothing was published before the bus's followers were set or after
+    // it closed.
+    expect(host.logs.filter((line) => line.startsWith("events: "))).toEqual([]);
   });
 
   it("answers only its health check until the manager commits its update", async () => {

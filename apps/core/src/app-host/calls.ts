@@ -79,7 +79,7 @@ export function entityTypes(permissions: readonly string[]) {
     .filter((type) => permissions.includes(entityReadPermission(type)));
 }
 
-// Why an app may not follow one of the core's events (core-events.ts), or
+// Why an app may not follow one of the core's events (events-for-apps.ts), or
 // null when it may read what the event is about: a driver hears of its own
 // devices.
 function followRefusal(name: CoreEventName, permissions: readonly string[]) {
@@ -371,7 +371,7 @@ export function createCoreCalls(options: {
     },
 
     // One of the core's events, by the permission to read what it is about
-    // (core-events.ts).
+    // (events-for-apps.ts).
     async follow(name) {
       open();
       if (!options.follow) {

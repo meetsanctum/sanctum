@@ -207,6 +207,14 @@ export async function testCore(
     if (!options.appSockets) {
       await rm(sockets, { recursive: true, force: true });
     }
+    // The bus says only what the core did out of order: published before
+    // its followers were set or after it closed (event-bus.ts).
+    const outOfOrder = logs.filter((line) => line.startsWith("events: "));
+    if (outOfOrder.length > 0) {
+      throw new Error(
+        `The test's core published out of order:\n${outOfOrder.join("\n")}`,
+      );
+    }
   });
   await core.start();
   await core.lifecycle.backgroundWorkSettled();

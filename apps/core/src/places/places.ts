@@ -152,6 +152,16 @@ function coordinatesAfter(
   };
 }
 
+// A change of the places, once it has committed: every place before and
+// after it.
+export type PlacesChange = { before: Places; after: Places };
+
+// Where the home is, before and after; null where it isn't set.
+export type LocationChange = {
+  before: HomeLocation | null;
+  after: HomeLocation | null;
+};
+
 const byName = <T extends { name: string }>(a: T, b: T) =>
   a.name.localeCompare(b.name);
 
@@ -159,14 +169,11 @@ export function createPlaces(
   db: CoreDatabase,
   options: {
     record: RecordActivity;
-    // Called after a change has committed, with the places before it, so
-    // live clients and running apps can follow.
-    onChange?: (places: Places, before: Places) => void;
+    // Called after a change has committed, with every place before and
+    // after it.
+    onChange?: (change: PlacesChange) => void;
     // Where the home is changed, which apps read apart from the places.
-    onLocationChange?: (
-      before: HomeLocation | null,
-      after: HomeLocation | null,
-    ) => void;
+    onLocationChange?: (change: LocationChange) => void;
     // Capture dependent state before the foreign-key cascade; the returned
     // notification runs only once the removal has committed, before
     // onChange, so what follows the devices hears them move first.
@@ -249,10 +256,10 @@ export function createPlaces(
       return done.result;
     });
     committed?.();
-    options.onChange?.(list(), before);
+    options.onChange?.({ before, after: list() });
     const isAt = locationNow();
     if (JSON.stringify(wasAt) !== JSON.stringify(isAt)) {
-      options.onLocationChange?.(wasAt, isAt);
+      options.onLocationChange?.({ before: wasAt, after: isAt });
     }
     return result;
   }

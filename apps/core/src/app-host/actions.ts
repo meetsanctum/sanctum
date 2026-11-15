@@ -11,7 +11,7 @@ import { activityTimes } from "../activity/kinds.js";
 import type { Outcome } from "../activity/schema.js";
 import type { AppContract, DeclaredAction } from "./contract.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
-import type { AppEvent } from "./app-work.js";
+import type { EmittedEvent } from "./app-work.js";
 
 // Runs apps' actions for the app host and writes them to the activity log. A
 // call that may change something has its entry as it starts, and what the
@@ -49,10 +49,10 @@ export function createActionRunner<
     entry: Entry,
     actor: Actor,
     storage: ReturnType<AppStorage["call"]>,
-    events: { held: AppEvent[]; withinMs: number },
+    events: { held: EmittedEvent[]; withinMs: number },
   ) => AppContext;
   // Hands on the events a call held back.
-  deliver: (events: readonly AppEvent[]) => void;
+  deliver: (events: readonly EmittedEvent[]) => void;
 }) {
   const { activity, timeoutMs, log } = options;
 
@@ -136,7 +136,7 @@ export function createActionRunner<
     }
 
     const storage = entry.storage.call();
-    const held: AppEvent[] = [];
+    const held: EmittedEvent[] = [];
     const ctx = options.contextFor(entry, actor, storage, { held, withinMs });
     if (declared.tier !== "read") {
       logged = record(appId, action.id, who, "ok");
