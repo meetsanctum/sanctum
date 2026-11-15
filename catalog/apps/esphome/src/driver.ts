@@ -50,6 +50,9 @@ type Owned = {
   problem: string | null;
   sleeps: boolean;
   setup: Promise<void>;
+  // What the core last took of its problem, and the report that's latest.
+  told: string | null;
+  reports: number;
   // Saying its problem again, after the core didn't take it.
   telling?: ReturnType<typeof setTimeout>;
 };
@@ -144,11 +147,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       });
       if (!current()) return;
       if (owned.problem) {
-        // No retry of the problem it had may follow its clearing.
-        clearTimeout(owned.telling);
-        await ctx.devices.problem({ key: owned.mac, problem: null });
-        if (!current()) return;
+        // Cleared before it's said, so no retry of the problem it had can
+        // follow, even one that fails while the core is answering this.
         owned.problem = null;
+        tell(owned);
       }
       owned.mapping = mapping;
       owned.sleeps = sleeps;
@@ -232,6 +234,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       mac,
       mapping: null,
       problem: device.problem?.id ?? null,
+      told: device.problem?.id ?? null,
+      reports: 0,
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
       connection: undefined as unknown as Connection,
@@ -258,7 +262,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         },
         halted: (halt) => {
           owned.problem = halt;
-          tell(owned, halt);
+          tell(owned);
         },
       },
     });
@@ -268,20 +272,28 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return owned;
   }
 
-  // Says a device's problem until the core takes it, so it never waits for
-  // Repair with nothing saying so, while it's still that device's problem.
-  function tell(owned: Owned, problem: string, attempt = 0) {
+  // Says a device's problem, as it stands when it's said, until the core
+  // takes it: so it never waits for Repair with nothing saying so, and a
+  // retry never says a problem it no longer has.
+  function tell(owned: Owned, attempt = 0) {
     clearTimeout(owned.telling);
-    // Repaired since, it's no longer the device's problem to say.
-    if (owned.problem !== problem) return;
-    ctx.devices.problem({ key: owned.mac, problem }).catch(() => {
-      if (stopped || devices.get(owned.mac) !== owned) return;
-      if (owned.problem !== problem) return;
-      owned.telling = setTimeout(
-        () => tell(owned, problem, attempt + 1),
-        Math.min(timings.firstPauseMs * 2 ** attempt, timings.longestPauseMs),
-      );
-    });
+    const problem = owned.problem;
+    const report = ++owned.reports;
+    ctx.devices.problem({ key: owned.mac, problem }).then(
+      () => {
+        if (report === owned.reports) owned.told = problem;
+      },
+      () => {
+        if (stopped || devices.get(owned.mac) !== owned) return;
+        owned.telling = setTimeout(
+          () => {
+            // A later report may have said it since.
+            if (owned.problem !== owned.told) tell(owned, attempt + 1);
+          },
+          Math.min(timings.firstPauseMs * 2 ** attempt, timings.longestPauseMs),
+        );
+      },
+    );
   }
 
   function forget(mac: string) {

@@ -429,3 +429,45 @@ it("hears a press once when the device reconnects before its first session is ta
     await button.stop();
   }
 });
+
+it("never says a problem again when an earlier report fails while its clearing is answered", async () => {
+  const key = await add(core, device);
+  await core.until(() => core.availability.get(key) === "online", "online");
+  const tell = context.devices.problem.bind(context.devices);
+  const problem = vi.spyOn(context.devices, "problem");
+  let failEarlier!: () => void;
+  let answerClearing!: () => void;
+  let failed = false;
+  let answered = false;
+  // The core takes the problem and the clearing, but the problem's answer
+  // fails only once the clearing waits for its own.
+  problem.mockImplementation(async (report) => {
+    await tell(report);
+    if (report.problem && !failed) {
+      failed = true;
+      await new Promise<void>((_, fail) => {
+        failEarlier = () => fail(new Error("The core's answer was lost"));
+      });
+    }
+    if (report.problem === null && !answered) {
+      answered = true;
+      await new Promise<void>((done) => {
+        answerClearing = done;
+      });
+    }
+  });
+  const next = newKey();
+  await device.unplug();
+  device.psk = next;
+  await device.listen();
+  await core.until(() => core.problems.has(key), "the problem");
+
+  expect(await core.repair(key, { key: next })).toBeUndefined();
+  await core.until(() => !core.problems.has(key), "the problem cleared");
+  failEarlier();
+  await new Promise((done) => setTimeout(done, timings.longestPauseMs * 3));
+  answerClearing();
+  await new Promise((done) => setTimeout(done, timings.longestPauseMs * 2));
+
+  expect(core.problems.has(key)).toBe(false);
+});
