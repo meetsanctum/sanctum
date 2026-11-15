@@ -1,4 +1,6 @@
 import {
+  comingsOn,
+  countedWeekHeadline,
   durationText,
   joinedSpans,
   midnight,
@@ -37,10 +39,7 @@ export function contactSentence(
   }
   const isOpenNow = last === joined.at(-1) && last.to >= now;
   if (on >= whole && isOpenNow) return "Open the whole time";
-  const openings = joined.filter((span, index) => {
-    const before = joined[index - 1];
-    return span.on && before?.known === true && !before.on;
-  });
+  const openings = comingsOn(joined);
   const total = `${durationText(on)} in all`;
   if (openings.length === 0) {
     return isOpenNow
@@ -66,6 +65,16 @@ export function contactSpanText(span: Span) {
  * has not been open.
  */
 export function contactWeekHeadline(days: readonly Day[], now: number) {
+  return sensedWeekHeadline(days, now, {
+    aDay: (about) => `Open ${about} a day`,
+    today: (duration) => `Open for ${duration} today`,
+    none: neverOpened(days, now),
+  });
+}
+
+// "Not opened" is said only of days known throughout, from the first day
+// anything is known of.
+function neverOpened(days: readonly Day[], now: number) {
   const firstKnown = days.find((day) => day.known > 0);
   const isKnownThroughout =
     firstKnown !== undefined &&
@@ -76,9 +85,22 @@ export function contactWeekHeadline(days: readonly Day[], now: number) {
           day.known >=
           (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
       );
-  return sensedWeekHeadline(days, now, {
-    aDay: (about) => `Open ${about} a day`,
-    today: (duration) => `Open for ${duration} today`,
-    none: isKnownThroughout ? "Not opened" : "Not seen open",
+  return isKnownThroughout ? "Not opened" : "Not seen open";
+}
+
+/** How often it opened, as a column's readout and a headline say it. */
+export const openedTimes = (count: number) =>
+  count === 1 ? "Opened once" : `Opened ${count} times`;
+
+/**
+ * What a door's last 7 days come to: about how often it opened a day, over
+ * the days that have ended; while that is less than once a day, how often
+ * in all; or since when it has not been opened.
+ */
+export function doorWeekHeadline(days: readonly Day[], now: number) {
+  return countedWeekHeadline(days, now, {
+    aDay: (about) => `Opened ${about} a day`,
+    times: openedTimes,
+    none: neverOpened(days, now),
   });
 }
