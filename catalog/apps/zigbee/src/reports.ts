@@ -1,5 +1,6 @@
 import type { AppContext } from "@meetsanctum/app-sdk";
 
+import { contactState } from "./contact.js";
 import type { ZigbeeDeviceEntry } from "./devices.js";
 import { firmwareOf } from "./firmware.js";
 import type { createFirmwareUpdates } from "./firmware-updates.js";
@@ -48,7 +49,9 @@ export function createDeviceReporter({
       const state =
         capability.kind === "sensor"
           ? sensorState(capability, raw)
-          : stateFromPayload(capability, raw);
+          : capability.kind === "contact"
+            ? contactState(capability, raw)
+            : stateFromPayload(capability, raw);
       if (state) {
         states[capability.id] = state;
       }

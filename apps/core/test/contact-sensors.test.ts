@@ -66,6 +66,60 @@ describe("a contact sensor", () => {
     });
   });
 
+  it("is one from then on when its driver first says its contact, without joining again", async () => {
+    const { core, maya } = await lampsCore();
+    const hall = (
+      await post(core, "/api/places/rooms/add", { name: "Hall" }, maya)
+    ).json();
+    // A driver that knew nothing of contacts brought it with no parts.
+    const registration = {
+      key: "magnet-1",
+      name: "Door and window sensor",
+      model: "MCCGQ11LM",
+      capabilities: [],
+    };
+    core.devices.register("test.lamps", registration);
+    const byDriverName = async () =>
+      (await get(core, "/api/devices", { token: maya.token }))
+        .json()
+        .find(
+          (device: { driverName: string }) =>
+            device.driverName === "Door and window sensor",
+        );
+    const before = await byDriverName();
+    expect(before).toMatchObject({ type: "unknown", name: "Unknown device" });
+    await post(
+      core,
+      "/api/devices/update",
+      { id: before.id, roomId: hall.id },
+      maya,
+    );
+
+    core.devices.register("test.lamps", {
+      ...registration,
+      capabilities: [{ id: "contact", kind: "contact" }],
+    });
+
+    // The same device, in its room, waiting for its first reading.
+    expect(await byDriverName()).toMatchObject({
+      id: before.id,
+      type: "contact",
+      name: "Hall contact sensor",
+      roomId: hall.id,
+      capabilities: [{ id: "contact", kind: "contact", state: null }],
+    });
+
+    core.devices.report("test.lamps", {
+      key: "magnet-1",
+      availability: "online",
+      states: { contact: { open: true } },
+    });
+    await settled();
+    expect((await byDriverName()).capabilities[0].state).toEqual({
+      open: true,
+    });
+  });
+
   it("says when it opened, and not again while it says the same", async () => {
     const { core, maya, sensor } = await contactCore();
     core.advance(2 * minute);

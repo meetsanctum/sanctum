@@ -1,5 +1,6 @@
 import type { ButtonFeatures, LightFeatures } from "@meetsanctum/app-sdk";
 
+import { mapContact, type ContactMapping } from "./contact.js";
 import { mapMotion, type DeviceFacts, type MotionMapping } from "./motion.js";
 import {
   isActionExpose,
@@ -14,11 +15,10 @@ import { numericValue } from "./values.js";
 
 // A device's exposes onto the core's capability kinds. Lights, switches, a
 // remote's buttons, a climate sensor's temperature and humidity and a motion
-// sensor's light level (sensors.ts) and its motion with its settings
-// (motion.ts): an expose of any other kind is left out rather than
-// guessed at, and so is a light or switch that cannot be switched and an
-// action expose with no presses. The driver brings no device with none of
-// these.
+// sensor's light level (sensors.ts), its motion with its settings
+// (motion.ts) and a contact sensor's contact (contact.ts): an expose of any
+// other kind is left out rather than guessed at, and so is a light or
+// switch that cannot be switched and an action expose with no presses.
 
 /** A binary feature, such as a light's state, and the values it takes. */
 type Binary = { property: string; on: unknown; off: unknown };
@@ -59,7 +59,12 @@ export type ButtonMapping = {
 };
 
 export type CapabilityMapping =
-  LightMapping | SwitchMapping | ButtonMapping | SensorMapping | MotionMapping;
+  | LightMapping
+  | SwitchMapping
+  | ButtonMapping
+  | SensorMapping
+  | MotionMapping
+  | ContactMapping;
 
 // The colour temperature range when a light gives none.
 const defaultColorTemperature = { min: 153, max: 500 };
@@ -131,7 +136,7 @@ function mapOne(
     return mapSensor(expose, exposes);
   }
   if (expose.type === "binary") {
-    return mapMotion(expose, exposes, facts);
+    return mapMotion(expose, exposes, facts) ?? mapContact(expose);
   }
   const kind = expose.type;
   if (kind !== "light" && kind !== "switch") {
@@ -188,8 +193,8 @@ function mapOne(
 }
 
 /**
- * The lights, switches, buttons, readings and motion a device exposes,
- * each once. Action exposes that publish in the same property are one
+ * The lights, switches, buttons, readings, motion and contact a device
+ * exposes, each once. Action exposes that publish in the same property are one
  * button, since a press says nothing of its endpoint and would otherwise
  * be handed on twice. A motion sensor's settings depend on its model and
  * what it said (`facts`).

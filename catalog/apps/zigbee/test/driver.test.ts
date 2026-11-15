@@ -121,27 +121,27 @@ describe("letting devices join", () => {
   it("says how each device that joins is getting on", async () => {
     const { core } = await running();
     const bulb = fresh("bulb");
-    const door = fresh("door");
+    const leak = fresh("leak");
     const broken = fresh("broken");
     await core.openPairing(60);
 
     // One at a time, as devices join a network.
     await bridge.join(dimmable(bulb.key, bulb.name), { state: "OFF" });
     await core.until(() => core.stageOf(bulb.key) === "ready", "ready");
-    // A door sensor exposes nothing the core has a capability for: it comes
+    // A leak sensor exposes nothing the core has a capability for: it comes
     // in all the same, with none.
     await bridge.join(
-      zigbeeDevice(door.key, door.name, [], {
+      zigbeeDevice(leak.key, leak.name, [], {
         definition: {
           vendor: "Aqara",
-          model: "MCCGQ11LM",
-          description: "Door and window sensor",
-          exposes: [{ type: "binary", property: "contact", access: 1 }],
+          model: "SJCGQ11LM",
+          description: "Water leak sensor",
+          exposes: [{ type: "binary", property: "water_leak", access: 1 }],
         },
       }),
       {},
     );
-    await core.until(() => core.stageOf(door.key) === "ready", "ready");
+    await core.until(() => core.stageOf(leak.key) === "ready", "ready");
     await bridge.join(dimmable(broken.key, broken.name), {}, "failed");
     await core.until(() => core.stageOf(broken.key) === "failed", "failed");
 
@@ -150,16 +150,16 @@ describe("letting devices join", () => {
       { key: bulb.key, stage: "interviewing", description: null },
       { key: bulb.key, stage: "ready", description: "Test light" },
     ]);
-    expect(core.joining.filter((each) => each.key === door.key).at(-1)).toEqual(
+    expect(core.joining.filter((each) => each.key === leak.key).at(-1)).toEqual(
       {
-        key: door.key,
+        key: leak.key,
         stage: "ready",
-        description: "Door and window sensor",
+        description: "Water leak sensor",
       },
     );
-    expect(core.registered.get(door.key)).toMatchObject({
-      name: door.name,
-      model: "MCCGQ11LM",
+    expect(core.registered.get(leak.key)).toMatchObject({
+      name: leak.name,
+      model: "SJCGQ11LM",
       capabilities: [],
     });
   });
