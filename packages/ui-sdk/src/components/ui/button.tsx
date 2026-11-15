@@ -56,9 +56,13 @@ const buttonVariants = cva(
         option:
           "bg-foreground/8 text-foreground hover:bg-foreground/12 hover:text-foreground active:bg-foreground/16 aria-checked:bg-foreground/12 data-heard:bg-foreground/16 data-heard:ring-[1.5px] data-heard:ring-foreground",
         // White at 14% over a dashboard's background, a tile's glass: White
-        // with Carbon ink while on.
+        // with Carbon ink while on, as a switch or by its own words (data-on).
         glass:
-          "bg-white/14 text-white hover:bg-white/20 hover:text-white active:bg-white/24 aria-pressed:bg-white aria-pressed:text-(--carbon) aria-pressed:hover:bg-white/90 aria-pressed:hover:text-(--carbon)",
+          "bg-white/14 text-white hover:bg-white/20 hover:text-white active:bg-white/24 aria-pressed:bg-white aria-pressed:text-(--carbon) aria-pressed:hover:bg-white/90 aria-pressed:hover:text-(--carbon) data-on:bg-white data-on:text-(--carbon) data-on:hover:bg-white/90 data-on:hover:text-(--carbon)",
+        // On a tile or a card that is on, which is White: its ink at 8% at
+        // rest and 12% under the pointer, such as a summary card's action.
+        "on-tile":
+          "bg-(--tile-on-ink)/8 text-(--tile-on-ink) hover:bg-(--tile-on-ink)/12 hover:text-(--tile-on-ink) active:bg-(--tile-on-ink)/16",
         // A dashed outline where something can go but nothing is yet, such
         // as the sidebar's pins with nothing pinned.
         placeholder:
