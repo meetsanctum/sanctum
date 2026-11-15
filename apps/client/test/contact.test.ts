@@ -2,6 +2,7 @@ import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
+  contactPageName,
   contactsOf,
   contactsStatus,
   contactsSummary,
@@ -213,6 +214,119 @@ describe("some contact sensors", () => {
     expect(said([door("new", null), offline("side")])).toEqual([
       "No readings",
       "No readings",
+    ]);
+  });
+});
+
+describe("contact sensors shown as doors and windows", () => {
+  const sensor = (id: string, open: boolean | null) =>
+    contactSensor(id, id, "hall", open);
+  const shown = (
+    id: string,
+    as: "door" | "window",
+    open: boolean | null,
+  ): DeviceInfo => ({ ...sensor(id, open), type: as, shownAs: as });
+  const line = (devices: DeviceInfo[]) => {
+    const { text, shownAs, label } = placeContacts(tiles(devices))!;
+    return [text, shownAs, label];
+  };
+
+  it("carry what the household shows them as on their tile, and nothing while it shows none", () => {
+    const [front, letterbox] = tiles([
+      shown("front", "door", true),
+      sensor("letterbox", false),
+    ]);
+    expect(front).toMatchObject({ kind: "contact", shownAs: "door" });
+    expect(letterbox).not.toHaveProperty("shownAs");
+  });
+
+  it("name their detail's page for what they are shown as", () => {
+    expect(contactPageName("door")).toBe("Door");
+    expect(contactPageName("window")).toBe("Window");
+    expect(contactPageName()).toBe("Contact");
+  });
+
+  it("are counted apart, each type by itself", () => {
+    const home = tiles([
+      shown("front", "door", true),
+      shown("back", "door", false),
+      shown("kitchen", "window", false),
+      sensor("letterbox", null),
+    ]);
+    expect(contactsOf(home, "door")).toEqual({
+      open: 1,
+      closed: 1,
+      unknown: 0,
+    });
+    expect(contactsOf(home, "window")).toEqual({
+      open: 0,
+      closed: 1,
+      unknown: 0,
+    });
+    expect(contactsOf(home, "contact")).toEqual({
+      open: 0,
+      closed: 0,
+      unknown: 1,
+    });
+    expect(contactsOf(home)).toEqual({ open: 1, closed: 2, unknown: 1 });
+    expect(contactsOf(tiles([sensor("letterbox", false)]), "door")).toBeNull();
+  });
+
+  it("name what is open in a room's line where that is all doors or all windows", () => {
+    expect(line([shown("front", "door", true)])).toEqual([
+      "Door open",
+      "door",
+      null,
+    ]);
+    expect(
+      line([shown("front", "door", true), shown("back", "door", true)]),
+    ).toEqual(["2 doors open", "door", null]);
+    expect(line([shown("kitchen", "window", true)])).toEqual([
+      "Window open",
+      "window",
+      null,
+    ]);
+    // What is closed beside them does not change what is open.
+    expect(
+      line([
+        shown("kitchen", "window", true),
+        shown("bath", "window", true),
+        shown("front", "door", false),
+        sensor("letterbox", false),
+      ]),
+    ).toEqual(["2 windows open", "window", null]);
+  });
+
+  it("count contact sensors and a mix, by the sensor's own glyph", () => {
+    expect(line([sensor("letterbox", true)])).toEqual([
+      "1 open",
+      undefined,
+      "Contact sensors",
+    ]);
+    expect(
+      line([shown("front", "door", true), shown("kitchen", "window", true)]),
+    ).toEqual(["2 open", undefined, "Contact sensors"]);
+    expect(
+      line([shown("front", "door", true), sensor("letterbox", true)]),
+    ).toEqual(["2 open", undefined, "Contact sensors"]);
+  });
+
+  it("say closed as before, by the door's or the window's glyph where every sensor there is one", () => {
+    expect(
+      line([shown("front", "door", false), shown("back", "door", false)]),
+    ).toEqual(["All closed", "door", "Doors"]);
+    expect(line([shown("kitchen", "window", false)])).toEqual([
+      "Closed",
+      "window",
+      "Windows",
+    ]);
+    expect(
+      line([shown("front", "door", false), shown("kitchen", "window", false)]),
+    ).toEqual(["All closed", undefined, "Contact sensors"]);
+    expect(line([shown("front", "door", null)])).toEqual([
+      "No readings",
+      "door",
+      "Doors",
     ]);
   });
 });

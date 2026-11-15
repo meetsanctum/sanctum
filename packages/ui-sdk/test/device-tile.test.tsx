@@ -599,6 +599,24 @@ describe("a contact sensor's tile", () => {
     expect(icon().classList.contains("lucide-contact-closed")).toBe(true);
     expect(icon().getAttribute("stroke-dasharray")).toBe("3 3");
   });
+
+  it("draws the door or the window the household shows it as, open or closed", async () => {
+    await render({ ...contact, shownAs: "door" });
+    expect(icon().classList.contains("lucide-door-open")).toBe(true);
+    await render({
+      ...contact,
+      shownAs: "door",
+      contact: { open: false, changedAt: null },
+    });
+    expect(icon().classList.contains("lucide-door-closed")).toBe(true);
+
+    await render({ ...contact, shownAs: "window" });
+    expect(icon().classList.contains("lucide-window-open")).toBe(true);
+    await render({ ...contact, shownAs: "window", contact: undefined });
+    expect(icon().classList.contains("lucide-window-closed")).toBe(true);
+    // Dashed while nothing is known of it, as the sensor's own glyph is.
+    expect(icon().getAttribute("stroke-dasharray")).toBe("3 3");
+  });
 });
 
 describe("a sensor's tile", () => {

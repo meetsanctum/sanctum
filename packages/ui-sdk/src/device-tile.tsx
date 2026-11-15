@@ -17,7 +17,7 @@ import {
 } from "react";
 
 import { showFailed } from "./show-failed";
-import { ContactClosed, ContactOpen } from "./contact-icons";
+import { contactIcon } from "./contact-icons";
 import type { Tile } from "./tiles";
 import { useThrottledSend } from "./use-throttled-send";
 
@@ -236,9 +236,7 @@ export function DeviceTile(props: {
           : tile.kind === "motion"
             ? Footprints
             : tile.kind === "contact"
-              ? tile.contact?.open
-                ? ContactOpen
-                : ContactClosed
+              ? contactIcon(tile.shownAs, tile.contact?.open === true)
               : tile.kind === "switch"
                 ? Plug
                 : on
