@@ -147,6 +147,10 @@ export function DeviceDetail(props: {
       : device?.capabilities.find(
           (each): each is Contact => each.kind === "contact",
         );
+  const contactShownAs =
+    device?.shownAs === "door" || device?.shownAs === "window"
+      ? device.shownAs
+      : undefined;
   const sensorLike = capability !== undefined && sensing(capability.kind);
   const pages =
     device && hasDetail
@@ -278,8 +282,8 @@ export function DeviceDetail(props: {
                     {
                       id: "contact",
                       // Named for what the household shows it as.
-                      label: contactPageName(tile.shownAs),
-                      icon: contactIcon(tile.shownAs, false),
+                      label: contactPageName(contactShownAs),
+                      icon: contactIcon(contactShownAs, false),
                       content: (
                         <ContactPage
                           key={`${device.id}/${contact.id}`}
