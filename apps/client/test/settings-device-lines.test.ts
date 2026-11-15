@@ -35,6 +35,19 @@ describe("a device's line", () => {
     });
     const updating = { text: "Updating, 40%", tone: "busy" } as const;
     expect(deviceStatus(low, updating, now)).toBe(updating);
+    // The device says its battery is low: its charge stays on its line.
+    const flagged = { ...remote, battery: 63, batteryLow: true };
+    expect(deviceDetail(flagged, [office])).toBe(
+      "Office · Wireless mini switch · Battery 63%",
+    );
+    expect(deviceStatus(flagged, null, now)).toEqual({
+      text: "Battery low: replace it soon",
+      tone: "problem",
+    });
+    expect(deviceStatus({ ...flagged, battery: null }, null, now)).toEqual({
+      text: "Battery low: replace it soon",
+      tone: "problem",
+    });
     expect(deviceStatus(remote, null, now)).toBeNull();
   });
 

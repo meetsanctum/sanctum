@@ -1,4 +1,5 @@
 import {
+  lowCharge,
   maintenanceOf,
   onBattery,
   type AppInfo,
@@ -81,8 +82,16 @@ function whereLine(device: DeviceInfo, rooms: readonly Room[]) {
 type First = {
   need: ReturnType<typeof maintenanceOf>;
   battery: number | null;
+  batteryLow: boolean;
   lastSeenAt: string | null;
 };
+
+const firstOf = (device: DeviceInfo, need: First["need"]): First => ({
+  need,
+  battery: device.battery,
+  batteryLow: device.batteryLow,
+  lastSeenAt: device.lastSeenAt,
+});
 
 /**
  * Rows in the order they were first shown, new ones after them, each with
@@ -98,10 +107,7 @@ function useKept(
   for (const device of shown) {
     if (!kept.current.has(device.id)) {
       const need = maintenanceOf(device, now);
-      kept.current.set(device.id, {
-        first: { need, battery: device.battery, lastSeenAt: device.lastSeenAt },
-        need,
-      });
+      kept.current.set(device.id, { first: firstOf(device, need), need });
     }
   }
   return [...kept.current].flatMap(([id, row]) => {
@@ -116,11 +122,7 @@ function useKept(
       row.need !== "quiet" &&
       row.need !== "battery"
     ) {
-      row.first = {
-        need,
-        battery: device.battery,
-        lastSeenAt: device.lastSeenAt,
-      };
+      row.first = firstOf(device, need);
     }
     row.need = need;
     return [{ device, first: row.first }];
@@ -140,7 +142,7 @@ function batteryStatus(
     return { text: quietText(device, now), tone: "problem" };
   if (need === "battery") {
     return {
-      text: lowBatteryText(isBeside ? undefined : device.battery!),
+      text: lowBatteryText(isBeside ? undefined : lowCharge(device)),
       tone: "problem",
     };
   }
@@ -151,6 +153,10 @@ function batteryStatus(
       device.battery - first.battery >= newBatteryRise
     ) {
       return { text: `New battery, up from ${first.battery}%`, tone: "done" };
+    }
+    // The device said its battery was low and no longer does.
+    if (first.need === "battery" && first.batteryLow && !device.batteryLow) {
+      return { text: "Battery no longer low", tone: "done" };
     }
     if (
       first.need === "quiet" &&
@@ -194,7 +200,7 @@ function upToDateStatus(device: DeviceInfo, now: number): Status | null {
 function Charge(props: { device: DeviceInfo; now: number }) {
   const { device } = props;
   const isQuiet = maintenanceOf(device, props.now) === "quiet";
-  if (device.battery === null || isQuiet) {
+  if ((device.battery === null && !device.batteryLow) || isQuiet) {
     return (
       <span
         className="w-16 shrink-0 text-end text-[15px] font-medium text-muted-foreground tabular-nums"
@@ -209,6 +215,15 @@ function Charge(props: { device: DeviceInfo; now: number }) {
     );
   }
   const isLow = maintenanceOf(device, props.now) === "battery";
+  // The device says its battery is low, without a charge.
+  if (device.battery === null) {
+    return (
+      <span className="flex w-16 shrink-0 items-center justify-end gap-1.5 text-[15px] font-medium text-destructive">
+        <BatteryWarning aria-hidden="true" className="size-5" />
+        Low
+      </span>
+    );
+  }
   const Glyph = isLow
     ? BatteryWarning
     : device.battery < 50

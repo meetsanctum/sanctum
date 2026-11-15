@@ -242,6 +242,33 @@ describe("a device's activity", () => {
     ]);
   });
 
+  it("says when a device says its battery is low, from what it said before, and not when it takes that back", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    const report = (said: { battery?: number; batteryLow?: boolean }) =>
+      core.devices.report("test.lamps", { key: "lamp-1", ...said });
+    core.advance(2 * 60 * minute);
+    // Its first word of its battery is no change.
+    await report({ batteryLow: true });
+    await report({ batteryLow: false });
+    await report({ batteryLow: true });
+    // Low already: its charge adds nothing, whatever it is.
+    await report({ battery: 63 });
+    // A cold battery recovers as it warms: no new battery for that.
+    await report({ batteryLow: false });
+    await report({ battery: 7 });
+    await report({ batteryLow: true });
+
+    const page = await activityOf(core, maya.token, { device: lamp });
+    const battery = page.entries.filter((entry) =>
+      entry.action.startsWith("device.battery."),
+    );
+    expect(battery.map((entry) => [entry.action, entry.detail])).toEqual([
+      ["device.battery.low", { battery: 7, was: 63 }],
+      // The device said so, at no charge that is low.
+      ["device.battery.low", null],
+    ]);
+  });
+
   it("says when a device on a battery went quiet, with the charge it last said", async () => {
     const { core, maya, lamp, plug } = await lampsCore();
     await core.devices.report("test.lamps", {

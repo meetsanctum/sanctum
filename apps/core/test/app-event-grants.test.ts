@@ -32,6 +32,7 @@ const device: DeviceInfo = {
   firmware: null,
   probe: false,
   battery: null,
+  batteryLow: false,
   leftAt: null,
   problem: null,
   capabilities: [

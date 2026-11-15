@@ -1,5 +1,6 @@
 import {
-  lowBattery,
+  hasLowBattery,
+  lowCharge,
   onBattery,
   type CapabilityKind,
   type FirmwareInfo,
@@ -15,7 +16,7 @@ import type { deviceCapabilities } from "./schema.js";
 // it was, and whether it went again (`resent`); a command the device did not
 // answer; a light or switch turned on or off outside Sanctum; a device going
 // offline and coming back; and, for Maintenance, one on a battery going
-// quiet, its battery falling low and a new battery.
+// quiet, its battery going low and a new battery.
 
 // The person and client behind a call, or the actor acting on its own.
 export type Who = { personId?: string; clientId?: string; actor?: string };
@@ -171,11 +172,13 @@ export function createDeviceLog(options: {
         id: string;
         availability: string;
         battery?: number | null;
+        batteryLow?: boolean | null;
         firmware?: FirmwareInfo | null;
       },
       availability: string,
     ) {
       const battery = device.battery ?? null;
+      const batteryLow = device.batteryLow ?? false;
       const went =
         availability === "offline" && device.availability === "online"
           ? "device.offline"
@@ -183,7 +186,11 @@ export function createDeviceLog(options: {
             ? "device.online"
             : availability === "unknown" &&
                 device.availability === "online" &&
-                onBattery({ battery, firmware: device.firmware ?? null })
+                onBattery({
+                  battery,
+                  batteryLow,
+                  firmware: device.firmware ?? null,
+                })
               ? "device.quiet"
               : null;
       if (went) {
@@ -200,28 +207,57 @@ export function createDeviceLog(options: {
       }
     },
 
-    /** A battery's charge falling under lowBattery, or a new battery, from the charge it said before. */
+    /**
+     * A battery going low, by its charge falling under lowBattery or by the
+     * device saying so itself, and a new battery, by its charge rising:
+     * each from what the device said before, so its first word of its
+     * battery records nothing. A device that takes back that its battery
+     * is low has no new one for that: a cold battery recovers as it warms.
+     */
     battery(
-      device: { id: string; battery: number | null; createdAt: Date },
-      battery: number,
+      device: {
+        id: string;
+        battery: number | null;
+        batteryLow: boolean | null;
+        createdAt: Date;
+      },
+      said: { battery?: number; batteryLow?: boolean },
       at: Date,
     ) {
       const was = device.battery;
-      if (was === null) return;
-      const action =
-        was >= lowBattery && battery < lowBattery
-          ? "device.battery.low"
-          : battery - was >= newBatteryRise &&
-              at.getTime() - device.createdAt.getTime() >= batterySettlesMs
-            ? "device.battery.new"
-            : null;
-      if (action) {
+      if (was === null && device.batteryLow === null) return;
+      const before = { battery: was, batteryLow: device.batteryLow ?? false };
+      const after = {
+        battery: said.battery ?? was,
+        batteryLow: said.batteryLow ?? before.batteryLow,
+      };
+      if (!hasLowBattery(before) && hasLowBattery(after)) {
+        // Its charge only where that is what is low.
+        const battery = lowCharge(after);
         record({
-          action,
+          action: "device.battery.low",
           outcome: "ok",
           actor: "device",
           subjectId: device.id,
-          detail: { battery, was },
+          detail:
+            battery === undefined
+              ? undefined
+              : { battery, ...(was !== null && { was }) },
+        });
+        return;
+      }
+      if (
+        was !== null &&
+        said.battery !== undefined &&
+        said.battery - was >= newBatteryRise &&
+        at.getTime() - device.createdAt.getTime() >= batterySettlesMs
+      ) {
+        record({
+          action: "device.battery.new",
+          outcome: "ok",
+          actor: "device",
+          subjectId: device.id,
+          detail: { battery: said.battery, was },
         });
       }
     },

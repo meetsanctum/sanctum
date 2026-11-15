@@ -5,8 +5,8 @@ import { access, type ZigbeeExpose } from "./types.js";
 // A contact sensor's contact, as Zigbee2MQTT publishes it: a binary by the
 // exact property `contact`, whose true means the contact is made, so what
 // it sits on is closed, and whose false means open. The core's kind says
-// the opposite, whether it is open. A sensor's tamper and battery_low are
-// not the contact and stay out.
+// the opposite, whether it is open. A sensor's tamper is not the contact
+// and stays out; its battery_low is its battery's (sensors.ts).
 
 export type ContactMapping = {
   kind: "contact";

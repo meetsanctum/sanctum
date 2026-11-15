@@ -597,6 +597,11 @@ export type DeviceInfo = {
    */
   battery: number | null;
   /**
+   * Whether the device itself says its battery is low, as some do beside
+   * their charge and some instead of it; false for one that has not said.
+   */
+  batteryLow: boolean;
+  /**
    * When its driver said its network no longer has it, as after a reset
    * (ctx.devices.present); null while its network has it.
    */
@@ -718,8 +723,8 @@ export type DeviceRegistration = Omit<
 /**
  * What a driver reports about one of its devices (ctx.devices.report):
  * whether it answers, each capability's whole state as the device reported
- * it, and its battery's charge, which is the device's rather than a
- * capability's.
+ * it, and its battery's charge and whether the device says its battery is
+ * low, which are the device's rather than a capability's.
  */
 export const deviceReport = z
   .strictObject({
@@ -727,12 +732,14 @@ export const deviceReport = z
     availability: z.enum(availabilities).optional(),
     states: z.record(capabilityId, z.unknown()).optional(),
     battery: percent.optional(),
+    batteryLow: z.boolean().optional(),
   })
   .refine(
     (report) =>
       report.availability !== undefined ||
       report.states ||
-      report.battery !== undefined,
+      report.battery !== undefined ||
+      report.batteryLow !== undefined,
     "a report says something",
   );
 export type DeviceReport = z.input<typeof deviceReport>;

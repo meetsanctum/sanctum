@@ -62,6 +62,9 @@ export const devices = sqliteTable(
     probe: integer("probe", { mode: "boolean" }).notNull().default(false),
     // Its battery's charge in percent, as its driver last reported it.
     battery: integer("battery"),
+    // Whether the device itself says its battery is low, as its driver
+    // last reported it; nothing while it has not said.
+    batteryLow: integer("battery_low", { mode: "boolean" }),
     // When its driver said its network no longer has it, as after a reset,
     // until a list of the network has it again.
     leftAt: integer("left_at", { mode: "timestamp_ms" }),

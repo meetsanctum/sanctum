@@ -13,15 +13,45 @@ export const lowBattery = 10;
  */
 export const quietAfterMs = 24 * 60 * 60_000;
 
-/** Whether a device runs on a battery: it has said its charge, or its driver says it sleeps, as one on a battery does. */
-export function onBattery(device: Pick<DeviceInfo, "battery" | "firmware">) {
-  return device.battery !== null || device.firmware?.sleeps === true;
+/** Whether a device runs on a battery: it has said its charge or that its battery is low, or its driver says it sleeps, as one on a battery does. */
+export function onBattery(
+  device: Pick<DeviceInfo, "battery" | "batteryLow" | "firmware">,
+) {
+  return (
+    device.battery !== null ||
+    device.batteryLow ||
+    device.firmware?.sleeps === true
+  );
+}
+
+/**
+ * Whether a device's battery is low: its charge is under `lowBattery`, or
+ * the device says so itself, whatever its charge.
+ */
+export function hasLowBattery(
+  device: Pick<DeviceInfo, "battery" | "batteryLow">,
+) {
+  return (
+    device.batteryLow ||
+    (device.battery !== null && device.battery < lowBattery)
+  );
+}
+
+/**
+ * The charge to say beside a low battery: the device's own while it is
+ * under `lowBattery`, and none where the device says its battery is low at
+ * a charge that isn't, or without one.
+ */
+export function lowCharge(device: Pick<DeviceInfo, "battery">) {
+  return device.battery !== null && device.battery < lowBattery
+    ? device.battery
+    : undefined;
 }
 
 /**
  * What a device needs from the household, the most pressing first: `quiet`,
- * on a battery and not heard from for a day; `battery`, its charge under
- * `lowBattery`; or `update`, firmware to start, under way, waiting for it to
+ * on a battery and not heard from for a day; `battery`, its battery low
+ * (`hasLowBattery`); or `update`, firmware to start, under way, waiting for it to
  * wake or that didn't finish. Null when it needs nothing.
  */
 export type Maintenance = "quiet" | "battery" | "update";
@@ -29,7 +59,7 @@ export type Maintenance = "quiet" | "battery" | "update";
 export function maintenanceOf(
   device: Pick<
     DeviceInfo,
-    "availability" | "lastSeenAt" | "battery" | "firmware"
+    "availability" | "lastSeenAt" | "battery" | "batteryLow" | "firmware"
   >,
   now: number,
 ): Maintenance | null {
@@ -41,7 +71,7 @@ export function maintenanceOf(
   ) {
     return "quiet";
   }
-  if (device.battery !== null && device.battery < lowBattery) return "battery";
+  if (hasLowBattery(device)) return "battery";
   const state = device.firmware?.state;
   return state && state !== "current" ? "update" : null;
 }
