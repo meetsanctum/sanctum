@@ -1,4 +1,10 @@
-import { ActionError, defineAction, names, partOf } from "@meetsanctum/app-sdk";
+import {
+  ActionError,
+  defineAction,
+  names,
+  partOf,
+  type AppContext,
+} from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 import { isLeftOut, leaveOut, takeBack, takeInLights } from "./choices.js";
@@ -13,15 +19,17 @@ import {
   lightOf,
   takesColorTemperature,
   followOptionsFor,
+  type FollowOptions,
   type RunForLight,
   type Timing,
 } from "./lights.js";
 import { preview, previewOf } from "./preview.js";
 import { followedLights } from "./schema.js";
-import { targetState } from "./target.js";
+import { targetState, type TargetState } from "./target.js";
 
-// Natural light's actions: leaving a light out of the curve or having it
-// follow again, pausing and resuming one, and today's curve. Lights are
+// Natural light's actions: leaving a light or a room's lights out of the
+// curve or having them follow again, pausing and resuming one, and today's
+// curve. Lights are
 // household things, so every client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
@@ -59,66 +67,58 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
         "Have a light follow the sun through the day, or stop following it.",
     },
     async run(ctx, input) {
+      return setFollowing(
+        ctx,
+        await followOptionsFor(ctx, timing),
+        runForLight,
+        input,
+      );
+    },
+  });
+
+  // A room's switch on the page: every light in the room that takes a
+  // colour temperature, or every one in no room for null, follows or is
+  // left out as its own switch would have it. Switched off, it also leaves
+  // out a light that still follows though it no longer says it takes a
+  // colour temperature, as the page lists it in the room. A light that
+  // can't be changed is named in `failed`, and the others still are.
+  const followRoom = defineAction({
+    id: "naturalLight.followRoom",
+    title: "Follow natural light in a room",
+    tier: "write",
+    input: z.object({
+      placeId: z.string().min(1).max(64).nullable(),
+      follow: z.boolean(),
+    }),
+    output: z.object({
+      failed: z.array(z.object({ device: z.string(), capability: z.string() })),
+    }),
+    async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
-      return runForLight(input.device, input.capability, async () => {
-        const found = await lightOf(ctx, input.device, input.capability);
-        if (!input.follow) {
-          // Left out, it comes back on as it remembers itself rather than
-          // at a look natural light still holds for it.
-          await leaveOut(ctx, input.device, input.capability);
-          const wasFollowing = await followedRow(
-            ctx,
-            input.device,
-            input.capability,
-          );
-          await forget(ctx, input.device, input.capability);
-          if (wasFollowing && options.isOn) {
-            try {
-              await letGo(ctx, found);
-            } catch {
-              ctx.log(`could not let go of ${found.device.name}`);
-            }
+      const failed: { device: string; capability: string }[] = [];
+      for (const device of await ctx.devices.list()) {
+        if (device.roomId !== input.placeId) continue;
+        for (const capability of device.capabilities) {
+          const stillFollows =
+            !input.follow &&
+            capability.kind === "light" &&
+            (await followedRow(ctx, device.id, capability.id)) !== undefined;
+          if (!takesColorTemperature(capability) && !stillFollows) continue;
+          const each = { device: device.id, capability: capability.id };
+          try {
+            await setFollowing(ctx, options, runForLight, {
+              ...each,
+              follow: input.follow,
+            });
+          } catch (error) {
+            ctx.log(
+              `could not change ${device.name} (${error instanceof Error ? error.message : String(error)})`,
+            );
+            failed.push(each);
           }
-          return null;
         }
-        if (!takesColorTemperature(found.capability)) {
-          throw new ActionError(
-            "conflict",
-            "This light does not take a colour temperature",
-          );
-        }
-        const wasLeftOut = await isLeftOut(ctx, input.device, input.capability);
-        await takeBack(ctx, input.device, input.capability);
-        const now = options.now();
-        const existing = await followedRow(ctx, input.device, input.capability);
-        if (!existing) {
-          await ctx.storage.db.insert(followedLights).values({
-            deviceId: input.device,
-            capabilityId: input.capability,
-            since: now,
-          });
-        }
-        const row = (await followedRow(ctx, input.device, input.capability))!;
-        // A light that begins following takes the curve at once.
-        try {
-          return await followOne(
-            ctx,
-            found,
-            row,
-            await homeSun(ctx, now),
-            options,
-            !existing,
-          );
-        } catch (error) {
-          // A refused first command must not silently enable the job, nor
-          // take back a light the household had left out.
-          if (!existing) await forget(ctx, input.device, input.capability);
-          if (!existing && wasLeftOut) {
-            await leaveOut(ctx, input.device, input.capability);
-          }
-          throw error;
-        }
-      });
+      }
+      return { failed };
     },
   });
 
@@ -230,5 +230,77 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     },
   });
 
-  return { follow, resume, pause, preview: showPreview, check };
+  return { follow, followRoom, resume, pause, preview: showPreview, check };
+}
+
+/**
+ * Has one light follow the curve, or leaves it out, as the household
+ * chose: a light left out lets go of a look natural light holds for it,
+ * and one that begins to follow takes the curve at once.
+ */
+async function setFollowing(
+  ctx: AppContext,
+  options: FollowOptions,
+  runForLight: RunForLight,
+  input: { device: string; capability: string; follow: boolean },
+): Promise<TargetState | null> {
+  return runForLight(input.device, input.capability, async () => {
+    const found = await lightOf(ctx, input.device, input.capability);
+    if (!input.follow) {
+      // Left out, it comes back on as it remembers itself rather than
+      // at a look natural light still holds for it.
+      await leaveOut(ctx, input.device, input.capability);
+      const wasFollowing = await followedRow(
+        ctx,
+        input.device,
+        input.capability,
+      );
+      await forget(ctx, input.device, input.capability);
+      if (wasFollowing && options.isOn) {
+        try {
+          await letGo(ctx, found);
+        } catch {
+          ctx.log(`could not let go of ${found.device.name}`);
+        }
+      }
+      return null;
+    }
+    if (!takesColorTemperature(found.capability)) {
+      throw new ActionError(
+        "conflict",
+        "This light does not take a colour temperature",
+      );
+    }
+    const wasLeftOut = await isLeftOut(ctx, input.device, input.capability);
+    await takeBack(ctx, input.device, input.capability);
+    const now = options.now();
+    const existing = await followedRow(ctx, input.device, input.capability);
+    if (!existing) {
+      await ctx.storage.db.insert(followedLights).values({
+        deviceId: input.device,
+        capabilityId: input.capability,
+        since: now,
+      });
+    }
+    const row = (await followedRow(ctx, input.device, input.capability))!;
+    // A light that begins following takes the curve at once.
+    try {
+      return await followOne(
+        ctx,
+        found,
+        row,
+        await homeSun(ctx, now),
+        options,
+        !existing,
+      );
+    } catch (error) {
+      // A refused first command must not silently enable the job, nor
+      // take back a light the household had left out.
+      if (!existing) await forget(ctx, input.device, input.capability);
+      if (!existing && wasLeftOut) {
+        await leaveOut(ctx, input.device, input.capability);
+      }
+      throw error;
+    }
+  });
 }

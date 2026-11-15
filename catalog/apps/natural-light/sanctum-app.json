@@ -25,6 +25,13 @@
       "needed": true,
       "asked": null,
       "startsOn": false
+    },
+    {
+      "id": "places.read",
+      "reason": "To list your lights by room.",
+      "needed": false,
+      "asked": null,
+      "startsOn": true
     }
   ],
   "icon": {
@@ -209,6 +216,66 @@
         "expose": true,
         "description": "Have a light follow the sun through the day, or stop following it."
       }
+    },
+    {
+      "id": "naturalLight.followRoom",
+      "title": "Follow natural light in a room",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "follow": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "placeId",
+          "follow"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
     },
     {
       "id": "naturalLight.resume",
