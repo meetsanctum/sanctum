@@ -75,27 +75,49 @@ describe("a version from before this core's protocol", () => {
     expect(home.containers).not.toContain("1.0.0+test");
   });
 
-  it("isn't where a new version that fails goes back to: the new one is tried again", async () => {
+  it("offers no version until its protocol can be read", async () => {
     const home = await versions();
-    const one = version("1.0.0");
-    await running(await home.coreWith(one), id);
-    home.builtForAnOlderProtocol(one);
-    home.containers.length = 0;
-    let tries = 0;
-
-    const core = await home.coreWith(
-      version("2.0.0", {
-        start: async () => {
-          tries += 1;
-          if (tries === 1) throw new Error("It fell over");
-        },
-      }),
-    );
-
-    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"));
+    await running(await home.coreWith(version("1.0.0")), id);
+    const core = await home.coreWith(version("2.0.0"));
     await running(core, id);
-    expect(tries).toBe(2);
-    expect(home.containers).not.toContain("1.0.0+test");
-    expect(core.logs.filter((line) => line.includes("goes back"))).toEqual([]);
+    await vi.waitFor(() => expect(home.journal.size).toBe(0));
+    const maya = await claimed(core);
+    home.packagesUnreadableFor(1);
+
+    const offered = await get(core, `/api/apps/${id}/go-back`, maya);
+    expect(offered.statusCode).toBe(200);
+    expect(offered.json()).toEqual({ to: null });
+    const retried = await get(core, `/api/apps/${id}/go-back`, maya);
+    expect(retried.json()).toMatchObject({ to: { version: "1.0.0" } });
   });
+
+  it.each([0, 1])(
+    "retries a failed new version after %i temporary package read failures",
+    async (failedReads) => {
+      const home = await versions();
+      const one = version("1.0.0");
+      await running(await home.coreWith(one), id);
+      home.builtForAnOlderProtocol(one);
+      home.packagesUnreadableFor(failedReads);
+      home.containers.length = 0;
+      let tries = 0;
+
+      const core = await home.coreWith(
+        version("2.0.0", {
+          start: async () => {
+            tries += 1;
+            if (tries === 1) throw new Error("It fell over");
+          },
+        }),
+      );
+
+      await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"));
+      await running(core, id);
+      expect(tries).toBe(2);
+      expect(home.containers).not.toContain("1.0.0+test");
+      expect(core.logs.filter((line) => line.includes("goes back"))).toEqual(
+        [],
+      );
+    },
+  );
 });

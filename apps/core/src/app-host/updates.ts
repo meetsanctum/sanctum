@@ -119,14 +119,10 @@ export function createAppUpdates(options: {
   const staysOnNew = (row: AppUpdateRow) =>
     isMove(row) || noWayBack.has(row.id);
 
-  // Whether this core can run the version in that folder. One whose manifest
-  // can't be read is left to fail where it's started, as before.
+  // Whether this core can run the version in that folder. An unreadable
+  // manifest must be tried again before deciding whether it can go back.
   async function canRun(appId: string, folder: string) {
-    try {
-      return speaksThisCore(await options.loadPackage(appId, folder));
-    } catch {
-      return true;
-    }
+    return speaksThisCore(await options.loadPackage(appId, folder));
   }
 
   const rowOf = (appId: string) =>
@@ -276,15 +272,15 @@ export function createAppUpdates(options: {
       ? "Waiting for its turn to go back"
       : "Waiting for its turn to update";
     host.waits(entry, why);
-    if (
-      !isMove(row) &&
-      !row.restores &&
-      !(await canRun(appId, row.fromFolder))
-    ) {
-      noWayBack.add(row.id);
-    }
-    if (!host.isCurrent(entry)) return;
     try {
+      if (
+        !isMove(row) &&
+        !row.restores &&
+        !(await canRun(appId, row.fromFolder))
+      ) {
+        noWayBack.add(row.id);
+      }
+      if (!host.isCurrent(entry)) return;
       await manager.beginAppUpdate(appId, {
         id: row.id,
         from: {
@@ -497,7 +493,12 @@ export function createAppUpdates(options: {
       if (!canGoBack(entry)) return null;
       const appId = entry.manifest.id;
       const kept = await manager.keptAppCopy(appId);
-      if (!kept || !(await canRun(appId, kept.from.folder))) return null;
+      if (!kept) return null;
+      try {
+        if (!(await canRun(appId, kept.from.folder))) return null;
+      } catch {
+        return null;
+      }
       return { id: kept.id, version: kept.from.version, since: kept.at };
     },
 
