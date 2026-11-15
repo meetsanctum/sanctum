@@ -19,6 +19,7 @@ import { registerDashboardRoutes } from "./dashboards/routes.js";
 import { registerDeviceRoutes } from "./devices/routes.js";
 import { registerEntityRoutes } from "./entities/routes.js";
 import { registerHistoryRoutes } from "./history/routes.js";
+import type { CoreLifecycle } from "./lifecycle.js";
 import type { Modules } from "./modules.js";
 import { PeopleError } from "./people/people.js";
 import { registerPeopleRoutes } from "./people/routes.js";
@@ -58,14 +59,20 @@ export function createServer(
     | "apps"
     | "workflows"
   > & {
+    // The core's phase and readiness (lifecycle.ts): only the health check
+    // answers while an update is on trial, until the manager commits it.
+    lifecycle?: Pick<CoreLifecycle, "phase" | "readiness">;
     // True while the manager has not committed the update that started this
-    // core (update-pending.ts).
+    // core, for a core without a lifecycle, as in tests (update-pending.ts).
     updatePending?: () => boolean;
     // HTTPS and WSS on the host; none only for `pnpm dev` and tests.
     https?: CoreHttps;
   },
 ) {
-  const updatePending = options.updatePending ?? (() => false);
+  const { lifecycle } = options;
+  const updatePending = lifecycle
+    ? () => lifecycle.readiness() === "healthOnly"
+    : (options.updatePending ?? (() => false));
   const { https } = options;
   // The live WebSocket upgrades on the same server, so it is WSS too.
   const serverFactory: FastifyServerFactory | undefined =
@@ -115,7 +122,13 @@ export function createServer(
           .send({ error: error.code, problems: error.problems });
       }
       return reply
-        .code(error.code === "not_found" ? 404 : 409)
+        .code(
+          error.code === "not_found"
+            ? 404
+            : error.code === "stopping"
+              ? 503
+              : 409,
+        )
         .send({ error: error.code });
     }
     // Fastify's own refusals, such as a malformed or oversized body.
@@ -145,6 +158,10 @@ export function createServer(
         version: config.version,
         uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
         updatePending: updatePending(),
+        ...(lifecycle && {
+          phase: lifecycle.phase(),
+          readiness: lifecycle.readiness(),
+        }),
       }));
 
       const { auth, people, places, devices, lights, pairing, gate, activity } =

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { setupCommands } from "./device-command-support.js";
+import { command, lampsCore } from "./devices-support.js";
 
 describe("commands whose deliveries overlap", () => {
   it.each([60, 110])(
@@ -391,5 +392,41 @@ describe("a light whose reports trail its commands", () => {
       state: { on: false, brightness: 30 },
     });
     expect(deliveries).toHaveLength(2);
+  });
+});
+
+describe("commands as the core stops", () => {
+  it("refuses one once nothing may go to a device", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    const before = core.devices.get(lamp)!.capabilities;
+
+    core.devices.closing();
+    const refused = await command(core, maya.token, lamp, "light", {
+      on: true,
+    });
+
+    expect(refused.statusCode).toBe(503);
+    expect(refused.json()).toEqual({ error: "unavailable" });
+    expect(core.devices.get(lamp)!.capabilities).toEqual(before);
+  });
+
+  it("refuses one that waited for a hold to end while the core began to stop", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    const before = core.devices.get(lamp)!.capabilities;
+    let ended!: () => void;
+    const interrupt = vi
+      .spyOn(core.holds, "interrupt")
+      .mockImplementation(() => new Promise<void>((done) => (ended = done)));
+    onTestFinished(() => interrupt.mockRestore());
+
+    const sending = command(core, maya.token, lamp, "light", { on: true });
+    await vi.waitFor(() => expect(interrupt).toHaveBeenCalled());
+    core.devices.closing();
+    ended();
+    const refused = await sending;
+
+    expect(refused.statusCode).toBe(503);
+    expect(refused.json()).toEqual({ error: "unavailable" });
+    expect(core.devices.get(lamp)!.capabilities).toEqual(before);
   });
 });

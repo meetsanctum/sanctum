@@ -9,7 +9,7 @@ import {
   radio,
   settled,
 } from "./devices-support.js";
-import { post, sharedClient, type TestCore } from "./support.js";
+import { post, sharedClient, testCore, type TestCore } from "./support.js";
 
 // Firmware updates and Check connection, with the lamps driver's pretend
 // radio: any client checks for an update, starts it and stops it through the
@@ -355,6 +355,24 @@ describe("a device's firmware", () => {
     expect(entries(core, "device.firmware.failed")).toMatchObject([
       { outcome: "failed", reason: "stopped_answering" },
     ]);
+  });
+
+  it("ends an update under way when the core stopped, once the core starts again", async () => {
+    const { core, lamp } = await lampsCore();
+    await radio.sayFirmware("lamp-1", { state: "updating", progress: 40 });
+
+    // A new core on the same data, as after a restart, which starts watching
+    // the updates under way as it starts.
+    const restarted = await testCore({
+      dataDir: core.dataDir,
+      firmwareStaleMs: 20,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(restarted.devices.row(lamp)?.firmware).toMatchObject({
+      state: "failed",
+      problem: "It stopped answering.",
+    });
   });
 
   it("fails a check the device does not answer, keeping what was known", async () => {

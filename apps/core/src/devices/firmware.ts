@@ -169,14 +169,6 @@ export function createFirmware(options: {
     deadlines.set(id, timer);
   }
 
-  // Updates under way when the core stopped keep their deadline.
-  for (const { id, firmware } of db
-    .select({ id: deviceTable.id, firmware: deviceTable.firmware })
-    .from(deviceTable)
-    .all()) {
-    if (firmware) watch(id, firmware);
-  }
-
   // A device whose firmware its driver can update, for a client's call.
   function updatable(input: unknown, action: string, who: Who) {
     const parsed = deviceRequest.safeParse(input);
@@ -422,6 +414,17 @@ export function createFirmware(options: {
     // A device's report committed: it answered whoever is checking it.
     reported(id: string) {
       for (const answered of probes.get(id) ?? []) answered();
+    },
+
+    // As the core starts: updates under way when it stopped keep their
+    // deadline.
+    start() {
+      for (const { id, firmware } of db
+        .select({ id: deviceTable.id, firmware: deviceTable.firmware })
+        .from(deviceTable)
+        .all()) {
+        if (firmware) watch(id, firmware);
+      }
     },
 
     close() {
