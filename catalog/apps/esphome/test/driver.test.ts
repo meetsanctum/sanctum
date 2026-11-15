@@ -187,9 +187,12 @@ describe("its key", () => {
     home = await startHome();
     const device = await home.plugIn({ kind: "switch" });
     const key = await add(home.core, device);
+    // Online, and what it said as it was added, which follows just after.
     await home.core.until(
-      () => home.core.availability.get(key) === "online",
-      "online",
+      () =>
+        home.core.availability.get(key) === "online" &&
+        home.core.latest(key, "switch-relay") !== undefined,
+      "online with its first state",
     );
     const reported = home.core.reports.length;
 
