@@ -60,8 +60,9 @@ import { createWorkflows } from "./workflows/workflows.js";
 // its permission gate and apps' settings, Workflows, the home's dashboards
 // and pinned apps and the activity log with the manager's audit. What
 // happens to devices, presses, places, the home's location, people and
-// entities, and the events apps emit, goes on the event bus, whose followers
-// are set last (event-bus.ts). Clients follow devices, presses, places and
+// entities, the motion Motion keeps for each place from them, and the events
+// apps emit, goes on the event bus, whose followers are set last
+// (event-bus.ts). Clients follow devices, presses, places and
 // entities from it, and pairing, settings, dashboards, pinned apps and the
 // activity log directly, over Auth's live socket; running apps follow what
 // it carries of the core's nouns through the app host.
@@ -251,7 +252,15 @@ export async function createModules(
     holds,
     now,
   });
-  const motion = createMotion({ devices, places });
+  // Each place's motion, kept as it changes.
+  const motion = createMotion({
+    db,
+    devices,
+    places,
+    onChange: (change) =>
+      eventBus.publish({ name: "motion.changed", ...change }),
+    now,
+  });
   // What drivers say is wrong with their devices, and Repair.
   const problems = createProblems({
     db,
@@ -474,6 +483,8 @@ export async function createModules(
     ],
     // Devices named after their room follow it.
     ["device names", { "places.changed": () => devices.renameAll() }],
+    // Before workflows, which follow what it makes of a place's sensors.
+    ["motion", motion.follower],
     [
       "workflows",
       {
@@ -484,6 +495,7 @@ export async function createModules(
         },
         "entity.changed": (change) => workflows.entityChanged(change),
         "app.emitted": (event) => workflows.appEvent(event),
+        "motion.changed": (change) => workflows.motionChanged(change),
       },
     ],
     [

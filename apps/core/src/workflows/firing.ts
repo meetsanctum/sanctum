@@ -2,7 +2,7 @@ import type { WorkflowNode } from "@meetsanctum/app-sdk";
 
 import type { EmittedEvent } from "../app-host/app-work.js";
 import type { DeviceChange } from "../devices/devices.js";
-import type { Motion } from "../devices/motion.js";
+import { placeKey, type MotionChange } from "../devices/motion.js";
 import type { Press } from "../devices/presses.js";
 import type { EntityChange } from "../entities/entities.js";
 import type { Engine, WorkflowRow } from "./engine.js";
@@ -22,9 +22,9 @@ import type { Timers } from "./timers.js";
 // changing, each matched against the triggers of the workflows that may run.
 // A workflow an app keeps runs only while the app runs and its grants cover
 // it: not while the app is absent or paused, or the workflow suspended
-// (kept-grants.ts). A place's motion starts motion triggers as the place
-// goes from no motion to motion, once, however many sensors see it, and
-// sets no-motion triggers' timers (timers.ts).
+// (kept-grants.ts). A place's motion, as Motion keeps it, starts motion
+// triggers as the place goes from no motion to motion, once, however many
+// sensors see it, and sets no-motion triggers' timers (timers.ts).
 
 export function createFiring(options: {
   rows: () => WorkflowRow[];
@@ -32,8 +32,6 @@ export function createFiring(options: {
   engine: Pick<Engine, "fire">;
   // Whether a workflow's triggers may start it now.
   mayRun: (workflow: WorkflowRow) => boolean;
-  // Motion in a place before and after a device's change.
-  motion: Pick<Motion, "around">;
   timers: Pick<Timers, "quiet">;
 }) {
   const { pieces, engine } = options;
@@ -54,46 +52,41 @@ export function createFiring(options: {
     });
   }
 
-  // A motion sensor's change, its going offline or back, or its leaving:
-  // whether its places' motion triggers fire, and their no-motion timers.
-  function motionChanged(change: DeviceChange) {
-    const senses = (device: DeviceChange["before"]) =>
-      device?.capabilities.some((each) => each.kind === "motion") ?? false;
-    if (!senses(change.before) && !senses(change.after)) {
-      return;
-    }
+  // A place's motion changed (motion.ts): its no-motion triggers' timers
+  // follow it, and its motion triggers fire as it goes from no motion to
+  // motion, once, however many sensors see it, when a sensor's own report
+  // made it. A sensor moved or a change of the places fires nothing, since
+  // nobody moved.
+  function motionChanged({ places, sensedBy }: MotionChange) {
+    const changes = new Map(
+      places.map((change) => [placeKey(change.place), change]),
+    );
     const fired = matching((workflow, node) => {
       if (node.app || (node.piece !== "motion" && node.piece !== "noMotion")) {
         return false;
       }
       if (node.piece === "noMotion") {
         const config = parsed<NoMotionTriggerConfig>(node);
-        if (config) {
-          const { was, now } = options.motion.around(config.place, change);
-          // Reports and settings that leave the quiet spell unchanged
-          // must not clear a due timer before the next tick runs it.
-          if (
-            was.answering !== now.answering ||
-            was.motion !== now.motion ||
-            was.quietSince?.getTime() !== now.quietSince?.getTime()
-          ) {
-            options.timers.quiet(workflow, node, now, config.forMinutes);
-          }
+        const change = config && changes.get(placeKey(config.place));
+        if (change) {
+          options.timers.quiet(workflow, node, change.after, config.forMinutes);
         }
         return false;
       }
       const config = parsed<MotionTriggerConfig>(node);
-      if (!config) {
-        return false;
-      }
-      const { was, now } = options.motion.around(config.place, change);
-      return !was.motion && now.motion;
+      const change = config && changes.get(placeKey(config.place));
+      return (
+        change !== undefined &&
+        sensedBy !== null &&
+        !change.before.motion &&
+        change.after.motion
+      );
     });
     for (const { workflow, nodes } of fired) {
       engine.fire(workflow, {
         nodes: nodes.map((node) => node.id),
         key: null,
-        data: { device: change.id, motion: true },
+        data: { device: sensedBy, motion: true },
       });
     }
   }
@@ -137,7 +130,6 @@ export function createFiring(options: {
      * reported before and after.
      */
     deviceChanged(change: DeviceChange) {
-      motionChanged(change);
       const after = change.after;
       if (!after) {
         return;
@@ -216,6 +208,8 @@ export function createFiring(options: {
         });
       }
     },
+
+    motionChanged,
 
     /**
      * An app's entity changed: `entity` triggers compare its state before

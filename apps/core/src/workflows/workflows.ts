@@ -96,7 +96,7 @@ export function createWorkflows(
     // switch.
     lights: Pick<Lights, "are" | "switch">;
     // Motion and the light level in a place, which motion pieces read.
-    motion: Pick<Motion, "at" | "around" | "lightLevel" | "name">;
+    motion: Pick<Motion, "at" | "lightLevel" | "name">;
     // The entities apps bring, which entity conditions read.
     entities: Pick<Entities, "get" | "list">;
     record: RecordActivity;
@@ -184,7 +184,6 @@ export function createWorkflows(
     pieces,
     engine,
     mayRun,
-    motion: options.motion,
     timers,
   });
   const jobs = createJobs(db, { host, clock });
@@ -648,10 +647,11 @@ export function createWorkflows(
       },
     },
 
-    // What happens: an app's event, a device's change, a remote's press,
-    // an entity's change (firing.ts).
+    // What happens: an app's event, a device's change, a place's motion, a
+    // remote's press, an entity's change (firing.ts).
     appEvent: unlessHeld(firing.appEvent),
     deviceChanged: unlessHeld(firing.deviceChanged),
+    motionChanged: unlessHeld(firing.motionChanged),
     pressed: unlessHeld(firing.pressed),
     entityChanged: unlessHeld(firing.entityChanged),
 
@@ -705,6 +705,7 @@ export function createWorkflows(
     start(startOptions: { ticking?: boolean } = {}) {
       if (interrupted) return;
       held = false;
+      timers.followQuiet();
       const ended = runs.interrupted();
       if (ended > 0) {
         log(`workflows: ${ended} interrupted runs ended as failed`);
