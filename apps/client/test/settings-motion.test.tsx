@@ -90,7 +90,7 @@ function sensor(
     firmware: { version: "2.53.6", updatable: true, sleeps: true } as never,
     probe: false,
     battery: 87,
-    batteryLow: false,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     capabilities: [
@@ -119,7 +119,7 @@ const lamp: DeviceInfo = {
   type: "light",
   probe: true,
   battery: null,
-  batteryLow: false,
+  batteryLow: null,
   leftAt: null,
   capabilities: [
     {

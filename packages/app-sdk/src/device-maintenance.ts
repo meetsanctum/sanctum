@@ -13,13 +13,17 @@ export const lowBattery = 10;
  */
 export const quietAfterMs = 24 * 60 * 60_000;
 
-/** Whether a device runs on a battery: it has said its charge or that its battery is low, or its driver says it sleeps, as one on a battery does. */
+/**
+ * Whether a device runs on a battery: it has said its charge or whether
+ * its battery is low, which stays so once that is no longer low, or its
+ * driver says it sleeps, as one on a battery does.
+ */
 export function onBattery(
   device: Pick<DeviceInfo, "battery" | "batteryLow" | "firmware">,
 ) {
   return (
     device.battery !== null ||
-    device.batteryLow ||
+    typeof device.batteryLow === "boolean" ||
     device.firmware?.sleeps === true
   );
 }
@@ -32,7 +36,7 @@ export function hasLowBattery(
   device: Pick<DeviceInfo, "battery" | "batteryLow">,
 ) {
   return (
-    device.batteryLow ||
+    device.batteryLow === true ||
     (device.battery !== null && device.battery < lowBattery)
   );
 }

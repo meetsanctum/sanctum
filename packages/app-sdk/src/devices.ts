@@ -598,9 +598,10 @@ export type DeviceInfo = {
   battery: number | null;
   /**
    * Whether the device itself says its battery is low, as some do beside
-   * their charge and some instead of it; false for one that has not said.
+   * their charge and some instead of it, as its driver last reported it;
+   * null for a device on mains power and one that has not said.
    */
-  batteryLow: boolean;
+  batteryLow: boolean | null;
   /**
    * When its driver said its network no longer has it, as after a reset
    * (ctx.devices.present); null while its network has it.

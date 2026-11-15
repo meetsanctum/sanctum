@@ -54,7 +54,7 @@ function device(
     firmware: firmware({ updatable: false, sleeps: true }),
     probe: false,
     battery: 64,
-    batteryLow: false,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     ...extra,
@@ -127,6 +127,19 @@ describe("batteries", () => {
     expect(maintenanceHint([flagged, unfigured, kitchen], now)).toBe(
       "2 batteries",
     );
+  });
+
+  it("keep one that says its battery is no longer low, though it says nothing else of a battery", () => {
+    const recovered = device("shed", "Shed door", {
+      battery: null,
+      batteryLow: false,
+      firmware: null,
+    });
+    const mains = lamp("Desk lamp", {});
+    expect(
+      batteryOrder([mains, recovered, kitchen], now).map((each) => each.name),
+    ).toEqual(["Kitchen button", "Shed door"]);
+    expect(dueBatteries([recovered], now)).toEqual([]);
   });
 
   it("make a tile without a charge where the device says its battery is low", () => {

@@ -82,14 +82,15 @@ function whereLine(device: DeviceInfo, rooms: readonly Room[]) {
 type First = {
   need: ReturnType<typeof maintenanceOf>;
   battery: number | null;
-  batteryLow: boolean;
+  // Whether the device has said its battery is low since, itself.
+  saidLow: boolean;
   lastSeenAt: string | null;
 };
 
 const firstOf = (device: DeviceInfo, need: First["need"]): First => ({
   need,
   battery: device.battery,
-  batteryLow: device.batteryLow,
+  saidLow: device.batteryLow === true,
   lastSeenAt: device.lastSeenAt,
 });
 
@@ -124,6 +125,7 @@ function useKept(
     ) {
       row.first = firstOf(device, need);
     }
+    if (device.batteryLow === true) row.first.saidLow = true;
     row.need = need;
     return [{ device, first: row.first }];
   });
@@ -155,7 +157,7 @@ function batteryStatus(
       return { text: `New battery, up from ${first.battery}%`, tone: "done" };
     }
     // The device said its battery was low and no longer does.
-    if (first.need === "battery" && first.batteryLow && !device.batteryLow) {
+    if (first.saidLow && device.batteryLow !== true) {
       return { text: "Battery no longer low", tone: "done" };
     }
     if (
@@ -169,6 +171,10 @@ function batteryStatus(
         tone: "done",
       };
     }
+  }
+  // It says whether its battery is low, and no charge so far.
+  if (device.battery === null && device.batteryLow === false) {
+    return { text: "Battery not low", tone: "plain" };
   }
   if (device.battery === null) {
     const kinds = new Set(device.capabilities.map((each) => each.kind));

@@ -178,7 +178,7 @@ export function createDeviceLog(options: {
       availability: string,
     ) {
       const battery = device.battery ?? null;
-      const batteryLow = device.batteryLow ?? false;
+      const batteryLow = device.batteryLow ?? null;
       const went =
         availability === "offline" && device.availability === "online"
           ? "device.offline"
@@ -226,7 +226,7 @@ export function createDeviceLog(options: {
     ) {
       const was = device.battery;
       if (was === null && device.batteryLow === null) return;
-      const before = { battery: was, batteryLow: device.batteryLow ?? false };
+      const before = { battery: was, batteryLow: device.batteryLow };
       const after = {
         battery: said.battery ?? was,
         batteryLow: said.batteryLow ?? before.batteryLow,

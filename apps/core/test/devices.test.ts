@@ -69,7 +69,7 @@ describe("a driver app's devices", () => {
         },
         probe: true,
         battery: null,
-        batteryLow: false,
+        batteryLow: null,
         leftAt: null,
         problem: null,
       },

@@ -35,7 +35,7 @@ const remote: DeviceInfo = {
   firmware: null,
   probe: false,
   battery: null,
-  batteryLow: false,
+  batteryLow: null,
   leftAt: null,
   problem: null,
   capabilities: [

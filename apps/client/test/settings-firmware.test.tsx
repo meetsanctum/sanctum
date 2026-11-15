@@ -72,7 +72,7 @@ function light(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     firmware: firmware(),
     probe: true,
     battery: null,
-    batteryLow: false,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     capabilities: [
@@ -99,7 +99,7 @@ const button = {
     firmware: firmware({ version: null, updatable: false, sleeps: true }),
     probe: false,
     battery: null,
-    batteryLow: false,
+    batteryLow: null,
     leftAt: null,
     problem: null,
   }),

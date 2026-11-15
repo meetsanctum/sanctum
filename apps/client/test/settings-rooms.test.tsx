@@ -39,7 +39,7 @@ function device(id: string, name: string, roomId: string | null) {
     firmware: null,
     probe: false,
     battery: null,
-    batteryLow: false,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     capabilities: [],

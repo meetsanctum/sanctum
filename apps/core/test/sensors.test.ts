@@ -87,11 +87,11 @@ describe("a climate sensor", () => {
     });
   });
 
-  it("keeps whether its battery is low as the device says it, and says no until one does", async () => {
+  it("keeps whether its battery is low as the device says it, and nothing until one does", async () => {
     const { core, maya, sensor, lamp } = await sensorCore();
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
       battery: 87,
-      batteryLow: false,
+      batteryLow: null,
     });
     await core.devices.report("test.lamps", {
       key: "sensor-1",
@@ -112,7 +112,7 @@ describe("a climate sensor", () => {
       batteryLow: false,
     });
     expect(await deviceOf(core, maya.token, lamp)).toMatchObject({
-      batteryLow: false,
+      batteryLow: null,
     });
   });
 
