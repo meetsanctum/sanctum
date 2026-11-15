@@ -13,9 +13,11 @@ import {
   type ColumnWords,
 } from "./device-history";
 import {
+  countedDays,
   dayMs,
   daysOf,
   joinedSpans,
+  midnight,
   spansOf,
   spanTimes,
   timeText,
@@ -30,7 +32,8 @@ import { Battery } from "./sensor-detail";
 // core History: under "Last 24 hours", what it says now and a sentence
 // that says what the band shows on its own; the day as a band, the one as
 // White spans, the other as a hairline and nothing where nothing was known;
-// and the week as a column of that time a day, as a light's History has.
+// and the week as a column of that time a day, as a light's History has,
+// or of how often it came on where the sensor's words count that.
 // The pointer or the arrow keys show a readout of a span or a day, and
 // screen readers get each as a list. Its battery is at the foot, as on a
 // sensor's Readings. Which value of its history it reads and every word it
@@ -51,6 +54,12 @@ export type DayAndWeekWords = {
   /** What the last 7 days come to. */
   week: (days: readonly Day[], now: number) => string;
   columns: ColumnWords;
+  /**
+   * Whether the week counts how often it came on each day, as a door's
+   * openings, in place of for how long: its changes are then read over the
+   * 7 days.
+   */
+  counted?: boolean;
 };
 
 // How near a White span the pointer has to be to show it, in px: a minute
@@ -63,11 +72,24 @@ export function DayAndWeek(props: {
   words: DayAndWeekWords;
 }) {
   const { device, capability, words } = props;
-  const { loaded, failed, now, live } = useDayAndWeek(device, capability);
+  const { loaded, failed, now, live } = useDayAndWeek(
+    device,
+    capability,
+    words.counted,
+  );
   const dayId = useId();
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
-  const days = loaded ? daysOf(loaded.statistics, spans, now, words.field) : [];
+  const timed = loaded
+    ? daysOf(loaded.statistics, spans, now, words.field)
+    : [];
+  const days =
+    loaded && words.counted
+      ? countedDays(
+          timed,
+          spansOf(loaded.states, midnight(now, 6) - 1, now, live),
+        )
+      : timed;
 
   return (
     <div

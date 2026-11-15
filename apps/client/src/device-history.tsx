@@ -87,8 +87,14 @@ type Loaded = { states: DeviceHistory; statistics: DeviceStatistics };
  * over the last 7 days, read when it is shown and every 5 minutes, with
  * every change seen live since, and the page's sense of now, a minute
  * fresh. A motion sensor's Motion page reads them too (motion-detail.tsx).
+ * A page that counts changes by day reads its changes over the 7 days
+ * (`weekOfChanges`), which the roll-ups do not hold.
  */
-export function useDayAndWeek(device: DeviceInfo, capability: CapabilityInfo) {
+export function useDayAndWeek(
+  device: DeviceInfo,
+  capability: CapabilityInfo,
+  weekOfChanges = false,
+) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -107,7 +113,12 @@ export function useDayAndWeek(device: DeviceInfo, capability: CapabilityInfo) {
       try {
         const [states, statistics] = await Promise.all([
           coreJson<DeviceHistory>(
-            `/api/history/states?${query({ from: new Date(to - dayMs).toISOString() })}`,
+            `/api/history/states?${query({
+              from: new Date(
+                // Keep the preceding state for an opening at midnight.
+                weekOfChanges ? midnight(to, 6) - 1 : to - dayMs,
+              ).toISOString(),
+            })}`,
           ),
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
@@ -135,7 +146,7 @@ export function useDayAndWeek(device: DeviceInfo, capability: CapabilityInfo) {
       clearInterval(reload);
       clearInterval(tick);
     };
-  }, [device.id, capability.id]);
+  }, [device.id, capability.id, weekOfChanges]);
 
   // Keep every change seen since the last history read. The next read
   // replaces these with the core's recorded times.
@@ -490,6 +501,14 @@ export type ColumnWords = {
   none: string;
   /** A day's time, as a screen reader's list says it. */
   spoken: (duration: string) => string;
+  /**
+   * For a week of counts in place of times (`Day.count`): a day's count as
+   * its readout says it, and as a screen reader's list does.
+   */
+  counts?: {
+    value: (count: number) => string;
+    spoken: (count: number) => string;
+  };
 };
 
 const onWords: ColumnWords = {
@@ -498,7 +517,13 @@ const onWords: ColumnWords = {
   spoken: (duration) => `on for ${duration}`,
 };
 
-/** The week as a column a day, as tall as the time it was on that day. */
+// The top of a week of counts: the first of these a day's count fits.
+const countScales = [5, 10, 20, 50, 100, 200, 500, 1000];
+
+/**
+ * The week as a column a day, as tall as the time it was on that day, or
+ * as how often it came on where the page counts that.
+ */
 export function Columns(props: {
   days: readonly Day[];
   now: number;
@@ -510,17 +535,24 @@ export function Columns(props: {
   const plot = Math.max(0, width - gutter);
   const slot = plot / Math.max(1, days.length);
   const columnWidth = Math.max(4, Math.min(24, Math.floor(slot - 8)));
-  const longest = Math.max(0, ...days.map((each) => each.on / 3600));
-  const scale = scales.find((hours) => hours >= longest) ?? 24;
+  const counts = words.counts;
+  // What a column is as tall as: a day's count, or its hours on.
+  const amountOf = (day: Day) => (counts ? (day.count ?? 0) : day.on / 3600);
+  const most = Math.max(0, ...days.map(amountOf));
+  const scale = counts
+    ? (countScales.find((count) => count >= most) ?? most)
+    : (scales.find((hours) => hours >= most) ?? 24);
   const today = midnight(now);
   const nameOf = (day: Day) =>
     day.start === today ? "Today" : weekday.format(day.start);
   const valueOf = (day: Day) =>
-    day.known === 0
+    day.known === 0 && amountOf(day) === 0
       ? "Not known"
-      : day.on === 0
+      : amountOf(day) === 0
         ? words.none
-        : sentence(durationText(day.on));
+        : counts
+          ? counts.value(day.count ?? 0)
+          : sentence(durationText(day.on));
   const pointed = cursor.at === null ? undefined : days[cursor.at];
 
   return (
@@ -548,10 +580,10 @@ export function Columns(props: {
             className="fill-white/14"
           />
           {days.map((day, index) => {
-            if (day.on === 0) return null;
+            if (amountOf(day) === 0) return null;
             const height = Math.max(
               2,
-              Math.round((columnsHeight * day.on) / 3600 / scale),
+              Math.round((columnsHeight * amountOf(day)) / scale),
             );
             const left = Math.round(slot * index + (slot - columnWidth) / 2);
             const top = columnsHeight - height;
@@ -578,7 +610,7 @@ export function Columns(props: {
         aria-hidden="true"
         className="absolute top-0 right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
       >
-        {scale} h
+        {counts ? scale : `${scale} h`}
       </span>
       <div
         aria-hidden="true"
@@ -599,7 +631,11 @@ export function Columns(props: {
         {days.map((day) => (
           <li key={day.start}>
             {dayAndDate.format(day.start)}:{" "}
-            {day.on > 0 ? words.spoken(durationText(day.on)) : valueOf(day)}
+            {amountOf(day) === 0
+              ? valueOf(day)
+              : counts
+                ? counts.spoken(day.count ?? 0)
+                : words.spoken(durationText(day.on))}
           </li>
         ))}
       </ul>

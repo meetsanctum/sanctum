@@ -5,8 +5,11 @@ import {
   contactSentence,
   contactSpanText,
   contactWeekHeadline,
+  doorWeekHeadline,
+  openedTimes,
 } from "../src/contact-history-data";
 import {
+  countedDays,
   daysOf,
   joinedSpans,
   midnight,
@@ -290,5 +293,119 @@ describe("a contact sensor's week", () => {
       "open",
     );
     expect(days.at(-2)).toMatchObject({ on: 1800, known: 3600 });
+  });
+});
+
+describe("a door's week", () => {
+  // Each day known throughout, with how often it was opened.
+  const week = (counts: number[], known?: number[]): Day[] =>
+    counts.map((count, index) => {
+      const start = midnight(now, counts.length - 1 - index);
+      return {
+        start,
+        on: count * 60,
+        known:
+          known?.[index] ?? (Math.min(midnight(start, -1), now) - start) / 1000,
+        count,
+      };
+    });
+  const online = (when: number, state: object) =>
+    [when, "online", state] as [number, "online", object];
+  // Include the state before the week's first midnight to see an opening there.
+  const spansOver = (states: [number, "online" | "offline", object | null][]) =>
+    spansOf(
+      {
+        kind: "contact",
+        states: states.map(([when, availability, state]) => ({
+          at: new Date(when).toISOString(),
+          availability,
+          state: state as Record<string, unknown> | null,
+        })),
+      },
+      midnight(now, 6) - 1,
+      now,
+    );
+  const dayAt = (daysBack: number, hours: number, minutes = 0) =>
+    midnight(now, daysBack) + hours * hour + minutes * minute;
+
+  it("counts each opening on the day it opened, and none it did not see", () => {
+    const spans = spansOver([
+      online(dayAt(6, 0), closed),
+      // Two days ago: opened twice, the second left open past midnight.
+      online(dayAt(2, 8), open),
+      online(dayAt(2, 8, 2), closed),
+      online(dayAt(2, 23, 50), open),
+      online(dayAt(1, 0, 10), closed),
+      // Yesterday: once more. Then offline, and open when it came back.
+      online(dayAt(1, 18), open),
+      online(dayAt(1, 18, 1), closed),
+      [dayAt(1, 20), "offline", null],
+      online(dayAt(0, 7), open),
+      online(dayAt(0, 7, 5), closed),
+      online(dayAt(0, 9), open),
+    ]);
+    const counted = countedDays(week([0, 0, 0, 0, 0, 0, 0]), spans);
+    expect(counted.map((each) => each.count)).toEqual([0, 0, 0, 0, 2, 1, 1]);
+  });
+
+  it("counts an opening at the week's first midnight with its preceding closed state", () => {
+    const spans = spansOver([
+      online(dayAt(6, 0) - minute, closed),
+      online(dayAt(6, 0), open),
+      online(dayAt(6, 0, 1), closed),
+    ]);
+    const counted = countedDays(week([0, 0, 0, 0, 0, 0, 0]), spans);
+    expect(counted.map((each) => each.count)).toEqual([1, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("includes an opening before any known time has elapsed that day", () => {
+    expect(
+      doorWeekHeadline(week([0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0]), now),
+    ).toBe("Opened once today");
+  });
+
+  it("says about how often it was opened a day, over the days that have ended", () => {
+    expect(doorWeekHeadline(week([6, 5, 7, 6, 6, 6, 2]), now)).toBe(
+      "Opened about 6 times a day",
+    );
+    expect(doorWeekHeadline(week([1, 1, 2, 1, 1, 1, 0]), now)).toBe(
+      "Opened about once a day",
+    );
+  });
+
+  it("says how often in all while that is less than once a day", () => {
+    expect(doorWeekHeadline(week([0, 1, 0, 0, 2, 0, 0]), now)).toBe(
+      "Opened 3 times this week",
+    );
+    expect(doorWeekHeadline(week([0, 0, 0, 0, 0, 0, 1]), now)).toBe(
+      "Opened once this week",
+    );
+    // Known only since yesterday, and only since today.
+    expect(
+      doorWeekHeadline(
+        week([0, 0, 0, 0, 0, 0, 2], [0, 0, 0, 0, 0, 0, 3600]),
+        now,
+      ),
+    ).toBe("Opened 2 times today");
+  });
+
+  it("says since when it was not opened, and only of days it knows throughout", () => {
+    expect(doorWeekHeadline(week([0, 0, 0, 0, 0, 0, 0]), now)).toBe(
+      "Not opened all week",
+    );
+    expect(
+      doorWeekHeadline(
+        week([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 3600]),
+        now,
+      ),
+    ).toBe("Not seen open today");
+    expect(
+      doorWeekHeadline(week([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]), now),
+    ).toBe("Not known yet");
+  });
+
+  it("says a count as its column does", () => {
+    expect(openedTimes(1)).toBe("Opened once");
+    expect(openedTimes(4)).toBe("Opened 4 times");
   });
 });
