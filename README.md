@@ -40,6 +40,8 @@ Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
 
 - Pair Zigbee lights, plugs, switches, remotes and motion, temperature,
   humidity and light-level sensors from Settings.
+- Add the ESPHome devices on your network, encrypted with their own keys:
+  lights, plugs, buttons and their sensors.
 - Choose what each button on a remote does; a new remote works from its
   first press.
 - Firmware updates, a connection check and battery levels, gathered in

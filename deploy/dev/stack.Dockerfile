@@ -21,6 +21,7 @@ COPY packages/auth-protocol/package.json packages/auth-protocol/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
 # The catalog apps, one line each, as in apps/core/Dockerfile.
+COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json
 COPY catalog/apps/natural-light/package.json catalog/apps/natural-light/package.json
 COPY catalog/apps/weather/package.json catalog/apps/weather/package.json
