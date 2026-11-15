@@ -27,10 +27,9 @@ export function motionSentence(
   if (known === 0) return "Nothing read in the last 24 hours";
   if (on === 0) return "No motion in the last 24 hours";
   const total = `${sentence(durationText(on))} of motion`;
-  const last = joinedSpans(spans)
-    .reverse()
-    .find((span) => span.on)!;
-  return last.to >= now
+  const joined = joinedSpans(spans);
+  const last = [...joined].reverse().find((span) => span.on)!;
+  return last === joined.at(-1) && last.to >= now
     ? `${total}, this time since ${timeText(last.from)}`
     : `${total}, the last at ${timeText(last.to)}`;
 }

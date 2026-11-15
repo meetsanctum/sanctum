@@ -149,9 +149,11 @@ describe("a contact sensor's page", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show() {
+  async function show(device = door) {
     await act(async () => {
-      root.render(<ContactPage device={door} capability={contactOf(door)} />);
+      root.render(
+        <ContactPage device={device} capability={contactOf(device)} />,
+      );
     });
     // The history arrives.
     await act(async () => {});
@@ -195,5 +197,27 @@ describe("a contact sensor's page", () => {
     expect(text).toContain("doesn't keep this device's history");
     expect(container.querySelector('[role="group"]')).toBeNull();
     expect(text).not.toContain("Last 7 days");
+  });
+
+  it("counts an opening as soon as the live reading arrives", async () => {
+    await show();
+    vi.setSystemTime(now + minute);
+    await show(contactSensor("door", "Front door", "hall", true, at(15, 1)));
+
+    expect(container.textContent).toContain(
+      "Opened 3 times, 8 min in all, this time since 15:01",
+    );
+  });
+
+  it("stops saying this time since as soon as the live reading closes", async () => {
+    await show();
+    vi.setSystemTime(now + minute);
+    await show(contactSensor("door", "Front door", "hall", true, at(15, 1)));
+    vi.setSystemTime(now + 3 * minute);
+    await show(contactSensor("door", "Front door", "hall", false, at(15, 3)));
+
+    expect(container.textContent).toContain(
+      "Opened 3 times, 10 min in all, the last at 15:01",
+    );
   });
 });

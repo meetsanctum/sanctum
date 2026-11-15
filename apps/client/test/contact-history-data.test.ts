@@ -96,6 +96,16 @@ describe("a contact sensor's day", () => {
     );
   });
 
+  it("counts the first opening at the current instant before time has elapsed", () => {
+    const spans = day([
+      [from - hour, "online", closed],
+      [now, "online", open],
+    ]);
+    expect(contactSentence(spans, from, now)).toBe(
+      "Opened once, under a minute in all, this time since 15:00",
+    );
+  });
+
   it("does not count an opening it did not see", () => {
     // Already open when the day began: its time counts, not an opening.
     expect(
@@ -129,6 +139,49 @@ describe("a contact sensor's day", () => {
     ).toBe("Open the whole time");
   });
 
+  it("keeps a brief closure in a day that was otherwise open", () => {
+    expect(
+      contactSentence(
+        day([
+          [from - hour, "online", open],
+          [at(9), "online", closed],
+          [at(9) + 30_000, "online", open],
+        ]),
+        from,
+        now,
+      ),
+    ).toBe("Opened once, 24 h in all, this time since 09:00");
+  });
+
+  it("does not call a day with a brief gap open the whole time", () => {
+    expect(
+      contactSentence(
+        day([
+          [from - hour, "online", open],
+          [at(9), "offline", open],
+          [at(9) + 30_000, "online", open],
+        ]),
+        from,
+        now,
+      ),
+    ).toBe("Open 24 h in all");
+  });
+
+  it("does not claim it stayed closed across even a brief gap", () => {
+    for (const states of [
+      [[from + 30_000, "online", closed]],
+      [
+        [from - hour, "online", closed],
+        [at(9), "offline", closed],
+        [at(9) + 30_000, "online", closed],
+      ],
+    ] satisfies Parameters<typeof day>[0][]) {
+      expect(contactSentence(day(states), from, now)).toBe(
+        "Not seen open in the last 24 hours",
+      );
+    }
+  });
+
   it("says it was not opened only of a day it knows throughout", () => {
     expect(
       contactSentence(day([[from - hour, "online", closed]]), from, now),
@@ -155,12 +208,16 @@ describe("a contact sensor's day", () => {
 });
 
 describe("a contact sensor's week", () => {
-  const week = (on: number[], known = on.map(() => 86_400)): Day[] =>
-    on.map((seconds, index) => ({
-      start: midnight(now, on.length - 1 - index),
-      on: seconds,
-      known: known[index]!,
-    }));
+  const week = (on: number[], known?: number[]): Day[] =>
+    on.map((seconds, index) => {
+      const start = midnight(now, on.length - 1 - index);
+      return {
+        start,
+        on: seconds,
+        known:
+          known?.[index] ?? (Math.min(midnight(start, -1), now) - start) / 1000,
+      };
+    });
 
   it("says about how long it was open a day, over the days that have ended", () => {
     expect(
@@ -186,6 +243,12 @@ describe("a contact sensor's week", () => {
         week([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 3600]),
         now,
       ),
+    ).toBe("Not seen open today");
+    expect(
+      contactWeekHeadline(
+        week([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 15 * 3600]),
+        now,
+      ),
     ).toBe("Not opened today");
     expect(
       contactWeekHeadline(
@@ -193,6 +256,17 @@ describe("a contact sensor's week", () => {
         now,
       ),
     ).toBe("Not known yet");
+  });
+
+  it("does not claim no openings across gaps in the week", () => {
+    expect(
+      contactWeekHeadline(week(Array(7).fill(0), Array(7).fill(3600)), now),
+    ).toBe("Not seen open all week");
+    const missingDay = week(Array(7).fill(0));
+    missingDay[3]!.known = 0;
+    expect(contactWeekHeadline(missingDay, now)).toBe(
+      "Not seen open since Sun",
+    );
   });
 
   it("reads how long it was open from the hourly roll-ups of open", () => {

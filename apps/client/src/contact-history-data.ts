@@ -1,6 +1,7 @@
 import {
   durationText,
   joinedSpans,
+  midnight,
   onWithin,
   sensedWeekHeadline,
   timeText,
@@ -11,10 +12,6 @@ import {
 // What a contact sensor's page says, from the spans and days core History
 // gives (device-history-data.ts): open as on, closed as off, and nothing
 // known while it was offline or before it said anything.
-
-// How much of the day may be missing at its start and it still counts as
-// the whole day: a sensor's first span starts where its history does.
-const slackMs = 60_000;
 
 /**
  * The line under the headline, which says what the band shows on its own:
@@ -29,28 +26,29 @@ export function contactSentence(
   now: number,
 ) {
   const { on, known } = onWithin(spans, from, now);
-  const whole = (now - from - slackMs) / 1000;
-  if (known === 0) return "Nothing read in the last 24 hours";
-  if (on === 0) {
+  const whole = (now - from) / 1000;
+  const joined = joinedSpans(spans);
+  const last = [...joined].reverse().find((span) => span.on);
+  if (!last) {
+    if (known === 0) return "Nothing read in the last 24 hours";
     return known >= whole
       ? "Not opened in the last 24 hours"
       : "Not seen open in the last 24 hours";
   }
-  if (on >= whole) return "Open the whole time";
-  const joined = joinedSpans(spans);
+  const isOpenNow = last === joined.at(-1) && last.to >= now;
+  if (on >= whole && isOpenNow) return "Open the whole time";
   const openings = joined.filter((span, index) => {
     const before = joined[index - 1];
     return span.on && before?.known === true && !before.on;
   });
-  const last = [...joined].reverse().find((span) => span.on)!;
   const total = `${durationText(on)} in all`;
   if (openings.length === 0) {
-    return last.to >= now
+    return isOpenNow
       ? `Open ${total}`
       : `Open ${total}, until ${timeText(last.to)}`;
   }
   const counted = `Opened ${openings.length === 1 ? "once" : `${openings.length} times`}, ${total}`;
-  return last.to >= now
+  return isOpenNow
     ? `${counted}, this time since ${timeText(last.from)}`
     : `${counted}, the last at ${timeText(openings.at(-1)!.from)}`;
 }
@@ -68,9 +66,19 @@ export function contactSpanText(span: Span) {
  * has not been open.
  */
 export function contactWeekHeadline(days: readonly Day[], now: number) {
+  const firstKnown = days.find((day) => day.known > 0);
+  const isKnownThroughout =
+    firstKnown !== undefined &&
+    days
+      .filter((day) => day.start >= firstKnown.start)
+      .every(
+        (day) =>
+          day.known >=
+          (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
+      );
   return sensedWeekHeadline(days, now, {
     aDay: (about) => `Open ${about} a day`,
     today: (duration) => `Open for ${duration} today`,
-    none: "Not opened",
+    none: isKnownThroughout ? "Not opened" : "Not seen open",
   });
 }

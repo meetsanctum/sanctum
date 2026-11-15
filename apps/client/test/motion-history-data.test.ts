@@ -98,6 +98,21 @@ describe("a motion sensor's day", () => {
     );
   });
 
+  it("stops calling motion current when quiet arrives at the current instant", () => {
+    const spans = spansOf(
+      history([
+        [from - hour, "online", { motion: false }],
+        [now - 25 * minute, "online", { motion: true }],
+        [now, "online", { motion: false }],
+      ]),
+      from,
+      now,
+    );
+    expect(motionSentence(spans, from, now)).toBe(
+      "25 min of motion, the last at 15:00",
+    );
+  });
+
   it("says when there was none, or nothing was heard", () => {
     const quiet = spansOf(
       history([[from - hour, "online", { motion: false }]]),

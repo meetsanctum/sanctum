@@ -82,7 +82,8 @@ const sameState = (a: Recorded, b: Omit<Recorded, "at">) =>
 /**
  * The spans from `from` until `to`: what the history says, then what the
  * device is now where that differs from its last change. Before the first
- * change nothing is known, so there is no span.
+ * change nothing is known, so there is no span. A change exactly at `to`
+ * keeps a zero-length span so summaries see it before time has elapsed.
  */
 export function spansOf(
   history: Pick<DeviceHistory, "kind" | "states">,
@@ -104,7 +105,10 @@ export function spansOf(
   for (const [index, each] of recorded.entries()) {
     const start = Math.max(each.at, from);
     const end = Math.min(recorded[index + 1]?.at ?? to, to);
-    if (end > start) spans.push(spanOf(history.kind, each, start, end));
+    const isCurrent = index === recorded.length - 1 && each.at === to;
+    if (end > start || isCurrent) {
+      spans.push(spanOf(history.kind, each, start, end));
+    }
   }
   return spans;
 }

@@ -99,7 +99,7 @@ export function DayAndWeek(props: {
               {words.sentence(spans, from, now)}
             </p>
             <Band
-              spans={joinedSpans(spans)}
+              spans={joinedSpans(spans).filter((span) => span.to > span.from)}
               from={from}
               to={now}
               label={words.band}
