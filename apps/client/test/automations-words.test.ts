@@ -253,6 +253,25 @@ describe("Automations' words for motion and light", () => {
     ]);
   });
 
+  it("offer a contact sensor's pieces to contact sensors, and list them under Security", () => {
+    // Is open and Is closed ask for `open`, which only a contact sensor has.
+    expect(deviceKindsFor(deviceCondition, { field: "open" })).toEqual([
+      "contact",
+    ]);
+    // Opens and Closes name the kind.
+    expect(
+      deviceKindsFor(deviceTrigger, {
+        kind: "contact",
+        field: "open",
+        operator: "is_on",
+        fromKnown: true,
+      }),
+    ).toEqual(["contact"]);
+    expect(groupOf(deviceTrigger, { config: { kind: "contact" } }, names)).toBe(
+      "Security",
+    );
+  });
+
   it("list motion among the core's named groups, a motion sensor's device trigger too", () => {
     expect(groupOf(motion, { config: {} }, names)).toBe("Motion");
     expect(groupOf(deviceTrigger, { config: { kind: "motion" } }, names)).toBe(

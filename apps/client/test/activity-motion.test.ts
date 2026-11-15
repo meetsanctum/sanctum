@@ -147,6 +147,24 @@ describe("a run that motion starts, in the activity log", () => {
     });
   });
 
+  it("names the contact sensor that started a run, and which way it went", () => {
+    const opened = (trigger: Record<string, unknown>) =>
+      activityWords(by({ piece: "device", ...trigger }, "Hall light"), "home")
+        .detail;
+    expect(opened({ device: "Front door", opened: true })).toBe(
+      "Hall light, after Front door opened",
+    );
+    expect(opened({ device: "Front door", opened: false })).toBe(
+      "Hall light, after Front door closed",
+    );
+    // The sensor has gone since: the run still says what started it.
+    expect(opened({ device: null, opened: true })).toBe(
+      "Hall light, after a contact sensor opened",
+    );
+    // Any other device's trigger is a change, as before.
+    expect(opened({})).toBe("Hall light, after a change");
+  });
+
   it("still reads when the run doesn't say where", () => {
     expect(activityWords(by({}, "Hall lights"), "home").detail).toBe(
       "Hall lights, after motion",

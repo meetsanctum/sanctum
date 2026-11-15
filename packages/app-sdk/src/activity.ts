@@ -62,6 +62,12 @@ export type ActivityTrigger = {
   place?: string;
   /** A no-motion trigger's wait. */
   forMinutes?: number;
+  /**
+   * A device trigger's contact sensor, by its name at the time (null once
+   * nothing knows it), and whether it opened or closed.
+   */
+  device?: string | null;
+  opened?: boolean;
 };
 
 /** The workflow run behind an entry, or the run an entry is. */

@@ -150,6 +150,25 @@ describe("changeFires", () => {
     );
   });
 
+  it("fires only on a change from a value it knew, where the trigger says so", () => {
+    const opens = {
+      field: "open",
+      operator: "is_on",
+      fromKnown: true,
+    } as const;
+    expect(changeFires(opens, { open: false }, { open: true })).toBe(true);
+    // A first state says how it is, not that it changed.
+    expect(changeFires(opens, null, { open: true })).toBe(false);
+    expect(changeFires(opens, undefined, { open: true })).toBe(false);
+    // Nor does a state that had no such value before.
+    expect(changeFires(opens, {}, { open: true })).toBe(false);
+    expect(changeFires(opens, { open: true }, { open: true })).toBe(false);
+    // Without it, a first state that passes fires, as a light's does.
+    expect(
+      changeFires({ field: "open", operator: "is_on" }, null, { open: true }),
+    ).toBe(true);
+  });
+
   it("fires below and above as a number crosses into them, not on every reading past it", () => {
     const below = { field: "value", operator: "below", value: 30 } as const;
     const above = { field: "value", operator: "above", value: 30 } as const;

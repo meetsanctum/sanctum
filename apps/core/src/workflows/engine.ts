@@ -6,6 +6,7 @@ import type {
   WorkflowNode,
   WorkflowProblem,
 } from "@meetsanctum/app-sdk";
+import { maintenanceOf } from "@meetsanctum/app-sdk";
 
 import type { Activity } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
@@ -224,6 +225,29 @@ export function createEngine(options: {
 
   // What started a run, for its entry: the first trigger that fired, with
   // what its words need.
+  // What a device trigger says of a contact sensor that started a run: the
+  // sensor by its name at the time, and whether it opened or closed.
+  function contactChange(node: WorkflowNode | undefined, firing: Firing) {
+    const data = (firing.data ?? {}) as {
+      device?: unknown;
+      kind?: unknown;
+      after?: { open?: unknown };
+    };
+    if (
+      node?.piece !== "device" ||
+      node.app ||
+      data.kind !== "contact" ||
+      typeof data.device !== "string" ||
+      typeof data.after?.open !== "boolean"
+    ) {
+      return {};
+    }
+    return {
+      device: devices.get(data.device)?.name ?? null,
+      opened: data.after.open,
+    };
+  }
+
   function triggerOf(workflow: WorkflowRow, firing: Firing) {
     const node = workflow.graph.nodes.find(
       (each) => each.id === firing.nodes[0],
@@ -236,6 +260,8 @@ export function createEngine(options: {
         ? { event: config.event, offsetMinutes: config.offsetMinutes ?? 0 }
         : {}),
       ...(node?.piece === "time" && !node.app ? { time: config.time } : {}),
+      // A contact sensor's change by the sensor's name then, and which way.
+      ...contactChange(node, firing),
       // Motion's place by its name then, and how long it waited.
       ...((node?.piece === "motion" || node?.piece === "noMotion") && !node.app
         ? {
@@ -366,11 +392,23 @@ export function createEngine(options: {
       const { device, capability, ...predicate } =
         config as DeviceConditionConfig;
       const found = devices.get(device, view);
-      const state = (
-        capability
-          ? found?.capabilities.find((each) => each.id === capability)
-          : found?.capabilities[0]
-      )?.state;
+      const part = capability
+        ? found?.capabilities.find((each) => each.id === capability)
+        : found?.capabilities[0];
+      // What a contact sensor last said is not how things are while
+      // nothing is known of it: offline, or gone quiet on its battery, it
+      // is neither open nor closed, so neither condition passes. "If the
+      // window is closed" must not pass on a sensor that has stopped
+      // answering.
+      if (
+        found &&
+        part?.kind === "contact" &&
+        (found.availability === "offline" ||
+          maintenanceOf(found, now().getTime()) === "quiet")
+      ) {
+        return false;
+      }
+      const state = part?.state;
       return state !== undefined && statePasses(predicate, state);
     }
     const output = await host.invoke({
