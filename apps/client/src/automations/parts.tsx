@@ -1,4 +1,5 @@
 import type { AppInfo, PieceInfo, WorkflowNode } from "@meetsanctum/app-sdk";
+import { ContactClosed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   CircleAlert,
@@ -47,6 +48,7 @@ const kindGlyphs: Record<string, LucideIcon> = {
   switch: ToggleRight,
   button: CircleDot,
   motion: Footprints,
+  contact: ContactClosed,
   sensor: Thermometer,
 };
 

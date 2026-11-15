@@ -185,13 +185,19 @@ export type StatePredicate = {
   field?: string;
   operator?: StateOperator;
   value?: unknown;
+  /**
+   * Fires only on a change from a value it knew: not on a first state,
+   * which says how things are and not that they changed.
+   */
+  fromKnown?: boolean;
 };
 
 /**
  * Whether a change from `before` to `after` fires a trigger. With a field:
  * it changed and its new value passes, or there was no state before and it
- * passes; below and above pass only as the value crosses into them. Without
- * one: anything changed.
+ * passes, unless the trigger fires only from a value it knew; below and
+ * above pass only as the value crosses into them. Without one: anything
+ * changed.
  */
 export function changeFires(
   predicate: StatePredicate,
@@ -203,7 +209,7 @@ export function changeFires(
   }
   if (!predicate.field) {
     return before === null || before === undefined
-      ? true
+      ? !predicate.fromKnown
       : !sameValue(before, after);
   }
   const current = stateField(after, predicate.field);
@@ -211,9 +217,15 @@ export function changeFires(
     return false;
   }
   if (before === null || before === undefined) {
-    return passes(current, predicate.operator, predicate.value);
+    return (
+      !predicate.fromKnown &&
+      passes(current, predicate.operator, predicate.value)
+    );
   }
   const previous = stateField(before, predicate.field);
+  if (predicate.fromKnown && previous === undefined) {
+    return false;
+  }
   if (crossing(predicate.operator)) {
     return (
       passes(current, predicate.operator, predicate.value) &&

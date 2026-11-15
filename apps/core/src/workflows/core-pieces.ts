@@ -110,6 +110,9 @@ export const corePieces = {
         field: field.optional(),
         operator: operator.optional(),
         value: z.unknown().optional(),
+        // Fires only on a change from a value the core knew, not on a
+        // device's first state: a door found open has not just opened.
+        fromKnown: z.boolean().optional().meta({ title: "Only on a change" }),
       }),
       words: {
         sentence: "{device} changes",
@@ -147,6 +150,28 @@ export const corePieces = {
               kind: "motion",
               field: "motion",
               operator: "is_off",
+            },
+          },
+          {
+            title: "Opens",
+            sentence: "{device} opens",
+            card: { name: "{device}", specifics: "Opens" },
+            config: {
+              kind: "contact",
+              field: "open",
+              operator: "is_on",
+              fromKnown: true,
+            },
+          },
+          {
+            title: "Closes",
+            sentence: "{device} closes",
+            card: { name: "{device}", specifics: "Closes" },
+            config: {
+              kind: "contact",
+              field: "open",
+              operator: "is_off",
+              fromKnown: true,
             },
           },
         ],
@@ -229,6 +254,16 @@ export const corePieces = {
             title: "Sees motion",
             sentence: "{device} sees motion",
             config: { field: "motion", operator: "is_on" },
+          },
+          {
+            title: "Is open",
+            sentence: "{device} is open",
+            config: { field: "open", operator: "is_on" },
+          },
+          {
+            title: "Is closed",
+            sentence: "{device} is closed",
+            config: { field: "open", operator: "is_off" },
           },
         ],
       },
