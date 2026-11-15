@@ -147,6 +147,8 @@ export function createDevices(
   const confirmMs = options.confirmMs ?? defaultConfirmMs;
   const deviceLog = createDeviceLog({ activity: options.activity, confirmMs });
   const { rename, roomNames } = createNaming(db, places);
+  // Set as the core stops, from which no command goes to a device.
+  let isStopping = false;
   const commands = createCommandTracking({
     confirmMs,
     now,
@@ -310,6 +312,11 @@ export function createDevices(
     command: unknown,
   ): Promise<CapabilityInfo> {
     const { device, capability } = target;
+    // The core is stopping: nothing goes to a device again.
+    if (isStopping) {
+      deviceLog.command(who, device.id, "refused", "unavailable");
+      throw new ActionCallError("unavailable");
+    }
     const definition = capabilityOf(capability.kind);
     const parsed = definition.command.safeParse(command);
     if (
@@ -780,6 +787,7 @@ export function createDevices(
 
     // The core is stopping: nothing goes to a device again from now on.
     closing() {
+      isStopping = true;
       commands.closing();
     },
 

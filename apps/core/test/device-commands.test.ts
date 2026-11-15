@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { setupCommands } from "./device-command-support.js";
+import { command, lampsCore } from "./devices-support.js";
 
 describe("commands whose deliveries overlap", () => {
   it.each([60, 110])(
@@ -391,5 +392,21 @@ describe("a light whose reports trail its commands", () => {
       state: { on: false, brightness: 30 },
     });
     expect(deliveries).toHaveLength(2);
+  });
+});
+
+describe("commands as the core stops", () => {
+  it("refuses one once nothing may go to a device", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    const before = core.devices.get(lamp)!.capabilities;
+
+    core.devices.closing();
+    const refused = await command(core, maya.token, lamp, "light", {
+      on: true,
+    });
+
+    expect(refused.statusCode).toBe(503);
+    expect(refused.json()).toEqual({ error: "unavailable" });
+    expect(core.devices.get(lamp)!.capabilities).toEqual(before);
   });
 });

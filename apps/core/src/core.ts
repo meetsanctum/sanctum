@@ -71,9 +71,11 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
   // manager staged for it. Each gets its database, asks for its services and
   // starts; the core serves meanwhile, so a slow app cannot hold it up. A core
   // on trial starts no app until the update commits, since a rollback can't
-  // undo what they did. Packages that can't be read mean a broken image: the
-  // core may be serving by then, but it stops all the same, so Docker tries it
-  // again and one on trial rolls back.
+  // undo what they did. A package that doesn't load is logged and left out
+  // (loader.ts), so one broken app doesn't keep the home's core from serving.
+  // Installing that fails as a whole is fatal: the core may be serving by
+  // then, but it stops all the same, so Docker tries it again and one on trial
+  // rolls back.
   async function installApps(cancelled: AbortSignal) {
     const first = stagedPackages();
     // One the image ships that the manager hasn't staged, as an old manager or
