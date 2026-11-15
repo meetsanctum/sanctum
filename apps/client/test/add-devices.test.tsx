@@ -123,6 +123,47 @@ describe("Add devices, with what drivers found", () => {
     return document.querySelector<HTMLElement>("[role=dialog]")!;
   }
 
+  it("says what to plug in where the home never had a Zigbee adapter, and otherwise that nothing adds devices", async () => {
+    // No app lets devices join: Zigbee waits for its adapter.
+    adding = { until: null, joined: [], drivers: [], found: [] };
+    const dialog = (notSetUp?: Parameters<typeof AddDevices>[0]["notSetUp"]) =>
+      act(async () =>
+        root.render(
+          <AddDevices
+            open
+            onOpenChange={() => undefined}
+            devices={[]}
+            rooms={[office]}
+            apps={[zigbee]}
+            adding={adding}
+            notSetUp={notSetUp}
+            live={live}
+            onChanged={() => {}}
+          />,
+        ),
+      );
+
+    await dialog([
+      {
+        service: "zigbee2mqtt",
+        problem: "No Zigbee coordinator is plugged in",
+        apps: ["sanctum.zigbee"],
+      },
+    ]);
+    const shown = () => document.querySelector("[role=dialog]")!;
+    expect(shown().textContent).toContain(
+      "Plug in a Zigbee adapter to add Zigbee devices.",
+    );
+    // A hint, not something that went wrong.
+    expect(shown().querySelector("[role=alert]")).toBeNull();
+
+    await dialog();
+    expect(shown().querySelector("[role=alert]")?.textContent).toBe(
+      "No app that adds devices is running.",
+    );
+    expect(shown().textContent).not.toContain("Plug in a Zigbee adapter");
+  });
+
   function named(label: string) {
     return document.querySelector<HTMLButtonElement>(
       `[role=dialog] button[aria-label="${label}"]`,

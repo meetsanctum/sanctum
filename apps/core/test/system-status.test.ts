@@ -379,7 +379,7 @@ describe("the host's status", () => {
       name: "zigbee2mqtt",
       apps: ["sanctum.zigbee"],
       state: "waiting",
-      problem: "No Zigbee coordinator is plugged in",
+      problem: "The Zigbee coordinator /dev/ttyACM0 is not plugged in",
     };
     host.clock = false;
     const { read } = await statusOf(async () => host);
@@ -393,11 +393,51 @@ describe("the host's status", () => {
         kind: "service",
         service: "zigbee2mqtt",
         state: "waiting",
-        problem: "No Zigbee coordinator is plugged in",
+        problem: "The Zigbee coordinator /dev/ttyACM0 is not plugged in",
         apps: ["sanctum.zigbee"],
       },
       { kind: "clock" },
     ]);
+    expect((await read()).notSetUp).toEqual([]);
+  });
+
+  it("has no problem with a service the home never set up, and says it apart", async () => {
+    const host = piStatus();
+    host.services[1] = {
+      name: "zigbee2mqtt",
+      apps: ["sanctum.zigbee"],
+      state: "waiting",
+      problem: "No Zigbee coordinator is plugged in",
+      neverSetUp: true,
+    };
+    const { read } = await statusOf(async () => host);
+
+    const status = await read();
+    expect(status.problems).toEqual([]);
+    expect(status.notSetUp).toEqual([
+      {
+        service: "zigbee2mqtt",
+        problem: "No Zigbee coordinator is plugged in",
+        apps: ["sanctum.zigbee"],
+      },
+    ]);
+  });
+
+  it("still has a problem with one an older manager says only waits", async () => {
+    const host = piStatus();
+    host.services[1] = {
+      name: "zigbee2mqtt",
+      apps: ["sanctum.zigbee"],
+      state: "waiting",
+      problem: "No Zigbee coordinator is plugged in",
+    };
+    const { read } = await statusOf(async () => host);
+
+    const status = await read();
+    expect(status.problems).toMatchObject([
+      { kind: "service", service: "zigbee2mqtt", state: "waiting" },
+    ]);
+    expect(status.notSetUp).toEqual([]);
   });
 
   it("forgets a weak supply after a day, and leaves swap alone while memory is free", async () => {
@@ -422,6 +462,7 @@ describe("the host's status", () => {
       channel: null,
       host: null,
       problems: [],
+      notSetUp: [],
     });
   });
 

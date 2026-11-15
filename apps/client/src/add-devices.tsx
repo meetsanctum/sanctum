@@ -2,14 +2,11 @@ import type {
   AddResult,
   AppInfo,
   DeviceInfo,
-  DeviceType,
   FoundDevice,
-  JoinedDevice,
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
-import { CircleAlert, LoaderCircle } from "lucide-react";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   useCallback,
   useEffect,
@@ -19,6 +16,7 @@ import {
   type FormEvent,
 } from "react";
 
+import { JoinedRow, ReadyRow, type DeviceChanges } from "./add-devices-rows";
 import { productName } from "./brand";
 import { Section } from "./components";
 import {
@@ -30,16 +28,10 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
-import {
-  DeviceIcon,
-  deviceProblem,
-  RoomPicker,
-  showAsOf,
-  ShowAsPicker,
-  updateDevice,
-} from "./device-parts";
+import { DeviceIcon, deviceProblem, updateDevice } from "./device-parts";
 import { QuestionField, type Refused } from "./device-questions";
 import { KnotLoader } from "./knot-loader";
+import { addDevicesHint, type ServiceNotSetUp } from "./system-status";
 
 // Adding devices, for everyone, whatever the radio: the devices drivers
 // found, as on the home's network, and the core's pairing flow. Found devices
@@ -52,38 +44,9 @@ import { KnotLoader } from "./knot-loader";
 // answer typed in it.
 
 type Opened = PairingInfo & { since: string };
-type Changes = {
-  name?: string | null;
-  roomId?: string | null;
-  shownAs?: DeviceType | null;
-};
-
 /** Minutes and seconds, as a countdown shows them: 3:52. */
 export function countdown(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-/**
- * How far a device that joined has come, as the dialog says it. One that is
- * ready and has nothing Sanctum can use says so: it is the household's to
- * name and place all the same.
- */
-export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
-  switch (joined.stage) {
-    case "joined":
-      return "Joining…";
-    case "interviewing":
-      return "Setting up…";
-    case "ready":
-      if (device && device.capabilities.length === 0) {
-        return `${productName} cannot use it`;
-      }
-      return joined.known ? "Joined again" : "Ready";
-    case "unsupported":
-      return `${productName} cannot use it`;
-    case "failed":
-      return "It did not finish joining. Reset it and try again.";
-  }
 }
 
 /** Names in a sentence: Zigbee, Zigbee or Thread. */
@@ -134,6 +97,8 @@ export function AddDevices(props: {
   // Adding devices as the core last said it: what drivers found, and which
   // let devices join. An older core says neither.
   adding?: PairingInfo;
+  // The services the home never set up, to say what to plug in.
+  notSetUp?: readonly ServiceNotSetUp[];
   live: LiveFeed;
   onChanged: (device: DeviceInfo) => void;
 }) {
@@ -347,12 +312,14 @@ export function AddDevices(props: {
   const drivers = pairing?.drivers ?? props.adding?.drivers;
   const radios = (drivers ?? []).flatMap((id) => appName(id) ?? []);
   const pairs = !unavailable && (drivers === undefined || drivers.length > 0);
+  const cannotAdd = !pairs && !opening && shown.length === 0;
+  // What to plug in, where that is all that is missing; else that nothing
+  // can add any.
+  const hint = cannotAdd ? addDevicesHint(props.notSetUp) : undefined;
   const nothing =
-    !pairs && !opening && shown.length === 0
-      ? "No app that adds devices is running."
-      : undefined;
+    cannotAdd && !hint ? "No app that adds devices is running." : undefined;
 
-  const save = async (device: DeviceInfo, changes: Changes) => {
+  const save = async (device: DeviceInfo, changes: DeviceChanges) => {
     const attempt = Symbol();
     const current = session.current;
     saveAttempts.current.set(device.id, attempt);
@@ -499,6 +466,9 @@ export function AddDevices(props: {
               ))}
             </ul>
           </Section>
+        )}
+        {hint && !problem && (
+          <p className="m-0 text-sm text-muted-foreground">{hint}</p>
         )}
         {(problem ?? nothing) && (
           <p role="alert" className="m-0 text-sm text-destructive">
@@ -654,142 +624,5 @@ function FoundRow(props: {
         </p>
       )}
     </li>
-  );
-}
-
-// A device added or ready, named and placed right here.
-function ReadyRow(props: {
-  device: DeviceInfo;
-  detail: string;
-  rooms: readonly Room[];
-  onSave: (device: DeviceInfo, changes: Changes) => Promise<void>;
-}) {
-  const { device } = props;
-  // A device that may be shown as another type has that and its room under
-  // its name, whichever is chosen, so its name keeps room to be read.
-  const stacked = showAsOf(device) !== null;
-  return (
-    <li className="flex items-start gap-3">
-      <DeviceIcon device={device} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div
-          className={
-            stacked ? "flex flex-col gap-2" : "flex items-center gap-2"
-          }
-        >
-          <div className={stacked ? "flex" : "flex min-w-0 flex-1"}>
-            <NameField
-              device={device}
-              onSave={(name) => void props.onSave(device, { name })}
-            />
-          </div>
-          <div
-            className={
-              // On a phone a long room goes under what it is shown as.
-              stacked
-                ? "flex flex-wrap items-center gap-2"
-                : "flex shrink-0 items-center gap-2"
-            }
-          >
-            <ShowAsPicker
-              device={device}
-              onChange={(shownAs) => void props.onSave(device, { shownAs })}
-            />
-            <RoomPicker
-              device={device}
-              rooms={props.rooms}
-              onChange={(roomId) => void props.onSave(device, { roomId })}
-            />
-          </div>
-        </div>
-        <span className="text-[13px] font-medium text-muted-foreground">
-          {props.detail}
-        </span>
-      </div>
-    </li>
-  );
-}
-
-function JoinedRow(props: {
-  joined: JoinedDevice;
-  device?: DeviceInfo;
-  rooms: readonly Room[];
-  onSave: (device: DeviceInfo, changes: Changes) => Promise<void>;
-}) {
-  const { joined, device } = props;
-  const working = joined.stage === "joined" || joined.stage === "interviewing";
-  const detail = [
-    device && joined.description !== device.name ? joined.description : null,
-    stageText(joined, device),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  if (joined.stage === "ready" && device) {
-    return (
-      <ReadyRow
-        device={device}
-        detail={detail}
-        rooms={props.rooms}
-        onSave={props.onSave}
-      />
-    );
-  }
-  return (
-    <li className="flex items-start gap-3">
-      <span
-        aria-hidden="true"
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/12"
-      >
-        {working ? (
-          <LoaderCircle className="size-4 animate-spin" />
-        ) : (
-          <CircleAlert className="size-4" />
-        )}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        {/* A device the home has goes by its name while it joins again. */}
-        <span className="truncate text-sm font-medium">
-          {device?.name ?? joined.description ?? "New device"}
-        </span>
-        <span className="text-[13px] font-medium text-muted-foreground">
-          {detail}
-        </span>
-      </div>
-    </li>
-  );
-}
-
-// A device's name, saved when the field is left. Left empty, the device is
-// named after its room again, and the field follows the name the core
-// gives it while nobody is typing.
-function NameField(props: {
-  device: DeviceInfo;
-  onSave: (name: string | null) => void;
-}) {
-  const { device } = props;
-  const [draft, setDraft] = useState(device.name);
-  const [typing, setTyping] = useState(false);
-  useEffect(() => {
-    if (!typing) setDraft(device.name);
-  }, [device.name, typing]);
-
-  return (
-    <Input
-      aria-label={`Name for ${device.driverName}`}
-      value={draft}
-      maxLength={120}
-      onFocus={() => setTyping(true)}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        setTyping(false);
-        const name = draft.trim();
-        if (name !== device.name) props.onSave(name || null);
-        if (!name) setDraft(device.name);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-      }}
-      className="h-8 min-w-0 flex-1"
-    />
   );
 }

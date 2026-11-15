@@ -48,7 +48,11 @@ import {
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import { SummaryCards, type Summary } from "./summary-cards";
-import type { HostProblem } from "./system-status";
+import {
+  waitingForSetUp,
+  type HostProblem,
+  type ServiceNotSetUp,
+} from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
@@ -337,6 +341,8 @@ export function HomeStatus(props: {
   // What needs someone about Sanctum itself (system-status.ts), and its
   // page.
   problems?: readonly HostProblem[];
+  // The services the home never set up, whose apps wait for nothing wrong.
+  notSetUp?: readonly ServiceNotSetUp[];
   apps: readonly AppInfo[];
   openCategory: (id: DeviceCategory) => void;
   openAttention: () => void;
@@ -387,7 +393,7 @@ export function HomeStatus(props: {
     needingAttention(devices.devices, devices.places?.rooms ?? [], props.apps),
     props.problems ?? [],
     unit,
-    appsNotRunning(props.apps),
+    appsNotRunning(props.apps, waitingForSetUp(props.notSetUp)),
   );
   if (attention) {
     shown.push({

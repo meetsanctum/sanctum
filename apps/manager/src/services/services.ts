@@ -42,6 +42,9 @@ export type ServiceStatus = {
   state: "off" | "starting" | "running" | "waiting" | "failed";
   // Why it is waiting or failed.
   problem?: string;
+  // It waits for what the home has never had, as an adapter nobody has
+  // plugged in: a home that does not use it, and no fault.
+  neverSetUp?: true;
   image?: string;
   restarts?: number;
 };
@@ -221,7 +224,11 @@ export function createServices(options: {
     const spec = await definition.spec(context);
     if ("problem" in spec) {
       await stopServiceContainer({ docker, service: name, log });
-      observed.set(name, { state: "waiting", problem: spec.problem });
+      observed.set(name, {
+        state: "waiting",
+        problem: spec.problem,
+        ...(spec.neverSetUp && { neverSetUp: true }),
+      });
       return;
     }
     const wanted = await imageChanges.specToRun(name, spec);

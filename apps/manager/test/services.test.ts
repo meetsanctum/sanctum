@@ -311,15 +311,18 @@ describe("services", () => {
     await services.reconcile();
 
     expect(services.status("mosquitto")).toMatchObject({ state: "running" });
+    // The home has never had one: it waits, and nothing is wrong.
     expect(services.status("zigbee2mqtt")).toMatchObject({
       state: "waiting",
       problem: "No Zigbee coordinator is plugged in",
+      neverSetUp: true,
     });
     expect(docker.container("sanctum-zigbee2mqtt")).toBeUndefined();
 
     await dev.plug(zbt2, "ttyACM0");
     await services.reconcile();
     expect(services.status("zigbee2mqtt")).toMatchObject({ state: "running" });
+    expect(services.status("zigbee2mqtt")).not.toHaveProperty("neverSetUp");
   });
 
   it("stops Zigbee2MQTT while its coordinator is unplugged", async () => {
@@ -336,6 +339,8 @@ describe("services", () => {
       state: "waiting",
       problem: `The Zigbee coordinator ${zbt2} is not plugged in`,
     });
+    // The one it used is gone, which is something to put right.
+    expect(services.status("zigbee2mqtt")).not.toHaveProperty("neverSetUp");
 
     // It may come back as another tty; the by-id path stays the same.
     await dev.plug(zbt2, "ttyACM1");

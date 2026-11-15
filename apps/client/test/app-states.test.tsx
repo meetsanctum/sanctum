@@ -24,6 +24,7 @@ import {
   blockedWords,
 } from "../src/automations/blocked";
 import { productName } from "../src/brand";
+import { waitingForSetUp } from "../src/system-status";
 import { coreJson } from "../src/core-fetch";
 
 // An app's states from its supervisor, said the same everywhere it shows.
@@ -330,6 +331,39 @@ describe("Needs attention", () => {
     );
     expect(appAttentionSpoken(longer)).toBe("Weather is waiting");
     expect(attentionTile([], [], "celsius", [longer])?.problem).toBe(false);
+  });
+
+  it("leaves out one that only waits for a service the home never set up", () => {
+    const zigbee = {
+      ...app("waiting", {
+        since,
+        waitingFor: "Waiting for Zigbee2MQTT",
+        attention: true,
+      }),
+      id: "sanctum.zigbee",
+      name: "Zigbee",
+    };
+    const notSetUp = waitingForSetUp([
+      {
+        service: "zigbee2mqtt",
+        problem: "No Zigbee coordinator is plugged in",
+        apps: ["sanctum.zigbee"],
+      },
+    ]);
+
+    // Nobody plugged an adapter in: nothing is wrong, and nothing asks.
+    expect(appsNotRunning([zigbee], notSetUp)).toEqual([]);
+    expect(
+      attentionTile([], [], "celsius", appsNotRunning([zigbee], notSetUp)),
+    ).toBeNull();
+    // Without that, as when its adapter was pulled out, it is listed.
+    expect(appsNotRunning([zigbee])).toEqual([zigbee]);
+    // One that gave up is listed whatever it would wait for.
+    const stopped = { ...failed, id: "sanctum.zigbee", name: "Zigbee" };
+    expect(appsNotRunning([stopped], notSetUp)).toEqual([stopped]);
+    // And another app's wait is its own.
+    const other = app("waiting", { since, attention: true });
+    expect(appsNotRunning([other, zigbee], notSetUp)).toEqual([other]);
   });
 
   it("says one stopped for good is a problem", () => {

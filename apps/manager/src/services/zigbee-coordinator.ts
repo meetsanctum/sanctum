@@ -104,13 +104,15 @@ function preferZigbeeCoordinatorCandidate(
 
 // The chosen coordinator, or the only one plugged in when none was chosen
 // (`picked`, for the caller to keep). Never switches to another coordinator
-// on its own: a new one would start a new Zigbee network.
+// on its own: a new one would start a new Zigbee network. With none chosen
+// and none plugged in, the home has never had one (`neverSetUp`): that is
+// a home that does not use Zigbee, or not yet, and no fault.
 export function chooseZigbeeCoordinator(
   chosen: ZigbeeCoordinatorChoice | undefined,
   candidates: ZigbeeCoordinatorCandidate[],
 ):
   | { coordinator: ZigbeeCoordinator; picked?: ZigbeeCoordinatorChoice }
-  | { problem: string } {
+  | { problem: string; neverSetUp?: true } {
   let choice = chosen;
   let picked: ZigbeeCoordinatorChoice | undefined;
   if (choice) {
@@ -121,7 +123,10 @@ export function chooseZigbeeCoordinator(
     }
   } else {
     if (candidates.length === 0) {
-      return { problem: "No Zigbee coordinator is plugged in" };
+      return {
+        problem: "No Zigbee coordinator is plugged in",
+        neverSetUp: true,
+      };
     }
     if (candidates.length > 1) {
       return {

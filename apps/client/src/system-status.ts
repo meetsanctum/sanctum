@@ -75,6 +75,19 @@ export type SystemStatus = {
   channel: Channel | null;
   host: HostInfo | null;
   problems: HostProblem[];
+  /**
+   * The services that wait for what the home has never had, as Zigbee for
+   * an adapter nobody has plugged in: no problem, so nothing asks for
+   * attention, and the Status page says it plainly. An older core says
+   * nothing of them.
+   */
+  notSetUp?: ServiceNotSetUp[];
+};
+
+export type ServiceNotSetUp = {
+  service: string;
+  problem: string | null;
+  apps: string[];
 };
 
 export const systemStatus = {
@@ -289,7 +302,7 @@ export function problemTitle(problem: HostProblem, unit: TemperatureUnit) {
 // why it can't start Zigbee's bridge; anything else starts again by itself.
 // An adapter of a type the manager can't tell is chosen on the command
 // line, which the install guide shows.
-function serviceFix(problem: Extract<HostProblem, { kind: "service" }>) {
+function serviceFix(problem: { problem: string | null }) {
   const text = problem.problem ?? "";
   if (text.startsWith("No Zigbee coordinator")) {
     return "No Zigbee adapter is plugged in. Plug it in, and Zigbee starts by itself";
@@ -304,6 +317,29 @@ function serviceFix(problem: Extract<HostProblem, { kind: "service" }>) {
     return `${productName} doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”`;
   }
   return `${productName} starts it again by itself`;
+}
+
+/** What a service that was never set up says on the Status page, and what starts it. */
+export function notSetUpWords(waiting: ServiceNotSetUp) {
+  return {
+    title: `${serviceName(waiting.service)} isn't set up`,
+    detail: serviceFix(waiting),
+  };
+}
+
+/** The apps that only wait for a service the home never set up: nothing is wrong with them. */
+export function waitingForSetUp(notSetUp: readonly ServiceNotSetUp[] = []) {
+  return new Set(notSetUp.flatMap((each) => each.apps));
+}
+
+/**
+ * What Add devices says while no app can add any because the home never
+ * set up what one needs: what to plug in.
+ */
+export function addDevicesHint(notSetUp: readonly ServiceNotSetUp[] = []) {
+  return notSetUp.some((each) => each.service === "zigbee2mqtt")
+    ? "Plug in a Zigbee adapter to add Zigbee devices."
+    : undefined;
 }
 
 /** What to do about a problem, under its title. */

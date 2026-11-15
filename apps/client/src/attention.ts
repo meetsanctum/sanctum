@@ -83,22 +83,33 @@ const wentBackFor = (app: AppInfo) => {
  * Whether Needs attention lists it: one that needs someone, one paused, and one
  * that has been waiting a while. One on its way back is news to nobody.
  */
-function worthTelling(app: AppInfo) {
+function worthTelling(app: AppInfo, notSetUp: ReadonlySet<string>) {
   // It runs, but someone may want to know it isn't on the version it should be.
   if (wentBackFor(app)?.triesAgain === false) return true;
   if (looksRunning(app)) return false;
   return (
     isGivenUp(app) ||
     app.state === "paused" ||
-    (app.state === "waiting" && app.run?.attention === true)
+    // One that waits for a service the home never set up, as Zigbee for an
+    // adapter nobody has plugged in, waits for nothing that went wrong.
+    (app.state === "waiting" &&
+      app.run?.attention === true &&
+      !notSetUp.has(app.id))
   );
 }
 
-/** The installed apps that aren't running, those that stopped first, then by name. */
-export function appsNotRunning(apps: readonly AppInfo[]): AppInfo[] {
+/**
+ * The installed apps that aren't running, those that stopped first, then by
+ * name; without those that only wait for a service the home never set up
+ * (`waitingForSetUp`).
+ */
+export function appsNotRunning(
+  apps: readonly AppInfo[],
+  notSetUp: ReadonlySet<string> = new Set(),
+): AppInfo[] {
   const rank = (app: AppInfo) => (isGivenUp(app) ? 0 : 1);
   return apps
-    .filter(worthTelling)
+    .filter((app) => worthTelling(app, notSetUp))
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
