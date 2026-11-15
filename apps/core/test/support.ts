@@ -44,11 +44,23 @@ const fast = {
 } as const;
 
 const open: (() => Promise<void>)[] = [];
+// The data folders testCore made. They go once every core of the test has
+// stopped, since a later core of the same test may start on one.
+const folders: string[] = [];
 afterEach(async () => {
   for (const close of open.splice(0)) {
     await close();
   }
+  for (const folder of folders.splice(0)) {
+    await rm(folder, { recursive: true, force: true });
+  }
 });
+
+async function dataFolder() {
+  const folder = await mkdtemp(join(tmpdir(), "sanctum-core-"));
+  folders.push(folder);
+  return folder;
+}
 
 // The fixture apps' packages (test/fixtures/apps), as a catalog folder.
 export const fixtureApps = fileURLToPath(
@@ -106,8 +118,7 @@ export async function testCore(
     allowed?: boolean;
   } = {},
 ) {
-  const dataDir =
-    options.dataDir ?? (await mkdtemp(join(tmpdir(), "sanctum-core-")));
+  const dataDir = options.dataDir ?? (await dataFolder());
   // On trial only when the test says, whatever the core before it on this
   // data was: the manager's marker of an update it hasn't committed.
   const marker = join(dataDir, updatePendingFile);
