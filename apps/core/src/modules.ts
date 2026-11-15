@@ -563,29 +563,7 @@ export async function createModules(
     stopNewWork,
     // The modules' steps of stopping, in order (lifecycle.ts).
     stoppingSteps,
-    // Stops them as stopping does, each step tried even after one fails, for
-    // a core without a lifecycle, as in tests.
-    async close() {
-      for (const [label, run] of stopNewWork) {
-        try {
-          run();
-        } catch (error) {
-          log(`core: ${label} failed (${message(error)})`);
-        }
-      }
-      for (const [label, run] of stoppingSteps) {
-        try {
-          await run();
-        } catch (error) {
-          log(`core: ${label} failed (${message(error)})`);
-        }
-      }
-    },
   };
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export type Modules = Awaited<ReturnType<typeof createModules>>;

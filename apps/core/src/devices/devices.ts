@@ -11,7 +11,6 @@ import {
   type DeviceCommand,
   type DeviceInfo,
   type DriverCommand,
-  type FirmwareInfo,
 } from "@meetsanctum/app-sdk";
 import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -25,10 +24,12 @@ import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { createDeviceLog, type Who } from "./activity.js";
 import { createCommandTracking } from "./commands.js";
+import { unknownFirmware } from "./firmware.js";
 import { createNaming } from "./naming.js";
 import { createPresence } from "./presence.js";
 import { writeCapabilities } from "./registration.js";
 import { createRemoval, type RemoveFromDriver } from "./removal.js";
+import { commandRequest, deviceChanges } from "./requests.js";
 import { createTurns } from "./turns.js";
 import { deviceCapabilities, devices, type StoredSetBy } from "./schema.js";
 import {
@@ -55,6 +56,8 @@ import { deviceInfo, viewOf, type View } from "./views.js";
 /** What a change did to a device, for live clients; null where it did not or no longer exists. */
 export type DeviceChange = {
   id: string;
+  // Its driver's own id for it, which only that driver hears of.
+  key?: string;
   before: DeviceInfo | null;
   after: DeviceInfo | null;
 };
@@ -66,34 +69,7 @@ export type Deliver = (
   actor: Actor,
 ) => Promise<void>;
 
-export const deviceChanges = z.object({
-  id: z.string().min(1).max(64),
-  // None names it after its room again.
-  name: z.string().trim().min(1).max(120).nullable().optional(),
-  roomId: z.string().min(1).max(64).nullable().optional(),
-});
-
-export const commandRequest = z.object({
-  device: z.string().min(1).max(64),
-  capability: z.string().min(1).max(32),
-  command: z.unknown(),
-});
-
 type CapabilityRow = typeof deviceCapabilities.$inferSelect;
-
-// Firmware a driver has said nothing about yet but what the device runs.
-const unknownFirmware: FirmwareInfo = {
-  version: null,
-  updatable: false,
-  sleeps: false,
-  state: null,
-  progress: null,
-  remainingSeconds: null,
-  problem: null,
-  checkedAt: null,
-  startedAt: null,
-  endedAt: null,
-};
 
 // Whether a report changes what a capability says, by its kind's history
 // fields (CapabilityInfo.changedAt): its first report does.
@@ -245,12 +221,22 @@ export function createDevices(
   // Runs a change, then tells live clients what it did to the device.
   function changing<T>(id: string, work: () => T): T {
     const before = load(id);
+    const keyBefore = keyOf(id);
     const result = work();
     const after = load(id);
     if (JSON.stringify(before) !== JSON.stringify(after)) {
-      options.onChange?.({ id, before, after });
+      const key = keyBefore ?? keyOf(id);
+      options.onChange?.({ id, ...(key ? { key } : {}), before, after });
     }
     return result;
+  }
+
+  function keyOf(id: string) {
+    return db
+      .select({ key: devices.key })
+      .from(devices)
+      .where(eq(devices.id, id))
+      .get()?.key;
   }
 
   // Adding, removing and repairing a device take turns (turns.ts).
@@ -769,6 +755,18 @@ export function createDevices(
     // A device as the core keeps it, with its driver and key.
     row(id: string) {
       return db.select().from(devices).where(eq(devices.id, id)).get() ?? null;
+    },
+
+    // A driver's own id for each of its devices, by the core's.
+    keysOf(driver: string): ReadonlyMap<string, string> {
+      return new Map(
+        db
+          .select({ id: devices.id, key: devices.key })
+          .from(devices)
+          .where(eq(devices.driver, driver))
+          .all()
+          .map(({ id, key }) => [id, key]),
+      );
     },
 
     // The core's id for a driver's device, if it has it.

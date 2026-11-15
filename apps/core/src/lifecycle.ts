@@ -75,6 +75,8 @@ export function createCoreLifecycle(options: { log: Log }) {
   const stopStarting = new AbortController();
   // The step of starting under way, which stopping waits for.
   let underWay: Promise<unknown> = Promise.resolve();
+  // Background work of starting under way.
+  const background = new Set<Promise<void>>();
   let stopping: Promise<CoreExit> | undefined;
   let exited!: (exit: CoreExit) => void;
   const stopped = new Promise<CoreExit>((resolve) => (exited = resolve));
@@ -147,12 +149,22 @@ export function createCoreLifecycle(options: { log: Log }) {
       task: (cancelled: AbortSignal) => Promise<void>,
     ) {
       if (stopStarting.signal.aborted) return;
-      void (async () => task(stopStarting.signal))().catch((error: unknown) => {
-        fail(label, error);
-        if (phase === "starting" || phase === "running") {
-          void lifecycle.stop("failure");
-        }
-      });
+      const work = (async () => task(stopStarting.signal))().catch(
+        (error: unknown) => {
+          fail(label, error);
+          if (phase === "starting" || phase === "running") {
+            void lifecycle.stop("failure");
+          }
+        },
+      );
+      background.add(work);
+      void work.finally(() => background.delete(work));
+    },
+
+    // Resolves once the background work it owns has ended, failed or not,
+    // with any it began meanwhile, as tests wait for it.
+    async backgroundWorkSettled() {
+      while (background.size > 0) await Promise.all([...background]);
     },
 
     // Stops the core once; a second call waits for the first. A failure that

@@ -7,14 +7,8 @@ import { z } from "zod";
 import type { Origin } from "../src/app-host/loader.js";
 import type { AppPackage } from "./runner-apps.js";
 import { ManagerRefusal } from "../src/manager.js";
-import {
-  claimed,
-  fakeManager,
-  managerSocket,
-  post,
-  testCore,
-  type TestCore,
-} from "./support.js";
+import { fakeManager, managerSocket } from "./manager-support.js";
+import { claimed, post, testCore, type TestCore } from "./support.js";
 
 // Services the manager runs for apps: requested over the manager's socket
 // when an app that declares one starts, released when it is removed, and

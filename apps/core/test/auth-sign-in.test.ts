@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
 import { authClients, authLogins } from "../src/auth/schema.js";
+import { createCoreCertificates } from "../src/certificate.js";
+import { testCa } from "./certificates.js";
 import { hostId, claimed, get, maya, signIn, testCore } from "./support.js";
 
 describe("signing in", () => {
@@ -90,8 +92,12 @@ describe("signing in", () => {
   });
 
   it("binds the pin of the host CA the core serves", async () => {
-    const pin = "hg6mmQxxksnFQb7m8qDqK0hT9z6lRb6vS8aW2b0FbUQ";
-    const core = await testCore({ pin });
+    const certificates = createCoreCertificates({
+      sign: (await testCa()).sign,
+      log: () => undefined,
+    });
+    const { pin } = await certificates.first();
+    const core = await testCore({ certificates });
     await claimed(core);
 
     // A device that saw no certificate, or another CA's.

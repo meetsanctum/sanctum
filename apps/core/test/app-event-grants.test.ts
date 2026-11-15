@@ -60,12 +60,12 @@ const device: DeviceInfo = {
   ],
 };
 
-function setup(initial: string[]) {
+function setup(initial: string[], appId = "test.listener") {
   let granted = initial;
   const heard: CoreEvent[] = [];
   const events = createCoreEvents({ timeoutMs: 1000, log() {} });
   const following = events.start(
-    "test.listener",
+    appId,
     () => granted,
     () => undefined,
   );
@@ -80,7 +80,7 @@ function setup(initial: string[]) {
     grant(next: string[]) {
       const before = granted;
       granted = next;
-      events.permissions("test.listener", before, granted);
+      events.permissions(appId, before, granted);
     },
     async drain() {
       following.started();
@@ -90,6 +90,49 @@ function setup(initial: string[]) {
 }
 
 describe("grants when queued events reach an app", () => {
+  it("removes an own device's key from both queued snapshots when registration is revoked", async () => {
+    const { events, grant, drain, heard } = setup(
+      ["devices.register", "devices.read:switch"],
+      device.driver,
+    );
+    events.device({
+      id: device.id,
+      key: "own-remote",
+      before: device,
+      after: { ...device, name: "Renamed" },
+    });
+    grant(["devices.read:switch"]);
+    await drain();
+
+    const event = heard.find((each) => each.name === "device.changed");
+    expect(event?.name).toBe("device.changed");
+    if (event?.name !== "device.changed") throw new Error("Missing change");
+    for (const snapshot of [event.device, event.before]) {
+      expect(snapshot).not.toHaveProperty("key");
+      expect(snapshot.capabilities.map(({ kind }) => kind)).toEqual(["switch"]);
+    }
+  });
+
+  it("leaves keys out of new events after registration is revoked", async () => {
+    const { events, grant, drain, heard } = setup(
+      ["devices.register", "devices.read:switch"],
+      device.driver,
+    );
+    grant(["devices.read:switch"]);
+    await drain();
+    events.device({
+      id: device.id,
+      key: "own-remote",
+      before: null,
+      after: device,
+    });
+    await expect.poll(() => heard.at(-1)?.name).toBe("device.added");
+
+    const event = heard.at(-1);
+    if (event?.name !== "device.added") throw new Error("Missing addition");
+    expect(event.device).not.toHaveProperty("key");
+  });
+
   it("drops queued private data when its permission was revoked", async () => {
     const { events, grant, drain, heard } = setup([
       "places.read",

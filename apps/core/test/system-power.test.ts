@@ -4,15 +4,17 @@ import { describe, expect, it } from "vitest";
 import { ManagerRefusal, ManagerUnavailable } from "../src/manager.js";
 import { openLive, personWithClient, settled } from "./devices-support.js";
 import {
-  claimed,
   fakeManager,
-  get,
   managerSocket,
+  type TestManager,
+} from "./manager-support.js";
+import {
+  claimed,
+  get,
   post,
   sharedClient,
   testCore,
   type TestCore,
-  type TestManager,
 } from "./support.js";
 
 // Settings → Status' last 24 hours, Restart and Shut down, Free up space and

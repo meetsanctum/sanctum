@@ -1,9 +1,9 @@
 import { loadApartPackages, shippedApps } from "./app-host/loader.js";
 import { createCoreCertificates } from "./certificate.js";
 import type { CoreConfig } from "./config.js";
-import { openCoreDatabase } from "./database.js";
+import { openCoreDatabase, type CoreDatabase } from "./database.js";
 import { createCoreLifecycle, type CoreSteps } from "./lifecycle.js";
-import { createManagerClient } from "./manager.js";
+import { createManagerClient, type ManagerClient } from "./manager.js";
 import { createModules, type Modules } from "./modules.js";
 import { loadHomeId } from "./places/places.js";
 import { createServer, renewCertificate } from "./server.js";
@@ -12,9 +12,65 @@ import { watchUpdatePending } from "./update-pending.js";
 // The core put together from its config, as a host runs it: the steps of each
 // phase of its lifecycle, in order (lifecycle.ts), and what each sets up for
 // the steps after it. index.ts turns the process's signals into a stop, so
-// tests can start and stop a whole core as a host does.
+// tests can start and stop a whole core as a host does. A test's core runs
+// the same steps, with what it replaces named in TestReplacements.
 
 type Log = (message: string) => void;
+type ModuleOptions = Parameters<typeof createModules>[1];
+type CoreCertificates = ReturnType<typeof createCoreCertificates>;
+
+// What the core asks of the manager: the modules' calls (modules.ts), the
+// host's id, the claim's report, the apps it staged and the core's
+// certificate. A host's core asks over the manager's socket (manager.ts).
+export type CoreManager = ModuleOptions["manager"] &
+  Pick<
+    ManagerClient,
+    "hostId" | "reportClaimed" | "stagedApps" | "signCertificate" | "close"
+  >;
+
+// What a test's core has in place of a host's (test/support.ts), each named
+// for what it replaces. A host's core replaces nothing.
+export type TestReplacements = {
+  // The clock the core reads, which a test moves on.
+  now?: () => Date;
+  // The manager as a test plays it, in place of the link over its socket.
+  manager?: CoreManager;
+  // Certificates a test's CA signs, in place of the manager's; only over
+  // HTTPS.
+  certificates?: CoreCertificates;
+  // The apps a test defines, in place of those the image ships, which the
+  // manager stages. They install in the background all the same.
+  installApps?: (core: {
+    db: CoreDatabase;
+    modules: Modules;
+    onTrial: boolean;
+  }) => Promise<void>;
+  // false: history's and workflows' timers tick only by hand.
+  ticking?: boolean;
+  // false: the activity log records no start or stop of the core, so a
+  // test's log holds only what the test did.
+  recordsStarts?: boolean;
+  // false: the core doesn't listen, and a test sends its requests with
+  // server.inject().
+  listens?: boolean;
+  // What the modules take that a host's core leaves at their defaults, as
+  // shorter waits, the home's time zone and sun, and no internet.
+  moduleOptions?: Partial<
+    Omit<
+      ModuleOptions,
+      | "dataDir"
+      | "packagesDir"
+      | "version"
+      | "manager"
+      | "hostId"
+      | "homeId"
+      | "pin"
+      | "onClaimed"
+      | "log"
+      | "now"
+    >
+  >;
+};
 
 // What a step of starting waits on, or a refusal as soon as the core stops.
 function untilCancelled<T>(work: Promise<T>, cancelled: AbortSignal) {
@@ -28,17 +84,26 @@ function untilCancelled<T>(work: Promise<T>, cancelled: AbortSignal) {
   });
 }
 
-export function createCore(config: CoreConfig, options: { log: Log }) {
+export function createCore(
+  config: CoreConfig,
+  options: {
+    log: Log;
+    // The lifecycle's own lines ("core: starting: open core.db"), apart
+    // from the modules'; both go to `log` unless it's given.
+    lifecycleLog?: Log;
+    testReplacements?: TestReplacements;
+  },
+) {
   const { log } = options;
-  const lifecycle = createCoreLifecycle({ log });
+  const replaced = options.testReplacements ?? {};
+  const ticking = replaced.ticking ?? true;
+  const lifecycle = createCoreLifecycle({ log: options.lifecycleLog ?? log });
   let database: ReturnType<typeof openCoreDatabase> | undefined;
   let homeId = "";
   let updatePending: ReturnType<typeof watchUpdatePending> | undefined;
-  let manager: ReturnType<typeof createManagerClient> | undefined;
-  let certificates: ReturnType<typeof createCoreCertificates> | undefined;
-  let certificate:
-    | Awaited<ReturnType<ReturnType<typeof createCoreCertificates>["first"]>>
-    | undefined;
+  let manager: CoreManager | undefined;
+  let certificates: CoreCertificates | undefined;
+  let certificate: Awaited<ReturnType<CoreCertificates["first"]>> | undefined;
   let modules: Modules | undefined;
   let hasActivity = false;
   let reported: Promise<void> = Promise.resolve();
@@ -48,6 +113,19 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
   let shipped: string[] = [];
   const started = new Set<string>();
   const onTrial = () => lifecycle.readiness() === "healthOnly";
+
+  // The link over the manager's socket, which learns the host's id and
+  // follows what the manager can do.
+  function linkToManager() {
+    const client = createManagerClient({
+      socketPath: config.managerSocket,
+      homeId,
+      log,
+    });
+    client.learnHostId();
+    client.followCapabilities();
+    return client;
+  }
 
   // What the manager has staged for this image, which it may still be doing,
   // so the core doesn't wait for it to serve.
@@ -76,7 +154,7 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
   // Installing that fails as a whole is fatal: the core may be serving by
   // then, but it stops all the same, so Docker tries it again and one on trial
   // rolls back.
-  async function installApps(cancelled: AbortSignal) {
+  async function installStagedApps(cancelled: AbortSignal) {
     const first = stagedPackages();
     // One the image ships that the manager hasn't staged, as an old manager or
     // one whose staging failed, is asked for again now and then, one ask at a
@@ -129,7 +207,7 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
       [
         "load the home's id",
         () => {
-          homeId = loadHomeId(database!.db);
+          homeId = loadHomeId(database!.db, replaced.now);
         },
       ],
       // An update of the core the manager hasn't committed: only the health
@@ -148,16 +226,11 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
       [
         "start the manager link",
         () => {
-          manager = createManagerClient({
-            socketPath: config.managerSocket,
-            homeId,
-            log,
-          });
-          manager.learnHostId();
-          manager.followCapabilities();
+          manager = replaced.manager ?? linkToManager();
           certificates = config.plainHttp
             ? undefined
-            : createCoreCertificates({ sign: manager.signCertificate, log });
+            : (replaced.certificates ??
+              createCoreCertificates({ sign: manager.signCertificate, log }));
         },
       ],
       // A core on trial runs no workflow or job until the update commits.
@@ -165,6 +238,7 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
         "build the modules",
         async () => {
           modules = await createModules(database!.db, {
+            ...replaced.moduleOptions,
             dataDir: config.dataDir,
             packagesDir: config.packagesDir,
             version: config.version,
@@ -176,6 +250,7 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
             // claimed.
             onClaimed: () => void manager!.reportClaimed(true),
             log,
+            now: replaced.now,
           });
           if (onTrial()) modules.workflows.hold();
         },
@@ -195,8 +270,16 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
       [
         "install the apps",
         async () => {
+          const testApps = replaced.installApps;
+          if (testApps) {
+            const db = database!.db;
+            lifecycle.ownBackgroundTask("install the apps", () =>
+              testApps({ db, modules: modules!, onTrial: onTrial() }),
+            );
+            return;
+          }
           shipped = await shippedApps(config.officialAppsDir, log);
-          lifecycle.ownBackgroundTask("install the apps", installApps);
+          lifecycle.ownBackgroundTask("install the apps", installStagedApps);
         },
       ],
       // Once the apps are installed and the update, if any, has committed, so
@@ -210,16 +293,17 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
               "start workflows",
               async (cancelled) => {
                 await modules!.apps.committed();
-                if (!cancelled.aborted) modules!.workflows.start();
+                if (!cancelled.aborted) modules!.workflows.start({ ticking });
               },
             );
           });
         },
       ],
-      ["start history", () => modules!.history.start()],
+      ["start history", () => modules!.history.start({ ticking })],
       [
         "start the activity log",
         () => {
+          if (replaced.recordsStarts === false) return;
           modules!.activity.start(config.version);
           hasActivity = true;
         },
@@ -257,6 +341,7 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
       [
         "listen",
         async () => {
+          if (replaced.listens === false) return;
           await server!.listen({ host: config.host, port: config.port });
           log(
             `core ${config.version} listening on ${certificate ? "https" : "http"}://${config.host}:${config.port}${onTrial() ? ", waiting for the update to commit" : ""}`,
@@ -300,6 +385,14 @@ export function createCore(config: CoreConfig, options: { log: Log }) {
   return {
     // Its phase and readiness.
     lifecycle,
+    // Opened in starting, from "open core.db" on.
+    get db() {
+      return database?.db;
+    },
+    // The home it serves, from "load the home's id" on.
+    get homeId() {
+      return homeId;
+    },
     // Built in starting, from "build the modules" on.
     get modules() {
       return modules;

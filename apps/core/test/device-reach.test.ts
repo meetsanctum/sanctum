@@ -7,7 +7,8 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { ManagerUnavailable } from "../src/manager.js";
-import { claimed, fakeManager, testCore } from "./support.js";
+import { fakeManager } from "./manager-support.js";
+import { claimed, testCore } from "./support.js";
 
 // A driver that reaches the devices it finds: its network's rules let it
 // open connections only to their addresses, on its port. The manager loads

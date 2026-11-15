@@ -20,6 +20,20 @@ import type { CoreDatabase } from "../database.js";
 import type { Devices } from "./devices.js";
 import { devices as deviceTable } from "./schema.js";
 
+/** Firmware a driver has said nothing about yet but what the device runs. */
+export const unknownFirmware: FirmwareInfo = {
+  version: null,
+  updatable: false,
+  sleeps: false,
+  state: null,
+  progress: null,
+  remainingSeconds: null,
+  problem: null,
+  checkedAt: null,
+  startedAt: null,
+  endedAt: null,
+};
+
 // Firmware updates and Check connection, the same whatever the radio. A
 // driver says what each device runs and whether it can update it when it
 // registers it, and what an update is doing as it learns it; the core keeps
