@@ -1,4 +1,8 @@
-import { toStaticManifest, type AppDefinition } from "@meetsanctum/app-sdk";
+import {
+  toStaticManifest,
+  type AppDefinition,
+  type StaticManifest,
+} from "@meetsanctum/app-sdk";
 import { manifestDigest } from "@meetsanctum/app-sdk/package";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { runSession } from "@meetsanctum/app-sdk/runner-session";
@@ -26,12 +30,17 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
   cleanUps.push(() => rm(folder, { recursive: true, force: true }));
   const fake = fakeManager();
   const staged = new Map<string, AppDefinition>();
+  // Folders of versions built for a protocol before this core's, as a core's
+  // update leaves them: their manifests don't say which they speak.
+  const olderProtocol = new Set<string>();
   const packageOf = (
     definition: AppDefinition,
     folder = folderOf(definition),
   ) => {
     staged.set(folder, definition);
-    const text = JSON.stringify(toStaticManifest(definition));
+    const manifest: Partial<StaticManifest> = toStaticManifest(definition);
+    if (olderProtocol.has(folder)) delete manifest.protocol;
+    const text = JSON.stringify(manifest);
     return {
       apart: {
         manifest: JSON.parse(text),
@@ -194,6 +203,8 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
     // the core has welcomed it.
     runContainer,
     stage: (definition: AppDefinition) => void packageOf(definition),
+    builtForAnOlderProtocol: (definition: AppDefinition) =>
+      void olderProtocol.add(folderOf(definition)),
     packagesUnreadableFor: (times: number) => {
       unreadable = times;
     },
