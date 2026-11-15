@@ -186,6 +186,31 @@ export function createTimers(
     },
 
     /**
+     * Every no-motion trigger's timer as its place is now, as workflows
+     * start: while they were held, they heard none of a place's changes.
+     * One that's due stays, for the tick to run or skip.
+     */
+    followQuiet() {
+      const at = clock.now();
+      for (const timer of db.select().from(workflowTimers).all()) {
+        if (timer.nextAt && timer.nextAt <= at) continue;
+        const node = db
+          .select()
+          .from(workflows)
+          .where(eq(workflows.id, timer.workflowId))
+          .get()
+          ?.graph.nodes.find((each) => each.id === timer.node);
+        if (node?.piece !== "noMotion" || node.app || !pieces.find(node)) {
+          continue;
+        }
+        const { nextAt } = nextFor(node, at);
+        if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
+          db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
+        }
+      }
+    },
+
+    /**
      * When each workflow's time and sun triggers next start it: the
      * earliest of its timers, by its workflow, in one query.
      */
