@@ -386,27 +386,39 @@ export function problemFix(
   }
 }
 
-/** A problem in a word or two, for the dashboard's Attention tile. */
-export function problemShort(problem: HostProblem) {
+/**
+ * A problem as the dashboard's Attention tile says it: the thing above and
+ * its state under it, as a device's and an app's tile read, "Storage" over
+ * "Almost full". A service that never ran is not running; one that ran and
+ * stopped has stopped.
+ */
+export function problemTile(problem: HostProblem): {
+  title: string;
+  value: string;
+} {
   switch (problem.kind) {
     case "power":
-      return "Power too weak";
+      return { title: "Power", value: "Too weak" };
     case "storage":
-      return "Storage almost full";
+      return { title: "Storage", value: "Almost full" };
     case "heat":
-      return "Too hot";
+      return { title: productName, value: "Too hot" };
     case "memory":
-      return "Short of memory";
+      return { title: "Memory", value: "Low" };
     case "service":
-      return `${serviceName(problem.service)} stopped`;
+      return {
+        title: serviceName(problem.service),
+        value: problem.state === "failed" ? "Stopped" : "Not running",
+      };
     case "clock":
-      return "Clock not set";
+      return { title: "Clock", value: "Not set" };
     case "memoryLimits":
-      return "Memory limits off";
+      return { title: "Memory", value: "Limits off" };
     case "appData":
-      return problem.state === "damaged"
-        ? "App data damaged"
-        : "App data missing";
+      return {
+        title: "App data",
+        value: problem.state === "damaged" ? "Damaged" : "Missing",
+      };
   }
 }
 

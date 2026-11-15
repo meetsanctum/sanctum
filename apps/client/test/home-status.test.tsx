@@ -204,6 +204,18 @@ describe("the home's status", () => {
     expect(openAttention).toHaveBeenCalledOnce();
   });
 
+  it("gives what needs attention a device tile's width, and the other tiles two cells", async () => {
+    devices = [lamp, { ...hallLight, availability: "offline" }];
+    await showStatus();
+
+    const widths = tiles().map((each) =>
+      each.classList.contains("col-span-3") ? 3 : 2,
+    );
+    // Lights, then Attention.
+    expect(tiles().at(-1)?.textContent).toContain("Offline");
+    expect(widths).toEqual([2, 3]);
+  });
+
   it("counts several devices, the most pressing first, and is Graphite while there are only rooms to choose", async () => {
     devices = [
       lamp,

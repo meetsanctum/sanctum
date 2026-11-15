@@ -20,7 +20,7 @@ import { productName } from "./brand";
 import { roomName } from "./device-parts";
 import {
   isWaitingForSetUp,
-  problemShort,
+  problemTile,
   problemTitle,
   type HostProblem,
   type ServiceNotSetUp,
@@ -277,8 +277,11 @@ export function attentionTile(
   }
   if (needing.length === 0 && apps.length === 0) {
     return {
-      title: productName,
-      value: problemShort(sanctum[0]!),
+      // One problem by what it is and how; several by their number, so the
+      // first does not stand for the rest.
+      ...(sanctum.length === 1
+        ? problemTile(sanctum[0]!)
+        : { title: productName, value: `${sanctum.length} problems` }),
       label: spoken[0]!,
       problem,
       opens: "status" as const,
