@@ -65,8 +65,9 @@ const switchFeatures: LightFeatures = {
 };
 
 // The pages apps add to the detail of a device of these kinds, in the
-// order of the apps, each with the device as its app may see it.
-function devicePages(
+// order of the apps, each with the device as its app may see it, and a
+// driver's pages on its own devices, with all of each.
+export function devicePages(
   apps: readonly HostedApp[],
   device: DeviceInfo,
   kinds: readonly CapabilityKind[],
@@ -80,7 +81,13 @@ function devicePages(
     if (!isShown(app.info)) return [];
     return app.info.provides.devicePages.flatMap((page) => {
       const Page = app.ui.devicePages?.[page.id];
-      return Page && page.kinds.some((kind) => kinds.includes(kind))
+      if (!Page) return [];
+      if (page.devices === "own") {
+        return device.driver === app.info.id
+          ? [{ app, id: page.id, title: page.title, Page, device }]
+          : [];
+      }
+      return page.kinds.some((kind) => kinds.includes(kind))
         ? [{ app, id: page.id, title: page.title, Page, device: seen }]
         : [];
     });

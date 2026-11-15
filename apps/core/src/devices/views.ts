@@ -18,18 +18,25 @@ type CapabilityRow = typeof deviceCapabilities.$inferSelect;
 
 /**
  * What a device is shown with: every client sees every device, shared
- * clients too. Apps see the kinds they may read.
+ * clients too. Apps see the kinds they may read, and a driver the devices it
+ * brings whole.
  */
-export type View = { kinds?: ReadonlySet<CapabilityKind> };
+export type View = {
+  kinds?: ReadonlySet<CapabilityKind>;
+  /** The driver app whose own devices this shows whole. */
+  own?: string;
+};
 
 /**
  * A device as one view sees it, or nothing when it sees none of it. A
  * client sees every device, one with no capabilities too, which the
  * household still names, places and removes. An app sees a device through
- * the kinds it may read, so it sees none of one that has no capabilities.
+ * the kinds it may read, so it sees none of one that has no capabilities,
+ * unless it's the driver that brings it, which sees all of it.
  */
 export function viewOf(device: DeviceInfo, view: View = {}): DeviceInfo | null {
   const { kinds } = view;
+  if (view.own !== undefined && device.driver === view.own) return device;
   if (!kinds) return device;
   const capabilities = device.capabilities.filter((capability) =>
     kinds.has(capability.kind),

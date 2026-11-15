@@ -6,7 +6,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { viewOf } from "../devices/views.js";
-import { deviceKinds, entityTypes } from "./calls.js";
+import { deviceKinds, deviceViewOf, entityTypes } from "./calls.js";
 import { ActionCallError } from "./errors.js";
 import type { AppHost } from "./host.js";
 
@@ -97,8 +97,10 @@ export function devicesForPage(
 ): DeviceInfo[] {
   const page = request.pageApp;
   if (!page) return [...devices];
-  const kinds = deviceKinds(page.granted).reads;
-  return devices.flatMap((device) => viewOf(device, { kinds }) ?? []);
+  // A driver's pages see its own devices whole, as the driver does, though
+  // not the keys it registered them by.
+  const view = deviceViewOf(page.app, page.granted);
+  return devices.flatMap((device) => viewOf(device, view) ?? []);
 }
 
 /** A command from an app's page, which needs its app to control the kind. */

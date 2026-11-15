@@ -20,7 +20,7 @@ import { viewOf } from "../devices/views.js";
 import type { Press } from "../devices/presses.js";
 import type { EntityChange } from "../entities/entities.js";
 import type { PersonChange } from "../people/people.js";
-import { deviceKinds, entityTypes } from "./calls.js";
+import { deviceKinds, deviceViewOf, entityTypes } from "./calls.js";
 import { TimedOut, withTimeout } from "./errors.js";
 
 // The core's events for apps: what happens to devices, places, people and
@@ -34,21 +34,42 @@ import { TimedOut, withTimeout } from "./errors.js";
 
 // What one change did, before and after; null where there was nothing.
 type Change =
-  | { noun: "device"; before: DeviceInfo | null; after: DeviceInfo | null }
+  | {
+      noun: "device";
+      // Its driver's own id for it, which only that driver hears of.
+      key?: string;
+      before: DeviceInfo | null;
+      after: DeviceInfo | null;
+    }
   | { noun: "place"; before: Place | null; after: Place | null }
   | { noun: "person"; before: PersonInfo | null; after: PersonInfo | null }
   | { noun: "entity"; before: EntityInfo | null; after: EntityInfo | null };
 
+// A device as one app sees it, with the key it registered it by for its
+// driver.
+function deviceShownTo(
+  device: DeviceInfo | null,
+  appId: string,
+  permissions: readonly string[],
+  key: string | undefined,
+) {
+  const shown = device && viewOf(device, deviceViewOf(appId, permissions));
+  return shown && key && shown.driver === appId ? { ...shown, key } : shown;
+}
+
 // A change as one app may read it: what it shows before and after, each
 // null where it shows nothing.
-function shownTo(change: Change, permissions: readonly string[]): Change {
+function shownTo(
+  change: Change,
+  appId: string,
+  permissions: readonly string[],
+): Change {
   switch (change.noun) {
     case "device": {
-      const view = { kinds: deviceKinds(permissions).reads };
       return {
         noun: "device",
-        before: change.before && viewOf(change.before, view),
-        after: change.after && viewOf(change.after, view),
+        before: deviceShownTo(change.before, appId, permissions, change.key),
+        after: deviceShownTo(change.after, appId, permissions, change.key),
       };
     }
     case "entity": {
@@ -103,10 +124,11 @@ function eventsOf(change: Change): CoreEvent[] {
 // adding data that was not visible when the event happened.
 function eventShownTo(
   event: CoreEvent,
+  appId: string,
   permissions: readonly string[],
 ): CoreEvent | undefined {
   if ("device" in event) {
-    const view = { kinds: deviceKinds(permissions).reads };
+    const view = deviceViewOf(appId, permissions);
     const device = viewOf(event.device, view);
     if (!device) return;
     if (
@@ -211,7 +233,7 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
         try {
           // Each app gets its own copy, as across a boundary.
           await follower.run(() => {
-            const shown = eventShownTo(event, follower.permissions());
+            const shown = eventShownTo(event, appId, follower.permissions());
             if (shown) return handler(structuredClone(shown));
           });
         } catch (error) {
@@ -258,7 +280,9 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
       if (follower.followed.size === 0 && !follower.early) {
         continue;
       }
-      for (const event of eventsOf(shownTo(change, follower.permissions()))) {
+      for (const event of eventsOf(
+        shownTo(change, appId, follower.permissions()),
+      )) {
         if (wants(follower, event.name)) {
           deliver(appId, follower, event);
         }
@@ -327,8 +351,8 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
       await follower.delivering;
     },
 
-    device({ before, after }: DeviceChange) {
-      changed({ noun: "device", before, after });
+    device({ key, before, after }: DeviceChange) {
+      changed({ noun: "device", ...(key ? { key } : {}), before, after });
     },
 
     // A press that no capture holds, for the apps that may read its button.

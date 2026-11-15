@@ -18,6 +18,7 @@ import {
   type AppSettings,
   type CoreCalls,
   type CoreEventName,
+  type DeviceInfo,
   type ServiceConnection,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
@@ -44,6 +45,17 @@ import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 // and fails it; a refusal for the actor reaches the app as an ActionError it
 // may handle, and answers its caller if it does not.
 
+/**
+ * What an app sees of the home's devices: the kinds it may read, and, for a
+ * driver, the devices it brings, whole.
+ */
+export function deviceViewOf(appId: string, permissions: readonly string[]) {
+  return {
+    kinds: deviceKinds(permissions).reads,
+    ...(permissions.includes(registerPermission) ? { own: appId } : {}),
+  };
+}
+
 /** The capability kinds an app may read and control. Controlling a kind includes reading it. */
 export function deviceKinds(permissions: readonly string[]) {
   const controls = new Set(
@@ -68,14 +80,19 @@ export function entityTypes(permissions: readonly string[]) {
 }
 
 // Why an app may not follow one of the core's events (core-events.ts), or
-// null when it may read what the event is about.
+// null when it may read what the event is about: a driver hears of its own
+// devices.
 function followRefusal(name: CoreEventName, permissions: readonly string[]) {
   const [noun] = name.split(".");
   const { reads } = deviceKinds(permissions);
   if (name === "device.pressed" && !reads.has("button")) {
     return `does not hold ${readPermission("button")}`;
   }
-  if (noun === "device" && reads.size === 0) {
+  if (
+    noun === "device" &&
+    reads.size === 0 &&
+    !permissions.includes(registerPermission)
+  ) {
     return "holds no devices.read: permission";
   }
   if (noun === "place" && !permissions.includes(placesReadPermission)) {
@@ -161,7 +178,17 @@ export function createCoreCalls(options: {
 }): CoreCalls {
   const { appId, actor, devices } = options;
   const permissions = options.permissions;
-  const view = (): View => ({ kinds: deviceKinds(permissions()).reads });
+  const view = (): View => deviceViewOf(appId, permissions());
+  // What a driver reads of its own devices carries the key it registered
+  // each by.
+  const keyed = (shown: DeviceInfo[]) => {
+    if (!permissions().includes(registerPermission)) return shown;
+    const keys = devices.keysOf(appId);
+    return shown.map((device) => {
+      const key = device.driver === appId ? keys.get(device.id) : undefined;
+      return key ? { ...device, key } : device;
+    });
+  };
 
   function need(permission: string) {
     if (options.ended()) {
@@ -204,7 +231,10 @@ export function createCoreCalls(options: {
     if (options.ended()) {
       throw new Error(`This call to ${appId} has ended`);
     }
-    if (deviceKinds(permissions()).reads.size === 0) {
+    if (
+      deviceKinds(permissions()).reads.size === 0 &&
+      !permissions().includes(registerPermission)
+    ) {
       throw new Error(`${appId} holds no devices.read: permission`);
     }
   }
@@ -263,7 +293,7 @@ export function createCoreCalls(options: {
 
     async devices() {
       readsDevices();
-      return devices.list(view());
+      return keyed(devices.list(view()));
     },
 
     async device(id) {
@@ -272,7 +302,7 @@ export function createCoreCalls(options: {
       if (!device) {
         throw new ActionError("not_found");
       }
-      return device;
+      return keyed([device])[0]!;
     },
 
     async command(request) {
