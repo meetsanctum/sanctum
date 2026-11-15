@@ -47,6 +47,7 @@ import {
   updateDevice,
 } from "./device-parts";
 import { MotionSettings } from "./motion-settings";
+import type { ServiceNotSetUp } from "./system-status";
 
 // Settings → Devices, where the household manages its hardware: every device
 // with its room, for every client, a shared one too, to add devices, rename
@@ -122,6 +123,8 @@ export function DevicesSection(props: {
   home: OnHome;
   // Opens with Add devices, as the dashboard's setup does.
   adding?: boolean;
+  // The services the home never set up, for Add devices to say what to do.
+  notSetUp?: readonly ServiceNotSetUp[];
 }) {
   const [devices, setDevices] = useState<DeviceInfo[]>();
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
@@ -637,6 +640,7 @@ export function DevicesSection(props: {
         rooms={rooms}
         apps={props.apps}
         adding={addable}
+        notSetUp={props.notSetUp}
         live={props.live}
         onChanged={changed}
       />

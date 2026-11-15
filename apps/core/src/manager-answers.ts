@@ -145,6 +145,9 @@ export const hostStatus = z.object({
       apps: z.array(z.string()),
       state: z.enum(["off", "starting", "running", "waiting", "failed"]),
       problem: z.string().optional(),
+      // It waits for what the home has never had; an older manager says
+      // nothing of it.
+      neverSetUp: z.boolean().optional(),
     }),
   ),
 });

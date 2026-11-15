@@ -1,78 +1,26 @@
-import {
-  defineApp,
-  toStaticManifest,
-  type ActionDefinition,
-  type Actor,
-} from "@meetsanctum/app-sdk";
+import { defineApp, toStaticManifest } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
+import { kelvinToMired, type CurveSettings } from "../src/curve.js";
 import { checkJob, createNaturalLightApp } from "../src/index.js";
-import {
-  brightnessPercent,
-  clampMired,
-  colorTemperatureKelvin,
-  kelvinToMired,
-  type CurveSettings,
-} from "../src/curve.js";
 import { defaultCurve } from "../src/settings.js";
-import { sunToday } from "../src/sun.js";
-import { fakeCore, zurich } from "./fake-core.js";
+import {
+  appId,
+  byHand,
+  curveAt,
+  lamp,
+  maya,
+  minute,
+  moods,
+  off,
+  on,
+  running,
+} from "./running.js";
+import { zurich } from "./fake-core.js";
 
 // Lights following the curve: a light that follows it is set to it at once,
 // kept on it as the day goes, comes back on at it, and is paused while a
 // mood or a person has set it, until it is switched off.
-
-const appId = "sanctum.natural-light";
-const maya: Actor = { kind: "user", id: "maya" };
-const moods = { app: "sanctum.moods", actor: maya };
-const byHand = { app: null, actor: maya };
-const minute = 60_000;
-const lamp = { device: "lamp", capability: "light" };
-const range = { min: 153, max: 454 };
-const on = { on: true, brightness: 100, colorMode: "temperature" as const };
-const off = { ...on, on: false };
-
-// What the curve sets a light with the fake core's range to at a moment.
-function curveAt(now: Date, curve: CurveSettings = defaultCurve) {
-  const sun = sunToday(zurich, now)!;
-  return {
-    colorTemperature: clampMired(
-      kelvinToMired(colorTemperatureKelvin(curve, sun, now)),
-      range,
-    ),
-    brightness: brightnessPercent(curve, sun, now),
-  };
-}
-
-function running() {
-  // Mid-morning in Zurich, with the curve rising towards noon.
-  const clock = { now: Date.parse("2026-10-29T09:00:00Z") };
-  const now = () => new Date(clock.now);
-  const app = createNaturalLightApp({ now });
-  const core = fakeCore(app, now);
-
-  async function call(id: string, input: object, actor: Actor = maya) {
-    const action = app.actions.find(
-      (each) => each.id === id,
-    ) as ActionDefinition;
-    const output = await action.run(core.as(actor), action.input.parse(input));
-    return action.output.parse(output);
-  }
-
-  return {
-    app,
-    core,
-    call,
-    // The app's job, as the core runs it: as the app itself.
-    check: () => call("naturalLight.check", {}, { kind: "app", id: appId }),
-    now,
-    advance: (ms: number) => (clock.now += ms),
-    target: () => core.state.entities.get("lamp/light")?.state,
-    // The commands the app sent from the n-th on.
-    sentFrom: (index: number) =>
-      core.state.sent.slice(index).map(({ command }) => command),
-  };
-}
 
 describe("following the curve", () => {
   it("sets a light to the curve as soon as it follows, and says so", async () => {
@@ -477,9 +425,10 @@ describe("which lights follow", () => {
     expect(target()).toBeUndefined();
   });
 
-  it("does not keep following after the initial command fails", async () => {
+  it("leaves a light out again when the command to follow fails", async () => {
     const { core, call, check, advance, target } = running();
     core.addLight("lamp", "Office light", { ...on, colorTemperature: 153 });
+    await call("naturalLight.follow", { ...lamp, follow: false });
     core.state.beforeCommand = async () => {
       throw new Error("radio failed");
     };
@@ -703,6 +652,7 @@ describe("natural light", () => {
       "naturalLight.target",
     ]);
     expect(Object.keys(manifest.settings?.properties ?? {})).toEqual([
+      "on",
       "shape",
       "lowKelvin",
       "highKelvin",

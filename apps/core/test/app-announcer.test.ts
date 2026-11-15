@@ -22,6 +22,7 @@ const supervision = {
   phase: "failed" as const,
   since: new Date("2026-11-13T12:00:00.000Z"),
   isFirstStart: false,
+  isOwnWait: false,
   failures: [],
   quiet: false,
   attention: false,

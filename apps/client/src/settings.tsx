@@ -172,6 +172,7 @@ export function SettingsPage(props: {
         live={props.live}
         home={props.home}
         adding={start === "add-devices"}
+        notSetUp={props.status?.notSetUp}
       />
       <ActivitySection
         apps={props.apps}

@@ -30,6 +30,8 @@ export type Supervision = {
   since: Date;
   isFirstStart: boolean;
   waitingFor?: string;
+  // Its own start said what it waits for, not the core.
+  isOwnWait: boolean;
   // When it failed, within the last ten minutes.
   failures: number[];
   lastFailure?: AppFailure;
@@ -89,6 +91,7 @@ export function newSupervision(now: Date): Supervision {
     phase: "starting",
     since: now,
     isFirstStart: true,
+    isOwnWait: false,
     failures: [],
     retries: 0,
     isDown: false,
@@ -272,10 +275,11 @@ export function createSupervisor(options: {
     waitingFor: string | undefined,
     again?: () => void,
     pauseMs?: number,
+    isOwnWait = false,
   ) {
     if (of(entry).isEnded || entry.off) return;
     const retries = of(entry).retries;
-    become(entry, "waiting", { waitingFor, retries: retries + 1 });
+    become(entry, "waiting", { waitingFor, isOwnWait, retries: retries + 1 });
     if (again) {
       of(entry).timer = setTimeout(
         again,
@@ -513,11 +517,16 @@ export function createSupervisor(options: {
     notReady(entry: InstalledApp, waitingFor: string) {
       log(`apps: ${entry.app.id} is waiting: ${waitingFor}`);
       if (options.updateNotReady(entry, waitingFor)) return;
-      waiting(entry, waitingFor, () => void reconcile(entry));
+      waiting(entry, waitingFor, () => void reconcile(entry), undefined, true);
     },
 
     /** It waits for something that isn't its own doing, asking again soon. */
-    waits: waiting,
+    waits: (
+      entry: InstalledApp,
+      waitingFor: string | undefined,
+      again?: () => void,
+      pauseMs?: number,
+    ) => waiting(entry, waitingFor, again, pauseMs),
 
     /** Its start failed, with its connection still there. */
     startFailed(entry: InstalledApp) {

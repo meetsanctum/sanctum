@@ -6,9 +6,10 @@ import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, type TestCore } from "./support.js";
 
-// Natural light on the core's own lights, end to end: it reads who last set a
-// light, its check runs as its job, and a light that is off holds the curve's
-// look in Devices until anyone switches it on. The panel test app stands in for
+// Natural light on the core's own lights, end to end: every light that takes
+// a colour temperature follows it by default, it reads who last set a light,
+// its check runs as its job, and a light that is off holds the curve's look
+// in Devices until anyone switches it on. The panel test app stands in for
 // Moods.
 
 const minutes = (count: number) => count * 60_000;
@@ -78,20 +79,22 @@ async function tick(core: TestCore) {
   await settled();
 }
 
+// Natural light takes the lamp in as it sees it, and its first check sets it,
+// whichever comes first.
+async function takenIn(core: TestCore) {
+  core.advance(minutes(5));
+  await tick(core);
+}
+
 describe("natural light on the core's lights", () => {
-  it("holds the curve for a light that is off, and it comes back on at it", async () => {
+  it("holds the curve for a light that is off, which it follows by default, and it comes back on at it", async () => {
     const { core, maya, lamp } = await naturalLightCore();
 
-    const followed = await call(core, maya.token, "naturalLight.follow", {
-      device: lamp,
-      capability: "light",
-      follow: true,
-    });
-    await settled();
-    const { colorTemperature, brightness } = followed.json();
+    await takenIn(core);
+    const target = await targetOf(core, maya.token);
+    const { colorTemperature, brightness } = target;
 
-    expect(followed.statusCode).toBe(200);
-    expect(followed.json()).toMatchObject({ status: "following" });
+    expect(target).toMatchObject({ status: "following" });
     expect(radio.received.map(({ command }) => command.command)).toEqual([
       { on: false },
     ]);
@@ -100,7 +103,7 @@ describe("natural light on the core's lights", () => {
       state: { on: false, brightness, colorTemperature },
       setBy: {
         app: "sanctum.natural-light",
-        actor: { kind: "user", id: maya.person.id },
+        actor: { kind: "app", id: "sanctum.natural-light" },
       },
     });
 
@@ -168,6 +171,15 @@ describe("natural light on the core's lights", () => {
     "takes a new curve to its lights without its job when the light is %s",
     async (state) => {
       const { core, maya, lamp } = await naturalLightCore();
+      // Left out, so having it follow again sets it at once, and the lamp
+      // comes on as it remembers itself rather than at the curve.
+      await takenIn(core);
+      await call(core, maya.token, "naturalLight.follow", {
+        device: lamp,
+        capability: "light",
+        follow: false,
+      });
+      await settled();
       if (state === "awaiting confirmation") {
         await viaPanel(core, maya.token, {
           device: lamp,

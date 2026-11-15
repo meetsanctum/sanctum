@@ -2,8 +2,10 @@ import { z } from "zod";
 
 import { curveShapes, type CurveSettings } from "./curve.js";
 
-// Natural light's settings: the curve, which Settings → Apps → Natural light
-// shows and the app's page opens.
+// Natural light's settings: whether it is on, and the curve, which Settings
+// → Apps → Natural light shows and the app's page opens. Switched off, no
+// light changes with the day and each keeps the look it has; the lights
+// left out stay as they were chosen.
 // Colour temperature runs from 2,000 to 6,500 K in steps of 100, brightness
 // from 20 to 100 % in steps of 5, and sunrise and sunset offsets up to two
 // hours in steps of 15 minutes. A light shows a colour temperature within
@@ -14,6 +16,11 @@ const brightness = z.number().int().min(20).max(100).multipleOf(5);
 const offset = z.number().int().min(-120).max(120).multipleOf(15);
 
 export const naturalLightSettings = z.object({
+  on: z.boolean().default(true).meta({
+    title: "Natural light",
+    description:
+      "Lights that follow it change with the day. Off, each keeps the look it has.",
+  }),
   shape: z
     .enum(curveShapes)
     .default("balanced")
@@ -51,9 +58,15 @@ export const naturalLightSettings = z.object({
   }),
 }) satisfies z.ZodType<CurveSettings>;
 
-/** The default curve, until the household changes it. */
-export const defaultCurve: CurveSettings = naturalLightSettings.parse({});
-
 /** The curve the household chose, from the app's settings (ctx.settings.get()). */
-export const curveOf = (settings: unknown): CurveSettings =>
-  naturalLightSettings.parse(settings);
+export function curveOf(settings: unknown): CurveSettings {
+  const { on: _, ...curve } = naturalLightSettings.parse(settings);
+  return curve;
+}
+
+/** The default curve, until the household changes it. */
+export const defaultCurve: CurveSettings = curveOf({});
+
+/** Whether natural light is on, from the app's settings. */
+export const isOnIn = (settings: unknown): boolean =>
+  naturalLightSettings.parse(settings).on;

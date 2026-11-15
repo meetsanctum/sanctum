@@ -196,6 +196,20 @@ describe("what it asks before turning off", () => {
       "Its moods leave every room until you turn it back on. Its data stays.",
     ],
     [
+      "the buttons it adds to rooms",
+      app({
+        name: "Example",
+        provides: {
+          ...provides,
+          roomSections: [
+            { id: "example.room", title: "Glow", kind: "buttons" },
+          ],
+        },
+      } as unknown as Partial<AppInfo>),
+      0,
+      "Its glow buttons leave every room until you turn it back on. Its data stays.",
+    ],
+    [
       "one that adds nothing",
       app(),
       0,

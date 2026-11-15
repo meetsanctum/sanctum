@@ -235,6 +235,23 @@ describe("natural light's page", () => {
     ]);
   });
 
+  it("says so while natural light is off, keeping each light's switch", async () => {
+    await show(
+      fakeClient({
+        devices: [device("office", "Office light")],
+        entities: [target("office", "off")],
+        preview: today,
+      }).client,
+    );
+
+    expect(rows()).toEqual(["Office lightNatural light is off"]);
+    expect(
+      container
+        .querySelector('[aria-label="Office light follows natural light"]')
+        ?.getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
   it("draws a changing temperature when the night is cooler than the peak", async () => {
     const preview = previewOf(
       { ...defaultCurve, lowKelvin: 5500, highKelvin: 2000 },

@@ -31,7 +31,8 @@ afterEach(() => {
 // entities the app publishes, each checked against the type it declares.
 // A light that is off and asked for a look holds it, and comes back at it
 // when switched on. The household changing the app's settings reaches its
-// start context as settings.changed.
+// start context as settings.changed, and a light joining the home as
+// device.added.
 
 type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 
@@ -157,7 +158,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       fetch: absent,
       emit: absent,
       follow: async (name) => {
-        if (name !== "settings.changed") {
+        if (name !== "settings.changed" && name !== "device.added") {
           throw new Error(`Natural light does not follow ${name}`);
         }
       },
@@ -227,6 +228,47 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
     });
   }
 
+  /** Adds a light, on or off, that takes colour temperatures unless told otherwise. */
+  function addLight(
+    id: string,
+    name: string,
+    shown: LightState | null,
+    features: LightFeatures = ambiance,
+  ) {
+    state.devices.push({
+      id,
+      name,
+      driver: "test.lamps",
+      manufacturer: null,
+      model: null,
+      roomId: null,
+      driverName: name,
+      type: "light",
+      availability: "online",
+      lastSeenAt: null,
+      firmware: null,
+      probe: false,
+      battery: null,
+      batteryLow: null,
+      shownAs: null,
+      leftAt: null,
+      problem: null,
+      capabilities: [
+        {
+          id: "light",
+          kind: "light",
+          features,
+          state: shown,
+          observed: shown,
+          desired: null,
+          sync: "synced",
+          setBy: null,
+          changedAt: null,
+        },
+      ],
+    });
+  }
+
   return {
     state,
     /** The context the app's start hook gets, acting as the app itself. */
@@ -239,49 +281,18 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         await handler({ name: "settings.changed", settings, before });
       }
     },
+    /** A light joins the home, as pairing one does, and the app hears of it. */
+    async joins(id: string, name: string, shown: LightState | null) {
+      addLight(id, name, shown);
+      const device = structuredClone(state.devices.at(-1)!);
+      for (const handler of handlers.get("device.added") ?? []) {
+        await handler({ name: "device.added", device });
+      }
+    },
     /** The context of an action a person calls. */
     as: (actor: Actor) => context(actor),
     set,
-    /** Adds a light, on or off, that takes colour temperatures unless told otherwise. */
-    addLight(
-      id: string,
-      name: string,
-      shown: LightState | null,
-      features: LightFeatures = ambiance,
-    ) {
-      state.devices.push({
-        id,
-        name,
-        driver: "test.lamps",
-        manufacturer: null,
-        model: null,
-        roomId: null,
-        driverName: name,
-        type: "light",
-        availability: "online",
-        lastSeenAt: null,
-        firmware: null,
-        probe: false,
-        battery: null,
-        batteryLow: null,
-        shownAs: null,
-        leftAt: null,
-        problem: null,
-        capabilities: [
-          {
-            id: "light",
-            kind: "light",
-            features,
-            state: shown,
-            observed: shown,
-            desired: null,
-            sync: "synced",
-            setBy: null,
-            changedAt: null,
-          },
-        ],
-      });
-    },
+    addLight,
     light: (device: string) => capabilityOf(device),
     /** Something other than the core changed it, such as its wall switch. */
     press(device: string, shown: Partial<LightState>) {

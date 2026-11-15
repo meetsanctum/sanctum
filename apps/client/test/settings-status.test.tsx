@@ -13,6 +13,7 @@ import {
   formatBytes,
   formatMemory,
   problemFix,
+  problemTile,
   problemTitle,
   runningFor,
   signalWord,
@@ -506,6 +507,31 @@ describe("the words", () => {
     );
   });
 
+  it("says a service the home never set up plainly, under the verdict, and not as a problem", async () => {
+    answer = async () => ({
+      ...piStatus(),
+      notSetUp: [
+        {
+          service: "zigbee2mqtt",
+          problem: "No Zigbee coordinator is plugged in",
+          apps: ["sanctum.zigbee"],
+        },
+      ],
+    });
+    await render();
+
+    const rows = [...container.querySelectorAll("ul[role=status] > li")].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toEqual([
+      "Everything's runningStorage, memory, temperature and power are fine",
+      "Zigbee isn't set upNo Zigbee adapter is plugged in. Plug it in, and Zigbee starts by itself",
+    ]);
+    expect(
+      container.querySelector("ul[role=status] .text-destructive"),
+    ).toBeNull();
+  });
+
   it("says each problem and what to do, in the home's words", () => {
     const appName = (id: string) => (id === "sanctum.zigbee" ? "Zigbee" : id);
     const now = new Date("2026-11-02T19:41:00Z");
@@ -563,11 +589,55 @@ describe("the dashboard's Attention tile", () => {
     lastLowAt: "2026-11-02T18:40:00Z",
   };
 
-  it("names Sanctum and its problem, and opens Status, while only Sanctum needs someone", () => {
+  it("names what is wrong above and how below, and opens Status, while only Sanctum needs someone", () => {
     expect(attentionTile([], [power])).toEqual({
-      title: "Sanctum",
-      value: "Power too weak",
+      title: "Power",
+      value: "Too weak",
       label: "Sanctum: Power supply too weak",
+      problem: true,
+      opens: "status",
+    });
+  });
+
+  it("says each of Sanctum's problems as the thing and its state", () => {
+    const said = (problem: HostProblem) => {
+      const { title, value } = problemTile(problem);
+      return `${title} / ${value}`;
+    };
+    const service = (state: "failed" | "waiting"): HostProblem => ({
+      kind: "service",
+      service: "zigbee2mqtt",
+      state,
+      problem: null,
+      apps: ["sanctum.zigbee"],
+    });
+
+    expect(said(power)).toBe("Power / Too weak");
+    expect(said({ kind: "storage", free: 800_000_000 })).toBe(
+      "Storage / Almost full",
+    );
+    expect(said({ kind: "heat", celsius: 83 })).toBe("Sanctum / Too hot");
+    expect(
+      said({ kind: "memory", available: 90_000_000, total: 1_900_000_000 }),
+    ).toBe("Memory / Low");
+    // One that ran and stopped, and one that could not start.
+    expect(said(service("failed"))).toBe("Zigbee / Stopped");
+    expect(said(service("waiting"))).toBe("Zigbee / Not running");
+    expect(said({ kind: "clock" })).toBe("Clock / Not set");
+    expect(said({ kind: "memoryLimits" })).toBe("Memory / Limits off");
+    expect(
+      said({ kind: "appData", app: "sanctum.moods", state: "damaged" }),
+    ).toBe("App data / Damaged");
+    expect(
+      said({ kind: "appData", app: "sanctum.moods", state: "missing" }),
+    ).toBe("App data / Missing");
+  });
+
+  it("counts Sanctum's problems where there are several, so the first does not stand for the rest", () => {
+    expect(attentionTile([], [power, { kind: "clock" }])).toEqual({
+      title: "Sanctum",
+      value: "2 problems",
+      label: "Sanctum: Power supply too weak, Clock not synchronised",
       problem: true,
       opens: "status",
     });

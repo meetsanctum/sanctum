@@ -18,7 +18,13 @@ import {
 } from "./app-state";
 import { productName } from "./brand";
 import { roomName } from "./device-parts";
-import { problemShort, problemTitle, type HostProblem } from "./system-status";
+import {
+  isWaitingForSetUp,
+  problemTile,
+  problemTitle,
+  type HostProblem,
+  type ServiceNotSetUp,
+} from "./system-status";
 
 // What needs attention: the apps that aren't running and the devices that
 // need someone to do something, the most pressing first, in the words
@@ -83,22 +89,32 @@ const wentBackFor = (app: AppInfo) => {
  * Whether Needs attention lists it: one that needs someone, one paused, and one
  * that has been waiting a while. One on its way back is news to nobody.
  */
-function worthTelling(app: AppInfo) {
+function worthTelling(app: AppInfo, notSetUp: readonly ServiceNotSetUp[]) {
   // It runs, but someone may want to know it isn't on the version it should be.
   if (wentBackFor(app)?.triesAgain === false) return true;
   if (looksRunning(app)) return false;
   return (
     isGivenUp(app) ||
     app.state === "paused" ||
-    (app.state === "waiting" && app.run?.attention === true)
+    // One that waits for a service the home never set up, as Zigbee for an
+    // adapter nobody has plugged in, waits for nothing that went wrong.
+    (app.state === "waiting" &&
+      app.run?.attention === true &&
+      !isWaitingForSetUp(app, notSetUp))
   );
 }
 
-/** The installed apps that aren't running, those that stopped first, then by name. */
-export function appsNotRunning(apps: readonly AppInfo[]): AppInfo[] {
+/**
+ * The installed apps that aren't running, those that stopped first, then by
+ * name; without those that only wait for a service the home never set up.
+ */
+export function appsNotRunning(
+  apps: readonly AppInfo[],
+  notSetUp: readonly ServiceNotSetUp[] = [],
+): AppInfo[] {
   const rank = (app: AppInfo) => (isGivenUp(app) ? 0 : 1);
   return apps
-    .filter(worthTelling)
+    .filter((app) => worthTelling(app, notSetUp))
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
@@ -261,8 +277,11 @@ export function attentionTile(
   }
   if (needing.length === 0 && apps.length === 0) {
     return {
-      title: productName,
-      value: problemShort(sanctum[0]!),
+      // One problem by what it is and how; several by their number, so the
+      // first does not stand for the rest.
+      ...(sanctum.length === 1
+        ? problemTile(sanctum[0]!)
+        : { title: productName, value: `${sanctum.length} problems` }),
       label: spoken[0]!,
       problem,
       opens: "status" as const,

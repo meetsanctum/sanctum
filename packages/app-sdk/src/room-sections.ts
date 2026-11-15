@@ -5,9 +5,17 @@ import type { ActionDefinition, AppDefinition } from "./index.js";
 import { permissionIds } from "./permissions.js";
 
 // Room sections: what an app adds to every room's page, which the shell
-// draws with its own tiles under a neutral heading, from the app's entities
-// of one type in that room. No app code runs to draw it, so a section looks
-// native whoever brings it.
+// draws from the app's entities of one type in that room, either as its own
+// tiles under a neutral heading or as small buttons beside the room's
+// button for all its lights. No app code runs to draw it, so a section
+// looks native whoever brings it.
+
+/**
+ * How a section shows: tiles under its heading, or buttons in the room's
+ * line after its lights button, with no heading, on its page and on Home.
+ */
+export const roomSectionKinds = ["tiles", "buttons"] as const;
+export type RoomSectionKind = (typeof roomSectionKinds)[number];
 
 /**
  * The icons a section's tiles may have, as Lucide names them. The shell
@@ -49,18 +57,18 @@ export type TileIcon = (typeof tileIcons)[number];
 
 /**
  * The tile shape: what the state of every entity a room section shows
- * holds, besides anything else its type keeps. The core checks a section's
- * type against it when the app is installed, and each state when the app
- * publishes it.
+ * holds, besides anything else its type keeps, whether the section shows
+ * it as a tile or a button. The core checks a section's type against it
+ * when the app is installed, and each state when the app publishes it.
  */
 export const roomSectionTile = z.object({
   /** The room it is in. */
   placeId: z.string(),
   icon: z.enum(tileIcons),
   name: z.string(),
-  /** Its place among the room's tiles, from 0. */
+  /** Its place among the section's tiles or buttons in the room, from 0. */
   order: z.number().int().min(0),
-  /** Whether it is active now, which the shell shows White. */
+  /** Whether it is active now, which the shell shows White, and pressed. */
   active: z.boolean(),
   /** What the section's action takes when the tile is tapped, such as { id }. */
   input: z.record(z.string(), z.unknown()),
@@ -83,9 +91,10 @@ export const sampleTilesMax = 6;
 
 /**
  * Where a room's sections go: after the room's header, by these weights, and
- * before its devices. Sanctum keeps those below `appSectionOrderFrom` for
- * its own, such as 200 for Moods; any app takes one from 300 to 799, 500
- * unless it says, and ties go by app id.
+ * before its devices; buttons go after the lights button by the same
+ * weights. Sanctum keeps those below `appSectionOrderFrom` for its own, such
+ * as 200 for Moods; any app takes one from 300 to 799, 500 unless it says,
+ * and ties go by app id.
  */
 export const sectionOrderFrom = 100;
 export const appSectionOrderFrom = 300;
@@ -99,8 +108,11 @@ export interface RoomSectionDefinition {
   readonly title: string;
   /** One of the types the app provides, whose state has the tile shape. */
   readonly entityType: string;
-  /** Tiles are the only kind. */
-  readonly kind: "tiles";
+  /**
+   * Tiles under its heading, or buttons in the room's line after its
+   * lights button, which have no heading.
+   */
+  readonly kind: RoomSectionKind;
   /**
    * Its weight among the room's sections, from 300 to 799, 500 when it
    * says none; below 300 only for Sanctum's own apps.
@@ -114,19 +126,20 @@ export interface RoomSectionDefinition {
   readonly press: ActionDefinition;
   /**
    * A page of the app that a link beside the heading opens, with
-   * `{ placeId }`, such as Moods' page for the room.
+   * `{ placeId }`, such as Moods' page for the room. Tiles only, since
+   * buttons have no heading.
    */
   readonly open?: { readonly page: string; readonly label: string };
   /**
    * When a room has nothing for the section, it still shows its heading
    * and `open` if the room has a device of this kind, so someone can add
    * the first. Otherwise a room with nothing has no
-   * section.
+   * section. Tiles only, since it needs `open`.
    */
   readonly whenEmpty?: { readonly roomHas: CapabilityKind };
   /**
-   * Sample tiles for its preview on the app's settings page, such as
-   * Moods' Aurora and Evening, one of them active.
+   * Sample tiles or buttons for its preview on the app's settings page,
+   * such as Moods' Aurora and Evening, one of them active.
    */
   readonly preview?: readonly SampleTile[];
 }
@@ -142,8 +155,8 @@ export type RoomSectionInfo = {
   id: string;
   title: string;
   entityType: string;
-  kind: "tiles";
-  /** Its weight among the room's sections. */
+  kind: RoomSectionKind;
+  /** Its weight among the room's sections, or its buttons among theirs. */
   order: number;
   /** The action a tap calls. */
   press: { action: string };
@@ -226,10 +239,10 @@ export function tileShapeProblemsOf(schema: unknown): string[] {
 }
 
 /**
- * An app's room sections: at most one, of the kind tiles, over a type it
+ * An app's room sections: at most one, of tiles or buttons, over a type it
  * provides in the tile shape, pressed with one of its own read or write
- * actions, opening one of its pages, and shown empty only for a kind of
- * device it reads.
+ * actions, and, for tiles, opening one of its pages and shown empty only
+ * for a kind of device it reads.
  */
 export function assertRoomSections(app: AppDefinition) {
   const sections = app.provides?.roomSections ?? [];
@@ -251,8 +264,10 @@ export function assertRoomSections(app: AppDefinition) {
     if (typeof section.title !== "string" || !section.title.trim()) {
       throw new Error(`Room section "${id}" needs a title`);
     }
-    if (section.kind !== "tiles") {
-      throw new Error(`Room section "${id}" is of the kind tiles`);
+    if (!roomSectionKinds.includes(section.kind)) {
+      throw new Error(
+        `Room section "${id}" is of the kind ${roomSectionKinds.join(" or ")}`,
+      );
     }
     if (
       section.order !== undefined &&
@@ -287,6 +302,14 @@ export function assertRoomSections(app: AppDefinition) {
       );
     }
     const { open, whenEmpty, preview } = section;
+    if (
+      section.kind === "buttons" &&
+      (open !== undefined || whenEmpty !== undefined)
+    ) {
+      throw new Error(
+        `Room section "${id}" shows buttons, which have no heading to open a page from or show empty`,
+      );
+    }
     if (
       preview !== undefined &&
       (!Array.isArray(preview) ||

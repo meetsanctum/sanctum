@@ -41,6 +41,8 @@ import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
 import {
+  buttonsIn,
+  RoomButtons,
   RoomSection,
   sectionsInOrder,
   type AppSection,
@@ -48,7 +50,7 @@ import {
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import { SummaryCards, type Summary } from "./summary-cards";
-import type { HostProblem } from "./system-status";
+import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
@@ -124,7 +126,8 @@ export type LightsSwitch = {
 // dashboard and an app's page do, and on a phone opening the page
 // (PageBar). A room's opens with its motion and what its sensors read,
 // offline ones left out, and a button for all its lights, white while any
-// is on; a category's with its status.
+// is on, followed by apps' buttons for the room; a category's with its
+// status.
 function PlaceHeader(props: {
   title: string;
   subtitle?: string;
@@ -134,14 +137,16 @@ function PlaceHeader(props: {
   contact?: PlaceContact | null;
   readings?: Reading[];
   lights?: LightsSwitch;
+  /** Apps' buttons for the room, after its lights button. */
+  buttons?: ReactNode;
 }) {
-  const { lights } = props;
+  const { lights, buttons } = props;
   const hasLine =
     !!props.subtitle ||
     !!props.motion ||
     !!props.contact ||
     !!props.readings?.length;
-  if (!hasLine && !lights) return <PageBar title={props.title} />;
+  if (!hasLine && !lights && !buttons) return <PageBar title={props.title} />;
   return (
     <header className="flex shrink-0 flex-col gap-2.5">
       <PageBar title={props.title} />
@@ -158,9 +163,10 @@ function PlaceHeader(props: {
           className="text-[15px] leading-[22px] [&_svg]:size-4"
         />
       </div>
-      {lights && (
+      {(lights || buttons) && (
         <div className="flex flex-wrap gap-2">
-          <LightsButton lights={lights} />
+          {lights && <LightsButton lights={lights} />}
+          {buttons}
         </div>
       )}
     </header>
@@ -320,6 +326,9 @@ type StatusTile = {
   label: string;
   icon: LucideIcon;
   colour: string;
+  // Three cells wide, a device tile's width, where the others have two:
+  // what needs attention has more to say than a count.
+  wide?: boolean;
   open: () => void;
 };
 
@@ -337,6 +346,8 @@ export function HomeStatus(props: {
   // What needs someone about Sanctum itself (system-status.ts), and its
   // page.
   problems?: readonly HostProblem[];
+  // The services the home never set up, whose apps wait for nothing wrong.
+  notSetUp?: readonly ServiceNotSetUp[];
   apps: readonly AppInfo[];
   openCategory: (id: DeviceCategory) => void;
   openAttention: () => void;
@@ -387,7 +398,7 @@ export function HomeStatus(props: {
     needingAttention(devices.devices, devices.places?.rooms ?? [], props.apps),
     props.problems ?? [],
     unit,
-    appsNotRunning(props.apps),
+    appsNotRunning(props.apps, props.notSetUp),
   );
   if (attention) {
     shown.push({
@@ -398,6 +409,7 @@ export function HomeStatus(props: {
       icon: icons.CircleAlert,
       // Red for a problem, Graphite while there are only rooms to choose.
       colour: attention.problem ? "var(--danger)" : "var(--graphite-text)",
+      wide: true,
       open:
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
@@ -427,7 +439,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className="col-span-2 flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className={`${each.wide ? "col-span-3" : "col-span-2"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
@@ -475,7 +487,12 @@ export function RoomPage(props: {
       .filter((device) => device.roomId === room.id)
       .flatMap((device) => device.capabilities.map((each) => each.kind)),
   );
-  const sections = sectionsInOrder(props.apps);
+  const sections = sectionsInOrder(props.apps, "tiles");
+  const buttons = buttonsIn(
+    sectionsInOrder(props.apps, "buttons"),
+    entities,
+    room.id,
+  );
   const appSection = ({ app, section }: AppSection) => (
     <RoomSection
       key={app.id}
@@ -504,6 +521,15 @@ export function RoomPage(props: {
           room,
           devices,
         )}
+        buttons={
+          buttons.length > 0 ? (
+            <RoomButtons
+              buttons={buttons}
+              roomName={room.name}
+              entities={entities}
+            />
+          ) : undefined
+        }
       />
       {sections.map(appSection)}
       <Sections

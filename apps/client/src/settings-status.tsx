@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Clock,
   Gauge,
+  Unplug,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -19,6 +20,7 @@ import {
   fineText,
   lastAtText,
   modelText,
+  notSetUpWords,
   osText,
   problemFix,
   problemTitle,
@@ -272,7 +274,22 @@ function Verdict(props: {
   // Storage almost full carries Free up space as its fix.
   space?: Space;
 }) {
-  const { host, problems = [] } = props.status ?? {};
+  const { host, problems = [], notSetUp = [] } = props.status ?? {};
+  // A service the home never set up is no problem: it is said plainly,
+  // under whatever the verdict is.
+  const waiting = notSetUp.map((each) => {
+    const { title, detail } = notSetUpWords(each);
+    return (
+      <VerdictRow
+        key={`not set up ${each.service}`}
+        icon={
+          <Unplug aria-hidden="true" className="size-5 text-muted-foreground" />
+        }
+        title={title}
+        detail={detail}
+      />
+    );
+  });
   let rows: ReactNode;
   if (!host) {
     rows = (
@@ -327,6 +344,7 @@ function Verdict(props: {
   return (
     <ul role="status" className="m-0 flex list-none flex-col gap-3 p-0">
       {rows}
+      {host && waiting}
     </ul>
   );
 }

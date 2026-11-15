@@ -5,9 +5,11 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-// Natural light's own database: the lights that follow the curve. A light
-// has a row while it follows, and whether it is paused is mostly read from
-// who last set it (lights.ts).
+// Natural light's own database: the lights that follow the curve, and the
+// lights the household left out. Every light that takes a colour
+// temperature follows unless it is left out (choices.ts). A light has a row
+// in followed_lights while it follows, and whether it is paused is mostly
+// read from who last set it (lights.ts).
 
 /** What natural light sets a light to: a colour temperature in mireds, and a brightness where the light dims. */
 export type Look = { colorTemperature: number; brightness?: number };
@@ -26,6 +28,15 @@ export const followedLights = sqliteTable(
     // What natural light last set it to, and when.
     applied: text("applied", { mode: "json" }).$type<Look>(),
     appliedAt: integer("applied_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [primaryKey({ columns: [table.deviceId, table.capabilityId] })],
+);
+
+export const leftOutLights = sqliteTable(
+  "left_out_lights",
+  {
+    deviceId: text("device_id").notNull(),
+    capabilityId: text("capability_id").notNull(),
   },
   (table) => [primaryKey({ columns: [table.deviceId, table.capabilityId] })],
 );

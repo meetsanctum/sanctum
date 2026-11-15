@@ -332,6 +332,48 @@ describe("Needs attention", () => {
     expect(attentionTile([], [], "celsius", [longer])?.problem).toBe(false);
   });
 
+  it("leaves out one that only waits for a service the home never set up", () => {
+    const zigbee = {
+      ...app("waiting", {
+        since,
+        waitingFor: "Waiting for Zigbee2MQTT",
+        ownWait: true,
+        attention: true,
+      }),
+      id: "sanctum.zigbee",
+      name: "Zigbee",
+    };
+    const notSetUp = [
+      {
+        service: "zigbee2mqtt",
+        problem: "No Zigbee coordinator is plugged in",
+        apps: ["sanctum.zigbee"],
+      },
+    ];
+
+    // Nobody plugged an adapter in: nothing is wrong, and nothing asks.
+    expect(appsNotRunning([zigbee], notSetUp)).toEqual([]);
+    expect(
+      attentionTile([], [], "celsius", appsNotRunning([zigbee], notSetUp)),
+    ).toBeNull();
+    // Without that, as when its adapter was pulled out, it is listed.
+    expect(appsNotRunning([zigbee])).toEqual([zigbee]);
+    // One that gave up is listed whatever it would wait for.
+    const stopped = { ...failed, id: "sanctum.zigbee", name: "Zigbee" };
+    expect(appsNotRunning([stopped], notSetUp)).toEqual([stopped]);
+    // And another app's wait is its own.
+    const other = app("waiting", { since, attention: true });
+    expect(appsNotRunning([other, zigbee], notSetUp)).toEqual([other]);
+    // Using that service does not make a wait of the core's harmless.
+    for (const waitingFor of [undefined, "Waiting for its data to come back"]) {
+      const restoring = {
+        ...zigbee,
+        run: { since, attention: true as const, waitingFor },
+      };
+      expect(appsNotRunning([restoring], notSetUp)).toEqual([restoring]);
+    }
+  });
+
   it("says one stopped for good is a problem", () => {
     expect(appAttentionText(failed)).toBe(
       "Not running: stopped after 5 failures in 10 minutes",

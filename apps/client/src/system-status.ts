@@ -1,4 +1,4 @@
-import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
 import { formatTemperature } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
@@ -75,6 +75,19 @@ export type SystemStatus = {
   channel: Channel | null;
   host: HostInfo | null;
   problems: HostProblem[];
+  /**
+   * The services that wait for what the home has never had, as Zigbee for
+   * an adapter nobody has plugged in: no problem, so nothing asks for
+   * attention, and the Status page says it plainly. An older core says
+   * nothing of them.
+   */
+  notSetUp?: ServiceNotSetUp[];
+};
+
+export type ServiceNotSetUp = {
+  service: string;
+  problem: string | null;
+  apps: string[];
 };
 
 export const systemStatus = {
@@ -289,7 +302,7 @@ export function problemTitle(problem: HostProblem, unit: TemperatureUnit) {
 // why it can't start Zigbee's bridge; anything else starts again by itself.
 // An adapter of a type the manager can't tell is chosen on the command
 // line, which the install guide shows.
-function serviceFix(problem: Extract<HostProblem, { kind: "service" }>) {
+function serviceFix(problem: { problem: string | null }) {
   const text = problem.problem ?? "";
   if (text.startsWith("No Zigbee coordinator")) {
     return "No Zigbee adapter is plugged in. Plug it in, and Zigbee starts by itself";
@@ -304,6 +317,47 @@ function serviceFix(problem: Extract<HostProblem, { kind: "service" }>) {
     return `${productName} doesn't recognise this Zigbee adapter's type by itself. The install guide says how to choose it, under “Zigbee does not start”`;
   }
   return `${productName} starts it again by itself`;
+}
+
+/** What a service that was never set up says on the Status page, and what starts it. */
+export function notSetUpWords(waiting: ServiceNotSetUp) {
+  return {
+    title: `${serviceName(waiting.service)} isn't set up`,
+    detail: serviceFix(waiting),
+  };
+}
+
+/**
+ * Whether the app only waits for a service the home never set up: its own
+ * start says it waits, and it asked for such a service. A wait of the core's,
+ * for its container or its data, needs attention whatever the app uses.
+ */
+export function isWaitingForSetUp(
+  app: AppInfo,
+  notSetUp: readonly ServiceNotSetUp[],
+) {
+  return (
+    app.state === "waiting" &&
+    app.run?.ownWait === true &&
+    notSetUp.some((each) => each.apps.includes(app.id))
+  );
+}
+
+/**
+ * What Add devices says while no app can add any because the home never
+ * set up what one needs: what to plug in.
+ */
+export function addDevicesHint(
+  apps: readonly AppInfo[],
+  notSetUp: readonly ServiceNotSetUp[] = [],
+) {
+  return notSetUp.some(
+    (each) =>
+      each.service === "zigbee2mqtt" &&
+      apps.some((app) => isWaitingForSetUp(app, [each])),
+  )
+    ? "Plug in a Zigbee adapter to add Zigbee devices."
+    : undefined;
 }
 
 /** What to do about a problem, under its title. */
@@ -332,27 +386,39 @@ export function problemFix(
   }
 }
 
-/** A problem in a word or two, for the dashboard's Attention tile. */
-export function problemShort(problem: HostProblem) {
+/**
+ * A problem as the dashboard's Attention tile says it: the thing above and
+ * its state under it, as a device's and an app's tile read, "Storage" over
+ * "Almost full". A service that never ran is not running; one that ran and
+ * stopped has stopped.
+ */
+export function problemTile(problem: HostProblem): {
+  title: string;
+  value: string;
+} {
   switch (problem.kind) {
     case "power":
-      return "Power too weak";
+      return { title: "Power", value: "Too weak" };
     case "storage":
-      return "Storage almost full";
+      return { title: "Storage", value: "Almost full" };
     case "heat":
-      return "Too hot";
+      return { title: productName, value: "Too hot" };
     case "memory":
-      return "Short of memory";
+      return { title: "Memory", value: "Low" };
     case "service":
-      return `${serviceName(problem.service)} stopped`;
+      return {
+        title: serviceName(problem.service),
+        value: problem.state === "failed" ? "Stopped" : "Not running",
+      };
     case "clock":
-      return "Clock not set";
+      return { title: "Clock", value: "Not set" };
     case "memoryLimits":
-      return "Memory limits off";
+      return { title: "Memory", value: "Limits off" };
     case "appData":
-      return problem.state === "damaged"
-        ? "App data damaged"
-        : "App data missing";
+      return {
+        title: "App data",
+        value: problem.state === "damaged" ? "Damaged" : "Missing",
+      };
   }
 }
 
