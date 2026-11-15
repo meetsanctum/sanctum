@@ -38,6 +38,12 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
+      "on": {
+        "default": true,
+        "title": "Natural light",
+        "description": "Lights that follow it change with the day. Off, each keeps the look it has.",
+        "type": "boolean"
+      },
       "shape": {
         "default": "balanced",
         "title": "Curve",
@@ -156,7 +162,8 @@
                 "enum": [
                   "following",
                   "paused",
-                  "waiting"
+                  "waiting",
+                  "off"
                 ]
               },
               "colorTemperature": {
@@ -244,7 +251,8 @@
             "enum": [
               "following",
               "paused",
-              "waiting"
+              "waiting",
+              "off"
             ]
           },
           "colorTemperature": {
@@ -324,7 +332,8 @@
             "enum": [
               "following",
               "paused",
-              "waiting"
+              "waiting",
+              "off"
             ]
           },
           "colorTemperature": {
@@ -595,7 +604,8 @@
               "enum": [
                 "following",
                 "paused",
-                "waiting"
+                "waiting",
+                "off"
               ]
             },
             "colorTemperature": {
