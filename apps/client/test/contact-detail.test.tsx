@@ -188,6 +188,53 @@ describe("a contact sensor's page", () => {
     expect(text).toContain("Battery 95%");
   });
 
+  it("has a door's week as how often it was opened, from a week of its changes", async () => {
+    await show({ ...door, type: "door", shownAs: "door" });
+
+    // Its changes are read from the week's first midnight, not from a day ago.
+    const asked = vi
+      .mocked(coreJson)
+      .mock.calls.map(([path]) => path)
+      .find((path) => path.startsWith("/api/history/states"))!;
+    expect(new URL(asked, "http://core").searchParams.get("from")).toBe(
+      new Date(2026, 9, 25).toISOString(),
+    );
+
+    const text = container.textContent ?? "";
+    // The day stays as it is.
+    expect(text).toContain("Opened 2 times, 8 min in all, the last at 13:52");
+    // The week counts: twice today, of the two days the roll-ups know.
+    expect(text).toContain("Opened 2 times since Fri");
+    const columns = container.querySelector(
+      '[role="group"][aria-label="How often it was opened each day"]',
+    );
+    expect(columns).not.toBeNull();
+    expect(columns!.parentElement!.textContent).not.toContain(" h");
+    expect(
+      [...container.querySelectorAll("ul.sr-only li")]
+        .map((each) => each.textContent)
+        .filter((each) => /opened|Not opened/.test(each ?? ""))
+        .at(-1),
+    ).toMatch(/: opened 2 times$/);
+  });
+
+  it("keeps a contact sensor's and a window's week as how long it was open", async () => {
+    await show({ ...door, type: "window", shownAs: "window" });
+    const asked = vi
+      .mocked(coreJson)
+      .mock.calls.map(([path]) => path)
+      .find((path) => path.startsWith("/api/history/states"))!;
+    expect(new URL(asked, "http://core").searchParams.get("from")).toBe(
+      new Date(now - 24 * 60 * 60_000).toISOString(),
+    );
+    expect(container.textContent).toContain("Open about 30 min a day");
+    expect(
+      container.querySelector(
+        '[role="group"][aria-label="How long it was open each day"]',
+      ),
+    ).not.toBeNull();
+  });
+
   it("says at its foot that its battery is low where the sensor says so, without a charge", async () => {
     await show({ ...door, battery: null, batteryLow: true });
     expect(container.textContent).toContain("Battery low: replace it soon");

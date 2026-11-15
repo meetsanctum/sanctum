@@ -155,8 +155,39 @@ export function onWithin(spans: readonly Span[], from: number, to: number) {
   return { on: on / 1000, known: known / 1000 };
 }
 
-/** One day of the week: how long it was on, out of how long it was known. */
-export type Day = { start: number; on: number; known: number };
+/**
+ * One day of the week: how long it was on, out of how long it was known,
+ * and how often it came on in it, where a week of its changes was read to
+ * count that (`countedDays`).
+ */
+export type Day = { start: number; on: number; known: number; count?: number };
+
+/**
+ * The spans that began as it came on, from joined spans: a change from
+ * off to on that was seen, as a door opening. One already on at the start,
+ * or that came on from nothing known, is not one.
+ */
+export function comingsOn(joined: readonly Span[]) {
+  return joined.filter((span, index) => {
+    const before = joined[index - 1];
+    return span.on && before?.known === true && !before.on;
+  });
+}
+
+/**
+ * The week's days with how often it came on in each, counted by the day it
+ * came on in, from its spans over the week.
+ */
+export function countedDays(days: readonly Day[], spans: readonly Span[]) {
+  const starts = comingsOn(joinedSpans(spans)).map((span) => span.from);
+  return days.map((day) => {
+    const end = midnight(day.start, -1);
+    return {
+      ...day,
+      count: starts.filter((at) => at >= day.start && at < end).length,
+    };
+  });
+}
 
 /** Local midnight of the day `at` is in, `daysBack` days before. */
 export function midnight(at: number, daysBack = 0) {
@@ -306,6 +337,50 @@ export function sensedWeekHeadline(
   return known[0]!.start === today
     ? `${words.none} today`
     : `${words.none} since ${weekday.format(known[0]!.start)}`;
+}
+
+/** The words a week of counts comes to, for what is counted. */
+export type CountWords = {
+  /** About how often a day, from "about 6 times": "Opened about 6 times a day". */
+  aDay: (about: string) => string;
+  /** How often in all: "Opened once", "Opened 3 times". */
+  times: (count: number) => string;
+  /** While it never did, before "all week", "today" and "since Mon". */
+  none: string;
+};
+
+/**
+ * What a week of counts comes to: about how often a day, over the days
+ * that have ended, once that is at least once a day; otherwise how often
+ * in all, this week, today or since the first day known; or since when not
+ * at all.
+ */
+export function countedWeekHeadline(
+  days: readonly Day[],
+  now: number,
+  words: CountWords,
+) {
+  const today = midnight(now);
+  const known = days.filter((day) => day.known > 0);
+  if (known.length === 0) return "Not known yet";
+  const count = (some: readonly Day[]) =>
+    some.reduce((sum, day) => sum + (day.count ?? 0), 0);
+  const total = count(known);
+  const isWholeWeek = known.length === days.length;
+  const since =
+    known[0]!.start === today
+      ? "today"
+      : `since ${weekday.format(known[0]!.start)}`;
+  if (total === 0) {
+    return `${words.none} ${isWholeWeek ? "all week" : since}`;
+  }
+  const ended = known.filter((day) => day.start !== today);
+  const average = count(ended) / Math.max(1, ended.length);
+  if (average >= 1) {
+    const rounded = Math.round(average);
+    return words.aDay(rounded === 1 ? "about once" : `about ${rounded} times`);
+  }
+  return `${words.times(total)} ${isWholeWeek ? "this week" : since}`;
 }
 
 /** A time of day as Automations writes it, such as 07:30. */
