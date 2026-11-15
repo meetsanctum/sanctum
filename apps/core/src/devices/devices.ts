@@ -123,6 +123,8 @@ export function createDevices(
   const confirmMs = options.confirmMs ?? defaultConfirmMs;
   const deviceLog = createDeviceLog({ activity: options.activity, confirmMs });
   const { rename, roomNames } = createNaming(db, places);
+  // Set as the core stops, from which no command goes to a device.
+  let isStopping = false;
   const commands = createCommandTracking({
     confirmMs,
     now,
@@ -296,6 +298,13 @@ export function createDevices(
     command: unknown,
   ): Promise<CapabilityInfo> {
     const { device, capability } = target;
+    // The core is stopping: nothing goes to a device again, also after a wait.
+    const refuseWhileStopping = () => {
+      if (!isStopping) return;
+      deviceLog.command(who, device.id, "refused", "unavailable");
+      throw new ActionCallError("unavailable");
+    };
+    refuseWhileStopping();
     const definition = capabilityOf(capability.kind);
     const parsed = definition.command.safeParse(command);
     if (
@@ -310,6 +319,7 @@ export function createDevices(
     // confirm a command that has not gone out yet.
     const ending = options.beforeCommand?.(device.id, capability.id);
     if (ending) await ending;
+    refuseWhileStopping();
     const row = capabilityRow(device.id, capability.id);
     if (!row) throw new ActionCallError("not_found");
     const prepared = prepare(row, parsed.data as Record<string, unknown>);
@@ -336,7 +346,7 @@ export function createDevices(
     // since a light switched twice is worse than one someone switches again.
     const wentThrough = options.driverRun?.(driver);
     const send = async (command: Record<string, unknown>) => {
-      if (options.driverRun?.(driver) !== wentThrough) {
+      if (isStopping || options.driverRun?.(driver) !== wentThrough) {
         throw new ActionCallError("unavailable");
       }
       return deliver(
@@ -778,6 +788,7 @@ export function createDevices(
 
     // The core is stopping: nothing goes to a device again from now on.
     closing() {
+      isStopping = true;
       commands.closing();
     },
 

@@ -40,6 +40,7 @@ import { createPairing } from "./devices/pairing.js";
 import { createPresses } from "./devices/presses.js";
 import { createEntities, type Entities } from "./entities/entities.js";
 import { createHistory, type History } from "./history/history.js";
+import type { CoreSteps } from "./lifecycle.js";
 import { createLiveUpdates } from "./live-updates.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
@@ -461,7 +462,6 @@ export async function createModules(
         log,
       })
     : undefined;
-  sightings?.start();
   host = apps;
   workflows = createWorkflows(db, {
     host: apps,
@@ -509,6 +509,25 @@ export async function createModules(
       );
     }
   });
+  // No workflow run starts once the core is stopping.
+  const stopNewWork = [
+    ["workflows", () => workflows!.interrupt()],
+  ] as const satisfies CoreSteps["stopNewWork"];
+  // Nothing goes to a device again while the apps stop. Devices' and
+  // firmware's deadlines are the last that change a device, and history then
+  // records that nothing is known from then on.
+  const stoppingSteps = [
+    ["stop discovery", () => sightings?.close()],
+    ["stop the manager's audit", () => managerAudit?.close()],
+    ["stop commands to devices", () => devices.closing()],
+    ["stop workflows", () => workflows!.close()],
+    ["stop holds", () => holds.close()],
+    ["stop the app host", () => apps.close()],
+    ["stop devices", () => devices.close()],
+    ["stop firmware", () => firmware.close()],
+    ["stop history", () => history!.close()],
+    ["stop pairing", () => pairing.stop()],
+  ] as const satisfies CoreSteps["stopping"];
   const audit = options.manager.audit;
   const managerAudit = audit
     ? createManagerAuditCopy({ db, activity, audit, log })
@@ -537,22 +556,36 @@ export async function createModules(
     apps,
     workflows,
     history,
-    // Stops the timers, the apps, then history, which records that nothing
-    // is known from then on, and the timers waiting for devices. Nothing
-    // goes to a device again while the apps stop.
+    // What the manager finds on the home's network, which starts with the
+    // core (core.ts); none under a manager that can't look.
+    discovery: sightings,
+    // At stopping's first moment, before anything is awaited (lifecycle.ts).
+    stopNewWork,
+    // The modules' steps of stopping, in order (lifecycle.ts).
+    stoppingSteps,
+    // Stops them as stopping does, each step tried even after one fails, for
+    // a core without a lifecycle, as in tests.
     async close() {
-      sightings?.close();
-      managerAudit?.close();
-      devices.closing();
-      workflows!.close();
-      await holds.close();
-      await apps.close();
-      history!.close();
-      devices.close();
-      firmware.close();
-      pairing.stop();
+      for (const [label, run] of stopNewWork) {
+        try {
+          run();
+        } catch (error) {
+          log(`core: ${label} failed (${message(error)})`);
+        }
+      }
+      for (const [label, run] of stoppingSteps) {
+        try {
+          await run();
+        } catch (error) {
+          log(`core: ${label} failed (${message(error)})`);
+        }
+      }
     },
   };
+}
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export type Modules = Awaited<ReturnType<typeof createModules>>;

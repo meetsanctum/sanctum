@@ -470,6 +470,10 @@ export async function testCore(
     sun: options.sun,
     fetch: options.fetch ?? noInternet,
   });
+  // What the core starts as it starts (core.ts): discovery, and the deadlines
+  // of firmware updates under way.
+  modules.discovery?.start();
+  modules.firmware.start();
   if (options.allowed ?? true) {
     allowEveryPermission(
       database.db,

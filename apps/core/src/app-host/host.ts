@@ -1,5 +1,4 @@
 import {
-  appSectionOrderFrom,
   lanPort,
   type Actor,
   type AppGoBack,
@@ -8,9 +7,7 @@ import {
   type AppInfo,
   type Sighting,
 } from "@meetsanctum/app-sdk";
-import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 
 import type { Activity } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
@@ -23,14 +20,8 @@ import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
 import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
-import {
-  checkManifest,
-  contractOf,
-  type AppPieces,
-  type DeclaredAction,
-} from "./contract.js";
+import type { AppPieces, DeclaredAction } from "./contract.js";
 import { createActionRunner, type Who } from "./actions.js";
-import { apartApp, apartStorage } from "./apart.js";
 import { announcerOf, appStateOf, installedInfoOf } from "./app-info.js";
 import { deviceKinds } from "./calls.js";
 import { createAppChoices } from "./choices.js";
@@ -45,28 +36,22 @@ import type { AppGrants } from "./grants.js";
 import type { InstalledApp } from "./installed.js";
 import type { ApartPackage } from "./loader.js";
 import { createAppLifecycle } from "./lifecycle.js";
-import { createAppLink } from "./link.js";
-import { createRequestsUnderWay, type NetFetch } from "./net.js";
+import type { NetFetch } from "./net.js";
 import {
   createAppServices,
-  declaredServices,
   mayRunServices,
   serviceOf,
-  servicePermission,
   type ServiceManager,
 } from "./services.js";
 import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
-import {
-  createSupervisor,
-  newSupervision,
-  type AppContainerManager,
-} from "./supervisor.js";
+import { createSupervisor, type AppContainerManager } from "./supervisor.js";
 import type { AppsOff } from "./off.js";
 import type { AppEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 import { createLanPolicies } from "./lan.js";
+import { createAppInstaller } from "./install.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -79,10 +64,6 @@ import { createLanPolicies } from "./lan.js";
 // switch shows it off, and one switched back on gets a new login. What an
 // app brings to the home stays only while it is installed; its settings,
 // which change through the gate too, stay with its database.
-
-// Where the core listens for apps apart, a folder for each app, shared with
-// their containers by the manager.
-const defaultAppSockets = "/run/sanctum-apps";
 
 type Log = (message: string) => void;
 
@@ -186,7 +167,7 @@ export function createAppHost(options: {
     now,
     isOff: (appId) => installed.get(appId)?.off === true,
   });
-  const { settingsOf, contextFor, coreOf, deliver } = contexts;
+  const { settingsOf, contextFor, deliver } = contexts;
   // A driver's devices stay paired while it's down. A database failure must
   // neither end the core's timer nor prevent the driver's container stopping.
   function markDriverOffline(entry: InstalledApp) {
@@ -213,7 +194,23 @@ export function createAppHost(options: {
     now,
     ...options.supervision,
   });
+  const install = createAppInstaller({
+    installed,
+    entities: options.entities,
+    updates: options.updates,
+    grants: options.grants,
+    off: options.off,
+    appServices,
+    supervisor: () => supervisor,
+    contexts,
+    appSockets: options.appSockets,
+    timeoutMs,
+    log,
+    now,
+  });
   let isOnTrial = false;
+  // The core is stopping: nothing more installs or starts.
+  let isClosing = false;
   let installing = Promise.resolve();
   // The apps whose entities stay: those checked as they installed, and those
   // the core says are coming, as one whose package isn't staged yet.
@@ -260,99 +257,6 @@ export function createAppHost(options: {
     timeoutMs,
     log,
   });
-
-  // `checked` collects the apps whose entities were checked against their
-  // types, which keep them even when the rest of the install fails.
-  function install(pkg: ApartPackage, checked: Set<string>) {
-    const { origin } = pkg;
-    const appId = pkg.apart.manifest.id;
-    if (installed.has(appId)) {
-      throw new Error("another package has the same id");
-    }
-    const manifest = checkManifest(pkg.apart.manifest);
-    const contract = contractOf(manifest);
-    const services = declaredServices(manifest);
-    if (services.length > 0 && !mayRunServices.includes(origin)) {
-      throw new Error(`a ${origin} app cannot have services`);
-    }
-    // The first places among a room's sections are Sanctum's own, such as
-    // Moods'.
-    if (
-      origin === "third-party" &&
-      manifest.provides.roomSections.some(
-        (section) => section.order < appSectionOrderFrom,
-      )
-    ) {
-      throw new Error(
-        `a third-party app's room section takes an order from ${appSectionOrderFrom}`,
-      );
-    }
-    // What it brought before is checked against the types it declares now,
-    // before its database opens: one that cannot open, as after a failed
-    // migration, leaves what it brought, such as a forecast kept offline.
-    options.entities.reconcileTypes(appId, contract.entityTypes.values());
-    checked.add(appId);
-    const link = createAppLink({
-      appId,
-      version: manifest.version,
-      manifest: pkg.apart.digest,
-      refuses: () => options.updates.holdsBack(appId, pkg.apart.folder),
-      socket: join(
-        options.appSockets ?? defaultAppSockets,
-        appId,
-        coreSocketName,
-      ),
-      log,
-      onReady() {
-        const entry = installed.get(appId);
-        if (entry) supervisor.ready(entry);
-      },
-      onGone(_reason, hung) {
-        const entry = installed.get(appId);
-        if (entry) supervisor.lost(entry, hung);
-      },
-    });
-    const storage = apartStorage(appId);
-    const code = apartApp(
-      manifest,
-      link,
-      coreOf,
-      (ctx) => contexts.timeLeft(ctx) ?? timeoutMs,
-      () => installed.get(appId)?.updating?.id,
-    );
-    options.grants.adopt(manifest);
-    const granted = options.grants.of(manifest);
-    const held = (name: string) => granted.includes(servicePermission(name));
-    for (const name of services.filter((each) => !held(each))) {
-      appServices.releaseOff(appId, name);
-    }
-    appServices.releaseUndeclared(appId, services);
-    installed.set(appId, {
-      app: code,
-      manifest,
-      contract,
-      origin,
-      granted,
-      grantsRevision: 0,
-      storage,
-      actions: new Map(code.actions.map((each) => [each.id, each])),
-      settings: manifest.settings,
-      services: new Map(
-        services
-          .filter(held)
-          .map((name) => [name, appServices.request(appId, name)]),
-      ),
-      calls: new Set(),
-      requests: createRequestsUnderWay(appId),
-      lifecycle: Promise.resolve(),
-      runId: 0,
-      off: options.off.isOff(appId),
-      link,
-      apartIn: pkg.apart.folder,
-      digest: pkg.apart.digest,
-      supervision: newSupervision(now()),
-    });
-  }
 
   const { record, execute } = createActionRunner<InstalledApp>({
     activity,
@@ -531,23 +435,34 @@ export function createAppHost(options: {
       });
       const added: InstalledApp[] = [];
       const checked = new Set<string>();
-      for (const pkg of await packages) {
-        const appId = pkg.apart.manifest.id;
-        try {
-          // Its old stop and socket cleanup must finish before a new install
-          // binds the same path.
-          await removals.get(appId);
-          install(await options.updates.packageFor(pkg), checked);
-          added.push(installed.get(appId)!);
-        } catch (error) {
-          log(`apps: ${appId} was not installed (${message(error)})`);
+      try {
+        for (const pkg of await packages) {
+          if (isClosing) break;
+          const appId = pkg.apart.manifest.id;
+          try {
+            // Its old stop and socket cleanup must finish before a new install
+            // binds the same path.
+            await removals.get(appId);
+            if (isClosing) break;
+            const current = await options.updates.packageFor(pkg);
+            if (isClosing) break;
+            install(current, checked);
+            added.push(installed.get(appId)!);
+          } catch (error) {
+            log(`apps: ${appId} was not installed (${message(error)})`);
+          }
         }
+        // A core that stops meanwhile keeps what every app brought: those it
+        // didn't reach aren't gone.
+        if (isClosing) return;
+        // What apps that are no longer here brought goes with them, and so
+        // does what the core could not check.
+        for (const appId of checked) kept.add(appId);
+        options.entities.keepApps([...kept]);
+      } finally {
+        // Closing also waits for an install that failed before it finished.
+        allInstalled();
       }
-      // What apps that are no longer here brought goes with them, and so
-      // does what the core could not check.
-      for (const appId of checked) kept.add(appId);
-      options.entities.keepApps([...kept]);
-      allInstalled();
       await Promise.all(
         added.map(async (entry) => {
           // The core may have stopped after saving the choice and before this.
@@ -564,6 +479,7 @@ export function createAppHost(options: {
     // workflows find their pieces from the first tick and a slow app holds up nothing.
     async committed() {
       await installing;
+      if (isClosing) return;
       isOnTrial = false;
       await Promise.all(waitingForCommit.splice(0).map(startApart));
       options.updates.retryCatchUp();
@@ -767,11 +683,15 @@ export function createAppHost(options: {
     personChanged: coreEvents.person,
     entityChanged: coreEvents.entity,
 
-    // Ends what the core has of every app, then their connections. Their
-    // containers go on: each runner stops its app there as its connection goes,
-    // and says hello to the next core, which starts it again in the same
-    // container. A host that shuts down stops the containers themselves.
+    // Ends what the core has of every app, then their connections, once an
+    // install under way has stopped. Their containers go on: each runner
+    // stops its app there as its connection goes, and says hello to the next
+    // core, which starts it again in the same container. A host that shuts
+    // down stops the containers themselves. Every app's end is tried, even
+    // after one fails, and the failures are thrown together.
     async close() {
+      isClosing = true;
+      await installing;
       handOut?.close();
       lan.close();
       options.updates.close();
@@ -779,20 +699,29 @@ export function createAppHost(options: {
       const entries = [...installed.values()];
       installed.clear();
       const ended = entries.map((entry) => supervisor.end(entry));
-      await Promise.all(
+      const stopped = await Promise.allSettled(
         entries.map(async (entry, index) => {
           await entry.lifecycle;
           await ended[index];
           await stopApp(entry, { reason: "shutdown", gone: true });
         }),
       );
-      await replacementsEnded;
-      await Promise.all(
+      const replaced = await Promise.allSettled([replacementsEnded]);
+      const closed = await Promise.allSettled(
         entries.map(async ({ storage, link }) => {
-          storage.close();
-          await link.close();
+          try {
+            storage.close();
+          } finally {
+            await link.close();
+          }
         }),
       );
+      const failures = [...stopped, ...replaced, ...closed].flatMap((each) =>
+        each.status === "rejected" ? [message(each.reason)] : [],
+      );
+      if (failures.length > 0) {
+        throw new Error(failures.join("; "));
+      }
     },
   };
 }
