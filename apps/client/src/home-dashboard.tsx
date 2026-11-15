@@ -11,6 +11,8 @@ import {
   unitOf,
 } from "./place-pages";
 import {
+  buttonsIn,
+  RoomButtons,
   RoomSection,
   sectionsInOrder,
   type SectionEntities,
@@ -19,14 +21,14 @@ import type { Devices } from "./use-devices";
 
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line has
-// the button for all its lights and what its motion and sensors say, as its
-// page's header does; then its apps' sections, its moods first, as on its
-// page but with no heading of their own; then its devices on Home, in the
-// household's order. Devices on Home with no room come last, under a name
-// that opens their page as a room's does. A room's page
-// stays complete and fixed; Home shows only what was put on it, so a sensor
-// needs no tile here for its readings. A room with nothing to show is in the
-// sidebar only.
+// the button for all its lights, apps' buttons for the room and what its
+// motion and sensors say, as its page's header does; then its apps'
+// sections, its moods first, as on its page but with no heading of their
+// own; then its devices on Home, in the household's order. Devices on Home
+// with no room come last, under a name that opens their page as a room's
+// does. A room's page stays complete and fixed; Home shows only what was put
+// on it, so a sensor needs no tile here for its readings. A room with
+// nothing to show is in the sidebar only.
 
 /** The rooms on Home, and while nothing is on it, how to put something there. */
 export function HomeRooms(props: {
@@ -45,7 +47,8 @@ export function HomeRooms(props: {
 }) {
   const { devices, entities } = props;
   const places = homePlaces(devices, props.onHome);
-  const sections = sectionsInOrder(props.apps);
+  const sections = sectionsInOrder(props.apps, "tiles");
+  const buttonSections = sectionsInOrder(props.apps, "buttons");
   const unit = unitOf(devices);
   const now = Date.now();
   // Devices with no room have no line of their own and no sections.
@@ -64,16 +67,23 @@ export function HomeRooms(props: {
           devices,
         )
       : undefined;
+    const buttons = room ? buttonsIn(buttonSections, entities, room.id) : [];
     const motion = room ? placeMotionText(own, now) : null;
     const contact = room ? placeContacts(own) : null;
     const readings = room ? readingsOf(sensorReadings(own), unit) : [];
-    const hasLine = !!lights || !!motion || !!contact || readings.length > 0;
+    const hasLine =
+      !!lights ||
+      buttons.length > 0 ||
+      !!motion ||
+      !!contact ||
+      readings.length > 0;
     return hasLine || roomSections.length > 0 || onHome.length > 0
       ? [
           {
             ...place,
             sections: roomSections,
             lights,
+            buttons,
             motion,
             contact,
             readings,
@@ -117,6 +127,11 @@ export function HomeRooms(props: {
             {place.hasLine && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {lights && <LightsButton lights={lights} />}
+                <RoomButtons
+                  buttons={place.buttons}
+                  roomName={place.name}
+                  entities={entities}
+                />
                 <PlaceReadings
                   motion={place.motion}
                   contact={place.contact}

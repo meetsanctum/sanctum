@@ -407,6 +407,32 @@ describe("an app's settings page", () => {
     expect(preview.className).toContain("home-slice");
   });
 
+  it("previews room buttons beside a room's lights", async () => {
+    const { roomSections } = manifests[moods.id]!.provides;
+    const tiles = roomSections[0]!;
+    roomSections[0] = { ...tiles, kind: "buttons" };
+    try {
+      await show(moods);
+
+      expect(text()).toContain("In 2 rooms, beside each room's lights");
+      const preview = container.querySelector('[role="img"]')!;
+      expect(preview.getAttribute("aria-label")).toBe(
+        "A preview of Moods' buttons beside a room's lights: Aurora, which is on and Night",
+      );
+      expect(
+        [...preview.querySelectorAll("button")].map((each) => [
+          each.textContent,
+          each.getAttribute("aria-pressed"),
+        ]),
+      ).toEqual([
+        ["Aurora", "true"],
+        ["Night", "false"],
+      ]);
+    } finally {
+      roomSections[0] = tiles;
+    }
+  });
+
   it("counts only existing rooms that contain its tiles", async () => {
     const request = vi.mocked(coreJson).getMockImplementation()!;
     vi.mocked(coreJson).mockImplementation(async (path, init) =>
