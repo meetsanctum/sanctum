@@ -209,6 +209,8 @@ export function createAppHost(options: {
     now,
   });
   let isOnTrial = false;
+  // The core is stopping: nothing more installs or starts.
+  let isClosing = false;
   let installing = Promise.resolve();
   // The apps whose entities stay: those checked as they installed, and those
   // the core says are coming, as one whose package isn't staged yet.
@@ -434,6 +436,7 @@ export function createAppHost(options: {
       const added: InstalledApp[] = [];
       const checked = new Set<string>();
       for (const pkg of await packages) {
+        if (isClosing) break;
         const appId = pkg.apart.manifest.id;
         try {
           // Its old stop and socket cleanup must finish before a new install
@@ -444,6 +447,12 @@ export function createAppHost(options: {
         } catch (error) {
           log(`apps: ${appId} was not installed (${message(error)})`);
         }
+      }
+      // A core that stops meanwhile keeps what every app brought: those it
+      // didn't reach aren't gone.
+      if (isClosing) {
+        allInstalled();
+        return;
       }
       // What apps that are no longer here brought goes with them, and so
       // does what the core could not check.
@@ -466,6 +475,7 @@ export function createAppHost(options: {
     // workflows find their pieces from the first tick and a slow app holds up nothing.
     async committed() {
       await installing;
+      if (isClosing) return;
       isOnTrial = false;
       await Promise.all(waitingForCommit.splice(0).map(startApart));
       options.updates.retryCatchUp();
@@ -669,11 +679,15 @@ export function createAppHost(options: {
     personChanged: coreEvents.person,
     entityChanged: coreEvents.entity,
 
-    // Ends what the core has of every app, then their connections. Their
-    // containers go on: each runner stops its app there as its connection goes,
-    // and says hello to the next core, which starts it again in the same
-    // container. A host that shuts down stops the containers themselves.
+    // Ends what the core has of every app, then their connections, once an
+    // install under way has stopped. Their containers go on: each runner
+    // stops its app there as its connection goes, and says hello to the next
+    // core, which starts it again in the same container. A host that shuts
+    // down stops the containers themselves. Every app's end is tried, even
+    // after one fails, and the failures are thrown together.
     async close() {
+      isClosing = true;
+      await installing;
       handOut?.close();
       lan.close();
       options.updates.close();
@@ -681,20 +695,29 @@ export function createAppHost(options: {
       const entries = [...installed.values()];
       installed.clear();
       const ended = entries.map((entry) => supervisor.end(entry));
-      await Promise.all(
+      const stopped = await Promise.allSettled(
         entries.map(async (entry, index) => {
           await entry.lifecycle;
           await ended[index];
           await stopApp(entry, { reason: "shutdown", gone: true });
         }),
       );
-      await replacementsEnded;
-      await Promise.all(
+      const replaced = await Promise.allSettled([replacementsEnded]);
+      const closed = await Promise.allSettled(
         entries.map(async ({ storage, link }) => {
-          storage.close();
-          await link.close();
+          try {
+            storage.close();
+          } finally {
+            await link.close();
+          }
         }),
       );
+      const failures = [...stopped, ...replaced, ...closed].flatMap((each) =>
+        each.status === "rejected" ? [message(each.reason)] : [],
+      );
+      if (failures.length > 0) {
+        throw new Error(failures.join("; "));
+      }
     },
   };
 }
