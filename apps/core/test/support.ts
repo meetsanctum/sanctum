@@ -48,11 +48,26 @@ const open: (() => Promise<void>)[] = [];
 // stopped, since a later core of the same test may start on one.
 const folders: string[] = [];
 afterEach(async () => {
+  const errors: unknown[] = [];
   for (const close of open.splice(0)) {
-    await close();
+    try {
+      await close();
+    } catch (error) {
+      errors.push(error);
+    }
   }
   for (const folder of folders.splice(0)) {
-    await rm(folder, { recursive: true, force: true });
+    try {
+      await rm(folder, { recursive: true, force: true });
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(
+      errors,
+      "The test's cores could not be cleaned up",
+    );
   }
 });
 
