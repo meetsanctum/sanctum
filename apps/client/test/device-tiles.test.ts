@@ -168,7 +168,7 @@ describe("sectionsByRoom", () => {
     ]);
   });
 
-  it("says what a command still on its way asks for, and what waits for a light to turn on", () => {
+  it("shows a command still on its way as it will be, and what waits for a light to turn on", () => {
     const waiting = (
       observed: LightState,
       desired: Partial<LightState>,
@@ -204,8 +204,8 @@ describe("sectionsByRoom", () => {
       places,
     );
     expect(section!.tiles.map((tile) => [tile.name, tile.status])).toEqual([
-      ["A", "Turning on…"],
-      ["B", "Turning off…"],
+      ["A", "60%"],
+      ["B", "Off"],
       ["C", "40%"],
       ["D", "Off · 40% when on"],
       ["E", "Off · new colour when on"],
