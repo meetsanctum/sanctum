@@ -179,7 +179,7 @@ it.each([Number.NaN, Infinity, -Infinity])(
   },
 );
 
-it("does not restore a device deleted while the startup list was being read", async () => {
+it("does not restore a device removed while the startup list was being read", async () => {
   device.psk = null;
   await announce(core, device);
   const key = await add(core, device);

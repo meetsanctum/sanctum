@@ -271,13 +271,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
 
   return {
     async start() {
-      const deleted = new Set<string>();
+      const removed = new Set<string>();
       let loading = true;
       // Following first, so no removal falls between following and reading.
-      await ctx.events.on("device.deleted", async ({ device }) => {
+      await ctx.events.on("device.removed", async ({ device }) => {
         const mac = device.key;
         if (device.driver !== ctx.appId || !mac) return;
-        if (loading) deleted.add(mac);
+        if (loading) removed.add(mac);
         await forget(mac);
         await ctx.secrets.delete(secretOf(mac));
         await facts.remove(mac);
@@ -289,11 +289,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       );
       await ctx.devices.present({
         keys: mine
-          .filter((device) => !deleted.has(device.key))
+          .filter((device) => !removed.has(device.key))
           .map((device) => device.key),
       });
       for (const device of mine) {
-        if (!deleted.has(device.key)) own(device);
+        if (!removed.has(device.key)) own(device);
       }
       loading = false;
       await listFound();
@@ -386,7 +386,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     },
 
     // Its flashed key stays on the device. Stop registering it before the
-    // core forgets it; its saved key and facts go with device.deleted.
+    // core forgets it; its saved key and facts go with device.removed.
     async remove({ key }: DriverRemoval) {
       const owned = devices.get(key);
       if (!owned) return;

@@ -515,7 +515,7 @@ export function createDriverCore(
       availability.delete(key);
       problems.delete(key);
       if (device) {
-        await deliver({ name: "device.deleted", device: infoOf(device) });
+        await deliver({ name: "device.removed", device: infoOf(device) });
       }
     },
 
