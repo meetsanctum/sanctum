@@ -83,7 +83,7 @@ describe("an app's network rules", () => {
         "  }",
         "  chain input {",
         "    type filter hook input priority 0; policy drop;",
-        "    ip saddr @reach tcp sport @reachports tcp flags & (ack | rst) != 0 accept",
+        "    ip saddr @reach tcp sport @reachports ct state established ct direction reply accept",
         "  }",
         "}",
         "",

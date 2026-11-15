@@ -111,8 +111,9 @@ export function rulesFor(policy: LanPolicy) {
     "  }",
     "  chain input {",
     "    type filter hook input priority 0; policy drop;",
-    // A device's service port doesn't let it open a connection into the app.
-    "    ip saddr @reach tcp sport @reachports tcp flags & (ack | rst) != 0 accept",
+    // Only replies in a connection the app opened, as well as from one of
+    // its devices' ports: a device can't open one into the app.
+    "    ip saddr @reach tcp sport @reachports ct state established ct direction reply accept",
     "  }",
     "}",
     "",
