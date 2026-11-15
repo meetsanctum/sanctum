@@ -235,6 +235,16 @@ describe("a room's switch", () => {
     expect(sentFrom(sent)).toEqual([curveAt(now()), curveAt(now())]);
   });
 
+  it("leaves out a light that still follows though it no longer takes a colour temperature", async () => {
+    const { core, call, check, following } = home();
+    await check();
+    core.light("desk").features = stripFeatures;
+
+    await call("naturalLight.followRoom", { placeId: "office", follow: false });
+
+    expect(following()).toEqual(["hall", "loose"]);
+  });
+
   it("covers the lights in no room for no room", async () => {
     const { call, check, following } = home();
     await check();

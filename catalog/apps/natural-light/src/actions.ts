@@ -78,8 +78,10 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
 
   // A room's switch on the page: every light in the room that takes a
   // colour temperature, or every one in no room for null, follows or is
-  // left out as its own switch would have it. A light that can't be
-  // changed is named in `failed`, and the others still are.
+  // left out as its own switch would have it. Switched off, it also leaves
+  // out a light that still follows though it no longer says it takes a
+  // colour temperature, as the page lists it in the room. A light that
+  // can't be changed is named in `failed`, and the others still are.
   const followRoom = defineAction({
     id: "naturalLight.followRoom",
     title: "Follow natural light in a room",
@@ -97,7 +99,11 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       for (const device of await ctx.devices.list()) {
         if (device.roomId !== input.placeId) continue;
         for (const capability of device.capabilities) {
-          if (!takesColorTemperature(capability)) continue;
+          const stillFollows =
+            !input.follow &&
+            capability.kind === "light" &&
+            (await followedRow(ctx, device.id, capability.id)) !== undefined;
+          if (!takesColorTemperature(capability) && !stillFollows) continue;
           const each = { device: device.id, capability: capability.id };
           try {
             await setFollowing(ctx, options, runForLight, {
