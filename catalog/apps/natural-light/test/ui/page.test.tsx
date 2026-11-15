@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type {
   AppInfo,
+  AppSettings,
   CapabilityInfo,
   DeviceInfo,
   EntityInfo,
   LiveMessage,
+  Places,
 } from "@meetsanctum/app-sdk";
 import {
   AppScope,
@@ -22,7 +24,8 @@ import type { TargetState } from "../../src/target.js";
 import ui from "../../src/ui/index";
 
 // Natural light's page: today's curve, and the lights that take a colour
-// temperature with where each stands, as both states show it.
+// temperature with where each stands, as both states show it, by room once
+// it may read the home's rooms.
 
 const zurich = {
   latitude: 47.3769,
@@ -52,13 +55,14 @@ const device = (
   id: string,
   name: string,
   colorTemperature = true,
+  roomId: string | null = null,
 ): DeviceInfo => ({
   id,
   name,
   driver: "sanctum.zigbee",
   manufacturer: null,
   model: null,
-  roomId: null,
+  roomId,
   driverName: name,
   type: "light",
   availability: "online",
@@ -94,6 +98,9 @@ function fakeClient(options: {
   devices: DeviceInfo[];
   entities: EntityInfo[];
   preview: Preview | null;
+  /** The home's rooms; without them, it may not read rooms. */
+  places?: Places;
+  settings?: AppSettings;
 }) {
   const listeners = new Set<LiveListener>();
   const app: AppInfo = {
@@ -108,17 +115,21 @@ function fakeClient(options: {
     settings: null,
     provides: { entities: [], widgets: [], roomSections: [], devicePages: [] },
   };
-  const call = vi.fn(async (action: string, _input: unknown) =>
-    action === "naturalLight.preview" ? options.preview : null,
+  const call = vi.fn(
+    async (action: string, _input: unknown): Promise<unknown> =>
+      action === "naturalLight.preview" ? options.preview : null,
   );
   const client: AppClient = {
     app,
     call: call as AppClient["call"],
-    places: vi.fn(),
+    places: vi.fn(async () => {
+      if (!options.places) throw new Error("It needs places.read");
+      return options.places;
+    }),
     devices: vi.fn(async () => options.devices),
     command: vi.fn(),
     entities: vi.fn(async () => options.entities),
-    settings: vi.fn(async () => ({})),
+    settings: vi.fn(async () => options.settings ?? {}),
     capturePresses: vi.fn(),
     ask: vi.fn(async () => true),
     subscribe(listener) {
@@ -150,7 +161,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function show(client: AppClient) {
+async function show(client: AppClient, openSettings = () => undefined) {
   const Page = ui.pages.main!;
   await act(async () => {
     root.render(
@@ -159,7 +170,7 @@ async function show(client: AppClient) {
           params={{}}
           open={() => undefined}
           back={() => undefined}
-          openSettings={() => undefined}
+          openSettings={openSettings}
         />
       </AppScope>,
     );
@@ -338,5 +349,124 @@ describe("natural light's page", () => {
       push({ type: "settings", app: "sanctum.natural-light", settings: curve }),
     );
     expect(line()).toBe(drawn);
+  });
+
+  describe("by room", () => {
+    const places: Places = {
+      home: {
+        name: "Home",
+        timeZone: "Europe/Zurich",
+        temperatureUnit: "celsius",
+      },
+      floors: [],
+      zones: [],
+      rooms: [
+        { id: "office", name: "Office", floorId: null },
+        { id: "hall", name: "Hall", floorId: null },
+        { id: "attic", name: "Attic", floorId: null },
+      ],
+    };
+    const devices = [
+      device("ceiling", "Ceiling", true, "office"),
+      device("desk", "Desk lamp", true, "office"),
+      device("hall", "Hall light", true, "hall"),
+      device("loose", "Loose lamp", true, null),
+    ];
+    const headings = () =>
+      [...container.querySelectorAll("h2")]
+        .map((each) => each.textContent)
+        .filter((text) => text !== "Today");
+    const roomSwitch = (room: string) =>
+      container.querySelector<HTMLButtonElement>(
+        `[aria-label="Lights in ${room} follow natural light"]`,
+      )!;
+
+    it("lists the lights by room in the home's order, those in no room last, with how many follow", async () => {
+      await show(
+        fakeClient({
+          devices,
+          entities: [target("ceiling", "following"), target("hall", "paused")],
+          preview: today,
+          places,
+        }).client,
+      );
+
+      expect(headings()).toEqual(["Office", "Hall", "No room"]);
+      expect(container.textContent).toContain("1 of 2 lights follows");
+      expect(container.textContent).toContain("Its light follows");
+      expect(container.textContent).toContain("Not following");
+      expect(roomSwitch("Office").getAttribute("aria-checked")).toBe("true");
+      expect(roomSwitch("No room").getAttribute("aria-checked")).toBe("false");
+      expect(rows()).toEqual([
+        "CeilingFollowing · 3,450 K at 92%",
+        "Desk lampNot following",
+        "Hall lightPaused until it’s switched offResume",
+        "Loose lampNot following",
+      ]);
+    });
+
+    it("has every light in a room follow or leaves them out with its switch", async () => {
+      const { client, call } = fakeClient({
+        devices,
+        entities: [target("ceiling", "following")],
+        preview: today,
+        places,
+      });
+      call.mockImplementation(async (action: string) =>
+        action === "naturalLight.followRoom" ? { failed: [] } : null,
+      );
+      await show(client);
+
+      await act(async () => roomSwitch("Office").click());
+      expect(call).toHaveBeenCalledWith("naturalLight.followRoom", {
+        placeId: "office",
+        follow: false,
+      });
+      await act(async () => roomSwitch("No room").click());
+      expect(call).toHaveBeenCalledWith("naturalLight.followRoom", {
+        placeId: null,
+        follow: true,
+      });
+    });
+
+    it("says so beside a room when a light couldn't be changed", async () => {
+      const { client, call } = fakeClient({
+        devices,
+        entities: [],
+        preview: today,
+        places,
+      });
+      call.mockImplementation(async (action: string) =>
+        action === "naturalLight.followRoom"
+          ? { failed: [{ device: "desk", capability: "light" }] }
+          : null,
+      );
+      await show(client);
+
+      await act(async () => roomSwitch("Office").click());
+      expect(container.textContent).toContain("Couldn’t change every light");
+    });
+  });
+
+  it("says first that natural light is off, with a link to its settings", async () => {
+    const openSettings = vi.fn();
+    await show(
+      fakeClient({
+        devices: [device("office", "Office light")],
+        entities: [target("office", "off")],
+        preview: today,
+        settings: { on: false },
+      }).client,
+      openSettings,
+    );
+
+    expect(container.textContent).toContain(
+      "Natural light is offLights keep the look they have and don’t change with the day.",
+    );
+    const link = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Open settings",
+    )!;
+    await act(async () => link.click());
+    expect(openSettings).toHaveBeenCalledTimes(1);
   });
 });

@@ -647,7 +647,11 @@ describe("natural light", () => {
     expect(manifest.permissions.map(({ id, needed }) => [id, needed])).toEqual([
       ["places.location", true],
       ["devices.control:light", true],
+      ["places.read", false],
     ]);
+    expect(
+      manifest.permissions.find(({ id }) => id === "places.read")?.startsOn,
+    ).toBe(true);
     expect(manifest.provides.entities.map((type) => type.id)).toEqual([
       "naturalLight.target",
     ]);
@@ -663,6 +667,7 @@ describe("natural light", () => {
     ]);
     expect(manifest.actions.map((action) => action.id)).toEqual([
       "naturalLight.follow",
+      "naturalLight.followRoom",
       "naturalLight.resume",
       "naturalLight.pause",
       "naturalLight.preview",

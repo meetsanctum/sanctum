@@ -1,4 +1,4 @@
-import type { DeviceInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, EntityInfo, Places } from "@meetsanctum/app-sdk";
 import { useAppClient, useAppSettings } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useState } from "react";
 
@@ -6,8 +6,9 @@ import type { Preview } from "../preview.js";
 import type { TargetState } from "../target.js";
 
 // What natural light's page shows: the lights that take a colour
-// temperature, where each that follows the curve stands (its own
-// naturalLight.target entities), and today's curve. Devices and entities are
+// temperature, by room once it may read the home's rooms, where each that
+// follows the curve stands (its own naturalLight.target entities), whether
+// natural light is on, and today's curve. Devices, entities and rooms are
 // read once and then followed live; the curve is read again every minute,
 // and at once when its settings change.
 
@@ -15,16 +16,30 @@ export type LightRow = {
   device: string;
   capability: string;
   name: string;
+  roomId: string | null;
   /** Where it stands, while it follows the curve. */
   target: TargetState | null;
+};
+
+/** A room's lights, or those in no room (`id` null). */
+export type RoomLights = {
+  id: string | null;
+  name: string;
+  lights: LightRow[];
 };
 
 export type NaturalLightView = {
   loaded: boolean;
   lights: LightRow[];
+  /** The lights by room, in the home's order; null while it may not read rooms. */
+  rooms: RoomLights[] | null;
+  /** Whether natural light is on, as its settings say. */
+  isOn: boolean;
   /** Today's curve; null until the home has a location, undefined while loading. */
   preview: Preview | null | undefined;
   follow(light: LightRow, follow: boolean): Promise<void>;
+  /** Every light in a room follows or is left out; answers those it couldn't change. */
+  followRoom(room: RoomLights, follow: boolean): Promise<number>;
   resume(light: LightRow): Promise<void>;
 };
 
@@ -35,6 +50,8 @@ export function useNaturalLight(): NaturalLightView {
   const [devices, setDevices] = useState<DeviceInfo[]>();
   const [entities, setEntities] = useState<EntityInfo[]>();
   const [preview, setPreview] = useState<Preview | null>();
+  // Null when it may not read the home's rooms, or they couldn't be read.
+  const [places, setPlaces] = useState<Places | null>();
   // Followed live, so a changed curve shows at once.
   const settings = useAppSettings();
 
@@ -65,10 +82,23 @@ export function useNaturalLight(): NaturalLightView {
         // The shell asks again when the connection is back.
       }
     };
+    const loadPlaces = async () => {
+      try {
+        const next = await client.places();
+        if (isCurrent) setPlaces(next);
+      } catch {
+        if (isCurrent) setPlaces(null);
+      }
+    };
     const stop = client.subscribe({
-      refresh: () => void load(),
+      refresh: () => {
+        void load();
+        void loadPlaces();
+      },
       message(message) {
-        if (message.type === "device") {
+        if (message.type === "places") {
+          setPlaces(message.places);
+        } else if (message.type === "device") {
           revision += 1;
           setDevices((list) => {
             const others = (list ?? []).filter(
@@ -88,6 +118,7 @@ export function useNaturalLight(): NaturalLightView {
       },
     });
     void load();
+    void loadPlaces();
     return () => {
       isCurrent = false;
       stop();
@@ -128,6 +159,7 @@ export function useNaturalLight(): NaturalLightView {
                 device: device.id,
                 capability: capability.id,
                 name: device.name,
+                roomId: device.roomId,
                 target,
               },
             ]
@@ -135,6 +167,7 @@ export function useNaturalLight(): NaturalLightView {
       }),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
+  const rooms = places ? roomsOf(places, lights) : null;
 
   const follow = useCallback(
     async (light: LightRow, follow: boolean) => {
@@ -143,6 +176,16 @@ export function useNaturalLight(): NaturalLightView {
         capability: light.capability,
         follow,
       });
+    },
+    [client],
+  );
+  const followRoom = useCallback(
+    async (room: RoomLights, follow: boolean) => {
+      const answer = (await client.call("naturalLight.followRoom", {
+        placeId: room.id,
+        follow,
+      })) as { failed: unknown[] };
+      return answer.failed.length;
     },
     [client],
   );
@@ -157,12 +200,38 @@ export function useNaturalLight(): NaturalLightView {
   );
 
   return {
-    loaded: devices !== undefined && entities !== undefined,
+    loaded:
+      devices !== undefined && entities !== undefined && places !== undefined,
     lights,
+    rooms,
+    isOn: settings?.on !== false,
     preview,
     follow,
+    followRoom,
     resume,
   };
+}
+
+/**
+ * The lights by room, in the home's order, then those in no room; a room
+ * with none is left out. A light whose room the home no longer has counts
+ * as in no room.
+ */
+function roomsOf(places: Places, lights: readonly LightRow[]): RoomLights[] {
+  const known = new Set(places.rooms.map((room) => room.id));
+  const groups: RoomLights[] = places.rooms.map((room) => ({
+    id: room.id,
+    name: room.name,
+    lights: lights.filter((light) => light.roomId === room.id),
+  }));
+  groups.push({
+    id: null,
+    name: "No room",
+    lights: lights.filter(
+      (light) => light.roomId === null || !known.has(light.roomId),
+    ),
+  });
+  return groups.filter((group) => group.lights.length > 0);
 }
 
 /**
