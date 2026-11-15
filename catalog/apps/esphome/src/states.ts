@@ -13,6 +13,7 @@ import { colorModesOf, measureOf, type Mapped } from "./entities.js";
 // and colour as fractions and colour modes there, percentages, mireds and
 // hue there; readings in each measure's standard unit.
 
+const whiteBit = 4;
 const temperatureBits = 8 | 16;
 const colorBit = 32;
 
@@ -76,9 +77,12 @@ export function lightStateOf(
     state.brightness = clamp(Math.round(event.brightness * 100), 0, 100);
   }
   const mode = event.colorMode ?? 0;
+  // A mode with white beside colour shines colour only while its colour
+  // channel is up: its last colour stays set while it shines white.
   const isColor =
     (mode & colorBit) !== 0 &&
-    ((mode & temperatureBits) === 0 || (event.colorBrightness ?? 0) > 0);
+    ((mode & (temperatureBits | whiteBit)) === 0 ||
+      (event.colorBrightness ?? 0) > 0);
   if (features.color && isColor) {
     const rgb = [event.red ?? 0, event.green ?? 0, event.blue ?? 0] as const;
     if (
@@ -180,14 +184,17 @@ export function stateOf(
   if (event.type === "light") return lightStateOf(mapped, event);
   if (event.type === "switch") return { on: event.state === true };
   if (event.type === "sensor") {
-    if (event.missingState || typeof event.state !== "number") return null;
-    if (!Number.isFinite(event.state)) return null;
+    if (event.missingState) return null;
+    // A reading of zero comes with no value at all, as a protocol buffer
+    // leaves out its defaults.
+    const reading = event.state ?? 0;
+    if (typeof reading !== "number" || !Number.isFinite(reading)) return null;
     const unit =
       entity.type === "sensor" ? (entity.unitOfMeasurement ?? "") : "";
     const value =
       measureOf(entity) === "temperature"
-        ? celsiusOf(event.state, unit)
-        : Math.round(event.state * 10) / 10;
+        ? celsiusOf(reading, unit)
+        : Math.round(reading * 10) / 10;
     return { value };
   }
   if (event.type === "binary_sensor") {

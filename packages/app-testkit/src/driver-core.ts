@@ -129,6 +129,7 @@ export function createDriverCore(
       roomId: null,
       driverName: device.name,
       type: (device.type ?? "unknown") as DeviceType,
+      shownAs: null,
       availability: availability.get(device.key) ?? "unknown",
       lastSeenAt: null,
       capabilities: device.capabilities.map((each) => {
@@ -150,14 +151,29 @@ export function createDriverCore(
         remainingSeconds: null,
         problem: null,
         checkedAt: null,
+        startedAt: null,
+        endedAt: null,
       },
       probe: device.probe,
-      battery: null,
-      batteryLow: null,
+      battery: latestReport(device.key, "battery") ?? null,
+      batteryLow: latestReport(device.key, "batteryLow") ?? null,
       leftAt: null,
       problem: problems.get(device.key) ?? null,
       key: device.key,
-    } as DeviceInfo;
+    };
+  }
+
+  // The last a driver said of a device's battery, whatever came after.
+  function latestReport<Field extends "battery" | "batteryLow">(
+    key: string,
+    field: Field,
+  ): Reported[Field] | undefined {
+    for (const report of [...reports].reverse()) {
+      if (report.key === key && report[field] !== undefined) {
+        return report[field];
+      }
+    }
+    return undefined;
   }
 
   function latestOf(key: string, capability: string) {

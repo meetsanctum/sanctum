@@ -52,6 +52,8 @@ type Owned = {
   problem: string | null;
   sleeps: boolean;
   setup: Promise<void>;
+  // Saying its problem again, after the core didn't take it.
+  telling?: ReturnType<typeof setTimeout>;
 };
 
 /** What a session says the device is, for the core's record. */
@@ -123,8 +125,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   function connected(owned: Owned, session: Session) {
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
+    // Its latest session, open or closed since with nothing in its place.
     const current = () =>
-      devices.get(owned.mac) === owned && owned.connection.session === session;
+      devices.get(owned.mac) === owned &&
+      (owned.connection.session ?? session) === session;
     // An old session finishes its writes before a new one takes over, and
     // removal waits for those writes before the core forgets the device.
     const setup = owned.setup.then(async () => {
@@ -241,9 +245,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         },
         halted: (halt) => {
           owned.problem = halt;
-          ctx.devices
-            .problem({ key: mac, problem: halt })
-            .catch(() => undefined);
+          tell(owned, halt);
         },
       },
     });
@@ -253,9 +255,24 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return owned;
   }
 
+  // Says a device's problem until the core takes it, so it never waits for
+  // Repair with nothing saying so, while it's still that device's problem.
+  function tell(owned: Owned, problem: string, attempt = 0) {
+    clearTimeout(owned.telling);
+    ctx.devices.problem({ key: owned.mac, problem }).catch(() => {
+      if (stopped || devices.get(owned.mac) !== owned) return;
+      if (owned.problem !== problem) return;
+      owned.telling = setTimeout(
+        () => tell(owned, problem, attempt + 1),
+        Math.min(timings.firstPauseMs * 2 ** attempt, timings.longestPauseMs),
+      );
+    });
+  }
+
   function forget(mac: string) {
     const owned = devices.get(mac);
     if (!owned) return;
+    clearTimeout(owned.telling);
     devices.delete(mac);
     owned.connection.stop();
     return owned.setup;

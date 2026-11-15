@@ -64,7 +64,9 @@ function varint(value: number) {
 
 type Spec = { fieldNumber: number; valueType: string };
 
+// As ESPHome does, a field at its default (zero, false, empty) is left out.
 function field(spec: Spec, value: FieldValue): Buffer {
+  if (value === 0 || value === false || value === "") return Buffer.alloc(0);
   const tag = (wire: number) => varint((spec.fieldNumber << 3) | wire);
   if (spec.valueType === "float") {
     const out = Buffer.alloc(4);

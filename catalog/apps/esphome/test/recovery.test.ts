@@ -248,7 +248,9 @@ it("keeps a new session's facts when an older setup was still finishing", async 
     device.options.version = "2026.11.0";
     await device.listen();
     await announce(core, device);
-    await expect.poll(() => device.connections).toBe(2);
+    // The new session is checked once it follows the device's states, and
+    // its setup is then the one waiting.
+    await device.followed();
     await new Promise((done) => setTimeout(done, 20));
     expect(writes.save).toHaveBeenCalledTimes(1);
   } finally {
@@ -300,4 +302,61 @@ it("waits for the new session's mapping before accepting commands", async () => 
     colorMode: ColorMode.RGB_COLD_WARM_WHITE,
     colorTemperature: 300,
   });
+});
+
+it("hears what a device said as it closed while it was being taken in, its presses too", async () => {
+  const button = await EmulatedDevice.start({
+    name: "button",
+    mac: nextMac(),
+    psk: newKey(),
+    ...entitiesOf("button"),
+  });
+  try {
+    await announce(core, button);
+    let release!: () => void;
+    writes.save.mockImplementationOnce(
+      () =>
+        new Promise<void>((done) => {
+          release = done;
+        }),
+    );
+    const key = await add(core, button);
+    await expect.poll(() => writes.save.mock.calls.length).toBe(1);
+    await button.followed();
+    button.fire(106, "single");
+    // The press reaches the session, which holds it while it's taken in.
+    await new Promise((done) => setTimeout(done, 50));
+    await button.unplug();
+    // Its connection has seen it go before what it said is taken in.
+    await core.until(() => core.availability.get(key) === "offline", "gone");
+    release();
+
+    await core.until(
+      () => core.presses.some((each) => each.key === key),
+      "the press",
+    );
+    expect(core.presses).toEqual([
+      { key, capability: "event-button", action: "single" },
+    ]);
+  } finally {
+    await button.stop();
+  }
+});
+
+it("says a device's problem again when the core didn't take it", async () => {
+  const key = await add(core, device);
+  await core.until(() => core.availability.get(key) === "online", "online");
+  const problem = vi.spyOn(context.devices, "problem");
+  problem.mockRejectedValueOnce(new Error("The core did not answer"));
+
+  await device.unplug();
+  device.psk = newKey();
+  await device.listen();
+
+  await core.until(
+    () => core.problems.get(key)?.id === "keyMismatch",
+    "the problem said at last",
+  );
+  expect(problem).toHaveBeenCalledTimes(2);
+  expect(problem).toHaveBeenLastCalledWith({ key, problem: "keyMismatch" });
 });

@@ -57,6 +57,14 @@ export function entitiesOf(kind: CapabilityKind): {
   entities: EmulatedEntity[];
   states: EmulatedOptions["states"];
 } {
+  // Its own copy, which a test may change.
+  return structuredClone(fixtureOf(kind));
+}
+
+function fixtureOf(kind: CapabilityKind): {
+  entities: EmulatedEntity[];
+  states: EmulatedOptions["states"];
+} {
   switch (kind) {
     case "light":
       return {

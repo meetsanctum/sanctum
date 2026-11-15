@@ -267,6 +267,37 @@ describe("states and commands", () => {
     },
   );
 
+  it("read a light with white beside colour as colour only while its colour channel shines", () => {
+    const [rgbw] = mapEntities([
+      entity({ type: "light", supportedColorModes: [ColorMode.RGB_WHITE] }),
+    ]).mapped;
+    const shining = (colorBrightness: number | undefined) =>
+      stateOf(rgbw!, {
+        type: "light",
+        key: 1,
+        entity: "Part",
+        state: true,
+        brightness: 1,
+        colorMode: ColorMode.RGB_WHITE,
+        // Its last colour, red, stays set while it shines white.
+        red: 1,
+        green: 0,
+        blue: 0,
+        white: colorBrightness ? 0 : 1,
+        colorBrightness,
+      } as never);
+
+    // A colour channel at zero comes with no value at all.
+    expect(shining(undefined)).toEqual({ on: true, brightness: 100 });
+    expect(shining(1)).toEqual({
+      on: true,
+      brightness: 100,
+      colorMode: "color",
+      hue: 0,
+      saturation: 100,
+    });
+  });
+
   it("read a temperature in degrees Celsius whatever unit the device says it in", () => {
     const [fahrenheit] = mapEntities([
       entity({

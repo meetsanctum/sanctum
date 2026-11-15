@@ -371,9 +371,17 @@ describe("its connection", () => {
     );
 
     await device.unplug();
-    await wait(timings.offlineMs * 2);
+    await home.core.until(
+      () => home.core.availability.get(key) === "unknown",
+      "out of reach",
+      timings.offlineMs * 10,
+    );
 
-    expect(home.core.availability.get(key)).toBe("unknown");
+    expect(
+      home.core.reports.some(
+        (each) => each.key === key && each.availability === "offline",
+      ),
+    ).toBe(false);
   });
 
   it("comes back after a restart from the core's record and the key kept", async () => {
@@ -399,6 +407,36 @@ describe("its connection", () => {
       .toBe(true);
     await home.core.until(() => device.commands.length === 1, "the command");
     expect(device.connections).toBe(2);
+  });
+});
+
+describe("what it reads", () => {
+  it("takes a reading of zero, which the device sends with no value", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      entities: [
+        {
+          type: "sensor",
+          key: 110,
+          objectId: "light_level",
+          name: "Light level",
+          fields: { deviceClass: "illuminance", unitOfMeasurement: "lx" },
+        },
+      ],
+      states: { 110: { state: 10 } },
+    });
+    const key = await add(home.core, device);
+    await home.core.until(
+      () => home.core.latest(key, "sensor-light_level")?.value === 10,
+      "10 lx",
+    );
+
+    device.setState(110, { state: 0 });
+
+    await home.core.until(
+      () => home.core.latest(key, "sensor-light_level")?.value === 0,
+      "0 lx",
+    );
   });
 });
 

@@ -235,10 +235,17 @@ export function createConnection(options: {
     void events
       .connected(next)
       .then(() => {
-        if (session !== next) return;
-        pause = timings.firstPauseMs;
-        say(true);
-        next.listen((event) => events.state(event));
+        if (session === next) {
+          pause = timings.firstPauseMs;
+          say(true);
+          next.listen((event) => events.state(event));
+        } else if (session === null && !stopped) {
+          // It closed while it was taken in, as a device that sleeps may,
+          // and nothing took its place: what it said meanwhile, presses
+          // too, still counts. A session that comes after is taken in only
+          // after this one, so it's heard after it.
+          next.listen((event) => events.state(event));
+        }
       })
       .catch(() => {
         if (session !== next) return;
