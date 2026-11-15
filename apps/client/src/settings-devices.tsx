@@ -6,6 +6,7 @@ import {
   type AppInfo,
   type CapabilityInfo,
   type DeviceInfo,
+  type DeviceType,
   type FirmwareState,
   type HistoryKept,
   type MotionCommand,
@@ -39,7 +40,12 @@ import { DeviceMenu } from "./device-menu";
 import { EditDevice, keepHistory, type Editing } from "./edit-device";
 import { foundHint, useAdding } from "./found-devices";
 import { lowBatteryText, quietText } from "./maintenance";
-import { DeviceIcon, roomName, updateDevice } from "./device-parts";
+import {
+  deviceProblem,
+  DeviceIcon,
+  roomName,
+  updateDevice,
+} from "./device-parts";
 import { MotionSettings } from "./motion-settings";
 
 // Settings → Devices, where the household manages its hardware: every device
@@ -139,6 +145,9 @@ export function DevicesSection(props: {
   const [announcement, setAnnouncement] = useState("");
   // Live device messages received during a request take precedence over its response.
   const liveDevices = useRef(new Map<string, DeviceInfo | null>());
+  const showAsAttempts = useRef(new Map<string, symbol>());
+  // Each device's latest Show as save, whatever has arrived live since.
+  const showAsLatest = useRef(new Map<string, symbol>());
   const now = useMinuteClock();
   // Each remote's press of the last few seconds, by device.
   const [pressed, setPressed] = useState<Record<string, string>>({});
@@ -265,6 +274,7 @@ export function DevicesSection(props: {
           if (pending.current) pending.current.rooms = message.places.rooms;
           setRooms(message.places.rooms);
         } else if (message.type === "device") {
+          showAsAttempts.current.delete(message.id);
           liveDevices.current.set(message.id, message.device);
           update((current) => {
             const others = current.filter((each) => each.id !== message.id);
@@ -285,6 +295,34 @@ export function DevicesSection(props: {
     setResults(({ [id]: _, ...rest }) =>
       result ? { ...rest, [id]: result } : rest,
     );
+
+  // A newer choice or live device takes precedence over a late save reply.
+  // A save that fails says so on the device's line, until the next try.
+  const saveShowAs = async (device: DeviceInfo, shownAs: DeviceType | null) => {
+    const attempt = Symbol();
+    showAsAttempts.current.set(device.id, attempt);
+    showAsLatest.current.set(device.id, attempt);
+    if (results[device.id]?.kind === "problem") found(device.id);
+    try {
+      const response = await updateDevice(device.id, { shownAs });
+      if (showAsAttempts.current.get(device.id) === attempt) changed(response);
+    } catch (error) {
+      // Only the latest choice says how it went: an earlier one failing
+      // after it says nothing.
+      if (showAsLatest.current.get(device.id) === attempt) {
+        const text = deviceProblem(error);
+        found(device.id, { kind: "problem", text });
+        setAnnouncement(text);
+      }
+    } finally {
+      if (showAsAttempts.current.get(device.id) === attempt) {
+        showAsAttempts.current.delete(device.id);
+      }
+      if (showAsLatest.current.get(device.id) === attempt) {
+        showAsLatest.current.delete(device.id);
+      }
+    }
+  };
 
   // An update that ended while this page was open is announced, and how
   // it ended takes the place of what a check found before.
@@ -505,6 +543,7 @@ export function DevicesSection(props: {
                         .then(changed)
                         .catch(() => undefined)
                     }
+                    onShowAs={(shownAs) => void saveShowAs(device, shownAs)}
                     onMotion={() => setTuning(device.id)}
                     onCheck={() => void check(device)}
                     onProbe={() => void probe(device)}

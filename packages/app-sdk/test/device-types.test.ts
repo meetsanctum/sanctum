@@ -4,6 +4,8 @@ import {
   capabilityKinds,
   deviceTypeOf,
   deviceTypes,
+  ownTypeOf,
+  showAsChoices,
   shownAsOf,
   shownType,
 } from "../src/index.js";
@@ -112,5 +114,27 @@ describe("what a device may be shown as", () => {
     expect(shownType("contact", "gate")).toBe("contact");
     expect(shownType("unknown", "door")).toBe("unknown");
     expect(shownType("light", "door")).toBe("light");
+  });
+
+  it("has its own type found again from what it is shown as", () => {
+    expect(ownTypeOf("contact", null)).toBe("contact");
+    expect(ownTypeOf("door", "door")).toBe("contact");
+    expect(ownTypeOf("window", "window")).toBe("contact");
+    expect(ownTypeOf("light", null)).toBe("light");
+  });
+
+  it("offers a device's own type first, then what it lists, and nothing where it lists none", () => {
+    expect(showAsChoices("contact", null)).toEqual([
+      "contact",
+      "door",
+      "window",
+    ]);
+    expect(showAsChoices("window", "window")).toEqual([
+      "contact",
+      "door",
+      "window",
+    ]);
+    expect(showAsChoices("light", null)).toEqual([]);
+    expect(showAsChoices("unknown", null)).toEqual([]);
   });
 });

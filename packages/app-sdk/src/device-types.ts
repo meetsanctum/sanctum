@@ -135,3 +135,29 @@ export function shownType(
 ): DeviceType {
   return shownAsOf(own).find((each) => each === chosen) ?? own;
 }
+
+/**
+ * What a device is of itself, from what it is shown as: its type where the
+ * household chose none (`shownAs` null), and otherwise the one type that
+ * offers the chosen one.
+ */
+export function ownTypeOf(
+  type: DeviceType,
+  shownAs: DeviceType | null,
+): DeviceType {
+  if (shownAs === null) return type;
+  return deviceTypes.find((each) => each.showAs?.includes(shownAs))?.id ?? type;
+}
+
+/**
+ * What the household may show a device as, its own type first; nothing for
+ * a device whose own type lists no other.
+ */
+export function showAsChoices(
+  type: DeviceType,
+  shownAs: DeviceType | null,
+): DeviceType[] {
+  const own = ownTypeOf(type, shownAs);
+  const others = shownAsOf(own);
+  return others.length > 0 ? [own, ...others] : [];
+}
