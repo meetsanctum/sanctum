@@ -5,6 +5,7 @@ import {
   deviceReport,
   historyFields,
   isCapabilityKind,
+  shownAsOf,
   type Actor,
   type CapabilityInfo,
   type CapabilityKind,
@@ -23,6 +24,7 @@ import type { Principal } from "../auth/clients.js";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { createDeviceLog, type Who } from "./activity.js";
+import { ownDeviceType } from "./classification.js";
 import { createCommandTracking } from "./commands.js";
 import { unknownFirmware } from "./firmware.js";
 import { createNaming } from "./naming.js";
@@ -132,6 +134,23 @@ export function createDevices(
     write: (device, capability, state, setBy) =>
       changing(device, () => writeSync(device, capability, state, setBy)),
   });
+
+  // Whether the household may show a device as this type: its own type
+  // lists it.
+  function mayBeShownAs(id: string, type: string) {
+    const device = db.select().from(devices).where(eq(devices.id, id)).get();
+    if (!device) {
+      throw new ActionCallError("not_found");
+    }
+    const capabilities = db
+      .select({ kind: deviceCapabilities.kind })
+      .from(deviceCapabilities)
+      .where(eq(deviceCapabilities.deviceId, id))
+      .all();
+    return shownAsOf(ownDeviceType({ ...device, capabilities })).some(
+      (each) => each === type,
+    );
+  }
 
   function load(id: string): DeviceInfo | null {
     const device = db.select().from(devices).where(eq(devices.id, id)).get();
@@ -668,7 +687,8 @@ export function createDevices(
       }
     },
 
-    // What the household decides about a device: its name and its room.
+    // What the household decides about a device: its name, its room and
+    // what it is shown as.
     update(by: ChangedBy, input: unknown): DeviceInfo {
       const parsed = deviceChanges.safeParse(input);
       if (!parsed.success) {
@@ -688,6 +708,9 @@ export function createDevices(
           if (changes.roomId && !places.hasRoom(changes.roomId)) {
             throw new ActionCallError("not_found");
           }
+          if (changes.shownAs && !mayBeShownAs(id, changes.shownAs)) {
+            throw new ActionCallError("invalid_request");
+          }
           const updated = db
             .update(devices)
             .set({ ...changes, ...naming, updatedAt: now() })
@@ -698,8 +721,8 @@ export function createDevices(
             throw new ActionCallError("not_found");
           }
           rename(id);
-          // What changed: its name, which removed entries are named by, or
-          // its room.
+          // What changed: its name, which removed entries are named by,
+          // its room, or what it is shown as, with what it then is.
           record({
             action: "device.update",
             outcome: "ok",
@@ -710,6 +733,9 @@ export function createDevices(
               ...(name === undefined ? {} : { name: load(id)!.name }),
               ...("roomId" in changes
                 ? { roomId: changes.roomId ?? null }
+                : {}),
+              ...("shownAs" in changes
+                ? { shownAs: load(id)!.shownAs, type: load(id)!.type }
                 : {}),
             },
           });

@@ -66,6 +66,7 @@ export function deviceInfo(
   const capabilities = stored.filter((capability) =>
     isCapabilityKind(capability.kind),
   );
+  const type = deviceType({ ...device, capabilities });
   return {
     id: device.id,
     name: device.name ?? device.driverName,
@@ -74,7 +75,9 @@ export function deviceInfo(
     model: device.model,
     roomId: device.roomId,
     driverName: device.driverName,
-    type: deviceType({ ...device, capabilities }),
+    type,
+    // Only a choice in effect: one that no longer fits is kept, not served.
+    shownAs: type === device.shownAs ? type : null,
     availability: device.availability,
     lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
     firmware: device.firmware,

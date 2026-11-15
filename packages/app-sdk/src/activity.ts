@@ -103,7 +103,8 @@ export type ActivityCaused = {
  * - sanctum.start: `version`, `stoppedAt` if it said it stopped, and
  *   `unexpected` if it stopped without saying;
  * - sanctum.space.free: `freed`, the bytes the disk gained, or null;
- * - device.update: `name` and `roomId`, whichever changed;
+ * - device.update: `name`, `roomId` and `shownAs` (with the `type` it then
+ *   is), whichever changed;
  * - a removal: `name`, what it was called;
  * - the manager's (source `manager`): update.end with `version`, `from`
  *   and `outcome`; service.start, .stop, .restart, .fail and .wait with

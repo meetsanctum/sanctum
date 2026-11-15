@@ -56,6 +56,26 @@ describe("an entry's words", () => {
     ).toMatchObject({ title: "Didn't stop", problem: true });
   });
 
+  it("says what the household shows a device as, by what it then is", () => {
+    const device = { kind: "device" as const };
+    const shown = (detail: Record<string, unknown>) =>
+      activityWords(
+        entry({ action: "device.update", who: device, detail }),
+        "device",
+      ).title;
+    expect(shown({ shownAs: "door", type: "door" })).toBe("Shown as a door");
+    expect(shown({ shownAs: "window", type: "window" })).toBe(
+      "Shown as a window",
+    );
+    expect(shown({ shownAs: null, type: "contact" })).toBe(
+      "Shown as a contact sensor",
+    );
+    // A type this build does not know.
+    expect(shown({ shownAs: "gate", type: "gate" })).toBe(
+      "Shown as another type",
+    );
+  });
+
   it("says a device on a battery went quiet, its battery fell low and it had a new one", () => {
     const device = { kind: "device" as const };
     expect(

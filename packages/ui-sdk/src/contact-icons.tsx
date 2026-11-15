@@ -19,3 +19,15 @@ export const ContactOpen = createLucideIcon("contact-open", [
     { x: "18", y: "7", width: "4", height: "10", rx: "1.5", key: "magnet" },
   ],
 ]);
+
+// A window, which Lucide has none for either: its frame with four panes,
+// on its sill, beside Lucide's door on its threshold.
+export const WindowClosed = createLucideIcon("window-closed", [
+  [
+    "rect",
+    { x: "4", y: "3", width: "16", height: "14", rx: "2", key: "frame" },
+  ],
+  ["path", { d: "M12 3v14", key: "mullion" }],
+  ["path", { d: "M4 10h16", key: "transom" }],
+  ["path", { d: "M2 21h20", key: "sill" }],
+]);

@@ -40,6 +40,7 @@ function device(id: string, name: string, roomId: string | null) {
     probe: false,
     battery: null,
     batteryLow: null,
+    shownAs: null,
     leftAt: null,
     problem: null,
     capabilities: [],

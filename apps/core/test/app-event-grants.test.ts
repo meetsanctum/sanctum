@@ -33,6 +33,7 @@ const device: DeviceInfo = {
   probe: false,
   battery: null,
   batteryLow: null,
+  shownAs: null,
   leftAt: null,
   problem: null,
   capabilities: [
