@@ -1,7 +1,8 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { countdown, stageText } from "../src/add-devices";
+import { countdown } from "../src/add-devices";
+import { stageText } from "../src/add-devices-rows";
 import { deviceDetail, deviceStatus } from "../src/settings-devices";
 import { light, now, office, remote } from "./settings-devices-fixtures";
 

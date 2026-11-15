@@ -8,13 +8,17 @@ import { zigbee2mqttBaseTopic, zigbee2mqttSpec } from "./zigbee2mqtt.js";
 // an app asks for with a `services:<name>` permission. The manager declares
 // what each one is; an app only names it.
 
+/**
+ * Why a service cannot run yet. `neverSetUp` where it waits for what the
+ * home has never had, as an adapter nobody has plugged in: no fault.
+ */
+export type NotYet = { problem: string; neverSetUp?: true };
+
 export type SpecContext = {
   state: ServicesState;
   mqttClients: MqttClient[];
   // The coordinator to use, or why there is none yet.
-  zigbeeCoordinator: () => Promise<
-    { coordinator: ZigbeeCoordinator } | { problem: string }
-  >;
+  zigbeeCoordinator: () => Promise<{ coordinator: ZigbeeCoordinator } | NotYet>;
 };
 
 export type ServiceDefinition = {
@@ -31,9 +35,7 @@ export type ServiceDefinition = {
   // What an app needs to know to use the service, besides its broker account.
   connection?: () => Record<string, unknown>;
   // The container to run, or why it cannot run yet.
-  spec: (
-    context: SpecContext,
-  ) => Promise<ServiceSpec | { problem: string }> | ServiceSpec;
+  spec: (context: SpecContext) => Promise<ServiceSpec | NotYet> | ServiceSpec;
 };
 
 // In the order they start.

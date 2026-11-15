@@ -506,6 +506,31 @@ describe("the words", () => {
     );
   });
 
+  it("says a service the home never set up plainly, under the verdict, and not as a problem", async () => {
+    answer = async () => ({
+      ...piStatus(),
+      notSetUp: [
+        {
+          service: "zigbee2mqtt",
+          problem: "No Zigbee coordinator is plugged in",
+          apps: ["sanctum.zigbee"],
+        },
+      ],
+    });
+    await render();
+
+    const rows = [...container.querySelectorAll("ul[role=status] > li")].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toEqual([
+      "Everything's runningStorage, memory, temperature and power are fine",
+      "Zigbee isn't set upNo Zigbee adapter is plugged in. Plug it in, and Zigbee starts by itself",
+    ]);
+    expect(
+      container.querySelector("ul[role=status] .text-destructive"),
+    ).toBeNull();
+  });
+
   it("says each problem and what to do, in the home's words", () => {
     const appName = (id: string) => (id === "sanctum.zigbee" ? "Zigbee" : id);
     const now = new Date("2026-11-02T19:41:00Z");

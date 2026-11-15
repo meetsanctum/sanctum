@@ -80,6 +80,17 @@ export type SystemStatus = {
     clock: boolean | null;
   } | null;
   problems: HostProblem[];
+  // The services that wait for what the home has never had, as Zigbee's
+  // bridge for an adapter nobody has plugged in: a home that does not use
+  // them, so no problem, and said plainly where the host's status is read.
+  notSetUp: ServiceNotSetUp[];
+};
+
+export type ServiceNotSetUp = {
+  service: string;
+  // Why it waits, in the manager's words.
+  problem: string | null;
+  apps: string[];
 };
 
 // What an update needs free: the new images, and a copy of the home's data.
@@ -124,6 +135,18 @@ async function dataSizes(dataDir: string, appIds: readonly string[]) {
   return { home, apps };
 }
 
+const isNotSetUp = (service: HostStatus["services"][number]) =>
+  service.state === "waiting" && service.neverSetUp === true;
+
+/** The services that wait for what the home has never had (SystemStatus.notSetUp). */
+export function notSetUpOf(host: HostStatus): ServiceNotSetUp[] {
+  return host.services.filter(isNotSetUp).map((service) => ({
+    service: service.name,
+    problem: service.problem ?? null,
+    apps: service.apps,
+  }));
+}
+
 export function problemsOf(host: HostStatus, now: Date): HostProblem[] {
   const problems: HostProblem[] = [];
   const lastLowAt = host.power?.lastLowAt;
@@ -150,6 +173,8 @@ export function problemsOf(host: HostStatus, now: Date): HostProblem[] {
     });
   }
   for (const service of host.services) {
+    // One that waits for what the home has never had is no problem.
+    if (isNotSetUp(service)) continue;
     if (service.state === "failed" || service.state === "waiting") {
       problems.push({
         kind: "service",
@@ -294,6 +319,7 @@ export function createStatus(options: {
             channel: null,
             host: null,
             problems: [],
+            notSetUp: [],
           };
         }
         throw error;
@@ -328,6 +354,7 @@ export function createStatus(options: {
           clock: host.clock,
         },
         problems: problemsOf(host, checkedAt),
+        notSetUp: notSetUpOf(host),
       };
     },
 

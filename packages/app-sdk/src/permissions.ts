@@ -169,6 +169,12 @@ export type AppRun = {
   isFirstStart?: true;
   /** What it waits for. */
   waitingFor?: string;
+  /**
+   * Its own start said what it waits for, as one whose service isn't there
+   * yet does. Without it the wait is the core's: for its container, its data
+   * or an update's turn.
+   */
+  ownWait?: true;
   /** How often it has failed lately, and what stopped it last. */
   failures?: number;
   lastFailure?: AppFailure;

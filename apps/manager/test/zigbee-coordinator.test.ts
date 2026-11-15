@@ -120,9 +120,10 @@ describe("choosing the Zigbee coordinator", () => {
   const candidate = (path: string) =>
     createZigbeeCoordinatorCandidate(path, "/dev/ttyACM0");
 
-  it("waits while none is plugged in", () => {
+  it("waits while none is plugged in, which a home that never had one is not at fault for", () => {
     expect(chooseZigbeeCoordinator(undefined, [])).toEqual({
       problem: "No Zigbee coordinator is plugged in",
+      neverSetUp: true,
     });
   });
 

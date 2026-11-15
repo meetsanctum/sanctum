@@ -687,6 +687,7 @@ export function Home(props: {
                           <HomeStatus
                             devices={devices}
                             problems={shownStatus?.problems ?? []}
+                            notSetUp={shownStatus?.notSetUp}
                             apps={installed}
                             openAttention={openSettings}
                             openStatus={() =>

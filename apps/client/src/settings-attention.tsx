@@ -204,7 +204,7 @@ export function NeedsAttentionSection(props: {
     props.status && props.status.problems.length > 0 && props.onOpenStatus
       ? props.status
       : null;
-  const apps = appsNotRunning(props.apps);
+  const apps = appsNotRunning(props.apps, props.status?.notSetUp);
   if (rows.length === 0 && !sanctum && apps.length === 0) {
     // The last row's outcome is still heard once the section has gone.
     return announcement ? (
