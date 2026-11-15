@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { deviceEntries } from "../src/devices.js";
 import { capabilityMappings } from "../src/exposes.js";
-import { batteryOf, sensorState, type SensorMapping } from "../src/sensors.js";
+import {
+  batteryLowOf,
+  batteryOf,
+  sensorState,
+  type SensorMapping,
+} from "../src/sensors.js";
 import type { ZigbeeExpose } from "../src/types.js";
 import { aqaraMotionSensor } from "./motion-sensors.js";
 import { climateExposes, zigbeeDevice } from "./pretend-bridge.js";
@@ -213,5 +218,12 @@ describe("a device's battery", () => {
     expect(batteryOf({ battery: 64.5 })).toBe(65);
     expect(batteryOf({ temperature: 21 })).toBeUndefined();
     expect(batteryOf({ battery: 180 })).toBeUndefined();
+  });
+
+  it("is low or not as its message's battery_low says, and unsaid without one", () => {
+    expect(batteryLowOf({ battery_low: true })).toBe(true);
+    expect(batteryLowOf({ battery: 63, battery_low: false })).toBe(false);
+    expect(batteryLowOf({ battery: 4 })).toBeUndefined();
+    expect(batteryLowOf({ battery_low: "true" })).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import {
   historyFields,
   lowBattery,
+  lowCharge,
   maintenanceOf,
   type AppInfo,
   type CapabilityInfo,
@@ -101,7 +102,7 @@ export function deviceStatus(
   if (need === "quiet")
     return { text: quietText(device, now), tone: "problem" };
   if (need === "battery") {
-    return { text: lowBatteryText(device.battery!), tone: "problem" };
+    return { text: lowBatteryText(lowCharge(device)), tone: "problem" };
   }
   return null;
 }

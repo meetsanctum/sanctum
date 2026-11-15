@@ -547,7 +547,10 @@ function deviceEntry(
     case "device.battery.low":
       return said(
         "Has a low battery",
-        `${String(entry.detail?.battery)}%: replace it soon`,
+        // Its charge where that is what is low, not where the device said so.
+        typeof entry.detail?.battery === "number"
+          ? `${entry.detail.battery}%: replace it soon`
+          : "Replace it soon",
       );
     case "device.battery.new":
       return said(

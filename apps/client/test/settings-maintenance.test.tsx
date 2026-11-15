@@ -115,6 +115,7 @@ function device(
         : firmware({ version: null, updatable: false, sleeps: true }),
     probe: kind === "light",
     battery: kind === "light" ? null : 64,
+    batteryLow: null,
     leftAt: null,
     problem: null,
     ...extra,
@@ -304,6 +305,48 @@ describe("the Maintenance page", () => {
       "Kitchen buttonOffice · Wireless mini switch64%",
       "Kitchen sensorSays its charge with its next reading · No room · Temperature and humidity sensor–",
     ]);
+  });
+
+  it("lists a battery its device says is low among the low ones, and says once it no longer is", async () => {
+    const flagged = { ...kitchen, battery: 63, batteryLow: true };
+    const unfigured = device("shed", "Shed door", "button", {
+      battery: null,
+      batteryLow: true,
+    });
+    const other = { ...kitchen, id: "other", name: "Hall button" };
+    await show([other, unfigured, flagged, low]);
+
+    const [batteries] = container.querySelectorAll("section");
+    expect(
+      [...batteries!.querySelectorAll("li")].map((each) => each.textContent),
+    ).toEqual([
+      "Hall sensorBattery low: replace it soon · Hall · Temperature and humidity sensor8%",
+      "Kitchen buttonBattery low: replace it soon · Office · Wireless mini switch63%",
+      "Shed doorBattery low: replace it soon · Office · Wireless mini switchLow",
+      "Hall buttonOffice · Wireless mini switch64%",
+    ]);
+
+    await show([{ ...unfigured, batteryLow: false }, flagged, low]);
+    expect(rows()).toContain(
+      "Shed doorBattery no longer low · Office · Wireless mini switch–",
+    );
+  });
+
+  it("says a battery is no longer low for a word of it that came after the row was first shown", async () => {
+    // Low by its charge first; the device says so itself only later.
+    await show([{ ...kitchen, battery: 8, batteryLow: false }]);
+    await show([{ ...kitchen, battery: 15, batteryLow: true }]);
+    expect(rows()[0]).toContain("Battery low: replace it soon");
+
+    await show([{ ...kitchen, battery: 15, batteryLow: false }]);
+    expect(rows()[0]).toContain("Battery no longer low");
+  });
+
+  it("lists a device that says only whether its battery is low, while it isn't", async () => {
+    await show([{ ...kitchen, battery: null, batteryLow: false }, low]);
+    expect(rows()).toContain(
+      "Kitchen buttonBattery not low · Office · Wireless mini switch–",
+    );
   });
 
   it("lists every update with its button, and says when there's none", async () => {

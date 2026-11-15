@@ -88,6 +88,17 @@ describe("an entry's words", () => {
       detail: "9%: replace it soon",
       problem: false,
     });
+    // The device said so itself, at no charge that is low.
+    expect(
+      activityWords(
+        entry({ action: "device.battery.low", who: device }),
+        "home",
+      ),
+    ).toEqual({
+      title: "Lamp has a low battery",
+      detail: "Replace it soon",
+      problem: false,
+    });
     expect(
       activityWords(
         entry({

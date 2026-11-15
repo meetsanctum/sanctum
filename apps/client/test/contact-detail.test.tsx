@@ -188,6 +188,14 @@ describe("a contact sensor's page", () => {
     expect(text).toContain("Battery 95%");
   });
 
+  it("says at its foot that its battery is low where the sensor says so, without a charge", async () => {
+    await show({ ...door, battery: null, batteryLow: true });
+    expect(container.textContent).toContain("Battery low: replace it soon");
+
+    await show({ ...door, battery: null });
+    expect(container.textContent).not.toContain("Battery");
+  });
+
   it("says so where the household does not keep its history", async () => {
     kept = false;
     await show();
