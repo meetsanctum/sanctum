@@ -31,6 +31,9 @@ const sunState = {
   days: ["2026-10-29", "2026-10-30", "2026-10-31"].map(sunDay),
 };
 
+// Turning an app off answers before it has stopped, so the tests wait for what
+// its stop does, as a driver's devices going offline, rather than give it a
+// moment.
 const settle = () => new Promise((done) => setTimeout(done, 20));
 
 const stateOf = (core: TestCore, id: string) =>
@@ -75,11 +78,10 @@ describe("turning an app off", () => {
     const maya = await claimed(core);
 
     const answer = await turn(core, maya, app.id, true);
-    await settle();
+    await expect.poll(() => said).toEqual(["start", "stop"]);
 
     expect(answer.statusCode).toBe(200);
     expect(answer.json()).toMatchObject({ state: "off" });
-    expect(said).toEqual(["start", "stop"]);
     expect(stops).toEqual([{ reason: "off" }]);
     expect(core.apps.isRunning(app.id)).toBe(false);
     expect(
@@ -122,7 +124,7 @@ describe("turning an app off", () => {
     const first = await testCore({ apps: [{ app, origin: "official" }] });
     const maya = await claimed(first);
     await turn(first, maya, app.id, true);
-    await settle();
+    await expect.poll(() => said).toEqual(["start", "stop"]);
     said.length = 0;
 
     const again = await testCore({
@@ -141,7 +143,7 @@ describe("turning an app off", () => {
     const maya = await claimed(core);
     const principal = core.auth.clients.authenticate(maya.token)!;
     await turn(core, maya, app.id, true);
-    await settle();
+    await expect.poll(() => said).toEqual(["start", "stop"]);
     said.length = 0;
 
     await core.apps.setPermission({
@@ -318,16 +320,43 @@ describe("turning an app off", () => {
       expect(device?.availability).toBe("online");
 
       await turn(core, maya, driver.id, true);
-      await settle();
-      expect(core.devices.get(device!.id)).toMatchObject({
-        availability: "offline",
-        leftAt: null,
-      });
+      await expect
+        .poll(() => core.devices.get(device!.id))
+        .toMatchObject({ availability: "offline", leftAt: null });
 
       await turn(core, maya, driver.id, false);
       await expect
         .poll(() => core.devices.get(device!.id))
         .toMatchObject({ availability: "online", leftAt: null });
+    });
+
+    // Its devices go offline once its stop has ended, which ends every context
+    // it reports through.
+    it("has its devices offline though it says they're online as it stops", async () => {
+      const said: string[] = [];
+      const lamp = { key: "lamp", states: { light: { on: false } } };
+      const reporting = defineApp({
+        ...driver,
+        stop: async (ctx: AppContext) => {
+          await ctx.devices.report({
+            ...lamp,
+            availability: "online",
+          } as never);
+          said.push("stopped");
+        },
+      });
+      const core = await testCore({
+        apps: [{ app: reporting, origin: "official" }],
+      });
+      const maya = await claimed(core);
+      const [device] = core.devices.list();
+
+      await turn(core, maya, reporting.id, true);
+      await expect.poll(() => said).toEqual(["stopped"]);
+
+      await expect
+        .poll(() => core.devices.get(device!.id)?.availability)
+        .toBe("offline");
     });
 
     it("refuses a command for its device while it's off", async () => {
