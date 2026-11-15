@@ -31,8 +31,9 @@ afterEach(() => {
 // entities the app publishes, each checked against the type it declares.
 // A light that is off and asked for a look holds it, and comes back at it
 // when switched on. The household changing the app's settings reaches its
-// start context as settings.changed, and a light joining the home as
-// device.added.
+// start context as settings.changed, a light joining the home as
+// device.added, and a light that changed as device.changed when a test says
+// so.
 
 type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 
@@ -158,7 +159,14 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       fetch: absent,
       emit: absent,
       follow: async (name) => {
-        if (name !== "settings.changed" && name !== "device.added") {
+        if (
+          ![
+            "settings.changed",
+            "device.added",
+            "device.changed",
+            "device.removed",
+          ].includes(name)
+        ) {
           throw new Error(`Natural light does not follow ${name}`);
         }
       },
@@ -287,6 +295,15 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       const device = structuredClone(state.devices.at(-1)!);
       for (const handler of handlers.get("device.added") ?? []) {
         await handler({ name: "device.added", device });
+      }
+    },
+    /** The app hears that a light changed, as the core tells it after a report or a command. */
+    async changed(id: string) {
+      const device = structuredClone(
+        state.devices.find((each) => each.id === id)!,
+      );
+      for (const handler of handlers.get("device.changed") ?? []) {
+        await handler({ name: "device.changed", device, before: device });
       }
     },
     /** The context of an action a person calls. */

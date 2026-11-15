@@ -5,8 +5,8 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-// Natural light's own database: the lights that follow the curve, and the
-// lights the household left out. Every light that takes a colour
+// Natural light's own database: the lights that follow the curve, the
+// lights the household left out, and each room's button as last published. Every light that takes a colour
 // temperature follows unless it is left out (choices.ts). A light has a row
 // in followed_lights while it follows, and whether it is paused is mostly
 // read from who last set it (lights.ts).
@@ -40,3 +40,13 @@ export const leftOutLights = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.deviceId, table.capabilityId] })],
 );
+
+// Each room's Natural light button as it was last published, so a button
+// is published again only when it changes, and taken out of the home once
+// its room has no light that follows, even one removed while natural light
+// was stopped. A row is written before its entity is published, with no
+// state until the core has taken it.
+export const roomButtons = sqliteTable("room_buttons", {
+  placeId: text("place_id").primaryKey(),
+  state: text("state", { mode: "json" }).$type<unknown>(),
+});

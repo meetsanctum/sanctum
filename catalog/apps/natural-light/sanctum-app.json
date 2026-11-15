@@ -278,6 +278,105 @@
       "assistant": null
     },
     {
+      "id": "naturalLight.toggleRoom",
+      "title": "Switch a room's natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "placeId"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "naturalLight.bringRoom",
+      "title": "Bring a room to natural light",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "names": "room"
+          }
+        },
+        "required": [
+          "placeId"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "device": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "device",
+                "capability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "failed"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
       "id": "naturalLight.resume",
       "title": "Resume natural light",
       "tier": "write",
@@ -709,10 +808,82 @@
           ],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "naturalLight.room",
+        "title": "Natural light in a room",
+        "standard": false,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "placeId": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string",
+              "enum": [
+                "sun"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "placeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "placeId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "placeId",
+            "icon",
+            "name",
+            "order",
+            "active",
+            "input"
+          ],
+          "additionalProperties": false
+        }
       }
     ],
     "widgets": [],
-    "roomSections": [],
+    "roomSections": [
+      {
+        "id": "naturalLight.room",
+        "title": "Natural light",
+        "entityType": "naturalLight.room",
+        "kind": "buttons",
+        "order": 200,
+        "press": {
+          "action": "naturalLight.toggleRoom"
+        },
+        "open": null,
+        "whenEmpty": null,
+        "preview": [
+          {
+            "icon": "sun",
+            "name": "Natural light",
+            "active": true
+          }
+        ]
+      }
+    ],
     "devicePages": [],
     "triggers": [],
     "conditions": [],
@@ -758,6 +929,16 @@
           "sentence": "Resume natural light on {device}",
           "preview": {
             "device": "Desk lamp"
+          }
+        },
+        "needs": []
+      },
+      {
+        "id": "naturalLight.bringRoom",
+        "words": {
+          "sentence": "Bring {placeId} to natural light",
+          "preview": {
+            "placeId": "Living room"
           }
         },
         "needs": []

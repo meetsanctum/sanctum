@@ -24,12 +24,19 @@ import {
   type Timing,
 } from "./lights.js";
 import { preview, previewOf } from "./preview.js";
+import {
+  bringRoom as bringToNaturalLight,
+  publishRooms,
+  toggleRoom as pressRoomButton,
+} from "./rooms.js";
 import { followedLights } from "./schema.js";
 import { targetState, type TargetState } from "./target.js";
 
 // Natural light's actions: leaving a light or a room's lights out of the
-// curve or having them follow again, pausing and resuming one, and today's
-// curve. Lights are
+// curve or having them follow again, pausing and resuming one, a press of a
+// room's button and bringing a room to natural light, and today's curve.
+// Whatever changes which lights follow, or whether one is paused, publishes
+// the room buttons again (rooms.ts). Lights are
 // household things, so every client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
@@ -38,6 +45,27 @@ const light = z.object({
   device: names("device"),
   capability: partOf("device"),
 });
+
+// The lights a press could not reach, which the shell fails on their tiles.
+const failedLights = z.object({
+  failed: z.array(z.object({ device: z.string(), capability: z.string() })),
+});
+
+// The room buttons again, after a change; a failure here leaves the action
+// done, and the next check publishes them.
+async function roomsChanged(
+  ctx: AppContext,
+  options: FollowOptions,
+  rooms?: readonly (string | null)[],
+) {
+  try {
+    await publishRooms(ctx, options, rooms ? { rooms } : undefined);
+  } catch (error) {
+    ctx.log(
+      `could not publish the room buttons (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+}
 
 export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
   const follow = defineAction({
@@ -67,12 +95,10 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
         "Have a light follow the sun through the day, or stop following it.",
     },
     async run(ctx, input) {
-      return setFollowing(
-        ctx,
-        await followOptionsFor(ctx, timing),
-        runForLight,
-        input,
-      );
+      const options = await followOptionsFor(ctx, timing);
+      const target = await setFollowing(ctx, options, runForLight, input);
+      await roomsChanged(ctx, options);
+      return target;
     },
   });
 
@@ -90,9 +116,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       placeId: z.string().min(1).max(64).nullable(),
       follow: z.boolean(),
     }),
-    output: z.object({
-      failed: z.array(z.object({ device: z.string(), capability: z.string() })),
-    }),
+    output: failedLights,
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
       const failed: { device: string; capability: string }[] = [];
@@ -118,6 +142,53 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
           }
         }
       }
+      await roomsChanged(ctx, options, [input.placeId]);
+      return { failed };
+    },
+  });
+
+  // A press of a room's Natural light button (index.ts' room section): off
+  // while the room is on natural light, and to natural light otherwise.
+  const toggleRoom = defineAction({
+    id: "naturalLight.toggleRoom",
+    title: "Switch a room's natural light",
+    tier: "write",
+    input: z.object({ placeId: z.string().min(1).max(64) }),
+    output: failedLights,
+    async run(ctx, input) {
+      const options = await followOptionsFor(ctx, timing);
+      const failed = await pressRoomButton(
+        ctx,
+        options,
+        runForLight,
+        input.placeId,
+      );
+      await roomsChanged(ctx, options, [input.placeId]);
+      return { failed };
+    },
+  });
+
+  // Every light in a room that follows on at the curve and the others off,
+  // as a grey press of its button does, for automations.
+  const bringRoom = defineAction({
+    id: "naturalLight.bringRoom",
+    title: "Bring a room to natural light",
+    tier: "write",
+    input: z.object({ placeId: names("room") }),
+    output: failedLights,
+    words: {
+      sentence: "Bring {placeId} to natural light",
+      preview: { placeId: "Living room" },
+    },
+    async run(ctx, input) {
+      const options = await followOptionsFor(ctx, timing);
+      const failed = await bringToNaturalLight(
+        ctx,
+        options,
+        runForLight,
+        input.placeId,
+      );
+      await roomsChanged(ctx, options, [input.placeId]);
       return { failed };
     },
   });
@@ -155,6 +226,9 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
           .set({ since: now, pausedAt: null })
           .where(followed(input.device, input.capability));
         return target;
+      }).then(async (target) => {
+        await roomsChanged(ctx, options);
+        return target;
       });
     },
   });
@@ -189,6 +263,9 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
           await homeSun(ctx, now),
           options,
         );
+      }).then(async (target) => {
+        await roomsChanged(ctx, options);
+        return target;
       });
     },
   });
@@ -226,11 +303,21 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
         );
       }
       await followAll(ctx, options, runForLight);
+      await roomsChanged(ctx, options);
       return {};
     },
   });
 
-  return { follow, followRoom, resume, pause, preview: showPreview, check };
+  return {
+    follow,
+    followRoom,
+    toggleRoom,
+    bringRoom,
+    resume,
+    pause,
+    preview: showPreview,
+    check,
+  };
 }
 
 /**

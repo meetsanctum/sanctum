@@ -274,7 +274,12 @@ export function standing(
   );
 }
 
-async function publish(ctx: AppContext, light: Light, state: TargetState) {
+/** Publishes where a light that follows the curve stands. */
+export async function publish(
+  ctx: AppContext,
+  light: Light,
+  state: TargetState,
+) {
   await ctx.entities.publish({
     type: targetType.id,
     key: targetKey(light.device.id, light.capability.id),
@@ -489,6 +494,38 @@ export async function followAll(
   await eachFollowed(ctx, runForLight, "follow", async (light, row) =>
     followOne(ctx, light, row, await sun(), options),
   );
+}
+
+/**
+ * Brings the lights of one device that follow the curve to it, as when the
+ * device changed: a light someone let go of takes the curve at once, and
+ * where each stands is published again.
+ */
+export async function followDevice(
+  ctx: AppContext,
+  deviceId: string,
+  options: FollowOptions,
+  runForLight: RunForLight,
+) {
+  const rows = await ctx.storage.db
+    .select()
+    .from(followedLights)
+    .where(eq(followedLights.deviceId, deviceId));
+  const sun = sunOnce(ctx, options);
+  for (const row of rows) {
+    await runForLight(row.deviceId, row.capabilityId, async () => {
+      const current = await followedRow(ctx, row.deviceId, row.capabilityId);
+      if (!current) return;
+      let light: Light;
+      try {
+        light = await lightOf(ctx, row.deviceId, row.capabilityId);
+      } catch (error) {
+        if (isActionError(error) && error.code === "not_found") return;
+        throw error;
+      }
+      await followOne(ctx, light, current, await sun(), options);
+    });
+  }
 }
 
 /** Lets go of every light that follows the curve, as natural light is switched off. */
