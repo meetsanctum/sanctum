@@ -28,6 +28,8 @@ const image = `sanctum-lan-test:${tag}`;
 const device = `sanctum-lan-test-device-${tag}`;
 const other = `sanctum-lan-test-other-${tag}`;
 const ticking = `sanctum-lan-test-ticking-${tag}`;
+const listener = `sanctum-lan-test-listener-${tag}`;
+const sayer = `sanctum-lan-test-sayer-${tag}`;
 
 let holders: LanHolders;
 let holder: string;
@@ -106,7 +108,15 @@ describe("an app's network of its own on real Docker", () => {
   }, 300_000);
 
   afterAll(async () => {
-    await docker("rm", "--force", device, other, ticking).catch(() => "");
+    await docker(
+      "rm",
+      "--force",
+      device,
+      other,
+      ticking,
+      listener,
+      sayer,
+    ).catch(() => "");
     await holders?.remove(app).catch(() => undefined);
     await docker("rmi", "--force", image).catch(() => "");
   }, 120_000);
@@ -154,10 +164,57 @@ describe("an app's network of its own on real Docker", () => {
     expect(await reaches("127.0.0.11", 53)).toBe("no");
   });
 
+  it("drops connections initiated by an allowed device from an allowed port", async () => {
+    const address = await addressOf(device);
+    const holderAddress = await addressOf(holderName(app));
+    await holders.apply(app, {
+      ...policy([address]),
+      ports: [6053, 6054],
+      manager: "test",
+      holder,
+    });
+    await docker(
+      "run",
+      "--detach",
+      "--name",
+      listener,
+      "--network",
+      `container:${holder}`,
+      "--cap-drop",
+      "ALL",
+      "alpine:latest",
+      "sh",
+      "-c",
+      "nc -l -p 12345",
+    );
+    // The listener is ready even while the firewall rejects its traffic.
+    await expect
+      .poll(() =>
+        docker(
+          "exec",
+          listener,
+          "sh",
+          "-c",
+          "cat /proc/net/tcp /proc/net/tcp6 | grep -c ':3039 ' || true",
+        ),
+      )
+      .toBe("1");
+
+    expect(
+      await docker(
+        "exec",
+        device,
+        "sh",
+        "-c",
+        `nc -z -w 2 -p 6054 ${holderAddress} 12345 && echo yes || echo no`,
+      ),
+    ).toBe("no");
+    await docker("rm", "--force", listener);
+  });
+
   it("cuts a connection open to an address it takes away", async () => {
     const address = await addressOf(device);
     // A device that says something every 100 ms on one open connection.
-    const sayer = `sanctum-lan-test-sayer-${tag}`;
     await docker(
       "run",
       "--detach",

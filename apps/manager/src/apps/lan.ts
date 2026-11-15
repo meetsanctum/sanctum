@@ -47,7 +47,11 @@ const ipv4 = z.ipv4();
 
 /** What an app's network may reach, as the core names it (core's app-host/lan.ts). */
 export const lanPolicy = z.object({
-  core: z.string().min(1).max(64),
+  core: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine((core) => !/[^A-Za-z0-9_-]/.test(core)),
   count: z.number().int().min(1),
   addresses: z.array(ipv4).max(maxLanAddresses),
   ports: z.array(z.number().int().min(1).max(65_535)).max(maxLanPorts),
@@ -72,8 +76,10 @@ export function lanNetworkName(app: string) {
   return stacked(`sanctum-app-${app}-lan`);
 }
 
+// Holders and helpers have their own prefix: -holder and -rules are both
+// valid endings of an app id.
 export function holderName(app: string) {
-  return stacked(`sanctum-app-${app}-holder`);
+  return stacked(`sanctum-lan-${app}-holder`);
 }
 
 function nextHolderName(app: string) {
@@ -105,7 +111,8 @@ export function rulesFor(policy: LanPolicy) {
     "  }",
     "  chain input {",
     "    type filter hook input priority 0; policy drop;",
-    "    ip saddr @reach tcp sport @reachports accept",
+    // A device's service port doesn't let it open a connection into the app.
+    "    ip saddr @reach tcp sport @reachports tcp flags & (ack | rst) != 0 accept",
     "  }",
     "}",
     "",
@@ -199,7 +206,7 @@ export function createLanHolders(options: {
     script: string,
     rules = "",
   ) {
-    const name = stacked(`sanctum-app-${app}-rules`);
+    const name = stacked(`sanctum-lan-${app}-rules`);
     const stale = await inspectContainer(docker, name);
     if (stale) {
       assertManaged({ labels: stale.Config.Labels, name }, rulesRole);
@@ -247,6 +254,9 @@ export function createLanHolders(options: {
         return false;
       }),
     };
+    // A failed readback can follow a successful load. Read the holder again
+    // next time rather than trust the policy cached before that attempt.
+    loaded.delete(holder);
     const { code, output } = await helper(
       holder,
       app,
@@ -287,13 +297,24 @@ export function createLanHolders(options: {
       `nft -j list table ${table}`,
     );
     const version = code === 0 ? versionOf(readRules(output)) : null;
-    if (version) loaded.set(holder, version);
+    if (!version) {
+      throw new AppRefusal(`${app}'s network policy could not be read`, 500);
+    }
+    loaded.set(holder, version);
     return version;
   }
 
-  async function loadNewer(holder: string, app: string, policy: LanPolicy) {
+  async function loadNewer(
+    holder: string,
+    app: string,
+    policy: LanPolicy,
+    canChangeCore = false,
+  ) {
     const held = await heldBy(holder, app);
-    if (held && held.core === policy.core && held.count >= policy.count) {
+    if (held.core !== policy.core && !canChangeCore) {
+      throw new AppRefusal(`${app}'s network belongs to another core run`, 409);
+    }
+    if (held.core === policy.core && held.count >= policy.count) {
       throw new AppRefusal(
         `${app}'s network holds a policy as new as that`,
         409,
@@ -368,8 +389,8 @@ export function createLanHolders(options: {
 
     /**
      * Replaces what the app's network may reach, in the holder the change
-     * names: refused when that isn't the app's holder now, or when its rules
-     * hold a policy as new from the same run of the core.
+     * names: refused when that isn't the app's holder now, its rules belong
+     * to another core run, or they hold a policy as new from this one.
      */
     async apply(app: string, change: z.infer<typeof lanChange>) {
       const holder = await inspectHolder(holderName(app));
@@ -385,17 +406,12 @@ export function createLanHolders(options: {
      * container it keeps.
      */
     keep(app: string, holder: ContainerInfo, policy: LanPolicy) {
-      return loadNewer(holder.Id, app, policy);
+      return loadNewer(holder.Id, app, policy, true);
     },
 
     /** A new holder that won't be used goes. */
     discard(app: string) {
       return removeNamed(nextHolderName(app));
-    },
-
-    /** Whether the app's container shares this holder's network. */
-    shares(container: ContainerInfo, holder: ContainerInfo) {
-      return container.HostConfig.NetworkMode === `container:${holder.Id}`;
     },
 
     /** Its holders and network go, as when the app does. */

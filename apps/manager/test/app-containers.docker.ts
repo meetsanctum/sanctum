@@ -266,7 +266,7 @@ describe("apps' containers on real Docker", () => {
         "ps",
         "--all",
         "--filter",
-        `name=sanctum-${stack}-app-test.reacher-holder`,
+        `name=sanctum-${stack}-lan-test.reacher-holder`,
         "--format",
         "{{.Names}}",
       ),

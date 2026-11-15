@@ -164,6 +164,35 @@ describe("what a manager can do", () => {
     expect((await change({ ...policy, ports: [0] })).statusCode).toBe(400);
   });
 
+  it.each([
+    'core"; policy accept',
+    "core\nrun",
+    "core run",
+    "core\\run",
+    "core\n",
+  ])(
+    "refuses a core run that cannot be safely written and recovered from its rules: %j",
+    async (core) => {
+      const { docker, server } = await manager({ lan: true });
+      const policy = { core, count: 1, addresses: [], ports: [6053] };
+
+      const started = await server.inject({
+        method: "PUT",
+        url: path,
+        payload: { folder, memoryMb: 128, lan: policy },
+      });
+      const changed = await server.inject({
+        method: "PUT",
+        url: `${path}/lan`,
+        payload: { ...policy, manager: "manager-1", holder: "holder" },
+      });
+
+      expect(started.statusCode).toBe(400);
+      expect(changed.statusCode).toBe(400);
+      expect(docker.container(holderName(app))).toBeUndefined();
+    },
+  );
+
   it("reports no staged apps without a host, so the core can start its apps at once", async () => {
     const server = createServer({ version: "dev-1" });
     servers.push(server);

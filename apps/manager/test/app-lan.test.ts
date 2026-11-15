@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   appContainerName,
+  appContainerOptions,
   createAppContainers,
   nodeImage,
 } from "../src/apps/containers.js";
@@ -82,7 +83,7 @@ describe("an app's network rules", () => {
         "  }",
         "  chain input {",
         "    type filter hook input priority 0; policy drop;",
-        "    ip saddr @reach tcp sport @reachports accept",
+        "    ip saddr @reach tcp sport @reachports tcp flags & (ack | rst) != 0 accept",
         "  }",
         "}",
         "",
@@ -106,6 +107,25 @@ describe("an app's network rules", () => {
 });
 
 describe("an app that reaches devices", () => {
+  it.each(["holder", "holder-next", "rules"])(
+    "does not collide with an app whose id ends in -%s",
+    async (suffix) => {
+      const { apps, docker, inspect } = await setup();
+      const otherApp = `${app}-${suffix}`;
+      const other = docker.run(
+        appContainerOptions({ ...start, app: otherApp }, "other-data"),
+      );
+
+      expect(await apps.start(start, { lan: policy })).toMatchObject({
+        state: "running",
+      });
+      expect((await inspect(other.id)).State.Running).toBe(true);
+
+      await apps.remove(app);
+      expect((await inspect(other.id)).State.Running).toBe(true);
+    },
+  );
+
   it("starts in its holder's network, once the holder's rules are loaded", async () => {
     const { apps, docker, nft, inspect } = await setup();
 
@@ -132,7 +152,7 @@ describe("an app that reaches devices", () => {
     // Its rules are in before the app's container starts.
     const events = docker.events.filter((each) => !each.startsWith("pull"));
     expect(events.indexOf(`start ${appContainerName(app)}`)).toBeGreaterThan(
-      events.indexOf(`remove sanctum-app-${app}-rules`),
+      events.indexOf(`remove sanctum-lan-${app}-rules`),
     );
   });
 
@@ -180,6 +200,111 @@ describe("an app that reaches devices", () => {
       manager: "manager-2",
     });
     expect(docker.events).not.toContain(`remove ${holderName(app)}`);
+  });
+
+  it("serializes overlapping changes and refuses one overtaken by a newer policy", async () => {
+    const { apps, nft } = await setup();
+    const { lan } = await apps.start(start, { lan: policy });
+    const change = { ...policy, manager: "manager-1", holder: lan!.holder };
+
+    const results = await Promise.allSettled([
+      apps.applyLan(app, { ...change, count: 3, addresses: [] }),
+      apps.applyLan(app, { ...change, count: 2 }),
+    ]);
+
+    expect(results[0]).toMatchObject({
+      status: "fulfilled",
+      value: { count: 3 },
+    });
+    expect(results[1]).toMatchObject({
+      status: "rejected",
+      reason: { status: 409 },
+    });
+    expect(readRules(listing(nft.tables.get(lan!.holder)!))).toMatchObject({
+      marker: "sanctum core-1 3",
+      addresses: [],
+    });
+  });
+
+  it("refuses a delayed change from a core that its kept holder has replaced", async () => {
+    const { apps, nft } = await setup();
+    const { lan } = await apps.start(start, { lan: policy });
+    await apps.start(start, {
+      keep: true,
+      lan: { ...policy, core: "core-2", addresses: [] },
+    });
+
+    await expect(
+      apps.applyLan(app, {
+        ...policy,
+        count: 2,
+        manager: "manager-1",
+        holder: lan!.holder,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(readRules(listing(nft.tables.get(lan!.holder)!))).toMatchObject({
+      marker: "sanctum core-2 1",
+      addresses: [],
+    });
+  });
+
+  it("rereads the holder after a load whose confirmation was lost", async () => {
+    const { apps, docker, nft } = await setup();
+    const { lan } = await apps.start(start, { lan: policy });
+    const change = {
+      ...policy,
+      count: 3,
+      addresses: [],
+      manager: "manager-1",
+      holder: lan!.holder,
+    };
+    const run = docker.onRun!;
+    docker.onRun = (options) => {
+      const result = run(options);
+      return result
+        ? { code: 1, output: "The rules could not be read back" }
+        : null;
+    };
+    await expect(apps.applyLan(app, change)).rejects.toMatchObject({
+      status: 500,
+    });
+    docker.onRun = run;
+
+    await expect(
+      apps.applyLan(app, { ...change, count: 2, addresses: policy.addresses }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(readRules(listing(nft.tables.get(lan!.holder)!))).toMatchObject({
+      marker: "sanctum core-1 3",
+      addresses: [],
+    });
+  });
+
+  it("leaves the policy unchanged when a restarted manager cannot read its version", async () => {
+    const { apps, docker, nft, holders } = await setup();
+    const { lan } = await apps.start(start, {
+      lan: { ...policy, count: 3, addresses: [] },
+    });
+    const restarted = holders("manager-2");
+    const run = docker.onRun!;
+    docker.onRun = (options) =>
+      options.Cmd?.[2]?.includes("nft -f -")
+        ? run(options)
+        : { code: 1, output: "The rules could not be read" };
+
+    await expect(
+      restarted.apply(app, {
+        ...policy,
+        count: 2,
+        manager: "manager-1",
+        holder: lan!.holder,
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+
+    expect(nft.loads).toHaveLength(1);
+    expect(readRules(listing(nft.tables.get(lan!.holder)!))).toMatchObject({
+      marker: "sanctum core-1 3",
+      addresses: [],
+    });
   });
 
   it("goes on through a core's restart in the holder it shares", async () => {

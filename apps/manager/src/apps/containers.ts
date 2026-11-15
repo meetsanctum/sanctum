@@ -579,13 +579,15 @@ export function createAppContainers(options: {
 
     // Replaces what an app's network may reach (lan.ts).
     applyLan(app: string, change: Parameters<LanHolders["apply"]>[1]) {
-      if (!lan) {
-        throw new AppRefusal(
-          "This manager can't give an app a network of its own",
-          409,
-        );
-      }
-      return lan.apply(app, change);
+      return inTurn(async () => {
+        if (!lan) {
+          throw new AppRefusal(
+            "This manager can't give an app a network of its own",
+            409,
+          );
+        }
+        return lan.apply(app, change);
+      });
     },
 
     // One that reaches devices whose holder has stopped stops too: its
