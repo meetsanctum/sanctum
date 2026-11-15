@@ -282,6 +282,36 @@ describe("the core's lifecycle", () => {
     expect(signal.aborted).toBe(true);
   });
 
+  it("starts no background work from a step cancelled while it waited", async () => {
+    const { lifecycle, done, step, steps } = lifecycleOf();
+    const starting = lifecycle.start(
+      steps({
+        starting: [
+          [
+            "install the apps",
+            async (cancelled) => {
+              await new Promise<void>((resolve) =>
+                cancelled.addEventListener("abort", () => resolve()),
+              );
+              lifecycle.ownBackgroundTask("install the apps", async () => {
+                done.push("installed the apps");
+              });
+            },
+          ],
+        ],
+        stopping: [step("close core.db")],
+      }),
+    );
+
+    expect(await lifecycle.stop("signal")).toEqual({
+      code: 0,
+      failedSteps: [],
+    });
+    await starting;
+
+    expect(done).toEqual(["close core.db"]);
+  });
+
   it("answers only its health check from a trial's start until the update commits", async () => {
     const { lifecycle, logs, steps } = lifecycleOf();
     expect(lifecycle.readiness()).toBe("everyone");

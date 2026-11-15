@@ -435,30 +435,34 @@ export function createAppHost(options: {
       });
       const added: InstalledApp[] = [];
       const checked = new Set<string>();
-      for (const pkg of await packages) {
-        if (isClosing) break;
-        const appId = pkg.apart.manifest.id;
-        try {
-          // Its old stop and socket cleanup must finish before a new install
-          // binds the same path.
-          await removals.get(appId);
-          install(await options.updates.packageFor(pkg), checked);
-          added.push(installed.get(appId)!);
-        } catch (error) {
-          log(`apps: ${appId} was not installed (${message(error)})`);
+      try {
+        for (const pkg of await packages) {
+          if (isClosing) break;
+          const appId = pkg.apart.manifest.id;
+          try {
+            // Its old stop and socket cleanup must finish before a new install
+            // binds the same path.
+            await removals.get(appId);
+            if (isClosing) break;
+            const current = await options.updates.packageFor(pkg);
+            if (isClosing) break;
+            install(current, checked);
+            added.push(installed.get(appId)!);
+          } catch (error) {
+            log(`apps: ${appId} was not installed (${message(error)})`);
+          }
         }
-      }
-      // A core that stops meanwhile keeps what every app brought: those it
-      // didn't reach aren't gone.
-      if (isClosing) {
+        // A core that stops meanwhile keeps what every app brought: those it
+        // didn't reach aren't gone.
+        if (isClosing) return;
+        // What apps that are no longer here brought goes with them, and so
+        // does what the core could not check.
+        for (const appId of checked) kept.add(appId);
+        options.entities.keepApps([...kept]);
+      } finally {
+        // Closing also waits for an install that failed before it finished.
         allInstalled();
-        return;
       }
-      // What apps that are no longer here brought goes with them, and so
-      // does what the core could not check.
-      for (const appId of checked) kept.add(appId);
-      options.entities.keepApps([...kept]);
-      allInstalled();
       await Promise.all(
         added.map(async (entry) => {
           // The core may have stopped after saving the choice and before this.

@@ -146,6 +146,7 @@ export function createCoreLifecycle(options: { log: Log }) {
       label: string,
       task: (cancelled: AbortSignal) => Promise<void>,
     ) {
+      if (stopStarting.signal.aborted) return;
       void (async () => task(stopStarting.signal))().catch((error: unknown) => {
         fail(label, error);
         if (phase === "starting" || phase === "running") {
