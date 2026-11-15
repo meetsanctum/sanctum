@@ -85,7 +85,10 @@ export function DayAndWeek(props: {
     : [];
   const days =
     loaded && words.counted
-      ? countedDays(timed, spansOf(loaded.states, midnight(now, 6), now, live))
+      ? countedDays(
+          timed,
+          spansOf(loaded.states, midnight(now, 6) - 1, now, live),
+        )
       : timed;
 
   return (

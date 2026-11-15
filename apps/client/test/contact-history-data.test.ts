@@ -311,7 +311,7 @@ describe("a door's week", () => {
     });
   const online = (when: number, state: object) =>
     [when, "online", state] as [number, "online", object];
-  // Its changes over the week, as spans from the week's first midnight.
+  // Include the state before the week's first midnight to see an opening there.
   const spansOver = (states: [number, "online" | "offline", object | null][]) =>
     spansOf(
       {
@@ -322,7 +322,7 @@ describe("a door's week", () => {
           state: state as Record<string, unknown> | null,
         })),
       },
-      midnight(now, 6),
+      midnight(now, 6) - 1,
       now,
     );
   const dayAt = (daysBack: number, hours: number, minutes = 0) =>
@@ -346,6 +346,22 @@ describe("a door's week", () => {
     ]);
     const counted = countedDays(week([0, 0, 0, 0, 0, 0, 0]), spans);
     expect(counted.map((each) => each.count)).toEqual([0, 0, 0, 0, 2, 1, 1]);
+  });
+
+  it("counts an opening at the week's first midnight with its preceding closed state", () => {
+    const spans = spansOver([
+      online(dayAt(6, 0) - minute, closed),
+      online(dayAt(6, 0), open),
+      online(dayAt(6, 0, 1), closed),
+    ]);
+    const counted = countedDays(week([0, 0, 0, 0, 0, 0, 0]), spans);
+    expect(counted.map((each) => each.count)).toEqual([1, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("includes an opening before any known time has elapsed that day", () => {
+    expect(
+      doorWeekHeadline(week([0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0]), now),
+    ).toBe("Opened once today");
   });
 
   it("says about how often it was opened a day, over the days that have ended", () => {

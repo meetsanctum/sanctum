@@ -176,7 +176,7 @@ export function comingsOn(joined: readonly Span[]) {
 
 /**
  * The week's days with how often it came on in each, counted by the day it
- * came on in, from its spans over the week.
+ * came on in, from spans including the state before the week's start.
  */
 export function countedDays(days: readonly Day[], spans: readonly Span[]) {
   const starts = comingsOn(joinedSpans(spans)).map((span) => span.from);
@@ -361,7 +361,7 @@ export function countedWeekHeadline(
   words: CountWords,
 ) {
   const today = midnight(now);
-  const known = days.filter((day) => day.known > 0);
+  const known = days.filter((day) => day.known > 0 || (day.count ?? 0) > 0);
   if (known.length === 0) return "Not known yet";
   const count = (some: readonly Day[]) =>
     some.reduce((sum, day) => sum + (day.count ?? 0), 0);

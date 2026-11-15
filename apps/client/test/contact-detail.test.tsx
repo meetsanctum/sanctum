@@ -191,13 +191,13 @@ describe("a contact sensor's page", () => {
   it("has a door's week as how often it was opened, from a week of its changes", async () => {
     await show({ ...door, type: "door", shownAs: "door" });
 
-    // Its changes are read from the week's first midnight, not from a day ago.
+    // Include the state before the week's first midnight.
     const asked = vi
       .mocked(coreJson)
       .mock.calls.map(([path]) => path)
       .find((path) => path.startsWith("/api/history/states"))!;
     expect(new URL(asked, "http://core").searchParams.get("from")).toBe(
-      new Date(2026, 9, 25).toISOString(),
+      new Date(new Date(2026, 9, 25).getTime() - 1).toISOString(),
     );
 
     const text = container.textContent ?? "";
@@ -233,6 +233,81 @@ describe("a contact sensor's page", () => {
         '[role="group"][aria-label="How long it was open each day"]',
       ),
     ).not.toBeNull();
+  });
+
+  it("keeps an opening at the week's first midnight through the history read and chart", async () => {
+    const firstMidnight = new Date(2026, 9, 25).getTime();
+    const changes = [
+      { at: firstMidnight - minute, open: false },
+      { at: firstMidnight, open: true },
+      { at: firstMidnight + minute, open: false },
+    ];
+    vi.mocked(coreJson).mockImplementationOnce(async (path) => {
+      const query = new URL(path, "http://core").searchParams;
+      const from = Date.parse(query.get("from")!);
+      // The core returns the last state at or before from, then later changes.
+      const before = changes.filter((change) => change.at <= from).slice(-1);
+      const during = changes.filter((change) => change.at > from);
+      return {
+        kind: "contact",
+        kept: true,
+        to: query.get("to"),
+        states: [...before, ...during].map((change) => ({
+          at: new Date(change.at).toISOString(),
+          availability: "online",
+          state: { open: change.open },
+        })),
+      };
+    });
+    await show({ ...door, type: "door", shownAs: "door" });
+
+    const columns = container.querySelector<HTMLDivElement>(
+      '[role="group"][aria-label="How often it was opened each day"]',
+    )!;
+    await act(async () => {
+      columns.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+      );
+    });
+    expect(columns.textContent).toContain("Opened once");
+    expect(container.textContent).toMatch(/Sun 25 Oct: opened once/);
+  });
+
+  it("shows an opening at today's midnight before time has elapsed", async () => {
+    const today = new Date(2026, 9, 31).getTime();
+    vi.setSystemTime(today);
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({
+        kind: "contact",
+        kept: true,
+        to: new Date(today).toISOString(),
+        states: [
+          {
+            at: new Date(today - minute).toISOString(),
+            availability: "online",
+            state: { open: false },
+          },
+          {
+            at: new Date(today).toISOString(),
+            availability: "online",
+            state: { open: true },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ fields: { open: [] } });
+    await show({
+      ...contactSensor("door", "Front door", "hall", true),
+      type: "door",
+      shownAs: "door",
+    });
+
+    const columns = container.querySelector<HTMLDivElement>(
+      '[role="group"][aria-label="How often it was opened each day"]',
+    )!;
+    await act(async () => columns.focus());
+    expect(columns.textContent).toContain("Opened once");
+    expect(container.textContent).toContain("Opened once since Fri");
+    expect(container.textContent).toMatch(/Sat 31 Oct: opened once/);
   });
 
   it("says at its foot that its battery is low where the sensor says so, without a charge", async () => {

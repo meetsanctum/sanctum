@@ -115,7 +115,8 @@ export function useDayAndWeek(
           coreJson<DeviceHistory>(
             `/api/history/states?${query({
               from: new Date(
-                weekOfChanges ? midnight(to, 6) : to - dayMs,
+                // Keep the preceding state for an opening at midnight.
+                weekOfChanges ? midnight(to, 6) - 1 : to - dayMs,
               ).toISOString(),
             })}`,
           ),
@@ -545,7 +546,7 @@ export function Columns(props: {
   const nameOf = (day: Day) =>
     day.start === today ? "Today" : weekday.format(day.start);
   const valueOf = (day: Day) =>
-    day.known === 0
+    day.known === 0 && amountOf(day) === 0
       ? "Not known"
       : amountOf(day) === 0
         ? words.none
