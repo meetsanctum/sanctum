@@ -23,8 +23,8 @@ setup, the commands and the layout; these notes are the rules.
   routes' shapes, the sign-in binding, username and password rules.
 - `packages/typescript-config` — shared TypeScript settings.
 - `catalog/apps/*` — Sanctum apps, driver apps included, one workspace
-  package each: `moods`, `natural-light`, `weather` and `zigbee`. An app's UI
-  is its package's `./ui` export, which the client bundles.
+  package each: `esphome`, `moods`, `natural-light`, `weather` and `zigbee`.
+  An app's UI is its package's `./ui` export, which the client bundles.
 - `assets/brand` — `@meetsanctum/brand`, the brand's files under their own
   licence: the logo, the app icons, the desktop app's icon and the brand's
   photos.

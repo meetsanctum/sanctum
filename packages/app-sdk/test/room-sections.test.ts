@@ -15,7 +15,7 @@ import {
 } from "../src/index.js";
 
 // Room sections: an app's part of every room's page, drawn by the shell from
-// its entities of one type in the tile shape.
+// its entities of one type in the tile shape, as tiles or as buttons.
 
 const moodState = z.object({
   placeId: z.string(),
@@ -111,7 +111,21 @@ describe("a room section", () => {
   it.each<[string, Partial<RoomSectionDefinition>, RegExp]>([
     ["an id that is not namespaced", { id: "moods" }, /namespaced id/],
     ["no title", { title: " " }, /needs a title/],
-    ["a kind other than tiles", { kind: "rows" as "tiles" }, /kind tiles/],
+    [
+      "a kind other than tiles or buttons",
+      { kind: "rows" as "tiles" },
+      /kind tiles or buttons/,
+    ],
+    [
+      "buttons that open a page",
+      { kind: "buttons", whenEmpty: undefined },
+      /buttons, which have no heading/,
+    ],
+    [
+      "buttons shown empty",
+      { kind: "buttons", open: undefined },
+      /buttons, which have no heading/,
+    ],
     ["an order before Sanctum's", { order: 50 }, /an order from 300 to 799/],
     ["an order after any app's", { order: 800 }, /an order from 300 to 799/],
     ["an order that is not whole", { order: 350.5 }, /an order from 300/],
@@ -157,6 +171,25 @@ describe("a room section", () => {
     ],
   ])("refuses %s", (_name, changes, error) => {
     expect(() => defineApp(app(changes))).toThrow(error);
+  });
+
+  it("may show buttons, with no page to open and nothing shown empty", () => {
+    const buttons = app({
+      kind: "buttons",
+      order: 300,
+      open: undefined,
+      whenEmpty: undefined,
+      preview: [{ icon: "sun", name: "Natural light", active: true }],
+    });
+    expect(toStaticManifest(defineApp(buttons)).provides.roomSections).toEqual([
+      expect.objectContaining({
+        kind: "buttons",
+        order: 300,
+        open: null,
+        whenEmpty: null,
+        preview: [{ icon: "sun", name: "Natural light", active: true }],
+      }),
+    ]);
   });
 
   it("is one per app at most", () => {

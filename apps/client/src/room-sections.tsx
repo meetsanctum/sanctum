@@ -4,10 +4,12 @@ import {
   type CapabilityKind,
   type EntityInfo,
   type RoomSectionInfo,
+  type RoomSectionKind,
   type RoomSectionTile,
 } from "@meetsanctum/app-sdk";
 import {
   Button,
+  SectionButton,
   SectionHeading,
   SectionTile,
   tileIconOf,
@@ -21,13 +23,15 @@ import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
 
 // Apps' room sections: the shell draws each from the app's entities of the
-// section's type in the room, as tiles, under a heading that looks like its
-// own sections'. No app code runs to draw one. A tap calls the section's
-// action through the gate; the lights and switches it could not reach fail
-// on their tiles, and a tap that fails as a whole fails on the section's
-// tile. While the app isn't running its tiles dim and say so. Edit beside
-// the heading opens the app's page for the room, on every device: what a
-// room has is the household's, a shared tablet's too.
+// section's type in the room, as tiles under a heading that looks like its
+// own sections', or as small buttons after the room's button for all its
+// lights, with no heading. No app code runs to draw one. A tap calls the
+// section's action through the gate; the lights and switches it could not
+// reach fail on their tiles, and a tap that fails as a whole fails on the
+// section's tile or button. While the app isn't running its tiles and
+// buttons dim, and its tiles say so. Edit beside the heading opens the
+// app's page for the room, on every device: what a room has is the
+// household's, a shared tablet's too.
 
 /** One of an app's section tiles, as its entity says. */
 export type SectionEntity = {
@@ -49,15 +53,21 @@ function sectionEntity(entity: EntityInfo): SectionEntity | null {
 export type AppSection = { app: AppInfo; section: RoomSectionInfo };
 
 /**
- * A room's sections in their order: by the weight each declares, Sanctum's
- * own first (Moods at 200), then other apps' from 300, ties by app id. The
- * device sections follow them.
+ * A room's sections of one kind in their order: by the weight each
+ * declares, Sanctum's own first (Moods at 200), then other apps' from 300,
+ * ties by app id. The device sections follow the tiles; the buttons follow
+ * the room's lights button.
  */
-export function sectionsInOrder(apps: readonly AppInfo[]): AppSection[] {
+export function sectionsInOrder(
+  apps: readonly AppInfo[],
+  kind: RoomSectionKind,
+): AppSection[] {
   return apps
     .filter(isShown)
     .flatMap((app) =>
-      app.provides.roomSections.map((section) => ({ app, section })),
+      app.provides.roomSections
+        .filter((section) => section.kind === kind)
+        .map((section) => ({ app, section })),
     )
     .sort(
       (a, b) =>
@@ -212,4 +222,50 @@ export function RoomSection(props: {
       {tiles.length > 0 && grid}
     </section>
   );
+}
+
+/** One of a room's buttons, from an app's section of buttons. */
+export type RoomButton = AppSection & { entity: SectionEntity };
+
+/** A room's buttons from these sections of buttons, in their order. */
+export function buttonsIn(
+  sections: readonly AppSection[],
+  entities: SectionEntities,
+  roomId: string,
+): RoomButton[] {
+  return sections.flatMap(({ app, section }) =>
+    entities
+      .tilesIn(app.id, section, roomId)
+      .map((entity) => ({ app, section, entity })),
+  );
+}
+
+/**
+ * A room's buttons, after its button for all its lights in the room's line,
+ * each named with the room, since several rooms' are in reach on Home.
+ * White and pressed while active; dimmed while its app isn't running, since
+ * the core would refuse a tap.
+ */
+export function RoomButtons(props: {
+  buttons: readonly RoomButton[];
+  roomName: string;
+  entities: SectionEntities;
+}) {
+  const { entities } = props;
+  return props.buttons.map(({ app, section, entity }) => {
+    const notRunning = stateShort(app);
+    const label = `${entity.tile.name} in ${props.roomName}`;
+    return (
+      <SectionButton
+        key={entityKey(entity.app, entity.key)}
+        icon={tileIconOf[entity.tile.icon]}
+        name={entity.tile.name}
+        label={notRunning ? `${label}, ${notRunning.toLowerCase()}` : label}
+        active={entity.tile.active}
+        disabled={notRunning !== null}
+        failures={entities.failuresOf(entity)}
+        onClick={() => void entities.press(app.id, section, entity)}
+      />
+    );
+  });
 }

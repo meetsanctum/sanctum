@@ -12,6 +12,7 @@ export * from "./light-picker";
 export * from "./page-bar";
 export * from "./page-section";
 export * from "./presses";
+export * from "./section-button";
 export * from "./section-tile";
 export * from "./swipe-pages";
 export * from "./temperature-unit";
