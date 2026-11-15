@@ -119,3 +119,25 @@ export const deviceCapabilities = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.deviceId, table.id] })],
 );
+
+// What each place senses, worked out from its sensors and kept, so that it
+// changes only as the place itself does (motion.ts): one row for each room,
+// zone and the home, and each kind of sensing, which is motion so far.
+export const placeSensing = sqliteTable(
+  "place_sensing",
+  {
+    // "home", "room:<id>" or "zone:<id>".
+    place: text("place").notNull(),
+    // The kind of part it senses with, such as motion.
+    kind: text("kind").$type<CapabilityKind>().notNull(),
+    // Whether any of its sensors answers, and whether one of those senses
+    // something now.
+    answering: integer("answering", { mode: "boolean" }).notNull(),
+    active: integer("active", { mode: "boolean" }).notNull(),
+    // Since when it has sensed nothing, while it answers and senses nothing;
+    // null while it senses something, answers not, or nobody knows when.
+    inactiveSince: integer("inactive_since", { mode: "timestamp_ms" }),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.place, table.kind] })],
+);

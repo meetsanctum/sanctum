@@ -1,5 +1,6 @@
 import type { EmittedEvent } from "./app-host/app-work.js";
 import type { DeviceChange } from "./devices/devices.js";
+import type { MotionChange } from "./devices/motion.js";
 import type { Press } from "./devices/presses.js";
 import type { EntityChange } from "./entities/entities.js";
 import type { PersonChange } from "./people/people.js";
@@ -29,7 +30,9 @@ export type BusEvent =
   | ({ name: "entity.changed" } & EntityChange)
   // An app's own event, once the app host has checked it and the action
   // that emitted it has succeeded.
-  | ({ name: "app.emitted" } & EmittedEvent);
+  | ({ name: "app.emitted" } & EmittedEvent)
+  // The places whose motion changed together, as Motion keeps it.
+  | ({ name: "motion.changed" } & MotionChange);
 
 export type BusEventName = BusEvent["name"];
 
@@ -39,8 +42,12 @@ export type EventBusFollower = {
 };
 
 // A follower of what happens to the core's own nouns, as the events for
-// apps are, with no place for apps' own events.
-export type CoreNounsFollower = Omit<EventBusFollower, "app.emitted">;
+// apps are, with no place for apps' own events or what the core works out
+// from its nouns, such as a place's motion.
+export type CoreNounsFollower = Omit<
+  EventBusFollower,
+  "app.emitted" | "motion.changed"
+>;
 
 // waitingForFollowers: until the modules are built, when the followers are
 // set. What's published meanwhile waits, and says so, since only a mistake
@@ -76,6 +83,8 @@ function about(event: BusEvent) {
       return `a change of ${event.app}'s ${event.key}`;
     case "app.emitted":
       return `${event.app}'s ${event.event}`;
+    case "motion.changed":
+      return "a change of the places' motion";
   }
 }
 
