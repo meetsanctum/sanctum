@@ -520,7 +520,10 @@ export async function followDevice(
       try {
         light = await lightOf(ctx, row.deviceId, row.capabilityId);
       } catch (error) {
-        if (isActionError(error) && error.code === "not_found") return;
+        if (isActionError(error) && error.code === "not_found") {
+          await forget(ctx, row.deviceId, row.capabilityId);
+          return;
+        }
         throw error;
       }
       await followOne(ctx, light, current, await sun(), options);

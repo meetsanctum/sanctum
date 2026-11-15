@@ -81,6 +81,115 @@ describe("a room's button", () => {
     expect(button("office")?.active).toBe(false);
   });
 
+  it("turns grey when a light that can't follow joins the room while on", async () => {
+    const { app, core, check, button } = home();
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      expect(button("office")?.active).toBe(true);
+
+      await core.joins(
+        "new-strip",
+        "New strip",
+        { on: true },
+        {
+          features: stripFeatures,
+          roomId: "office",
+        },
+      );
+
+      await vi.waitFor(() => expect(button("office")?.active).toBe(false));
+    } finally {
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
+  it("removes a departed light's target and its room's button at once", async () => {
+    const { app, core, check, button } = home();
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      expect(button("hall")).toBeDefined();
+      expect(core.state.entities.has("hall/light")).toBe(true);
+
+      await core.removes("hall");
+
+      await vi.waitFor(() => {
+        expect(button("hall")).toBeUndefined();
+        expect(core.state.entities.has("hall/light")).toBe(false);
+      });
+    } finally {
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
+  it.each(["off", "no location"])(
+    "refuses a stale White button press with %s",
+    async (reason) => {
+      const { core, call, check, button } = home();
+      await check();
+      expect(button("office")?.active).toBe(true);
+      if (reason === "off") core.state.settings = { on: false };
+      else core.state.location = null;
+      const sent = core.state.sent.length;
+
+      await expect(
+        call("naturalLight.toggleRoom", { placeId: "office" }),
+      ).rejects.toThrow(
+        reason === "off"
+          ? "Natural light is switched off"
+          : "Natural light waits for the home's location",
+      );
+
+      expect(core.state.sent).toHaveLength(sent);
+    },
+  );
+
+  it("keeps buttons hidden if natural light is switched off during a check", async () => {
+    const { core, check, button } = home();
+    await check();
+    core.set("ceiling", { on: false }, byHand);
+    core.press("ceiling", { colorTemperature: 400 });
+    core.state.beforeCommand = async () => {
+      core.state.settings = { on: false };
+    };
+
+    await check();
+
+    expect(button("office")).toBeUndefined();
+    expect(button("hall")).toBeUndefined();
+  });
+
+  it("waits for the next check after a failed command restores the same device state", async () => {
+    const { app, core, check, advance } = home();
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      core.set("ceiling", { on: true }, byHand);
+      core.press("ceiling", { colorTemperature: 400 });
+      let attempts = 0;
+      core.state.beforeCommand = async (device) => {
+        if (device !== "ceiling") return;
+        attempts += 1;
+        // A failed delivery restores the preceding state and emits a
+        // change. Bound the announcements so a retry loop can finish.
+        if (attempts < 4) await core.changed("ceiling");
+        throw new Error("radio failed");
+      };
+
+      await core.changed("ceiling");
+      await vi.waitFor(() => expect(attempts).toBeGreaterThan(0));
+      await new Promise((done) => setTimeout(done, 20));
+      expect(attempts).toBe(1);
+
+      advance(5 * 60_000);
+      await check();
+      expect(attempts).toBe(2);
+    } finally {
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
   it("switches every light in the room off when pressed while White", async () => {
     const { core, call, check, button } = home();
     core.set("desk", { on: true }, byHand);

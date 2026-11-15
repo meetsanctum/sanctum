@@ -1,4 +1,9 @@
-import type { AppContext } from "@meetsanctum/app-sdk";
+import {
+  isActionError,
+  type AppContext,
+  type DeviceInfo,
+} from "@meetsanctum/app-sdk";
+import { isDeepStrictEqual } from "node:util";
 
 import { takeInLights } from "./choices.js";
 import {
@@ -45,6 +50,10 @@ export function createFollower(
   // The devices that changed meanwhile, and the rooms they were and are in.
   const changed = new Set<string>();
   const changedRooms = new Set<string | null>();
+  // A rejected command restores its preceding state and emits a change.
+  // Do not turn that same state into another immediate attempt; the job
+  // retries it, or a different device state starts a new attempt.
+  const seen = new Map<string, DeviceInfo>();
   let wasOn: boolean | undefined;
   let wake: (() => void) | undefined;
 
@@ -74,9 +83,8 @@ export function createFollower(
   // Lights added meanwhile, which follow unless left out.
   async function takeInNewLights() {
     const began = await takeInLights(ctx, runForLight);
-    if (began.length === 0) return;
     const options = await followOptionsFor(ctx, timing);
-    await followAll(ctx, options, runForLight);
+    if (began.length > 0) await followAll(ctx, options, runForLight);
     await publishRooms(ctx, options);
   }
 
@@ -86,8 +94,21 @@ export function createFollower(
     rooms: readonly (string | null)[],
   ) {
     const options = await followOptionsFor(ctx, timing);
-    for (const device of devices) {
-      await followDevice(ctx, device, options, runForLight);
+    for (const deviceId of devices) {
+      let device: DeviceInfo | null;
+      try {
+        device = await ctx.devices.state(deviceId);
+      } catch (error) {
+        if (!isActionError(error) || error.code !== "not_found") throw error;
+        device = null;
+      }
+      if (device) {
+        if (isDeepStrictEqual(seen.get(deviceId), device)) continue;
+        seen.set(deviceId, device);
+      } else {
+        seen.delete(deviceId);
+      }
+      await followDevice(ctx, deviceId, options, runForLight);
     }
     await publishRooms(ctx, options, { rooms });
   }

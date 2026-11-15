@@ -63,7 +63,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
     sent: [] as { device: string; command: LightCommand; actor: Actor }[],
     jobs: [] as Job[],
     logs: [] as string[],
-    beforeCommand: null as (() => Promise<void>) | null,
+    beforeCommand: null as ((device: string) => Promise<void>) | null,
     // What the household chose in Settings → Apps; the app applies its
     // defaults.
     settings: {} as AppSettings,
@@ -207,7 +207,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       async command({ device, capability, command }) {
         holds("devices.control:light");
         capabilityOf(device, capability);
-        await state.beforeCommand?.();
+        await state.beforeCommand?.(device);
         state.sent.push({ device, command: command as LightCommand, actor });
         return structuredClone(
           set(device, command as LightCommand, { app: app.id, actor }),
@@ -291,8 +291,14 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       }
     },
     /** A light joins the home, as pairing one does, and the app hears of it. */
-    async joins(id: string, name: string, shown: LightState | null) {
-      addLight(id, name, shown);
+    async joins(
+      id: string,
+      name: string,
+      shown: LightState | null,
+      options: { features?: LightFeatures; roomId?: string } = {},
+    ) {
+      addLight(id, name, shown, options.features);
+      state.devices.at(-1)!.roomId = options.roomId ?? null;
       const device = structuredClone(state.devices.at(-1)!);
       for (const handler of handlers.get("device.added") ?? []) {
         await handler({ name: "device.added", device });
@@ -313,6 +319,18 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       );
       for (const handler of handlers.get("device.changed") ?? []) {
         await handler({ name: "device.changed", device, before: device });
+      }
+    },
+    /** A device leaves the home, and the app hears of it. */
+    async removes(id: string) {
+      const index = state.devices.findIndex((each) => each.id === id);
+      if (index === -1) throw new ActionError("not_found");
+      const [device] = state.devices.splice(index, 1);
+      for (const handler of handlers.get("device.removed") ?? []) {
+        await handler({
+          name: "device.removed",
+          device: structuredClone(device!),
+        });
       }
     },
     /** The context of an action a person calls. */

@@ -13,6 +13,7 @@ import { z } from "zod";
 import {
   followed,
   followedRow,
+  followOptionsFor,
   homeSun,
   isPaused,
   lookFor,
@@ -154,6 +155,9 @@ async function publishNow(
     (await db.select().from(roomButtons)).map((row) => [row.placeId, row]),
   );
   const devices = await ctx.devices.list();
+  // A call may have waited for a light or another publication while the
+  // household switched natural light off. Publish what stands now.
+  options = await followOptionsFor(ctx, options);
   const shows = options.isOn && (await homeSun(ctx, options.now())) !== null;
   const rows = shows ? await rowsOf(ctx) : new Map<string, Followed>();
   const wanted = rooms ?? [
@@ -237,6 +241,26 @@ export async function switchRoomOff(
   });
 }
 
+// Both directions of a room's button need natural light to be available,
+// even if the button is still on screen after its settings changed.
+async function requireRoomSun(
+  ctx: AppContext,
+  options: FollowOptions,
+  now: Date,
+) {
+  if (!options.isOn) {
+    throw new ActionError("conflict", "Natural light is switched off");
+  }
+  const sun = await homeSun(ctx, now);
+  if (!sun) {
+    throw new ActionError(
+      "conflict",
+      "Natural light waits for the home's location",
+    );
+  }
+  return sun;
+}
+
 /**
  * Brings the room to natural light: every light that follows on at the
  * curve, its pause ended, and every other light that is on off.
@@ -247,17 +271,8 @@ export async function bringRoom(
   runForLight: RunForLight,
   placeId: string,
 ): Promise<Failed[]> {
-  if (!options.isOn) {
-    throw new ActionError("conflict", "Natural light is switched off");
-  }
   const now = options.now();
-  const sun = await homeSun(ctx, now);
-  if (!sun) {
-    throw new ActionError(
-      "conflict",
-      "Natural light waits for the home's location",
-    );
-  }
+  const sun = await requireRoomSun(ctx, options, now);
   const lights = lightsIn(await ctx.devices.list(), placeId);
   return eachLight(ctx, runForLight, lights, async (light) => {
     const { device, capability } = light;
@@ -310,7 +325,9 @@ export async function toggleRoom(
     await rowsOf(ctx),
     ctx.appId,
   );
-  return state?.active
-    ? switchRoomOff(ctx, runForLight, placeId)
-    : bringRoom(ctx, options, runForLight, placeId);
+  if (state?.active) {
+    await requireRoomSun(ctx, options, options.now());
+    return switchRoomOff(ctx, runForLight, placeId);
+  }
+  return bringRoom(ctx, options, runForLight, placeId);
 }
