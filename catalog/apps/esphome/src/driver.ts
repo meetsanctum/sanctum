@@ -146,6 +146,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       });
       if (!current()) return;
       if (owned.problem) {
+        // No retry of the problem it had may follow its clearing.
+        clearTimeout(owned.telling);
         await ctx.devices.problem({ key: owned.mac, problem: null });
         if (!current()) return;
         owned.problem = null;
@@ -259,6 +261,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // Repair with nothing saying so, while it's still that device's problem.
   function tell(owned: Owned, problem: string, attempt = 0) {
     clearTimeout(owned.telling);
+    // Repaired since, it's no longer the device's problem to say.
+    if (owned.problem !== problem) return;
     ctx.devices.problem({ key: owned.mac, problem }).catch(() => {
       if (stopped || devices.get(owned.mac) !== owned) return;
       if (owned.problem !== problem) return;

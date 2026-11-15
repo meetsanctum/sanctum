@@ -13,6 +13,7 @@ import {
   migrationsFolder,
   nextMac,
   signalEntity,
+  timings,
 } from "./support.js";
 
 // The app's own writes and the core's calls failing or overlapping: a
@@ -359,4 +360,30 @@ it("says a device's problem again when the core didn't take it", async () => {
   );
   expect(problem).toHaveBeenCalledTimes(2);
   expect(problem).toHaveBeenLastCalledWith({ key, problem: "keyMismatch" });
+});
+
+it("never says a problem again once its device is repaired", async () => {
+  const key = await add(core, device);
+  await core.until(() => core.availability.get(key) === "online", "online");
+  // The core takes each problem, but its answer never comes back, so the
+  // app keeps saying it.
+  const tell = context.devices.problem.bind(context.devices);
+  const problem = vi.spyOn(context.devices, "problem");
+  problem.mockImplementation(async (report) => {
+    await tell(report);
+    if (report.problem) throw new Error("The core's answer was lost");
+  });
+  const next = newKey();
+  await device.unplug();
+  device.psk = next;
+  await device.listen();
+  await expect.poll(() => problem.mock.calls.length).toBeGreaterThan(1);
+
+  expect(await core.repair(key, { key: next })).toBeUndefined();
+  await core.until(() => !core.problems.has(key), "the problem cleared");
+  const cleared = problem.mock.calls.length;
+  await new Promise((done) => setTimeout(done, timings.longestPauseMs * 3));
+
+  expect(core.problems.has(key)).toBe(false);
+  expect(problem.mock.calls.slice(cleared)).toEqual([]);
 });

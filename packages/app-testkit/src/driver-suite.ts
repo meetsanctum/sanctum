@@ -132,11 +132,14 @@ export function describeDriver(harness: DriverHarness) {
 
     afterEach(async () => {
       try {
-        await core.stop();
+        try {
+          await core.stop();
+        } finally {
+          core.close();
+        }
       } finally {
-        core.close();
+        await harness.tearDown?.();
       }
-      await harness.tearDown?.();
       // Even when it does not wait for the answer, a driver never sends
       // the core something it refuses.
       expect(core.refused).toEqual([]);
