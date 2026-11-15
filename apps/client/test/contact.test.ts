@@ -5,6 +5,7 @@ import {
   contactsOf,
   contactsStatus,
   contactsSummary,
+  contactNowText,
   contactText,
   placeContacts,
 } from "../src/contact";
@@ -46,6 +47,24 @@ describe("a contact sensor's words", () => {
 
   it("say only Open when it is not known since when", () => {
     expect(contactText(true, null, now)).toBe("Open");
+  });
+
+  it("say on its detail since when it has been closed, which a tile leaves out", () => {
+    expect(contactNowText(true, ago(12 * minute), now)).toBe("Open for 12 min");
+    expect(contactNowText(false, ago(30_000), now)).toBe("Closed");
+    expect(contactNowText(false, ago(12 * minute), now)).toBe(
+      "Closed for 12 min",
+    );
+    expect(
+      contactNowText(false, new Date(2026, 9, 31, 13, 56).toISOString(), now),
+    ).toBe("Closed since 13:56");
+    expect(
+      contactNowText(false, new Date(2026, 9, 30, 23, 50).toISOString(), now),
+    ).toBe("Closed since yesterday");
+    expect(
+      contactNowText(false, new Date(2026, 9, 28, 9, 0).toISOString(), now),
+    ).toBe("Closed since 28 Oct");
+    expect(contactNowText(false, null, now)).toBe("Closed");
   });
 });
 
