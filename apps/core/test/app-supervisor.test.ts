@@ -244,6 +244,7 @@ describe("an app's supervisor", () => {
         supervisor.notReady(entry, "Waiting for Zigbee2MQTT");
         expect(phase()).toBe("waiting");
         expect(entry.supervision!.waitingFor).toBe("Waiting for Zigbee2MQTT");
+        expect(entry.supervision!.isOwnWait).toBe(true);
         await passes(pause - 1);
         expect(reconciled).not.toHaveBeenCalled();
         await passes(1);
@@ -470,6 +471,8 @@ describe("an app's supervisor", () => {
       expect(entry.supervision!.waitingFor).toBe(
         "Waiting for an update that lets it reach your devices",
       );
+      // The core holds it back; its own start said nothing.
+      expect(entry.supervision!.isOwnWait).toBe(false);
       expect(started).toEqual([]);
       expect(stopped).toEqual([entry.app.id]);
       supervisor.end(entry);

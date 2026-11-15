@@ -337,6 +337,7 @@ describe("Needs attention", () => {
       ...app("waiting", {
         since,
         waitingFor: "Waiting for Zigbee2MQTT",
+        ownWait: true,
         attention: true,
       }),
       id: "sanctum.zigbee",
@@ -363,7 +364,7 @@ describe("Needs attention", () => {
     // And another app's wait is its own.
     const other = app("waiting", { since, attention: true });
     expect(appsNotRunning([other, zigbee], notSetUp)).toEqual([other]);
-    // Using that service does not make its other waits harmless.
+    // Using that service does not make a wait of the core's harmless.
     for (const waitingFor of [undefined, "Waiting for its data to come back"]) {
       const restoring = {
         ...zigbee,

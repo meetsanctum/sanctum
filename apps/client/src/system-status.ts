@@ -327,19 +327,19 @@ export function notSetUpWords(waiting: ServiceNotSetUp) {
   };
 }
 
-/** Whether the app's wait is explained by a service the home never set up. */
+/**
+ * Whether the app only waits for a service the home never set up: its own
+ * start says it waits, and it asked for such a service. A wait of the core's,
+ * for its container or its data, needs attention whatever the app uses.
+ */
 export function isWaitingForSetUp(
   app: AppInfo,
   notSetUp: readonly ServiceNotSetUp[],
 ) {
-  // Other waits, such as starting its container or recovering its data, still
-  // need attention even when the app also uses an unconfigured service.
   return (
     app.state === "waiting" &&
-    app.run?.waitingFor === "Waiting for Zigbee2MQTT" &&
-    notSetUp.some(
-      (each) => each.service === "zigbee2mqtt" && each.apps.includes(app.id),
-    )
+    app.run?.ownWait === true &&
+    notSetUp.some((each) => each.apps.includes(app.id))
   );
 }
 
@@ -351,7 +351,11 @@ export function addDevicesHint(
   apps: readonly AppInfo[],
   notSetUp: readonly ServiceNotSetUp[] = [],
 ) {
-  return apps.some((app) => isWaitingForSetUp(app, notSetUp))
+  return notSetUp.some(
+    (each) =>
+      each.service === "zigbee2mqtt" &&
+      apps.some((app) => isWaitingForSetUp(app, [each])),
+  )
     ? "Plug in a Zigbee adapter to add Zigbee devices."
     : undefined;
 }

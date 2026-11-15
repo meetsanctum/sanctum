@@ -544,6 +544,7 @@ describe("an app that runs apart, supervised", () => {
       await vi.waitFor(() => expect(stateOf().state).toBe("waiting"));
       expect(stateOf().run).toMatchObject({
         waitingFor: "Waiting for Zigbee2MQTT",
+        ownWait: true,
       });
       await vi.waitFor(() => expect(tries.length).toBeGreaterThan(2));
       expect(containers()).toBe(1);
@@ -552,6 +553,7 @@ describe("an app that runs apart, supervised", () => {
       await running();
 
       expect(stateOf().run?.waitingFor).toBeUndefined();
+      expect(stateOf().run?.ownWait).toBeUndefined();
       expect(stateOf().run?.failures).toBeUndefined();
       expect(containers()).toBe(1);
     });

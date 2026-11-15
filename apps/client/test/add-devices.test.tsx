@@ -141,6 +141,7 @@ describe("Add devices, with what drivers found", () => {
                 run: {
                   since: "2026-10-29T12:00:00.000Z",
                   waitingFor: "Waiting for Zigbee2MQTT",
+                  ownWait: true,
                 },
               },
             ]}
@@ -163,18 +164,22 @@ describe("Add devices, with what drivers found", () => {
     expect(shown().textContent).toContain(
       "Plug in a Zigbee adapter to add Zigbee devices.",
     );
-    // A hint, not something that went wrong.
+    // A hint, not something that went wrong, and heard as it appears.
     expect(shown().querySelector("[role=alert]")).toBeNull();
+    expect(shown().querySelector("[role=status]")?.textContent).toBe(
+      "Plug in a Zigbee adapter to add Zigbee devices.",
+    );
 
     await dialog();
     expect(shown().querySelector("[role=alert]")?.textContent).toBe(
       "No app that adds devices is running.",
     );
     expect(shown().textContent).not.toContain("Plug in a Zigbee adapter");
+    expect(shown().querySelector("[role=status]")?.textContent).toBe("");
   });
 
   it.each(["off", "paused", "failed", "stopped", "waiting"] as const)(
-    "does not suggest an adapter when the app is %s for another reason",
+    "does not suggest an adapter when the app is %s for a reason of the core's",
     async (state) => {
       adding = { until: null, joined: [], drivers: [], found: [] };
       await act(async () =>

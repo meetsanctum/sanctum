@@ -472,6 +472,10 @@ export function AddDevices(props: {
         {hint && !problem && (
           <p className="m-0 text-sm text-muted-foreground">{hint}</p>
         )}
+        {/* There before the hint is, so it is heard when looking ends. */}
+        <p role="status" className="sr-only">
+          {problem ? "" : hint}
+        </p>
         {(problem ?? nothing) && (
           <p role="alert" className="m-0 text-sm text-destructive">
             {problem ?? nothing}

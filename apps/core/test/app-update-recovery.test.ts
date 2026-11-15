@@ -59,6 +59,8 @@ describe("an app that waited for the manager to come back", () => {
       expect(stateOf(core, id).run?.waitingFor).toBe(
         "Waiting for its data to come back",
       );
+      // The core's wait, not one its own start told of.
+      expect(stateOf(core, id).run?.ownWait).toBeUndefined();
 
       isAnswering = true;
       await running(core, id);
