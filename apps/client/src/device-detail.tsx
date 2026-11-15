@@ -7,7 +7,7 @@ import { registerPermission } from "@meetsanctum/app-sdk";
 import {
   AppScope,
   Button,
-  ContactClosed,
+  contactIcon,
   deviceKindsOf,
   LightControls,
   SwipePages,
@@ -20,6 +20,7 @@ import { useEffect, useId } from "react";
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
+import { contactPageName } from "./contact";
 import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
@@ -146,6 +147,10 @@ export function DeviceDetail(props: {
       : device?.capabilities.find(
           (each): each is Contact => each.kind === "contact",
         );
+  const contactShownAs =
+    device?.shownAs === "door" || device?.shownAs === "window"
+      ? device.shownAs
+      : undefined;
   const sensorLike = capability !== undefined && sensing(capability.kind);
   const pages =
     device && hasDetail
@@ -276,8 +281,9 @@ export function DeviceDetail(props: {
                 ? [
                     {
                       id: "contact",
-                      label: "Contact",
-                      icon: ContactClosed,
+                      // Named for what the household shows it as.
+                      label: contactPageName(contactShownAs),
+                      icon: contactIcon(contactShownAs, false),
                       content: (
                         <ContactPage
                           key={`${device.id}/${contact.id}`}

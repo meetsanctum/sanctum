@@ -296,6 +296,45 @@ describe("Security's card", () => {
     ).toBe(true);
   });
 
+  it("is one for the doors, one for the windows and one for the sensors shown as neither, each only where the home has one", async () => {
+    const as = (device: DeviceInfo, type: "door" | "window"): DeviceInfo => ({
+      ...device,
+      type,
+      shownAs: type,
+    });
+    devices = [
+      as(contactSensor("front", "Front door", "hall", true), "door"),
+      as(contactSensor("back", "Back door", "hall", false), "door"),
+      as(contactSensor("kitchen", "Kitchen window", "office", false), "window"),
+      contactSensor("letterbox", "Letterbox", "hall", null),
+    ];
+    await show("security");
+
+    expect(cards().map((each) => each.textContent)).toEqual([
+      "Doors, 1 open",
+      "Windows, All closed",
+      "Contact sensors, No readings",
+    ]);
+    // Only the doors' is White, and each has its own glyph, open or closed.
+    expect(cards().map((each) => each.dataset.active)).toEqual([
+      "",
+      undefined,
+      undefined,
+    ]);
+    const glyphs = ["door-open", "window-closed", "contact-closed"];
+    expect(
+      cards().map((each, index) =>
+        each
+          .querySelector("svg")!
+          .classList.contains(`lucide-${glyphs[index]}`),
+      ),
+    ).toEqual([true, true, true]);
+
+    devices = devices.slice(0, 2);
+    await show("security");
+    expect(cards().map((each) => each.textContent)).toEqual(["Doors, 1 open"]);
+  });
+
   it("is frosted glass and says All closed once every contact sensor has said so", async () => {
     devices = [
       contactSensor("front", "Front door", "hall", false),
