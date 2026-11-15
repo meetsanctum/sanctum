@@ -1,4 +1,6 @@
 import {
+  hasLowBattery,
+  lowCharge,
   maintenanceOf,
   onBattery,
   type DeviceInfo,
@@ -37,7 +39,11 @@ export function quietText(device: DeviceInfo, now: number) {
   return `Not heard from since ${sinceWords(device.lastSeenAt!, now)}: try a new battery`;
 }
 
-/** What leads a line with a low battery, with its charge or without it where the charge sits beside it. */
+/**
+ * What leads a line with a low battery, with its charge (`lowCharge`) or
+ * without it: where the charge sits beside it, and where the device says
+ * its battery is low at a charge that isn't, or without one.
+ */
 export function lowBatteryText(battery?: number) {
   return battery === undefined
     ? "Battery low: replace it soon"
@@ -48,8 +54,8 @@ const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
 
 /**
  * Every device on a battery, the next to replace first: quiet ones, the
- * longest quiet first, then by charge, lowest first, and last those that
- * have not said it yet.
+ * longest quiet first, then those with a low battery, then the rest, each
+ * by charge, lowest first, and last those that have not said it.
  */
 export function batteryOrder(devices: readonly DeviceInfo[], now: number) {
   const quiet = (device: DeviceInfo) => maintenanceOf(device, now) === "quiet";
@@ -57,6 +63,9 @@ export function batteryOrder(devices: readonly DeviceInfo[], now: number) {
     if (quiet(a) !== quiet(b)) return quiet(a) ? -1 : 1;
     if (quiet(a)) {
       return Date.parse(a.lastSeenAt!) - Date.parse(b.lastSeenAt!);
+    }
+    if (hasLowBattery(a) !== hasLowBattery(b)) {
+      return hasLowBattery(a) ? -1 : 1;
     }
     if (a.battery !== b.battery) {
       if (a.battery === null) return 1;
@@ -136,18 +145,25 @@ export function batteriesTile(devices: readonly DeviceInfo[], now: number) {
   const said = (device: DeviceInfo) =>
     maintenanceOf(device, now) === "quiet"
       ? `${device.name} hasn't been heard from since ${sinceWords(device.lastSeenAt!, now)}`
-      : `${device.name}'s battery is at ${device.battery}%`;
+      : lowCharge(device) === undefined
+        ? `${device.name}'s battery is low`
+        : `${device.name}'s battery is at ${device.battery}%`;
   const [only] = due;
   if (!only) return null;
   if (due.length === 1) {
     const isQuiet = maintenanceOf(only, now) === "quiet";
+    const charge = lowCharge(only);
     return {
       title: only.name,
       // Short enough for a 1 × 2 tile, as the activity log says it.
-      value: isQuiet ? "Gone quiet" : `Battery ${only.battery}%`,
+      value: isQuiet
+        ? "Gone quiet"
+        : charge === undefined
+          ? "Battery low"
+          : `Battery ${charge}%`,
       label: isQuiet
         ? `${said(only)}. Its battery may be empty. Opens Maintenance`
-        : `${only.name}'s battery is low, ${only.battery}%. Opens Maintenance`,
+        : `${only.name}'s battery is low${charge === undefined ? "" : `, ${charge}%`}. Opens Maintenance`,
     };
   }
   return {

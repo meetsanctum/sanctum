@@ -87,6 +87,35 @@ describe("a climate sensor", () => {
     });
   });
 
+  it("keeps whether its battery is low as the device says it, and nothing until one does", async () => {
+    const { core, maya, sensor, lamp } = await sensorCore();
+    expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
+      battery: 87,
+      batteryLow: null,
+    });
+    await core.devices.report("test.lamps", {
+      key: "sensor-1",
+      batteryLow: true,
+    });
+    // A reading without it keeps it, and its charge stays its own.
+    await radio.press("sensor-1", { temperature: 22 });
+    expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
+      battery: 87,
+      batteryLow: true,
+    });
+    await core.devices.report("test.lamps", {
+      key: "sensor-1",
+      batteryLow: false,
+    });
+    expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
+      battery: 87,
+      batteryLow: false,
+    });
+    expect(await deviceOf(core, maya.token, lamp)).toMatchObject({
+      batteryLow: null,
+    });
+  });
+
   it("takes no commands", async () => {
     const { core, maya, sensor } = await sensorCore();
     const answer = await command(core, maya.token, sensor, "temperature", {

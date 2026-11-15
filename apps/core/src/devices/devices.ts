@@ -547,7 +547,13 @@ export function createDevices(
           parsed.error,
         );
       }
-      const { key, availability, states = {}, battery } = parsed.data;
+      const {
+        key,
+        availability,
+        states = {},
+        battery,
+        batteryLow,
+      } = parsed.data;
       const device = db
         .select()
         .from(devices)
@@ -581,6 +587,7 @@ export function createDevices(
       const answered =
         observations.length > 0 ||
         battery !== undefined ||
+        batteryLow !== undefined ||
         availability === "online";
       changing(device.id, () =>
         db.transaction(() => {
@@ -615,7 +622,9 @@ export function createDevices(
           // One its network no longer has stays offline until a list has it
           // again or its driver registers it, whatever a late report says.
           const left = device.leftAt !== null;
-          if (battery !== undefined) deviceLog.battery(device, battery, at);
+          if (battery !== undefined || batteryLow !== undefined) {
+            deviceLog.battery(device, { battery, batteryLow }, at);
+          }
           db.update(devices)
             .set({
               availability: left
@@ -623,6 +632,7 @@ export function createDevices(
                 : (availability ?? device.availability),
               lastSeenAt: answered ? at : device.lastSeenAt,
               battery: battery ?? device.battery,
+              batteryLow: batteryLow ?? device.batteryLow,
             })
             .where(eq(devices.id, device.id))
             .run();
