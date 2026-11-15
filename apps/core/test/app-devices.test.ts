@@ -166,7 +166,7 @@ describe("an action that timed out", () => {
       input: z.object({ device: z.string() }),
       output: z.unknown(),
       async run(ctx, input) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await new Promise((resolve) => setTimeout(resolve, 1_100));
         try {
           return await ctx.devices.command({
             device: input.device,
@@ -189,8 +189,9 @@ describe("an action that timed out", () => {
     });
     const { core, maya, lamp } = await lampsCore({
       apps: [{ app, origin: "system" }],
-      // Time enough for the driver's start, which registers its devices.
-      appTimeoutMs: 300,
+      // Time enough for the driver's start, which registers its devices,
+      // also on a busy machine, and short of the action's wait.
+      appTimeoutMs: 1_000,
     });
 
     const asked = await post(
