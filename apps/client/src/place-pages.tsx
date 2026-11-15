@@ -5,11 +5,11 @@ import {
 } from "@meetsanctum/app-sdk";
 import {
   Button,
-  ContactClosed,
-  ContactOpen,
+  contactIcon,
   DeviceSections,
   icons,
   PageBar,
+  type ContactShownAs,
   type LucideIcon,
   type PageParams,
   type Tile,
@@ -22,6 +22,7 @@ import {
   contactsOf,
   contactsStatus,
   contactsSummary,
+  contactTypes,
   placeContacts,
 } from "./contact";
 import {
@@ -167,7 +168,15 @@ function PlaceHeader(props: {
 }
 
 /** A place's contact sensors as its line says them (contact.ts). */
-export type PlaceContact = { text: string; open: boolean; isUnknown: boolean };
+export type PlaceContact = {
+  text: string;
+  open: boolean;
+  isUnknown: boolean;
+  /** The door or window its glyph is, where its sensors are all one. */
+  shownAs?: ContactShownAs;
+  /** What it counts, said before it for a screen reader; none where its words name it. */
+  label: string | null;
+};
 
 /**
  * A place's motion, whether its contact sensors are open and what its
@@ -181,7 +190,7 @@ export function PlaceReadings(props: {
   className: string;
 }) {
   const { contact } = props;
-  const Contact = contact?.open ? ContactOpen : ContactClosed;
+  const Contact = contactIcon(contact?.shownAs, contact?.open === true);
   if (!props.motion && !contact && !props.readings?.length) return null;
   return (
     <p
@@ -201,7 +210,7 @@ export function PlaceReadings(props: {
             className="text-white/65"
             strokeDasharray={contact.isUnknown ? "3 3" : undefined}
           />
-          <span className="sr-only">Contact sensors </span>
+          {contact.label && <span className="sr-only">{contact.label} </span>}
           {contact.text}
         </span>
       )}
@@ -601,21 +610,24 @@ function environmentCards(
   });
 }
 
-// What Security's page opens with: a card for the home's contact sensors.
+// What Security's page opens with: a card for each type of contact sensor
+// the home has, its doors, its windows and those shown as neither.
 function securityCards(tiles: readonly Tile[]): Summary[] {
-  const contacts = contactsOf(tiles);
-  if (!contacts) return [];
-  const { open, status, note } = contactsSummary(contacts);
-  return [
-    {
-      id: "contact",
-      icon: open ? ContactOpen : ContactClosed,
-      title: "Contact sensors",
-      status,
-      note,
-      active: open,
-    },
-  ];
+  return contactTypes.flatMap(({ type, title }) => {
+    const contacts = contactsOf(tiles, type);
+    if (!contacts) return [];
+    const { open, status, note } = contactsSummary(contacts);
+    return [
+      {
+        id: type,
+        icon: contactIcon(type === "contact" ? null : type, open),
+        title,
+        status,
+        note,
+        active: open,
+      },
+    ];
+  });
 }
 
 export function CategoryPage(props: {

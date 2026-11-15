@@ -289,8 +289,9 @@ const isContact = (capability: CapabilityInfo): capability is Contact =>
   capability.kind === "contact";
 
 // A contact sensor's tile: White while it is open, saying for how long by
-// `now`. One that is offline, has gone quiet or has said nothing yet is
-// not known, which its tile never shows as closed.
+// `now`, with the glyph of the door or window the household shows it as.
+// One that is offline, has gone quiet or has said nothing yet is not
+// known, which its tile never shows as closed.
 function contactTile(
   device: DeviceInfo,
   capability: Contact,
@@ -304,6 +305,9 @@ function contactTile(
     deviceId: device.id,
     capabilityId: capability.id,
     kind: "contact" as const,
+    ...((device.shownAs === "door" || device.shownAs === "window") && {
+      shownAs: device.shownAs,
+    }),
     roomId,
     // A device with several contacts names each.
     name: several ? `${device.name} ${capability.id}` : device.name,

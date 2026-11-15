@@ -1,9 +1,11 @@
-import type { Tile } from "@meetsanctum/ui-sdk";
+import type { ContactShownAs, Tile } from "@meetsanctum/ui-sdk";
 
 import { midnight, timeText } from "./device-history-data";
 
 // What contact sensors say, in words: on a sensor's tile, in a room's line
-// under its name, in the home's status and on Security's summary card. A sensor is
+// under its name, in the home's status and on Security's summary cards,
+// one for the doors, one for the windows and one for the sensors shown as
+// neither. A sensor is
 // open, closed or not known: one that is offline, has gone quiet on its
 // battery or has said nothing yet is not known, and is never counted as
 // closed. So "All closed" needs a closed reading from every sensor, and
@@ -61,9 +63,56 @@ export function contactNowText(
 /** How some contact sensors are: how many are open, closed and not known. */
 export type Contacts = { open: number; closed: number; unknown: number };
 
-/** The contact sensors among some tiles, or null when there is none. */
-export function contactsOf(tiles: readonly Tile[]): Contacts | null {
-  const sensors = tiles.filter((tile) => tile.kind === "contact");
+/** What a contact sensor counts among: the doors, the windows, or the sensors shown as neither. */
+export type ContactType = ContactShownAs | "contact";
+
+/**
+ * Each type in the order its card and its words come: what its card and a
+ * sensor's detail page are called, and what one and several are called in
+ * a room's line.
+ */
+export const contactTypes: readonly {
+  type: ContactType;
+  title: string;
+  page: string;
+  one: string;
+  several: string;
+}[] = [
+  { type: "door", title: "Doors", page: "Door", one: "Door", several: "doors" },
+  {
+    type: "window",
+    title: "Windows",
+    page: "Window",
+    one: "Window",
+    several: "windows",
+  },
+  {
+    type: "contact",
+    title: "Contact sensors",
+    page: "Contact",
+    one: "Contact sensor",
+    several: "contact sensors",
+  },
+];
+
+/** What a contact sensor's detail page is called, by what it is shown as. */
+export const contactPageName = (shownAs?: ContactShownAs) =>
+  contactTypes.find((each) => each.type === (shownAs ?? "contact"))!.page;
+
+const typeOf = (tile: Tile): ContactType => tile.shownAs ?? "contact";
+
+/**
+ * The contact sensors among some tiles, all of them or those of one type,
+ * or null when there is none.
+ */
+export function contactsOf(
+  tiles: readonly Tile[],
+  type?: ContactType,
+): Contacts | null {
+  const sensors = tiles.filter(
+    (tile) =>
+      tile.kind === "contact" && (type === undefined || typeOf(tile) === type),
+  );
   if (sensors.length === 0) return null;
   const known = sensors.flatMap((tile) =>
     tile.contact && !tile.disabled ? [tile.contact] : [],
@@ -94,17 +143,45 @@ export function contactsStatus(contacts: Contacts) {
     : closedText(contacts, "All closed");
 }
 
-/** A place's contact sensors as its line says them, and whether any is open. */
+// The one type some contact sensors' tiles are all of, or none for a mix.
+function oneType(tiles: readonly Tile[]) {
+  const types = new Set(tiles.map(typeOf));
+  return types.size === 1
+    ? contactTypes.find((each) => each.type === typeOf(tiles[0]!))!
+    : null;
+}
+
+/**
+ * A place's contact sensors as its line says them, and whether any is
+ * open. What is open is named where it is all doors or all windows: "Door
+ * open", "2 windows open"; contact sensors and a mix are counted, "2
+ * open". Its glyph is the door's or the window's where what is open, or
+ * while nothing is, every sensor there, is one; and what it counts is said
+ * before it for a screen reader unless its words name it.
+ */
 export function placeContacts(tiles: readonly Tile[]) {
+  const sensors = tiles.filter((tile) => tile.kind === "contact");
   const contacts = contactsOf(tiles);
   if (!contacts) return null;
   const open = contacts.open > 0;
+  const opened = oneType(
+    sensors.filter((tile) => !tile.disabled && tile.contact?.open),
+  );
+  const all = oneType(sensors);
+  const named = open && opened !== null && opened.type !== "contact";
+  const type = (open ? opened : all)?.type ?? "contact";
   return {
     open,
     isUnknown: !open && contacts.closed === 0,
-    text: open
-      ? `${contacts.open} open`
-      : closedText(contacts, contacts.closed === 1 ? "Closed" : "All closed"),
+    text: named
+      ? contacts.open === 1
+        ? `${opened.one} open`
+        : `${contacts.open} ${opened.several} open`
+      : open
+        ? `${contacts.open} open`
+        : closedText(contacts, contacts.closed === 1 ? "Closed" : "All closed"),
+    ...(type !== "contact" && { shownAs: type }),
+    label: named ? null : (all ?? contactTypes.at(-1)!).title,
   };
 }
 

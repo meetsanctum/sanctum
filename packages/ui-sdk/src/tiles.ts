@@ -1,5 +1,7 @@
 import type { LightState, SensorMeasure } from "@meetsanctum/app-sdk";
 
+import type { ContactShownAs } from "./contact-icons";
+
 // The home's lights, switches, remotes, sensors, motion sensors and contact
 // sensors as tiles, and a tile for a device Sanctum cannot use:
 // what a tile shows, which the shell works out from the core's devices and
@@ -36,6 +38,11 @@ export type Tile = {
   dims: boolean;
   brightness?: number;
   disabled: boolean;
+  /**
+   * The door or window the household shows a contact sensor as, which its
+   * glyph is then; none for one shown as what it is.
+   */
+  shownAs?: ContactShownAs;
   /** A sensor's readings, in standard units, while it answers. */
   readings?: Partial<Record<SensorMeasure, number>>;
   /** What a sensor measures, whether it answers or not, which its icon says. */
