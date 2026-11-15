@@ -8,7 +8,7 @@ import { PlacesError, type PlacesModule } from "./places.js";
 
 // What removing a room takes with it, for the warning someone reads before
 // removing it; nothing changes here. Its devices move to No room and stay
-// paired. Apps clean up what they keep for it on place.deleted, counted here
+// paired. Apps clean up what they keep for it on place.removed, counted here
 // from their entities whose state puts them in the room by `placeId`, as a
 // room section's tiles do. Workflows keep their config, so those that name
 // the room, in a field their pieces declare with names("room"), are broken

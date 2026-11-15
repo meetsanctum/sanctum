@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
-import type { ApartPackage } from "./loader.js";
+import { speaksThisCore, type ApartPackage } from "./loader.js";
 import type { InstalledApp } from "./installed.js";
 import { appUpdates } from "./schema.js";
 import type { AppSettingsStore } from "./settings.js";
@@ -48,6 +48,11 @@ import type { AppVersions } from "./versions.js";
 // failure: it goes on from the copy it took in, tried again with growing pauses and
 // stopped in the end with Restart. The original goes once its next update commits.
 //
+// A version kept from before the core's protocol, as a core's update that changes the
+// protocol leaves each app's last one, can't run on this core, so the core never goes
+// back to it: nobody is offered it, an update cut short starts the version the core
+// brings, and a new version that fails is tried again, as on a first move.
+//
 // An app's own database is the truth for what it owns in the core, so undoing puts
 // that back and lets the old version rebuild from it, through the same calls any app
 // uses. The new version's writes go through while it starts, so nothing is held back,
@@ -71,6 +76,9 @@ const goingBackGivesUpAfterMs = 10 * 60_000;
 // The row's from folder on an app's first move.
 const inTheCore = "";
 const isMove = (row: AppUpdateRow) => row.fromFolder === inTheCore;
+// Said of a version kept from before this core's protocol, which it can't run.
+const speaksOlder = (appId: string, version: string) =>
+  `apps: ${appId} ${version} speaks a protocol this core doesn't`;
 
 export function createAppUpdates(options: {
   db: CoreDatabase;
@@ -104,6 +112,18 @@ export function createAppUpdates(options: {
   let inFlight: Promise<void> | undefined;
   let recovered: Promise<void> | undefined;
   const retrying = new Map<string, NodeJS.Timeout>();
+  // Updates whose old version this core can't run, by the update's id: a new
+  // version that fails is tried again, as on a first move, since going back
+  // would start what can't run.
+  const noWayBack = new Set<string>();
+  const staysOnNew = (row: AppUpdateRow) =>
+    isMove(row) || noWayBack.has(row.id);
+
+  // Whether this core can run the version in that folder. One whose manifest
+  // can't be read throws, so the caller tries again before it decides.
+  async function canRun(appId: string, folder: string) {
+    return speaksThisCore(await options.loadPackage(appId, folder));
+  }
 
   const rowOf = (appId: string) =>
     db.select().from(appUpdates).where(eq(appUpdates.appId, appId)).get();
@@ -253,6 +273,14 @@ export function createAppUpdates(options: {
       : "Waiting for its turn to update";
     host.waits(entry, why);
     try {
+      if (
+        !isMove(row) &&
+        !row.restores &&
+        !(await canRun(appId, row.fromFolder))
+      ) {
+        noWayBack.add(row.id);
+      }
+      if (!host.isCurrent(entry)) return;
       await manager.beginAppUpdate(appId, {
         id: row.id,
         from: {
@@ -387,10 +415,25 @@ export function createAppUpdates(options: {
         // With nowhere else to carry on, it goes on from the copy it took in.
         return pkg;
       }
+      // A version from before this core's protocol can't run, so the one the
+      // core brings starts instead. The manager puts back the copy of an
+      // update no row speaks for, and the update begins again from there.
+      const unlessOlder = async (other: string, then?: () => void) => {
+        const kept = await options.loadPackage(appId, other);
+        if (speaksThisCore(kept)) {
+          then?.();
+          return kept;
+        }
+        log(
+          `${speaksOlder(appId, kept.apart.manifest.version)}, so it starts on ${pkg.apart.manifest.version}`,
+        );
+        forget(appId);
+        return pkg;
+      };
       if (row.status === "waiting") {
         // Someone asked to go back, and the core still brings what they left.
         if (row.restores && row.fromFolder === folder) {
-          return options.loadPackage(appId, row.toFolder);
+          return unlessOlder(row.toFolder);
         }
         // Another version arrived while it waited. What it stopped is still there.
         if (row.toFolder !== folder) forget(appId);
@@ -415,8 +458,9 @@ export function createAppUpdates(options: {
         return pkg;
       }
       // The power went after it started and before its commit.
-      if (row.status === "starting") mark(appId, { status: "undoing" });
-      return options.loadPackage(appId, row.fromFolder);
+      return unlessOlder(row.fromFolder, () => {
+        if (row.status === "starting") mark(appId, { status: "undoing" });
+      });
     },
 
     /** How its update stands now, for what clients say. */
@@ -447,10 +491,15 @@ export function createAppUpdates(options: {
     /** What going back would return to, if anything. Nothing while it can't. */
     async goBackOption(entry: InstalledApp): Promise<AppGoBack | null> {
       if (!canGoBack(entry)) return null;
-      const kept = await manager.keptAppCopy(entry.manifest.id);
-      return (
-        kept && { id: kept.id, version: kept.from.version, since: kept.at }
-      );
+      const appId = entry.manifest.id;
+      const kept = await manager.keptAppCopy(appId);
+      if (!kept) return null;
+      try {
+        if (!(await canRun(appId, kept.from.folder))) return null;
+      } catch {
+        return null;
+      }
+      return { id: kept.id, version: kept.from.version, since: kept.at };
     },
 
     /**
@@ -461,8 +510,12 @@ export function createAppUpdates(options: {
       const appId = entry.manifest.id;
       const kept = canGoBack(entry) ? await manager.keptAppCopy(appId) : null;
       if (!kept || kept.id !== copyId) return false;
-      // Refused here, before anything stops, if it can't be read.
-      await options.loadPackage(appId, kept.from.folder);
+      // Refused here, before anything stops, if it can't be read or run.
+      const back = await options.loadPackage(appId, kept.from.folder);
+      if (!speaksThisCore(back)) {
+        log(`${speaksOlder(appId, kept.from.version)}, so it can't go back`);
+        return false;
+      }
       const last = versions.last(appId);
       if (!canGoBack(entry) || !last?.folder) return false;
       const row: AppUpdateRow = {
@@ -622,6 +675,7 @@ export function createAppUpdates(options: {
         tryAgainLater(entry, row);
       }
       if (row?.status !== "starting") return;
+      noWayBack.delete(row.id);
       log(`apps: ${row.appId} is on ${row.toVersion}`);
       if (!isMove(row)) removeOriginal(row.appId);
       manager.commitAppUpdate(row.appId, row.id).catch((error: unknown) => {
@@ -642,7 +696,7 @@ export function createAppUpdates(options: {
       if (row?.status !== "starting") return false;
       // With nowhere to go back to, it's any app's failure: tried again as they are,
       // and stopped in the end with Restart. Its file stays as it was until a commit.
-      if (isMove(row)) return false;
+      if (staysOnNew(row)) return false;
       log(
         `apps: ${appId} ${row.toVersion} failed (${failure}), so it goes back`,
       );
@@ -667,7 +721,7 @@ export function createAppUpdates(options: {
         return true;
       }
       // On a first move it waits, as any app does, for what it needs.
-      if (isMove(row)) return false;
+      if (staysOnNew(row)) return false;
       log(
         `apps: ${appId} ${row.toVersion} isn't ready (${waitingFor}), so it goes back for now`,
       );

@@ -47,8 +47,8 @@ describe("the core's end of an app's socket", () => {
     });
 
     // An app that ran on through a core's update speaks the protocol of the
-    // core before.
-    it("welcomes an app speaking an older protocol the core still speaks", async () => {
+    // core before, which a core speaks until a version changes what it says.
+    it("welcomes an app speaking the oldest protocol the core still speaks", async () => {
       await listening();
       const app = await appOnSocket();
 

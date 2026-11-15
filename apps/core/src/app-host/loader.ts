@@ -1,5 +1,9 @@
 import type { StaticManifest } from "@meetsanctum/app-sdk";
 import { manifestDigest, manifestFileName } from "@meetsanctum/app-sdk/package";
+import {
+  oldestProtocolVersion,
+  protocolVersion,
+} from "@meetsanctum/app-sdk/protocol";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -20,6 +24,18 @@ export type ApartPackage = {
 };
 
 type Log = (message: string) => void;
+
+// Whether this core speaks the protocol a package's runner was built for, as
+// its manifest says. One from before manifests said so speaks an older one
+// than any this core does.
+export function speaksThisCore({ apart }: ApartPackage) {
+  const { protocol } = apart.manifest as { protocol?: unknown };
+  return (
+    typeof protocol === "number" &&
+    protocol >= oldestProtocolVersion &&
+    protocol <= protocolVersion
+  );
+}
 
 // An app at the version staged in its folder, as its manifest there has it.
 export async function loadApartPackage(
