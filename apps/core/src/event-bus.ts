@@ -1,6 +1,6 @@
 import type { EmittedEvent } from "./app-host/app-work.js";
 import type { DeviceChange } from "./devices/devices.js";
-import type { PlaceMotionChange } from "./devices/motion.js";
+import type { MotionChange } from "./devices/motion.js";
 import type { Press } from "./devices/presses.js";
 import type { EntityChange } from "./entities/entities.js";
 import type { PersonChange } from "./people/people.js";
@@ -31,8 +31,8 @@ export type BusEvent =
   // An app's own event, once the app host has checked it and the action
   // that emitted it has succeeded.
   | ({ name: "app.emitted" } & EmittedEvent)
-  // A room's, a zone's or the home's motion, as Motion keeps it.
-  | ({ name: "motion.changed" } & PlaceMotionChange);
+  // The places whose motion changed together, as Motion keeps it.
+  | ({ name: "motion.changed" } & MotionChange);
 
 export type BusEventName = BusEvent["name"];
 
@@ -84,7 +84,7 @@ function about(event: BusEvent) {
     case "app.emitted":
       return `${event.app}'s ${event.event}`;
     case "motion.changed":
-      return `a change of motion in ${event.place.kind === "home" ? "the home" : `${event.place.kind} ${event.place.id}`}`;
+      return "a change of the places' motion";
   }
 }
 

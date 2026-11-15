@@ -2,7 +2,7 @@ import type { WorkflowNode } from "@meetsanctum/app-sdk";
 
 import type { EmittedEvent } from "../app-host/app-work.js";
 import type { DeviceChange } from "../devices/devices.js";
-import { placeKey, type PlaceMotionChange } from "../devices/motion.js";
+import { placeKey, type MotionChange } from "../devices/motion.js";
 import type { Press } from "../devices/presses.js";
 import type { EntityChange } from "../entities/entities.js";
 import type { Engine, WorkflowRow } from "./engine.js";
@@ -57,24 +57,27 @@ export function createFiring(options: {
   // motion, once, however many sensors see it, when a sensor's own report
   // made it. A sensor moved or a change of the places fires nothing, since
   // nobody moved.
-  function motionChanged(change: PlaceMotionChange) {
-    const key = placeKey(change.place);
+  function motionChanged({ places, sensedBy }: MotionChange) {
+    const changes = new Map(
+      places.map((change) => [placeKey(change.place), change]),
+    );
     const fired = matching((workflow, node) => {
       if (node.app || (node.piece !== "motion" && node.piece !== "noMotion")) {
         return false;
       }
       if (node.piece === "noMotion") {
         const config = parsed<NoMotionTriggerConfig>(node);
-        if (config && placeKey(config.place) === key) {
+        const change = config && changes.get(placeKey(config.place));
+        if (change) {
           options.timers.quiet(workflow, node, change.after, config.forMinutes);
         }
         return false;
       }
       const config = parsed<MotionTriggerConfig>(node);
+      const change = config && changes.get(placeKey(config.place));
       return (
-        config !== undefined &&
-        placeKey(config.place) === key &&
-        change.sensedBy !== null &&
+        change !== undefined &&
+        sensedBy !== null &&
         !change.before.motion &&
         change.after.motion
       );
@@ -83,7 +86,7 @@ export function createFiring(options: {
       engine.fire(workflow, {
         nodes: nodes.map((node) => node.id),
         key: null,
-        data: { device: change.sensedBy, motion: true },
+        data: { device: sensedBy, motion: true },
       });
     }
   }

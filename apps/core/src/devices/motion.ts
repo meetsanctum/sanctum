@@ -60,14 +60,21 @@ const nobody: PlaceMotion = {
 };
 
 /**
- * A place's motion changed, as it was and is now, and the sensor whose own
- * report made it, if one did: not when a sensor was moved, added or removed,
- * or the places changed, when nobody moved.
+ * A place's motion changed, as it was and is now.
  */
 export type PlaceMotionChange = {
   place: MotionPlace;
   before: PlaceMotion;
   after: PlaceMotion;
+};
+
+/**
+ * The places changed together, and the sensor whose own report made it, if
+ * one did. Keeping them together starts each workflow once for one report,
+ * with every trigger it matched.
+ */
+export type MotionChange = {
+  places: PlaceMotionChange[];
   sensedBy: string | null;
 };
 
@@ -205,7 +212,7 @@ export function createMotion(options: {
   devices: Pick<Devices, "list">;
   places: Pick<PlacesModule, "list">;
   // A place's motion changed, once it has been kept.
-  onChange?: (change: PlaceMotionChange) => void;
+  onChange?: (change: MotionChange) => void;
   now?: () => Date;
 }) {
   const { db, devices, places } = options;
@@ -260,7 +267,7 @@ export function createMotion(options: {
         );
         if (before && sameMotion(before, after)) continue;
         keep(key, after, at);
-        if (before) changes.push({ place, before, after, sensedBy });
+        if (before) changes.push({ place, before, after });
       }
       for (const [key, before] of was) {
         db.delete(placeSensing)
@@ -270,12 +277,13 @@ export function createMotion(options: {
           .run();
         const place = placeOf(key);
         if (place && !sameMotion(before, nobody)) {
-          changes.push({ place, before, after: nobody, sensedBy: null });
+          changes.push({ place, before, after: nobody });
         }
       }
     });
-    if (!says) return;
-    for (const change of changes) options.onChange?.(change);
+    if (says && changes.length > 0) {
+      options.onChange?.({ places: changes, sensedBy });
+    }
   }
 
   // Each place's motion, kept from the first time the core builds this, as

@@ -1,10 +1,11 @@
+import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { createMotion } from "../src/devices/motion.js";
 import { deviceCapabilities } from "../src/devices/schema.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
-import { get, post, type TestCore } from "./support.js";
+import { loadAppPackage } from "./runner-apps.js";
+import { fixtureApps, get, post, testCore, type TestCore } from "./support.js";
 import {
   addWorkflow,
   lightsOff,
@@ -278,6 +279,41 @@ describe("a zone whose rooms change otherwise", () => {
 });
 
 describe("a place's kept motion", () => {
+  it.each(["single", "queued", "restart", "parallel"])(
+    "starts one %s run with every place changed by the same report",
+    async (runMode) => {
+      const home = await upstairs();
+      const { core, token, office, ids } = home;
+      const { id } = await addWorkflow(core, token, {
+        runMode,
+        graph: {
+          version: 1,
+          nodes: [
+            trigger("home", "motion", { place: { kind: "home" } }),
+            trigger("room", "motion", { place: { kind: "room", id: office } }),
+            trigger("zone", "motion", { place: home.upstairs }),
+            lightsOff("off", { kind: "home" }),
+          ],
+          edges: ["home", "room", "zone"].map((from) => ({ from, to: "off" })),
+        },
+      });
+
+      await sees("motion-1", true);
+      await core.workflows.settled();
+
+      expect(await runsOf(core, token, id)).toEqual([
+        expect.objectContaining({
+          status: "succeeded",
+          trigger: {
+            nodes: ["home", "room", "zone"],
+            key: null,
+            data: { device: ids.desk, motion: true },
+          },
+        }),
+      ]);
+    },
+  );
+
   // Whether a run by hand passes "no motion upstairs for ten minutes".
   async function quietUpstairs(
     core: TestCore,
@@ -321,24 +357,27 @@ describe("a place's kept motion", () => {
   });
 
   it("is kept for a core that starts again on the same data", async () => {
-    const { core, token, office, upstairs } = await someoneAtTheDesk();
+    const { core, token, office, quiet, upstairs } = await someoneAtTheDesk();
     await post(core, "/api/places/rooms/remove", { id: office }, { token });
     await settled();
-    const removedAt = core.now();
     core.advance(minute);
+    const startsAt = core.now().toISOString();
+    await core.stop();
 
-    const again = createMotion({
-      db: core.db,
-      devices: core.devices,
-      places: core.places,
-      now: core.now,
+    const again = await testCore({
+      dataDir: core.dataDir,
+      apps: [await loadAppPackage(join(fixtureApps, "lamps"), "system")],
+      startsAt,
     });
 
-    expect(again.at(upstairs)).toEqual({
-      answering: true,
-      motion: false,
-      quietSince: removedAt,
-    });
+    again.advance(8 * minute);
+    await tick(again);
+    expect(await runsOf(again, token, quiet)).toHaveLength(0);
+    expect(await quietUpstairs(again, token, upstairs)).toBe(false);
+    again.advance(minute);
+    await tick(again);
+    expect(await runsOf(again, token, quiet)).toHaveLength(1);
+    expect(await quietUpstairs(again, token, upstairs)).toBe(true);
   });
 
   it("sets the timers of workflows that were held while it changed", async () => {
