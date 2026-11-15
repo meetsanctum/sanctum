@@ -42,7 +42,7 @@ describe("a contact sensor shown as a door or a window", () => {
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
       type: "contact",
       shownAs: null,
-      name: "Hall contact sensor",
+      name: "Hall Contact Sensor",
     });
   });
 
@@ -56,7 +56,7 @@ describe("a contact sensor shown as a door or a window", () => {
     expect(door.json()).toMatchObject({
       type: "door",
       shownAs: "door",
-      name: "Hall door",
+      name: "Hall Door",
       // What it is made of stays.
       capabilities: [{ id: "contact", kind: "contact" }],
     });
@@ -64,13 +64,13 @@ describe("a contact sensor shown as a door or a window", () => {
     expect((await show("window")).json()).toMatchObject({
       type: "window",
       shownAs: "window",
-      name: "Hall window",
+      name: "Hall Window",
     });
 
     expect((await show(null)).json()).toMatchObject({
       type: "contact",
       shownAs: null,
-      name: "Hall contact sensor",
+      name: "Hall Contact Sensor",
     });
   });
 
@@ -111,7 +111,7 @@ describe("a contact sensor shown as a door or a window", () => {
     ).toMatchObject({
       type: "window",
       roomId: office.id,
-      name: "Office window",
+      name: "Office Window",
     });
   });
 
@@ -182,7 +182,7 @@ describe("a contact sensor shown as a door or a window", () => {
       id,
       type: "unknown",
       shownAs: null,
-      name: "Unknown device",
+      name: "Unknown Device",
     });
 
     // And with it again, as when it joins again: the same window.

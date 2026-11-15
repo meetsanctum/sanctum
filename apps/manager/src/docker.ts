@@ -227,6 +227,15 @@ export type UsageDockerLike = {
   getContainer: (id: string) => StatusContainerLike;
 };
 
+// What Docker does to containers as it does it, one JSON object to a line,
+// from `since` on (seconds since the epoch).
+export type EventsDockerLike = {
+  getEvents: (options: {
+    since?: string;
+    filters?: Record<string, string[]>;
+  }) => Promise<Readable>;
+};
+
 // What the kernel charges a container, which is what a memory limit is held to,
 // reckoned as `docker stats` does, without the file cache it would give back first.
 // Null where it keeps no count, as with the memory cgroup off.
@@ -255,11 +264,16 @@ export async function memoryOf(container: StatusContainerLike) {
 
 export function createDockerClient(
   socketPath = "/var/run/docker.sock",
-): DockerClientLike & StatusDockerLike & SpaceDockerLike & UsageDockerLike {
+): DockerClientLike &
+  StatusDockerLike &
+  SpaceDockerLike &
+  UsageDockerLike &
+  EventsDockerLike {
   return new Docker({ socketPath }) as unknown as DockerClientLike &
     StatusDockerLike &
     SpaceDockerLike &
-    UsageDockerLike;
+    UsageDockerLike &
+    EventsDockerLike;
 }
 
 export async function inspectContainer(

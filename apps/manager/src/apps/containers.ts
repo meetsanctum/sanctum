@@ -23,6 +23,7 @@ import {
   removeBrokerNetwork,
   usesBroker,
 } from "./broker.js";
+import type { AppExits } from "./exits.js";
 import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
 import type { LanHolders, LanPolicy, LanVersion } from "./lan.js";
 import { AppRefusal } from "./refusal.js";
@@ -85,7 +86,7 @@ export type AppContainerStatus = {
   lan?: LanVersion;
   folder?: string;
   memoryMb?: number;
-  // Why it stopped, as Docker saw it.
+  // Why it stopped, as Docker and its events tell it (exits.ts).
   exitCode?: number;
   outOfMemory?: boolean;
   error?: string;
@@ -289,8 +290,10 @@ export function createAppContainers(options: {
   // Gives an app that reaches devices its network's holder and rules, when
   // this manager can.
   lan?: LanHolders;
+  // Tells one the kernel killed for its memory where Docker's flag misses it.
+  exits?: Pick<AppExits, "outOfMemory" | "stopping">;
 }) {
-  const { docker, dataDir, log, images, prepareImage, lan } = options;
+  const { docker, dataDir, log, images, prepareImage, lan, exits } = options;
   const totalMemory = options.totalMemory ?? totalmem;
   const ownFolder =
     options.ownFolder ??
@@ -322,8 +325,11 @@ export function createAppContainers(options: {
     return existing;
   }
 
-  function statusOf(app: string, container: ContainerInfo | null) {
-    if (!container) return { app, state: "none" } as AppContainerStatus;
+  async function statusOf(
+    app: string,
+    container: ContainerInfo | null,
+  ): Promise<AppContainerStatus> {
+    if (!container) return { app, state: "none" };
     const labels = container.Config.Labels ?? {};
     const { State: state } = container;
     const started = state.StartedAt && !state.StartedAt.startsWith("0001");
@@ -337,7 +343,9 @@ export function createAppContainers(options: {
     };
     if (!state.Running && finished) {
       status.exitCode = state.ExitCode ?? 0;
-      status.outOfMemory = state.OOMKilled ?? false;
+      status.outOfMemory = exits
+        ? await exits.outOfMemory(container)
+        : (state.OOMKilled ?? false);
       status.finishedAt = state.FinishedAt;
       if (state.Error) status.error = state.Error;
     }
@@ -389,6 +397,7 @@ export function createAppContainers(options: {
     if (!existing) return;
     const container = docker.getContainer(existing.Id);
     if (existing.State.Running) {
+      exits?.stopping(existing);
       await container.stop({ t: 10 }).catch(() => undefined);
     }
     await container.remove({ force: true, v: true });
@@ -452,7 +461,7 @@ export function createAppContainers(options: {
     if (version === null) return undefined;
     log(`Keeping ${desired.name} on ${spec.folder}`);
     return {
-      ...statusOf(spec.app, existing),
+      ...(await statusOf(spec.app, existing)),
       kept: true,
       ...(version ? { lan: version } : {}),
     };
@@ -571,7 +580,7 @@ export function createAppContainers(options: {
         log(`Starting ${desired.name} from ${spec.folder}`);
         await container.start();
         return {
-          ...statusOf(spec.app, await container.inspect()),
+          ...(await statusOf(spec.app, await container.inspect())),
           ...(holder ? { lan: holder.version } : {}),
         };
       });
@@ -605,6 +614,7 @@ export function createAppContainers(options: {
         if (holder?.State.Running) continue;
         const app = container.Config.Labels![appLabel]!;
         log(`Stopping ${appContainerName(app)}: its network's holder stopped`);
+        exits?.stopping(container);
         await docker
           .getContainer(container.Id)
           .stop({ t: 10 })
@@ -635,6 +645,7 @@ export function createAppContainers(options: {
         const existing = await inspectApp(app);
         if (existing?.State.Running) {
           log(`Stopping ${appContainerName(app)}`);
+          exits?.stopping(existing);
           try {
             await docker.getContainer(existing.Id).stop({ t: 10 });
           } catch (error) {
@@ -663,8 +674,10 @@ export function createAppContainers(options: {
 
     async list() {
       const containers = await all();
-      return containers.map((each) =>
-        statusOf(each.Config.Labels![appLabel]!, each),
+      return Promise.all(
+        containers.map((each) =>
+          statusOf(each.Config.Labels![appLabel]!, each),
+        ),
       );
     },
   };

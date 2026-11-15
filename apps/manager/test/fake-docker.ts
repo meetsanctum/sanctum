@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { text } from "node:stream/consumers";
 
 import type {
@@ -115,6 +115,18 @@ export class FakeDocker implements DockerClientLike {
   // What the kernel gives containers: Raspberry Pi OS has no memory limits until
   // its boot settings turn them on, and Docker then discards any asked for.
   memoryLimit = true;
+  // A process that takes no SIGTERM, as Node doesn't as a container's first
+  // process without a handler: Docker kills it once a stop runs out of time.
+  ignoresStop = false;
+  // Who hears Docker's events (getEvents), and which.
+  private listeners = new Set<{
+    stream: PassThrough;
+    filters: Record<string, string[]>;
+  }>();
+  // How many times something began to listen.
+  listened = 0;
+  // Events Docker drops, as it does for a listener that falls far behind.
+  unreported = new Set<string>();
   // Changes what a container got, as a daemon's defaults might.
   onCreate: ((options: ContainerCreateOptions) => void) | null = null;
   // Called when a container starts, e.g. to have a new core migrate its data.
@@ -182,11 +194,72 @@ export class FakeDocker implements DockerClientLike {
     const container = this.containers.get(id) as FakeContainer;
     container.running = true;
     container.startedAt = new Date();
+    this.report(container, "start");
     return container;
   }
 
   container(name: string) {
     return [...this.containers.values()].find((c) => c.name === name);
+  }
+
+  // Ends a container's process by itself, as when it exits or the kernel kills
+  // it, with no signal from Docker. Docker says it died a moment after its
+  // inspection says it stopped: with `died: false`, a later died() says so.
+  exit(
+    name: string,
+    how: { exitCode: number; oomKilled?: boolean },
+    { died = true } = {},
+  ) {
+    const container = this.container(name)!;
+    Object.assign(container, {
+      running: false,
+      exitCode: how.exitCode,
+      oomKilled: how.oomKilled ?? false,
+      finishedAt: new Date(),
+    });
+    if (died) this.died(name);
+  }
+
+  died(name: string) {
+    const container = this.container(name)!;
+    this.report(container, "die", { exitCode: String(container.exitCode) });
+  }
+
+  // Ends the stream of events each listener hears, as when Docker restarts.
+  endEvents() {
+    for (const { stream } of this.listeners) stream.end();
+  }
+
+  // Tells those listening what happened to a container, as Docker does: by its
+  // id, with its labels and name among the attributes.
+  private report(
+    container: FakeContainer,
+    action: string,
+    attributes: Record<string, string> = {},
+  ) {
+    const labels: Labels = {
+      ...this.images.get(container.imageId)?.labels,
+      ...container.options.Labels,
+    };
+    const event = {
+      Type: "container",
+      Action: action,
+      timeNano: Date.now() * 1_000_000,
+      Actor: {
+        ID: container.id,
+        Attributes: { ...labels, name: container.name, ...attributes },
+      },
+    };
+    if (this.unreported.has(action)) return;
+    for (const { stream, filters } of this.listeners) {
+      if (filters.type && !filters.type.includes("container")) continue;
+      if (filters.event && !filters.event.includes(action)) continue;
+      const matches = (filters.label ?? []).every((filter) => {
+        const [key, value] = filter.split("=") as [string, string?];
+        return value === undefined ? key in labels : labels[key] === value;
+      });
+      if (matches) stream.write(`${JSON.stringify(event)}\n`);
+    }
   }
 
   imageOf(name: string) {
@@ -258,6 +331,17 @@ export class FakeDocker implements DockerClientLike {
 
   async info() {
     return { MemoryLimit: this.memoryLimit, SwapLimit: this.memoryLimit };
+  }
+
+  async getEvents({
+    filters = {},
+  }: { since?: string; filters?: Record<string, string[]> } = {}) {
+    const stream = new PassThrough();
+    const listener = { stream, filters };
+    this.listeners.add(listener);
+    this.listened += 1;
+    stream.on("close", () => this.listeners.delete(listener));
+    return stream;
   }
 
   async ping() {
@@ -352,6 +436,7 @@ export class FakeDocker implements DockerClientLike {
           container.networks[network] = { EndpointID: "endpoint" };
         }
         this.events.push(`start ${container.name}`);
+        this.report(container, "start");
         this.onStart?.(
           container.name,
           image.labels["org.opencontainers.image.version"],
@@ -362,6 +447,7 @@ export class FakeDocker implements DockerClientLike {
           container.exitCode = ran.code;
           container.output = ran.output;
           container.finishedAt = new Date();
+          this.report(container, "die", { exitCode: String(ran.code) });
         }
       },
       wait: async () => ({ StatusCode: get().exitCode ?? 0 }),
@@ -369,8 +455,17 @@ export class FakeDocker implements DockerClientLike {
       stop: async () => {
         const container = get();
         if (container.running) {
-          container.exitCode = 143;
+          // Docker reports each signal it sends before it reports the exit.
+          this.report(container, "kill", { signal: "15" });
+          if (this.ignoresStop) {
+            this.report(container, "kill", { signal: "9" });
+          }
+          container.exitCode = this.ignoresStop ? 137 : 143;
           container.finishedAt = new Date();
+          container.running = false;
+          this.report(container, "die", {
+            exitCode: String(container.exitCode),
+          });
         }
         container.running = false;
         this.events.push(`stop ${container.name}`);
@@ -389,7 +484,12 @@ export class FakeDocker implements DockerClientLike {
             `${container.name} is locked: this would wait forever on Docker`,
           );
         }
+        if (container.running) {
+          this.report(container, "kill", { signal: "9" });
+          this.report(container, "die", { exitCode: "137" });
+        }
         this.containers.delete(container.id);
+        this.report(container, "destroy");
         if (!options?.v) this.removedKeepingVolumes.push(container.name);
         this.events.push(`remove ${container.name}`);
       },
