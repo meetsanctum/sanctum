@@ -546,6 +546,28 @@ export function createDevices(
       }
     },
 
+    // A room's removal moves its devices to No room through the database,
+    // not through Devices: this takes them as they are before it, and the
+    // returned publishMoves tells what each move did once the removal has
+    // committed.
+    prepareRoomRemoval(roomId: string) {
+      const moving = loadAll().flatMap((before) =>
+        before.roomId === roomId ? [{ before, key: keyOf(before.id) }] : [],
+      );
+      return function publishMoves() {
+        for (const { before, key } of moving) {
+          const after = load(before.id);
+          if (JSON.stringify(before) === JSON.stringify(after)) continue;
+          options.onChange?.({
+            id: before.id,
+            ...(key ? { key } : {}),
+            before,
+            after,
+          });
+        }
+      };
+    },
+
     // Runs a change of a device's own row, as firmware.ts makes, then
     // tells live clients what it did.
     changing,

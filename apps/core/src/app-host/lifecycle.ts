@@ -16,7 +16,7 @@ import { stopLimitMs } from "./apart.js";
 import { appStateOf } from "./app-info.js";
 import { newAppUpdate, type AppCommits } from "./commits.js";
 import type { AppContexts } from "./contexts.js";
-import type { CoreEvents } from "./core-events.js";
+import type { EventsForApps } from "./events-for-apps.js";
 import { TimedOut, withTimeout } from "./errors.js";
 import { createEventStorage } from "./event-storage.js";
 import type { InstalledApp } from "./installed.js";
@@ -42,7 +42,7 @@ const isInSupervisorsHands = (entry: InstalledApp) =>
 
 export function createAppLifecycle(options: {
   installed: ReadonlyMap<string, InstalledApp>;
-  coreEvents: CoreEvents;
+  eventsForApps: EventsForApps;
   contexts: AppContexts;
   people: Pick<People, "list">;
   places: Pick<PlacesModule, "list" | "location">;
@@ -56,7 +56,7 @@ export function createAppLifecycle(options: {
   timeoutMs: number;
   log: (message: string) => void;
 }) {
-  const { installed, coreEvents, contexts, timeoutMs, log } = options;
+  const { installed, eventsForApps, contexts, timeoutMs, log } = options;
   let lastRunId = 0;
 
   // Whether the app takes calls now: it runs and is not paused.
@@ -115,7 +115,7 @@ export function createAppLifecycle(options: {
     // These two are one moment: what it reads while it starts, and the first
     // of the events it hears after.
     const snapshot = createReadSnapshot(options);
-    const following = coreEvents.start(
+    const following = eventsForApps.start(
       app.id,
       () => entry.granted,
       // It starts again, and catches up, as it does after any stop.
@@ -197,7 +197,7 @@ export function createAppLifecycle(options: {
     entry.running = undefined;
     options.presses().endCaptures(entry.app.id);
     entry.requests.end();
-    await coreEvents.stop(entry.app.id);
+    await eventsForApps.stop(entry.app.id);
     if (!shutdown) {
       await Promise.allSettled([...entry.calls]);
     }

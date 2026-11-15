@@ -8,32 +8,30 @@ import {
   type CoreEventName,
   type DeviceInfo,
   type EntityInfo,
-  type HomeLocation,
   type PersonInfo,
   type Place,
   type Places,
 } from "@meetsanctum/app-sdk";
 
 import { personInfo } from "../auth/logins.js";
-import type { DeviceChange } from "../devices/devices.js";
+import type { CoreNounsFollower } from "../event-bus.js";
 import { viewOf } from "../devices/views.js";
-import type { Press } from "../devices/presses.js";
-import type { EntityChange } from "../entities/entities.js";
-import type { PersonChange } from "../people/people.js";
 import { deviceKinds, deviceViewOf, entityTypes } from "./calls.js";
 import { TimedOut, withTimeout } from "./errors.js";
 
 // The core's events for apps: what happens to devices, places, people and
 // the entities of standard types, and remotes' presses, handed to each
 // running app that follows it, as its reads would show it: a device with the
-// capabilities it may read, entities of the types it may read. An app
+// capabilities it may read, entities of the types it may read. They come
+// from the core's event bus, which this follows (event-bus.ts). An app
 // follows them from its start context and hears nothing once it stops; each
 // app gets its events in order, one at a time, after the change has
 // committed, and a handler that fails or takes too long is logged and holds
-// up nothing else. Apps never hear each other's own events.
+// up nothing else. Apps never hear each other's own events: this follower
+// has no place for them.
 
 // What one change did, before and after; null where there was nothing.
-type Change =
+type EventChange =
   | {
       noun: "device";
       // Its driver's own id for it, which only that driver hears of.
@@ -64,10 +62,10 @@ function deviceShownTo(
 // A change as one app may read it: what it shows before and after, each
 // null where it shows nothing.
 function shownTo(
-  change: Change,
+  change: EventChange,
   appId: string,
   permissions: readonly string[],
-): Change {
+): EventChange {
   switch (change.noun) {
     case "device": {
       return {
@@ -98,7 +96,7 @@ function shownTo(
 }
 
 // The events a change makes, as one app may read it.
-function eventsOf(change: Change): CoreEvent[] {
+function eventsOf(change: EventChange): CoreEvent[] {
   const { noun, before, after } = change;
   if (
     noun === "entity" &&
@@ -194,7 +192,7 @@ function placesOf(places: Places) {
 }
 
 // What a change of Places did to each place.
-function placeChanges(before: Places, after: Places): Change[] {
+function placeChanges(before: Places, after: Places): EventChange[] {
   const was = placesOf(before);
   const is = placesOf(after);
   return [...new Set([...was.keys(), ...is.keys()])].map((key) => ({
@@ -213,7 +211,7 @@ const maxWaitingBytes = 4 * 1024 * 1024;
 
 // One running app's following: the events it asked for, its handlers and
 // the deliveries still on their way to it.
-type Follower = {
+type AppFollower = {
   // What the app may do now, its grants, read as each change comes.
   permissions: () => readonly string[];
   followed: Set<CoreEventName>;
@@ -229,12 +227,12 @@ type Follower = {
   waitingBytes: number;
 };
 
-export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
-  const followers = new Map<string, Follower>();
+export function createEventsForApps(options: { timeoutMs: number; log: Log }) {
+  const followers = new Map<string, AppFollower>();
 
   function enqueue(
     appId: string,
-    follower: Follower,
+    follower: AppFollower,
     event: CoreEvent,
     bytes: number,
   ) {
@@ -260,7 +258,7 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
     });
   }
 
-  function deliver(appId: string, follower: Follower, event: CoreEvent) {
+  function deliver(appId: string, follower: AppFollower, event: CoreEvent) {
     if (follower.stopped) {
       return;
     }
@@ -285,10 +283,10 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
   }
 
   // Whether it wants an event of this name, or can't say yet.
-  const wants = (follower: Follower, name: CoreEventName) =>
+  const wants = (follower: AppFollower, name: CoreEventName) =>
     Boolean(follower.early) || follower.followed.has(name);
 
-  function changed(change: Change) {
+  function changed(change: EventChange) {
     for (const [appId, follower] of followers) {
       if (follower.followed.size === 0 && !follower.early) {
         continue;
@@ -303,7 +301,74 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
     }
   }
 
+  // What the core's modules publish (event-bus.ts), as the bus's follower.
+  // It has no handler for apps' own events, which apps never hear.
+  const follower = {
+    "device.changed"({ key, before, after }) {
+      changed({ noun: "device", ...(key ? { key } : {}), before, after });
+    },
+
+    // A press, for the apps that may read its button, unless a capture
+    // holds it.
+    "device.pressed"({ device, capability, action, isCaptured }) {
+      if (isCaptured) return;
+      for (const [appId, follower] of followers) {
+        if (!wants(follower, "device.pressed")) {
+          continue;
+        }
+        const shown = viewOf(device, {
+          kinds: deviceKinds(follower.permissions()).reads,
+        });
+        if (shown?.capabilities.some((each) => each.id === capability)) {
+          deliver(appId, follower, {
+            name: "device.pressed",
+            device: shown,
+            capability,
+            action,
+          });
+        }
+      }
+    },
+
+    "places.changed"({ before, after }) {
+      for (const change of placeChanges(before, after)) {
+        changed(change);
+      }
+    },
+
+    // Where the home is, for the apps that may read that.
+    "location.changed"({ before, after }) {
+      for (const [appId, follower] of followers) {
+        if (
+          wants(follower, "location.changed") &&
+          follower.permissions().includes(placesLocationPermission)
+        ) {
+          deliver(appId, follower, {
+            name: "location.changed",
+            location: after,
+            before,
+          });
+        }
+      }
+    },
+
+    "person.changed"({ before, after }) {
+      changed({
+        noun: "person",
+        before: before && personInfo(before),
+        after: after && personInfo(after),
+      });
+    },
+
+    "entity.changed"({ before, after }) {
+      changed({ noun: "entity", before, after });
+    },
+  } satisfies Required<CoreNounsFollower>;
+
   return {
+    // The bus's follower: what happened to the core's nouns.
+    follower,
+
     // A running app, from its start: where its start context keeps its
     // handlers and how it asks for an event, which calls.ts has checked.
     // What happens meanwhile waits for `started`, once the start hook has
@@ -316,11 +381,11 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
       appId: string,
       permissions: () => readonly string[],
       overflowed: () => void,
-      run: Follower["run"] = (work) =>
+      run: AppFollower["run"] = (work) =>
         withTimeout(Promise.resolve().then(work), options.timeoutMs),
     ) {
       let open!: () => void;
-      const follower: Follower = {
+      const follower: AppFollower = {
         permissions,
         followed: new Set(),
         handlers: new Map(),
@@ -364,64 +429,6 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
       await follower.delivering;
     },
 
-    device({ key, before, after }: DeviceChange) {
-      changed({ noun: "device", ...(key ? { key } : {}), before, after });
-    },
-
-    // A press that no capture holds, for the apps that may read its button.
-    pressed({ device, capability, action }: Press) {
-      for (const [appId, follower] of followers) {
-        if (!wants(follower, "device.pressed")) {
-          continue;
-        }
-        const shown = viewOf(device, {
-          kinds: deviceKinds(follower.permissions()).reads,
-        });
-        if (shown?.capabilities.some((each) => each.id === capability)) {
-          deliver(appId, follower, {
-            name: "device.pressed",
-            device: shown,
-            capability,
-            action,
-          });
-        }
-      }
-    },
-
-    places(before: Places, after: Places) {
-      for (const change of placeChanges(before, after)) {
-        changed(change);
-      }
-    },
-
-    // Where the home is, for the apps that may read that.
-    location(before: HomeLocation | null, after: HomeLocation | null) {
-      for (const [appId, follower] of followers) {
-        if (
-          wants(follower, "location.changed") &&
-          follower.permissions().includes(placesLocationPermission)
-        ) {
-          deliver(appId, follower, {
-            name: "location.changed",
-            location: after,
-            before,
-          });
-        }
-      }
-    },
-
-    person({ before, after }: PersonChange) {
-      changed({
-        noun: "person",
-        before: before && personInfo(before),
-        after: after && personInfo(after),
-      });
-    },
-
-    entity({ before, after }: EntityChange) {
-      changed({ noun: "entity", before, after });
-    },
-
     // The household changed what one app may do: only that app hears it.
     permissions(
       appId: string,
@@ -452,4 +459,4 @@ export function createCoreEvents(options: { timeoutMs: number; log: Log }) {
   };
 }
 
-export type CoreEvents = ReturnType<typeof createCoreEvents>;
+export type EventsForApps = ReturnType<typeof createEventsForApps>;
