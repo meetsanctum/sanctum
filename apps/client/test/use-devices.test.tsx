@@ -308,7 +308,7 @@ describe("failed commands", () => {
         await loading;
       });
       expect(devices.tiles[0]!.failures).toBeUndefined();
-      expect(devices.tiles[0]!.status).toBe("Turning on…");
+      expect(devices.tiles[0]).toMatchObject({ on: true, status: "On" });
       await act(async () => {
         devices.apply(live(unanswered));
       });
@@ -583,7 +583,7 @@ describe("failed commands", () => {
 });
 
 describe("commands from here", () => {
-  it("show on the tile as pending before the core answers", async () => {
+  it("show on the tile as they will be before the core answers", async () => {
     await seed();
     const response = deferred<CapabilityInfo>();
     client.command.mockReturnValue(response.promise);
@@ -591,7 +591,7 @@ describe("commands from here", () => {
     act(() => {
       command = devices.toggle(devices.tiles[0]!);
     });
-    expect(devices.tiles[0]).toMatchObject({ on: true, status: "Turning on…" });
+    expect(devices.tiles[0]).toMatchObject({ on: true, status: "On" });
 
     await act(async () => {
       response.resolve(capability(true));
@@ -678,7 +678,7 @@ describe("commands from here", () => {
     },
   );
 
-  it("show a room's lights turning off before the core answers", async () => {
+  it("show a room's lights off before the core answers", async () => {
     await seed();
     act(() =>
       devices.apply({ type: "device", id: "device", device: device(true) }),
@@ -692,10 +692,7 @@ describe("commands from here", () => {
         devices.tiles,
       );
     });
-    expect(devices.tiles[0]).toMatchObject({
-      on: false,
-      status: "Turning off…",
-    });
+    expect(devices.tiles[0]).toMatchObject({ on: false, status: "Off" });
 
     await act(async () => {
       result.resolve({ on: false, switched: 1, failed: [] });
@@ -721,7 +718,7 @@ describe("commands from here", () => {
         devices.switchLights({ kind: "room", id: "room" }, devices.tiles),
       ];
     });
-    expect(devices.tiles[0]?.status).toBe("Turning off…");
+    expect(devices.tiles[0]).toMatchObject({ on: false, status: "Off" });
 
     act(() => {
       switching.push(
