@@ -17,7 +17,7 @@ import {
   type CurveSettings,
 } from "./curve.js";
 import { followedLights, type Look } from "./schema.js";
-import { curveOf } from "./settings.js";
+import { curveOf, isOnIn } from "./settings.js";
 import { sunToday, type HomeSun } from "./sun.js";
 import { targetKey, targetType, type TargetState } from "./target.js";
 
@@ -71,11 +71,13 @@ export function createRunForLight(): RunForLight {
 export type Timing = { now: () => Date; activeMs: number; offMs: number };
 
 /**
- * What one call follows: its timing, and the curve as the household set it.
- * `isDueNow` has every light take it now, as once the household changes it.
+ * What one call follows: its timing, the curve as the household set it, and
+ * whether natural light is on. `isDueNow` has every light take it now, as
+ * once the household changes it.
  */
 export type FollowOptions = Timing & {
   curve: CurveSettings;
+  isOn: boolean;
   isDueNow?: boolean;
 };
 
@@ -86,7 +88,8 @@ export async function followOptionsFor(
   ctx: AppContext,
   timing: Timing,
 ): Promise<FollowOptions> {
-  return { ...timing, curve: curveOf(await ctx.settings.get()) };
+  const settings = await ctx.settings.get();
+  return { ...timing, curve: curveOf(settings), isOn: isOnIn(settings) };
 }
 
 /** A light natural light can set: one that takes a colour temperature. */
@@ -241,6 +244,15 @@ const targetOf = (
   brightness: look?.brightness ?? null,
 });
 
+// Where a light that follows the curve stands while natural light is off.
+const offTarget = (light: Light): TargetState => ({
+  device: light.device.id,
+  capability: light.capability.id,
+  status: "off",
+  colorTemperature: null,
+  brightness: null,
+});
+
 /** Where one light that follows the curve stands now, without setting it. */
 export function standing(
   light: Light,
@@ -249,6 +261,9 @@ export function standing(
   options: FollowOptions,
   appId: string,
 ): TargetState {
+  if (!options.isOn) {
+    return offTarget(light);
+  }
   const look = sun
     ? lookFor(options.curve, sun, light.capability, options.now())
     : null;
@@ -282,6 +297,10 @@ export async function followOne(
   force = false,
 ): Promise<TargetState> {
   const { device, capability } = light;
+  if (!options.isOn) {
+    await publish(ctx, light, offTarget(light));
+    return offTarget(light);
+  }
   const now = options.now();
   const look = sun ? lookFor(options.curve, sun, capability, now) : null;
   const target = (status: TargetState["status"]) =>
@@ -379,6 +398,27 @@ export async function followedRow(
     .get();
 }
 
+/**
+ * Lets go of a light that is off and holds natural light's look in the
+ * core, so it comes back on as it remembers itself: an "off" with no look
+ * drops what is held.
+ */
+export async function letGo(ctx: AppContext, light: Light) {
+  const { device, capability } = light;
+  if (
+    capability.state?.on !== false ||
+    capability.setBy?.app !== ctx.appId ||
+    device.availability === "offline"
+  ) {
+    return;
+  }
+  await ctx.devices.command({
+    device: device.id,
+    capability: capability.id,
+    command: { on: false },
+  });
+}
+
 /** Stops following a light, and takes its entity out of the home. */
 export async function forget(
   ctx: AppContext,
@@ -399,7 +439,7 @@ export async function forget(
 async function eachFollowed(
   ctx: AppContext,
   runForLight: RunForLight,
-  what: "follow" | "publish",
+  what: "follow" | "publish" | "let go of",
   work: (light: Light, row: Followed) => Promise<unknown>,
 ) {
   const rows = await ctx.storage.db.select().from(followedLights);
@@ -446,6 +486,24 @@ export async function followAll(
   await eachFollowed(ctx, runForLight, "follow", async (light, row) =>
     followOne(ctx, light, row, await sun(), options),
   );
+}
+
+/** Lets go of every light that follows the curve, as natural light is switched off. */
+export async function letGoAll(ctx: AppContext, runForLight: RunForLight) {
+  await eachFollowed(ctx, runForLight, "let go of", (light) =>
+    letGo(ctx, light),
+  );
+}
+
+/**
+ * Has every light that follows the curve take it again from now, as
+ * natural light is switched back on: what was set while it was off pauses
+ * nothing.
+ */
+export async function followAgainFrom(ctx: AppContext, now: Date) {
+  await ctx.storage.db
+    .update(followedLights)
+    .set({ since: now, pausedAt: null });
 }
 
 /**

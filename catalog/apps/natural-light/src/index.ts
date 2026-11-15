@@ -12,10 +12,12 @@ import { targetType } from "./target.js";
 
 // Natural light: lights that follow the sun through the day, warm and dim at
 // night and cooler and brighter towards noon. It works out the sun itself
-// from where the home is, so it needs no other app, controls the lights a
-// household picks, and brings a `naturalLight.target` entity for each.
-// Workflows can have a light follow it, pause or resume. Its UI is in ./ui,
-// which the shell bundles.
+// from where the home is, so it needs no other app. Every light that takes
+// a colour temperature follows it unless the household leaves it out, new
+// ones too (choices.ts), and it brings a `naturalLight.target` entity for
+// each. A switch in its settings turns it off altogether. Workflows can
+// have a light follow it, pause or resume. Its UI is in ./ui, which the
+// shell bundles.
 //
 // The check is the app's job every 5 minutes; a light that is on is due
 // every 5 minutes and one that is off every 15 (lights.ts). The core logs

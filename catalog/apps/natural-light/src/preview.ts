@@ -20,7 +20,8 @@ const instant = z.iso.datetime();
 export const preview = z.object({
   date: z.string(),
   timeZone: z.string(),
-  curve: naturalLightSettings,
+  // The curve alone, without whether natural light is on.
+  curve: naturalLightSettings.omit({ on: true }),
   /** What lights that follow it are set to now. */
   now: z.object({ at: instant, kelvin: z.number(), brightness: z.number() }),
   /** Sunrise and sunset with the curve's offsets. */

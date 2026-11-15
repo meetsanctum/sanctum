@@ -1,6 +1,7 @@
 import { ActionError, defineAction, names, partOf } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import { isLeftOut, leaveOut, takeBack, takeInLights } from "./choices.js";
 import {
   followAll,
   followed,
@@ -8,6 +9,7 @@ import {
   followedRow,
   forget,
   homeSun,
+  letGo,
   lightOf,
   takesColorTemperature,
   followOptionsFor,
@@ -18,9 +20,9 @@ import { preview, previewOf } from "./preview.js";
 import { followedLights } from "./schema.js";
 import { targetState } from "./target.js";
 
-// Natural light's actions: which lights follow the curve, pausing and
-// resuming one, and today's curve. Lights are household things, so every
-// client may use them all, shared ones too.
+// Natural light's actions: leaving a light out of the curve or having it
+// follow again, pausing and resuming one, and today's curve. Lights are
+// household things, so every client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
 
@@ -61,7 +63,22 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       return runForLight(input.device, input.capability, async () => {
         const found = await lightOf(ctx, input.device, input.capability);
         if (!input.follow) {
+          // Left out, it comes back on as it remembers itself rather than
+          // at a look natural light still holds for it.
+          await leaveOut(ctx, input.device, input.capability);
+          const wasFollowing = await followedRow(
+            ctx,
+            input.device,
+            input.capability,
+          );
           await forget(ctx, input.device, input.capability);
+          if (wasFollowing && options.isOn) {
+            try {
+              await letGo(ctx, found);
+            } catch {
+              ctx.log(`could not let go of ${found.device.name}`);
+            }
+          }
           return null;
         }
         if (!takesColorTemperature(found.capability)) {
@@ -70,6 +87,8 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
             "This light does not take a colour temperature",
           );
         }
+        const wasLeftOut = await isLeftOut(ctx, input.device, input.capability);
+        await takeBack(ctx, input.device, input.capability);
         const now = options.now();
         const existing = await followedRow(ctx, input.device, input.capability);
         if (!existing) {
@@ -91,8 +110,12 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
             !existing,
           );
         } catch (error) {
-          // A refused first command must not silently enable the job.
+          // A refused first command must not silently enable the job, nor
+          // take back a light the household had left out.
           if (!existing) await forget(ctx, input.device, input.capability);
+          if (!existing && wasLeftOut) {
+            await leaveOut(ctx, input.device, input.capability);
+          }
           throw error;
         }
       });
@@ -185,7 +208,8 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     },
   });
 
-  // The app's job (index.ts).
+  // The app's job (index.ts): it takes in lights that are new meanwhile,
+  // then brings every light that follows to the curve.
   const check = defineAction({
     id: "naturalLight.check",
     title: "Bring lights to natural light",
@@ -194,6 +218,13 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     output: z.object({}),
     async run(ctx) {
       const options = await followOptionsFor(ctx, timing);
+      try {
+        await takeInLights(ctx, runForLight);
+      } catch (error) {
+        ctx.log(
+          `could not take in new lights (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
       await followAll(ctx, options, runForLight);
       return {};
     },

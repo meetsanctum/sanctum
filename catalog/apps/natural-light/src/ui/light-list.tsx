@@ -8,9 +8,9 @@ import {
 } from "./use-natural-light";
 
 // The lights that take a colour temperature: each with where it stands and
-// a switch to have it follow the curve, and Resume for one a mood or a
-// person paused. A refusal leaves the switch as it was and says so on its
-// row.
+// a switch to have it follow the curve or leave it out, and Resume for one
+// a mood or a person paused. Every light follows unless it is left out. A
+// refusal leaves the switch as it was and says so on its row.
 
 const muted = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
@@ -18,6 +18,9 @@ function status(light: LightRow) {
   const { target } = light;
   if (!target) {
     return "Not following";
+  }
+  if (target.status === "off") {
+    return "Natural light is off";
   }
   if (target.status === "waiting" || target.colorTemperature === null) {
     return "Waiting for the home’s location";
