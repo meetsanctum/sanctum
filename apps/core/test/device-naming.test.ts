@@ -293,6 +293,17 @@ describe("an automatic name", () => {
     expect(baseName("sensor", "2nd floor")).toBe("2nd Floor Sensor");
   });
 
+  it("finds words beside punctuation and keeps apostrophes within them", () => {
+    expect(baseName("light", "(office)")).toBe("(Office) Light");
+    expect(baseName("contact", "living-room")).toBe(
+      "Living-Room Contact Sensor",
+    );
+    expect(baseName("plug", "TV-room")).toBe("TV-Room Plug");
+    expect(baseName("light", "children’s room")).toBe("Children’s Room Light");
+    expect(baseName("switch", "iPad's corner")).toBe("iPad's Corner Switch");
+    expect(baseName("light", "🛋living room")).toBe("🛋Living Room Light");
+  });
+
   it("follows the capitals of a name a device was given before", () => {
     expect(automaticName("Office Light", [], "Office light 2")).toBe(
       "Office Light 2",

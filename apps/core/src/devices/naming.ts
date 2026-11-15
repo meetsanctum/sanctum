@@ -16,15 +16,18 @@ import { deviceCapabilities, devices } from "./schema.js";
 // any room, since its type has no word to follow a room's name.
 
 const words = new Map(deviceTypes.map((type) => [type.id, type]));
+const wordSegments = new Intl.Segmenter("en", { granularity: "word" });
 
 // "living room light" as "Living Room Light". A word with a capital of its
-// own, "TV" or "iPad", stays as it is.
-const capitalized = (name: string) =>
-  name.replace(/\S+/g, (word) =>
-    /\p{Lu}/u.test(word)
-      ? word
-      : word.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase()),
-  );
+// own, "TV" or "iPad", stays as it is. Word boundaries keep punctuation
+// outside a word and apostrophes within it.
+function capitalizeWords(name: string) {
+  return Array.from(wordSegments.segment(name), ({ segment, isWordLike }) =>
+    isWordLike && !/\p{Lu}/u.test(segment)
+      ? segment.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase())
+      : segment,
+  ).join("");
+}
 
 /**
  * What a device of this type is called in this room, before any number: its
@@ -32,7 +35,7 @@ const capitalized = (name: string) =>
  */
 export function baseName(type: DeviceType, room: string | null) {
   const { title, noun } = words.get(type)!;
-  return capitalized(room && noun ? `${room} ${noun}` : title);
+  return capitalizeWords(room && noun ? `${room} ${noun}` : title);
 }
 
 const normal = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
