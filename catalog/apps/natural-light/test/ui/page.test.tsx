@@ -381,6 +381,74 @@ describe("natural light's page", () => {
         `[aria-label="Lights in ${room} follow natural light"]`,
       )!;
 
+    it.each(["answers", "fails"])(
+      "keeps live room names when an older read %s later",
+      async (outcome) => {
+        const { client, push } = fakeClient({
+          devices,
+          entities: [],
+          preview: today,
+          places,
+        });
+        let finishOlder!: (places: Places) => void;
+        let failOlder!: (error: Error) => void;
+        vi.mocked(client.places).mockImplementationOnce(
+          () =>
+            new Promise<Places>((resolve, reject) => {
+              finishOlder = resolve;
+              failOlder = reject;
+            }),
+        );
+        await show(client);
+        const renamed = {
+          ...places,
+          rooms: places.rooms.map((room) =>
+            room.id === "office" ? { ...room, name: "Study" } : room,
+          ),
+        };
+        await act(async () => push({ type: "places", places: renamed }));
+        expect(headings()).toEqual(["Study", "Hall", "No room"]);
+
+        await act(async () => {
+          if (outcome === "answers") finishOlder(places);
+          else failOlder(new Error("Connection lost"));
+        });
+
+        expect(headings()).toEqual(["Study", "Hall", "No room"]);
+      },
+    );
+
+    it.each(["answers", "fails"])(
+      "keeps refreshed rooms when an older read %s later",
+      async (outcome) => {
+        const { client, refresh } = fakeClient({
+          devices,
+          entities: [],
+          preview: today,
+          places,
+        });
+        let finishOlder!: (places: Places) => void;
+        let failOlder!: (error: Error) => void;
+        vi.mocked(client.places).mockImplementationOnce(
+          () =>
+            new Promise<Places>((resolve, reject) => {
+              finishOlder = resolve;
+              failOlder = reject;
+            }),
+        );
+        await show(client);
+        await act(async () => refresh());
+        expect(headings()).toEqual(["Office", "Hall", "No room"]);
+
+        await act(async () => {
+          if (outcome === "answers") finishOlder({ ...places, rooms: [] });
+          else failOlder(new Error("Connection lost"));
+        });
+
+        expect(headings()).toEqual(["Office", "Hall", "No room"]);
+      },
+    );
+
     it("lists the lights by room in the home's order, those in no room last, with how many follow", async () => {
       await show(
         fakeClient({

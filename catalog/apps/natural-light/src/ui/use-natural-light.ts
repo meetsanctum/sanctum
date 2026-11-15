@@ -61,6 +61,8 @@ export function useNaturalLight(): NaturalLightView {
     // again, rather than overwrite the change with an older answer.
     let revision = 0;
     let request = 0;
+    let placesRevision = 0;
+    let placesRequest = 0;
     const load = async () => {
       const requestId = ++request;
       const startedAt = revision;
@@ -83,11 +85,20 @@ export function useNaturalLight(): NaturalLightView {
       }
     };
     const loadPlaces = async () => {
+      const requestId = ++placesRequest;
+      const startedAt = placesRevision;
+      let next: Places | null;
       try {
-        const next = await client.places();
-        if (isCurrent) setPlaces(next);
+        next = await client.places();
       } catch {
-        if (isCurrent) setPlaces(null);
+        next = null;
+      }
+      if (
+        isCurrent &&
+        requestId === placesRequest &&
+        startedAt === placesRevision
+      ) {
+        setPlaces(next);
       }
     };
     const stop = client.subscribe({
@@ -97,6 +108,7 @@ export function useNaturalLight(): NaturalLightView {
       },
       message(message) {
         if (message.type === "places") {
+          placesRevision += 1;
           setPlaces(message.places);
         } else if (message.type === "device") {
           revision += 1;
