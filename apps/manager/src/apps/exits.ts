@@ -55,7 +55,8 @@ export function createAppExits(options: {
 }) {
   const { docker, log } = options;
   const runs = new Map<string, Run>();
-  // A stop can reach Docker before its queued start event reaches us.
+  // Stops the manager asked for, kept until the run they end is heard: a stop
+  // can reach Docker before the manager hears the container started.
   const pendingStops = new Set<string>();
   let isListening = false;
   // Said once while it can't hear them, not at each try.
