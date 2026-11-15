@@ -37,10 +37,13 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
   let container: HTMLDivElement;
   const live = createLiveFeed();
   let replies: ((device: DeviceInfo) => void)[];
+  // What the next save fails with, if it is to fail.
+  let failure: Error | undefined;
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     replies = [];
+    failure = undefined;
     const since = new Date().toISOString();
     const pairing: PairingInfo = {
       until: null,
@@ -73,6 +76,7 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
         case "/api/devices/pairing/open":
           return { ...pairing, since };
         case "/api/devices/update":
+          if (failure) throw failure;
           return new Promise<DeviceInfo>((resolve) => replies.push(resolve));
         default:
           throw new Error(`Unexpected request: ${path}`);
@@ -164,6 +168,31 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
     await act(async () => replies[0]!(door));
     expect(container.textContent).toContain("Hall window");
     expect(container.textContent).not.toContain("Hall door");
+  });
+
+  it("says so when a save fails, until the next try", async () => {
+    await show();
+    failure = new TypeError("Failed to fetch");
+    await choose("Door");
+    // On the device's line in Settings, and in the dialog while adding.
+    const said = () =>
+      (where === "Settings"
+        ? container.querySelector("li")!
+        : document.querySelector("[role=dialog]")!
+      ).textContent;
+    expect(said()).toContain("Can't reach Sanctum. Try again.");
+    expect(container.textContent).not.toContain("Hall door");
+    if (where === "Settings") {
+      expect(container.querySelector("[role=status]")?.textContent).toBe(
+        "Can't reach Sanctum. Try again.",
+      );
+    }
+
+    failure = undefined;
+    await choose("Door");
+    expect(said()).not.toContain("Can't reach Sanctum. Try again.");
+    await act(async () => replies[0]!(door));
+    expect(container.textContent).toContain("Hall door");
   });
 
   if (where === "Add devices") {

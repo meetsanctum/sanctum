@@ -40,7 +40,12 @@ import { DeviceMenu } from "./device-menu";
 import { EditDevice, keepHistory, type Editing } from "./edit-device";
 import { foundHint, useAdding } from "./found-devices";
 import { lowBatteryText, quietText } from "./maintenance";
-import { DeviceIcon, roomName, updateDevice } from "./device-parts";
+import {
+  deviceProblem,
+  DeviceIcon,
+  roomName,
+  updateDevice,
+} from "./device-parts";
 import { MotionSettings } from "./motion-settings";
 
 // Settings → Devices, where the household manages its hardware: every device
@@ -284,24 +289,34 @@ export function DevicesSection(props: {
   const appName = (device: DeviceInfo) =>
     props.apps.find((app) => app.id === device.driver)?.name ?? null;
 
+  const found = (id: string, result?: CheckResult) =>
+    setResults(({ [id]: _, ...rest }) =>
+      result ? { ...rest, [id]: result } : rest,
+    );
+
   // A newer choice or live device takes precedence over a late save reply.
+  // A save that fails says so on the device's line, until the next try.
   const saveShowAs = async (device: DeviceInfo, shownAs: DeviceType | null) => {
     const attempt = Symbol();
     showAsAttempts.current.set(device.id, attempt);
+    if (results[device.id]?.kind === "problem") found(device.id);
     try {
       const response = await updateDevice(device.id, { shownAs });
       if (showAsAttempts.current.get(device.id) === attempt) changed(response);
+    } catch (error) {
+      // Unless a newer choice is on its way, which will say how it went.
+      const latest = showAsAttempts.current.get(device.id);
+      if (latest === undefined || latest === attempt) {
+        const text = deviceProblem(error);
+        found(device.id, { kind: "problem", text });
+        setAnnouncement(text);
+      }
     } finally {
       if (showAsAttempts.current.get(device.id) === attempt) {
         showAsAttempts.current.delete(device.id);
       }
     }
   };
-
-  const found = (id: string, result?: CheckResult) =>
-    setResults(({ [id]: _, ...rest }) =>
-      result ? { ...rest, [id]: result } : rest,
-    );
 
   // An update that ended while this page was open is announced, and how
   // it ended takes the place of what a check found before.
@@ -522,9 +537,7 @@ export function DevicesSection(props: {
                         .then(changed)
                         .catch(() => undefined)
                     }
-                    onShowAs={(shownAs) =>
-                      void saveShowAs(device, shownAs).catch(() => undefined)
-                    }
+                    onShowAs={(shownAs) => void saveShowAs(device, shownAs)}
                     onMotion={() => setTuning(device.id)}
                     onCheck={() => void check(device)}
                     onProbe={() => void probe(device)}
