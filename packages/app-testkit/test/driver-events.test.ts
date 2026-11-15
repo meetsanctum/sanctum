@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createDriverCore } from "../src/index.js";
 
+// The suite's core hands each event to the handlers of the driver's
+// current start, every one of them even when one fails.
+
 const event: CoreEvent = {
   name: "permissions.changed",
   granted: [],

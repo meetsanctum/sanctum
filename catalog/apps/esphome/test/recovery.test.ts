@@ -15,6 +15,12 @@ import {
   signalEntity,
 } from "./support.js";
 
+// The app's own writes and the core's calls failing or overlapping: a
+// device's state waits until what its connection told is kept, a problem
+// is cleared once the core takes it, a removal or a new session never
+// meets an older session's setup, and invalid readings never stop valid
+// ones.
+
 const writes = vi.hoisted(() => ({ save: vi.fn(), signal: vi.fn() }));
 
 // Fail a write at the storage boundary while keeping the real database.

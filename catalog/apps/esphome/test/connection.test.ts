@@ -10,6 +10,11 @@ import {
 import { EmulatedDevice, newKey } from "./emulated-device.js";
 import { entitiesOf, keyOf, nextMac, timings } from "./support.js";
 
+// A device's connection where it can go wrong: a session that closes before
+// it's taken over, a setup the driver couldn't finish, a connection gone
+// quiet, a key that can't be read, and a handshake still under way as the
+// app stops.
+
 let device: EmulatedDevice;
 let connection: Connection;
 
