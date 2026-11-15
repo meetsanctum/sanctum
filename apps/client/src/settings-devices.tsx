@@ -145,9 +145,9 @@ export function DevicesSection(props: {
   const [announcement, setAnnouncement] = useState("");
   // Live device messages received during a request take precedence over its response.
   const liveDevices = useRef(new Map<string, DeviceInfo | null>());
-  // Each device's latest save from its menu, until it answers or a live
-  // message for the device arrives; and the latest of each kind, a room or
-  // what it is shown as, whatever has arrived live since.
+  // Each device's latest save of its room or what it is shown as, until it
+  // answers or a live message for the device arrives; and the latest of
+  // each kind of menu save, whatever has arrived live since.
   const saveAttempts = useRef(new Map<string, symbol>());
   const saveLatest = useRef(new Map<string, symbol>());
   const now = useMinuteClock();
@@ -306,6 +306,7 @@ export function DevicesSection(props: {
     setAnnouncement(text);
   };
   const trying = (device: DeviceInfo) => {
+    setAnnouncement("");
     if (results[device.id]?.kind === "problem") found(device.id);
   };
 
@@ -339,9 +340,24 @@ export function DevicesSection(props: {
 
   // Whether it shows on Home and whether its history is kept are not the
   // device's own: they say when they could not be changed.
-  const attempted = (device: DeviceInfo, work: Promise<unknown>) => {
+  const attempted = (
+    device: DeviceInfo,
+    choice: "home" | "history",
+    work: Promise<unknown>,
+  ) => {
+    const attempt = Symbol();
+    const kind = `${device.id}/${choice}`;
+    saveLatest.current.set(kind, attempt);
     trying(device);
-    void work.catch((error: unknown) => failed(device, error));
+    void work
+      .catch((error: unknown) => {
+        if (saveLatest.current.get(kind) === attempt) failed(device, error);
+      })
+      .finally(() => {
+        if (saveLatest.current.get(kind) === attempt) {
+          saveLatest.current.delete(kind);
+        }
+      });
   };
 
   // An update that ended while this page was open is announced, and how
@@ -548,6 +564,7 @@ export function DevicesSection(props: {
                     onHome={(on) =>
                       attempted(
                         device,
+                        "home",
                         on
                           ? props.home.add(device.id)
                           : props.home.remove(device.id),
@@ -556,6 +573,7 @@ export function DevicesSection(props: {
                     onKeep={() =>
                       attempted(
                         device,
+                        "history",
                         keepHistory(device.id, true).then(() =>
                           keepChanged(device.id, true),
                         ),

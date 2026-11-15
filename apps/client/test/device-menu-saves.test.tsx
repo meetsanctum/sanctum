@@ -40,18 +40,18 @@ describe("what a device's menu saves", () => {
     fail: (error: Error) => void;
   }[];
   // Whether Home and History refuse what they are asked.
-  let refusing: boolean;
+  let isRefusing: boolean;
   let home: OnHome;
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     saves = [];
-    refusing = false;
+    isRefusing = false;
     home = {
       ...unknownHome,
       devices: [],
       add: async () => {
-        if (refusing) throw new TypeError("Failed to fetch");
+        if (isRefusing) throw new TypeError("Failed to fetch");
       },
       remove: async () => undefined,
     };
@@ -65,7 +65,7 @@ describe("what a device's menu saves", () => {
         case "/api/history/devices":
           return [{ device: sensor.id, kept: false }];
         case "/api/history/keep":
-          if (refusing) throw new TypeError("Failed to fetch");
+          if (isRefusing) throw new TypeError("Failed to fetch");
           return init.json;
         case "/api/devices/pairing":
           return { until: null, found: [], drivers: [], joined: [] };
@@ -167,6 +167,18 @@ describe("what a device's menu saves", () => {
     expect(line()).toContain("Hall door");
   });
 
+  it("announces a repeated failure after retrying a room save", async () => {
+    await show();
+    await choose("Room", office.name);
+    await act(async () => saves[0]!.fail(new TypeError("Failed to fetch")));
+    expect(announced()).toBe(unreachable);
+
+    await choose("Room", office.name);
+    expect(announced()).toBe("");
+    await act(async () => saves[1]!.fail(new TypeError("Failed to fetch")));
+    expect(announced()).toBe(unreachable);
+  });
+
   it("says nothing of an earlier room that fails after a later one was saved", async () => {
     await show();
     await choose("Room", office.name);
@@ -189,16 +201,44 @@ describe("what a device's menu saves", () => {
 
   it("says so when it could not be shown on Home", async () => {
     await show();
-    refusing = true;
+    isRefusing = true;
     await tick("Show on Home");
     await act(async () => {});
     expect(line()).toContain(unreachable);
     expect(announced()).toBe(unreachable);
   });
 
+  it.each([false, true])(
+    "says nothing of an older Home choice failing (failure last: %s)",
+    async (isFailureLast) => {
+      let refuse!: (error: Error) => void;
+      let finish!: () => void;
+      home.add = () =>
+        new Promise<void>((_, reject) => {
+          refuse = reject;
+        });
+      home.remove = () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      await show();
+      await tick("Show on Home");
+      // Home shows the pending addition immediately, so it can be undone.
+      home.devices = [sensor.id];
+      await show();
+      await tick("Show on Home");
+
+      if (isFailureLast) await act(async () => finish());
+      await act(async () => refuse(new TypeError("Failed to fetch")));
+      if (!isFailureLast) await act(async () => finish());
+      expect(line()).not.toContain(unreachable);
+      expect(announced()).not.toBe(unreachable);
+    },
+  );
+
   it("says so when its history could not be kept", async () => {
     await show();
-    refusing = true;
+    isRefusing = true;
     await tick("Keep history");
     await act(async () => {});
     expect(line()).toContain(unreachable);
