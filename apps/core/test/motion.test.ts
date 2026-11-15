@@ -75,7 +75,7 @@ describe("a motion sensor", () => {
     const { core, token, ids } = await home();
 
     expect(await deviceOf(core, token, ids.desk)).toMatchObject({
-      name: "Office motion sensor",
+      name: "Office Motion Sensor",
       battery: 90,
       capabilities: [
         {

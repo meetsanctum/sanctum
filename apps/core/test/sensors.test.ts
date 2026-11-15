@@ -67,7 +67,7 @@ describe("a climate sensor", () => {
     );
 
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
-      name: "Office sensor",
+      name: "Office Sensor",
       roomId: office.id,
     });
   });

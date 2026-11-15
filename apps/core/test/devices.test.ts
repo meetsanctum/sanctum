@@ -404,7 +404,7 @@ describe("a driver app's devices", () => {
       { id: lamp, name: null },
       maya,
     );
-    expect(named.json().name).toBe("Hall light");
+    expect(named.json().name).toBe("Hall Light");
   });
 });
 

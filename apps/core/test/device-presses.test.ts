@@ -97,7 +97,7 @@ describe("a remote", () => {
     const room = core.places.list().rooms[0]!.id;
     await post(core, "/api/devices/update", { id: office, roomId: room }, maya);
 
-    expect(core.devices.get(office)?.name).toBe("Office button");
+    expect(core.devices.get(office)?.name).toBe("Office Button");
   });
 
   it("sends each press to live clients once, as it happens, and answers", async () => {

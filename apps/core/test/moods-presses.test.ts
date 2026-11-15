@@ -78,7 +78,7 @@ describe("a remote's presses", () => {
 
     expect(await kept(core, maya)).toEqual([
       expect.objectContaining({
-        name: "Office button: presses not chosen",
+        name: "Office Button: presses not chosen",
         appKey: `default:${remote}`,
       }),
     ]);
