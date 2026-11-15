@@ -119,6 +119,31 @@ const reporting = `
   setInterval(() => undefined, 60_000);
 `;
 
+// An app that reaches devices says what its own network lets it reach.
+const reaching = `
+  const dns = require("node:dns");
+  const net = require("node:net");
+  const os = require("node:os");
+  const status = require("node:fs").readFileSync("/proc/self/status", "utf8");
+  const attempt = (connect) => new Promise((done) => {
+    const socket = connect();
+    socket.setTimeout(2000, () => { socket.destroy(); done("timeout"); });
+    socket.on("connect", () => { socket.destroy(); done("connected"); });
+    socket.on("error", (error) => done(error.code));
+  });
+  (async () => {
+    const lookup = await new Promise((done) =>
+      dns.lookup("example.com", (error) => done(error ? error.code : "found")));
+    console.log(JSON.stringify({
+      capabilities: /CapEff:\\s+(\\S+)/.exec(status)[1],
+      networks: Object.keys(os.networkInterfaces()).sort(),
+      lookup,
+      internet: await attempt(() => net.connect(80, "1.1.1.1")),
+    }));
+    setInterval(() => undefined, 60_000);
+  })();
+`;
+
 const logsOf = (app: string) =>
   run("sh", ["-c", `docker logs sanctum-${stack}-app-${app} 2>&1`]);
 
@@ -167,6 +192,7 @@ describe("apps' containers on real Docker", () => {
     await stage("test.reporter", reporting);
     await stage("test.other", reporting);
     await stage("test.quits", "process.exit(3);");
+    await stage("test.reacher", reaching);
     await stage(
       "test.hog",
       `const kept = []; for (;;) kept.push(Buffer.alloc(10 * 1024 * 1024, 1));`,
@@ -191,7 +217,60 @@ describe("apps' containers on real Docker", () => {
       appContainers: true,
       memoryLimits: true,
       discovery: false,
+      lan: true,
     });
+  });
+
+  it("gives one that reaches devices a network of its own, reaching nothing it isn't given", async () => {
+    const policy = { core: "test", count: 1, addresses: [], ports: [6053] };
+    const started = await api("PUT", "/api/apps/test.reacher/container", {
+      folder,
+      memoryMb: 64,
+      lan: policy,
+    });
+    expect(started).toMatchObject({
+      status: 200,
+      body: { state: "running", lan: { core: "test", count: 1 } },
+    });
+    const { lan } = (
+      started as { body: { lan: { manager: string; holder: string } } }
+    ).body;
+
+    expect(await reportOf("test.reacher")).toMatchObject({
+      capabilities: "0000000000000000",
+      networks: ["eth0", "lo"],
+      lookup: expect.not.stringMatching(/^found$/),
+      internet: expect.not.stringMatching(/^connected$/),
+    });
+    const change = (body: object) =>
+      api("PUT", "/api/apps/test.reacher/container/lan", body);
+    expect(
+      (await change({ ...policy, ...lan, count: 2, holder: "another" })).status,
+    ).toBe(409);
+    expect(await change({ ...policy, ...lan, count: 2 })).toMatchObject({
+      status: 200,
+      body: { count: 2, holder: lan.holder },
+    });
+
+    // The host's status counts it, holder beside it.
+    const status = await api("GET", "/api/host/status");
+    expect(status.status).toBe(200);
+    expect(
+      (status.body as { memory: { containers: { app?: string }[] } }).memory
+        .containers,
+    ).toContainEqual(expect.objectContaining({ app: "test.reacher" }));
+
+    await api("DELETE", "/api/apps/test.reacher/container");
+    expect(
+      await docker(
+        "ps",
+        "--all",
+        "--filter",
+        `name=sanctum-${stack}-lan-test.reacher-holder`,
+        "--format",
+        "{{.Names}}",
+      ),
+    ).toBe("");
   });
 
   it("starts one, and what it can do is what the standard allows", async () => {

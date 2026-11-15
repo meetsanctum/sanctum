@@ -70,6 +70,7 @@ LABEL sanctum.service="manager" \
       org.opencontainers.image.version=$SANCTUM_VERSION
 WORKDIR /app/apps/manager
 COPY --from=packages /app/stack-packages /app/stack-packages
-# What checks, attaches and grows apps' images, as on a host.
-RUN apk add --no-cache e2fsprogs e2fsprogs-extra losetup util-linux-misc
+# What checks, attaches and grows apps' images, and loads the rules of the
+# network of an app that reaches devices, as on a host.
+RUN apk add --no-cache e2fsprogs e2fsprogs-extra losetup util-linux-misc nftables
 CMD ["node", "--watch", "--watch-preserve-output", "dist/index.js"]

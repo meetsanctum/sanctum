@@ -1,11 +1,15 @@
+import { randomUUID } from "node:crypto";
+import { access } from "node:fs/promises";
+
 import { startAnnouncing } from "./announce.js";
-import { createDiscovery } from "./discovery.js";
+import { createDiscovery, hostNetworks, isHomeAddress } from "./discovery.js";
 import {
   createAppContainers,
   ensureAppFolders,
   nodeImage,
 } from "./apps/containers.js";
 import { createImageHelper } from "./apps/helper.js";
+import { createLanHolders } from "./apps/lan.js";
 import { createAppImages } from "./apps/images.js";
 import { createMaintenance } from "./apps/maintenance.js";
 import { createAppUpdates } from "./apps/updates.js";
@@ -52,6 +56,7 @@ import {
   createStackPackages,
   followStackBuilds,
 } from "./update/stack-packages.js";
+import { managerContainerName } from "./update/manager-update.js";
 import { createRegistry } from "./update/registry.js";
 import { createVersionList } from "./update/versions.js";
 
@@ -202,13 +207,41 @@ if (config.supervise) {
   await space.resume().catch((error: unknown) => {
     log(`Could not finish the registry's cleanup: ${errorMessage(error)}`);
   });
+  // An app that reaches devices gets a network of its own, whose rules this
+  // manager's own image loads with nftables, where it has them.
+  const canLoadRules = await access("/usr/sbin/nft").then(
+    () => true,
+    () => false,
+  );
+  const lan = canLoadRules
+    ? createLanHolders({
+        docker,
+        image: async () => {
+          const manager = await inspectContainer(docker, managerContainerName);
+          if (!manager) throw new Error("The manager can't find its own image");
+          return manager.Image;
+        },
+        run: randomUUID(),
+        reachable: (address) => isHomeAddress(address, hostNetworks()),
+        log,
+      })
+    : undefined;
   const appContainers = createAppContainers({
     docker,
     dataDir: config.dataDir,
     log,
     images: appImages,
     prepareImage: maintenance.prepare,
+    lan,
   });
+  // An app whose network's holder stopped stops too, soon after.
+  if (lan) {
+    setInterval(() => {
+      void appContainers.stopStranded().catch((error: unknown) => {
+        log(`Couldn't check apps' networks: ${errorMessage(error)}`);
+      });
+    }, 15_000).unref();
+  }
   const appUpdates = createAppUpdates({
     dataDir: config.dataDir,
     operations,

@@ -8,10 +8,12 @@ import {
   createAppContainers,
   nodeImage,
 } from "../src/apps/containers.js";
+import { createLanHolders, holderName } from "../src/apps/lan.js";
 import { coreContainerOptions } from "../src/core-container.js";
 import { createServer } from "../src/server.js";
 import type { UpdateService } from "../src/update/service.js";
 import { FakeDocker } from "./fake-docker.js";
+import { playNft } from "./fake-nft.js";
 
 const app = "sanctum.weather";
 const folder = "0.3.0+1a2b3c4d5e6f7a8b";
@@ -22,9 +24,11 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-async function manager() {
+async function manager(options: { lan?: boolean } = {}) {
   const docker = new FakeDocker();
   docker.load(nodeImage, { title: "node", version: "24" });
+  docker.load("sanctum-manager:test", { title: "manager", version: "test" });
+  playNft(docker);
   const dataDir = await mkdtemp(join(tmpdir(), "sanctum-apps-"));
   await mkdir(join(dataDir, "packages", app, folder), { recursive: true });
   await writeFile(join(dataDir, "packages", app, folder, "package.json"), "{}");
@@ -35,6 +39,17 @@ async function manager() {
     totalMemory: () => 2 * 1024 * 1024 * 1024,
     ownFolder: async () => {},
     images: { ensure: async () => "sanctum-app-data-sanctum.weather" },
+    ...(options.lan
+      ? {
+          lan: createLanHolders({
+            docker,
+            image: async () => "sanctum-manager:test",
+            run: "manager-1",
+            reachable: () => true,
+            log: vi.fn(),
+          }),
+        }
+      : {}),
   });
   const server = createServer(
     { version: "dev-1" },
@@ -63,6 +78,7 @@ describe("what a manager can do", () => {
       appContainers: false,
       memoryLimits: true,
       discovery: false,
+      lan: false,
     });
 
     docker.load("sanctum-core:1", { title: "sanctum-core", version: "1" });
@@ -72,6 +88,7 @@ describe("what a manager can do", () => {
       appContainers: true,
       memoryLimits: true,
       discovery: false,
+      lan: false,
     });
   });
 
@@ -99,9 +116,82 @@ describe("what a manager can do", () => {
       appContainers: false,
       memoryLimits: false,
       discovery: false,
+      lan: false,
     });
     expect(start.statusCode).toBe(503);
   });
+
+  it("gives one that reaches devices a network of its own, and changes what it may reach", async () => {
+    const { docker, server } = await manager({ lan: true });
+    docker.load("sanctum-core:1", { title: "sanctum-core", version: "1" });
+    await docker.createContainer(coreContainerOptions("sanctum-core:1"));
+    const policy = {
+      core: "core-1",
+      count: 1,
+      addresses: ["192.168.1.40"],
+      ports: [6053],
+    };
+
+    expect(
+      (await server.inject({ url: "/api/capabilities" })).json(),
+    ).toMatchObject({ appContainers: true, lan: true });
+    const started = await server.inject({
+      method: "PUT",
+      url: path,
+      payload: { folder, memoryMb: 128, lan: policy },
+    });
+    const holder = (await docker.getContainer(holderName(app)).inspect()).Id;
+    expect(started.json().lan).toEqual({
+      core: "core-1",
+      count: 1,
+      manager: "manager-1",
+      holder,
+    });
+
+    const change = (body: object) =>
+      server.inject({ method: "PUT", url: `${path}/lan`, payload: body });
+    const changed = await change({
+      ...policy,
+      count: 2,
+      manager: "manager-1",
+      holder,
+    });
+    expect(changed.json()).toMatchObject({ count: 2, holder });
+    expect(
+      (await change({ ...policy, count: 3, manager: "m", holder: "other" }))
+        .statusCode,
+    ).toBe(409);
+    expect((await change({ ...policy, ports: [0] })).statusCode).toBe(400);
+  });
+
+  it.each([
+    'core"; policy accept',
+    "core\nrun",
+    "core run",
+    "core\\run",
+    "core\n",
+  ])(
+    "refuses a core run that cannot be safely written and recovered from its rules: %j",
+    async (core) => {
+      const { docker, server } = await manager({ lan: true });
+      const policy = { core, count: 1, addresses: [], ports: [6053] };
+
+      const started = await server.inject({
+        method: "PUT",
+        url: path,
+        payload: { folder, memoryMb: 128, lan: policy },
+      });
+      const changed = await server.inject({
+        method: "PUT",
+        url: `${path}/lan`,
+        payload: { ...policy, manager: "manager-1", holder: "holder" },
+      });
+
+      expect(started.statusCode).toBe(400);
+      expect(changed.statusCode).toBe(400);
+      expect(docker.container(holderName(app))).toBeUndefined();
+    },
+  );
 
   it("reports no staged apps without a host, so the core can start its apps at once", async () => {
     const server = createServer({ version: "dev-1" });

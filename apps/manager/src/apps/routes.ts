@@ -14,6 +14,7 @@ import {
   smallestImageMb,
   type AppImages,
 } from "./images.js";
+import { lanChange, lanPolicy } from "./lan.js";
 import { maintenanceFilePattern, type Maintenance } from "./maintenance.js";
 import { OperationConflictError } from "../operations.js";
 import { AppRefusal } from "./refusal.js";
@@ -23,11 +24,19 @@ import type { AppUsage } from "./usage.js";
 // Apps' containers, on the manager's socket, which only the core reaches:
 //
 //   GET    /api/capabilities         what this manager can do: run apps, limit
-//                                    their memory, look for devices; one too old
-//                                    for this route answers 404, which means nothing
+//                                    their memory, look for devices, give an app
+//                                    that reaches them its own network; one too
+//                                    old for this route answers 404, which means
+//                                    nothing
 //   GET    /api/apps/containers      every app's container and its state
 //   GET    /api/apps/:app/container  one app's
-//   PUT    /api/apps/:app/container  start it: { folder, memoryMb, keep? }
+//   PUT    /api/apps/:app/container  start it: { folder, memoryMb, keep?, lan? },
+//                                    an app that reaches devices with its first
+//                                    policy, answered with the one its rules hold
+//   PUT    /api/apps/:app/container/lan  replace what its network may reach:
+//                                    { core, count, addresses, ports, manager,
+//                                    holder }, refused (409) for another holder
+//                                    or one no newer
 //   POST   /api/apps/:app/container/stop  stop it, keeping why it stopped
 //   DELETE /api/apps/:app/container  remove it, keeping its data
 //   GET    /api/apps/:app/usage      what it holds and uses now, for its settings
@@ -54,6 +63,8 @@ const startBody = z.object({
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb).optional(),
   // One already running as this would make it goes on.
   keep: z.boolean().optional(),
+  // What an app that reaches devices may reach first (lan.ts).
+  lan: lanPolicy.optional(),
 });
 const growBody = z.object({
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb),
@@ -103,12 +114,24 @@ export function registerAppRoutes(
   discovery = false,
 ) {
   app.get("/api/capabilities", async () => {
-    if (!apps) return { appContainers: false, memoryLimits: false, discovery };
+    if (!apps) {
+      return {
+        appContainers: false,
+        memoryLimits: false,
+        discovery,
+        lan: false,
+      };
+    }
     const [appContainers, memoryLimits] = await Promise.all([
       apps.ready(),
       apps.memoryLimits(),
     ]);
-    return { appContainers, memoryLimits, discovery };
+    return {
+      appContainers,
+      memoryLimits,
+      discovery,
+      lan: appContainers && apps.reachesDevices(),
+    };
   });
 
   app.get("/api/apps/staged", async () => ({
@@ -162,8 +185,19 @@ export function registerAppRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: "Invalid container request" });
       }
-      const { keep, ...spec } = parsed.data;
-      return apps.start({ app: id, ...spec }, { keep });
+      const { keep, lan, ...spec } = parsed.data;
+      return apps.start({ app: id, ...spec }, { keep, lan });
+    }),
+  );
+
+  app.put(
+    "/api/apps/:app/container/lan",
+    withApp(async (id, body, reply) => {
+      const parsed = lanChange.safeParse(body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid network policy" });
+      }
+      return apps.applyLan(id, parsed.data);
     }),
   );
 
