@@ -188,3 +188,89 @@ describe("switching natural light off", () => {
     await app.stop!(core.ctx, { reason: "shutdown" });
   });
 });
+
+describe("a room's switch", () => {
+  function home() {
+    const run = running();
+    const { core } = run;
+    core.addLight("ceiling", "Ceiling", { ...on, colorTemperature: 153 });
+    core.addLight("desk", "Desk lamp", { ...on, colorTemperature: 153 });
+    core.addLight("strip", "Shelf strip", { on: true }, stripFeatures);
+    core.addLight("hall", "Hall light", { ...on, colorTemperature: 153 });
+    core.addLight("loose", "Loose lamp", { ...on, colorTemperature: 153 });
+    const rooms: Record<string, string | null> = {
+      ceiling: "office",
+      desk: "office",
+      strip: "office",
+      hall: "hall",
+      loose: null,
+    };
+    for (const device of core.state.devices) device.roomId = rooms[device.id]!;
+    const following = () =>
+      [...core.state.entities.keys()].map((key) => key.split("/")[0]).sort();
+    return { ...run, following };
+  }
+
+  it("leaves out every light in the room, or has them all follow again", async () => {
+    const { call, check, now, sentFrom, following } = home();
+
+    expect(
+      await call("naturalLight.followRoom", {
+        placeId: "office",
+        follow: false,
+      }),
+    ).toEqual({ failed: [] });
+    await check();
+    expect(following()).toEqual(["hall", "loose"]);
+    const sent = sentFrom(0).length;
+
+    expect(
+      await call("naturalLight.followRoom", {
+        placeId: "office",
+        follow: true,
+      }),
+    ).toEqual({ failed: [] });
+    expect(following()).toEqual(["ceiling", "desk", "hall", "loose"]);
+    // Both take the curve at once; the strip takes no colour temperature.
+    expect(sentFrom(sent)).toEqual([curveAt(now()), curveAt(now())]);
+  });
+
+  it("leaves out a light that still follows though it no longer takes a colour temperature", async () => {
+    const { core, call, check, following } = home();
+    await check();
+    core.light("desk").features = stripFeatures;
+
+    await call("naturalLight.followRoom", { placeId: "office", follow: false });
+
+    expect(following()).toEqual(["hall", "loose"]);
+  });
+
+  it("covers the lights in no room for no room", async () => {
+    const { call, check, following } = home();
+    await check();
+
+    await call("naturalLight.followRoom", { placeId: null, follow: false });
+
+    expect(following()).toEqual(["ceiling", "desk", "hall"]);
+  });
+
+  it("names a light it couldn't change, and changes the others", async () => {
+    const { core, call, following } = home();
+    await call("naturalLight.followRoom", { placeId: "office", follow: false });
+    let refused = false;
+    core.state.beforeCommand = async () => {
+      if (!refused) {
+        refused = true;
+        throw new Error("radio failed");
+      }
+    };
+
+    expect(
+      await call("naturalLight.followRoom", {
+        placeId: "office",
+        follow: true,
+      }),
+    ).toEqual({ failed: [{ device: "ceiling", capability: "light" }] });
+    expect(following()).toEqual(["desk"]);
+  });
+});

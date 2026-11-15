@@ -2,6 +2,7 @@ import {
   controlPermission,
   defineApp,
   placesLocationPermission,
+  placesReadPermission,
 } from "@meetsanctum/app-sdk";
 
 import { naturalLightActions } from "./actions.js";
@@ -42,10 +43,8 @@ function timingOf(options: NaturalLightOptions): Timing {
 export function createNaturalLightApp(options: NaturalLightOptions = {}) {
   const timing = timingOf(options);
   const runForLight = createRunForLight();
-  const { follow, resume, pause, preview, check } = naturalLightActions(
-    timing,
-    runForLight,
-  );
+  const { follow, followRoom, resume, pause, preview, check } =
+    naturalLightActions(timing, runForLight);
   let follower: ReturnType<typeof createFollower> | undefined;
 
   return defineApp({
@@ -67,6 +66,13 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
         reason: "To bring the lights that follow it to the light of the day.",
         needed: true,
       },
+      // Its page lists lights by room, and lists them all together without
+      // it.
+      {
+        id: placesReadPermission,
+        reason: "To list your lights by room.",
+        startsOn: true,
+      },
     ],
     provides: {
       entities: [targetType],
@@ -75,7 +81,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
     // The curve (settings.ts).
     settings: naturalLightSettings,
     migrations: "migrations",
-    actions: [follow, resume, pause, preview, check],
+    actions: [follow, followRoom, resume, pause, preview, check],
     events: [],
     async start(ctx) {
       // Kept by the core across restarts; scheduling it again keeps its
