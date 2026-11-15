@@ -26,19 +26,27 @@ export function createReadSnapshot({
   devices,
   entities,
 }: Live) {
+  const listedDevices = devices.list();
   let held:
     | {
         people: ReturnType<People["list"]>;
         places: ReturnType<PlacesModule["list"]>;
         location: ReturnType<PlacesModule["location"]>;
         devices: DeviceInfo[];
+        deviceKeys: ReadonlyMap<string, ReadonlyMap<string, string>>;
         entities: ReturnType<Entities["list"]>;
       }
     | undefined = {
     people: people.list(),
     places: places.list(),
     location: places.location(),
-    devices: devices.list(),
+    devices: listedDevices,
+    deviceKeys: new Map(
+      [...new Set(listedDevices.map(({ driver }) => driver))].map((driver) => [
+        driver,
+        devices.keysOf(driver),
+      ]),
+    ),
     entities: entities.list(),
   };
 
@@ -50,6 +58,10 @@ export function createReadSnapshot({
     },
     devices: {
       ...devices,
+      keysOf: (driver: string) =>
+        held
+          ? (held.deviceKeys.get(driver) ?? new Map())
+          : devices.keysOf(driver),
       list: (view: View = {}) =>
         held
           ? held.devices.flatMap((device) => viewOf(device, view) ?? [])

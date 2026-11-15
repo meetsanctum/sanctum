@@ -53,8 +53,12 @@ function deviceShownTo(
   permissions: readonly string[],
   key: string | undefined,
 ) {
-  const shown = device && viewOf(device, deviceViewOf(appId, permissions));
-  return shown && key && shown.driver === appId ? { ...shown, key } : shown;
+  if (!device) return null;
+  const view = deviceViewOf(appId, permissions);
+  const unkeyed = { ...device };
+  delete unkeyed.key;
+  const shown = viewOf(unkeyed, view);
+  return shown && key && shown.driver === view.own ? { ...shown, key } : shown;
 }
 
 // A change as one app may read it: what it shows before and after, each
@@ -128,8 +132,12 @@ function eventShownTo(
   permissions: readonly string[],
 ): CoreEvent | undefined {
   if ("device" in event) {
-    const view = deviceViewOf(appId, permissions);
-    const device = viewOf(event.device, view);
+    const device = deviceShownTo(
+      event.device,
+      appId,
+      permissions,
+      event.device.key,
+    );
     if (!device) return;
     if (
       event.name === "device.pressed" &&
@@ -138,7 +146,12 @@ function eventShownTo(
       return;
     }
     if (event.name === "device.changed") {
-      const before = viewOf(event.before, view);
+      const before = deviceShownTo(
+        event.before,
+        appId,
+        permissions,
+        event.before.key,
+      );
       if (!before || JSON.stringify(before) === JSON.stringify(device)) return;
       return { ...event, before, device };
     }

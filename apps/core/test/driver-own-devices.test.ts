@@ -6,6 +6,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
+import { createReadSnapshot } from "../src/app-host/snapshot.js";
 import { lampsCore, settled } from "./devices-support.js";
 import { get, post } from "./support.js";
 
@@ -77,6 +78,24 @@ const byName = (devices: DeviceInfo[]) =>
     .sort((a, b) => a.driverName.localeCompare(b.driverName));
 
 describe("a driver's own devices", () => {
+  it("keep their registration keys in a startup snapshot after a device is removed", async () => {
+    const { core, maya, lampHere } = await owning();
+    const snapshot = createReadSnapshot(core);
+
+    await post(
+      core,
+      "/api/devices/remove",
+      { id: lampHere, force: true },
+      maya,
+    );
+
+    expect(snapshot.devices.get(lampHere)).not.toBeNull();
+    expect(snapshot.devices.keysOf("test.own").get(lampHere)).toBe("aa:bb");
+    snapshot.release();
+    expect(snapshot.devices.get(lampHere)).toBeNull();
+    expect(snapshot.devices.keysOf("test.own").has(lampHere)).toBe(false);
+  });
+
   it("are listed whole, with the keys it registered them by, and no one else's", async () => {
     const { ctx, display } = await owning();
 
