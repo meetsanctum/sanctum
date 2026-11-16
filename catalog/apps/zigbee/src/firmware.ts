@@ -63,11 +63,25 @@ export function firmwareOf(update: unknown): FirmwareSaid | null {
   }
 }
 
+/**
+ * A version as a device wrote it, or null when it wrote none. Some end
+ * theirs with a null character and send what lay behind it in their memory
+ * too, as "2019\0www." does, so the text ends at the first one, and no
+ * control character is part of it.
+ */
+function versionText(value: unknown) {
+  const text = stringValue(value)
+    ?.split("\0", 1)[0]
+    ?.replace(/\p{Cc}/gu, "")
+    .trim()
+    .slice(0, 120)
+    .trim();
+  return text || null;
+}
+
 /** What a device runs, as Zigbee2MQTT lists it: its software build, else its date code. */
 export function versionOf(device: ZigbeeDevice) {
-  const version =
-    stringValue(device.software_build_id) ?? stringValue(device.date_code);
-  return version?.trim().slice(0, 120).trim() || null;
+  return versionText(device.software_build_id) ?? versionText(device.date_code);
 }
 
 /**
