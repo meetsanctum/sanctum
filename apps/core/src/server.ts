@@ -161,7 +161,7 @@ export function createServer(
         options;
       await registerAuth(core, { auth, people });
       registerPageRequests(core, { host: options.apps });
-      registerPeopleRoutes(core, { people, connections: auth.connections });
+      registerPeopleRoutes(core, { people });
       registerSystemRoutes(core, { ...options.system, gate });
       registerPlacesRoutes(core, {
         places,

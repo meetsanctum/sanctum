@@ -8,7 +8,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { changedBy, parseRequest } from "../auth/callers.js";
-import type { LiveConnections } from "../auth/live.js";
 import { personInfo } from "../auth/logins.js";
 import { newPerson, personChanges, type People } from "./people.js";
 
@@ -35,13 +34,9 @@ const schemas = {
 
 export function registerPeopleRoutes(
   app: FastifyInstance,
-  options: {
-    people: People;
-    // Removing someone closes the live connections their clients had open.
-    connections: Pick<LiveConnections, "closePerson">;
-  },
+  options: { people: People },
 ) {
-  const { people, connections } = options;
+  const { people } = options;
   const by = (request: FastifyRequest) => changedBy(request.principal!);
 
   app.get("/api/people", async (): Promise<PersonInfo[]> =>
@@ -63,11 +58,10 @@ export function registerPeopleRoutes(
   });
 
   // Their login and personal clients go with them, so their next request is
-  // refused; their open connections close now.
+  // refused, and their open connections close as the removal commits.
   app.post("/api/people/remove", async (request, reply) => {
     const { id: personId } = parseRequest(schemas.remove, request.body);
     people.remove(personId, by(request));
-    connections.closePerson(personId);
     return reply.code(204).send();
   });
 }
