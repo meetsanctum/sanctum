@@ -295,13 +295,21 @@ async function publishButton(ctx: AppContext, state: RoomState) {
  * core only for the lights, so a button follows its room's lights closely
  * while each light is still being set. `waits` leaves a room as it is, as
  * for publishRooms.
+ *
+ * `held` gives the devices as the caller holds them, or none where it holds
+ * none. They decide only whether the core is asked at all: a room's lights
+ * each change several times as the room is switched, and nearly every such
+ * change leaves its button as it is. Where the held devices leave every
+ * button as recorded, nothing is asked and nothing published; otherwise the
+ * lights are read from the core as ever, and only what it says is published.
  */
 export function publishButtons(
   ctx: AppContext,
   rooms: readonly string[],
   waits?: (placeId: string) => boolean,
+  held?: () => readonly DeviceInfo[] | null,
 ) {
-  const mine = turn.then(() => publishButtonsNow(ctx, rooms, waits));
+  const mine = turn.then(() => publishButtonsNow(ctx, rooms, waits, held));
   turn = mine.catch(() => undefined);
   return mine;
 }
@@ -310,6 +318,7 @@ async function publishButtonsNow(
   ctx: AppContext,
   rooms: readonly string[],
   waits?: (placeId: string) => boolean,
+  held?: () => readonly DeviceInfo[] | null,
 ) {
   const { db } = ctx.storage;
   // One recorded with no state is on its way out or failed, which
@@ -318,6 +327,17 @@ async function publishButtonsNow(
     (row) => rooms.includes(row.placeId) && row.state !== null,
   );
   if (out.length === 0) return;
+  // Read in this publication's turn, so they are the devices as its turn
+  // finds them.
+  const heldNow = held?.();
+  if (heldNow) {
+    const rows = await rowsOf(ctx);
+    const isAsRecorded = out.every((kept) => {
+      const state = roomStateOf(kept.placeId, heldNow, rows, ctx.appId);
+      return !state || isDeepStrictEqual(kept.state, state);
+    });
+    if (isAsRecorded) return;
+  }
   const isLeft = leftWaiting(
     waits,
     out.map((row) => row.placeId),
