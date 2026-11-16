@@ -71,6 +71,29 @@ export function createFollower(
   // by how many: following ends its pause, so the button waits for that.
   const backRooms = new Map<string, number>();
   let wakeButtons: (() => void) | undefined;
+  // The home's devices as their events have left them, read from the core
+  // as the app starts and resumes, and whether that read succeeded. A room's
+  // button asks the core for its lights only where these say it may have
+  // changed (publishButtons); nothing is published from them.
+  const held = new Map<string, DeviceInfo>();
+  let isHeld = false;
+  const heldDevices = () => (isHeld ? [...held.values()] : null);
+
+  // The core hands an app no event until its start or resume has finished,
+  // so none falls between this read and the events that keep it.
+  async function holdDevices() {
+    isHeld = false;
+    try {
+      const devices = await ctx.devices.list();
+      held.clear();
+      for (const device of devices) held.set(device.id, device);
+      isHeld = true;
+    } catch (error) {
+      ctx.log(
+        `could not read the devices to hold (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
 
   // Every light to the settings as they stand now, those it set a moment
   // ago too.
@@ -187,7 +210,7 @@ export function createFollower(
       buttonRooms.clear();
       if (rooms.length === 0) continue;
       try {
-        await publishButtons(ctx, rooms, waitsForBack);
+        await publishButtons(ctx, rooms, waitsForBack, heldDevices);
       } catch (error) {
         if (!isStopped) {
           ctx.log(
@@ -252,6 +275,7 @@ export function createFollower(
         `could not take in new lights (${error instanceof Error ? error.message : String(error)})`,
       );
     }
+    await holdDevices();
     const options = await followOptionsFor(ctx, timing);
     wasOn = options.isOn;
     await publishAll(ctx, options, runForLight);
@@ -292,14 +316,21 @@ export function createFollower(
         isLocationChanged = true;
         wake?.();
       });
-      await ctx.events.on("device.added", () => {
+      // Each first keeps the device as the event leaves it, before anything
+      // that could fail.
+      await ctx.events.on("device.added", ({ device }) => {
+        held.set(device.id, device);
         isDeviceAdded = true;
         wake?.();
       });
-      await ctx.events.on("device.changed", ({ device, before }) =>
-        heard(device, before),
-      );
-      await ctx.events.on("device.removed", ({ device }) => heard(device));
+      await ctx.events.on("device.changed", ({ device, before }) => {
+        held.set(device.id, device);
+        heard(device, before);
+      });
+      await ctx.events.on("device.removed", ({ device }) => {
+        held.delete(device.id);
+        heard(device);
+      });
       await publishStanding();
       void run();
       void showButtons();
