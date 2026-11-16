@@ -4,8 +4,10 @@ import {
   assertDriverProblems,
   defineApp,
   answersTo,
+  isDeclaredAddRefusal,
   isDeclaredRefusal,
   shownProblem,
+  shownRefusals,
   shownQuestions,
   toStaticManifest,
   type AppDefinition,
@@ -131,6 +133,23 @@ describe("a driver's problems", () => {
   });
 });
 
+describe("a driver's refusals of adding", () => {
+  it("are checked as the app is defined and carried by its static manifest", () => {
+    const refusals = { notWaiting: "It stopped waiting for a key." };
+
+    expect(toStaticManifest(example({ refusals })).driver).toMatchObject({
+      refusals,
+    });
+    expect(toStaticManifest(example({})).driver).not.toHaveProperty("refusals");
+    expect(() => example({ refusals: { notWaiting: "" } })).toThrow(
+      "A driver's refusals",
+    );
+    expect(() => example({ refusals: { "not-waiting": "Words." } })).toThrow(
+      "A driver's refusals",
+    );
+  });
+});
+
 describe("answers to what's asked", () => {
   const asks = shownProblem({ problems, questions }, "keyMismatch")!.repair!
     .asks;
@@ -158,6 +177,36 @@ describe("answers to what's asked", () => {
     ).toBe(false);
     expect(
       isDeclaredRefusal([], { question: "key", refusal: "wrongKey" }),
+    ).toBe(false);
+  });
+
+  it("are refused, in adding, as a question or the driver declares", () => {
+    const refusals = shownRefusals({
+      refusals: { notWaiting: "It stopped waiting for a key." },
+    });
+
+    expect(refusals).toEqual({ notWaiting: "It stopped waiting for a key." });
+    expect(
+      isDeclaredAddRefusal(asks, refusals, {
+        question: "key",
+        refusal: "wrongKey",
+      }),
+    ).toBe(true);
+    expect(isDeclaredAddRefusal([], refusals, { refusal: "notWaiting" })).toBe(
+      true,
+    );
+    // A question's refusal is no refusal of adding at all, nor the other way.
+    expect(isDeclaredAddRefusal(asks, refusals, { refusal: "wrongKey" })).toBe(
+      false,
+    );
+    expect(
+      isDeclaredAddRefusal(asks, refusals, {
+        question: "key",
+        refusal: "notWaiting",
+      }),
+    ).toBe(false);
+    expect(
+      isDeclaredAddRefusal([], refusals, { refusal: "notWaiting", extra: 1 }),
     ).toBe(false);
   });
 

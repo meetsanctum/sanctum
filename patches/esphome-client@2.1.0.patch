@@ -1,0 +1,22 @@
+diff --git a/dist/esphome-client.js b/dist/esphome-client.js
+index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..ad5f6456ae217bd3ca6d89ce3607fa9bdc3b04a0 100644
+--- a/dist/esphome-client.js
++++ b/dist/esphome-client.js
+@@ -1542,13 +1542,15 @@ export class EspHomeClient {
+             // This validator stands beside the handshake's own because the key set validates a key it sends to the device, and no handshake state exists here to validate it.
+             // It reports the fault in the connect flow's wording for the same fault.
+             const keyBuffer = Buffer.from(key, "base64");
+-            if (keyBuffer.length !== NOISE_PSK_LEN) {
++            // An empty key clears the device's own, as ESPHome takes one of no bytes.
++            if (keyBuffer.length !== NOISE_PSK_LEN && key !== "") {
+                 throw new EncryptionKeyInvalidError("The encryption key is invalid: PSK must be exactly " + String(NOISE_PSK_LEN) + " bytes, got " + String(keyBuffer.length) +
+                     ".", "INVALID_PSK_LENGTH");
+             }
+             // Build the protobuf fields for the key set request.
++            // ESPHome decodes base64 text from this bytes field.
+             const fields = [
+-                { fieldNumber: 1, value: keyBuffer, wireType: WireType.LENGTH_DELIMITED }
++                { fieldNumber: 1, value: Buffer.from(key, "utf8"), wireType: WireType.LENGTH_DELIMITED }
+             ];
+             // The wait follows the caller's signal and the connection, and the correlator holds its timeout, so a cancellation, a teardown, and a timeout each reject with
+             // their own reason and only the device's reply resolves. The composite is bound ahead of the send, so a teardown the send itself triggers still ends the wait.

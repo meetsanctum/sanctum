@@ -11,6 +11,8 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# The dependencies' patches, which installing applies.
+COPY patches patches
 COPY apps/core/package.json apps/core/package.json
 COPY apps/manager/package.json apps/manager/package.json
 COPY packages/app-sdk/package.json packages/app-sdk/package.json

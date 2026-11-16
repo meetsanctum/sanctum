@@ -11,6 +11,7 @@
  * raises `oldestProtocolVersion` with it: an app built before is refused and
  * runs again once it's rebuilt.
  */
-export const protocolVersion = 6;
+// 7 lets a driver refuse adding a device whatever it asked (driver.refusals).
+export const protocolVersion = 7;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 6;

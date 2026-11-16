@@ -12,10 +12,12 @@ import {
   deviceReport,
   answersTo,
   foundDevices,
+  isDeclaredAddRefusal,
   isDeclaredRefusal,
   permissionIds,
   shownProblem,
   shownQuestions,
+  shownRefusals,
   type Actor,
   type AppContext,
   type AppDefinition,
@@ -404,6 +406,7 @@ export function createDriverCore(
           description: each.description,
           type: each.type,
           asks,
+          refusals: shownRefusals(app.driver),
         };
       });
     },
@@ -627,11 +630,12 @@ export function createDriverCore(
       }
       const result = await add(person(), { key, answers: checked });
       if (result !== undefined) {
-        if (!result || !isDeclaredRefusal(listed.asks, result.refused)) {
+        if (
+          !result ||
+          !isDeclaredAddRefusal(listed.asks, listed.refusals, result.refused)
+        ) {
           refuse(
-            new Error(
-              `${app.id} refused an answer in words it doesn't declare`,
-            ),
+            new Error(`${app.id} refused adding in words it doesn't declare`),
           );
         }
         return result;

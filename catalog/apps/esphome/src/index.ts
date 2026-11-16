@@ -13,8 +13,9 @@ import { esphomeService } from "./sightings.js";
 // into the core's Devices, over ESPHome's native API, one connection to
 // each device. The manager finds them on mDNS and lets the app reach the
 // devices it found, on the API's port, and nothing else. A device with an
-// encryption key is added with it, and never talked to without it. Its UI,
-// a page in each of its devices' detail, is in ./ui.
+// encryption key is added with it, and never talked to without it; one
+// waiting for a key gets one of its own, which removing it takes off. Its
+// UI, a page in each of its devices' detail, is in ./ui.
 
 export type { DriverOptions } from "./driver.js";
 
@@ -32,7 +33,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
   return defineApp({
     id: "sanctum.esphome",
     name: "ESPHome",
-    version: "0.1.0",
+    // 0.2.0: a device waiting for a key gets one of its own, and removing
+    // it takes the key off.
+    version: "0.2.0",
     core: "^1.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
@@ -123,6 +126,12 @@ export function createEsphomeApp(options: DriverOptions = {}) {
               "That key doesn't match. Copy it again from its configuration, under api: encryption: key.",
           },
         },
+      },
+      refusals: {
+        notWaiting:
+          "It stopped waiting for a key. Turn it off and on again, then add it.",
+        keyChanged:
+          "It has another key now. Add it again with the key from its configuration, under api: encryption: key.",
       },
     },
   });

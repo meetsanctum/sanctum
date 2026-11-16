@@ -2,7 +2,7 @@ import {
   answersTo,
   deviceKey,
   foundDevices,
-  isDeclaredRefusal,
+  isDeclaredAddRefusal,
   type Actor,
   type AddResult,
   type DeviceQuestion,
@@ -57,6 +57,8 @@ export type Lister = {
   run: number;
   canAdd: boolean;
   questionsOf: (ids: readonly string[]) => DeviceQuestion[];
+  // Why it may refuse adding a device whatever it asks, by id, in its words.
+  refusals: Record<string, string>;
 };
 
 export function createFound(options: {
@@ -137,6 +139,7 @@ export function createFound(options: {
           description: each.description,
           type: each.type,
           asks,
+          refusals: lister.refusals,
         };
       });
       lists.set(driver, { run: lister.run, found });
@@ -181,14 +184,19 @@ export function createFound(options: {
           const said = z.object({ refused: z.unknown() }).safeParse(result);
           if (
             !said.success ||
-            !isDeclaredRefusal(found.asks, said.data.refused)
+            !isDeclaredAddRefusal(found.asks, found.refusals, said.data.refused)
           ) {
             log(found, "failed", who, "app_failed");
             throw new ActionCallError("app_failed");
           }
-          const { question, refusal } = said.data.refused;
-          log(found, "refused", who, refusal);
-          return { refused: { question, refusal } };
+          const refused = said.data.refused;
+          log(found, "refused", who, refused.refusal);
+          return {
+            refused:
+              "question" in refused
+                ? { question: refused.question, refusal: refused.refusal }
+                : { refusal: refused.refusal },
+          };
         }
         // It registers the device before it answers.
         const id = devices.idFor(driver, key);
