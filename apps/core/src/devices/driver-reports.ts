@@ -16,6 +16,7 @@ import type { createDeviceLog } from "./activity.js";
 import type { createCommandTracking } from "./commands.js";
 import { unknownFirmware } from "./firmware.js";
 import type { createNaming } from "./naming.js";
+import type { DeviceReads } from "./reads.js";
 import { writeCapabilities } from "./registration.js";
 import { deviceCapabilities, devices } from "./schema.js";
 import { observe, reconcile } from "./sync.js";
@@ -53,6 +54,7 @@ export function createDriverReports(
     record: RecordActivity;
     deviceLog: ReturnType<typeof createDeviceLog>;
     commands: ReturnType<typeof createCommandTracking>;
+    reads: Pick<DeviceReads, "byKey">;
     // One of a device's capabilities, if this build has its kind.
     capabilityRow: (
       deviceId: string,
@@ -67,8 +69,16 @@ export function createDriverReports(
     now: () => Date;
   },
 ) {
-  const { record, deviceLog, commands, capabilityRow, changing, rename, now } =
-    options;
+  const {
+    record,
+    deviceLog,
+    commands,
+    reads,
+    capabilityRow,
+    changing,
+    rename,
+    now,
+  } = options;
 
   return {
     // A driver brings one of its devices in, or updates it, by its own key.
@@ -152,11 +162,7 @@ export function createDriverReports(
         battery,
         batteryLow,
       } = parsed.data;
-      const device = db
-        .select()
-        .from(devices)
-        .where(and(eq(devices.driver, driver), eq(devices.key, key)))
-        .get();
+      const device = reads.byKey(driver, key);
       if (!device) {
         throw new ActionError("not_found", `${driver} has no device ${key}`);
       }

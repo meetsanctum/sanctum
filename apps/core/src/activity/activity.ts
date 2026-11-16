@@ -124,8 +124,24 @@ export function createActivity(
       .run();
   });
 
+  // What every entry written reads, each compiled once, which costs SQLite
+  // far more than running it: the entry itself, to tell the listener of it,
+  // and the one before it about the same subject, which it may join.
+  const byId = db
+    .select()
+    .from(activity)
+    .where(eq(activity.id, sql.placeholder("id")))
+    .prepare();
+  const lastAbout = db
+    .select()
+    .from(activity)
+    .where(eq(activity.subjectId, sql.placeholder("subjectId")))
+    .orderBy(desc(activity.at), desc(rowid))
+    .limit(1)
+    .prepare();
+
   function get(id: string): ActivityEntry | null {
-    return db.select().from(activity).where(eq(activity.id, id)).get() ?? null;
+    return byId.get({ id }) ?? null;
   }
 
   // Tells the listener once whatever transaction wrote it is over, and only
@@ -150,13 +166,7 @@ export function createActivity(
   }
 
   function latestAbout(subjectId: string) {
-    return db
-      .select()
-      .from(activity)
-      .where(eq(activity.subjectId, subjectId))
-      .orderBy(desc(activity.at), desc(rowid))
-      .limit(1)
-      .get();
+    return lastAbout.get({ subjectId });
   }
 
   function latestOf(action: string) {
