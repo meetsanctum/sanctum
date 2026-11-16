@@ -96,7 +96,13 @@ describe("the core's health check on real Docker", () => {
   it("leaves no process behind, check after check", async () => {
     const deadline = Date.now() + 60_000;
     let health = (await inspect()).State.Health;
-    while (health.Log.length < checks && Date.now() < deadline) {
+    // Early checks can fail before HTTPS starts listening. Wait until all
+    // five retained checks succeeded, even when the log is already full.
+    while (
+      (health.Log.length < checks ||
+        health.Log.some((check) => check.ExitCode !== 0)) &&
+      Date.now() < deadline
+    ) {
       await new Promise((done) => setTimeout(done, 500));
       health = (await inspect()).State.Health;
     }
