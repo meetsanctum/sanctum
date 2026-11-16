@@ -479,16 +479,14 @@ export async function followOne(
         .set({ applied: sent, appliedAt: now })
         .where(followed(device.id, capability.id));
     } catch (error) {
-      // Switched meanwhile: once more, as it stands now.
+      // Switched meanwhile: once more, as the light stands now, with this
+      // turn's row, which a requested resume has cleared of its pauses
+      // before they are recorded.
       if (isSwitchedMeanwhile(error) && !isAgain) {
-        const current = await followedRow(ctx, device.id, capability.id);
-        if (!current) return target(status);
         return followOne(
           ctx,
           await lightOf(ctx, device.id, capability.id),
-          // A requested resume clears pauses before its row is recorded.
-          // Keep it unless following has restarted since this turn began.
-          row.since >= current.since ? row : current,
+          row,
           sun,
           options,
           force,
