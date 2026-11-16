@@ -179,23 +179,49 @@ describe("a press of a room's six lights", () => {
           await get(core, "/api/entities?app=sanctum.natural-light", maya)
         ).json() as EntityInfo[]
       ).filter((entity) => entity.type === "naturalLight.target");
+    // Let the location's curve reach all six lights before measuring a
+    // press. A later curve makes each light need a new look when it comes on.
+    await vi.waitFor(async () => {
+      const current = await targets();
+      expect(current).toHaveLength(6);
+      for (const target of current) {
+        expect(target.state).toMatchObject({ status: "following" });
+      }
+    }, realClock);
+    core.advance(6 * 60 * 60_000);
+    live.messages.length = 0;
+
     // What the client heard that Natural light did, by the app's name.
     const byNaturalLight = () =>
       live.messages
         .filter((message) => message.type === "activity")
         .map((message) => message.entry as ActivityInfo)
         .filter(
-          ({ who }) => who.kind === "app" && who.name === "Natural light",
+          ({ who, action, outcome }) =>
+            who.kind === "app" &&
+            who.name === "Natural light" &&
+            action === "device.command" &&
+            outcome === "ok",
         );
 
     const texts = compiled(core);
     expect((await press("on")).json()).toMatchObject({ switched: 6 });
-    // Natural light takes each light in as it sees it come on, which it
-    // reads its settings and where the home is for, publishes what it holds
-    // for each, and sets the colour of those it follows.
+    // Each light takes the new curve, reports it and has its target
+    // published. Existing targets or the first activity entry alone don't
+    // say that the remaining lights have been followed yet.
     await vi.waitFor(async () => {
-      expect(await targets()).toHaveLength(6);
-      expect(byNaturalLight().length).toBeGreaterThan(0);
+      const current = await targets();
+      expect(current).toHaveLength(6);
+      for (const target of current) {
+        expect(target).toMatchObject({
+          updatedAt: core.now().toISOString(),
+          state: { status: "following" },
+        });
+      }
+      expect(heardFrom(live, true).size).toBe(6);
+      expect(
+        new Set(byNaturalLight().map(({ subject }) => subject?.id)).size,
+      ).toBe(6);
     }, realClock);
     await settled();
     expect(
