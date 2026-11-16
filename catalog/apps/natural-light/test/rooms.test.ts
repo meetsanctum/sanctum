@@ -418,6 +418,16 @@ describe("a room's button", () => {
         }
         return publish(key, entity);
       });
+      // Following the light once it is back stops at its command.
+      let follow = () => {};
+      const followHeld = new Promise<void>((resolve) => {
+        follow = resolve;
+      });
+      const asked: string[] = [];
+      core.state.beforeCommand = async (device) => {
+        asked.push(device);
+        await followHeld;
+      };
       try {
         await core.changed("desk");
         await vi.waitFor(() => expect(isWaiting).toBe(true));
@@ -426,8 +436,20 @@ describe("a room's button", () => {
         advance(minute);
         ceiling.availability = "online";
         await core.changed("ceiling", { availability: "offline" });
+        letGo();
+
+        // The publications that waited have had their turn by the time the
+        // light is being followed, which hasn't ended its pause for the
+        // room yet.
+        await vi.waitFor(() => expect(asked).toEqual(["ceiling"]));
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "paused",
+        });
+        expect(shown).toEqual([]);
+        expect(button("office")?.active).toBe(true);
       } finally {
         letGo();
+        follow();
         lists.mockRestore();
       }
 
@@ -439,6 +461,7 @@ describe("a room's button", () => {
       expect(shown).not.toContain(false);
       expect(button("office")?.active).toBe(true);
     } finally {
+      core.state.beforeCommand = null;
       await app.stop!(core.ctx, { reason: "shutdown" });
     }
   });
