@@ -79,6 +79,10 @@ export function coreContainerOptions(image: string): ContainerCreateOptions {
           Retries: 3,
         },
     HostConfig: {
+      // An init process runs first and takes in what the health check leaves:
+      // BusyBox's wget doesn't wait for the helper it starts for HTTPS, and
+      // Node, were it first, reaps nothing, so each check would leave a zombie.
+      Init: true,
       Binds: [
         `${coreVolumeName}:/data`,
         `${socketVolumeName}:${socketDirectory}`,
@@ -135,6 +139,13 @@ export function hasAppFolders(core: ContainerInfo) {
   );
 }
 
+// Whether a core's container starts with an init process. An older manager's
+// update makes one without, as with the folders, and a container only gets
+// one when it is created.
+export function hasInit(core: ContainerInfo) {
+  return core.HostConfig.Init === true;
+}
+
 // And only those folders: a Docker too old to know subpaths ignores them and
 // mounts the manager's whole volume there. Recreating wouldn't help, so this
 // only decides whether the manager says it can run apps.
@@ -169,7 +180,12 @@ export async function reconcileCore(options: {
       { labels: existing.Config.Labels, name: coreContainerName },
       coreRole,
     );
-    if (hasAppFolders(existing)) {
+    const lacks = !hasAppFolders(existing)
+      ? "the folders apps need"
+      : !hasInit(existing)
+        ? "an init process"
+        : null;
+    if (!lacks) {
       const started = await startExistingContainer({
         container: existing,
         docker,
@@ -181,7 +197,7 @@ export async function reconcileCore(options: {
       }
     } else {
       // Once, and with the image it has. Its data is in its volume.
-      log(`Recreating ${coreContainerName} with the folders apps need`);
+      log(`Recreating ${coreContainerName} with ${lacks}`);
       const container = docker.getContainer(existing.Id);
       await container.stop({ t: 30 }).catch(() => undefined);
       await container.remove({ force: true });
