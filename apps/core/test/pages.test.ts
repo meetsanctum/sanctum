@@ -30,6 +30,9 @@ import {
 // ticket, by lookup in what the core indexed, with a policy that lets a page
 // load its own files and the kit's and nothing else.
 
+// Permission bits deny nothing to root, and Windows has none to set.
+const canDenyReads = process.platform !== "win32" && process.getuid?.() !== 0;
+
 const example = {
   origin: "official" as const,
   app: defineApp({
@@ -487,8 +490,11 @@ describe("an app's pages", () => {
       (await claimed(core).catch(() => null))?.token ?? token,
     );
     const pagesDir = await stagePages();
+    // The same bytes, outside pages/, so only the link is what's refused.
+    const elsewhere = join(kitDir, "same-pages.css");
+    await writeFile(elsewhere, pageFiles["pages.css"]);
     await rm(join(pagesDir, "pages.css"));
-    await symlink(join(kitDir, "kit.css"), join(pagesDir, "pages.css"));
+    await symlink(elsewhere, join(pagesDir, "pages.css"));
     expect(
       (
         await get(
@@ -532,61 +538,70 @@ describe("pages built for a kit", () => {
 });
 
 describe("a kit that couldn't be read", () => {
-  it("is tried again next time, rather than kept failed", async () => {
-    await rm(kitDir, { recursive: true, force: true });
-    await writeAll(kitDir, kitFiles);
-    await writeFile(
-      join(kitDir, "kit.json"),
-      JSON.stringify({
-        version: "0.1.0",
-        bridge: 1,
-        digest: kitDigest,
-        stylesheet: "kit.css",
-        imports: { react: "react.js" },
-      }),
-    );
-    await chmod(join(kitDir, "icons"), 0o000);
-    const fresh = await testCore({ apps: [example], kitDir });
-    try {
-      const signedIn = await claimed(fresh);
-      const ask = () =>
-        post(fresh, "/api/pages/ticket", {}, { token: signedIn.token });
-      const first = await ask();
-      expect(first.statusCode).toBe(200);
-      expect(first.json<PageTicket>().kit).toBeNull();
-      await chmod(join(kitDir, "icons"), 0o755);
-      expect((await ask()).json<PageTicket>().kit?.digest).toBe(kitDigest);
-    } finally {
-      await chmod(join(kitDir, "icons"), 0o755).catch(() => undefined);
-      await fresh.stop();
-    }
-  });
+  it.skipIf(!canDenyReads)(
+    "is tried again next time, rather than kept failed",
+    async () => {
+      await rm(kitDir, { recursive: true, force: true });
+      await writeAll(kitDir, kitFiles);
+      await writeFile(
+        join(kitDir, "kit.json"),
+        JSON.stringify({
+          version: "0.1.0",
+          bridge: 1,
+          digest: kitDigest,
+          stylesheet: "kit.css",
+          imports: { react: "react.js" },
+        }),
+      );
+      await chmod(join(kitDir, "icons"), 0o000);
+      const fresh = await testCore({ apps: [example], kitDir });
+      try {
+        const signedIn = await claimed(fresh);
+        const ask = () =>
+          post(fresh, "/api/pages/ticket", {}, { token: signedIn.token });
+        const first = await ask();
+        expect(first.statusCode).toBe(200);
+        expect(first.json<PageTicket>().kit).toBeNull();
+        await chmod(join(kitDir, "icons"), 0o755);
+        expect((await ask()).json<PageTicket>().kit?.digest).toBe(kitDigest);
+      } finally {
+        await chmod(join(kitDir, "icons"), 0o755).catch(() => undefined);
+        await fresh.stop();
+      }
+    },
+  );
 });
 
 describe("a read that fails for a while", () => {
-  it("of the kit's kit.json is tried again, rather than taken as no kit", async () => {
-    await chmod(join(kitDir, "kit.json"), 0o000);
-    try {
-      const first = (await ticketFor()).kit;
-      expect(first).toBeNull();
-      await chmod(join(kitDir, "kit.json"), 0o644);
-      expect((await ticketFor()).kit?.digest).toBe(kitDigest);
-    } finally {
-      await chmod(join(kitDir, "kit.json"), 0o644).catch(() => undefined);
-    }
-  });
+  it.skipIf(!canDenyReads)(
+    "of the kit's kit.json is tried again, rather than taken as no kit",
+    async () => {
+      await chmod(join(kitDir, "kit.json"), 0o000);
+      try {
+        const first = (await ticketFor()).kit;
+        expect(first).toBeNull();
+        await chmod(join(kitDir, "kit.json"), 0o644);
+        expect((await ticketFor()).kit?.digest).toBe(kitDigest);
+      } finally {
+        await chmod(join(kitDir, "kit.json"), 0o644).catch(() => undefined);
+      }
+    },
+  );
 
-  it("of an app's pages.json is tried again, rather than taken as no pages", async () => {
-    const { ticket } = await ticketFor();
-    const pagesDir = await stagePages();
-    const url = `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`;
-    await chmod(join(pagesDir, "pages.json"), 0o000);
-    try {
-      expect((await get(core, url)).statusCode).toBe(404);
-      await chmod(join(pagesDir, "pages.json"), 0o644);
-      expect((await get(core, url)).statusCode).toBe(200);
-    } finally {
-      await chmod(join(pagesDir, "pages.json"), 0o644).catch(() => undefined);
-    }
-  });
+  it.skipIf(!canDenyReads)(
+    "of an app's pages.json is tried again, rather than taken as no pages",
+    async () => {
+      const { ticket } = await ticketFor();
+      const pagesDir = await stagePages();
+      const url = `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`;
+      await chmod(join(pagesDir, "pages.json"), 0o000);
+      try {
+        expect((await get(core, url)).statusCode).toBe(404);
+        await chmod(join(pagesDir, "pages.json"), 0o644);
+        expect((await get(core, url)).statusCode).toBe(200);
+      } finally {
+        await chmod(join(pagesDir, "pages.json"), 0o644).catch(() => undefined);
+      }
+    },
+  );
 });
