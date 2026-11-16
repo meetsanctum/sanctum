@@ -117,7 +117,7 @@ describe("removing a device", () => {
     await home.core.remove(key);
 
     expect(device.keysSent.at(-1)).toEqual({ key: "", encrypted: true });
-    expect(device.waiting).toBe(true);
+    await home.core.until(() => device.waiting, "its key applied");
     expect(home.core.secrets.size).toBe(0);
     await announce(home.core, device);
     expect(home.core.found.map((each) => each.key)).toEqual([key]);

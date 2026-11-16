@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { maxAppSecrets } from "@meetsanctum/app-sdk";
 
 import { secretOf } from "../src/driver.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
@@ -93,6 +94,20 @@ describe("finding devices", () => {
 
     expect(home.core.found).toEqual([]);
   });
+
+  it("closes a pending description connection when the app stops", async () => {
+    home = await startHome();
+    const device = await home.plugIn();
+    device.psk = null;
+    device.waiting = true;
+    device.answersHello = false;
+    await announce(home.core, device);
+    await home.core.until(() => device.activeConnections > 0, "connecting");
+
+    await home.core.stop();
+
+    await expect.poll(() => device.activeConnections, { timeout: 200 }).toBe(0);
+  });
 });
 
 describe("adding a device", () => {
@@ -132,6 +147,19 @@ describe("adding a device", () => {
     expect(home.core.registered.has(key)).toBe(false);
     expect(home.core.secrets.size).toBe(0);
     expect(home.core.found.map((each) => each.key)).toEqual([key]);
+  });
+
+  it("closes its checked connection when the key cannot be saved", async () => {
+    home = await startHome();
+    const device = await home.plugIn();
+    for (let index = 0; index < maxAppSecrets; index += 1) {
+      home.core.secrets.set(`full:${index}`, "kept");
+    }
+
+    await expect(add(home.core, device)).rejects.toThrow("secrets already");
+
+    expect(home.core.registered.size).toBe(0);
+    await expect.poll(() => device.activeConnections, { timeout: 200 }).toBe(0);
   });
 
   it("adds a device without encryption as one", async () => {

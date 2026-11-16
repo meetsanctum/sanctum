@@ -146,6 +146,8 @@ export class EmulatedDevice {
   connections = 0;
   /** Whether it answers pings, so a test can model a silent connection. */
   answersPings = true;
+  /** Whether it finishes a connection's greeting. */
+  answersHello = true;
   /** Waiting for a key, which it takes over a connection under the zero key. */
   waiting: boolean;
   /** Its window for being given a key closed, as a device that waited too long. */
@@ -160,6 +162,10 @@ export class EmulatedDevice {
     (type: number, payload: Buffer) => void
   >();
   readonly states: Record<number, Record<string, FieldValue>>;
+
+  get activeConnections() {
+    return this.sockets.size;
+  }
 
   private constructor(readonly options: EmulatedOptions) {
     this.psk = options.psk;
@@ -407,6 +413,7 @@ export class EmulatedDevice {
       field({ fieldNumber, valueType: "string" }, value);
     const flag = (fieldNumber: number, value: number | boolean) =>
       field({ fieldNumber, valueType: "varint" }, Number(value));
+    if (type === message.helloRequest && !this.answersHello) return;
     if (type === message.helloRequest && this.waiting && this.windowClosed) {
       // Too late to be given a key: it says who it is, then asks to part.
       send(
@@ -417,27 +424,30 @@ export class EmulatedDevice {
       socket.end();
     } else if (type === message.noiseSetKeyRequest) {
       const raw = decode(payload).get(1)?.[0];
-      const key = Buffer.isBuffer(raw) ? raw : Buffer.alloc(0);
-      this.keysSent.push({ key: key.toString("base64"), encrypted });
+      // The bytes field carries base64 text, which the firmware decodes.
+      const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
+      const key = Buffer.from(text, "base64");
+      this.keysSent.push({ key: text, encrypted });
       const valid =
-        key.length === 0 || (key.length === 32 && key.some(Boolean));
-      if (valid) {
+        text === "" ||
+        (/^[A-Za-z0-9+/]{43}=$/.test(text) &&
+          key.length === 32 &&
+          key.some(Boolean));
+      const apply = () => {
         // An empty key clears its own, so it waits for one again.
-        this.psk = key.length === 0 ? null : key.toString("base64");
+        this.psk = text === "" ? null : text;
         this.waiting = this.psk === null;
-      }
+        for (const each of this.sockets) each.destroy();
+      };
       if (this.losesNextAnswer) {
         this.losesNextAnswer = false;
-        for (const each of this.sockets) each.destroy();
+        if (valid) apply();
+        else socket.destroy();
         return;
       }
       send(message.noiseSetKeyResponse, flag(1, valid));
       // It applies its key by ending every connection, as ESPHome does.
-      if (valid) {
-        setTimeout(() => {
-          for (const each of this.sockets) each.destroy();
-        }, 10);
-      }
+      if (valid) setTimeout(apply, 10);
     } else if (type === message.helloRequest) {
       send(
         message.helloResponse,

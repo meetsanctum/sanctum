@@ -108,6 +108,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     string,
     { version: string | null; parts: string | null }
   >();
+  const describing = new Map<AbortController, Promise<void>>();
   // Devices removed with the key Sanctum gave them still on them, as when
   // they couldn't be reached, whose keys it keeps.
   const kept = new Set<string>();
@@ -371,25 +372,39 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
 
   // What a device waiting for a key has, once for each version it runs,
   // over a connection under the zero key.
-  async function describe(found: Announced) {
+  function describe(found: Announced): Promise<void> {
     const before = described.get(found.mac);
-    if (before && before.version === found.version) return;
-    described.set(found.mac, { version: found.version, parts: null });
-    const address = addressOf(found.mac);
-    if (!address) return;
-    const result = await connectOnce({
-      mac: found.mac,
-      key: zeroKey,
-      address,
-      timings,
-    });
-    if (!("session" in result)) return;
-    result.session.client.disconnect();
-    described.set(found.mac, {
+    if (stopped || (before && before.version === found.version)) {
+      return Promise.resolve();
+    }
+    const description = {
       version: found.version,
-      parts: partsOf(mapEntities(result.session.entities)),
-    });
-    await listFound();
+      parts: null as string | null,
+    };
+    described.set(found.mac, description);
+    const address = addressOf(found.mac);
+    if (!address) return Promise.resolve();
+    const controller = new AbortController();
+    const work = (async () => {
+      try {
+        const result = await connectOnce({
+          mac: found.mac,
+          key: zeroKey,
+          address,
+          timings,
+          signal: controller.signal,
+        });
+        if (!("session" in result)) return;
+        result.session.client.disconnect();
+        if (stopped || described.get(found.mac) !== description) return;
+        description.parts = partsOf(mapEntities(result.session.entities));
+        await listFound();
+      } finally {
+        describing.delete(controller);
+      }
+    })();
+    describing.set(controller, work);
+    return work;
   }
 
   // A device from a session checked under its key, or under none: the
@@ -445,7 +460,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
 
     async stop() {
       stopped = true;
-      await Promise.all([...devices.keys()].map(forget));
+      const descriptions = [...describing];
+      for (const [controller] of descriptions) controller.abort();
+      await Promise.all([
+        ...[...devices.keys()].map(forget),
+        ...descriptions.map(([, work]) => work.catch(() => undefined)),
+      ]);
     },
 
     async discovered({ found, lost }: DriverDiscovery) {
@@ -525,9 +545,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if ("error" in result) throw new Error("It didn't answer");
       // Its key is kept before the core has the device, so no device of
       // Sanctum's is ever without the key it was added with.
-      if (psk !== null) await ctx.secrets.set(secretOf(key), psk);
-      else await ctx.secrets.delete(secretOf(key));
-      await ctx.secrets.delete(givenOf(key));
+      try {
+        if (psk !== null) await ctx.secrets.set(secretOf(key), psk);
+        else await ctx.secrets.delete(secretOf(key));
+        await ctx.secrets.delete(givenOf(key));
+      } catch (error) {
+        result.session.client.disconnect();
+        throw error;
+      }
       return take(key, result.session);
     },
 
