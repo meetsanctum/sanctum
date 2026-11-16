@@ -24,6 +24,9 @@ const envSchema = z.object({
   // from what the manager staged for this image, so this is for tests.
   CORE_APPS_APART: z.string().default(""),
   CORE_PACKAGES_DIR: z.string().min(1).default("/packages"),
+  // The kit in the core's image: React and ui-sdk as the modules apps' pages
+  // import.
+  CORE_KIT_DIR: z.string().min(1).default("/app/kit"),
   // The manager's socket. The default is where the manager puts it when run
   // from the workspace.
   CORE_MANAGER_SOCKET: z
@@ -42,6 +45,7 @@ export type CoreConfig = {
   officialAppsDir: string;
   appsApart: string[];
   packagesDir: string;
+  kitDir: string;
   managerSocket: string;
   version: string;
 };
@@ -61,6 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
       .map((app) => app.trim())
       .filter((app) => app.length > 0),
     packagesDir: parsed.CORE_PACKAGES_DIR,
+    kitDir: parsed.CORE_KIT_DIR,
     managerSocket: parsed.CORE_MANAGER_SOCKET,
     version: parsed.SANCTUM_VERSION,
   };

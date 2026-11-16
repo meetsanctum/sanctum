@@ -16,6 +16,22 @@ export type ClientKind = "personal" | "shared";
 /** Client tokens carry a type prefix so logs and secret scanners can tell them apart. */
 export const clientTokenPrefix = "client_";
 
+/** Page tickets carry one too: they open apps' page files and the kit, nothing else. */
+export const pageTicketPrefix = "page_";
+
+/**
+ * `POST /api/pages/ticket`: a ticket for this client's frames to load apps'
+ * page files and the kit with, in their address, and the kit they load. A
+ * client asks for the next one before this one's week is out; each works a
+ * day past it, so a page that's open keeps loading.
+ */
+export type PageTicket = {
+  ticket: string;
+  expiresAt: string;
+  /** The home's kit, or none where its core has none. */
+  kit: { version: string; bridge: number; digest: string } | null;
+};
+
 /**
  * `GET /api/auth/status`: the host's id, the id of the home it serves
  * and whether it is claimed.

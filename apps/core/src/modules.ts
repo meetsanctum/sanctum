@@ -43,6 +43,7 @@ import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
 import { createLiveUpdates } from "./live-updates.js";
+import { createPages } from "./pages/pages.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
 import { createPlaces } from "./places/places.js";
@@ -105,6 +106,8 @@ export async function createModules(
     appSockets?: string;
     // Where the manager stages apps' versions, which an update may go back to.
     packagesDir?: string;
+    // The kit the core's image carries, which apps' pages import.
+    kitDir?: string;
     // For tests: how soon an update asks for its turn again, and its versions.
     appUpdates?: {
       turnPauseMs?: number;
@@ -414,6 +417,14 @@ export async function createModules(
         log,
       })
     : undefined;
+  // Apps' pages and the kit, for the frames the shell shows them in.
+  const pages = createPages(db, {
+    packagesDir: options.packagesDir ?? "/packages",
+    kitDir: options.kitDir ?? "/app/kit",
+    runningPackage: (appId) => apps.runningPackage(appId),
+    now: now ?? (() => new Date()),
+    log,
+  });
   const workflows = createWorkflows(db, {
     host: apps,
     devices,
@@ -558,6 +569,7 @@ export async function createModules(
     found,
     entities,
     apps,
+    pages,
     workflows,
     history,
     // What the manager finds on the home's network, which starts with the

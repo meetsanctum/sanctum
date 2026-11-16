@@ -64,7 +64,7 @@ export const authClients = sqliteTable(
   ],
 );
 
-export const tokenKinds = ["client", "widget"] as const;
+export const tokenKinds = ["client", "widget", "page"] as const;
 
 export const authTokens = sqliteTable(
   "auth_tokens",

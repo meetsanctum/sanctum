@@ -32,6 +32,7 @@ describe("loadConfig", () => {
       officialAppsDir: "/app/catalog/official",
       appsApart: [],
       packagesDir: "/packages",
+      kitDir: "/app/kit",
       managerSocket: "../manager/data/manager.sock",
       version: "dev",
     });

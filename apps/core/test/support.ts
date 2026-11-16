@@ -131,6 +131,8 @@ export async function testCore(
     // ask for before the test, as each app's page would have asked; tests
     // of the core's own first answers say false.
     allowed?: boolean;
+    // The kit the core serves apps' pages, none unless a test gives one.
+    kitDir?: string;
     // Until it resolves the apps' packages are still being staged, as after
     // an update: the core serves meanwhile, and installs them once it does.
     staged?: Promise<void>;
@@ -168,6 +170,7 @@ export async function testCore(
       officialAppsDir: join(dataDir, "no-catalog"),
       appsApart: [],
       packagesDir: join(dataDir, "no-packages"),
+      kitDir: options.kitDir ?? join(dataDir, "no-kit"),
       managerSocket: join(dataDir, "no-manager.sock"),
       version: "1.2.3",
     },

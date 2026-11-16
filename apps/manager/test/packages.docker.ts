@@ -144,6 +144,9 @@ function loadAlone(id: string, folder: string) {
 describe("the apps' packages on real images", () => {
   let port: number;
   let staged: PackagesState;
+  // The host is claimed once, by whichever test needs a client first.
+  let token: string | undefined;
+  const signedIn = async () => (token ??= await claim());
 
   beforeAll(async () => {
     await build("apps/core/Dockerfile", coreImage);
@@ -225,6 +228,77 @@ describe("the apps' packages on real images", () => {
     }
   });
 
+  it("serves the kit and each official app's pages under a client's page ticket", async () => {
+    const at = (path: string) => `http://127.0.0.1:${port}${path}`;
+    await waitFor("the core", async () =>
+      (await fetch(at("/api/health"))).ok ? true : undefined,
+    );
+    const issued = await fetch(at("/api/pages/ticket"), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${await signedIn()}`,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    const { ticket, kit } = (await issued.json()) as {
+      ticket: string;
+      kit: { version: string; digest: string } | null;
+    };
+    const imageKit = JSON.parse(
+      await docker(
+        "run",
+        "--rm",
+        "--entrypoint",
+        "cat",
+        coreImage,
+        "/app/kit/kit.json",
+      ),
+    ) as { version: string; digest: string };
+    expect(kit).toEqual(
+      expect.objectContaining({
+        version: imageKit.version,
+        digest: imageKit.digest,
+      }),
+    );
+    const react = await fetch(
+      at(`/pages/${ticket}/kit/${kit!.digest}/react.js`),
+    );
+    expect(react.status).toBe(200);
+    expect(react.headers.get("content-type")).toBe(
+      "text/javascript; charset=utf-8",
+    );
+
+    for (const { id } of shipped) {
+      const folder = staged.apps[id]!.current.folder;
+      const { digest, entry } = JSON.parse(
+        await docker(
+          "run",
+          "--rm",
+          "--network",
+          "none",
+          "--mount",
+          `type=volume,src=${dataVolume},dst=/package,volume-subpath=packages/${id}/${folder},readonly`,
+          nodeImage,
+          "cat",
+          "/package/pages/pages.json",
+        ),
+      ) as { digest: string; entry: string };
+      const base = `/pages/${ticket}/apps/${id}/${digest}/`;
+      const page = await fetch(at(base));
+      expect(page.status, id).toBe(200);
+      const html = await page.text();
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain(`/pages/${ticket}/kit/${kit!.digest}/react.js`);
+      expect((await fetch(at(`${base}${entry}`))).status, id).toBe(200);
+    }
+    // Without a ticket that opens anything, none of it is there.
+    const made = `page_${"A".repeat(43)}`;
+    expect(
+      (await fetch(at(`/pages/${made}/kit/${kit!.digest}/react.js`))).status,
+    ).toBe(404);
+  });
+
   it("runs each app apart from its staged package", async () => {
     await waitFor("the core", async () => {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);
@@ -236,7 +310,7 @@ describe("the apps' packages on real images", () => {
   });
 
   it("answers through the apps' own copies of the SDK, their refusals included", async () => {
-    const token = await claim();
+    const token = await signedIn();
     const call = async (path: string, body?: object) => {
       const response = await fetch(`http://127.0.0.1:${port}${path}`, {
         method: body ? "POST" : "GET",

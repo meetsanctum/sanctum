@@ -626,6 +626,14 @@ export function createAppHost(options: {
       return installed.has(appId);
     },
 
+    /** The folder of the version an installed app runs, which its pages come from, and its name. */
+    runningPackage(appId: string) {
+      const entry = installed.get(appId);
+      return entry
+        ? { folder: entry.apartIn, name: entry.manifest.name }
+        : null;
+    },
+
     // What an installed app holds, which the workflows it keeps act with.
     holds(appId: string) {
       const entry = installed.get(appId);

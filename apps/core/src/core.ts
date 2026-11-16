@@ -60,6 +60,7 @@ export type TestReplacements = {
       ModuleOptions,
       | "dataDir"
       | "packagesDir"
+      | "kitDir"
       | "version"
       | "manager"
       | "hostId"
@@ -241,6 +242,7 @@ export function createCore(
             ...replaced.moduleOptions,
             dataDir: config.dataDir,
             packagesDir: config.packagesDir,
+            kitDir: config.kitDir,
             version: config.version,
             manager: manager!,
             hostId: manager!.hostId,
