@@ -57,6 +57,7 @@ function configOf(
     officialAppsDir: join(dataDir, "no-catalog"),
     appsApart: [],
     packagesDir: join(dataDir, "no-packages"),
+    kitDir: join(dataDir, "no-kit"),
     managerSocket,
     version: "1.2.3",
     ...overrides,

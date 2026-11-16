@@ -24,6 +24,7 @@ import type { Modules } from "./modules.js";
 import { PeopleError } from "./people/people.js";
 import { registerPeopleRoutes } from "./people/routes.js";
 import { PlacesError } from "./places/places.js";
+import { registerPageRoutes } from "./pages/routes.js";
 import { registerPinRoutes } from "./pins/routes.js";
 import { registerPlacesRoutes } from "./places/routes.js";
 import { registerSystemRoutes } from "./system/routes.js";
@@ -57,6 +58,7 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "apps"
+    | "pages"
     | "workflows"
   > & {
     // The core's phase and readiness (lifecycle.ts): only the health check
@@ -192,6 +194,12 @@ export function createServer(
       });
       registerAppRoutes(core, { host: options.apps, gate });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
+      // Only the desktop app's shell, and those a development stack allows,
+      // may show an app's page in a frame.
+      registerPageRoutes(core, {
+        pages: options.pages,
+        frameAncestors: ["app://sanctum", ...config.allowedOrigins],
+      });
     }),
   );
 
