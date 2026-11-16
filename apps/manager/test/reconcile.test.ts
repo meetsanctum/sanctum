@@ -6,6 +6,7 @@ import {
   coreContainerOptions,
   coreVolumeName,
   hasAppFolders,
+  hasInit,
   reconcileCore,
   socketGroupId,
   socketVolumeName,
@@ -137,6 +138,98 @@ describe("reconcileCore and the folders apps need", () => {
   });
 });
 
+describe("reconcileCore and the core's init process", () => {
+  // What a manager from before the init process leaves after an update: the
+  // core it created, which the manager that replaces it finds.
+  async function olderCore(docker: FakeDocker, running = true) {
+    const options = coreContainerOptions(coreImage);
+    delete options.HostConfig!.Init;
+    const { id } = await docker.createContainer(options);
+    if (running) await docker.getContainer(id).start();
+    return id;
+  }
+
+  it("starts a new core with an init process, which reaps what its health check leaves", async () => {
+    const { docker, reconcile } = setup();
+
+    await reconcile();
+
+    const core = await docker.getContainer(coreContainerName).inspect();
+    expect(hasInit(core)).toBe(true);
+    expect(
+      docker.container(coreContainerName)!.options.Healthcheck,
+    ).toMatchObject({
+      Test: [
+        "CMD",
+        "wget",
+        "--no-check-certificate",
+        "-qO-",
+        "https://127.0.0.1:4100/api/health",
+      ],
+    });
+  });
+
+  it("recreates once a core without one, on the image it has", async () => {
+    const { docker, log } = setup();
+    const committed = await olderCore(docker);
+    const image = docker.container(coreContainerName)!.imageId;
+    // The image a manager would otherwise start, which isn't the committed one.
+    docker.load("localhost:5000/sanctum-core:dev-0", {
+      title: "sanctum-core",
+      version: "dev-0",
+    });
+    const reconcile = () =>
+      reconcileCore({
+        docker,
+        image: "localhost:5000/sanctum-core:dev-0",
+        log,
+      });
+
+    await expect(reconcile()).resolves.toBe(image);
+
+    const core = docker.container(coreContainerName)!;
+    expect(core.id).not.toBe(committed);
+    expect(core).toMatchObject({ imageId: image, running: true });
+    const inspected = await docker.getContainer(core.id).inspect();
+    expect(hasInit(inspected)).toBe(true);
+    expect(hasAppFolders(inspected)).toBe(true);
+    expect(log).toHaveBeenCalledWith(
+      `Recreating ${coreContainerName} with an init process`,
+    );
+    // Stopped gently first: it has a database to close.
+    expect(docker.events.join("\n")).toContain(`stop ${coreContainerName}`);
+
+    docker.events = [];
+    await reconcile();
+    await reconcile();
+    expect(docker.container(coreContainerName)!.id).toBe(core.id);
+    expect(docker.events).toEqual([]);
+  });
+
+  it("recreates a stopped core without one too, and starts it", async () => {
+    const { docker, reconcile } = setup();
+    const stopped = await olderCore(docker, false);
+
+    await reconcile();
+
+    const core = docker.container(coreContainerName)!;
+    expect(core.id).not.toBe(stopped);
+    expect(core.running).toBe(true);
+    expect(hasInit(await docker.getContainer(core.id).inspect())).toBe(true);
+  });
+
+  it("counts only an init process Docker reports as on", () => {
+    const core = coreContainerOptions(coreImage);
+
+    expect(
+      hasInit({ HostConfig: { ...core.HostConfig, Init: false } } as never),
+    ).toBe(false);
+    expect(
+      hasInit({ HostConfig: { ...core.HostConfig, Init: null } } as never),
+    ).toBe(false);
+  });
+});
+
 describe("reconcileCore", () => {
   it("creates the network, volume and core when the host is new", async () => {
     const { docker, reconcile } = setup();
@@ -156,6 +249,7 @@ describe("reconcileCore", () => {
       GroupAdd: [String(socketGroupId)],
       PortBindings: { "4100/tcp": [{ HostPort: "4100" }] },
       RestartPolicy: { Name: "unless-stopped" },
+      Init: true,
     });
     expect(core?.networks[sanctumNetworkName]).toBeDefined();
     // The apps' origins may read the core's responses.

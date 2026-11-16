@@ -432,6 +432,22 @@ describe("motion while a permission is off", () => {
     expect(keys()).toEqual(["default:remote"]);
   });
 
+  it("pauses motion even when the devices can't be read", async () => {
+    const { start, call, state, grant, keys } = home([
+      lamp(),
+      sensorWithLight("office-motion", "office"),
+    ]);
+    await start();
+    await call(setMotion, { roomId: "office", turnOn: true, darkerThan: 30 });
+    expect(keys()).toEqual(["motion-on:office"]);
+    state.failDeviceReads = 1;
+
+    await expect(grant("devices.read:sensor", false)).rejects.toThrow(
+      "device read failed",
+    );
+    expect(keys()).toEqual([]);
+  });
+
   it("never drops the light condition when permission is lost during a sync", async () => {
     const { start, call, state, holdDevices, grant, keys } = home();
     await start();

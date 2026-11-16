@@ -52,6 +52,15 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     refusing: false,
     // Held, the next read of the devices waits until it is let go.
     hold: null as { reached: () => void; until: Promise<void> } | null,
+    // How often Moods read every device from the core.
+    deviceReads: 0,
+    // A one-shot failure of that read.
+    failDeviceReads: 0,
+    // Held, the next publication waits until it is let go.
+    holdPublication: null as {
+      reached: () => void;
+      until: Promise<void>;
+    } | null,
     // The workflows Moods keeps, by key, as the core keeps them.
     workflows: new Map<string, WorkflowInfo>(),
     // A one-shot failure for tests of app data/workflow reconciliation.
@@ -109,6 +118,12 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
       if (!type) throw new Error(`Moods does not provide ${entity.type}`);
       type.state.parse(entity.state);
       if (entity.type === "moods.mood") state.publications += 1;
+      const hold = state.holdPublication;
+      state.holdPublication = null;
+      if (hold) {
+        hold.reached();
+        await hold.until;
+      }
       state.entities.set(entity.key, structuredClone(entity));
     },
     async unpublish(key) {
@@ -120,6 +135,11 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     people: unused,
     places: async () => structuredClone(state.places),
     async devices() {
+      state.deviceReads += 1;
+      if (state.failDeviceReads > 0) {
+        state.failDeviceReads -= 1;
+        throw new Error("device read failed");
+      }
       const hold = state.hold;
       state.hold = null;
       if (hold) {
@@ -280,6 +300,15 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
       const reaching = new Promise<void>((resolve) => (reached = resolve));
       const until = new Promise<void>((resolve) => (release = resolve));
       state.hold = { reached, until };
+      return { reached: reaching, release };
+    },
+    // The next publication waits, once reached, until released.
+    holdPublication() {
+      let reached!: () => void;
+      let release!: () => void;
+      const reaching = new Promise<void>((resolve) => (reached = resolve));
+      const until = new Promise<void>((resolve) => (release = resolve));
+      state.holdPublication = { reached, until };
       return { reached: reaching, release };
     },
   };
