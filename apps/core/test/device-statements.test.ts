@@ -235,7 +235,7 @@ describe("a list of entities", () => {
   it("compiles nothing, by app, by type, by both or by neither", async () => {
     const { core, maya } = await lampsCore();
     // Two apps with two types between them, so each way of asking answers
-    // entities no other does.
+    // entities no other does, in the list's order: by app, then by name.
     const kept = [
       ["sanctum.example", "one", "example.thing"],
       ["sanctum.example", "two", "example.other"],
@@ -256,7 +256,7 @@ describe("a list of entities", () => {
     }
     const texts = compiled(core);
     for (const [query, found] of [
-      ["", ["one", "three", "two"]],
+      ["", ["one", "two", "three"]],
       ["?app=sanctum.example", ["one", "two"]],
       ["?type=example.thing", ["one", "three"]],
       ["?app=sanctum.example&type=example.thing", ["one"]],
@@ -265,7 +265,7 @@ describe("a list of entities", () => {
       const listed = (
         await get(core, `/api/entities${query}`, maya)
       ).json() as EntityInfo[];
-      expect(listed.map((entity) => entity.key).sort()).toEqual(found);
+      expect(listed.map((entity) => entity.key)).toEqual(found);
     }
     expect(reading(texts, ["entities"])).toEqual([]);
   });
