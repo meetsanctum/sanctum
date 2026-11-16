@@ -234,28 +234,38 @@ describe("a press of a room's six lights", () => {
 describe("a list of entities", () => {
   it("compiles nothing, by app, by type, by both or by neither", async () => {
     const { core, maya } = await lampsCore();
-    core.db
-      .insert(entities)
-      .values({
-        appId: "sanctum.example",
-        key: "one",
-        type: "example.thing",
-        name: "One",
-        state: {},
-        updatedAt: new Date(),
-      })
-      .run();
+    // Two apps with two types between them, so each way of asking answers
+    // entities no other does.
+    const kept = [
+      ["sanctum.example", "one", "example.thing"],
+      ["sanctum.example", "two", "example.other"],
+      ["sanctum.example-notes", "three", "example.thing"],
+    ] as const;
+    for (const [appId, key, type] of kept) {
+      core.db
+        .insert(entities)
+        .values({
+          appId,
+          key,
+          type,
+          name: key,
+          state: {},
+          updatedAt: core.now(),
+        })
+        .run();
+    }
     const texts = compiled(core);
     for (const [query, found] of [
-      ["", 1],
-      ["?app=sanctum.example", 1],
-      ["?type=example.thing", 1],
-      ["?app=sanctum.example&type=example.thing", 1],
-      ["?app=sanctum.example&type=example.other", 0],
+      ["", ["one", "three", "two"]],
+      ["?app=sanctum.example", ["one", "two"]],
+      ["?type=example.thing", ["one", "three"]],
+      ["?app=sanctum.example&type=example.thing", ["one"]],
+      ["?app=sanctum.example-notes&type=example.other", []],
     ] as const) {
-      expect(
-        (await get(core, `/api/entities${query}`, maya)).json(),
-      ).toHaveLength(found);
+      const listed = (
+        await get(core, `/api/entities${query}`, maya)
+      ).json() as EntityInfo[];
+      expect(listed.map((entity) => entity.key).sort()).toEqual(found);
     }
     expect(reading(texts, ["entities"])).toEqual([]);
   });
