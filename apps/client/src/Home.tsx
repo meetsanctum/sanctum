@@ -19,18 +19,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { plainIcon } from "./app-settings";
 import { AppNotice, WhileNotRunning } from "./app-state";
 import { usePermissionSheet } from "./permission-sheet";
-import {
-  AppHosts,
-  hasPage,
-  hostedApps,
-  opens,
-  pageOf,
-  type Route,
-} from "./apps";
-import { AppsPage, appsPage, type ListedApp } from "./apps-page";
+import { AppHosts, hasPage, hostedApps, pageOf, type Route } from "./apps";
+import { AppsPage, appsPage, listedApps } from "./apps-page";
 import { followHost, forgetHost, moveHost } from "./auth/session";
 import { AutomationsPage, automationsApp } from "./automations/page";
 import { usePrefersDark } from "./color-scheme";
@@ -401,19 +393,16 @@ export function Home(props: {
     sidebar.close();
   };
 
-  // Settings, Automations and the apps with a page of their own, by name:
-  // what Apps lists, and what may be pinned. An app without an icon of its
-  // own shows the plain one, as in Settings.
-  const listed: ListedApp[] = [
-    { ...settingsApp, onOpen: openSettings },
-    { ...automationsApp, onOpen: openAutomations },
-    ...apps.filter(opens).map(({ info }) => ({
-      id: info.id,
-      name: info.name,
-      icon: info.icon ?? plainIcon,
-      onOpen: () => setRoutes([{ app: info.id, page: "main", params: {} }]),
-    })),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  // What Apps lists, and what may be pinned.
+  const listed = listedApps(
+    [
+      { ...settingsApp, onOpen: openSettings },
+      { ...automationsApp, onOpen: openAutomations },
+    ],
+    installed,
+    apps,
+    setRoutes,
+  );
 
   // A dashboard and a room's or category's page are in Evening over the
   // dashboard's background, along with the menus portalled out of them; an

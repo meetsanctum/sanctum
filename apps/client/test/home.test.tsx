@@ -234,9 +234,10 @@ describe("navigation", () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it("lists Automations and Settings in the overview, not Moods, which has no page of its own", async () => {
+  it("lists Sanctum's own apps and every installed one in the overview, by name, opening each in its place", async () => {
     expect(await openFromOverview("Settings")).toEqual([
       "Automations",
+      "Moods",
       "Settings",
     ]);
     expect(pageTitle()).toBe("Settings");
@@ -271,6 +272,14 @@ describe("an app's preferences", () => {
     expect(backShown()).toBe(false);
     await done();
     expect(pageTitle()).toBe("Settings");
+  });
+
+  it("are the page Apps opens for an app without one of its own, over Apps, so Done returns there", async () => {
+    await openFromOverview("Moods");
+    expect(pageTitle()).toBe("Moods settings");
+    expect(backShown()).toBe(false);
+    await done();
+    expect(pageTitle()).toBe("Apps");
   });
 
   it("open from the same button at the end of the bar on every app page, never on Sanctum's own", async () => {
@@ -733,11 +742,21 @@ describe("the pinned apps", () => {
   it("are the household's, Apps last, each opening its app and marked while it is on show", async () => {
     pins = ["sanctum.settings", "sanctum.gone"];
     await refresh();
-    // An app this client cannot open has no tile.
+    // An app the home doesn't have has no tile.
     expect(tiles()).toEqual(["Settings", "Apps"]);
     await press(tile("Settings"));
     expect(pageTitle()).toBe("Settings");
     expect(tile("Settings").getAttribute("aria-current")).toBe("page");
+    expect(tile("Apps").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("mark an app without a page of its own while its settings are on show", async () => {
+    pins = ["sanctum.settings", "sanctum.moods"];
+    await refresh();
+    await press(tile("Moods"));
+    expect(pageTitle()).toBe("Moods settings");
+    expect(tile("Moods").getAttribute("aria-current")).toBe("page");
+    expect(tile("Settings").getAttribute("aria-current")).toBeNull();
     expect(tile("Apps").getAttribute("aria-current")).toBeNull();
   });
 

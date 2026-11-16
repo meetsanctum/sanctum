@@ -1,7 +1,7 @@
 import type { DashboardInfo } from "@meetsanctum/app-sdk";
 
 import type { Route } from "./apps";
-import { appsPage, type ListedApp } from "./apps-page";
+import { appOnShow, appsPage, type ListedApp } from "./apps-page";
 import { dashboardBackground } from "./dashboards";
 import { placePages, SidebarPlaces } from "./place-pages";
 import { SidebarContent } from "./sidebar";
@@ -33,6 +33,7 @@ export function HomeSidebar(props: {
 }) {
   const { layout, routes, go } = props;
   const route = routes.at(-1);
+  const onShow = appOnShow(routes);
   const pinned = props.pins?.flatMap((id) => {
     const app = props.listed.find((each) => each.id === id);
     return app ? [app] : [];
@@ -41,7 +42,7 @@ export function HomeSidebar(props: {
     route?.app === appsPage ||
     (route !== undefined &&
       route.app !== placePages &&
-      !pinned?.some((app) => app.id === route.app));
+      !pinned?.some((app) => app.id === onShow));
   const openApps = () => go([{ app: appsPage, page: "main", params: {} }]);
   return (
     <SidebarContent
@@ -60,7 +61,7 @@ export function HomeSidebar(props: {
         <SidebarPins
           apps={pinned?.map((app) => ({
             ...app,
-            current: route?.app === app.id,
+            current: onShow === app.id,
             onOpen: () => {
               app.onOpen();
               layout.close();
