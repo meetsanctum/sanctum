@@ -161,6 +161,26 @@ async function rowsOf(ctx: AppContext) {
   );
 }
 
+/**
+ * Which rooms a publication is for, all of them without `rooms`. `waits`
+ * leaves a room as it is, asked as the publication reads the lights and as
+ * each room's turn comes, since what a room waits for may begin while the
+ * publication waits its own turn, and end while it publishes another room.
+ */
+type PublishedRooms = {
+  rooms?: readonly (string | null)[];
+  always?: boolean;
+  waits?: (placeId: string) => boolean;
+};
+
+// The rooms a publication leaves as they are: those that wait as it reads
+// the lights, since what it then reads of them is from before what they
+// wait for even once that is over, and those that wait as their turn comes.
+function leftWaiting(waits: PublishedRooms["waits"], rooms: Iterable<string>) {
+  const asRead = new Set([...rooms].filter((room) => waits?.(room)));
+  return (room: string) => asRead.has(room) || waits?.(room) === true;
+}
+
 // One publication at a time, so a button worked out before a change never
 // lands after one worked out since.
 let turn: Promise<unknown> = Promise.resolve();
@@ -175,7 +195,7 @@ let turn: Promise<unknown> = Promise.resolve();
 export function publishRooms(
   ctx: AppContext,
   options: FollowOptions,
-  which?: { rooms?: readonly (string | null)[]; always?: boolean },
+  which?: PublishedRooms,
 ) {
   const mine = turn.then(() => publishNow(ctx, options, which ?? {}));
   turn = mine.catch(() => undefined);
@@ -185,7 +205,7 @@ export function publishRooms(
 async function publishNow(
   ctx: AppContext,
   options: FollowOptions,
-  which: { rooms?: readonly (string | null)[]; always?: boolean },
+  which: PublishedRooms,
 ) {
   const { db } = ctx.storage;
   const rooms = which.rooms?.filter((room): room is string => room !== null);
@@ -193,6 +213,7 @@ async function publishNow(
   const recorded = new Map(
     (await db.select().from(roomButtons)).map((row) => [row.placeId, row]),
   );
+  const isLeft = leftWaiting(which.waits, rooms ?? recorded.keys());
   const devices = await ctx.devices.list();
   // A call may have waited for a light or another publication while the
   // household switched natural light off. Publish what stands now.
@@ -206,6 +227,7 @@ async function publishNow(
     ]),
   ];
   for (const placeId of new Set(wanted)) {
+    if (isLeft(placeId)) continue;
     const state = shows ? roomStateOf(placeId, devices, rows, ctx.appId) : null;
     const kept = recorded.get(placeId);
     if (!state) {
@@ -236,18 +258,7 @@ async function publishNow(
           ...(isTurnOnKept ? {} : { turnOn: null }),
         },
       });
-    if (!isButtonKept) {
-      await ctx.entities.publish({
-        type: roomType.id,
-        key: roomKey(placeId),
-        name: "Natural light",
-        state,
-      });
-      await db
-        .update(roomButtons)
-        .set({ state })
-        .where(eq(roomButtons.placeId, placeId));
-    }
+    if (!isButtonKept) await publishButton(ctx, state);
     if (!isTurnOnKept) {
       await ctx.entities.publish({
         type: turnOnType.id,
@@ -263,28 +274,96 @@ async function publishNow(
   }
 }
 
+// A room's button, out and then recorded as it went.
+async function publishButton(ctx: AppContext, state: RoomState) {
+  await ctx.entities.publish({
+    type: roomType.id,
+    key: roomKey(state.placeId),
+    name: "Natural light",
+    state,
+  });
+  await ctx.storage.db
+    .update(roomButtons)
+    .set({ state })
+    .where(eq(roomButtons.placeId, state.placeId));
+}
+
+/**
+ * Publishes again the buttons of these rooms that are out, White or not as
+ * their lights stand now, and nothing else: it adds and takes out no button
+ * and leaves the rules for turning on, which publishRooms does. It asks the
+ * core only for the lights, so a button follows its room's lights closely
+ * while each light is still being set. `waits` leaves a room as it is, as
+ * for publishRooms.
+ */
+export function publishButtons(
+  ctx: AppContext,
+  rooms: readonly string[],
+  waits?: (placeId: string) => boolean,
+) {
+  const mine = turn.then(() => publishButtonsNow(ctx, rooms, waits));
+  turn = mine.catch(() => undefined);
+  return mine;
+}
+
+async function publishButtonsNow(
+  ctx: AppContext,
+  rooms: readonly string[],
+  waits?: (placeId: string) => boolean,
+) {
+  const { db } = ctx.storage;
+  // One recorded with no state is on its way out or failed, which
+  // publishRooms tries again.
+  const out = (await db.select().from(roomButtons)).filter(
+    (row) => rooms.includes(row.placeId) && row.state !== null,
+  );
+  if (out.length === 0) return;
+  const isLeft = leftWaiting(
+    waits,
+    out.map((row) => row.placeId),
+  );
+  const devices = await ctx.devices.list();
+  const rows = await rowsOf(ctx);
+  for (const kept of out) {
+    if (isLeft(kept.placeId)) continue;
+    const state = roomStateOf(kept.placeId, devices, rows, ctx.appId);
+    if (!state || isDeepStrictEqual(kept.state, state)) continue;
+    // Recorded before it goes out, so a failed publication is tried again.
+    await db
+      .update(roomButtons)
+      .set({ state: null })
+      .where(eq(roomButtons.placeId, kept.placeId));
+    await publishButton(ctx, state);
+  }
+}
+
 /** A light the press could not reach, which the shell fails on its tile. */
 export type Failed = { device: string; capability: string };
 
+// A press reaches every light of the room at once, as the room's button for
+// all its lights does, so the room changes in one step rather than light by
+// light. Each light still takes its own turn (runForLight).
 async function eachLight(
   ctx: AppContext,
   runForLight: RunForLight,
   lights: readonly RoomLight[],
   work: (light: RoomLight) => Promise<void>,
 ): Promise<Failed[]> {
-  const failed: Failed[] = [];
-  for (const light of lights) {
-    const each = { device: light.device.id, capability: light.capability.id };
-    try {
-      await runForLight(each.device, each.capability, () => work(light));
-    } catch (error) {
-      ctx.log(
-        `could not set ${light.device.name} (${isActionError(error) ? error.code : error instanceof Error ? error.message : String(error)})`,
-      );
-      failed.push(each);
-    }
-  }
-  return failed;
+  const failed = await Promise.all(
+    lights.map(async (light): Promise<Failed | null> => {
+      const each = { device: light.device.id, capability: light.capability.id };
+      try {
+        await runForLight(each.device, each.capability, () => work(light));
+        return null;
+      } catch (error) {
+        ctx.log(
+          `could not set ${light.device.name} (${isActionError(error) ? error.code : error instanceof Error ? error.message : String(error)})`,
+        );
+        return each;
+      }
+    }),
+  );
+  return failed.filter((each) => each !== null);
 }
 
 /** Switches every light in the room that is on off. */

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { byHand, curveAt, moods, off, on, running } from "./running.js";
+import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
+import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
 // Natural light's button for each room: White while every light in the room
@@ -251,6 +252,248 @@ describe("a room's button", () => {
       ["ceiling", { on: true, ...curveAt(now()) }],
       ["desk", { on: true, ...curveAt(now()) }],
     ]);
+  });
+
+  it("sends a press to every light in the room at once", async () => {
+    const { core, call, check } = home();
+    await check();
+    core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
+    core.set("strip", { on: true }, byHand);
+    // No command is taken until the test lets them go.
+    const waiting: string[] = [];
+    let letGo = () => {};
+    const held = new Promise<void>((resolve) => {
+      letGo = resolve;
+    });
+    core.state.beforeCommand = async (device) => {
+      waiting.push(device);
+      await held;
+    };
+
+    const press = call("naturalLight.toggleRoom", { placeId: "office" });
+    try {
+      await vi.waitFor(() =>
+        expect(waiting).toEqual(["ceiling", "desk", "strip"]),
+      );
+    } finally {
+      letGo();
+    }
+
+    expect(await press).toEqual({ failed: [] });
+  });
+
+  it("follows the room's lights at once, while it is still setting each to the curve", async () => {
+    const { app, core, check, button } = home();
+    core.set("ceiling", { on: false }, byHand);
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      expect(button("office")?.active).toBe(false);
+      // The lights come on as they were, and take no command meanwhile.
+      let letGo = () => {};
+      const held = new Promise<void>((resolve) => {
+        letGo = resolve;
+      });
+      const asked: string[] = [];
+      core.state.beforeCommand = async (device) => {
+        asked.push(device);
+        await held;
+      };
+      const sent = core.state.sent.length;
+
+      core.set("ceiling", { on: true }, byHand);
+      core.set("desk", { on: true }, byHand);
+      core.press("ceiling", { colorTemperature: 400 });
+      core.press("desk", { colorTemperature: 400 });
+      await core.changed("ceiling");
+      await core.changed("desk");
+
+      try {
+        await vi.waitFor(() => expect(asked).toEqual(["ceiling"]));
+        await vi.waitFor(() => expect(button("office")?.active).toBe(true));
+        expect(core.state.sent).toHaveLength(sent);
+
+        // And grey again when they go off, the first still being set.
+        core.set("ceiling", { on: false }, byHand);
+        core.set("desk", { on: false }, byHand);
+        await core.changed("ceiling");
+        await core.changed("desk");
+        await vi.waitFor(() => expect(button("office")?.active).toBe(false));
+        expect(core.state.sent).toHaveLength(sent);
+      } finally {
+        letGo();
+      }
+      await vi.waitFor(() =>
+        expect(core.state.sent.length).toBeGreaterThan(sent),
+      );
+    } finally {
+      core.state.beforeCommand = null;
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
+  it("stays White when a paused light answers again after being offline, which ends its pause", async () => {
+    const { app, core, check, advance, button } = home();
+    core.set("desk", { on: true }, byHand);
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      advance(minute);
+      core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
+      await core.changed("ceiling");
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "paused",
+        }),
+      );
+      expect(button("office")?.active).toBe(false);
+      const ceiling = core.state.devices.find((each) => each.id === "ceiling")!;
+      ceiling.availability = "offline";
+      await core.changed("ceiling", { availability: "online" });
+      await vi.waitFor(() => expect(button("office")?.active).toBe(true));
+      // Every state the button is published with from here on.
+      const shown: boolean[] = [];
+      const publish = core.state.entities.set.bind(core.state.entities);
+      vi.spyOn(core.state.entities, "set").mockImplementation((key, entity) => {
+        if (key === "room:office") {
+          shown.push((entity.state as { active: boolean }).active);
+        }
+        return publish(key, entity);
+      });
+
+      advance(minute);
+      ceiling.availability = "online";
+      await core.changed("ceiling", { availability: "offline" });
+
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "following",
+        }),
+      );
+      expect(shown).not.toContain(false);
+      expect(button("office")?.active).toBe(true);
+    } finally {
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
+  it("stays White when a paused light comes back while its room's publication waits", async () => {
+    const { app, core, check, advance, button } = home();
+    core.set("desk", { on: true }, byHand);
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      advance(minute);
+      core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
+      await core.changed("ceiling");
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "paused",
+        }),
+      );
+      const ceiling = core.state.devices.find((each) => each.id === "ceiling")!;
+      ceiling.availability = "offline";
+      await core.changed("ceiling", { availability: "online" });
+      await vi.waitFor(() => expect(button("office")?.active).toBe(true));
+
+      // A publication for the room that waits for the core's lights.
+      let letGo = () => {};
+      const held = new Promise<void>((resolve) => {
+        letGo = resolve;
+      });
+      const list = core.ctx.devices.list.bind(core.ctx.devices);
+      let isWaiting = false;
+      const lists = vi
+        .spyOn(core.ctx.devices, "list")
+        .mockImplementation(async () => {
+          isWaiting = true;
+          await held;
+          return list();
+        });
+      const shown: boolean[] = [];
+      const publish = core.state.entities.set.bind(core.state.entities);
+      vi.spyOn(core.state.entities, "set").mockImplementation((key, entity) => {
+        if (key === "room:office") {
+          shown.push((entity.state as { active: boolean }).active);
+        }
+        return publish(key, entity);
+      });
+      // Following the light once it is back stops at its command.
+      let follow = () => {};
+      const followHeld = new Promise<void>((resolve) => {
+        follow = resolve;
+      });
+      const asked: string[] = [];
+      core.state.beforeCommand = async (device) => {
+        asked.push(device);
+        await followHeld;
+      };
+      try {
+        await core.changed("desk");
+        await vi.waitFor(() => expect(isWaiting).toBe(true));
+
+        // The paused light answers again before that publication goes on.
+        advance(minute);
+        ceiling.availability = "online";
+        await core.changed("ceiling", { availability: "offline" });
+        letGo();
+
+        // The publications that waited have had their turn by the time the
+        // light is being followed, which hasn't ended its pause for the
+        // room yet.
+        await vi.waitFor(() => expect(asked).toEqual(["ceiling"]));
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "paused",
+        });
+        expect(shown).toEqual([]);
+        expect(button("office")?.active).toBe(true);
+      } finally {
+        letGo();
+        follow();
+        lists.mockRestore();
+      }
+
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "following",
+        }),
+      );
+      expect(shown).not.toContain(false);
+      expect(button("office")?.active).toBe(true);
+    } finally {
+      core.state.beforeCommand = null;
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
+  it("leaves a room that waited as the lights were read, even once its wait ends while another room is published", async () => {
+    const { core, check, button } = home();
+    await check();
+    expect(button("office")?.active).toBe(true);
+    expect(button("hall")?.active).toBe(true);
+    // The office's button has a change to publish, and the hall's light
+    // reads as paused, as one back from offline does until it is followed.
+    core.set("strip", { on: true }, byHand);
+    core.set("hall", { colorTemperature: 300, brightness: 40 }, moods);
+    let hallWaits = true;
+    const published: string[] = [];
+    const publish = core.state.entities.set.bind(core.state.entities);
+    vi.spyOn(core.state.entities, "set").mockImplementation((key, entity) => {
+      published.push(key);
+      // Its wait ends while the office's button goes out.
+      if (key === "room:office") hallWaits = false;
+      return publish(key, entity);
+    });
+
+    await publishButtons(
+      core.ctx,
+      ["office", "hall"],
+      (room) => room === "hall" && hallWaits,
+    );
+
+    expect(published).toEqual(["room:office"]);
+    expect(button("office")?.active).toBe(false);
+    expect(button("hall")?.active).toBe(true);
   });
 
   it("names a light a press couldn't reach, and sets the others", async () => {

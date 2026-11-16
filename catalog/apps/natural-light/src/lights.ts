@@ -259,6 +259,11 @@ function showsLook(state: LightState | null, look: Look) {
   );
 }
 
+// The core's answer to a command that holds only while a light is on, or
+// off, once the light shows otherwise.
+const isSwitchedMeanwhile = (error: unknown) =>
+  isActionError(error) && error.code === "conflict";
+
 /** What to send a light that follows the curve now, if anything. */
 export function commandFor(
   light: Light,
@@ -412,6 +417,7 @@ export async function followOne(
   sun: HomeSun | null,
   options: FollowOptions,
   force = false,
+  isAgain = false,
 ): Promise<TargetState> {
   const { device, capability } = light;
   // A check may have waited for this light while the household changed
@@ -458,16 +464,35 @@ export async function followOne(
   );
   if (command) {
     try {
+      // What it is sent goes by whether it was read as on, so it holds only
+      // while the light still shows that: the look a light that is off
+      // comes back at never switches off one someone turned on meanwhile,
+      // and a look for a light that is on never turns one back on.
       await ctx.devices.command({
         device: device.id,
         capability: capability.id,
         command,
+        whileOn: capability.state?.on === true,
       });
       await ctx.storage.db
         .update(followedLights)
         .set({ applied: sent, appliedAt: now })
         .where(followed(device.id, capability.id));
     } catch (error) {
+      // Switched meanwhile: once more, as the light stands now, with this
+      // turn's row, which a requested resume has cleared of its pauses
+      // before they are recorded.
+      if (isSwitchedMeanwhile(error) && !isAgain) {
+        return followOne(
+          ctx,
+          await lightOf(ctx, device.id, capability.id),
+          row,
+          sun,
+          options,
+          force,
+          true,
+        );
+      }
       // Asked for now, the caller hears of it; otherwise the next check
       // tries again.
       if (force) {
@@ -539,11 +564,17 @@ export async function letGo(ctx: AppContext, light: Light) {
   ) {
     return;
   }
-  await ctx.devices.command({
-    device: device.id,
-    capability: capability.id,
-    command: { on: false },
-  });
+  try {
+    await ctx.devices.command({
+      device: device.id,
+      capability: capability.id,
+      command: { on: false },
+      whileOn: false,
+    });
+  } catch (error) {
+    // Turned on meanwhile, it holds nothing to let go of.
+    if (!isSwitchedMeanwhile(error)) throw error;
+  }
 }
 
 /** Stops following a light, and takes its entity out of the home. */
