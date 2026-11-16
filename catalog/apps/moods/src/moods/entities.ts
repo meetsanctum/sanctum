@@ -56,13 +56,24 @@ function inTurn<T>(work: () => Promise<T>): Promise<T> {
  * Publishes the moods of these rooms as they stand now, those whose state
  * changed only, and takes out the entities of their moods that are gone.
  * Without rooms it publishes every mood again, in case the home missed
- * one, as on start.
+ * one, as on start. With `devices`, the home's devices as the caller holds
+ * them, it asks the core for none: a room's lights each report as they
+ * change, and reading every device for each report costs the core more
+ * than the report did.
  */
-export function publishMoods(ctx: AppContext, rooms?: readonly string[]) {
-  return inTurn(() => publishNow(ctx, rooms && [...new Set(rooms)]));
+export function publishMoods(
+  ctx: AppContext,
+  rooms?: readonly string[],
+  devices?: readonly DeviceInfo[],
+) {
+  return inTurn(() => publishNow(ctx, rooms && [...new Set(rooms)], devices));
 }
 
-async function publishNow(ctx: AppContext, rooms?: readonly string[]) {
+async function publishNow(
+  ctx: AppContext,
+  rooms?: readonly string[],
+  held?: readonly DeviceInfo[],
+) {
   if (rooms?.length === 0) return;
   const { db } = ctx.storage;
   const moods = rooms
@@ -76,7 +87,7 @@ async function publishNow(ctx: AppContext, rooms?: readonly string[]) {
   const last = new Map(published.map((row) => [row.moodId, row]));
 
   if (moods.length > 0) {
-    const devices = await ctx.devices.list();
+    const devices = held ?? (await ctx.devices.list());
     for (const [roomId, own] of byRoom(moods)) {
       const inRoom = lightsInRoom(devices, roomId);
       const active = activeMood(

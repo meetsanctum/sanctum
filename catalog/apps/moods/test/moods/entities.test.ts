@@ -14,6 +14,7 @@ import {
 } from "../../src/moods/actions.js";
 import type { MoodState } from "../../src/moods/entities.js";
 import { assignSmartMood } from "../../src/moods/smart-actions.js";
+import { turnOnKey } from "../../src/schedules/turn-on.js";
 import { startableHome } from "./core.js";
 import { device, lightCapability } from "./home.js";
 
@@ -434,8 +435,59 @@ describe("moods.mood entities", () => {
     expect(state.followed).toEqual(followed);
   });
 
+  it("follow a room's lights from their reports, reading no device from the core", async () => {
+    const { start, call, changeDevice, state, active } = home();
+    await start();
+    await call(createMood, {
+      roomId: "office",
+      name: "Reading",
+      lights: reading,
+    });
+    await call(createMood, {
+      roomId: "office",
+      name: "Bright",
+      lights: bright,
+    });
+    const read = state.deviceReads;
+
+    // A room switched to another mood: each of its lights reports.
+    await changeDevice("desk", showing({ on: true, brightness: 100 }));
+    expect(active()).toEqual({ Reading: false, Bright: false });
+    await changeDevice("ceiling", showing({ on: true, brightness: 100 }));
+    expect(active()).toEqual({ Reading: false, Bright: true });
+    // And switched off, which keeps what it showed for turning it on again.
+    await changeDevice("desk", showing({ on: false }));
+    await changeDevice("ceiling", showing({ on: false }));
+
+    expect(active()).toEqual({ Reading: false, Bright: false });
+    expect(state.entities.get(turnOnKey("office"))).toBeDefined();
+    expect(state.deviceReads).toBe(read);
+  });
+
+  it("read the devices again once what Moods may read has changed", async () => {
+    const { start, call, changeDevice, grant, state, active } = home();
+    await start();
+    await call(createMood, {
+      roomId: "office",
+      name: "Reading",
+      lights: reading,
+    });
+    expect(active()).toEqual({ Reading: true });
+
+    // Out of Moods' sight the ceiling light comes on, which no event says.
+    await grant("devices.control:light", false);
+    state.devices.find((each) => each.id === "ceiling")!.capabilities = [
+      lightCapability({ on: true, brightness: 10 }),
+    ];
+    await grant("devices.control:light", true);
+    // Within a level of 2: the desk's own report leaves Reading as it was.
+    await changeDevice("desk", showing({ on: true, brightness: 41 }));
+
+    expect(active()).toEqual({ Reading: false });
+  });
+
   it("never land a room read before a change after one read since", async () => {
-    const { start, call, changeDevice, holdDevices, entity } = home();
+    const { start, call, changeDevice, holdPublication, entity } = home();
     await start();
     const read = await call(createMood, {
       roomId: "office",
@@ -443,8 +495,8 @@ describe("moods.mood entities", () => {
       lights: reading,
     });
 
-    // The desk's report reads the room, then waits for the devices…
-    const held = holdDevices();
+    // The desk's report reads the room, then waits for its publication…
+    const held = holdPublication();
     const reported = changeDevice(
       "desk",
       showing({ on: true, brightness: 80 }),
