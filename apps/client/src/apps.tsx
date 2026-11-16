@@ -71,7 +71,7 @@ export function hostedApps(
   });
 }
 
-/** Whether the app overview can open the app: it has a main page. */
+/** Whether the app overview opens the app's own page: it has a main page. */
 export const opens = (app: HostedApp) => hasPage(app, mainPage);
 
 /** A page must be both installed on the core and bundled in this client. */
