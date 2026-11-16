@@ -13,6 +13,8 @@ import {
   followOptionsFor,
   letGoAll,
   publishAll,
+  rememberLightChanges,
+  type LightChange,
   type RunForLight,
   type Timing,
 } from "./lights.js";
@@ -36,7 +38,9 @@ import { publishRooms } from "./rooms.js";
 //   the household left it out.
 // - A light that changed or went (device.changed, device.removed): where it
 //   stands and its room's button say so at once, as when a mood pauses it,
-//   and one someone let go of takes the curve.
+//   and one someone let go of takes the curve. One that answers again after
+//   being offline, as a bulb behind a wall switch does, counts as switched
+//   off and on: any pause or dim ends and it takes the curve at once.
 
 export function createFollower(
   ctx: AppContext,
@@ -48,8 +52,10 @@ export function createFollower(
   let isDeviceAdded = false;
   let isLocationChanged = false;
   // The devices that changed meanwhile, and the rooms they were and are in.
-  const changed = new Set<string>();
+  const changed = new Map<string, Map<string, LightChange>>();
   const changedRooms = new Set<string | null>();
+  // Those among them that answered again after being offline.
+  const cameBack = new Map<string, Date>();
   // A rejected command restores its preceding state and emits a change.
   // Do not turn that same state into another immediate attempt; the job
   // retries it, or a different device state starts a new attempt.
@@ -90,11 +96,12 @@ export function createFollower(
 
   // Lights that changed meanwhile, and their rooms' buttons.
   async function takeChanges(
-    devices: readonly string[],
+    devices: ReadonlyMap<string, ReadonlyMap<string, LightChange>>,
     rooms: readonly (string | null)[],
+    back: ReadonlyMap<string, Date>,
   ) {
     const options = await followOptionsFor(ctx, timing);
-    for (const deviceId of devices) {
+    for (const [deviceId, changes] of devices) {
       let device: DeviceInfo | null;
       try {
         device = await ctx.devices.state(deviceId);
@@ -103,12 +110,32 @@ export function createFollower(
         device = null;
       }
       if (device) {
-        if (isDeepStrictEqual(seen.get(deviceId), device)) continue;
+        if (
+          !back.has(deviceId) &&
+          isDeepStrictEqual(seen.get(deviceId), device)
+        ) {
+          continue;
+        }
         seen.set(deviceId, device);
       } else {
         seen.delete(deviceId);
       }
-      await followDevice(ctx, deviceId, options, runForLight);
+      // One light that can't be set leaves the others' changes, and their
+      // rooms' buttons, to go on.
+      try {
+        await followDevice(
+          ctx,
+          deviceId,
+          options,
+          runForLight,
+          back.get(deviceId),
+          changes,
+        );
+      } catch (error) {
+        ctx.log(
+          `could not follow ${device?.name ?? deviceId} (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
     }
     await publishRooms(ctx, options, { rooms });
   }
@@ -129,16 +156,18 @@ export function createFollower(
       const settings = isSettingsChanged;
       const added = isDeviceAdded;
       const moved = isLocationChanged;
-      const devices = [...changed];
+      const devices = new Map(changed);
+      const back = new Map(cameBack);
       const rooms = [...changedRooms];
       isSettingsChanged = false;
       isDeviceAdded = false;
       isLocationChanged = false;
       changed.clear();
+      cameBack.clear();
       changedRooms.clear();
       try {
         if (added) await takeInNewLights();
-        if (devices.length > 0) await takeChanges(devices, rooms);
+        if (devices.size > 0) await takeChanges(devices, rooms, back);
         if (settings) await takeNewSettings();
         else if (moved) await takeNewLocation();
       } catch (error) {
@@ -168,13 +197,20 @@ export function createFollower(
     await publishRooms(ctx, options, { always: true });
   }
 
-  function heard(
-    device: { id: string; roomId: string | null },
-    before?: { roomId: string | null },
-  ) {
-    changed.add(device.id);
+  function heard(device: DeviceInfo, before?: DeviceInfo) {
+    const changes = changed.get(device.id) ?? new Map<string, LightChange>();
+    const now = timing.now();
+    if (before) rememberLightChanges(changes, before, now);
+    rememberLightChanges(changes, device, now);
+    changed.set(device.id, changes);
     changedRooms.add(device.roomId);
     if (before) changedRooms.add(before.roomId);
+    if (
+      before?.availability === "offline" &&
+      device.availability !== "offline"
+    ) {
+      cameBack.set(device.id, now);
+    }
     wake?.();
   }
 

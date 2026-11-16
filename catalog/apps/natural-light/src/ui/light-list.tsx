@@ -12,7 +12,9 @@ import {
 // the home's rooms, each room in a section of its own with a switch for all
 // its lights. Each light has where it stands and a switch to have it follow
 // the curve or leave it out, and Resume for one a mood or a person paused.
-// Every light follows unless it is left out. A refusal leaves the switch as
+// A light someone dimmed keeps following the curve's colour, and Resume
+// brings its brightness back too. Every light follows unless it is left
+// out. A refusal leaves the switch as
 // it was and says so on its row, or beside its room's name.
 
 const muted = "text-[13px] leading-[18px] font-medium text-muted-foreground";
@@ -32,6 +34,9 @@ function status(light: LightRow) {
     target.brightness === null
       ? kelvin(target.colorTemperature)
       : `${kelvin(target.colorTemperature)} at ${target.brightness}%`;
+  if (target.status === "dimmed") {
+    return `Following · ${kelvin(target.colorTemperature)} at your brightness`;
+  }
   return target.status === "paused"
     ? "Paused until it’s switched off"
     : `Following · ${look}`;
@@ -164,7 +169,8 @@ function Row(props: { light: LightRow; view: NaturalLightView }) {
           {failed ? "Couldn’t change this light" : status(light)}
         </span>
       </span>
-      {light.target?.status === "paused" && (
+      {(light.target?.status === "paused" ||
+        light.target?.status === "dimmed") && (
         <Button
           variant="outline"
           size="sm"

@@ -39,6 +39,7 @@ import { targetKey, targetType, type TargetState } from "./target.js";
 
 export type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 export type Light = { device: DeviceInfo; capability: LightCapability };
+export type LightChange = { capability: LightCapability; at: Date };
 type Followed = typeof followedLights.$inferSelect;
 
 export type RunForLight = <T>(
@@ -121,12 +122,44 @@ export function lookFor(
   return look;
 }
 
-// Asks for a look, which pauses: a brightness, a colour or a colour
-// temperature, not on or off alone.
-const asksLook = (asked: Partial<LightState>) =>
-  (asked.brightness ?? 0) > 0 ||
-  asked.colorTemperature !== undefined ||
-  asked.hue !== undefined;
+// Asks for a colour, which pauses the light altogether: a colour
+// temperature or a hue, as a mood or a colour picked by hand does.
+const asksColour = (asked: Partial<LightState>) =>
+  asked.colorTemperature !== undefined || asked.hue !== undefined;
+
+// Asks for a brightness alone, which leaves its colour to natural light:
+// a remote's dimmer, a tile or a slider. Switching it on or off alone asks
+// for neither.
+const asksBrightnessAlone = (asked: Partial<LightState>) =>
+  !asksColour(asked) && (asked.brightness ?? 0) > 0;
+
+/**
+ * Keeps each light's last colour or switch while changes wait to be read.
+ * Brightness alone must not hide a preceding colour pause or its end.
+ */
+export function rememberLightChanges(
+  changes: Map<string, LightChange>,
+  device: DeviceInfo,
+  now: Date,
+) {
+  for (const capability of device.capabilities) {
+    if (capability.kind !== "light") continue;
+    const asked = capability.setBy?.asked;
+    if (
+      capability.state?.on === false ||
+      (asked && (asked.on !== undefined || asksColour(asked)))
+    ) {
+      const changedAt = Math.max(
+        Date.parse(capability.changedAt ?? "") || 0,
+        Date.parse(capability.setBy?.at ?? "") || 0,
+      );
+      changes.set(capability.id, {
+        capability,
+        at: changedAt ? new Date(changedAt) : now,
+      });
+    }
+  }
+}
 
 // A look natural light set itself, such as a mood preview putting the light
 // back as it was.
@@ -137,20 +170,35 @@ const isOwnLook = (asked: Partial<LightState>, applied: Look | null) =>
     asked.colorTemperature === applied.colorTemperature) &&
   (asked.brightness === undefined || asked.brightness === applied.brightness);
 
-function hasEndedPause(
-  row: Pick<Followed, "pausedAt">,
-  capability: LightCapability,
-) {
+// Whether a pause or a dim from `at` has ended: the light was switched off,
+// or switched on or off since.
+function hasEnded(at: Date | null, capability: LightCapability) {
   return (
-    row.pausedAt !== null &&
+    at !== null &&
     (capability.state?.on === false ||
       (capability.setBy !== null &&
-        Date.parse(capability.setBy.at) > row.pausedAt.getTime() &&
+        Date.parse(capability.setBy.at) > at.getTime() &&
         capability.setBy.asked.on !== undefined))
   );
 }
 
-/** Whether a light that follows the curve is paused now. */
+// Someone else's change since the light began following, or was last
+// resumed, other than a look natural light set itself.
+function othersChange(
+  row: Pick<Followed, "since" | "applied">,
+  capability: LightCapability,
+  appId: string,
+) {
+  const { setBy } = capability;
+  return setBy !== null &&
+    setBy.app !== appId &&
+    Date.parse(setBy.at) > row.since.getTime() &&
+    (asksBrightnessAlone(setBy.asked) || !isOwnLook(setBy.asked, row.applied))
+    ? setBy
+    : null;
+}
+
+/** Whether a light that follows the curve is paused now, colour and all. */
 export function isPaused(
   row: Pick<Followed, "since" | "pausedAt" | "applied">,
   capability: LightCapability,
@@ -159,18 +207,44 @@ export function isPaused(
   if (capability.state?.on !== true) {
     return false;
   }
-  const { setBy } = capability;
-  const setAt = setBy ? Date.parse(setBy.at) : 0;
-  if (row.pausedAt && !hasEndedPause(row, capability)) {
+  if (row.pausedAt && !hasEnded(row.pausedAt, capability)) {
     return true;
   }
-  return (
-    setBy !== null &&
-    setBy.app !== appId &&
-    setAt > row.since.getTime() &&
-    asksLook(setBy.asked) &&
-    !isOwnLook(setBy.asked, row.applied)
-  );
+  const change = othersChange(row, capability, appId);
+  return change !== null && asksColour(change.asked);
+}
+
+/**
+ * Since when a light that follows the curve has a brightness someone else
+ * set, while natural light keeps its colour on the curve; null when it
+ * hasn't. It is kept (`dimmedAt`) since natural light's own colour then
+ * becomes what last set the light.
+ */
+export function dimmedSince(
+  row: Pick<Followed, "since" | "dimmedAt" | "applied">,
+  capability: LightCapability,
+  appId: string,
+): Date | null {
+  if (capability.state?.on !== true) {
+    return null;
+  }
+  if (row.dimmedAt && !hasEnded(row.dimmedAt, capability)) {
+    return row.dimmedAt;
+  }
+  const change = othersChange(row, capability, appId);
+  return change && asksBrightnessAlone(change.asked)
+    ? new Date(change.at)
+    : null;
+}
+
+/** Where a light that follows the curve and is on stands, pause-wise. */
+export function pauseOf(
+  row: Followed,
+  capability: LightCapability,
+  appId: string,
+): "none" | "dimmed" | "paused" {
+  if (isPaused(row, capability, appId)) return "paused";
+  return dimmedSince(row, capability, appId) ? "dimmed" : "none";
 }
 
 // A check that comes a moment before a light is due still counts, so jobs
@@ -241,8 +315,15 @@ const targetOf = (
   capability: light.capability.id,
   status: look ? status : "waiting",
   colorTemperature: look?.colorTemperature ?? null,
-  brightness: look?.brightness ?? null,
+  // A dimmed light's brightness is someone else's.
+  brightness: status === "dimmed" ? null : (look?.brightness ?? null),
 });
+
+const statusOf = {
+  none: "following",
+  dimmed: "dimmed",
+  paused: "paused",
+} as const satisfies Record<ReturnType<typeof pauseOf>, TargetState["status"]>;
 
 // Where a light that follows the curve stands while natural light is off.
 const offTarget = (light: Light): TargetState => ({
@@ -267,11 +348,7 @@ export function standing(
   const look = sun
     ? lookFor(options.curve, sun, light.capability, options.now())
     : null;
-  return targetOf(
-    light,
-    look,
-    isPaused(row, light.capability, appId) ? "paused" : "following",
-  );
+  return targetOf(light, look, statusOf[pauseOf(row, light.capability, appId)]);
 }
 
 /** Publishes where a light that follows the curve stands. */
@@ -288,10 +365,45 @@ export async function publish(
   });
 }
 
+// A chosen colour stays paused even once a brightness command takes its
+// place as who last set the light, and while the home has no curve.
+async function keepPause(
+  ctx: AppContext,
+  light: Light,
+  row: Followed,
+  changedAt?: Date,
+) {
+  const { device, capability } = light;
+  const kept = {
+    pausedAt:
+      (!changedAt || !row.pausedAt || row.pausedAt <= changedAt) &&
+      hasEnded(row.pausedAt, capability)
+        ? null
+        : row.pausedAt,
+    dimmedAt:
+      (!changedAt || !row.dimmedAt || row.dimmedAt <= changedAt) &&
+      hasEnded(row.dimmedAt, capability)
+        ? null
+        : row.dimmedAt,
+  };
+  if (!kept.pausedAt && isPaused({ ...row, ...kept }, capability, ctx.appId)) {
+    kept.pausedAt = new Date(capability.setBy!.at);
+  }
+  if (kept.pausedAt !== row.pausedAt || kept.dimmedAt !== row.dimmedAt) {
+    await ctx.storage.db
+      .update(followedLights)
+      .set(kept)
+      .where(followed(device.id, capability.id));
+    return { ...row, ...kept };
+  }
+  return row;
+}
+
 /**
  * Brings one light that follows the curve to it, or leaves it while it is
- * paused, and publishes where it stands. `force` sends the curve's look at
- * once, as following or resuming a light does.
+ * paused, or only its colour while it is dimmed, and publishes where it
+ * stands. `force` sends the curve's look at once, as following or resuming
+ * a light does.
  */
 export async function followOne(
   ctx: AppContext,
@@ -313,15 +425,7 @@ export async function followOne(
   const look = sun ? lookFor(options.curve, sun, capability, now) : null;
   const target = (status: TargetState["status"]) =>
     targetOf(light, look, status);
-  if (hasEndedPause(row, capability)) {
-    // Switched since the pause, which ends here, before natural light's next
-    // command takes the switch's place as who set the light last.
-    await ctx.storage.db
-      .update(followedLights)
-      .set({ pausedAt: null })
-      .where(followed(device.id, capability.id));
-    row = { ...row, pausedAt: null };
-  }
+  row = await keepPause(ctx, light, row);
   if (!look) {
     await publish(ctx, light, target("waiting"));
     return target("waiting");
@@ -330,10 +434,25 @@ export async function followOne(
     await publish(ctx, light, target("paused"));
     return target("paused");
   }
+  const dimmed = dimmedSince(row, capability, ctx.appId);
+  if (dimmed && row.dimmedAt?.getTime() !== dimmed.getTime()) {
+    // Kept, since natural light's own colour is about to be what last set
+    // the light.
+    await ctx.storage.db
+      .update(followedLights)
+      .set({ dimmedAt: dimmed })
+      .where(followed(device.id, capability.id));
+    row = { ...row, dimmedAt: dimmed };
+  }
+  // Dimmed, it takes the curve's colour and keeps its brightness.
+  const sent: Look = dimmed
+    ? { colorTemperature: look.colorTemperature }
+    : look;
+  const status = dimmed ? "dimmed" : "following";
   const command = commandFor(
     light,
     row,
-    look,
+    sent,
     { ...options, appId: ctx.appId, now },
     force,
   );
@@ -346,7 +465,7 @@ export async function followOne(
       });
       await ctx.storage.db
         .update(followedLights)
-        .set({ applied: look, appliedAt: now })
+        .set({ applied: sent, appliedAt: now })
         .where(followed(device.id, capability.id));
     } catch (error) {
       // Asked for now, the caller hears of it; otherwise the next check
@@ -357,19 +476,19 @@ export async function followOne(
       ctx.log(`could not set ${device.name} (${describe(error)})`);
     }
   } else if (
-    showsLook(capability.state, look) &&
-    (row.applied?.colorTemperature !== look.colorTemperature ||
-      row.applied?.brightness !== look.brightness)
+    showsLook(capability.state, sent) &&
+    (row.applied?.colorTemperature !== sent.colorTemperature ||
+      row.applied?.brightness !== sent.brightness)
   ) {
     // Already at the curve: it counts as natural light's own look, so
     // putting it back after a mood preview pauses nothing.
     await ctx.storage.db
       .update(followedLights)
-      .set({ applied: look })
+      .set({ applied: sent })
       .where(followed(device.id, capability.id));
   }
-  await publish(ctx, light, target("following"));
-  return target("following");
+  await publish(ctx, light, target(status));
+  return target(status);
 }
 
 /** The sun on the home's day, or none until the home has a location. */
@@ -506,6 +625,13 @@ export async function followDevice(
   deviceId: string,
   options: FollowOptions,
   runForLight: RunForLight,
+  /**
+   * When the device answered again after being offline, as a bulb behind a
+   * wall switch does: that counts as switching it off and on, so any pause
+   * or dim ends and it takes the curve at once.
+   */
+  cameBackAt?: Date,
+  changes?: ReadonlyMap<string, LightChange>,
 ) {
   const rows = await ctx.storage.db
     .select()
@@ -514,7 +640,7 @@ export async function followDevice(
   const sun = sunOnce(ctx, options);
   for (const row of rows) {
     await runForLight(row.deviceId, row.capabilityId, async () => {
-      const current = await followedRow(ctx, row.deviceId, row.capabilityId);
+      let current = await followedRow(ctx, row.deviceId, row.capabilityId);
       if (!current) return;
       let light: Light;
       try {
@@ -526,7 +652,37 @@ export async function followDevice(
         }
         throw error;
       }
-      await followOne(ctx, light, current, await sun(), options);
+      if (cameBackAt) {
+        const back = {
+          since: current.since > cameBackAt ? current.since : cameBackAt,
+          pausedAt:
+            current.pausedAt && current.pausedAt > cameBackAt
+              ? current.pausedAt
+              : null,
+          dimmedAt:
+            current.dimmedAt && current.dimmedAt > cameBackAt
+              ? current.dimmedAt
+              : null,
+        };
+        await ctx.storage.db
+          .update(followedLights)
+          .set(back)
+          .where(followed(row.deviceId, row.capabilityId));
+        current = { ...current, ...back };
+      }
+      const remembered = changes?.get(row.capabilityId);
+      if (remembered && current.since <= remembered.at) {
+        current = await keepPause(
+          ctx,
+          { ...light, capability: remembered.capability },
+          current,
+          remembered.at,
+        );
+      }
+      await followOne(ctx, light, current, await sun(), {
+        ...options,
+        isDueNow: cameBackAt ? true : options.isDueNow,
+      });
     });
   }
 }
@@ -546,7 +702,7 @@ export async function letGoAll(ctx: AppContext, runForLight: RunForLight) {
 export async function followAgainFrom(ctx: AppContext, now: Date) {
   await ctx.storage.db
     .update(followedLights)
-    .set({ since: now, pausedAt: null });
+    .set({ since: now, pausedAt: null, dimmedAt: null });
 }
 
 /**

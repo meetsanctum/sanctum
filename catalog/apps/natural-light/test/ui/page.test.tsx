@@ -246,6 +246,20 @@ describe("natural light's page", () => {
     ]);
   });
 
+  it("says a dimmed light follows the colour at someone's brightness, with Resume", async () => {
+    await show(
+      fakeClient({
+        devices: [device("office", "Office light")],
+        entities: [target("office", "dimmed")],
+        preview: today,
+      }).client,
+    );
+
+    expect(rows()).toEqual([
+      "Office lightFollowing · 3,450 K at your brightnessResume",
+    ]);
+  });
+
   it("says so while natural light is off, keeping each light's switch", async () => {
     await show(
       fakeClient({
