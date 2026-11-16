@@ -19,17 +19,14 @@ import { ActionCallError } from "./errors.js";
 export type Rule = Pick<ActionDefinition, "tier">;
 
 export function createGate(people: People) {
-  // Refuses what an actor may not do.
-  function permit(actor: Actor, rule: Rule) {
+  // Refuses what an actor may not do, taking a person to be in the household
+  // still.
+  function weigh(actor: Actor, rule: Rule) {
     switch (actor.kind) {
-      // A shared client acts as the household, never as a person.
+      // A shared client acts as the household, never as a person, and there
+      // is nothing between people.
       case "client":
-        return;
-      // Someone removed from the household is refused at once.
       case "user":
-        if (!people.get(actor.id)) {
-          throw new ActionCallError("forbidden");
-        }
         return;
       // An app acting on its own, from its lifecycle hooks and jobs, and a
       // workflow, which acts for the household whoever made it, do the
@@ -46,22 +43,47 @@ export function createGate(people: People) {
     }
   }
 
+  // Refuses what an actor may not do.
+  function permit(actor: Actor, rule: Rule) {
+    // Someone removed from the household is refused at once.
+    if (actor.kind === "user" && !people.get(actor.id)) {
+      throw new ActionCallError("forbidden");
+    }
+    weigh(actor, rule);
+  }
+
+  // The actor a principal acts as.
+  function actorOf(principal: Principal): Actor {
+    // Widget tokens read widget data and nothing else.
+    if (principal.scope !== "full") {
+      throw new ActionCallError("forbidden");
+    }
+    // A personal client acts as its person.
+    const actor: Actor =
+      principal.client.kind === "shared"
+        ? { kind: "client", id: principal.client.id }
+        : { kind: "user", id: principal.person?.id ?? "" };
+    if (actor.kind === "user" && !actor.id) {
+      throw new ActionCallError("forbidden");
+    }
+    return actor;
+  }
+
   return {
     // The actor for this call, or an ActionCallError.
     admit(principal: Principal, rule: Rule): Actor {
-      // Widget tokens read widget data and nothing else.
-      if (principal.scope !== "full") {
-        throw new ActionCallError("forbidden");
-      }
-      // A personal client acts as its person.
-      const actor: Actor =
-        principal.client.kind === "shared"
-          ? { kind: "client", id: principal.client.id }
-          : { kind: "user", id: principal.person?.id ?? "" };
-      if (actor.kind === "user" && !actor.id) {
-        throw new ActionCallError("forbidden");
-      }
+      const actor = actorOf(principal);
       permit(actor, rule);
+      return actor;
+    },
+
+    // The same for an open live connection, by what it authenticated as:
+    // one closes as its person is removed or its client revoked
+    // (auth/live.ts), so what is sent to those still open asks People
+    // nothing.
+    admitConnected(principal: Principal, rule: Rule): Actor {
+      const actor = actorOf(principal);
+      weigh(actor, rule);
       return actor;
     },
 

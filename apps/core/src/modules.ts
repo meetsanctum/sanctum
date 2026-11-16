@@ -137,8 +137,12 @@ export async function createModules(
   const people = createPeople(db, {
     ...loginRule(db),
     record: activity.for("people"),
-    onChange: (change) =>
-      eventBus.publish({ name: "person.changed", ...change }),
+    onChange(change) {
+      // Their clients went with them, so the live connections those had open
+      // close first: whatever the removal sets off reaches none of them.
+      if (!change.after) auth.connections.closePerson(change.id);
+      eventBus.publish({ name: "person.changed", ...change });
+    },
   });
   const auth = await createAuth(db, {
     people,

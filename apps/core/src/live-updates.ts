@@ -19,6 +19,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 
 import type { Gate, Rule } from "./app-host/gate.js";
+import type { Principal } from "./auth/clients.js";
 import type { LiveConnections } from "./auth/live.js";
 import { dashboardRules } from "./dashboards/dashboards.js";
 import type { DeviceChange } from "./devices/devices.js";
@@ -29,27 +30,29 @@ import type { EntityChange } from "./entities/entities.js";
 import { pinRules } from "./pins/pins.js";
 
 // What the core pushes to clients over /api/live once they are ready, in the
-// shapes @meetsanctum/app-sdk gives them: each connection gets only what its
-// principal may see, read again for every update, as a request would. A
-// client opens the socket first and then reads GET /api/devices,
-// /api/places, /api/entities, /api/dashboards and /api/pins, so nothing
-// falls between the two. Remotes' presses, the activity log's entries and a
-// restart or shutdown about to happen go out as they happen. Every client
-// hears all of it, shared ones too.
+// shapes @meetsanctum/app-sdk gives them: each connection gets only what the
+// principal it authenticated as may see. A connection closes as its person
+// is removed or its client revoked, so an update asks only the gate's rules
+// for each one still open, never the database. A client opens the socket
+// first and then reads GET /api/devices, /api/places, /api/entities,
+// /api/dashboards and /api/pins, so nothing falls between the two. Remotes'
+// presses, the activity log's entries and a restart or shutdown about to
+// happen go out as they happen. Every client hears all of it, shared ones
+// too.
 
 export function createLiveUpdates(
   connections: Pick<LiveConnections, "publish">,
-  gate: Gate,
+  gate: Pick<Gate, "admitConnected">,
 ) {
-  function admitted(principal: Parameters<Gate["admit"]>[0], rule: Rule) {
+  function admitted(principal: Principal, rule: Rule) {
     try {
-      return gate.admit(principal, rule);
+      return gate.admitConnected(principal, rule);
     } catch {
       return undefined;
     }
   }
 
-  const reads = (principal: Parameters<Gate["admit"]>[0]) =>
+  const reads = (principal: Principal) =>
     admitted(principal, { tier: "read" }) !== undefined;
 
   return {

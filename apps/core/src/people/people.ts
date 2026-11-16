@@ -61,7 +61,8 @@ export function createPeople(
     // Writes a change made through People's routes to the activity log, in
     // the change's transaction.
     record?: RecordActivity;
-    // Called after a change has committed, so running apps can follow.
+    // Called after a change has committed, so running apps can follow and a
+    // removed person's live connections close.
     onChange?: (change: PersonChange) => void;
   },
 ) {
