@@ -7,7 +7,8 @@ const statuses = {
   not_found: 404,
   conflict: 409,
   app_failed: 500,
-  // The app, or a device's driver app, is not running: paused or stopped.
+  // The app, or a device's driver app, is not running: paused or stopped. Or
+  // the core can't say yet, as which apps the home has before they install.
   unavailable: 503,
   timeout: 504,
 } as const;

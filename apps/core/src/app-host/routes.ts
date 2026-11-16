@@ -76,9 +76,13 @@ export function registerAppRoutes(
   const infos = (): AppInfo[] =>
     host.list().map(({ origin: _origin, ...info }) => info);
 
-  // Which apps the home has is household information, for every client.
+  // Which apps the home has is household information, for every client. The
+  // core serves before its apps' packages are staged, which takes a while
+  // after an update: until they are installed it refuses, since an empty
+  // list would say the home has none, and a client asks again.
   app.get("/api/apps", async (request): Promise<AppInfo[]> => {
     gate.admit(request.principal!, { tier: "read" });
+    if (!host.hasInstalled()) throw new ActionCallError("unavailable");
     return infos().sort((a, b) => a.name.localeCompare(b.name));
   });
 
