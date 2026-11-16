@@ -73,6 +73,25 @@ describe("what a device runs", () => {
     expect(versionOf({ date_code: "20250226" })).toBe("20250226");
     expect(versionOf({})).toBeNull();
   });
+
+  it("ends at a null character, as the device's own text does", () => {
+    expect(
+      versionOf({ software_build_id: "2019\0www.", date_code: "20230109" }),
+    ).toBe("2019");
+  });
+
+  it("holds no control characters", () => {
+    expect(versionOf({ software_build_id: "1.0\t\u0007.4\r\n" })).toBe("1.0.4");
+  });
+
+  it("is the date code when the software build has no text", () => {
+    expect(
+      versionOf({ software_build_id: "\0www.", date_code: "20230109" }),
+    ).toBe("20230109");
+    expect(
+      versionOf({ software_build_id: "\0", date_code: "\u0001" }),
+    ).toBeNull();
+  });
 });
 
 describe("why an update failed", () => {
