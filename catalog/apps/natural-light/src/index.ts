@@ -4,6 +4,7 @@ import {
   defineRoomSection,
   placesLocationPermission,
   placesReadPermission,
+  turnOnType,
 } from "@meetsanctum/app-sdk";
 
 import { naturalLightActions } from "./actions.js";
@@ -87,7 +88,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       },
     ],
     provides: {
-      entities: [targetType, roomType],
+      entities: [targetType, roomType, turnOnType],
       steps: [follow, pause, resume, bringRoom],
       roomSections: [
         defineRoomSection({

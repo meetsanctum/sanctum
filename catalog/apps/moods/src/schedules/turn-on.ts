@@ -26,18 +26,20 @@ import { day, minuteIn, spanAt } from "./times.js";
 
 // What turning a room's lights on brings. The core turns a room, a zone or
 // the home on, so Moods publishes each room's rule as a standard
-// lights.turnOn entity, which the core reads by type at the press:
+// lights.turnOn entity, which the core reads by type at the press, going by
+// the highest-ranked rule any app publishes for the room:
 //
 // - Following the schedule (the default): the scheduled mood while one
 //   holds, its lights as it sets them and the room's others off, until
-//   its end. Otherwise the lights that were on when the room last went
-//   dark come back, each as it remembers itself, so a look the core holds
-//   for one, such as natural light's, wins.
+//   its end, ranked as the household's choice. Otherwise the lights that
+//   were on when the room last went dark come back, each as it remembers
+//   itself, ranked last, so a look another app keeps for the room, such as
+//   natural light's, comes first.
 // - As they were: those lights with exactly the look they had, schedule
-//   or not.
+//   or not, ranked as the household's choice.
 //
 // A rule that would turn no light on is none, so the core switches the
-// room on as it remembers its lights.
+// room on as if it had none.
 
 /** The instant a minute of the day next comes after now, in a time zone. */
 export function nextAt(minute: number, timeZone: string, now: Date) {
@@ -82,6 +84,7 @@ export function turnOnRule(input: {
         state: own.get(keyOf(light)) ?? { on: false },
       })),
       until: scheduled.until.toISOString(),
+      rank: "chosen",
     };
     if (comesOn(rule)) return rule;
   }
@@ -100,6 +103,7 @@ export function turnOnRule(input: {
             : { on: true },
       })),
     until: null,
+    rank: behaviour === "asTheyWere" ? "chosen" : "previous",
   };
   return comesOn(rule) ? rule : null;
 }

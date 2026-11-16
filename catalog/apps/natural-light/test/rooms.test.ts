@@ -309,4 +309,36 @@ describe("a room's button", () => {
     expect(button("hall")).toBeDefined();
     await app.stop!(core.ctx, { reason: "shutdown" });
   });
+
+  it("comes with a rule for turning the room on: the lights that follow on, the others off", async () => {
+    const { core, call, check } = home();
+    await check();
+    const rule = (room: string) =>
+      core.state.entities.get(`turn-on:${room}`)?.state;
+
+    expect(rule("office")).toEqual({
+      placeId: "office",
+      lights: [
+        { device: "ceiling", capability: "light", state: { on: true } },
+        { device: "desk", capability: "light", state: { on: true } },
+        { device: "strip", capability: "light", state: { on: false } },
+      ],
+      until: null,
+      rank: "look",
+    });
+
+    await call("naturalLight.follow", {
+      device: "desk",
+      capability: "light",
+      follow: false,
+    });
+    expect(rule("office")).toMatchObject({
+      lights: expect.arrayContaining([
+        { device: "desk", capability: "light", state: { on: false } },
+      ]),
+    });
+
+    await call("naturalLight.followRoom", { placeId: "office", follow: false });
+    expect(rule("office")).toBeUndefined();
+  });
 });

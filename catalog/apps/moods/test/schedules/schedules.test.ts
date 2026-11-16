@@ -406,6 +406,7 @@ describe("turning a room on", () => {
         { device: "shelf", capability: "light", state: { on: false } },
       ],
       until: "2026-10-30T17:00:00.000Z",
+      rank: "chosen",
     });
   });
 
@@ -459,6 +460,7 @@ describe("turning a room on", () => {
         { device: "shelf", capability: "light", state: { on: false } },
       ],
       until: null,
+      rank: "previous",
     });
     const [schedule] = await call(listSchedules, { roomId: "office" });
     expect(schedule?.snapshot).toEqual({
@@ -503,6 +505,7 @@ describe("turning a room on", () => {
         { device: "shelf", capability: "light", state: { on: false } },
       ],
       until: null,
+      rank: "chosen",
     });
   });
 

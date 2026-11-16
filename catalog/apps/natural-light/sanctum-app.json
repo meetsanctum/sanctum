@@ -864,6 +864,122 @@
           ],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "lights.turnOn",
+        "title": "Turning on",
+        "standard": true,
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "placeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lights": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "device": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "capability": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": false
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "brightness": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "colorTemperature": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 1000
+                          },
+                          "hue": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 360
+                          },
+                          "saturation": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "on"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "device",
+                  "capability",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "until": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rank": {
+              "default": "chosen",
+              "type": "string",
+              "enum": [
+                "chosen",
+                "look",
+                "previous"
+              ]
+            }
+          },
+          "required": [
+            "placeId",
+            "lights",
+            "until",
+            "rank"
+          ],
+          "additionalProperties": false
+        }
       }
     ],
     "widgets": [],

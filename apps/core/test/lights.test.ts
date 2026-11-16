@@ -1,8 +1,8 @@
 import {
   defineAction,
   defineApp,
+  turnOnSchema,
   turnOnType,
-  type TurnOn,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -120,7 +120,8 @@ async function publishRule(
   core: TestCore,
   token: string,
   key: string,
-  state: TurnOn,
+  // As an app writes it: one that names no rank is a choice.
+  state: z.input<typeof turnOnSchema>,
 ) {
   const response = await post(
     core,
@@ -466,6 +467,127 @@ describe("the lights pieces", () => {
       expect(Object.keys(asked())).toEqual(["ceiling-1"]);
       expect(asked()["ceiling-1"]).toMatchObject({ on: true, brightness: 40 });
     });
+
+    it("goes by the highest-ranked rule for the room, the first app's of those ranked alike", async () => {
+      const { core, token, living, ids } = await dark();
+      const only = (on: string) =>
+        [ids.lamp, ids.ceiling].map((device) => ({
+          device,
+          capability: "light",
+          state: { on: device === on } as { on: true } | { on: false },
+        }));
+      await publishRule(core, token, "living-previous", {
+        placeId: living,
+        lights: only(ids.lamp),
+        until: null,
+        rank: "previous",
+      });
+      await publishRule(core, token, "living-look", {
+        placeId: living,
+        lights: only(ids.ceiling),
+        until: null,
+        rank: "look",
+      });
+      await lights(core, token, {
+        place: { kind: "room", id: living },
+        to: "on",
+      });
+      expect(switched()).toEqual([["ceiling-1", { on: true }]]);
+
+      await lights(core, token, {
+        place: { kind: "room", id: living },
+        to: "off",
+      });
+      await settled();
+      radio.received.length = 0;
+      await publishRule(core, token, "living-chosen", {
+        placeId: living,
+        lights: only(ids.lamp),
+        until: null,
+      });
+      await lights(core, token, {
+        place: { kind: "room", id: living },
+        to: "on",
+      });
+      expect(switched()).toEqual([["lamp-1", { on: true }]]);
+    });
+
+    it("brings every light on at full brightness with nothing to go by, unless the core holds a look for it", async () => {
+      const { core, token, living, ids } = await home();
+      for (const device of [ids.lamp, ids.ceiling]) {
+        await post(
+          core,
+          "/api/devices/command",
+          { device, capability: "light", command: { brightness: 40 } },
+          { token },
+        );
+      }
+      await lights(core, token, {
+        place: { kind: "room", id: living },
+        to: "off",
+      });
+      await settled();
+      // A colour for the ceiling while it is off, which the core holds.
+      await post(
+        core,
+        "/api/devices/command",
+        {
+          device: ids.ceiling,
+          capability: "light",
+          command: { colorTemperature: 300 },
+        },
+        { token },
+      );
+      await settled();
+      radio.received.length = 0;
+
+      await lights(core, token, {
+        place: { kind: "room", id: living },
+        to: "on",
+      });
+
+      expect(asked()["lamp-1"]).toMatchObject({ on: true, brightness: 100 });
+      expect(asked()["ceiling-1"]).toMatchObject({
+        on: true,
+        brightness: 40,
+        colorTemperature: 300,
+      });
+    });
+
+    it.each([true, false])(
+      "turns a room back on before off is confirmed, with a reserved look: %s",
+      async (hasLook) => {
+        const { core, token, living, ids } = await home();
+        radio.confirms = false;
+        const response = await post(
+          core,
+          "/api/devices/command",
+          {
+            device: ids.lamp,
+            capability: "light",
+            command: {
+              on: false,
+              ...(hasLook ? { brightness: 40, colorTemperature: 300 } : {}),
+            },
+          },
+          { token },
+        );
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ sync: "pending" });
+        radio.received.length = 0;
+
+        await lights(core, token, {
+          place: { kind: "room", id: living },
+          to: "on",
+        });
+
+        expect(asked()["lamp-1"]).toMatchObject({
+          on: true,
+          brightness: hasLook ? 40 : 100,
+          ...(hasLook ? { colorTemperature: 300 } : {}),
+        });
+      },
+    );
 
     it("brings a light it leaves out on as the core remembers it", async () => {
       const { core, token, living, ids } = await dark();

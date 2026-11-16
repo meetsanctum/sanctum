@@ -1,0 +1,1 @@
+ALTER TABLE `room_buttons` ADD `turn_on` text;
