@@ -92,8 +92,8 @@ function useCoreStatus() {
 // dashboards show the same. While the home has no devices it shows how to
 // set the home up instead, and then the steps still left above the rooms
 // (setup-guide.tsx). The sidebar starts with the household's pinned apps and
-// Apps, which lists Settings, Automations and the apps that have a page of
-// their own, then lists the dashboards, the categories and the rooms
+// Apps, which lists Settings, Automations and every installed app, then
+// lists the dashboards, the categories and the rooms
 // (home-sidebar.tsx). Room pages draw apps' room sections from their
 // entities (place-pages.tsx). An app's page opens its preferences,
 // Settings → Apps → the app. There is no Back: the sidebar
