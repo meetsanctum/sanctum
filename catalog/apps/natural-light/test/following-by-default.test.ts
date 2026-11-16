@@ -206,8 +206,12 @@ describe("a room's switch", () => {
       loose: null,
     };
     for (const device of core.state.devices) device.roomId = rooms[device.id]!;
+    // The lights' targets, leaving out the rooms' buttons.
     const following = () =>
-      [...core.state.entities.keys()].map((key) => key.split("/")[0]).sort();
+      [...core.state.entities.keys()]
+        .filter((key) => key.includes("/"))
+        .map((key) => key.split("/")[0])
+        .sort();
     return { ...run, following };
   }
 

@@ -654,6 +654,18 @@ describe("natural light", () => {
     ).toBe(true);
     expect(manifest.provides.entities.map((type) => type.id)).toEqual([
       "naturalLight.target",
+      "naturalLight.room",
+    ]);
+    // Its button beside each room's lights.
+    expect(manifest.provides.roomSections).toEqual([
+      expect.objectContaining({
+        id: "naturalLight.room",
+        entityType: "naturalLight.room",
+        kind: "buttons",
+        press: { action: "naturalLight.toggleRoom" },
+        open: null,
+        whenEmpty: null,
+      }),
     ]);
     expect(Object.keys(manifest.settings?.properties ?? {})).toEqual([
       "on",
@@ -668,6 +680,8 @@ describe("natural light", () => {
     expect(manifest.actions.map((action) => action.id)).toEqual([
       "naturalLight.follow",
       "naturalLight.followRoom",
+      "naturalLight.toggleRoom",
+      "naturalLight.bringRoom",
       "naturalLight.resume",
       "naturalLight.pause",
       "naturalLight.preview",
@@ -704,6 +718,14 @@ describe("natural light", () => {
         words: {
           sentence: "Resume natural light on {device}",
           preview: { device: "Desk lamp" },
+        },
+        needs: [],
+      },
+      {
+        id: "naturalLight.bringRoom",
+        words: {
+          sentence: "Bring {placeId} to natural light",
+          preview: { placeId: "Living room" },
         },
         needs: [],
       },
