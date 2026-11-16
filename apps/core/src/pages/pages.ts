@@ -12,21 +12,55 @@ import { createPageTickets } from "./tickets.js";
 
 /**
  * Whether a kit can stand in for the one pages were built against: one of
- * its major from that version on, where below 1.0 the minor is the major.
+ * its major from that version on, where below 1.0 the minor is the major,
+ * and a prerelease comes before its release, as SemVer orders them.
  */
 export function kitFits(builtFor: string, served: string) {
-  const parts = (version: string) =>
-    /^(\d+)\.(\d+)\.(\d+)/.exec(version)?.slice(1).map(Number);
-  const want = parts(builtFor);
-  const have = parts(served);
+  const parse = (version: string) => {
+    const match =
+      /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+        version,
+      );
+    return match
+      ? {
+          core: [Number(match[1]), Number(match[2]), Number(match[3])] as const,
+          pre: match[4]?.split(".") ?? [],
+        }
+      : undefined;
+  };
+  const want = parse(builtFor);
+  const have = parse(served);
   if (!want || !have) return false;
-  const [wantMajor, wantMinor, wantPatch] = want as [number, number, number];
-  const [haveMajor, haveMinor, havePatch] = have as [number, number, number];
-  if (wantMajor !== haveMajor) return false;
-  if (wantMajor === 0 && wantMinor !== haveMinor) return false;
-  return haveMinor !== wantMinor
-    ? haveMinor > wantMinor
-    : havePatch >= wantPatch;
+  if (want.core[0] !== have.core[0]) return false;
+  if (want.core[0] === 0 && want.core[1] !== have.core[1]) return false;
+  return compareVersions(have, want) >= 0;
+}
+
+// SemVer's precedence: the numbers, then a release after its prereleases,
+// then prereleases identifier by identifier, numbers before words.
+function compareVersions(
+  a: { core: readonly number[]; pre: string[] },
+  b: { core: readonly number[]; pre: string[] },
+) {
+  for (let each = 0; each < 3; each++) {
+    if (a.core[each] !== b.core[each]) return a.core[each]! - b.core[each]!;
+  }
+  if (a.pre.length === 0 || b.pre.length === 0) {
+    return b.pre.length - a.pre.length;
+  }
+  for (let each = 0; each < Math.max(a.pre.length, b.pre.length); each++) {
+    const x = a.pre[each];
+    const y = b.pre[each];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    const xNumber = /^\d+$/.test(x);
+    const yNumber = /^\d+$/.test(y);
+    if (xNumber && yNumber) return Number(x) - Number(y);
+    if (xNumber !== yNumber) return xNumber ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
 }
 
 // Apps' pages and the kit they import, for the frames the shell shows them

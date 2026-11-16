@@ -510,6 +510,13 @@ describe("pages built for a kit", () => {
     expect(kitFits("1.4.1", "1.4.0")).toBe(false);
     expect(kitFits("1.2.0", "2.0.0")).toBe(false);
     expect(kitFits("not a version", "1.0.0")).toBe(false);
+    // A prerelease comes before its release, and after the one before it.
+    expect(kitFits("0.1.0", "0.1.0-beta.1")).toBe(false);
+    expect(kitFits("0.1.0-beta.1", "0.1.0")).toBe(true);
+    expect(kitFits("0.1.0-beta.2", "0.1.0-beta.10")).toBe(true);
+    expect(kitFits("0.1.0-beta.10", "0.1.0-beta.2")).toBe(false);
+    expect(kitFits("0.1.0-beta", "0.1.0-beta.1")).toBe(true);
+    expect(kitFits("0.1.0", "0.1.1-beta.1")).toBe(true);
   });
 
   it("aren't served by a core whose kit can't stand in for theirs, which it says once", async () => {
@@ -552,6 +559,34 @@ describe("a kit that couldn't be read", () => {
     } finally {
       await chmod(join(kitDir, "icons"), 0o755).catch(() => undefined);
       await fresh.stop();
+    }
+  });
+});
+
+describe("a read that fails for a while", () => {
+  it("of the kit's kit.json is tried again, rather than taken as no kit", async () => {
+    await chmod(join(kitDir, "kit.json"), 0o000);
+    try {
+      const first = (await ticketFor()).kit;
+      expect(first).toBeNull();
+      await chmod(join(kitDir, "kit.json"), 0o644);
+      expect((await ticketFor()).kit?.digest).toBe(kitDigest);
+    } finally {
+      await chmod(join(kitDir, "kit.json"), 0o644).catch(() => undefined);
+    }
+  });
+
+  it("of an app's pages.json is tried again, rather than taken as no pages", async () => {
+    const { ticket } = await ticketFor();
+    const pagesDir = await stagePages();
+    const url = `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`;
+    await chmod(join(pagesDir, "pages.json"), 0o000);
+    try {
+      expect((await get(core, url)).statusCode).toBe(404);
+      await chmod(join(pagesDir, "pages.json"), 0o644);
+      expect((await get(core, url)).statusCode).toBe(200);
+    } finally {
+      await chmod(join(pagesDir, "pages.json"), 0o644).catch(() => undefined);
     }
   });
 });

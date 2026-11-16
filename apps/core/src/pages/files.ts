@@ -85,13 +85,20 @@ export async function indexKit(
   kitDir: string,
   log: (message: string) => void,
 ): Promise<KitIndex | null> {
+  let text: string;
+  try {
+    text = await readFile(join(kitDir, "kit.json"), "utf8");
+  } catch (error) {
+    // No kit, where the image has none. Anything else may pass, so it's
+    // thrown for the next request to try again.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
   let manifest: Omit<KitIndex, "files" | "digest"> & { digest?: string };
   try {
-    manifest = JSON.parse(await readFile(join(kitDir, "kit.json"), "utf8"));
+    manifest = JSON.parse(text);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      log(`pages: the kit's kit.json couldn't be read (${String(error)})`);
-    }
+    log(`pages: the kit's kit.json isn't JSON (${String(error)})`);
     return null;
   }
   const files = new Map<string, ServedFile>();
@@ -143,13 +150,23 @@ export async function indexPages(
   pagesDir: string,
   log: (message: string) => void,
 ): Promise<PagesIndex | null> {
-  let source: unknown;
+  let text: string;
   try {
     // A linked pages folder could make its own files appear to belong to
     // the package even when they live outside it.
     if (!(await lstat(pagesDir)).isDirectory()) return null;
-    source = JSON.parse(await readFile(join(pagesDir, "pages.json"), "utf8"));
+    text = await readFile(join(pagesDir, "pages.json"), "utf8");
+  } catch (error) {
+    // No pages, where the package has none. Anything else may pass, so it's
+    // thrown for the next request to try again.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let source: unknown;
+  try {
+    source = JSON.parse(text);
   } catch {
+    log(`pages: ${pagesDir} isn't served: its pages.json isn't JSON`);
     return null;
   }
   const refuse = (why: string) => {
