@@ -163,14 +163,23 @@ async function rowsOf(ctx: AppContext) {
 
 /**
  * Which rooms a publication is for, all of them without `rooms`. `waits`
- * leaves a room as it is, asked as each room's turn comes, since what a room
- * waits for may begin while the publication waits its own turn.
+ * leaves a room as it is, asked as the publication reads the lights and as
+ * each room's turn comes, since what a room waits for may begin while the
+ * publication waits its own turn, and end while it publishes another room.
  */
 type PublishedRooms = {
   rooms?: readonly (string | null)[];
   always?: boolean;
   waits?: (placeId: string) => boolean;
 };
+
+// The rooms a publication leaves as they are: those that wait as it reads
+// the lights, since what it then reads of them is from before what they
+// wait for even once that is over, and those that wait as their turn comes.
+function leftWaiting(waits: PublishedRooms["waits"], rooms: Iterable<string>) {
+  const asRead = new Set([...rooms].filter((room) => waits?.(room)));
+  return (room: string) => asRead.has(room) || waits?.(room) === true;
+}
 
 // One publication at a time, so a button worked out before a change never
 // lands after one worked out since.
@@ -204,6 +213,7 @@ async function publishNow(
   const recorded = new Map(
     (await db.select().from(roomButtons)).map((row) => [row.placeId, row]),
   );
+  const isLeft = leftWaiting(which.waits, rooms ?? recorded.keys());
   const devices = await ctx.devices.list();
   // A call may have waited for a light or another publication while the
   // household switched natural light off. Publish what stands now.
@@ -217,7 +227,7 @@ async function publishNow(
     ]),
   ];
   for (const placeId of new Set(wanted)) {
-    if (which.waits?.(placeId)) continue;
+    if (isLeft(placeId)) continue;
     const state = shows ? roomStateOf(placeId, devices, rows, ctx.appId) : null;
     const kept = recorded.get(placeId);
     if (!state) {
@@ -308,10 +318,14 @@ async function publishButtonsNow(
     (row) => rooms.includes(row.placeId) && row.state !== null,
   );
   if (out.length === 0) return;
+  const isLeft = leftWaiting(
+    waits,
+    out.map((row) => row.placeId),
+  );
   const devices = await ctx.devices.list();
   const rows = await rowsOf(ctx);
   for (const kept of out) {
-    if (waits?.(kept.placeId)) continue;
+    if (isLeft(kept.placeId)) continue;
     const state = roomStateOf(kept.placeId, devices, rows, ctx.appId);
     if (!state || isDeepStrictEqual(kept.state, state)) continue;
     // Recorded before it goes out, so a failed publication is tried again.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
+import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
 // Natural light's button for each room: White while every light in the room
@@ -440,6 +441,36 @@ describe("a room's button", () => {
     } finally {
       await app.stop!(core.ctx, { reason: "shutdown" });
     }
+  });
+
+  it("leaves a room that waited as the lights were read, even once its wait ends while another room is published", async () => {
+    const { core, check, button } = home();
+    await check();
+    expect(button("office")?.active).toBe(true);
+    expect(button("hall")?.active).toBe(true);
+    // The office's button has a change to publish, and the hall's light
+    // reads as paused, as one back from offline does until it is followed.
+    core.set("strip", { on: true }, byHand);
+    core.set("hall", { colorTemperature: 300, brightness: 40 }, moods);
+    let hallWaits = true;
+    const published: string[] = [];
+    const publish = core.state.entities.set.bind(core.state.entities);
+    vi.spyOn(core.state.entities, "set").mockImplementation((key, entity) => {
+      published.push(key);
+      // Its wait ends while the office's button goes out.
+      if (key === "room:office") hallWaits = false;
+      return publish(key, entity);
+    });
+
+    await publishButtons(
+      core.ctx,
+      ["office", "hall"],
+      (room) => room === "hall" && hallWaits,
+    );
+
+    expect(published).toEqual(["room:office"]);
+    expect(button("office")?.active).toBe(false);
+    expect(button("hall")?.active).toBe(true);
   });
 
   it("names a light a press couldn't reach, and sets the others", async () => {
