@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { analyze } from "eslint-scope";
 import { parseAst, type Plugin } from "vite";
 
 // Lucide's icons, one module each in the kit. ui-sdk's `icons` holds all of
@@ -84,11 +85,24 @@ export function transformIcons(
 ): string | undefined {
   if (!code.includes(sdkModule)) return undefined;
   const program = parseAst(code) as unknown as Node;
-  let local: string | undefined;
-  let declaration: Node | undefined;
-  for (const { node } of walk(program)) {
+  const locals = new Set<string>();
+  const declarations = new Set<Node>();
+  const identifiers = new Set<string>();
+  const parents = new Map<Node, { parent?: Node; key?: string }>();
+  for (const { node, parent, key } of walk(program)) {
+    parents.set(node, {
+      ...(parent ? { parent } : {}),
+      ...(key ? { key } : {}),
+    });
+    node.range = [node.start, node.end];
+    if (node.type === "Identifier") identifiers.add(node.name as string);
     const source = node.source as Node | undefined;
     if (source?.value !== sdkModule) continue;
+    if (node.type === "ImportExpression") {
+      throw new Error(
+        `${id}: import what it uses from ${sdkModule} by name, so its icons can be found`,
+      );
+    }
     if (node.type === "ImportDeclaration") {
       for (const specifier of node.specifiers as Node[]) {
         if (specifier.type === "ImportNamespaceSpecifier") {
@@ -100,44 +114,38 @@ export function transformIcons(
           specifier.type === "ImportSpecifier" &&
           nameOf(specifier.imported as Node) === "icons"
         ) {
-          local = nameOf(specifier.local as Node);
-          declaration = node;
+          locals.add(nameOf(specifier.local as Node));
+          declarations.add(node);
         }
       }
     } else if (
-      (node.type === "ExportNamedDeclaration" ||
-        node.type === "ExportAllDeclaration") &&
-      code.slice(node.start, node.end).includes("icons")
+      node.type === "ExportAllDeclaration" ||
+      (node.type === "ExportNamedDeclaration" &&
+        (node.specifiers as Node[]).some(
+          (specifier) => nameOf(specifier.local as Node) === "icons",
+        ))
     ) {
       throw new Error(`${id}: re-exports ui-sdk's icons, which pages can't`);
     }
   }
-  if (!local || !declaration) return undefined;
+  if (locals.size === 0) return undefined;
 
-  const used = new Set<string>();
+  const used = new Map<string, string>();
   const edits: { start: number; end: number; text: string }[] = [];
-  for (const { node, parent, key } of walk(program)) {
-    if (node.type !== "Identifier" || node.name !== local) continue;
+  // Resolve references to the imports, so a parameter or local variable with
+  // the same name keeps its own meaning.
+  const scopes = analyze(program as unknown as Parameters<typeof analyze>[0], {
+    ecmaVersion: 2022,
+    sourceType: "module",
+  });
+  const references = scopes.scopes
+    .find((scope) => scope.type === "module")!
+    .variables.filter((variable) => locals.has(variable.name))
+    .flatMap((variable) => variable.references);
+  for (const reference of references) {
+    const node = reference.identifier as unknown as Node;
+    const { parent, key } = parents.get(node)!;
     if (!parent) continue;
-    // The import itself, and property names that only look like it.
-    if (parent.type === "ImportSpecifier") continue;
-    if (
-      parent.type === "MemberExpression" &&
-      key === "property" &&
-      !parent.computed
-    ) {
-      continue;
-    }
-    if (
-      (parent.type === "Property" ||
-        parent.type === "MethodDefinition" ||
-        parent.type === "PropertyDefinition") &&
-      key === "key" &&
-      !parent.computed &&
-      !parent.shorthand
-    ) {
-      continue;
-    }
     const property = parent.property as Node | undefined;
     if (
       parent.type === "MemberExpression" &&
@@ -149,48 +157,53 @@ export function transformIcons(
       if (!icons.has(name)) {
         throw new Error(`${id}: icons.${name} isn't one of Lucide's icons`);
       }
-      used.add(name);
+      if (!used.has(name)) {
+        const base = `__sanctum_icon_${name}`;
+        let imported = base;
+        for (let suffix = 1; identifiers.has(imported); suffix++) {
+          imported = `${base}_${suffix}`;
+        }
+        identifiers.add(imported);
+        used.set(name, imported);
+      }
       edits.push({
         start: parent.start,
         end: parent.end,
-        text: `__sanctum_icon_${name}`,
+        text: used.get(name)!,
       });
       continue;
     }
     throw new Error(
-      `${id}: name each icon it uses, as ${local}.Check, so the page loads only those`,
+      `${id}: name each icon it uses, as ${node.name as string}.Check, so the page loads only those`,
     );
   }
 
   // The import without `icons`, and one import per icon used.
-  const kept = (declaration.specifiers as Node[]).filter(
-    (specifier) =>
-      !(
-        specifier.type === "ImportSpecifier" &&
-        nameOf(specifier.imported as Node) === "icons"
-      ),
-  );
-  const named = kept.map((specifier) => {
-    const imported = nameOf(specifier.imported as Node);
-    const as = nameOf(specifier.local as Node);
-    return imported === as ? as : `${imported} as ${as}`;
-  });
-  const iconImports = [...used]
-    .sort()
+  const imports = [...used]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(
-      (name) =>
-        `import __sanctum_icon_${name} from "${iconModules}${icons.get(name)}.js";`,
+      ([name, imported]) =>
+        `import ${imported} from "${iconModules}${icons.get(name)}.js";`,
     );
-  edits.push({
-    start: declaration.start,
-    end: declaration.end,
-    text: [
-      ...(named.length > 0
-        ? [`import { ${named.join(", ")} } from "${sdkModule}";`]
-        : []),
-      ...iconImports,
-    ].join("\n"),
-  });
+  for (const declaration of declarations) {
+    const named = (declaration.specifiers as Node[])
+      .filter((specifier) => nameOf(specifier.imported as Node) !== "icons")
+      .map((specifier) => {
+        const imported = nameOf(specifier.imported as Node);
+        const as = nameOf(specifier.local as Node);
+        return imported === as ? as : `${imported} as ${as}`;
+      });
+    edits.push({
+      start: declaration.start,
+      end: declaration.end,
+      text: [
+        ...(named.length > 0
+          ? [`import { ${named.join(", ")} } from "${sdkModule}";`]
+          : []),
+        ...imports.splice(0),
+      ].join("\n"),
+    });
+  }
 
   let out = code;
   for (const edit of edits.sort((a, b) => b.start - a.start)) {

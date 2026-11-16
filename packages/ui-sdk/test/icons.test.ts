@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseAst } from "vite";
 
 import { lucideIcons, transformIcons } from "../tools/icons";
 
@@ -69,6 +70,54 @@ describe("a page's icons", () => {
     expect(out).toContain("{ icons: 1 }.icons + __sanctum_icon_House");
   });
 
+  it.each([
+    `import { icons as first } from "@meetsanctum/ui-sdk";\nimport { icons as second } from "@meetsanctum/ui-sdk";`,
+    `import { icons as first, icons as second } from "@meetsanctum/ui-sdk";`,
+  ])("rewrites every imported alias: %s", (imports) => {
+    const out = turn(
+      `${imports}\nexport const a = [first.Check, second.Plus];`,
+    );
+    expect(out).not.toContain(`from "@meetsanctum/ui-sdk"`);
+    expect(out).toContain("[__sanctum_icon_Check, __sanctum_icon_Plus]");
+  });
+
+  it("leaves local bindings that shadow an import alone", () => {
+    const local = [
+      `export function pick(icons) { return icons.Check; }`,
+      `export function block() { const icons = { House: 1 }; return icons.House; }`,
+      `export const named = function icons() { return icons; };`,
+      `export const namedClass = class icons { static get value() { return icons; } };`,
+    ].join("\n");
+    const out = turn(
+      [
+        `import { icons } from "@meetsanctum/ui-sdk";`,
+        local,
+        `export const a = icons.Plus;`,
+      ].join("\n"),
+    );
+    expect(out).toContain(local);
+    expect(out).toContain("export const a = __sanctum_icon_Plus;");
+  });
+
+  it("chooses icon import names without capturing existing bindings", () => {
+    const out = turn(
+      [
+        `import { icons } from "@meetsanctum/ui-sdk";`,
+        `export const __sanctum_icon_Check = 1;`,
+        `export function pick(__sanctum_icon_Check_1) { return icons.Check; }`,
+      ].join("\n"),
+    )!;
+    expect(() => parseAst(out)).not.toThrow();
+    expect(out).toContain(`import __sanctum_icon_Check_2 from`);
+    expect(out).toContain(`return __sanctum_icon_Check_2;`);
+  });
+
+  it("allows a component re-export whose alias happens to be icons", () => {
+    expect(
+      turn(`export { PageBar as icons } from "@meetsanctum/ui-sdk";`),
+    ).toBeUndefined();
+  });
+
   it("fail the build when one is picked by a name computed while the page runs", () => {
     const code = [
       `import { icons } from "@meetsanctum/ui-sdk";`,
@@ -102,5 +151,13 @@ describe("a page's icons", () => {
     expect(() => turn(`export { icons } from "@meetsanctum/ui-sdk";`)).toThrow(
       /re-exports/,
     );
+    expect(() => turn(`export * from "@meetsanctum/ui-sdk";`)).toThrow(
+      /re-exports/,
+    );
+    expect(() =>
+      turn(
+        `const sdk = await import("@meetsanctum/ui-sdk"); export const a = sdk.icons.Check;`,
+      ),
+    ).toThrow(/by name/);
   });
 });

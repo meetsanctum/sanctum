@@ -43,7 +43,12 @@ jobs:
       # No `pnpm lint`: each package's lint is the same tsc run as its
       # typecheck.
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: |
+          if [ -n "$SANCTUM_CONTRACT_BASE" ]; then
+            SANCTUM_CONTRACT_BASE="$(git rev-parse --verify "${SANCTUM_CONTRACT_BASE}^{commit}")"
+            export SANCTUM_CONTRACT_BASE
+          fi
+          pnpm test
         env:
           SANCTUM_CONTRACT_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
       - run: pnpm build

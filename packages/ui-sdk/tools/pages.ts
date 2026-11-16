@@ -79,10 +79,12 @@ const isKitImport = (id: string) =>
 export async function buildPages(
   packageDir: string,
 ): Promise<PagesManifest | undefined> {
+  const outDir = join(packageDir, pagesFolder);
+  // A removed page or failed rebuild must not leave an older build to ship.
+  await rm(outDir, { recursive: true, force: true });
   const ui = await uiEntry(packageDir);
   if (ui === undefined) return undefined;
   if (!existsSync(ui)) throw new Error(`No ${ui}: it's the package's ./ui`);
-  const outDir = join(packageDir, pagesFolder);
   // The entry and stylesheet the build starts from, out of the way.
   const work = join(packageDir, "node_modules/.sanctum-pages");
   await rm(work, { recursive: true, force: true });
@@ -132,21 +134,23 @@ export async function buildPages(
         },
       },
     });
+    const files = await listFiles(outDir);
+    const manifest: PagesManifest = {
+      kit: sdkVersion(),
+      digest: digestOf(files),
+      entry: "index.js",
+      stylesheet: Object.hasOwn(files, "pages.css") ? "pages.css" : null,
+      files,
+    };
+    await writeFile(
+      join(outDir, pagesManifestName),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+    return manifest;
+  } catch (error) {
+    await rm(outDir, { recursive: true, force: true });
+    throw error;
   } finally {
     await rm(work, { recursive: true, force: true });
   }
-
-  const files = await listFiles(outDir);
-  const manifest: PagesManifest = {
-    kit: sdkVersion(),
-    digest: digestOf(files),
-    entry: "index.js",
-    stylesheet: Object.hasOwn(files, "pages.css") ? "pages.css" : null,
-    files,
-  };
-  await writeFile(
-    join(outDir, pagesManifestName),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
-  return manifest;
 }

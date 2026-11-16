@@ -122,4 +122,24 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
     expect(await buildPages(dir)).toBeUndefined();
     expect(existsSync(join(dir, "pages"))).toBe(false);
   });
+
+  it("removes an earlier build when the package no longer has pages", async () => {
+    const dir = await app(page);
+    await buildPages(dir);
+    await writeFile(join(dir, "package.json"), JSON.stringify({ exports: {} }));
+    expect(await buildPages(dir)).toBeUndefined();
+    expect(existsSync(join(dir, "pages"))).toBe(false);
+  }, 60_000);
+
+  it("removes an earlier build when a rebuild fails", async () => {
+    const dir = await app(page);
+    await buildPages(dir);
+    await writeFile(
+      join(dir, "src/ui/index.tsx"),
+      `export default missing + ;`,
+    );
+    await expect(buildPages(dir)).rejects.toThrow();
+    expect(existsSync(join(dir, "pages"))).toBe(false);
+    expect(existsSync(join(dir, "node_modules/.sanctum-pages"))).toBe(false);
+  }, 60_000);
 });

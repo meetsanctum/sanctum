@@ -23,7 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
     "test": "vitest run && sanctum-app manifest --check",
     "manifest": "sanctum-app manifest",
-    "clean": "rm -rf dist .turbo",
+    "clean": "rm -rf dist pages .turbo",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
