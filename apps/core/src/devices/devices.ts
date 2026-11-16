@@ -23,6 +23,7 @@ import { createCommandTracking } from "./commands.js";
 import { createDriverReports } from "./driver-reports.js";
 import { createNaming } from "./naming.js";
 import { createPresence } from "./presence.js";
+import { createDeviceReads } from "./reads.js";
 import { createRemoval, type RemoveFromDriver } from "./removal.js";
 import { commandRequest, deviceChanges } from "./requests.js";
 import { createTurns } from "./turns.js";
@@ -96,6 +97,7 @@ export function createDevices(
   const confirmMs = options.confirmMs ?? defaultConfirmMs;
   const deviceLog = createDeviceLog({ activity: options.activity, confirmMs });
   const { rename, roomNames } = createNaming(db, places);
+  const reads = createDeviceReads(db);
   // Set as the core stops, from which no command goes to a device.
   let isStopping = false;
   const commands = createCommandTracking({
@@ -124,47 +126,27 @@ export function createDevices(
   }
 
   function load(id: string): DeviceInfo | null {
-    const device = db.select().from(devices).where(eq(devices.id, id)).get();
-    return device
-      ? deviceInfo(
-          device,
-          db
-            .select()
-            .from(deviceCapabilities)
-            .where(eq(deviceCapabilities.deviceId, id))
-            .all(),
-        )
-      : null;
+    const device = reads.device(id);
+    return device ? deviceInfo(device, reads.capabilities(id)) : null;
   }
 
   function loadAll(): DeviceInfo[] {
     const byDevice = new Map<string, CapabilityRow[]>();
-    for (const capability of db.select().from(deviceCapabilities).all()) {
+    for (const capability of reads.everyCapability()) {
       byDevice.set(capability.deviceId, [
         ...(byDevice.get(capability.deviceId) ?? []),
         capability,
       ]);
     }
-    return db
-      .select()
-      .from(devices)
-      .all()
+    return reads
+      .everyDevice()
       .map((device) => deviceInfo(device, byDevice.get(device.id) ?? []))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // One of a kind this build doesn't have counts as none, as in deviceInfo.
   function capabilityRow(deviceId: string, capabilityId: string) {
-    const row = db
-      .select()
-      .from(deviceCapabilities)
-      .where(
-        and(
-          eq(deviceCapabilities.deviceId, deviceId),
-          eq(deviceCapabilities.id, capabilityId),
-        ),
-      )
-      .get();
+    const row = reads.capability(deviceId, capabilityId);
     return row && isCapabilityKind(row.kind) ? row : undefined;
   }
 
@@ -222,11 +204,7 @@ export function createDevices(
   }
 
   function keyOf(id: string) {
-    return db
-      .select({ key: devices.key })
-      .from(devices)
-      .where(eq(devices.id, id))
-      .get()?.key;
+    return reads.address(id)?.key;
   }
 
   // Adding, removing and repairing a device take turns (turns.ts).
@@ -243,6 +221,7 @@ export function createDevices(
     record,
     deviceLog,
     commands,
+    reads,
     capabilityRow,
     changing,
     rename,
@@ -352,11 +331,7 @@ export function createDevices(
       asked: setBy.asked,
       app,
     };
-    const { driver, key } = db
-      .select({ driver: devices.driver, key: devices.key })
-      .from(devices)
-      .where(eq(devices.id, device.id))
-      .get()!;
+    const { driver, key } = reads.address(device.id)!;
     // Sending it again, if the device does not confirm it in time, goes the
     // same way, as the same actor (commands.ts), and only to the driver as it
     // ran when it first went: a driver that has restarted never gets it again,
@@ -651,7 +626,7 @@ export function createDevices(
 
     // A device as the core keeps it, with its driver and key.
     row(id: string) {
-      return db.select().from(devices).where(eq(devices.id, id)).get() ?? null;
+      return reads.device(id) ?? null;
     },
 
     // A driver's own id for each of its devices, by the core's.
