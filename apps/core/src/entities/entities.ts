@@ -1,5 +1,5 @@
 import type { EntityInfo } from "@meetsanctum/app-sdk";
-import { and, eq, notInArray, type SQL } from "drizzle-orm";
+import { and, eq, notInArray, sql, type SQL } from "drizzle-orm";
 
 import type { DeclaredEntityType } from "../app-host/contract.js";
 import type { CoreDatabase } from "../database.js";
@@ -39,12 +39,30 @@ export function createEntities(
 ) {
   const now = options.now ?? (() => new Date());
 
-  function get(appId: string, key: string) {
-    const row = db
+  // What every publication and every reader asks, each compiled once: an
+  // app publishes as often as it checks, and each publication reads the
+  // entity before and after it. A list is by app, by type, by both or by
+  // neither, so each of the four is a statement of its own.
+  const ofApp = eq(entities.appId, sql.placeholder("app"));
+  const ofType = eq(entities.type, sql.placeholder("type"));
+  const byKey = db
+    .select()
+    .from(entities)
+    .where(and(ofApp, eq(entities.key, sql.placeholder("key"))))
+    .prepare();
+  const listed = {
+    all: db.select().from(entities).prepare(),
+    byApp: db.select().from(entities).where(ofApp).prepare(),
+    byType: db.select().from(entities).where(ofType).prepare(),
+    byAppAndType: db
       .select()
       .from(entities)
-      .where(and(eq(entities.appId, appId), eq(entities.key, key)))
-      .get();
+      .where(and(ofApp, ofType))
+      .prepare(),
+  };
+
+  function get(appId: string, key: string) {
+    const row = byKey.get({ app: appId, key });
     return row ? kept(row) : null;
   }
 
@@ -104,18 +122,16 @@ export function createEntities(
 
   // By app or type, in a stable order.
   function list(filter: { app?: string; type?: string } = {}) {
-    return db
-      .select()
-      .from(entities)
-      .where(
-        and(
-          filter.app === undefined ? undefined : eq(entities.appId, filter.app),
-          filter.type === undefined
-            ? undefined
-            : eq(entities.type, filter.type),
-        ),
-      )
-      .all()
+    const { app, type } = filter;
+    const rows =
+      app === undefined
+        ? type === undefined
+          ? listed.all.all()
+          : listed.byType.all({ type })
+        : type === undefined
+          ? listed.byApp.all({ app })
+          : listed.byAppAndType.all({ app, type });
+    return rows
       .map(kept)
       .sort(
         (a, b) =>

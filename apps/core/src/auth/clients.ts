@@ -3,7 +3,7 @@ import type {
   ClientKind,
   Platform,
 } from "@meetsanctum/auth-protocol";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
@@ -63,6 +63,28 @@ export function createClients(
   },
 ) {
   const { record, connections, now } = options;
+
+  // What every request and every entry a shared client leaves in the
+  // activity log reads, each compiled once: the client a token stands for,
+  // and a client's name.
+  const byToken = db
+    .select({ client: authClients })
+    .from(authTokens)
+    .innerJoin(authClients, eq(authTokens.clientId, authClients.id))
+    .where(
+      and(
+        eq(authTokens.tokenHash, sql.placeholder("tokenHash")),
+        eq(authTokens.kind, "client"),
+        isNull(authTokens.revokedAt),
+        isNull(authClients.revokedAt),
+      ),
+    )
+    .prepare();
+  const nameOf = db
+    .select({ name: authClients.name })
+    .from(authClients)
+    .where(eq(authClients.id, sql.placeholder("id")))
+    .prepare();
 
   function active(id: string) {
     return db
@@ -140,19 +162,7 @@ export function createClients(
     // unknown or revoked. Checked against the database on every request, so
     // revoking takes effect at once.
     authenticate(token: string): Principal | undefined {
-      const found = db
-        .select({ client: authClients })
-        .from(authTokens)
-        .innerJoin(authClients, eq(authTokens.clientId, authClients.id))
-        .where(
-          and(
-            eq(authTokens.tokenHash, hashToken(token)),
-            eq(authTokens.kind, "client"),
-            isNull(authTokens.revokedAt),
-            isNull(authClients.revokedAt),
-          ),
-        )
-        .get();
+      const found = byToken.get({ tokenHash: hashToken(token) });
       if (!found) {
         return undefined;
       }
@@ -184,13 +194,7 @@ export function createClients(
 
     // A client's name, revoked or not, for the activity log.
     name(id: string): string | null {
-      return (
-        db
-          .select({ name: authClients.name })
-          .from(authClients)
-          .where(eq(authClients.id, id))
-          .get()?.name ?? null
-      );
+      return nameOf.get({ id })?.name ?? null;
     },
 
     // Every client sees every client.
