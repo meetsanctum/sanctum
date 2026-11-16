@@ -212,7 +212,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
           throw new ActionError("not_found", "This light does not follow it");
         }
         const now = options.now();
-        const resumed = { ...row, since: now, pausedAt: null };
+        const resumed = { ...row, since: now, pausedAt: null, dimmedAt: null };
         const target = await followOne(
           ctx,
           found,
@@ -223,7 +223,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
         );
         await ctx.storage.db
           .update(followedLights)
-          .set({ since: now, pausedAt: null })
+          .set({ since: now, pausedAt: null, dimmedAt: null })
           .where(followed(input.device, input.capability));
         return target;
       }).then(async (target) => {

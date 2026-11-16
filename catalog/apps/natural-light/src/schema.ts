@@ -22,9 +22,13 @@ export const followedLights = sqliteTable(
     // Since it began following, or was last resumed: what others set before
     // that does not pause it.
     since: integer("since", { mode: "timestamp_ms" }).notNull(),
-    // Paused on purpose (naturalLight.pause) until it is switched off or
-    // on.
+    // Paused on purpose (naturalLight.pause), or by a chosen colour, until
+    // it is switched off or on.
     pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
+    // Since someone set its brightness alone: natural light keeps its colour
+    // on the curve and leaves its brightness to them, until it is switched
+    // off or on.
+    dimmedAt: integer("dimmed_at", { mode: "timestamp_ms" }),
     // What natural light last set it to, and when.
     applied: text("applied", { mode: "json" }).$type<Look>(),
     appliedAt: integer("applied_at", { mode: "timestamp_ms" }),

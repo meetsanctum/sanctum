@@ -1,0 +1,1 @@
+ALTER TABLE `followed_lights` ADD `dimmed_at` integer;

@@ -15,7 +15,7 @@ import {
   followedRow,
   followOptionsFor,
   homeSun,
-  isPaused,
+  pauseOf,
   lookFor,
   publish,
   takesColorTemperature,
@@ -32,7 +32,7 @@ import { targetKey } from "./target.js";
 // location.
 //
 // It is White while every light in the room that is on follows the curve,
-// unpaused, and at least one is on; lights that are off don't count, but a
+// neither paused nor dimmed, and at least one is on; lights that are off don't count, but a
 // light that is on and doesn't follow does. A press while it is White
 // switches every light in the room off. Otherwise it brings the room to
 // natural light: every light that follows comes on at the curve, any pause
@@ -103,7 +103,7 @@ export function roomStateOf(
     on.every(
       (light) =>
         follows(light) &&
-        !isPaused(rows.get(keyOf(light))!, light.capability, appId),
+        pauseOf(rows.get(keyOf(light))!, light.capability, appId) === "none",
     );
   return {
     placeId,
@@ -263,7 +263,7 @@ async function requireRoomSun(
 
 /**
  * Brings the room to natural light: every light that follows on at the
- * curve, its pause ended, and every other light that is on off.
+ * curve, its pause or dim ended, and every other light that is on off.
  */
 export async function bringRoom(
   ctx: AppContext,
@@ -297,7 +297,13 @@ export async function bringRoom(
     });
     await ctx.storage.db
       .update(followedLights)
-      .set({ since: now, pausedAt: null, applied: look, appliedAt: now })
+      .set({
+        since: now,
+        pausedAt: null,
+        dimmedAt: null,
+        applied: look,
+        appliedAt: now,
+      })
       .where(followed(device.id, capability.id));
     await publish(ctx, light, {
       device: device.id,
