@@ -45,12 +45,14 @@ export const leftOutLights = sqliteTable(
   (table) => [primaryKey({ columns: [table.deviceId, table.capabilityId] })],
 );
 
-// Each room's Natural light button as it was last published, so a button
-// is published again only when it changes, and taken out of the home once
-// its room has no light that follows, even one removed while natural light
-// was stopped. A row is written before its entity is published, with no
-// state until the core has taken it.
+// Each room's Natural light button, and its rule for turning the room on, as
+// they were last published, so each is published again only when it
+// changes, and taken out of the home once its room has no light that
+// follows, even one removed while natural light was stopped. A row is
+// written before its entities are published, with neither until the core
+// has taken them.
 export const roomButtons = sqliteTable("room_buttons", {
   placeId: text("place_id").primaryKey(),
   state: text("state", { mode: "json" }).$type<unknown>(),
+  turnOn: text("turn_on", { mode: "json" }).$type<unknown>(),
 });

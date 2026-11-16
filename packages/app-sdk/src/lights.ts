@@ -46,12 +46,23 @@ export type LightsResult = {
   failed: { device: string; capability: string }[];
 };
 
-// What turning a room's lights on does: an app such as Moods publishes one
+// What turning a room's lights on does: an app such as Moods publishes a
 // lights.turnOn entity for a room, and the core reads it by type whenever it
 // turns a room, a zone or the home on, so the rule stays the app's and no
-// app code runs at the press. Each light it names stays off or comes on,
-// with a look or as it remembers itself; a light it leaves out comes on as
-// the core remembers it, as with no entity at all.
+// app code runs at the press. Several apps may each publish one for a room:
+// the core goes by the highest-ranked (turnOnRanks). Each light it names
+// stays off or comes on, with a look or as it remembers itself; a light it
+// leaves out comes on as the core remembers it. A room with none comes on
+// with every light at full brightness, unless the core holds a look for it.
+
+/**
+ * How firmly a rule holds, highest first: a choice the household made for
+ * the room, such as a scheduled mood or turning it on as it was; a look an
+ * app keeps for the room, such as natural light's; and what was on before
+ * it went dark.
+ */
+export const turnOnRanks = ["chosen", "look", "previous"] as const;
+export type TurnOnRank = (typeof turnOnRanks)[number];
 
 const look = {
   brightness: z.number().int().min(1).max(100).optional(),
@@ -93,6 +104,8 @@ export const turnOnSchema = z.object({
    * none after it. Null holds until the app publishes another.
    */
   until: z.iso.datetime({ offset: true }).nullable(),
+  /** How firmly it holds; a rule that says none is a choice. */
+  rank: z.enum(turnOnRanks).default("chosen"),
 });
 export type TurnOn = z.infer<typeof turnOnSchema>;
 export type TurnOnLight = TurnOn["lights"][number];

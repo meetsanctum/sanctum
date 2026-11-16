@@ -660,6 +660,7 @@ describe("natural light", () => {
     expect(manifest.provides.entities.map((type) => type.id)).toEqual([
       "naturalLight.target",
       "naturalLight.room",
+      "lights.turnOn",
     ]);
     // Its button beside each room's lights.
     expect(manifest.provides.roomSections).toEqual([
