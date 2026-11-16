@@ -40,6 +40,16 @@ describe("a page's stylesheet", () => {
     ).toBe("");
   });
 
+  it("puts a page's own utility after the kit's, whatever Tailwind's order", () => {
+    // The trade-off it makes: `mt-auto` is the kit's, so on an element
+    // with both, the page's margin comes later and wins.
+    const page =
+      "@layer utilities{.m-\\[13px\\]{margin:13px}.mt-auto{margin-top:auto}}";
+    expect(withoutKitRules(page, kit)).toBe(
+      "@layer utilities{.m-\\[13px\\]{margin:13px}}",
+    );
+  });
+
   it("keeps a rule the kit has only in another group, or with other values", () => {
     const page =
       "@layer utilities{.sm\\:flex{display:flex}.mt-auto{margin-top:auto!important}}";

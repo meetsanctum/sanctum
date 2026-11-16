@@ -5,6 +5,12 @@
 // uses `m-0` would take `mt-auto` off a card that has both. So a page's
 // stylesheet leaves out every rule of its utilities that the kit's already
 // has, word for word, and each utility comes once across the two.
+//
+// What two stylesheets can't keep is Tailwind's order between a page's own
+// utility and a later one the kit has: on a page's element with
+// `m-[13px] mt-auto`, the page's margin comes after the kit's `mt-auto` and
+// wins. Carrying every utility ui-sdk uses in each page would keep it, at
+// about 45 KB a page; pages avoid the mix instead.
 
 type Item = { text: string; prelude?: string; body?: string };
 
