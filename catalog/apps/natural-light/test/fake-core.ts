@@ -84,8 +84,9 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
     device: string,
     command: LightCommand,
     by: { app: string | null; actor: Actor },
+    capabilityId = "light",
   ) {
-    const capability = capabilityOf(device);
+    const capability = capabilityOf(device, capabilityId);
     const parsed = lightKind.command.parse(command);
     if (!lightKind.supports(capability.features, parsed)) {
       throw new Error("The light cannot do that");
@@ -210,7 +211,12 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         await state.beforeCommand?.(device);
         state.sent.push({ device, command: command as LightCommand, actor });
         return structuredClone(
-          set(device, command as LightCommand, { app: app.id, actor }),
+          set(
+            device,
+            command as LightCommand,
+            { app: app.id, actor },
+            capability,
+          ),
         );
       },
       async publish(entity) {

@@ -39,6 +39,7 @@ import { targetKey, targetType, type TargetState } from "./target.js";
 
 export type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 export type Light = { device: DeviceInfo; capability: LightCapability };
+export type LightChange = { capability: LightCapability; at: Date };
 type Followed = typeof followedLights.$inferSelect;
 
 export type RunForLight = <T>(
@@ -132,6 +133,34 @@ const asksColour = (asked: Partial<LightState>) =>
 const asksBrightnessAlone = (asked: Partial<LightState>) =>
   !asksColour(asked) && (asked.brightness ?? 0) > 0;
 
+/**
+ * Keeps each light's last colour or switch while changes wait to be read.
+ * Brightness alone must not hide a preceding colour pause or its end.
+ */
+export function rememberLightChanges(
+  changes: Map<string, LightChange>,
+  device: DeviceInfo,
+  now: Date,
+) {
+  for (const capability of device.capabilities) {
+    if (capability.kind !== "light") continue;
+    const asked = capability.setBy?.asked;
+    if (
+      capability.state?.on === false ||
+      (asked && (asked.on !== undefined || asksColour(asked)))
+    ) {
+      const changedAt = Math.max(
+        Date.parse(capability.changedAt ?? "") || 0,
+        Date.parse(capability.setBy?.at ?? "") || 0,
+      );
+      changes.set(capability.id, {
+        capability,
+        at: changedAt ? new Date(changedAt) : now,
+      });
+    }
+  }
+}
+
 // A look natural light set itself, such as a mood preview putting the light
 // back as it was.
 const isOwnLook = (asked: Partial<LightState>, applied: Look | null) =>
@@ -164,7 +193,7 @@ function othersChange(
   return setBy !== null &&
     setBy.app !== appId &&
     Date.parse(setBy.at) > row.since.getTime() &&
-    !isOwnLook(setBy.asked, row.applied)
+    (asksBrightnessAlone(setBy.asked) || !isOwnLook(setBy.asked, row.applied))
     ? setBy
     : null;
 }
@@ -336,6 +365,40 @@ export async function publish(
   });
 }
 
+// A chosen colour stays paused even once a brightness command takes its
+// place as who last set the light, and while the home has no curve.
+async function keepPause(
+  ctx: AppContext,
+  light: Light,
+  row: Followed,
+  changedAt?: Date,
+) {
+  const { device, capability } = light;
+  const kept = {
+    pausedAt:
+      (!changedAt || !row.pausedAt || row.pausedAt <= changedAt) &&
+      hasEnded(row.pausedAt, capability)
+        ? null
+        : row.pausedAt,
+    dimmedAt:
+      (!changedAt || !row.dimmedAt || row.dimmedAt <= changedAt) &&
+      hasEnded(row.dimmedAt, capability)
+        ? null
+        : row.dimmedAt,
+  };
+  if (!kept.pausedAt && isPaused({ ...row, ...kept }, capability, ctx.appId)) {
+    kept.pausedAt = new Date(capability.setBy!.at);
+  }
+  if (kept.pausedAt !== row.pausedAt || kept.dimmedAt !== row.dimmedAt) {
+    await ctx.storage.db
+      .update(followedLights)
+      .set(kept)
+      .where(followed(device.id, capability.id));
+    return { ...row, ...kept };
+  }
+  return row;
+}
+
 /**
  * Brings one light that follows the curve to it, or leaves it while it is
  * paused, or only its colour while it is dimmed, and publishes where it
@@ -362,20 +425,7 @@ export async function followOne(
   const look = sun ? lookFor(options.curve, sun, capability, now) : null;
   const target = (status: TargetState["status"]) =>
     targetOf(light, look, status);
-  const kept = {
-    pausedAt: hasEnded(row.pausedAt, capability) ? null : row.pausedAt,
-    dimmedAt: hasEnded(row.dimmedAt, capability) ? null : row.dimmedAt,
-  };
-  if (kept.pausedAt !== row.pausedAt || kept.dimmedAt !== row.dimmedAt) {
-    // Switched since the pause or the dim, which ends here, before natural
-    // light's next command takes the switch's place as who set the light
-    // last.
-    await ctx.storage.db
-      .update(followedLights)
-      .set(kept)
-      .where(followed(device.id, capability.id));
-    row = { ...row, ...kept };
-  }
+  row = await keepPause(ctx, light, row);
   if (!look) {
     await publish(ctx, light, target("waiting"));
     return target("waiting");
@@ -581,6 +631,7 @@ export async function followDevice(
    * or dim ends and it takes the curve at once.
    */
   cameBackAt?: Date,
+  changes?: ReadonlyMap<string, LightChange>,
 ) {
   const rows = await ctx.storage.db
     .select()
@@ -589,7 +640,7 @@ export async function followDevice(
   const sun = sunOnce(ctx, options);
   for (const row of rows) {
     await runForLight(row.deviceId, row.capabilityId, async () => {
-      const current = await followedRow(ctx, row.deviceId, row.capabilityId);
+      let current = await followedRow(ctx, row.deviceId, row.capabilityId);
       if (!current) return;
       let light: Light;
       try {
@@ -601,23 +652,37 @@ export async function followDevice(
         }
         throw error;
       }
-      if (!cameBackAt) {
-        await followOne(ctx, light, current, await sun(), options);
-        return;
+      if (cameBackAt) {
+        const back = {
+          since: current.since > cameBackAt ? current.since : cameBackAt,
+          pausedAt:
+            current.pausedAt && current.pausedAt > cameBackAt
+              ? current.pausedAt
+              : null,
+          dimmedAt:
+            current.dimmedAt && current.dimmedAt > cameBackAt
+              ? current.dimmedAt
+              : null,
+        };
+        await ctx.storage.db
+          .update(followedLights)
+          .set(back)
+          .where(followed(row.deviceId, row.capabilityId));
+        current = { ...current, ...back };
       }
-      const back = { since: cameBackAt, pausedAt: null, dimmedAt: null };
-      await ctx.storage.db
-        .update(followedLights)
-        .set(back)
-        .where(followed(row.deviceId, row.capabilityId));
-      await followOne(
-        ctx,
-        light,
-        { ...current, ...back },
-        await sun(),
-        options,
-        true,
-      );
+      const remembered = changes?.get(row.capabilityId);
+      if (remembered && current.since <= remembered.at) {
+        current = await keepPause(
+          ctx,
+          { ...light, capability: remembered.capability },
+          current,
+          remembered.at,
+        );
+      }
+      await followOne(ctx, light, current, await sun(), {
+        ...options,
+        isDueNow: cameBackAt ? true : options.isDueNow,
+      });
     });
   }
 }

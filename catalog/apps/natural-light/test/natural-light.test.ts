@@ -235,7 +235,7 @@ describe("pausing", () => {
   });
 
   it("brings a light that was switched off and on meanwhile back to the curve", async () => {
-    const { core, check, now, target, sentFrom } = await following();
+    const { core, check, advance, now, target, sentFrom } = await following();
     core.set(
       "lamp",
       { on: true, brightness: 40, colorTemperature: 400 },
@@ -244,6 +244,7 @@ describe("pausing", () => {
     await check();
 
     // Off and on between two checks: the look the mood left comes back.
+    advance(1000);
     core.set("lamp", { on: false }, byHand);
     core.set("lamp", { on: true }, byHand);
     await check();
