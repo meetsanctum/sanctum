@@ -162,7 +162,7 @@ export function AppFrame(props: {
       clearTimeout(loader);
       clearTimeout(late);
     };
-  }, [phase, waits, attempt]);
+  }, [phase, waits, attempt, id, version]);
 
   if (phase === "newer") {
     return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
@@ -191,7 +191,10 @@ export function AppFrame(props: {
           action={
             <Button
               variant="outline"
-              onClick={() => setAttempt((each) => each + 1)}
+              onClick={() => {
+                forgetPageTicket();
+                setAttempt((each) => each + 1);
+              }}
             >
               Try again
             </Button>
@@ -207,7 +210,7 @@ export function AppFrame(props: {
         )
       )}
       <iframe
-        key={attempt}
+        key={`${id}:${version}:${attempt}`}
         ref={frame}
         src={src}
         title={title ?? name}

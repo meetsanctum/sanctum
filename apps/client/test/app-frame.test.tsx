@@ -11,25 +11,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
 import { AppFrame } from "../src/frames/app-frame";
+import { forgetPageTicket } from "../src/frames/page-ticket";
 
 // An app's page in its frame, as the shell shows it before and instead of
 // the page: its name in the top bar, the loader after 0.4 s, and a notice
 // when it doesn't open. The page never answers here.
 
 const address = vi.hoisted(() => ({
-  answer: () =>
-    Promise.resolve({
-      kit: { version: "0.1.1", bridge: 1, digest: "kit" },
-      url: "about:blank",
-    }) as Promise<unknown>,
+  answer: (): Promise<unknown> => Promise.resolve(),
   calls: 0,
+  tickets: 0,
 }));
-vi.mock("../src/frames/page-ticket", () => ({
-  pageAddress: () => {
+vi.mock("../src/core-fetch", () => ({
+  currentCredential: () => ({ token: "client" }),
+  coreJson: (path: string) => {
+    if (path === "/api/pages/ticket") {
+      address.tickets++;
+      return address.answer();
+    }
     address.calls++;
-    return address.answer();
+    return Promise.resolve({ digest: "page" });
   },
-  forgetPageTicket: vi.fn(),
 }));
 
 const info = (over: Partial<AppInfo> = {}): AppInfo => ({
@@ -62,7 +64,15 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  forgetPageTicket();
   address.calls = 0;
+  address.tickets = 0;
+  address.answer = () =>
+    Promise.resolve({
+      ticket: `page_ticket${address.tickets}`,
+      expiresAt: new Date(Date.now() + 8 * 24 * 60 * 60_000).toISOString(),
+      kit: { version: "0.1.1", bridge: 1, digest: "kit" },
+    });
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -124,12 +134,27 @@ describe("an app's page in its frame", () => {
       "It didn't answer in time. What Weather adds to the home keeps working.",
     );
     expect(address.calls).toBe(1);
+    expect(frame().src).toContain("/pages/page_ticket1/");
     const tryAgain = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Try again",
     )!;
     await act(async () => tryAgain.click());
+    expect(frame().src).toContain("/pages/page_ticket2/");
     expect(address.calls).toBe(2);
     expect(text()).not.toContain("didn't open");
+  });
+
+  it("opens a new frame with a full timeout when the app's version changes", async () => {
+    await show();
+    const previous = frame();
+    await after(9_500);
+    await show({ app: info({ version: "0.3.1" }) });
+    expect(frame()).not.toBe(previous);
+    expect(address.calls).toBe(2);
+    await after(9_999);
+    expect(text()).not.toContain("didn't open");
+    await after(1);
+    expect(text()).toContain("It didn't answer in time.");
   });
 
   it("says its files didn't load when the core has none", async () => {
@@ -140,11 +165,6 @@ describe("an app's page in its frame", () => {
   });
 
   it("waits while the home is away", async () => {
-    address.answer = () =>
-      Promise.resolve({
-        kit: { version: "0.1.1", bridge: 1, digest: "kit" },
-        url: "about:blank",
-      });
     await show({ isAway: true });
     await after(60_000);
     expect(text()).not.toContain("didn't open");

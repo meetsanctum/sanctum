@@ -39,3 +39,9 @@ body {
   gap: 24px;
   padding: 0 24px 24px;
 }
+
+/* App pages use filled cards, as they do in the shell. */
+.frame-page [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
