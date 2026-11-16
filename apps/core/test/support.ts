@@ -131,6 +131,9 @@ export async function testCore(
     // ask for before the test, as each app's page would have asked; tests
     // of the core's own first answers say false.
     allowed?: boolean;
+    // Until it resolves the apps' packages are still being staged, as after
+    // an update: the core serves meanwhile, and installs them once it does.
+    staged?: Promise<void>;
   } = {},
 ) {
   const dataDir = options.dataDir ?? (await dataFolder());
@@ -196,7 +199,10 @@ export async function testCore(
               now(),
             );
           }
-          await modules.apps.start(installed, { onTrial });
+          await modules.apps.start(
+            options.staged ? options.staged.then(() => installed) : installed,
+            { onTrial },
+          );
           // Each app the test defines has had its first start, as one in the
           // core's process has once the core starts, unless it waits for a
           // commit.
@@ -243,7 +249,7 @@ export async function testCore(
     }
   });
   await core.start();
-  await core.lifecycle.backgroundWorkSettled();
+  if (!options.staged) await core.lifecycle.backgroundWorkSettled();
   if (core.lifecycle.phase() !== "running") {
     throw new Error(
       `The test's core didn't start:\n${lifecycleLogs.join("\n")}`,

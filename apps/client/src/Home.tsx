@@ -1,4 +1,4 @@
-import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 import type { Me } from "@meetsanctum/auth-protocol";
 import {
   AppScope,
@@ -23,6 +23,7 @@ import { AppNotice, WhileNotRunning } from "./app-state";
 import { usePermissionSheet } from "./permission-sheet";
 import { AppHosts, hasPage, hostedApps, pageOf, type Route } from "./apps";
 import { AppsPage, appsPage, listedApps } from "./apps-page";
+import { useInstalledApps } from "./installed-apps";
 import { followHost, forgetHost, moveHost } from "./auth/session";
 import { AutomationsPage, automationsApp } from "./automations/page";
 import { usePrefersDark } from "./color-scheme";
@@ -123,14 +124,19 @@ export function Home(props: {
   const [certificateNotValid, setCertificateNotValid] = useState(false);
   const [reachedCore, setReachedCore] = useState(false);
   const [me, setMe] = useState<Me>();
-  const [installed, setInstalled] = useState<AppInfo[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   // A device's detail covers the screen, inside it.
   const [screen, setScreen] = useState<HTMLDivElement | null>(null);
   const sidebarTrigger = useRef<HTMLButtonElement>(null);
   const live = useMemo(() => createLiveFeed(), []);
+  const {
+    installed,
+    isWaiting: appsWaiting,
+    read: readApps,
+    stop: stopApps,
+    appChanged,
+  } = useInstalledApps(live);
   const refreshId = useRef(0);
-  const changedApps = useRef(new Map<string, AppInfo>());
   const { dashboards, rename, home } = useDashboards(live);
   const { pins, change: changePins } = usePins(live);
   const { current: dashboard, show: showDashboard } =
@@ -211,25 +217,13 @@ export function Home(props: {
 
   const refresh = useCallback(async () => {
     const requestId = ++refreshId.current;
-    changedApps.current.clear();
-    const [nextMe, nextApps] = await Promise.allSettled([
+    const [nextMe] = await Promise.allSettled([
       coreJson<Me>("/api/auth/me"),
-      coreJson<AppInfo[]>("/api/apps"),
+      readApps(),
     ]);
     if (requestId !== refreshId.current) return;
     if (nextMe.status === "fulfilled") setMe(nextMe.value);
-    // The same list keeps the apps' clients, so their pages do not reload.
-    if (nextApps.status === "fulfilled") {
-      // Keep grant changes received during this read without dropping the
-      // rest of the list, including when it is the first read.
-      const next = nextApps.value.map(
-        (app) => changedApps.current.get(app.id) ?? app,
-      );
-      setInstalled((current) =>
-        JSON.stringify(current) === JSON.stringify(next) ? current : next,
-      );
-    }
-  }, []);
+  }, [readApps]);
 
   useEffect(() => {
     if (!found) {
@@ -254,12 +248,13 @@ export function Home(props: {
     liveConnection.current = connection;
     return () => {
       refreshId.current += 1;
+      stopApps();
       window.clearInterval(timer);
       window.removeEventListener("focus", update);
       connection.stop();
       liveConnection.current = undefined;
     };
-  }, [found, refresh, live, host.url, host.token, checkNow]);
+  }, [found, refresh, stopApps, live, host.url, host.token, checkNow]);
 
   // Back after a restart or an outage: reconnect at once and read
   // everything again, rather than wait for the next try.
@@ -286,26 +281,6 @@ export function Home(props: {
     }
   }, [found, core.state]);
 
-  // An app as the core answered a change of its permissions, which the
-  // shell takes at once for everything that shows it.
-  const appChanged = useCallback((changed: AppInfo) => {
-    // A read started before this answer must keep these newer grants.
-    changedApps.current.set(changed.id, changed);
-    setInstalled((current) =>
-      current.map((each) => (each.id === changed.id ? changed : each)),
-    );
-  }, []);
-  // A change made on another client reaches this one at once, so the
-  // app's pages get a client with what it holds now.
-  useEffect(
-    () =>
-      live.subscribe({
-        message(message) {
-          if (message.type === "app") appChanged(message.app);
-        },
-      }),
-    [live, appChanged],
-  );
   const permissionSheet = usePermissionSheet(installed, appChanged);
   const { ask } = permissionSheet;
   const bridge = useMemo<CoreBridge>(
@@ -526,6 +501,7 @@ export function Home(props: {
                     {route?.app === appsPage ? (
                       <AppsPage
                         apps={listed}
+                        starting={appsWaiting && installed.length === 0}
                         pins={pins}
                         onPins={(next) =>
                           void changePins(next).catch(() => undefined)

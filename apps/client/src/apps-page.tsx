@@ -85,6 +85,8 @@ export function appOnShow(routes: readonly Route[]) {
 // unpins it, and Done ends it. Each visit starts afresh.
 export function AppsPage(props: {
   apps: ListedApp[];
+  /** The home's own apps are still starting, so only the shell's are listed. */
+  starting?: boolean;
   /** The household's pinned apps, in their order; none until read. */
   pins: string[] | undefined;
   onPins: (apps: string[]) => void;
@@ -172,6 +174,14 @@ export function AppsPage(props: {
           ) : (
             <p className="m-0 text-[15px] leading-[22px] text-muted-foreground">
               No apps match “{query.trim()}”.
+            </p>
+          )}
+          {props.starting && !search && (
+            <p
+              role="status"
+              className="m-0 text-[15px] leading-[22px] text-muted-foreground"
+            >
+              Your apps are still starting. They'll show here in a moment.
             </p>
           )}
         </div>

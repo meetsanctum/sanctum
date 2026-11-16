@@ -212,6 +212,9 @@ export function createAppHost(options: {
   // The core is stopping: nothing more installs or starts.
   let isClosing = false;
   let installing = Promise.resolve();
+  // Whether the packages the core started with are installed. Until then the
+  // home's apps aren't known, which is not the same as having none.
+  let hasInstalled = false;
   // The apps whose entities stay: those checked as they installed, and those
   // the core says are coming, as one whose package isn't staged yet.
   const kept = new Set<string>();
@@ -460,6 +463,7 @@ export function createAppHost(options: {
         for (const appId of checked) kept.add(appId);
         options.entities.keepApps([...kept]);
       } finally {
+        hasInstalled = true;
         // Closing also waits for an install that failed before it finished.
         allInstalled();
       }
@@ -533,6 +537,9 @@ export function createAppHost(options: {
         installed.get(appId)?.contract.actions.get(actionId)?.title ?? null
       );
     },
+
+    /** Whether the apps it started with are installed, so `list` is the home's apps. */
+    hasInstalled: () => hasInstalled,
 
     list() {
       return [...installed.values()].map((entry) => ({
