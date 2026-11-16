@@ -186,6 +186,45 @@ describe("the apps' packages on real images", () => {
     }
   });
 
+  it("stages each app's pages, built against the kit the image carries", async () => {
+    const kit = JSON.parse(
+      await docker(
+        "run",
+        "--rm",
+        "--entrypoint",
+        "cat",
+        coreImage,
+        "/app/kit/kit.json",
+      ),
+    ) as { version: string; imports: Record<string, string> };
+    expect(kit.imports["@meetsanctum/ui-sdk"]).toBe("ui-sdk.js");
+    for (const { id } of shipped) {
+      const folder = staged.apps[id]!.current.folder;
+      const inPages = (...command: string[]) =>
+        docker(
+          "run",
+          "--rm",
+          "--network",
+          "none",
+          "--mount",
+          `type=volume,src=${dataVolume},dst=/package,volume-subpath=packages/${id}/${folder},readonly`,
+          "--workdir",
+          "/package/pages",
+          nodeImage,
+          ...command,
+        );
+      const pages = JSON.parse(await inPages("cat", "pages.json")) as {
+        kit: string;
+        entry: string;
+        files: Record<string, { sha256: string }>;
+      };
+      expect(pages.kit).toBe(kit.version);
+      expect((await inPages("sha256sum", pages.entry)).split(" ")[0]).toBe(
+        pages.files[pages.entry]!.sha256,
+      );
+    }
+  });
+
   it("runs each app apart from its staged package", async () => {
     await waitFor("the core", async () => {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);

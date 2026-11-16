@@ -1,0 +1,112 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { digestOf, listFiles } from "../tools/files";
+import { lucideIcons } from "../tools/icons";
+import { buildKit, sdkVersion, type KitManifest } from "../tools/kit";
+
+// The kit, React and ui-sdk as the modules every app page imports, in parts:
+// React, ui-sdk without its icons, and one module per icon.
+
+let dir: string;
+let kit: KitManifest;
+const read = (path: string) => readFileSync(join(dir, path), "utf8");
+// The kit's own modules a module imports.
+const importsOf = (path: string) =>
+  [...read(path).matchAll(/from"(\.\.?\/[^"]+)"/g)].map(([, from]) =>
+    join(path, "..", from!),
+  );
+
+beforeAll(async () => {
+  dir = await mkdtemp(join(tmpdir(), "sanctum-kit-"));
+  kit = await buildKit(dir);
+}, 120_000);
+
+afterAll(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+// Hashing its 2,000 files takes a while on a busy machine.
+describe("the kit", { timeout: 60_000 }, () => {
+  it("says its version, bridge, digest, stylesheet and which module answers each import", async () => {
+    expect(kit).toEqual({
+      version: sdkVersion(),
+      bridge: 1,
+      // What the build says it wrote is what's on disk.
+      digest: digestOf(await listFiles(dir, ["kit.json"])),
+      stylesheet: "kit.css",
+      imports: {
+        react: "react.js",
+        "react/jsx-runtime": "react-jsx-runtime.js",
+        "react-dom": "react-dom.js",
+        "react-dom/client": "react-dom-client.js",
+        "@meetsanctum/ui-sdk": "ui-sdk.js",
+        "@meetsanctum/ui-sdk/icons/": "icons/",
+      },
+    });
+    expect(JSON.parse(read("kit.json"))).toEqual(kit);
+    for (const [, module] of Object.entries(kit.imports)) {
+      expect(existsSync(join(dir, module))).toBe(true);
+    }
+  });
+
+  it("has one module per icon, each small, and keeps them out of ui-sdk's", () => {
+    const files = new Set(lucideIcons().values());
+    expect(readdirSync(join(dir, "icons")).sort()).toEqual(
+      [...files].map((file) => `${file}.js`).sort(),
+    );
+    expect(statSync(join(dir, "icons/check.js")).size).toBeLessThan(200);
+    // Lucide's 1,900 icons alone are 750 KB.
+    expect(statSync(join(dir, "ui-sdk.js")).size).toBeLessThan(400_000);
+    // An icon ui-sdk's own components don't use.
+    expect(read("icons/bitcoin.js")).toBeTruthy();
+    expect(read("ui-sdk.js")).not.toContain("bitcoin");
+  });
+
+  it("gives a frame one React, which all its modules share", () => {
+    const [react] = importsOf("react.js").filter((path) =>
+      path.includes("chunks/react-"),
+    );
+    expect(react).toBeDefined();
+    expect(importsOf("react-dom-client.js")).toContain(react);
+    expect(importsOf("ui-sdk.js")).toContain(react);
+    // An icon, through Lucide's shared code.
+    const reached = new Set<string>();
+    const reach = (path: string) => {
+      for (const next of importsOf(path)) {
+        if (!reached.has(next)) {
+          reached.add(next);
+          reach(next);
+        }
+      }
+    };
+    reach("icons/check.js");
+    expect(reached).toContain(react);
+  });
+
+  it("has a stylesheet with Sanctum's theme and ui-sdk's classes, and Inter as WOFF2 next to it", () => {
+    const css = read("kit.css");
+    expect(css).toContain("--carbon:#222326");
+    expect(css).toContain("--cell:64px");
+    expect(css).toMatch(/\[data-mode=evening\]/);
+    expect(css).toMatch(
+      /url\(\.\/assets\/inter-latin-400-normal-[\w-]+\.woff2\)/,
+    );
+    expect(css).not.toMatch(/\.woff\)/);
+    expect(css).not.toMatch(/url\(\//);
+    const fonts = readdirSync(join(dir, "assets"));
+    expect(fonts.every((name) => name.endsWith(".woff2"))).toBe(true);
+  });
+
+  it("comes out the same from the same sources", async () => {
+    const again = await mkdtemp(join(tmpdir(), "sanctum-kit-"));
+    try {
+      expect((await buildKit(again)).digest).toBe(kit.digest);
+    } finally {
+      await rm(again, { recursive: true, force: true });
+    }
+  }, 120_000);
+});

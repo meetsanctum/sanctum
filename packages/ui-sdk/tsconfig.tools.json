@@ -1,0 +1,9 @@
+{
+  "extends": "@meetsanctum/typescript-config/base.json",
+  "compilerOptions": {
+    "outDir": "dist/tools",
+    "rootDir": "tools",
+    "types": ["node"]
+  },
+  "include": ["tools"]
+}

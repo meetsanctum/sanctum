@@ -22,6 +22,8 @@ COPY packages/app-testkit/package.json packages/app-testkit/package.json
 COPY packages/auth-protocol/package.json packages/auth-protocol/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
+# ui-sdk's command shim, which pnpm links when it installs.
+COPY packages/ui-sdk/bin packages/ui-sdk/bin
 # The catalog apps, one line each, as in apps/core/Dockerfile.
 COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json

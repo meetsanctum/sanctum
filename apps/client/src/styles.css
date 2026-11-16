@@ -1,112 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@meetsanctum/ui-sdk/theme.css";
 @import "./shell-frame.css";
 
 /* The UIs the shell hosts bring Tailwind classes of their own: ui-sdk's
    components and the bundled apps' pages (src/apps.tsx). */
 @source "../../../packages/ui-sdk/src";
 @source "../../../catalog/apps/*/src/ui/**/*.{ts,tsx}";
-
-/* shadcn's dark variant is the Evening mode. */
-@custom-variant dark (&:where([data-mode="evening"], [data-mode="evening"] *));
-
-/* The brand's tokens. */
-:root {
-  /* The two backgrounds; each is the ink of the other. */
-  --carbon: #222326;
-  --white: #ffffff;
-  /* Greys: Silver and Pewter on Carbon, Steel on White. */
-  --silver: #c5c7ca;
-  --pewter: #a3a6ab;
-  --steel: #5c5e62;
-  --hairline-on-white: #e3e4e6;
-  --hairline-on-carbon: rgb(255 255 255 / 14%);
-  /* The action colour, only for what you can press. */
-  --electric-blue: #3e6ae1;
-  --light-blue: #7a97ee;
-  /* App colours: the fill, then the text shades on Carbon and on White. */
-  --ember: #ff9500;
-  --ember-on-carbon: #ff9f0a;
-  --ember-on-white: #c93400;
-  --sun: #ffcc00;
-  --sun-on-carbon: #ffd60a;
-  --sun-on-white: #b25000;
-  --ruby: #ff3b30;
-  --ruby-on-carbon: #ff453a;
-  --ruby-on-white: #d70015;
-  --leaf: #34c759;
-  --leaf-on-carbon: #30d158;
-  --leaf-on-white: #1f8039;
-  --sky: #32ade6;
-  --sky-on-carbon: #64d2ff;
-  --sky-on-white: #0071a4;
-  --blossom: #ff2d55;
-  --blossom-on-carbon: #ff4d6a;
-  --blossom-on-white: #d30f45;
-  --iris: #af52de;
-  --iris-on-carbon: #c468f5;
-  --iris-on-white: #8944ab;
-  --graphite: #8e8e93;
-  --graphite-on-carbon: #98989d;
-  --graphite-on-white: #6c6c70;
-  /* Corners: one radius for cards, scaled down for buttons, fields, menus
-     and swatches (--radius-xs to --radius-4xl in the theme below). */
-  --radius: 15px;
-  /* The dashboard's grid: square cells that keep their size, as many across
-     as fit, with 12 px between them. A tile spans whole cells. */
-  --cell: 64px;
-  --cell-gap: 12px;
-
-  font-family: "Inter", system-ui, sans-serif;
-}
-
-/* The two modes. Day is the default and Evening is set with
-   data-mode="evening" on any element. */
-:root,
-[data-mode="day"] {
-  color-scheme: light;
-  --background: var(--white);
-  /* A card on an app's page: the ink at 5% over the background. */
-  --card: #f4f4f4;
-  --ink: var(--carbon);
-  --secondary: var(--steel);
-  --hairline: var(--hairline-on-white);
-  --action: var(--electric-blue);
-  --ember-text: var(--ember-on-white);
-  --sun-text: var(--sun-on-white);
-  --ruby-text: var(--ruby-on-white);
-  --leaf-text: var(--leaf-on-white);
-  --sky-text: var(--sky-on-white);
-  --blossom-text: var(--blossom-on-white);
-  --iris-text: var(--iris-on-white);
-  --graphite-text: var(--graphite-on-white);
-}
-
-[data-mode="evening"] {
-  color-scheme: dark;
-  --background: var(--carbon);
-  --card: #2d2e31;
-  --ink: var(--white);
-  --secondary: var(--silver);
-  --hairline: var(--hairline-on-carbon);
-  --action: var(--light-blue);
-  --ember-text: var(--ember-on-carbon);
-  --sun-text: var(--sun-on-carbon);
-  --ruby-text: var(--ruby-on-carbon);
-  --leaf-text: var(--leaf-on-carbon);
-  --sky-text: var(--sky-on-carbon);
-  --blossom-text: var(--blossom-on-carbon);
-  --iris-text: var(--iris-on-carbon);
-  --graphite-text: var(--graphite-on-carbon);
-}
-
-:root,
-[data-mode] {
-  /* Destructive actions and problems take Apple's red, as in its own apps. */
-  --danger: var(--ruby-text);
-  color: var(--ink);
-}
 
 /* Only the page paints the mode's background; a part of it in another
    mode, such as the sidebar's frosted glass in Evening over a page in Day,
@@ -660,59 +561,4 @@ body {
 
 .empty p {
   margin: 0 0 8px;
-}
-
-/* shadcn's theme (src/components/ui and packages/ui-sdk) on the brand tokens: its surfaces take
-   the mode's background and ink, its primary is Electric blue, its lines are
-   the hairline and its corners scale from --radius. */
-@theme inline {
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-heading: var(--font-sans);
-  --color-background: var(--background);
-  --color-foreground: var(--ink);
-  --color-card: var(--card);
-  --color-card-foreground: var(--ink);
-  --color-popover: var(--background);
-  --color-popover-foreground: var(--ink);
-  --color-primary: var(--electric-blue);
-  --color-primary-foreground: var(--white);
-  --color-secondary: color-mix(in srgb, var(--ink) 8%, transparent);
-  --color-secondary-foreground: var(--ink);
-  --color-muted: color-mix(in srgb, var(--ink) 8%, transparent);
-  --color-muted-foreground: var(--secondary);
-  --color-accent: color-mix(in srgb, var(--ink) 8%, transparent);
-  --color-accent-foreground: var(--ink);
-  --color-destructive: var(--danger);
-  /* The app colours by their plain names, in the mode's text shade, for
-     marks that aren't an app's icon or title, such as Status' bars and its
-     green check: bg-pink, text-green. */
-  --color-orange: var(--ember-text);
-  --color-yellow: var(--sun-text);
-  --color-red: var(--ruby-text);
-  --color-green: var(--leaf-text);
-  --color-cyan: var(--sky-text);
-  --color-pink: var(--blossom-text);
-  --color-purple: var(--iris-text);
-  --color-gray: var(--graphite-text);
-  --color-border: var(--hairline);
-  --color-input: var(--hairline);
-  --color-ring: var(--action);
-  --radius-xs: calc(var(--radius) * 0.4);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  button:not(:disabled),
-  [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
 }
