@@ -140,22 +140,33 @@ let turn: Promise<unknown> = Promise.resolve();
  * Publishes these rooms' lights.turnOn as they stand now, those that
  * changed only, and takes out the ones that are none any more. Without
  * rooms it publishes every room's again and takes out those of rooms that
- * are gone, as on start.
+ * are gone, as on start. With `devices`, the home's devices as the caller
+ * holds them, it asks the core for none (publishMoods).
  */
-export function publishTurnOn(ctx: AppContext, rooms?: readonly string[]) {
-  const mine = turn.then(() => publishNow(ctx, rooms && [...new Set(rooms)]));
+export function publishTurnOn(
+  ctx: AppContext,
+  rooms?: readonly string[],
+  devices?: readonly DeviceInfo[],
+) {
+  const mine = turn.then(() =>
+    publishNow(ctx, rooms && [...new Set(rooms)], devices),
+  );
   turn = mine.catch(() => undefined);
   return mine;
 }
 
-async function publishNow(ctx: AppContext, rooms?: readonly string[]) {
+async function publishNow(
+  ctx: AppContext,
+  rooms?: readonly string[],
+  held?: readonly DeviceInfo[],
+) {
   if (rooms?.length === 0) return;
   const { db } = ctx.storage;
   const places = await ctx.places.list();
   const present = new Map(places.rooms.map((room) => [room.id, room]));
   const recorded = await db.select().from(turnOnEntities).all();
   const last = new Map(recorded.map((row) => [row.roomId, row]));
-  const devices: DeviceInfo[] = await ctx.devices.list();
+  const devices = held ?? (await ctx.devices.list());
   const now = new Date();
   const wanted = rooms ?? [...new Set([...present.keys(), ...last.keys()])];
   for (const roomId of wanted) {

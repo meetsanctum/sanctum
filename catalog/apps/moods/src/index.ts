@@ -196,11 +196,14 @@ export default defineApp({
         } else {
           snapshotDevices.set(event.device.id, event.device);
         }
-        await publishMoods(ctx, rooms);
-        const dark = await followLights(ctx, snapshots, rooms, [
-          ...snapshotDevices.values(),
-        ]);
-        await publishTurnOn(ctx, lightsMoved(event) ? rooms : dark);
+        // The devices as these events have left them, with none read from
+        // the core: every light of a room reports as the room is switched,
+        // and a list of every device for each report costs the core more
+        // than the report. What has changed since comes with its own event.
+        const devices = [...snapshotDevices.values()];
+        await publishMoods(ctx, rooms, devices);
+        const dark = await followLights(ctx, snapshots, rooms, devices);
+        await publishTurnOn(ctx, lightsMoved(event) ? rooms : dark, devices);
         if (pressesFollow(event)) await syncPresses(ctx);
         for (const room of lightLevelMoved(event)) await syncMotion(ctx, room);
       });
@@ -208,6 +211,9 @@ export default defineApp({
     // A permission switched on or off pauses or resumes presses and
     // motion; what the household chose for them stays either way.
     await ctx.events.on("permissions.changed", async () => {
+      // What it may read of each device changed with it, and no device's
+      // event says so.
+      await holdDevices(ctx, snapshotDevices);
       try {
         await syncPresses(ctx);
       } finally {
@@ -243,14 +249,20 @@ async function catchUp(
   await keepRoomSchedules(ctx.storage.db, roomIds);
   await keepRoomMotion(ctx.storage.db, roomIds);
   await publishMoods(ctx);
-  snapshotDevices.clear();
-  for (const device of await ctx.devices.list())
-    snapshotDevices.set(device.id, device);
+  await holdDevices(ctx, snapshotDevices);
   await followLights(ctx, snapshots, roomIds, [...snapshotDevices.values()]);
   await syncJobs(ctx, { all: true });
   await publishTurnOn(ctx);
   await syncPresses(ctx);
   await syncMotion(ctx);
+}
+
+// Takes the home's devices as the core shows them now; their events keep
+// them from then on.
+async function holdDevices(ctx: AppContext, held: Map<string, DeviceInfo>) {
+  const devices = await ctx.devices.list();
+  held.clear();
+  for (const device of devices) held.set(device.id, device);
 }
 
 // Follows the lights of these rooms, and keeps the snapshot of each that

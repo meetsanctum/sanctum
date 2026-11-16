@@ -159,4 +159,69 @@ describe("Moods", () => {
       "lamp-1",
     ]);
   });
+
+  it("follows a room's six lights through a press without having the core list its devices", async () => {
+    const { core, maya, lamp } = await lampsCore({ apps: [moodsPackage] });
+    for (const each of [2, 3, 4, 5, 6]) {
+      await radio.add(`lamp-${each}`, "light", `Lamp ${each}`);
+    }
+    const room = (
+      await post(core, "/api/places/rooms/add", { name: "Office" }, maya)
+    ).json().id as string;
+    const lights = (
+      (await get(core, "/api/devices", maya)).json() as {
+        id: string;
+        type: string;
+      }[]
+    ).filter((device) => device.type === "light");
+    expect(lights.map((light) => light.id)).toContain(lamp);
+    expect(lights).toHaveLength(6);
+    for (const { id } of lights) {
+      await post(core, "/api/devices/update", { id, roomId: room }, maya);
+    }
+    const mood = (
+      await call(core, maya.token, "moods.createMood", {
+        roomId: room,
+        name: "All on",
+        lights: lights.map(({ id }) => ({
+          device: id,
+          capability: "light",
+          state: { on: true },
+        })),
+      })
+    ).json().id as string;
+    // Whether the home has the mood as active, which Moods says once it
+    // has followed the last of the lights.
+    const active = async () =>
+      (
+        (await get(core, "/api/entities?type=moods.mood", maya)).json() as {
+          key: string;
+          state: { active: boolean };
+        }[]
+      ).find((entity) => entity.key === mood)?.state.active;
+    await expect.poll(active).toBe(false);
+    let listed = 0;
+    const list = core.devices.list;
+    core.devices.list = ((...view: Parameters<typeof list>) => {
+      listed += 1;
+      return list(...view);
+    }) as typeof list;
+
+    for (const [to, shows] of [
+      ["on", true],
+      ["off", false],
+    ] as const) {
+      listed = 0;
+      const pressed = await post(
+        core,
+        "/api/devices/lights",
+        { place: { kind: "room", id: room }, to },
+        maya,
+      );
+      expect(pressed.json()).toMatchObject({ switched: 6 });
+      await expect.poll(active).toBe(shows);
+      // Once, by the press itself, to find the room's lights.
+      expect(listed).toBe(1);
+    }
+  });
 });
