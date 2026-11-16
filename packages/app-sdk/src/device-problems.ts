@@ -133,6 +133,7 @@ const problemShape = z.strictObject({
 type DriverWithProblems = {
   readonly problems?: Readonly<Record<string, DriverProblem>>;
   readonly questions?: Readonly<Record<string, DriverQuestion>>;
+  readonly refusals?: Readonly<Record<string, string>>;
   readonly repair?: unknown;
 };
 
@@ -159,6 +160,12 @@ export function assertDriverProblems(
     throw new Error(
       `A driver's questions: ${z.prettifyError(questions.error)}`,
     );
+  }
+  const refusals = ids(words(200), maxRefusals).safeParse(
+    driver.refusals ?? {},
+  );
+  if (!refusals.success) {
+    throw new Error(`A driver's refusals: ${z.prettifyError(refusals.error)}`);
   }
   let repairs = false;
   for (const [id, problem] of Object.entries(problems.data)) {
@@ -190,6 +197,7 @@ export function assertDriverProblems(
 export function staticProblems(driver: DriverWithProblems) {
   const problems = driver.problems ?? {};
   const questions = driver.questions ?? {};
+  const refusals = driver.refusals ?? {};
   return {
     ...(Object.keys(problems).length > 0
       ? { problems: JSON.parse(JSON.stringify(problems)) as typeof problems }
@@ -199,7 +207,18 @@ export function staticProblems(driver: DriverWithProblems) {
           questions: JSON.parse(JSON.stringify(questions)) as typeof questions,
         }
       : {}),
+    ...(Object.keys(refusals).length > 0 ? { refusals: { ...refusals } } : {}),
   };
+}
+
+/**
+ * Why a driver may refuse adding a device whatever it's asked, as the core
+ * shows it with a found device, from what its static manifest says.
+ */
+export function shownRefusals(
+  driver: DriverWithProblems | null | undefined,
+): Record<string, string> {
+  return { ...(driver?.refusals ?? {}) };
 }
 
 /**
@@ -284,6 +303,29 @@ export function answersTo(asks: readonly DeviceQuestion[], answers: unknown) {
 }
 
 /** Whether a driver's refusal is one the question it names declares, among those asked. */
+/**
+ * A driver's refusal to add a device: an answer to one of the questions
+ * adding it asks, or adding it at all, in words the driver declares.
+ */
+export type AddRefusal =
+  { question: string; refusal: string } | { refusal: string };
+
+/** Whether a driver refused adding a device in words it declares. */
+export function isDeclaredAddRefusal(
+  asks: readonly DeviceQuestion[],
+  refusals: Readonly<Record<string, string>>,
+  refused: unknown,
+): refused is AddRefusal {
+  const parsed = z
+    .strictObject({ question: z.string().optional(), refusal: z.string() })
+    .safeParse(refused);
+  if (!parsed.success) return false;
+  const { question, refusal } = parsed.data;
+  return question === undefined
+    ? Object.hasOwn(refusals, refusal)
+    : isDeclaredRefusal(asks, { question, refusal });
+}
+
 export function isDeclaredRefusal(
   asks: readonly DeviceQuestion[],
   refused: unknown,

@@ -419,6 +419,12 @@ export interface AppDefinition extends AppManifestFields {
     /** What repairing one of its devices may ask, by id. */
     readonly questions?: Readonly<Record<string, DriverQuestion>>;
     /**
+     * Why it may refuse adding a device it found, whatever adding it asks,
+     * by id, in the words the shell then shows with the device: "It stopped
+     * waiting for a key…".
+     */
+    readonly refusals?: Readonly<Record<string, string>>;
+    /**
      * Sets one of its devices right, with the answers to what its problem's
      * repair asks, resolving once done or with the answer it refuses.
      */

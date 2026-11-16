@@ -19,6 +19,8 @@ const porchLamp = {
   asks: ["key"],
 };
 
+const tooLate = "It stopped listening. Turn it off and on again, then add it.";
+
 function entries(core: TestCore, action: string) {
   return core.activity.recent().filter((entry) => entry.action === action);
 }
@@ -54,6 +56,7 @@ describe("found devices", () => {
         description: null,
         type: "light",
         asks: [],
+        refusals: { tooLate },
       },
       {
         driver: "test.lamps",
@@ -71,6 +74,7 @@ describe("found devices", () => {
             refusals: { wrongKey: "That key doesn't match. Check its label." },
           },
         ],
+        refusals: { tooLate },
       },
     ]);
     const told = live.messages.filter((each) => each.type === "pairing");
@@ -175,6 +179,32 @@ describe("adding a found device", () => {
     const said = JSON.stringify(core.activity.recent()) + core.logs.join("\n");
     expect(said).not.toContain(secret);
     expect(said).not.toContain("not the key");
+  });
+
+  it("shows the refusal its driver declares of adding it at all, and fails one it doesn't", async () => {
+    const { core, maya } = await lampsCore();
+    await radio.sayFound([hallLamp]);
+    radio.refusesAdding.set("lamp-7", "tooLate");
+
+    const late = await add(core, maya, {
+      driver: "test.lamps",
+      key: "lamp-7",
+      answers: {},
+    });
+    expect(late.json()).toEqual({ refused: { refusal: "tooLate" } });
+    expect(entries(core, "device.add")).toMatchObject([
+      { outcome: "refused", reason: "tooLate", detail: { name: "Hall lamp" } },
+    ]);
+    expect(await foundBy(core, maya)).toHaveLength(1);
+
+    radio.refusesAdding.set("lamp-7", "busy");
+    const odd = await add(core, maya, {
+      driver: "test.lamps",
+      key: "lamp-7",
+      answers: {},
+    });
+    expect(odd.statusCode).toBe(500);
+    expect(odd.json()).toMatchObject({ error: "app_failed" });
   });
 
   it("is for every client, a shared one too", async () => {

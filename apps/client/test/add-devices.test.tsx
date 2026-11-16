@@ -39,6 +39,10 @@ const sensor: FoundDevice = {
   description: "temperature, humidity, motion",
   type: "sensor",
   asks: [],
+  refusals: {
+    notWaiting:
+      "It stopped waiting for a key. Turn it off and on again, then add it.",
+  },
 };
 const plug: FoundDevice = {
   driver: "sanctum.example",
@@ -47,6 +51,7 @@ const plug: FoundDevice = {
   description: "needs its encryption key",
   type: null,
   asks: [key],
+  refusals: {},
 };
 
 describe("Add devices, with what drivers found", () => {
@@ -483,6 +488,18 @@ describe("Add devices, with what drivers found", () => {
 
     expect(dialog.querySelector("[role=alert]")!.textContent).toBe(
       "It didn't answer in time. Check it's switched on, then try again.",
+    );
+    expect(named("Add Kitchen sensor").disabled).toBe(false);
+  });
+
+  it("says why its driver refused adding one that asks nothing", async () => {
+    answers.kitchen = () => ({ refused: { refusal: "notWaiting" } });
+    const dialog = await show();
+
+    await act(async () => named("Add Kitchen sensor").click());
+
+    expect(dialog.querySelector("[role=alert]")!.textContent).toBe(
+      "It stopped waiting for a key. Turn it off and on again, then add it.",
     );
     expect(named("Add Kitchen sensor").disabled).toBe(false);
   });

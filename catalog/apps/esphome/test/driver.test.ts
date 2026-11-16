@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { maxAppSecrets } from "@meetsanctum/app-sdk";
 
 import { secretOf } from "../src/driver.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
@@ -32,37 +33,34 @@ async function reflash(device: EmulatedDevice, psk: string | null) {
 }
 
 describe("finding devices", () => {
-  it("lists those on the network with what adding each needs, not one waiting for a key", async () => {
+  it("lists those on the network with what adding each needs", async () => {
     home = await startHome();
     const keyed = await home.plugIn({
       name: "porch",
       friendlyName: "Porch light",
     });
     const open = await home.plugIn({ name: "fan", psk: null });
-    const waiting = await home.plugIn({ name: "new", psk: null });
-    const record = waiting.sighting();
-    await home.core.discovered({
-      found: [
-        {
-          ...record,
-          txt: {
-            ...record.txt,
-            api_encryption_supported: "Noise_NNpsk0_25519_ChaChaPoly_SHA256",
-            api_provisioning: "zero_psk",
-          },
-        },
-      ],
-      lost: [],
+    const waiting = await home.plugIn({
+      name: "new",
+      psk: null,
+      waiting: true,
+      kind: "sensor",
     });
-
-    expect(
+    const rows = () =>
       home.core.found.map(({ key, name, description, asks }) => ({
         key,
         name,
         description,
         asks: asks.map((each) => each.id),
-      })),
-    ).toEqual([
+      }));
+
+    // One waiting for a key says what it has, once a connection under the
+    // zero key has told it.
+    await home.core.until(
+      () => rows().at(-1)?.description === "temperature",
+      "what it has",
+    );
+    expect(rows()).toEqual([
       {
         key: keyOf(keyed.options.mac),
         name: "Porch light",
@@ -73,6 +71,12 @@ describe("finding devices", () => {
         key: keyOf(open.options.mac),
         name: "fan",
         description: "Not encrypted",
+        asks: [],
+      },
+      {
+        key: keyOf(waiting.options.mac),
+        name: "new",
+        description: "temperature",
         asks: [],
       },
     ]);
@@ -89,6 +93,20 @@ describe("finding devices", () => {
     });
 
     expect(home.core.found).toEqual([]);
+  });
+
+  it("closes a pending description connection when the app stops", async () => {
+    home = await startHome();
+    const device = await home.plugIn();
+    device.psk = null;
+    device.waiting = true;
+    device.answersHello = false;
+    await announce(home.core, device);
+    await home.core.until(() => device.activeConnections > 0, "connecting");
+
+    await home.core.stop();
+
+    await expect.poll(() => device.activeConnections, { timeout: 200 }).toBe(0);
   });
 });
 
@@ -129,6 +147,19 @@ describe("adding a device", () => {
     expect(home.core.registered.has(key)).toBe(false);
     expect(home.core.secrets.size).toBe(0);
     expect(home.core.found.map((each) => each.key)).toEqual([key]);
+  });
+
+  it("closes its checked connection when the key cannot be saved", async () => {
+    home = await startHome();
+    const device = await home.plugIn();
+    for (let index = 0; index < maxAppSecrets; index += 1) {
+      home.core.secrets.set(`full:${index}`, "kept");
+    }
+
+    await expect(add(home.core, device)).rejects.toThrow("secrets already");
+
+    expect(home.core.registered.size).toBe(0);
+    await expect.poll(() => device.activeConnections, { timeout: 200 }).toBe(0);
   });
 
   it("adds a device without encryption as one", async () => {

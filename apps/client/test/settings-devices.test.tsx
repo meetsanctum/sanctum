@@ -210,6 +210,7 @@ describe("Settings → Devices", () => {
       description: null,
       type: null,
       asks: [],
+      refusals: {},
     };
     pairing = { ...pairing, found: [found, { ...found, key: "0x2" }] };
     await show(admin);

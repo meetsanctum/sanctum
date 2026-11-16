@@ -541,7 +541,10 @@ function FoundRow(props: {
       });
       if (!isShown.current) return;
       if ("refused" in result) {
-        setRefused(result.refused);
+        // A refusal of adding it at all is said under its row, in its words.
+        const refused = result.refused;
+        if ("question" in refused) setRefused(refused);
+        else setFailure(found.refusals[refused.refusal]);
         return;
       }
       setAnswers({});

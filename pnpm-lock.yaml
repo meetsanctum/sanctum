@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  esphome-client@2.1.0:
+    hash: b4b52a8a42509b91bc2bc658a9d2ae3473630af3c827381d81086646aa0c0e27
+    path: patches/esphome-client@2.1.0.patch
+
 importers:
 
   .:
@@ -314,7 +319,7 @@ importers:
         version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
       esphome-client:
         specifier: 2.1.0
-        version: 2.1.0
+        version: 2.1.0(patch_hash=b4b52a8a42509b91bc2bc658a9d2ae3473630af3c827381d81086646aa0c0e27)
       zod:
         specifier: ^4.3.6
         version: 4.6.7
@@ -8610,7 +8615,7 @@ snapshots:
   escape-string-regexp@4.0.0:
     optional: true
 
-  esphome-client@2.1.0: {}
+  esphome-client@2.1.0(patch_hash=b4b52a8a42509b91bc2bc658a9d2ae3473630af3c827381d81086646aa0c0e27): {}
 
   esprima@4.0.1: {}
 

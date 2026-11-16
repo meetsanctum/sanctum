@@ -126,6 +126,9 @@ class Radio {
   readonly adds: { add: DriverAdd; actor: Actor }[] = [];
   addMs = 0;
   addForgets = false;
+  // The refusal it gives adding a lamp at all, whatever it asked, by key:
+  // tooLate, which it declares, or one it doesn't, as a careless driver.
+  readonly refusesAdding = new Map<string, string>();
   // How long a stopped lamp takes to say where it got to; Zigbee2MQTT reads
   // one back half a second after its stop.
   stopReportMs = 0;
@@ -311,6 +314,8 @@ class Radio {
       await new Promise((done) => setTimeout(done, this.addMs));
     }
     this.turns.push(`added ${add.key}`);
+    const refusal = this.refusesAdding.get(add.key);
+    if (refusal) return { refused: { refusal } };
     const key = this.keys.get(add.key);
     if (key !== undefined && add.answers.key !== key) {
       return { refused: { question: "key", refusal: "wrongKey" } };
@@ -462,6 +467,7 @@ class Radio {
     this.adds.length = 0;
     this.addMs = 0;
     this.addForgets = false;
+    this.refusesAdding.clear();
     this.stopReportMs = 0;
     this.moves.length = 0;
     this.heard.length = 0;
@@ -644,6 +650,9 @@ export default defineApp({
         placeholder: "On its label",
         refusals: { wrongKey: "That key doesn't match. Check its label." },
       },
+    },
+    refusals: {
+      tooLate: "It stopped listening. Turn it off and on again, then add it.",
     },
     async repair(ctx, repair) {
       return radio.repair(repair, ctx.actor);

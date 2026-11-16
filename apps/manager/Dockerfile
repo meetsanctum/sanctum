@@ -6,6 +6,8 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# The dependencies' patches, which installing applies.
+COPY patches patches
 COPY apps/manager/package.json apps/manager/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 RUN pnpm install --filter @meetsanctum/manager... --frozen-lockfile
