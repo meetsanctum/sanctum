@@ -185,10 +185,18 @@ export function createLights(options: {
 
   // A light that comes on with nothing to go by: at full brightness, unless
   // the core holds a look for it, which it comes back at.
-  const withNothingToGoBy = (light: Light): LightCommand =>
-    canDim(light) && light.capability.sync !== "held"
+  function withNothingToGoBy(light: Light): LightCommand {
+    const { capability } = light;
+    // An off can reserve its next look before the device confirms the off.
+    const hasLook =
+      capability.sync === "held" ||
+      (capability.sync === "pending" &&
+        capability.desired?.on === false &&
+        Object.keys(capability.desired).some((field) => field !== "on"));
+    return canDim(light) && !hasLook
       ? { on: true, brightness: 100 }
       : { on: true };
+  }
 
   // The commands that turn a place's lights on, room by room: each light
   // that is off as its room's rule says, where it names the light, and as

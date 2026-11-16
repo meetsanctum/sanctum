@@ -554,6 +554,41 @@ describe("the lights pieces", () => {
       });
     });
 
+    it.each([true, false])(
+      "turns a room back on before off is confirmed, with a reserved look: %s",
+      async (hasLook) => {
+        const { core, token, living, ids } = await home();
+        radio.confirms = false;
+        const response = await post(
+          core,
+          "/api/devices/command",
+          {
+            device: ids.lamp,
+            capability: "light",
+            command: {
+              on: false,
+              ...(hasLook ? { brightness: 40, colorTemperature: 300 } : {}),
+            },
+          },
+          { token },
+        );
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ sync: "pending" });
+        radio.received.length = 0;
+
+        await lights(core, token, {
+          place: { kind: "room", id: living },
+          to: "on",
+        });
+
+        expect(asked()["lamp-1"]).toMatchObject({
+          on: true,
+          brightness: hasLook ? 40 : 100,
+          ...(hasLook ? { colorTemperature: 300 } : {}),
+        });
+      },
+    );
+
     it("brings a light it leaves out on as the core remembers it", async () => {
       const { core, token, living, ids } = await dark();
       await publishRule(core, token, "living", {
