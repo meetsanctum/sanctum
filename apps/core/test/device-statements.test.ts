@@ -1,6 +1,13 @@
+import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { lampsCore, openLive, radio, settled } from "./devices-support.js";
+import {
+  command,
+  lampsCore,
+  openLive,
+  radio,
+  settled,
+} from "./devices-support.js";
 import { get, post, type TestCore } from "./support.js";
 
 // What the core asks of SQLite for one press of a room's lights button. A
@@ -72,6 +79,38 @@ describe("a press of a room's six lights", () => {
       texts.filter((text) =>
         /^select .* from "(devices|device_capabilities|activity)"/.test(text),
       ),
+    ).toEqual([]);
+  });
+});
+
+describe("a light's adjustments", () => {
+  it("compiles no activity read when successive adjustments join", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    await command(core, maya.token, lamp, "light", {
+      on: true,
+      brightness: 30,
+    });
+    await settled();
+    const live = await openLive(core, maya.token);
+    const texts = compiled(core);
+    for (const brightness of [40, 50]) {
+      expect(
+        (await command(core, maya.token, lamp, "light", { brightness }))
+          .statusCode,
+      ).toBe(200);
+      await settled();
+    }
+    await settled();
+
+    const heard = live.messages
+      .filter((message) => message.type === "activity")
+      .map((message) => message.entry as ActivityInfo)
+      .filter((entry) => entry.action === "device.command");
+    expect(heard.map((entry) => entry.count)).toEqual([1, 2]);
+    expect(heard[1]!.id).toBe(heard[0]!.id);
+    expect(texts.length).toBeGreaterThan(0);
+    expect(
+      texts.filter((text) => /^select .* from "activity"/.test(text)),
     ).toEqual([]);
   });
 });
