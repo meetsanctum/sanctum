@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { extname, join, sep } from "node:path";
+import { z } from "zod";
 
 // What the core serves app pages from: the kit in its own image, and each
 // running app's pages/ in its staged package, as indexes it builds itself. A
@@ -124,21 +125,30 @@ export async function indexKit(
   };
 }
 
-type PagesManifest = {
-  kit?: unknown;
-  entry?: unknown;
-  stylesheet?: unknown;
-  files?: Record<string, { size?: unknown; sha256?: unknown }>;
-};
+const pagesManifest = z.object({
+  kit: z.string(),
+  entry: z.string(),
+  stylesheet: z.string().nullable().optional(),
+  files: z.record(
+    z.string(),
+    z.object({
+      size: z.number().int().nonnegative(),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+  ),
+});
 
 /** An app's pages in its package's `pages/`, checked file by file, or none. */
 export async function indexPages(
   pagesDir: string,
   log: (message: string) => void,
 ): Promise<PagesIndex | null> {
-  let manifest: PagesManifest;
+  let source: unknown;
   try {
-    manifest = JSON.parse(await readFile(join(pagesDir, "pages.json"), "utf8"));
+    // A linked pages folder could make its own files appear to belong to
+    // the package even when they live outside it.
+    if (!(await lstat(pagesDir)).isDirectory()) return null;
+    source = JSON.parse(await readFile(join(pagesDir, "pages.json"), "utf8"));
   } catch {
     return null;
   }
@@ -146,11 +156,11 @@ export async function indexPages(
     log(`pages: ${pagesDir} isn't served: ${why}`);
     return null;
   };
-  if (typeof manifest.kit !== "string" || typeof manifest.entry !== "string") {
-    return refuse("its pages.json says no kit or entry");
-  }
+  const parsed = pagesManifest.safeParse(source);
+  if (!parsed.success) return refuse("its pages.json is invalid");
+  const manifest = parsed.data;
   const files = new Map<string, ServedFile>();
-  for (const [name, said] of Object.entries(manifest.files ?? {})) {
+  for (const [name, said] of Object.entries(manifest.files)) {
     const found = await plainFileIn(pagesDir, name);
     if (!found) return refuse(`${name} isn't a file it may serve`);
     const body = await readFile(found.path);

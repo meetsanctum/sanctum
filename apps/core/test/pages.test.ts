@@ -1,7 +1,14 @@
 import { defineApp } from "@meetsanctum/app-sdk";
 import type { PageTicket } from "@meetsanctum/auth-protocol";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -407,10 +414,43 @@ describe("an app's pages", () => {
     ).toBe(true);
   });
 
+  it.each([
+    ["a null manifest", null],
+    [
+      "null file metadata",
+      { kit: "0.1.0", entry: "index.js", files: { "index.js": null } },
+    ],
+  ])(
+    "aren't served when pages.json holds %s",
+    async (_description, manifest) => {
+      const { ticket } = await ticketFor();
+      const pagesDir = await stagePages();
+      await writeFile(join(pagesDir, "pages.json"), JSON.stringify(manifest));
+      const response = await get(
+        core,
+        `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`,
+      );
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: "not_found" });
+    },
+  );
+
+  it("aren't served when pages/ itself links outside the staged package", async () => {
+    const { ticket } = await ticketFor();
+    const pagesDir = await stagePages();
+    const outside = join(kitDir, "outside-pages");
+    await rename(pagesDir, outside);
+    await symlink(outside, pagesDir);
+    expect(
+      (await get(core, `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`))
+        .statusCode,
+    ).toBe(404);
+  });
+
   it("aren't served when pages.json names a file outside pages/ or a link out of it", async () => {
     const { ticket } = await ticketFor();
     const outside = await stagePages(pageFiles, {
-      "../sanctum-app.json": { size: 1, sha256: "0" },
+      "../sanctum-app.json": { size: 1, sha256: "0".repeat(64) },
     });
     expect(
       (await get(core, `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`))
