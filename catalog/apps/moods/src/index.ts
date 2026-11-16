@@ -211,15 +211,18 @@ export default defineApp({
     // A permission switched on or off pauses or resumes presses and
     // motion; what the household chose for them stays either way.
     await ctx.events.on("permissions.changed", async () => {
-      // What it may read of each device changed with it, and no device's
-      // event says so.
-      await holdDevices(ctx, snapshotDevices);
       try {
-        await syncPresses(ctx);
+        // What it may read of each device changed with it, and no device's
+        // event says so.
+        await holdDevices(ctx, snapshotDevices);
       } finally {
-        // A failed remote sync must not leave motion running without
-        // the permission it needs.
-        await syncMotion(ctx);
+        try {
+          await syncPresses(ctx);
+        } finally {
+          // Neither a failed read of the devices nor a failed remote sync
+          // must leave motion running without the permission it needs.
+          await syncMotion(ctx);
+        }
       }
     });
     await catchUp(ctx, running);

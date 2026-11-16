@@ -54,6 +54,8 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     hold: null as { reached: () => void; until: Promise<void> } | null,
     // How often Moods read every device from the core.
     deviceReads: 0,
+    // A one-shot failure of that read.
+    failDeviceReads: 0,
     // Held, the next publication waits until it is let go.
     holdPublication: null as {
       reached: () => void;
@@ -134,6 +136,10 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     places: async () => structuredClone(state.places),
     async devices() {
       state.deviceReads += 1;
+      if (state.failDeviceReads > 0) {
+        state.failDeviceReads -= 1;
+        throw new Error("device read failed");
+      }
       const hold = state.hold;
       state.hold = null;
       if (hold) {
