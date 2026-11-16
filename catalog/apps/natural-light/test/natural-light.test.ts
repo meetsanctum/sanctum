@@ -188,7 +188,7 @@ describe("pausing", () => {
     expect(core.light("lamp").state).toMatchObject(curveAt(now()));
   });
 
-  it("pauses for a person's own change, but not for switching alone", async () => {
+  it("pauses for a person's own colour, dims for their brightness, but not for switching alone", async () => {
     const { core, check, target } = await following();
 
     core.set("lamp", { on: false }, byHand);
@@ -198,6 +198,10 @@ describe("pausing", () => {
     expect(target()).toMatchObject({ status: "following" });
 
     core.set("lamp", { brightness: 30 }, byHand);
+    await check();
+    expect(target()).toMatchObject({ status: "dimmed", brightness: null });
+
+    core.set("lamp", { colorTemperature: 400 }, byHand);
     await check();
     expect(target()).toMatchObject({ status: "paused" });
   });

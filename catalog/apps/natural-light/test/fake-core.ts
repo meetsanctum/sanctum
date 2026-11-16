@@ -313,12 +313,16 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       }
     },
     /** The app hears that a light changed, as the core tells it after a report or a command. */
-    async changed(id: string) {
+    async changed(id: string, before?: Partial<DeviceInfo>) {
       const device = structuredClone(
         state.devices.find((each) => each.id === id)!,
       );
       for (const handler of handlers.get("device.changed") ?? []) {
-        await handler({ name: "device.changed", device, before: device });
+        await handler({
+          name: "device.changed",
+          device,
+          before: { ...device, ...before },
+        });
       }
     },
     /** A device leaves the home, and the app hears of it. */

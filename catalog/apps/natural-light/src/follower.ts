@@ -36,7 +36,9 @@ import { publishRooms } from "./rooms.js";
 //   the household left it out.
 // - A light that changed or went (device.changed, device.removed): where it
 //   stands and its room's button say so at once, as when a mood pauses it,
-//   and one someone let go of takes the curve.
+//   and one someone let go of takes the curve. One that answers again after
+//   being offline, as a bulb behind a wall switch does, counts as switched
+//   off and on: any pause or dim ends and it takes the curve at once.
 
 export function createFollower(
   ctx: AppContext,
@@ -50,6 +52,8 @@ export function createFollower(
   // The devices that changed meanwhile, and the rooms they were and are in.
   const changed = new Set<string>();
   const changedRooms = new Set<string | null>();
+  // Those among them that answered again after being offline.
+  const cameBack = new Set<string>();
   // A rejected command restores its preceding state and emits a change.
   // Do not turn that same state into another immediate attempt; the job
   // retries it, or a different device state starts a new attempt.
@@ -92,6 +96,7 @@ export function createFollower(
   async function takeChanges(
     devices: readonly string[],
     rooms: readonly (string | null)[],
+    back: ReadonlySet<string>,
   ) {
     const options = await followOptionsFor(ctx, timing);
     for (const deviceId of devices) {
@@ -108,7 +113,21 @@ export function createFollower(
       } else {
         seen.delete(deviceId);
       }
-      await followDevice(ctx, deviceId, options, runForLight);
+      // One light that can't be set leaves the others' changes, and their
+      // rooms' buttons, to go on.
+      try {
+        await followDevice(
+          ctx,
+          deviceId,
+          options,
+          runForLight,
+          back.has(deviceId) ? options.now() : undefined,
+        );
+      } catch (error) {
+        ctx.log(
+          `could not follow ${device?.name ?? deviceId} (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
     }
     await publishRooms(ctx, options, { rooms });
   }
@@ -130,15 +149,17 @@ export function createFollower(
       const added = isDeviceAdded;
       const moved = isLocationChanged;
       const devices = [...changed];
+      const back = new Set(cameBack);
       const rooms = [...changedRooms];
       isSettingsChanged = false;
       isDeviceAdded = false;
       isLocationChanged = false;
       changed.clear();
+      cameBack.clear();
       changedRooms.clear();
       try {
         if (added) await takeInNewLights();
-        if (devices.length > 0) await takeChanges(devices, rooms);
+        if (devices.length > 0) await takeChanges(devices, rooms, back);
         if (settings) await takeNewSettings();
         else if (moved) await takeNewLocation();
       } catch (error) {
@@ -168,13 +189,16 @@ export function createFollower(
     await publishRooms(ctx, options, { always: true });
   }
 
-  function heard(
-    device: { id: string; roomId: string | null },
-    before?: { roomId: string | null },
-  ) {
+  function heard(device: DeviceInfo, before?: DeviceInfo) {
     changed.add(device.id);
     changedRooms.add(device.roomId);
     if (before) changedRooms.add(before.roomId);
+    if (
+      before?.availability === "offline" &&
+      device.availability !== "offline"
+    ) {
+      cameBack.add(device.id);
+    }
     wake?.();
   }
 

@@ -9,6 +9,7 @@ import { z } from "zod";
 
 export const targetStatuses = [
   "following",
+  "dimmed",
   "paused",
   "waiting",
   "off",
@@ -19,6 +20,8 @@ export const targetState = z.object({
   capability: z.string(),
   /**
    * `following`: set to the curve, or brought back at it once switched on;
+   * `dimmed`: on at a brightness someone set, its colour still on the
+   * curve, until it is switched off or on;
    * `paused`: on, as a mood or a person set it, until it is switched off;
    * `waiting`: no curve today, until the home has a location and a sunrise
    * and sunset, or the light no longer takes a colour temperature;
@@ -27,7 +30,7 @@ export const targetState = z.object({
   status: z.enum(targetStatuses),
   /** What it sets now, in mireds within the light's range; none while waiting or off. */
   colorTemperature: z.number().int().nullable(),
-  /** Its brightness now, for a light that dims. */
+  /** Its brightness now, for a light that dims; none while dimmed, as it is someone else's. */
   brightness: z.number().int().min(0).max(100).nullable(),
 });
 export type TargetState = z.infer<typeof targetState>;
