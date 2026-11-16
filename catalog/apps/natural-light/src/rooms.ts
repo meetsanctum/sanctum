@@ -161,6 +161,17 @@ async function rowsOf(ctx: AppContext) {
   );
 }
 
+/**
+ * Which rooms a publication is for, all of them without `rooms`. `waits`
+ * leaves a room as it is, asked as each room's turn comes, since what a room
+ * waits for may begin while the publication waits its own turn.
+ */
+type PublishedRooms = {
+  rooms?: readonly (string | null)[];
+  always?: boolean;
+  waits?: (placeId: string) => boolean;
+};
+
 // One publication at a time, so a button worked out before a change never
 // lands after one worked out since.
 let turn: Promise<unknown> = Promise.resolve();
@@ -175,7 +186,7 @@ let turn: Promise<unknown> = Promise.resolve();
 export function publishRooms(
   ctx: AppContext,
   options: FollowOptions,
-  which?: { rooms?: readonly (string | null)[]; always?: boolean },
+  which?: PublishedRooms,
 ) {
   const mine = turn.then(() => publishNow(ctx, options, which ?? {}));
   turn = mine.catch(() => undefined);
@@ -185,7 +196,7 @@ export function publishRooms(
 async function publishNow(
   ctx: AppContext,
   options: FollowOptions,
-  which: { rooms?: readonly (string | null)[]; always?: boolean },
+  which: PublishedRooms,
 ) {
   const { db } = ctx.storage;
   const rooms = which.rooms?.filter((room): room is string => room !== null);
@@ -206,6 +217,7 @@ async function publishNow(
     ]),
   ];
   for (const placeId of new Set(wanted)) {
+    if (which.waits?.(placeId)) continue;
     const state = shows ? roomStateOf(placeId, devices, rows, ctx.appId) : null;
     const kept = recorded.get(placeId);
     if (!state) {
@@ -271,15 +283,24 @@ async function publishButton(ctx: AppContext, state: RoomState) {
  * their lights stand now, and nothing else: it adds and takes out no button
  * and leaves the rules for turning on, which publishRooms does. It asks the
  * core only for the lights, so a button follows its room's lights closely
- * while each light is still being set.
+ * while each light is still being set. `waits` leaves a room as it is, as
+ * for publishRooms.
  */
-export function publishButtons(ctx: AppContext, rooms: readonly string[]) {
-  const mine = turn.then(() => publishButtonsNow(ctx, rooms));
+export function publishButtons(
+  ctx: AppContext,
+  rooms: readonly string[],
+  waits?: (placeId: string) => boolean,
+) {
+  const mine = turn.then(() => publishButtonsNow(ctx, rooms, waits));
   turn = mine.catch(() => undefined);
   return mine;
 }
 
-async function publishButtonsNow(ctx: AppContext, rooms: readonly string[]) {
+async function publishButtonsNow(
+  ctx: AppContext,
+  rooms: readonly string[],
+  waits?: (placeId: string) => boolean,
+) {
   const { db } = ctx.storage;
   // One recorded with no state is on its way out or failed, which
   // publishRooms tries again.
@@ -290,6 +311,7 @@ async function publishButtonsNow(ctx: AppContext, rooms: readonly string[]) {
   const devices = await ctx.devices.list();
   const rows = await rowsOf(ctx);
   for (const kept of out) {
+    if (waits?.(kept.placeId)) continue;
     const state = roomStateOf(kept.placeId, devices, rows, ctx.appId);
     if (!state || isDeepStrictEqual(kept.state, state)) continue;
     // Recorded before it goes out, so a failed publication is tried again.

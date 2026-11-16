@@ -103,11 +103,27 @@ export function createFollower(
     await publishRooms(ctx, options);
   }
 
+  // The rooms of lights back from offline that have now been followed, once
+  // for each such light.
+  function followedBackIn(rooms: string[]) {
+    for (const room of rooms.splice(0)) {
+      const left = (backRooms.get(room) ?? 1) - 1;
+      if (left > 0) backRooms.set(room, left);
+      else backRooms.delete(room);
+    }
+  }
+
+  // Whether a room's button waits for a light back from offline. Asked as a
+  // button is about to go out, since a light may come back while its room's
+  // publication waits its turn.
+  const waitsForBack = (room: string) => backRooms.has(room);
+
   // Lights that changed meanwhile, and their rooms' buttons.
   async function takeChanges(
     devices: ReadonlyMap<string, ReadonlyMap<string, LightChange>>,
     rooms: readonly (string | null)[],
     back: ReadonlyMap<string, Date>,
+    backRoomsFollowed: string[],
   ) {
     const options = await followOptionsFor(ctx, timing);
     for (const [deviceId, changes] of devices) {
@@ -146,7 +162,10 @@ export function createFollower(
         );
       }
     }
-    await publishRooms(ctx, options, { rooms });
+    // Those back from offline are followed now. A room where another came
+    // back since waits for that one, whose own turn publishes it.
+    followedBackIn(backRoomsFollowed);
+    await publishRooms(ctx, options, { rooms, waits: waitsForBack });
   }
 
   const isAsked = () =>
@@ -164,11 +183,11 @@ export function createFollower(
         wakeButtons = undefined;
       }
       if (isStopped) return;
-      const rooms = [...buttonRooms].filter((room) => !backRooms.has(room));
+      const rooms = [...buttonRooms].filter((room) => !waitsForBack(room));
       buttonRooms.clear();
       if (rooms.length === 0) continue;
       try {
-        await publishButtons(ctx, rooms);
+        await publishButtons(ctx, rooms, waitsForBack);
       } catch (error) {
         if (!isStopped) {
           ctx.log(
@@ -205,7 +224,9 @@ export function createFollower(
       changedRooms.clear();
       try {
         if (added) await takeInNewLights();
-        if (devices.size > 0) await takeChanges(devices, rooms, back);
+        if (devices.size > 0) {
+          await takeChanges(devices, rooms, back, followedBack);
+        }
         if (settings) await takeNewSettings();
         else if (moved) await takeNewLocation();
       } catch (error) {
@@ -215,11 +236,8 @@ export function createFollower(
           );
         }
       }
-      for (const room of followedBack) {
-        const left = (backRooms.get(room) ?? 1) - 1;
-        if (left > 0) backRooms.set(room, left);
-        else backRooms.delete(room);
-      }
+      // Whatever kept them from being followed, their rooms wait no longer.
+      followedBackIn(followedBack);
     }
   }
 

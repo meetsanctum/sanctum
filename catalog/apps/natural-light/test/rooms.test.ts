@@ -376,6 +376,72 @@ describe("a room's button", () => {
     }
   });
 
+  it("stays White when a paused light comes back while its room's publication waits", async () => {
+    const { app, core, check, advance, button } = home();
+    core.set("desk", { on: true }, byHand);
+    await app.start!(core.ctx, { reason: "started" });
+    try {
+      await check();
+      advance(minute);
+      core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
+      await core.changed("ceiling");
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "paused",
+        }),
+      );
+      const ceiling = core.state.devices.find((each) => each.id === "ceiling")!;
+      ceiling.availability = "offline";
+      await core.changed("ceiling", { availability: "online" });
+      await vi.waitFor(() => expect(button("office")?.active).toBe(true));
+
+      // A publication for the room that waits for the core's lights.
+      let letGo = () => {};
+      const held = new Promise<void>((resolve) => {
+        letGo = resolve;
+      });
+      const list = core.ctx.devices.list.bind(core.ctx.devices);
+      let isWaiting = false;
+      const lists = vi
+        .spyOn(core.ctx.devices, "list")
+        .mockImplementation(async () => {
+          isWaiting = true;
+          await held;
+          return list();
+        });
+      const shown: boolean[] = [];
+      const publish = core.state.entities.set.bind(core.state.entities);
+      vi.spyOn(core.state.entities, "set").mockImplementation((key, entity) => {
+        if (key === "room:office") {
+          shown.push((entity.state as { active: boolean }).active);
+        }
+        return publish(key, entity);
+      });
+      try {
+        await core.changed("desk");
+        await vi.waitFor(() => expect(isWaiting).toBe(true));
+
+        // The paused light answers again before that publication goes on.
+        advance(minute);
+        ceiling.availability = "online";
+        await core.changed("ceiling", { availability: "offline" });
+      } finally {
+        letGo();
+        lists.mockRestore();
+      }
+
+      await vi.waitFor(() =>
+        expect(core.state.entities.get("ceiling/light")?.state).toMatchObject({
+          status: "following",
+        }),
+      );
+      expect(shown).not.toContain(false);
+      expect(button("office")?.active).toBe(true);
+    } finally {
+      await app.stop!(core.ctx, { reason: "shutdown" });
+    }
+  });
+
   it("names a light a press couldn't reach, and sets the others", async () => {
     const { core, call, check } = home();
     await check();
