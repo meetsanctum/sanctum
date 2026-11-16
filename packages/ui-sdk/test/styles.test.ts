@@ -46,6 +46,16 @@ describe("a page's stylesheet", () => {
     expect(withoutKitRules(page, kit)).toBe(page);
   });
 
+  it("keeps a layer without a name, which is never the kit's", () => {
+    const page = "@layer utilities{@layer{.m-0{margin:0}}.m-0{margin:0}}";
+    expect(
+      withoutKitRules(page, "@layer utilities{@layer{.m-0{margin:0}}}"),
+    ).toBe(page);
+    expect(withoutKitRules(page, kit)).toBe(
+      "@layer utilities{@layer{.m-0{margin:0}}}",
+    );
+  });
+
   it("reads braces in strings and escapes as text", () => {
     const page =
       '@layer utilities{.content-\\[\\"\\}\\"\\]{content:"}"}.m-0{margin:0}}';

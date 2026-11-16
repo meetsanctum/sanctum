@@ -621,7 +621,8 @@ export function Home(props: {
                         >
                           {isFramed(route.app) ? (
                             <AppFrame
-                              key={route.app}
+                              // Afresh when the home moves to another address.
+                              key={`${route.app} ${host.url}`}
                               app={routeApp}
                               page={route.page}
                               params={route.params}

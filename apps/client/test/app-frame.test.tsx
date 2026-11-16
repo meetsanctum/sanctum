@@ -85,14 +85,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function show(options: { app?: AppInfo; isAway?: boolean } = {}) {
+async function show(
+  options: { app?: AppInfo; isAway?: boolean; shown?: string } = {},
+) {
   await act(async () => {
     root.render(
       <AppFrame
         app={hosted(options.app ?? info())}
         page="main"
         params={{}}
-        shown="1"
+        shown={options.shown ?? "1"}
         open={() => {}}
         back={() => {}}
         openSettings={() => {}}
@@ -111,6 +113,27 @@ const after = (ms: number) =>
 
 const text = () => container.textContent;
 const frame = () => container.querySelector("iframe")!;
+
+// The frame says hello as the kit would, and its end of the port.
+function hello() {
+  const target = frame().contentWindow!;
+  const code = new URL(frame().src).hash.replace("#hello=", "");
+  let port: MessagePort | undefined;
+  vi.spyOn(target, "postMessage").mockImplementation(((
+    _data: unknown,
+    _to: string,
+    ports: MessagePort[],
+  ) => {
+    port = ports[0];
+  }) as typeof target.postMessage);
+  window.dispatchEvent(
+    Object.assign(new Event("message"), {
+      data: { sanctum: "hello", code, bridge: 1 },
+      source: target,
+    }),
+  );
+  return port!;
+}
 
 describe("an app's page in its frame", () => {
   it("shows the app's name, and the loader only after 0.4 s", async () => {
@@ -155,6 +178,18 @@ describe("an app's page in its frame", () => {
     expect(text()).not.toContain("didn't open");
     await after(1);
     expect(text()).toContain("It didn't answer in time.");
+  });
+
+  it("shows the page's title, and the app's name again when another page shows", async () => {
+    await show();
+    const port = hello();
+    port.postMessage({ type: "bar", title: "Forecast" });
+    await vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Forecast"),
+    );
+    await show({ shown: "2" });
+    expect(container.querySelector("h1")?.textContent).toBe("Weather");
+    port.close();
   });
 
   it("says its files didn't load when the core has none", async () => {

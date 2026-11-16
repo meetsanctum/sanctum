@@ -53,7 +53,10 @@ export function AppFrame(props: {
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<Phase>("opening");
   const [title, setTitle] = useState<string>();
-  const [src, setSrc] = useState<string>();
+  // Where the frame loads from, with the code in its address. Each address
+  // gets a frame of its own: one that differs only after its # would be a
+  // jump within the page already there, which keeps the old code.
+  const [src, setSrc] = useState<{ url: string; code: string }>();
   const [showsLoader, setShowsLoader] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const bridge = useRef<FrameBridge>(undefined);
@@ -113,7 +116,7 @@ export function AppFrame(props: {
     pageAddress(id, code).then(
       ({ kit, url }) => {
         if (!isCurrent) return;
-        if (kit?.bridge === frameBridge) setSrc(url);
+        if (kit?.bridge === frameBridge) setSrc({ url, code });
         else setPhase(kit && kit.bridge > frameBridge ? "newer" : "files");
       },
       () => {
@@ -143,6 +146,8 @@ export function AppFrame(props: {
     shownBefore.current = props.shown;
     const { page, params } = latest.current;
     if (phase === "opening" || phase === "ready") {
+      // The app's name until the new page says its own title.
+      setTitle(undefined);
       bridge.current?.send({ type: "show", page, params });
     } else {
       setAttempt((each) => each + 1);
@@ -210,9 +215,9 @@ export function AppFrame(props: {
         )
       )}
       <iframe
-        key={`${id}:${version}:${attempt}`}
+        key={src?.code ?? "opening"}
         ref={frame}
-        src={src}
+        src={src?.url}
         title={title ?? name}
         sandbox="allow-scripts"
         allow=""

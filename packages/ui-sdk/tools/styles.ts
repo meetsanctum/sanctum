@@ -47,10 +47,14 @@ function itemsOf(block: string): Item[] {
   return items;
 }
 
-// At-rules that group rules, whose rules are compared one by one.
+// At-rules that group rules, whose rules are compared one by one. A layer
+// without a name is a layer of its own in each stylesheet, so it's never
+// the kit's: it stays as it is.
 const isGroup = (item: Item) =>
   item.body !== undefined &&
-  /^@(media|supports|container|layer)\b/.test(item.prelude!);
+  /^@(media|supports|container|layer\s+[\w.-])/.test(item.prelude!);
+const isOwnLayer = (item: Item) =>
+  item.body !== undefined && item.prelude === "@layer";
 
 const utilities = (css: string) =>
   itemsOf(css).filter((item) => item.prelude === "@layer utilities");
@@ -58,6 +62,7 @@ const utilities = (css: string) =>
 // Each rule of a block, keyed by the groups it's in and its text.
 function rulesOf(block: string, within: string, into: Set<string>) {
   for (const item of itemsOf(block)) {
+    if (isOwnLayer(item)) continue;
     if (isGroup(item)) rulesOf(item.body!, `${within}${item.prelude}\n`, into);
     else into.add(`${within}${item.text}`);
   }
@@ -66,6 +71,7 @@ function rulesOf(block: string, within: string, into: Set<string>) {
 function leaveOut(block: string, within: string, kit: Set<string>): string {
   return itemsOf(block)
     .map((item) => {
+      if (isOwnLayer(item)) return item.text;
       if (!isGroup(item))
         return kit.has(`${within}${item.text}`) ? "" : item.text;
       const body = leaveOut(item.body!, `${within}${item.prelude}\n`, kit);
