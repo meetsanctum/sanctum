@@ -1,11 +1,17 @@
 {
+  "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "test": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/deploy/install.sh",
-        "$TURBO_ROOT$/deploy/compose.yml"
+    "test:containers": {
+      "dependsOn": [
+        "^build",
+        "build",
+        "@meetsanctum/core#build",
+        "@meetsanctum/esphome#build",
+        "@meetsanctum/moods#build",
+        "@meetsanctum/natural-light#build",
+        "@meetsanctum/weather#build",
+        "@meetsanctum/zigbee#build"
       ]
     }
   }
