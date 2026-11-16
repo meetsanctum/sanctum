@@ -3,6 +3,49 @@ import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { setupCommands } from "./device-command-support.js";
 import { command, lampsCore } from "./devices-support.js";
 
+describe("a command that holds only while a light is off", () => {
+  it("is refused once the light shows on, and changes nothing", async () => {
+    const { devices, id, deliveries, state, sent } = await setupCommands();
+    const panel = { kind: "app", id: "test.panel" } as const;
+    const send = (command: object, whileOn?: boolean) =>
+      devices.command(
+        panel,
+        { device: id, capability: "light", command, whileOn },
+        {},
+        "test.panel",
+      );
+    const off = send({ on: false });
+    deliveries[0]!.resolve();
+    await off;
+    devices.report("test.driver", {
+      key: "lamp",
+      states: { light: { on: false, brightness: 80 } },
+    });
+
+    // Off, it takes what it comes back at.
+    const held = send({ on: false, brightness: 40 }, false);
+    deliveries[1]!.resolve();
+    await held;
+    expect(state().desired).toEqual({ on: false, brightness: 40 });
+
+    // Someone turns it on, which it has yet to confirm.
+    const on = send({ on: true });
+    deliveries[2]!.resolve();
+    await on;
+    expect(state()).toMatchObject({ sync: "pending", state: { on: true } });
+
+    await expect(
+      send({ on: false, brightness: 60 }, false),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(sent()).toHaveLength(3);
+    expect(state()).toMatchObject({
+      sync: "pending",
+      desired: { on: true },
+      setBy: { asked: { on: true } },
+    });
+  });
+});
+
 describe("commands whose deliveries overlap", () => {
   it.each([60, 110])(
     "keeps the previous deadline on rollback after %s ms",

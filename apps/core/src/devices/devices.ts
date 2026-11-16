@@ -31,6 +31,7 @@ import {
   confirmMs as defaultConfirmMs,
   prepare,
   settle,
+  shownState,
   type Settled,
 } from "./sync.js";
 import { deviceInfo, viewOf, type View } from "./views.js";
@@ -295,6 +296,7 @@ export function createDevices(
     view: View,
     target: { device: DeviceInfo; capability: CapabilityInfo },
     command: unknown,
+    whileOn?: boolean,
   ): Promise<CapabilityInfo> {
     const { device, capability } = target;
     // The core is stopping: nothing goes to a device again, also after a wait.
@@ -321,6 +323,13 @@ export function createDevices(
     refuseWhileStopping();
     const row = capabilityRow(device.id, capability.id);
     if (!row) throw new ActionCallError("not_found");
+    // A command that holds only while the capability is on, or off: checked
+    // here, after any wait, against what it shows now, an on or off still on
+    // its way included. Whoever sent it went by an earlier state, so it
+    // changes nothing and is no refusal worth an entry.
+    if (whileOn !== undefined && shownState(row)?.on !== whileOn) {
+      throw new ActionCallError("conflict");
+    }
     const prepared = prepare(row, parsed.data as Record<string, unknown>);
     const setBy: StoredSetBy = {
       app,
@@ -440,7 +449,15 @@ export function createDevices(
       const actor = admitted(who, target.device.id, () =>
         gate.admit(principal, ruleFor(target.capability.kind)),
       );
-      return run(actor, null, who, view, target, request.data.command);
+      return run(
+        actor,
+        null,
+        who,
+        view,
+        target,
+        request.data.command,
+        request.data.whileOn,
+      );
     },
 
     // An app's command (ctx.devices.command), for the actor behind the call,
@@ -456,7 +473,7 @@ export function createDevices(
       if (!request.success) {
         throw new ActionCallError("invalid_request");
       }
-      const { device, capability, command } = request.data;
+      const { device, capability, command, whileOn } = request.data;
       const who =
         actor.kind === "user"
           ? { personId: actor.id }
@@ -469,7 +486,7 @@ export function createDevices(
       admitted(who, target.device.id, () =>
         gate.permit(actor, ruleFor(target.capability.kind)),
       );
-      return run(actor, app, who, view, target, command);
+      return run(actor, app, who, view, target, command, whileOn);
     },
 
     // A driver brings one of its devices in, or updates it, and reports what

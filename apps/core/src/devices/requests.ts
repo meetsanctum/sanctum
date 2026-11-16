@@ -17,4 +17,6 @@ export const commandRequest = z.object({
   device: z.string().min(1).max(64),
   capability: z.string().min(1).max(32),
   command: z.unknown(),
+  // Only while the capability shows this (DeviceCommand).
+  whileOn: z.boolean().optional(),
 });

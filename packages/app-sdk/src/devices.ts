@@ -801,6 +801,14 @@ export type DeviceCommand = {
   device: string;
   capability: string;
   command: unknown;
+  /**
+   * Only while the light or switch shows this, what is asked of it and not
+   * yet confirmed included: once it shows otherwise the core refuses the
+   * command with `conflict` and changes nothing. A caller that read a light
+   * as off, and says what it comes back at, never switches off one that
+   * someone turned on meanwhile.
+   */
+  whileOn?: boolean;
 };
 
 /** What the core hands a driver app for one of its devices: the command as the core prepared it. */

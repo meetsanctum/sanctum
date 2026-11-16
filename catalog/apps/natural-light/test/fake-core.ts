@@ -205,10 +205,16 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
         if (!device) throw new ActionError("not_found");
         return structuredClone(device);
       },
-      async command({ device, capability, command }) {
+      async command({ device, capability, command, whileOn }) {
         holds("devices.control:light");
         capabilityOf(device, capability);
         await state.beforeCommand?.(device);
+        if (
+          whileOn !== undefined &&
+          capabilityOf(device, capability).state?.on !== whileOn
+        ) {
+          throw new ActionError("conflict");
+        }
         state.sent.push({ device, command: command as LightCommand, actor });
         return structuredClone(
           set(

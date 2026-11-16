@@ -236,18 +236,7 @@ async function publishNow(
           ...(isTurnOnKept ? {} : { turnOn: null }),
         },
       });
-    if (!isButtonKept) {
-      await ctx.entities.publish({
-        type: roomType.id,
-        key: roomKey(placeId),
-        name: "Natural light",
-        state,
-      });
-      await db
-        .update(roomButtons)
-        .set({ state })
-        .where(eq(roomButtons.placeId, placeId));
-    }
+    if (!isButtonKept) await publishButton(ctx, state);
     if (!isTurnOnKept) {
       await ctx.entities.publish({
         type: turnOnType.id,
@@ -263,28 +252,82 @@ async function publishNow(
   }
 }
 
+// A room's button, out and then recorded as it went.
+async function publishButton(ctx: AppContext, state: RoomState) {
+  await ctx.entities.publish({
+    type: roomType.id,
+    key: roomKey(state.placeId),
+    name: "Natural light",
+    state,
+  });
+  await ctx.storage.db
+    .update(roomButtons)
+    .set({ state })
+    .where(eq(roomButtons.placeId, state.placeId));
+}
+
+/**
+ * Publishes again the buttons of these rooms that are out, White or not as
+ * their lights stand now, and nothing else: it adds and takes out no button
+ * and leaves the rules for turning on, which publishRooms does. It asks the
+ * core only for the lights, so a button follows its room's lights closely
+ * while each light is still being set.
+ */
+export function publishButtons(ctx: AppContext, rooms: readonly string[]) {
+  const mine = turn.then(() => publishButtonsNow(ctx, rooms));
+  turn = mine.catch(() => undefined);
+  return mine;
+}
+
+async function publishButtonsNow(ctx: AppContext, rooms: readonly string[]) {
+  const { db } = ctx.storage;
+  // One recorded with no state is on its way out or failed, which
+  // publishRooms tries again.
+  const out = (await db.select().from(roomButtons)).filter(
+    (row) => rooms.includes(row.placeId) && row.state !== null,
+  );
+  if (out.length === 0) return;
+  const devices = await ctx.devices.list();
+  const rows = await rowsOf(ctx);
+  for (const kept of out) {
+    const state = roomStateOf(kept.placeId, devices, rows, ctx.appId);
+    if (!state || isDeepStrictEqual(kept.state, state)) continue;
+    // Recorded before it goes out, so a failed publication is tried again.
+    await db
+      .update(roomButtons)
+      .set({ state: null })
+      .where(eq(roomButtons.placeId, kept.placeId));
+    await publishButton(ctx, state);
+  }
+}
+
 /** A light the press could not reach, which the shell fails on its tile. */
 export type Failed = { device: string; capability: string };
 
+// A press reaches every light of the room at once, as the room's button for
+// all its lights does, so the room changes in one step rather than light by
+// light. Each light still takes its own turn (runForLight).
 async function eachLight(
   ctx: AppContext,
   runForLight: RunForLight,
   lights: readonly RoomLight[],
   work: (light: RoomLight) => Promise<void>,
 ): Promise<Failed[]> {
-  const failed: Failed[] = [];
-  for (const light of lights) {
-    const each = { device: light.device.id, capability: light.capability.id };
-    try {
-      await runForLight(each.device, each.capability, () => work(light));
-    } catch (error) {
-      ctx.log(
-        `could not set ${light.device.name} (${isActionError(error) ? error.code : error instanceof Error ? error.message : String(error)})`,
-      );
-      failed.push(each);
-    }
-  }
-  return failed;
+  const failed = await Promise.all(
+    lights.map(async (light): Promise<Failed | null> => {
+      const each = { device: light.device.id, capability: light.capability.id };
+      try {
+        await runForLight(each.device, each.capability, () => work(light));
+        return null;
+      } catch (error) {
+        ctx.log(
+          `could not set ${light.device.name} (${isActionError(error) ? error.code : error instanceof Error ? error.message : String(error)})`,
+        );
+        return each;
+      }
+    }),
+  );
+  return failed.filter((each) => each !== null);
 }
 
 /** Switches every light in the room that is on off. */

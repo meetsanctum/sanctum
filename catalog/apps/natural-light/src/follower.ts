@@ -18,7 +18,7 @@ import {
   type RunForLight,
   type Timing,
 } from "./lights.js";
-import { publishRooms } from "./rooms.js";
+import { publishButtons, publishRooms } from "./rooms.js";
 
 // What natural light does while it runs, beside its job and its actions. Its
 // start takes in the lights that follow it by default and publishes where
@@ -36,11 +36,12 @@ import { publishRooms } from "./rooms.js";
 //   light, and the rooms' buttons show once the home has a location.
 // - A light added to the home (device.added): it follows at once, unless
 //   the household left it out.
-// - A light that changed or went (device.changed, device.removed): where it
-//   stands and its room's button say so at once, as when a mood pauses it,
-//   and one someone let go of takes the curve. One that answers again after
-//   being offline, as a bulb behind a wall switch does, counts as switched
-//   off and on: any pause or dim ends and it takes the curve at once.
+// - A light that changed or went (device.changed, device.removed): its
+//   room's button says so first, in a loop of its own, then where it stands,
+//   as when a mood pauses it, and one someone let go of takes the curve. One
+//   that answers again after being offline, as a bulb behind a wall switch
+//   does, counts as switched off and on: any pause or dim ends and it takes
+//   the curve at once.
 
 export function createFollower(
   ctx: AppContext,
@@ -54,14 +55,22 @@ export function createFollower(
   // The devices that changed meanwhile, and the rooms they were and are in.
   const changed = new Map<string, Map<string, LightChange>>();
   const changedRooms = new Set<string | null>();
-  // Those among them that answered again after being offline.
+  // Those among them that answered again after being offline, and their
+  // rooms, once for each.
   const cameBack = new Map<string, Date>();
+  const cameBackRooms: string[] = [];
   // A rejected command restores its preceding state and emits a change.
   // Do not turn that same state into another immediate attempt; the job
   // retries it, or a different device state starts a new attempt.
   const seen = new Map<string, DeviceInfo>();
   let wasOn: boolean | undefined;
   let wake: (() => void) | undefined;
+  // The rooms whose lights changed, for their buttons (showButtons).
+  const buttonRooms = new Set<string>();
+  // Those where a light that is back from offline has yet to be followed,
+  // by how many: following ends its pause, so the button waits for that.
+  const backRooms = new Map<string, number>();
+  let wakeButtons: (() => void) | undefined;
 
   // Every light to the settings as they stand now, those it set a moment
   // ago too.
@@ -143,6 +152,33 @@ export function createFollower(
   const isAsked = () =>
     isSettingsChanged || isLocationChanged || isDeviceAdded || changed.size > 0;
 
+  // The rooms' buttons as their lights stand now, in a loop of its own:
+  // following takes a moment for each light, and a button that waited its
+  // turn behind them would trail the room's button for all its lights.
+  async function showButtons() {
+    while (!isStopped) {
+      if (buttonRooms.size === 0) {
+        await new Promise<void>((resolve) => {
+          wakeButtons = resolve;
+        });
+        wakeButtons = undefined;
+      }
+      if (isStopped) return;
+      const rooms = [...buttonRooms].filter((room) => !backRooms.has(room));
+      buttonRooms.clear();
+      if (rooms.length === 0) continue;
+      try {
+        await publishButtons(ctx, rooms);
+      } catch (error) {
+        if (!isStopped) {
+          ctx.log(
+            `could not publish the room buttons (${error instanceof Error ? error.message : String(error)})`,
+          );
+        }
+      }
+    }
+  }
+
   async function run() {
     while (!isStopped) {
       // One at a time: a change meanwhile runs right after.
@@ -159,6 +195,8 @@ export function createFollower(
       const devices = new Map(changed);
       const back = new Map(cameBack);
       const rooms = [...changedRooms];
+      const followedBack = [...cameBackRooms];
+      cameBackRooms.length = 0;
       isSettingsChanged = false;
       isDeviceAdded = false;
       isLocationChanged = false;
@@ -176,6 +214,11 @@ export function createFollower(
             `could not follow the change (${error instanceof Error ? error.message : String(error)})`,
           );
         }
+      }
+      for (const room of followedBack) {
+        const left = (backRooms.get(room) ?? 1) - 1;
+        if (left > 0) backRooms.set(room, left);
+        else backRooms.delete(room);
       }
     }
   }
@@ -205,13 +248,20 @@ export function createFollower(
     changed.set(device.id, changes);
     changedRooms.add(device.roomId);
     if (before) changedRooms.add(before.roomId);
-    if (
-      before?.availability === "offline" &&
-      device.availability !== "offline"
-    ) {
+    const isBack =
+      before?.availability === "offline" && device.availability !== "offline";
+    if (isBack) {
       cameBack.set(device.id, now);
+      if (device.roomId) {
+        cameBackRooms.push(device.roomId);
+        backRooms.set(device.roomId, (backRooms.get(device.roomId) ?? 0) + 1);
+      }
+    }
+    for (const room of [device.roomId, before?.roomId]) {
+      if (room) buttonRooms.add(room);
     }
     wake?.();
+    wakeButtons?.();
   }
 
   return {
@@ -234,6 +284,7 @@ export function createFollower(
       await ctx.events.on("device.removed", ({ device }) => heard(device));
       await publishStanding();
       void run();
+      void showButtons();
     },
     /** After the core restarted: all it owns, said again for the home now. */
     async resume() {
@@ -242,6 +293,7 @@ export function createFollower(
     stop() {
       isStopped = true;
       wake?.();
+      wakeButtons?.();
     },
   };
 }
