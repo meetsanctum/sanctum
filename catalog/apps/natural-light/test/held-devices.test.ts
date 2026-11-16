@@ -136,7 +136,7 @@ describe("natural light, running", () => {
     }
   });
 
-  it("still turns the button grey at once when a light's change does", async () => {
+  it("still turns the button grey when a light's change does", async () => {
     const { app, core, button, shown } = await started();
     try {
       core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
