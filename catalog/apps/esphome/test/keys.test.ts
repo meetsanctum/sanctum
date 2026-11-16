@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { secretOf } from "../src/driver.js";
 import { givenOf } from "../src/keys.js";
+import { newKey } from "./emulated-device.js";
 import { add, announce, keyOf, startHome } from "./support.js";
 
 // Keys Sanctum gives: a device built to be given its key later gets 32
@@ -74,6 +75,29 @@ describe("a device waiting for a key", () => {
     });
     expect(home.core.secrets.size).toBe(0);
     expect(device.keysSent).toEqual([]);
+  });
+
+  it("doesn't take one when its window closes as it's given it", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = keyOf(device.options.mac);
+    // Once what it has is read, its next greeting is Add's.
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "switch",
+      "what it has",
+    );
+    device.closesWindowAfterHello = true;
+
+    await expect(home.core.add(key, {})).rejects.toThrow();
+    expect(device.keysSent).toHaveLength(1);
+    expect(device.waiting).toBe(true);
+    expect(device.psk).toBeNull();
+
+    expect(await home.core.add(key, {})).toEqual({
+      refused: { refusal: "notWaiting" },
+    });
   });
 
   it("is never sent a key when it answers in the clear", async () => {
@@ -162,6 +186,49 @@ describe("removing a device", () => {
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toEqual([{ key: given, encrypted: true }]);
+  });
+
+  it("anyway, then reflashed without encryption, adds it as one, forgetting the key", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = await add(home.core, device);
+    await device.unplug();
+    await home.core.remove(key, true);
+
+    device.psk = null;
+    device.waiting = false;
+    await device.listen();
+    await announce(home.core, device);
+    await home.core.add(key, {});
+
+    expect(home.core.registered.has(key)).toBe(true);
+    expect(home.core.secrets.size).toBe(0);
+  });
+
+  it("anyway, then reflashed with another key, asks for that key", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = await add(home.core, device);
+    await device.unplug();
+    await home.core.remove(key, true);
+
+    const flashed = newKey();
+    device.psk = flashed;
+    await device.listen();
+    await announce(home.core, device);
+    expect(await home.core.add(key, {})).toEqual({
+      refused: { refusal: "keyChanged" },
+    });
+    expect(
+      home.core.found
+        .find((each) => each.key === key)
+        ?.asks.map((each) => each.id),
+    ).toEqual(["key"]);
+    await home.core.add(key, { key: flashed });
+
+    expect(home.core.registered.has(key)).toBe(true);
+    expect(home.core.secrets.get(secretOf(key))).toBe(flashed);
+    expect(home.core.secrets.has(givenOf(key))).toBe(false);
   });
 
   it("never touches a key it was flashed with", async () => {

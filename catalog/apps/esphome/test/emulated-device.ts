@@ -152,6 +152,8 @@ export class EmulatedDevice {
   waiting: boolean;
   /** Its window for being given a key closed, as a device that waited too long. */
   windowClosed = false;
+  /** Its window closes once it has greeted the next connection. */
+  closesWindowAfterHello = false;
   /** It takes the next key it's sent, or has its own cleared, but its answer is lost. */
   losesNextAnswer = false;
   /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
@@ -428,11 +430,14 @@ export class EmulatedDevice {
       const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
       const key = Buffer.from(text, "base64");
       this.keysSent.push({ key: text, encrypted });
+      // A window that closed since its greeting refuses the key too, as
+      // the firmware checks it again here.
       const valid =
-        text === "" ||
-        (/^[A-Za-z0-9+/]{43}=$/.test(text) &&
-          key.length === 32 &&
-          key.some(Boolean));
+        !(this.waiting && this.windowClosed) &&
+        (text === "" ||
+          (/^[A-Za-z0-9+/]{43}=$/.test(text) &&
+            key.length === 32 &&
+            key.some(Boolean)));
       const apply = () => {
         // An empty key clears its own, so it waits for one again.
         this.psk = text === "" ? null : text;
@@ -449,6 +454,10 @@ export class EmulatedDevice {
       // It applies its key by ending every connection, as ESPHome does.
       if (valid) setTimeout(apply, 10);
     } else if (type === message.helloRequest) {
+      if (this.closesWindowAfterHello) {
+        this.closesWindowAfterHello = false;
+        this.windowClosed = true;
+      }
       send(
         message.helloResponse,
         Buffer.concat([

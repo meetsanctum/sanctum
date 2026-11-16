@@ -130,6 +130,8 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       refusals: {
         notWaiting:
           "It stopped waiting for a key. Turn it off and on again, then add it.",
+        keyChanged:
+          "It has another key now. Add it again with the key from its configuration, under api: encryption: key.",
       },
     },
   });

@@ -512,10 +512,23 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }
       // A key Sanctum gave it, as before an answer was lost or as it was
       // removed while out of reach, is tried first.
-      const given = await givenKey(key);
+      let given = await givenKey(key);
       if (given) {
         const kept = await check(key, given);
         if ("session" in kept) return take(key, kept.session);
+        if ("error" in kept) throw new Error("It didn't answer");
+        if (found.encryption !== "waiting") {
+          // It no longer takes that key, as after it was flashed again:
+          // the key is forgotten, the marker first, and it's added as it
+          // is now, asking the key it was flashed with where it has one.
+          await ctx.secrets.delete(givenOf(key));
+          await ctx.secrets.delete(secretOf(key));
+          given = null;
+          await listFound();
+          if (found.encryption === "key") {
+            return { refused: { refusal: "keyChanged" } };
+          }
+        }
       }
       if (found.encryption === "waiting") {
         const gave = await giveKey({
@@ -533,7 +546,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if ("notWaiting" in gave) return { refused: { refusal: "notWaiting" } };
         return take(key, gave.session);
       }
-      if (given) throw new Error("It has another key now");
       const psk =
         found.encryption === "key" ? (answers.key ?? "").trim() : null;
       if (psk !== null && !isKey(psk)) return wrongKey;
@@ -544,11 +556,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }
       if ("error" in result) throw new Error("It didn't answer");
       // Its key is kept before the core has the device, so no device of
-      // Sanctum's is ever without the key it was added with.
+      // Sanctum's is ever without the key it was added with. The marker of a
+      // key Sanctum gave goes first, so a key it was flashed with is never
+      // taken for one.
       try {
+        await ctx.secrets.delete(givenOf(key));
         if (psk !== null) await ctx.secrets.set(secretOf(key), psk);
         else await ctx.secrets.delete(secretOf(key));
-        await ctx.secrets.delete(givenOf(key));
       } catch (error) {
         result.session.client.disconnect();
         throw error;
@@ -565,9 +579,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if ("halt" in result) return wrongKey;
       if ("error" in result) throw new Error("It didn't answer");
       result.session.client.disconnect();
-      // The key someone typed is the one it was flashed with.
-      await ctx.secrets.set(secretOf(key), psk);
+      // The key someone typed is the one it was flashed with, never taken
+      // for one Sanctum gave: the marker goes first.
       await ctx.secrets.delete(givenOf(key));
+      await ctx.secrets.set(secretOf(key), psk);
       // Its connection clears the problem once it's back with the new key.
       owned.connection.renew();
     },
