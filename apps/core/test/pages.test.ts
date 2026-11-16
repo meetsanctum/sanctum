@@ -2,6 +2,7 @@ import { defineApp } from "@meetsanctum/app-sdk";
 import type { PageTicket } from "@meetsanctum/auth-protocol";
 import { createHash } from "node:crypto";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   rename,
@@ -14,6 +15,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { digestOf } from "../src/pages/files.js";
+import { kitFits } from "../src/pages/pages.js";
 import { ticketGraceMs, ticketWeekMs } from "../src/pages/tickets.js";
 import {
   claimed,
@@ -89,6 +91,7 @@ async function stagePages(
       { size: Buffer.byteLength(body), sha256: sha256(body) },
     ]),
   ),
+  builtFor = "0.1.0",
 ) {
   const pagesDir = join(
     core.dataDir,
@@ -97,7 +100,7 @@ async function stagePages(
   await writeAll(pagesDir, {
     ...files,
     "pages.json": JSON.stringify({
-      kit: "0.1.0",
+      kit: builtFor,
       digest: pageDigest,
       entry: "index.js",
       stylesheet: "pages.css",
@@ -303,6 +306,25 @@ describe("a ticket that opens nothing", () => {
     expect(
       (await get(core, good, { remoteAddress: "192.0.2.8" })).statusCode,
     ).toBe(200);
+    // Once the window has passed, it's let in again.
+    core.advance(5 * 60_000);
+    expect(
+      (await get(core, good, { remoteAddress: "192.0.2.7" })).statusCode,
+    ).toBe(200);
+  });
+
+  it("is a client's oldest once it has asked for four after it", async () => {
+    const tickets = [];
+    for (let each = 0; each < 5; each++) {
+      tickets.push((await ticketFor()).ticket);
+      core.advance(1);
+    }
+    const opens = async (ticket: string) =>
+      (await get(core, `/pages/${ticket}/kit/${kitDigest}/react.js`))
+        .statusCode === 200;
+    expect(await opens(tickets[0]!)).toBe(false);
+    for (const ticket of tickets.slice(1))
+      expect(await opens(ticket)).toBe(true);
   });
 });
 
@@ -475,5 +497,61 @@ describe("an app's pages", () => {
         )
       ).statusCode,
     ).toBe(404);
+  });
+});
+
+describe("pages built for a kit", () => {
+  it("fit any kit of its major from that version on, where below 1.0 the minor is the major", () => {
+    expect(kitFits("0.1.0", "0.1.0")).toBe(true);
+    expect(kitFits("0.1.0", "0.1.3")).toBe(true);
+    expect(kitFits("0.1.3", "0.1.0")).toBe(false);
+    expect(kitFits("0.1.0", "0.2.0")).toBe(false);
+    expect(kitFits("1.2.0", "1.4.0")).toBe(true);
+    expect(kitFits("1.4.1", "1.4.0")).toBe(false);
+    expect(kitFits("1.2.0", "2.0.0")).toBe(false);
+    expect(kitFits("not a version", "1.0.0")).toBe(false);
+  });
+
+  it("aren't served by a core whose kit can't stand in for theirs, which it says once", async () => {
+    const { ticket } = await ticketFor();
+    await stagePages(undefined, undefined, "0.2.0");
+    const url = `/pages/${ticket}/apps/sanctum.example/${pageDigest}/`;
+    expect((await get(core, url)).statusCode).toBe(404);
+    expect((await get(core, url)).statusCode).toBe(404);
+    expect(
+      core.logs.filter((line) => line.includes("need kit 0.2.0")),
+    ).toHaveLength(1);
+  });
+});
+
+describe("a kit that couldn't be read", () => {
+  it("is tried again next time, rather than kept failed", async () => {
+    await rm(kitDir, { recursive: true, force: true });
+    await writeAll(kitDir, kitFiles);
+    await writeFile(
+      join(kitDir, "kit.json"),
+      JSON.stringify({
+        version: "0.1.0",
+        bridge: 1,
+        digest: kitDigest,
+        stylesheet: "kit.css",
+        imports: { react: "react.js" },
+      }),
+    );
+    await chmod(join(kitDir, "icons"), 0o000);
+    const fresh = await testCore({ apps: [example], kitDir });
+    try {
+      const signedIn = await claimed(fresh);
+      const ask = () =>
+        post(fresh, "/api/pages/ticket", {}, { token: signedIn.token });
+      const first = await ask();
+      expect(first.statusCode).toBe(200);
+      expect(first.json<PageTicket>().kit).toBeNull();
+      await chmod(join(kitDir, "icons"), 0o755);
+      expect((await ask()).json<PageTicket>().kit?.digest).toBe(kitDigest);
+    } finally {
+      await chmod(join(kitDir, "icons"), 0o755).catch(() => undefined);
+      await fresh.stop();
+    }
   });
 });
