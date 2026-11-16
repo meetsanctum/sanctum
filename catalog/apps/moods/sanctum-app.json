@@ -3582,12 +3582,22 @@
                   "type": "null"
                 }
               ]
+            },
+            "rank": {
+              "default": "chosen",
+              "type": "string",
+              "enum": [
+                "chosen",
+                "look",
+                "previous"
+              ]
             }
           },
           "required": [
             "placeId",
             "lights",
-            "until"
+            "until",
+            "rank"
           ],
           "additionalProperties": false
         }

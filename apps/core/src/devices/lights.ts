@@ -2,6 +2,7 @@ import {
   choice,
   names,
   partOf,
+  turnOnRanks,
   turnOnSchema,
   turnOnType,
   type Actor,
@@ -32,11 +33,14 @@ import type { View } from "./views.js";
 // count, and "all off" means none is on: a light that has yet to report
 // counts as not on. Each light's command passes the gate as the caller,
 // like any other. What turning a room on brings is an app's rule, such as
-// Moods' scheduled mood or what the room was before it went dark: the app
-// publishes it as the room's lights.turnOn entity, which the core reads by
-// type here, so no app code runs at the press. A zone or the home go room
-// by room. Without one, a light comes back as the core remembers it. A
-// workflow whose place is a room or a zone that was removed is broken.
+// Moods' scheduled mood, natural light's look or what the room was before it
+// went dark: the app publishes it as the room's lights.turnOn entity, which
+// the core reads by type here, so no app code runs at the press, and the
+// highest-ranked rule for a room holds. A zone or the home go room by room.
+// Without one, every light comes on at full brightness, unless the core
+// holds a look for it, so a light dimmed to nothing before it went off
+// can't come back looking as if it never came on. A workflow whose place is
+// a room or a zone that was removed is broken.
 // Chosen lights are a place of their own, and a workflow with one of them
 // removed is broken too. The step also makes lights brighter or dimmer by a
 // fifth of their range, and brightens or dims them while the remote's
@@ -147,38 +151,59 @@ export function createLights(options: {
   const { devices, gate } = options;
   const now = options.now ?? (() => new Date());
 
-  // What turning each room on does for its lights: the lights.turnOn of
-  // the first app that provides one for the room, while it holds.
+  // What turning each room on does for its lights: the highest-ranked
+  // lights.turnOn for the room that holds, the first app's of those ranked
+  // alike.
   function turnOnRules() {
     const at = now().getTime();
-    const rules = new Map<string, Map<string, TurnOnLight["state"]>>();
+    const best = new Map<
+      string,
+      { rank: number; lights: Map<string, TurnOnLight["state"]> }
+    >();
     for (const entity of options.entities.list({
       type: turnOnType.id,
     })) {
       const parsed = turnOnSchema.safeParse(entity.state);
       if (!parsed.success) continue;
       const { placeId, lights, until } = parsed.data;
-      if (rules.has(placeId)) continue;
       if (until !== null && Date.parse(until) <= at) continue;
-      rules.set(
-        placeId,
-        new Map(
+      const rank = turnOnRanks.indexOf(parsed.data.rank);
+      const kept = best.get(placeId);
+      if (kept && kept.rank <= rank) continue;
+      best.set(placeId, {
+        rank,
+        lights: new Map(
           lights.map((light) => [
             keyOf(light.device, light.capability),
             light.state,
           ]),
         ),
-      );
+      });
     }
-    return rules;
+    return new Map([...best].map(([placeId, { lights }]) => [placeId, lights]));
+  }
+
+  // A light that comes on with nothing to go by: at full brightness, unless
+  // the core holds a look for it, which it comes back at.
+  function withNothingToGoBy(light: Light): LightCommand {
+    const { capability } = light;
+    // An off can reserve its next look before the device confirms the off.
+    const hasLook =
+      capability.sync === "held" ||
+      (capability.sync === "pending" &&
+        capability.desired?.on === false &&
+        Object.keys(capability.desired).some((field) => field !== "on"));
+    return canDim(light) && !hasLook
+      ? { on: true, brightness: 100 }
+      : { on: true };
   }
 
   // The commands that turn a place's lights on, room by room: each light
-  // that is off as its room's rule says, where it names the light. A room
-  // with none of its lights on whose rule would leave them all off is
-  // switched on as if it had none, since on never means nothing comes on:
-  // its lights come back as the core remembers them. A room with a light
-  // on already keeps the lights its rule keeps off.
+  // that is off as its room's rule says, where it names the light, and as
+  // the core remembers it where it doesn't. A room with none of its lights
+  // on whose rule would leave them all off is switched on as if it had none,
+  // since on never means nothing comes on. A room with a light on already
+  // keeps the lights its rule keeps off.
   function turningOn(lights: readonly Light[]) {
     const rules = turnOnRules();
     const litRooms = new Set(
@@ -197,12 +222,17 @@ export function createLights(options: {
       .filter((light) => !isOn(light))
       .flatMap((light) => {
         const { device, capability } = light;
-        const state =
+        const rule =
           device.roomId === null || !litRooms.has(device.roomId)
             ? undefined
-            : rules.get(device.roomId)?.get(keyOf(device.id, capability.id));
+            : rules.get(device.roomId);
+        const state = rule?.get(keyOf(device.id, capability.id));
         if (state?.on === false) return [];
-        const command: LightCommand = state ? { ...state } : { on: true };
+        const command: LightCommand = state
+          ? { ...state }
+          : rule
+            ? { on: true }
+            : withNothingToGoBy(light);
         return [{ light, command }];
       });
   }

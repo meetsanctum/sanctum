@@ -2,9 +2,11 @@ import {
   ActionError,
   defineEntityType,
   isActionError,
+  turnOnType,
   type AppContext,
   type CapabilityInfo,
   type DeviceInfo,
+  type TurnOn,
 } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
@@ -38,6 +40,13 @@ import { targetKey } from "./target.js";
 // natural light: every light that follows comes on at the curve, any pause
 // ended, and every other light that is on goes off, so the room looks the
 // same after every press. Offline lights are left alone and don't count.
+//
+// Each such room also has natural light's rule for turning it on, a
+// standard lights.turnOn ranked as a look: every light that follows comes
+// on, at the look natural light holds for it while it is off, and every
+// other light stays off. The core goes by it unless the household chose
+// something firmer for the room, such as a scheduled mood, and before what
+// was on when the room went dark.
 
 export const roomState = z.object({
   placeId: z.string(),
@@ -57,6 +66,9 @@ export const roomType = defineEntityType({
 
 /** A room button's key. Targets' keys have a slash, so none is one. */
 export const roomKey = (placeId: string) => `room:${placeId}`;
+
+/** A room's rule for turning it on, by its own key. */
+export const turnOnKey = (placeId: string) => `turn-on:${placeId}`;
 
 type Followed = typeof followedLights.$inferSelect;
 type RoomLight = {
@@ -115,6 +127,33 @@ export function roomStateOf(
   };
 }
 
+/** Natural light's rule for turning a room with a button on. */
+export function turnOnOf(
+  placeId: string,
+  devices: readonly DeviceInfo[],
+  rows: ReadonlyMap<string, Followed>,
+): TurnOn {
+  const lights = devices.flatMap((device) =>
+    device.roomId === placeId
+      ? device.capabilities.flatMap((capability) =>
+          capability.kind === "light" ? [{ device, capability }] : [],
+        )
+      : [],
+  );
+  return {
+    placeId,
+    lights: lights.map((light) => ({
+      device: light.device.id,
+      capability: light.capability.id,
+      state: {
+        on: takesColorTemperature(light.capability) && rows.has(keyOf(light)),
+      },
+    })),
+    until: null,
+    rank: "look",
+  };
+}
+
 async function rowsOf(ctx: AppContext) {
   const rows = await ctx.storage.db.select().from(followedLights);
   return new Map(
@@ -127,11 +166,11 @@ async function rowsOf(ctx: AppContext) {
 let turn: Promise<unknown> = Promise.resolve();
 
 /**
- * Publishes these rooms' buttons as they stand now, those that changed
- * only, and takes out those that are none any more. Without rooms it does
- * every room with a light and every room it published a button for, and
- * with `always` it publishes each again whether or not it changed, as on
- * start.
+ * Publishes these rooms' buttons and rules for turning them on as they stand
+ * now, those that changed only, and takes out those that are none any more.
+ * Without rooms it does every room with a light and every room it published
+ * a button for, and with `always` it publishes each again whether or not it
+ * changed, as on start.
  */
 export function publishRooms(
   ctx: AppContext,
@@ -172,30 +211,55 @@ async function publishNow(
     if (!state) {
       if (!kept) continue;
       await ctx.entities.remove(roomKey(placeId));
+      await ctx.entities.remove(turnOnKey(placeId));
       await db.delete(roomButtons).where(eq(roomButtons.placeId, placeId));
       continue;
     }
-    if (!which.always && kept && isDeepStrictEqual(kept.state, state)) {
-      continue;
-    }
-    // Recorded before it goes out, so a failed publication is tried again.
+    const turnOn = turnOnOf(placeId, devices, rows);
+    const isButtonKept =
+      !which.always &&
+      kept !== undefined &&
+      isDeepStrictEqual(kept.state, state);
+    const isTurnOnKept =
+      !which.always &&
+      kept !== undefined &&
+      isDeepStrictEqual(kept.turnOn, turnOn);
+    if (isButtonKept && isTurnOnKept) continue;
+    // Recorded before they go out, so a failed publication is tried again.
     await db
       .insert(roomButtons)
-      .values({ placeId, state: null })
+      .values({ placeId, state: null, turnOn: null })
       .onConflictDoUpdate({
         target: roomButtons.placeId,
-        set: { state: null },
+        set: {
+          ...(isButtonKept ? {} : { state: null }),
+          ...(isTurnOnKept ? {} : { turnOn: null }),
+        },
       });
-    await ctx.entities.publish({
-      type: roomType.id,
-      key: roomKey(placeId),
-      name: "Natural light",
-      state,
-    });
-    await db
-      .update(roomButtons)
-      .set({ state })
-      .where(eq(roomButtons.placeId, placeId));
+    if (!isButtonKept) {
+      await ctx.entities.publish({
+        type: roomType.id,
+        key: roomKey(placeId),
+        name: "Natural light",
+        state,
+      });
+      await db
+        .update(roomButtons)
+        .set({ state })
+        .where(eq(roomButtons.placeId, placeId));
+    }
+    if (!isTurnOnKept) {
+      await ctx.entities.publish({
+        type: turnOnType.id,
+        key: turnOnKey(placeId),
+        name: "Natural light",
+        state: turnOn,
+      });
+      await db
+        .update(roomButtons)
+        .set({ turnOn })
+        .where(eq(roomButtons.placeId, placeId));
+    }
   }
 }
 
