@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { build, type BuildOptions, type Plugin } from "vite";
 
-import { digestOf, listFiles } from "./files.js";
+import { digestOf, filesOf } from "./files.js";
 import { iconModules, lucideDir, lucideIcons, sdkModule } from "./icons.js";
 
 // The kit: React, React DOM, React's JSX runtime and ui-sdk, as the modules
@@ -93,11 +93,15 @@ const virtual = "\0sanctum-kit:";
 type OnLog = NonNullable<NonNullable<BuildOptions["rolldownOptions"]>["onLog"]>;
 
 /**
- * Leaves out Radix's `"use client"`, which says nothing outside React's
- * server components and which bundling drops, as it should.
+ * Leaves out what a build says that asks nothing of anyone: Radix's
+ * `"use client"`, which says nothing outside React's server components and
+ * which bundling drops, as it should, and how long plugins took on a busy
+ * machine.
  */
-export const quietDirectives: OnLog = (level, log, handler) => {
-  if (log.code === "MODULE_LEVEL_DIRECTIVE") return;
+export const quietLogs: OnLog = (level, log, handler) => {
+  if (log.code === "MODULE_LEVEL_DIRECTIVE" || log.code === "PLUGIN_TIMINGS") {
+    return;
+  }
   handler(level, log);
 };
 
@@ -161,7 +165,7 @@ export async function buildKit(
   };
   for (const file of files) input[`icons/${file}`] = `${virtual}icon:${file}`;
 
-  await build({
+  const result = await build({
     configFile: false,
     root: sdkRoot,
     // What a home serves, whatever the environment that builds it says.
@@ -183,7 +187,7 @@ export async function buildKit(
       reportCompressedSize: false,
       rolldownOptions: {
         input,
-        onLog: quietDirectives,
+        onLog: quietLogs,
         preserveEntrySignatures: "strict",
         output: {
           format: "es",
@@ -201,7 +205,7 @@ export async function buildKit(
   const manifest: KitManifest = {
     version: sdkVersion(),
     bridge: bridgeVersion,
-    digest: digestOf(await listFiles(outDir)),
+    digest: digestOf(filesOf(result)),
     stylesheet: "kit.css",
     imports: { ...kitImports },
   };

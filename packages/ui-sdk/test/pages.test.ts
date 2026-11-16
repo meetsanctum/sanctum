@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { digestOf } from "../tools/files";
+import { digestOf, listFiles } from "../tools/files";
 import { sdkVersion } from "../tools/kit";
 import { buildPages } from "../tools/pages";
 
@@ -84,6 +84,10 @@ describe("an app's pages", () => {
     expect(
       JSON.parse(readFileSync(join(dir, "pages/pages.json"), "utf8")),
     ).toEqual(built);
+    // What the build says it wrote is what's on disk.
+    expect(await listFiles(join(dir, "pages"), ["pages.json"])).toEqual(
+      built!.files,
+    );
   }, 60_000);
 
   it("carry only their own classes, on Sanctum's theme, not the kit's", async () => {

@@ -29,11 +29,13 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("the kit", () => {
+// Hashing its 2,000 files takes a while on a busy machine.
+describe("the kit", { timeout: 60_000 }, () => {
   it("says its version, bridge, digest, stylesheet and which module answers each import", async () => {
     expect(kit).toEqual({
       version: sdkVersion(),
       bridge: 1,
+      // What the build says it wrote is what's on disk.
       digest: digestOf(await listFiles(dir, ["kit.json"])),
       stylesheet: "kit.css",
       imports: {

@@ -5,9 +5,9 @@ import { dirname, join, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { build } from "vite";
 
-import { digestOf, listFiles, type BuiltFile } from "./files.js";
+import { digestOf, filesOf, type BuiltFile } from "./files.js";
 import { iconImports, iconModules } from "./icons.js";
-import { kitImports, quietDirectives, sdkRoot, sdkVersion } from "./kit.js";
+import { kitImports, quietLogs, sdkRoot, sdkVersion } from "./kit.js";
 
 // `sanctum-pages build`, run in an app's package as part of its build: its
 // pages, its `./ui` export, built into pages/ in the package, which ships
@@ -98,7 +98,7 @@ export async function buildPages(
   );
 
   try {
-    await build({
+    const result = await build({
       configFile: false,
       root: packageDir,
       // What a home serves, whatever the environment that builds it says.
@@ -120,7 +120,7 @@ export async function buildPages(
         rolldownOptions: {
           input: { index: join(work, "index.js") },
           external: isKitImport,
-          onLog: quietDirectives,
+          onLog: quietLogs,
           preserveEntrySignatures: "exports-only",
           output: {
             format: "es",
@@ -134,7 +134,7 @@ export async function buildPages(
         },
       },
     });
-    const files = await listFiles(outDir);
+    const files = filesOf(result);
     const manifest: PagesManifest = {
       kit: sdkVersion(),
       digest: digestOf(files),

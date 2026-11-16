@@ -7,6 +7,11 @@ try {
   const said = await main(process.argv.slice(2));
   if (said) console.log(said);
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  // What the command refuses says why in its message; anything else, such as
+  // a file system error, comes with where it happened.
+  const system = error instanceof Error && "code" in error;
+  console.error(
+    error instanceof Error ? (system ? error.stack : error.message) : error,
+  );
   process.exitCode = 1;
 }
