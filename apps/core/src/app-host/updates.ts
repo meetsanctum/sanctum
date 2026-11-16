@@ -5,7 +5,7 @@ import type {
   StaticManifest,
 } from "@meetsanctum/app-sdk";
 import { appDatabaseName } from "@meetsanctum/app-sdk/protocol";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -125,8 +125,14 @@ export function createAppUpdates(options: {
     return speaksThisCore(await options.loadPackage(appId, folder));
   }
 
-  const rowOf = (appId: string) =>
-    db.select().from(appUpdates).where(eq(appUpdates.appId, appId)).get();
+  // Whether an app is in an update is asked whenever the apps are listed,
+  // far more often than one updates, so the read is compiled once.
+  const updateOf = db
+    .select()
+    .from(appUpdates)
+    .where(eq(appUpdates.appId, sql.placeholder("appId")))
+    .prepare();
+  const rowOf = (appId: string) => updateOf.get({ appId });
 
   function mark(appId: string, change: Partial<AppUpdateRow>) {
     durably(db, () => {

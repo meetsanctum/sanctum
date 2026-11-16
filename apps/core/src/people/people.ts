@@ -1,4 +1,4 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -87,8 +87,21 @@ export function createPeople(
     return new PeopleError("not_found", `No person ${id}`);
   }
 
+  // The two reads, each compiled once: who a request or an entry of the
+  // activity log is by is read far more often than people change.
+  const byId = db
+    .select()
+    .from(people)
+    .where(eq(people.id, sql.placeholder("id")))
+    .prepare();
+  const everyone = db
+    .select()
+    .from(people)
+    .orderBy(asc(people.createdAt), asc(people.name))
+    .prepare();
+
   function get(id: string): Person | undefined {
-    return db.select().from(people).where(eq(people.id, id)).get();
+    return byId.get({ id });
   }
 
   // Tells whoever follows People once a change has committed. Changes made
@@ -142,11 +155,7 @@ export function createPeople(
 
   return {
     list(): Person[] {
-      return db
-        .select()
-        .from(people)
-        .orderBy(asc(people.createdAt), asc(people.name))
-        .all();
+      return everyone.all();
     },
 
     get,

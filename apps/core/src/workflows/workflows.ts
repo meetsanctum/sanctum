@@ -189,8 +189,12 @@ export function createWorkflows(
   const jobs = createJobs(db, { host, clock });
   const runningJobs = new Map<string, Promise<void>>();
 
+  // Every workflow, compiled once: each change of a device or an entity
+  // reads them all for the triggers it may fire.
+  const everyWorkflow = db.select().from(workflows).prepare();
+
   function rows() {
-    return db.select().from(workflows).all();
+    return everyWorkflow.all();
   }
 
   function row(workflowId: string) {

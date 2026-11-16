@@ -201,23 +201,33 @@ export function createPlaces(
     };
   }
 
+  // What reading the places and the home takes, each compiled once: apps
+  // ask where the home is and what a room is called as they work, and so
+  // does everything that names a place, far more often than a place
+  // changes.
+  const read = {
+    home: db.select().from(home).prepare(),
+    floors: db
+      .select({ id: floors.id, name: floors.name, level: floors.level })
+      .from(floors)
+      .prepare(),
+    rooms: db
+      .select({ id: rooms.id, name: rooms.name, floorId: rooms.floorId })
+      .from(rooms)
+      .prepare(),
+    zones: db.select({ id: zones.id, name: zones.name }).from(zones).prepare(),
+    zoneRooms: db.select().from(zoneRooms).prepare(),
+  };
+
   function list(): Places {
-    const memberships = db.select().from(zoneRooms).all();
+    const memberships = read.zoneRooms.all();
     return {
-      home: homeOf(db.select().from(home).get()),
-      floors: db
-        .select({ id: floors.id, name: floors.name, level: floors.level })
-        .from(floors)
+      home: homeOf(read.home.get()),
+      floors: read.floors
         .all()
         .sort((a, b) => a.level - b.level || byName(a, b)),
-      rooms: db
-        .select({ id: rooms.id, name: rooms.name, floorId: rooms.floorId })
-        .from(rooms)
-        .all()
-        .sort(byName),
-      zones: db
-        .select({ id: zones.id, name: zones.name })
-        .from(zones)
+      rooms: read.rooms.all().sort(byName),
+      zones: read.zones
         .all()
         .sort(byName)
         .map((zone) => ({
@@ -314,7 +324,7 @@ export function createPlaces(
   }
 
   function homeInfo() {
-    const row = db.select().from(home).get();
+    const row = read.home.get();
     return {
       name: row?.name ?? defaultHomeName,
       timeZone: row?.timeZone ?? null,
