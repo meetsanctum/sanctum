@@ -31,8 +31,9 @@ afterEach(() => {
 // entities the app publishes, each checked against the type it declares.
 // A light that is off and asked for a look holds it, and comes back at it
 // when switched on. The household changing the app's settings reaches its
-// start context as settings.changed, and a light joining the home as
-// device.added.
+// start context as settings.changed, a light joining the home as
+// device.added, and a light that changed as device.changed when a test says
+// so.
 
 type LightCapability = Extract<CapabilityInfo, { kind: "light" }>;
 
@@ -62,7 +63,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
     sent: [] as { device: string; command: LightCommand; actor: Actor }[],
     jobs: [] as Job[],
     logs: [] as string[],
-    beforeCommand: null as (() => Promise<void>) | null,
+    beforeCommand: null as ((device: string) => Promise<void>) | null,
     // What the household chose in Settings → Apps; the app applies its
     // defaults.
     settings: {} as AppSettings,
@@ -158,7 +159,15 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       fetch: absent,
       emit: absent,
       follow: async (name) => {
-        if (name !== "settings.changed" && name !== "device.added") {
+        if (
+          ![
+            "settings.changed",
+            "location.changed",
+            "device.added",
+            "device.changed",
+            "device.removed",
+          ].includes(name)
+        ) {
           throw new Error(`Natural light does not follow ${name}`);
         }
       },
@@ -198,7 +207,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       async command({ device, capability, command }) {
         holds("devices.control:light");
         capabilityOf(device, capability);
-        await state.beforeCommand?.();
+        await state.beforeCommand?.(device);
         state.sent.push({ device, command: command as LightCommand, actor });
         return structuredClone(
           set(device, command as LightCommand, { app: app.id, actor }),
@@ -282,11 +291,46 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       }
     },
     /** A light joins the home, as pairing one does, and the app hears of it. */
-    async joins(id: string, name: string, shown: LightState | null) {
-      addLight(id, name, shown);
+    async joins(
+      id: string,
+      name: string,
+      shown: LightState | null,
+      options: { features?: LightFeatures; roomId?: string } = {},
+    ) {
+      addLight(id, name, shown, options.features);
+      state.devices.at(-1)!.roomId = options.roomId ?? null;
       const device = structuredClone(state.devices.at(-1)!);
       for (const handler of handlers.get("device.added") ?? []) {
         await handler({ name: "device.added", device });
+      }
+    },
+    /** The household sets where the home is, and the app hears of it. */
+    async moves(location: HomeLocation | null) {
+      const before = state.location;
+      state.location = location;
+      for (const handler of handlers.get("location.changed") ?? []) {
+        await handler({ name: "location.changed", location, before });
+      }
+    },
+    /** The app hears that a light changed, as the core tells it after a report or a command. */
+    async changed(id: string) {
+      const device = structuredClone(
+        state.devices.find((each) => each.id === id)!,
+      );
+      for (const handler of handlers.get("device.changed") ?? []) {
+        await handler({ name: "device.changed", device, before: device });
+      }
+    },
+    /** A device leaves the home, and the app hears of it. */
+    async removes(id: string) {
+      const index = state.devices.findIndex((each) => each.id === id);
+      if (index === -1) throw new ActionError("not_found");
+      const [device] = state.devices.splice(index, 1);
+      for (const handler of handlers.get("device.removed") ?? []) {
+        await handler({
+          name: "device.removed",
+          device: structuredClone(device!),
+        });
       }
     },
     /** The context of an action a person calls. */

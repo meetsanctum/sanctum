@@ -1,6 +1,7 @@
 import {
   controlPermission,
   defineApp,
+  defineRoomSection,
   placesLocationPermission,
   placesReadPermission,
 } from "@meetsanctum/app-sdk";
@@ -8,6 +9,7 @@ import {
 import { naturalLightActions } from "./actions.js";
 import { createFollower } from "./follower.js";
 import { createRunForLight, type Timing } from "./lights.js";
+import { roomType } from "./rooms.js";
 import { naturalLightSettings } from "./settings.js";
 import { targetType } from "./target.js";
 
@@ -16,9 +18,11 @@ import { targetType } from "./target.js";
 // from where the home is, so it needs no other app. Every light that takes
 // a colour temperature follows it unless the household leaves it out, new
 // ones too (choices.ts), and it brings a `naturalLight.target` entity for
-// each. A switch in its settings turns it off altogether. Workflows can
-// have a light follow it, pause or resume. Its UI is in ./ui, which the
-// shell bundles.
+// each, and a Natural light button beside each room's lights button where
+// a light follows (rooms.ts). A switch in its settings turns it off
+// altogether. Workflows can have a light follow it, pause or resume, or
+// bring a room to natural light. Its UI is in ./ui, which the shell
+// bundles.
 //
 // The check is the app's job every 5 minutes; a light that is on is due
 // every 5 minutes and one that is off every 15 (lights.ts). The core logs
@@ -43,8 +47,16 @@ function timingOf(options: NaturalLightOptions): Timing {
 export function createNaturalLightApp(options: NaturalLightOptions = {}) {
   const timing = timingOf(options);
   const runForLight = createRunForLight();
-  const { follow, followRoom, resume, pause, preview, check } =
-    naturalLightActions(timing, runForLight);
+  const {
+    follow,
+    followRoom,
+    toggleRoom,
+    bringRoom,
+    resume,
+    pause,
+    preview,
+    check,
+  } = naturalLightActions(timing, runForLight);
   let follower: ReturnType<typeof createFollower> | undefined;
 
   return defineApp({
@@ -75,13 +87,34 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       },
     ],
     provides: {
-      entities: [targetType],
-      steps: [follow, pause, resume],
+      entities: [targetType, roomType],
+      steps: [follow, pause, resume, bringRoom],
+      roomSections: [
+        defineRoomSection({
+          id: "naturalLight.room",
+          title: "Natural light",
+          entityType: roomType.id,
+          kind: "buttons",
+          // Sanctum's own, as Moods' tiles are.
+          order: 200,
+          press: toggleRoom,
+          preview: [{ icon: "sun", name: "Natural light", active: true }],
+        }),
+      ],
     },
     // The curve (settings.ts).
     settings: naturalLightSettings,
     migrations: "migrations",
-    actions: [follow, followRoom, resume, pause, preview, check],
+    actions: [
+      follow,
+      followRoom,
+      toggleRoom,
+      bringRoom,
+      resume,
+      pause,
+      preview,
+      check,
+    ],
     events: [],
     async start(ctx) {
       // Kept by the core across restarts; scheduling it again keeps its
