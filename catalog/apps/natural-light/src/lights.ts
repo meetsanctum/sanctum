@@ -486,7 +486,9 @@ export async function followOne(
         return followOne(
           ctx,
           await lightOf(ctx, device.id, capability.id),
-          current,
+          // A requested resume clears pauses before its row is recorded.
+          // Keep it unless following has restarted since this turn began.
+          row.since >= current.since ? row : current,
           sun,
           options,
           force,

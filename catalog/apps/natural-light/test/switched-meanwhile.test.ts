@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { byHand, curveAt, lamp, off, on, running } from "./running.js";
+import { byHand, curveAt, lamp, minute, off, on, running } from "./running.js";
 
 // What natural light sends a light goes by whether it read the light as on.
 // A light someone switches between that reading and the command keeps what
@@ -58,4 +58,27 @@ describe("a light switched while natural light was about to set it", () => {
     expect(sentFrom(sent)).toEqual([]);
     expect(core.light("lamp").state).toMatchObject({ on: true });
   });
+
+  it.each([0, minute])(
+    "keeps a requested resume when an off light comes on before the command, with %s ms between actions",
+    async (elapsed) => {
+      const { core, call, advance, target, sentFrom, now } = running();
+      core.addLight("lamp", "Office light", { ...on, colorTemperature: 400 });
+      await call("naturalLight.follow", { ...lamp, follow: true });
+      advance(elapsed);
+      await call("naturalLight.pause", lamp);
+      advance(elapsed);
+      core.press("lamp", { on: false, colorTemperature: 400 });
+      core.state.beforeCommand = async () => {
+        core.state.beforeCommand = null;
+        core.press("lamp", { on: true });
+      };
+      const sent = core.state.sent.length;
+
+      await call("naturalLight.resume", lamp);
+
+      expect(target()).toMatchObject({ status: "following" });
+      expect(sentFrom(sent)).toEqual([curveAt(now())]);
+    },
+  );
 });

@@ -315,6 +315,15 @@ export function createDevices(
       deviceLog.command(who, device.id, "refused", "invalid_request");
       throw new ActionCallError("invalid_request");
     }
+    // A command whose condition already fails must leave a hold alone.
+    if (
+      whileOn !== undefined &&
+      (!capability.state ||
+        !("on" in capability.state) ||
+        capability.state.on !== whileOn)
+    ) {
+      throw new ActionCallError("conflict");
+    }
     // Finish a hold before preparing or tracking its replacement. Otherwise
     // the move can overwrite who set the light, and its final report can
     // confirm a command that has not gone out yet.
