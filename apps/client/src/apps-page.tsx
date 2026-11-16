@@ -1,14 +1,24 @@
-import type { AppIcon as AppIconInfo } from "@meetsanctum/app-sdk";
-import { Button, Input, PageBar, PageBarButton } from "@meetsanctum/ui-sdk";
+import type { AppIcon as AppIconInfo, AppInfo } from "@meetsanctum/app-sdk";
+import {
+  Button,
+  Input,
+  mainPage,
+  PageBar,
+  PageBarButton,
+} from "@meetsanctum/ui-sdk";
 import { Minus, Pin, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
 import { AppIcon } from "./app-icon";
+import { plainIcon } from "./app-settings";
+import { opens, type HostedApp, type Route } from "./apps";
+import { settingsApp } from "./settings";
+import { appSettingsPage } from "./settings-apps";
 
 /** Where Apps is on show, as a route's app. */
 export const appsPage = "sanctum.apps";
 
-/** An app with a page of its own, as Apps lists it. */
+/** An app as Apps lists it. */
 export type ListedApp = {
   id: string;
   name: string;
@@ -16,14 +26,63 @@ export type ListedApp = {
   onOpen: () => void;
 };
 
+/**
+ * What Apps lists, and what may be pinned: the shell's own apps and every
+ * installed one, by name. An app with a page of its own opens it in Apps'
+ * place. One without, such as a driver, opens its settings over Apps, so
+ * Done returns there. An app without an icon of its own shows the plain
+ * one, as in Settings.
+ */
+export function listedApps(
+  shells: ListedApp[],
+  installed: readonly AppInfo[],
+  hosted: readonly HostedApp[],
+  show: (routes: Route[]) => void,
+): ListedApp[] {
+  const opened = (info: AppInfo): Route[] => {
+    const app = hosted.find((each) => each.info.id === info.id);
+    return app && opens(app)
+      ? [{ app: info.id, page: mainPage, params: {} }]
+      : [
+          { app: appsPage, page: mainPage, params: {} },
+          {
+            app: settingsApp.id,
+            page: appSettingsPage,
+            params: { id: info.id },
+          },
+        ];
+  };
+  return [
+    ...shells,
+    ...installed.map((info) => ({
+      id: info.id,
+      name: info.name,
+      icon: info.icon ?? plainIcon,
+      onOpen: () => show(opened(info)),
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The app on show: the one whose page it is, or the one whose settings are
+ * over Apps, as Apps opens an app without a page of its own.
+ */
+export function appOnShow(routes: readonly Route[]) {
+  const route = routes.at(-1);
+  return route?.app === settingsApp.id &&
+    route.page === appSettingsPage &&
+    routes.at(-2)?.app === appsPage
+    ? route.params.id
+    : route?.app;
+}
+
 // Apps: the page the sidebar's last tile opens, an app's page like any
 // other, full bleed in the device's mode. It lists Settings, Automations and
-// every installed app with a page of its own, by name: a search field, then
-// their icons with their names under them. Pin apps in the top bar pins them
-// to the top of the sidebar for the household: the pinned first, in their
-// order, each with a −, then the rest with a +, fainter, as in Edit Home;
-// pressing one pins or unpins it, and Done ends it. Each visit starts
-// afresh.
+// every installed app, by name: a search field, then their icons with their
+// names under them. Pin apps in the top bar pins them to the top of the
+// sidebar for the household: the pinned first, in their order, each with a
+// −, then the rest with a +, fainter, as in Edit Home; pressing one pins or
+// unpins it, and Done ends it. Each visit starts afresh.
 export function AppsPage(props: {
   apps: ListedApp[];
   /** The household's pinned apps, in their order; none until read. */
