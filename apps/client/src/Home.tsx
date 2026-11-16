@@ -41,6 +41,8 @@ import {
 } from "./dashboards";
 import { connectLive } from "./live";
 import { EditHome } from "./edit-home";
+import { AppFrame } from "./frames/app-frame";
+import { isFramed } from "./frames/framed";
 import { HomeRooms } from "./home-dashboard";
 import { HomeSidebar } from "./home-sidebar";
 import { HomeWidgets, useWidgetCards } from "./home-widgets";
@@ -617,14 +619,30 @@ export function Home(props: {
                           // The page's sections, as they stand in it.
                           className="flex shrink-0 grow flex-col gap-6"
                         >
-                          <Page
-                            // A page opened afresh starts afresh.
-                            key={`${routes.length}:${JSON.stringify(route)}`}
-                            params={route.params}
-                            open={opener(route.app)}
-                            back={back}
-                            openSettings={settingsOf(route.app)}
-                          />
+                          {isFramed(route.app) ? (
+                            <AppFrame
+                              key={route.app}
+                              app={routeApp}
+                              page={route.page}
+                              params={route.params}
+                              shown={`${routes.length}:${JSON.stringify(route)}`}
+                              open={opener(route.app)}
+                              back={back}
+                              openSettings={settingsOf(route.app)}
+                              mode={deviceMode}
+                              household={devices.places?.home}
+                              isAway={veil !== undefined}
+                            />
+                          ) : (
+                            <Page
+                              // A page opened afresh starts afresh.
+                              key={`${routes.length}:${JSON.stringify(route)}`}
+                              params={route.params}
+                              open={opener(route.app)}
+                              back={back}
+                              openSettings={settingsOf(route.app)}
+                            />
+                          )}
                         </WhileNotRunning>
                       </AppScope>
                     ) : isEditingHome ? (

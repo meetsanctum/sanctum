@@ -10,3 +10,32 @@
 @import "./theme.css";
 
 @source "./";
+
+/* An app's page in its frame, laid out as the shell lays out an app's page:
+   full bleed in the device's mode, its cards filled, 24 px in. */
+:root {
+  background: var(--background);
+  /* It scrolls as the shell's pages do, with no bar. */
+  scrollbar-width: none;
+}
+
+body {
+  margin: 0;
+}
+
+.frame-page {
+  --glass: var(--card);
+  --glass-ink: var(--ink);
+  --glass-secondary: var(--secondary);
+  --glass-line: transparent;
+  --tile: var(--card);
+  --tile-ink: var(--ink);
+  --tile-secondary: var(--secondary);
+  --tile-chip: color-mix(in srgb, var(--ink) 8%, transparent);
+  --tile-on: var(--ink);
+  --tile-on-ink: var(--background);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 24px 24px;
+}

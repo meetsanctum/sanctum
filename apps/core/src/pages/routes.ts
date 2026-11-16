@@ -1,4 +1,4 @@
-import type { PageTicket } from "@meetsanctum/auth-protocol";
+import type { AppPages, PageTicket } from "@meetsanctum/auth-protocol";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -19,6 +19,9 @@ import type { Pages } from "./pages.js";
 //   /pages/<ticket>/kit/<digest>/<file>
 //   /pages/<ticket>/apps/<app>/<digest>/          the entry, which the core writes
 //   /pages/<ticket>/apps/<app>/<digest>/<file>
+
+// The module of the kit that starts a page in its frame, as pages import it.
+const sdkSpecifier = "@meetsanctum/ui-sdk";
 
 // The client's own address; forwarded-for headers are not trusted.
 const addressOf = (request: FastifyRequest) =>
@@ -65,6 +68,21 @@ export function registerPageRoutes(
       .header("cache-control", "no-store")
       .send({ error: "not_found" });
 
+  // The build of an app's pages a frame's address names, which changes as
+  // the app updates; none for an app without pages that fit the kit.
+  app.get<{ Params: { appId: string } }>(
+    "/api/pages/apps/:appId",
+    async (request, reply) => {
+      if (request.principal!.scope !== "full") {
+        throw new AuthError("forbidden");
+      }
+      const found = await pages.pagesOf(request.params.appId);
+      if (!found) return nothing(reply);
+      const answer: AppPages = { digest: found.digest };
+      return answer;
+    },
+  );
+
   // Whether a request's ticket opens anything; a ticket that doesn't counts
   // against its address.
   function admitted(request: FastifyRequest, ticket: string) {
@@ -80,10 +98,10 @@ export function registerPageRoutes(
   // the core's whole origin.
   function headers(
     reply: FastifyReply,
-    places: { page?: string; kit: string; importMap?: string },
+    places: { page?: string; kit: string; inline?: string[] },
   ) {
-    const { page, kit, importMap } = places;
-    const scripts = [page, kit, importMap && `'sha256-${importMap}'`];
+    const { page, kit, inline = [] } = places;
+    const scripts = [page, kit, ...inline.map((hash) => `'sha256-${hash}'`)];
     const policy = [
       "default-src 'none'",
       `script-src ${scripts.filter(Boolean).join(" ")}`,
@@ -162,17 +180,26 @@ export function registerPageRoutes(
       return send(reply, file);
     }
 
-    // The entry: the kit's import map under this ticket, which the policy
-    // allows by its hash, then the kit's stylesheet and the page's own, and
-    // the page's code.
+    // The entry: the kit's import map under this ticket, then the kit's
+    // stylesheet and the page's own, and the kit's start, which loads the
+    // page's code while it says hello to the shell. The policy allows the
+    // two inline scripts by their hashes.
     const imports = Object.fromEntries(
       Object.entries(kit.imports).map(([specifier, module]) => [
         specifier,
         `${kitPath}${module}`,
       ]),
     );
-    const importMap = JSON.stringify({ imports }).replace(/</g, "\\u003c");
-    const hash = createHash("sha256").update(importMap).digest("base64");
+    const inline = (script: string) => script.replace(/</g, "\\u003c");
+    const importMap = inline(JSON.stringify({ imports }));
+    const start = inline(
+      [
+        `import { startFrame } from ${JSON.stringify(sdkSpecifier)};`,
+        `startFrame(() => import(${JSON.stringify(`${pagePath}${found.entry}`)}));`,
+      ].join("\n"),
+    );
+    const hashOf = (script: string) =>
+      createHash("sha256").update(script).digest("base64");
     const html = [
       "<!doctype html>",
       '<html lang="en">',
@@ -184,13 +211,14 @@ export function registerPageRoutes(
       ...(found.stylesheet
         ? [`<link rel="stylesheet" href="${pagePath}${found.stylesheet}">`]
         : []),
-      `<script type="module" src="${pagePath}${found.entry}"></script>`,
+      `<link rel="modulepreload" href="${pagePath}${found.entry}">`,
+      `<script type="module">${start}</script>`,
       "</head>",
       "<body></body>",
       "</html>",
       "",
     ].join("\n");
-    headers(reply, { ...places, importMap: hash });
+    headers(reply, { ...places, inline: [hashOf(importMap), hashOf(start)] });
     return reply.header("content-type", "text/html; charset=utf-8").send(html);
   });
 }

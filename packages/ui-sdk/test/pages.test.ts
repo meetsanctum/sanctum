@@ -2,16 +2,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { digestOf, listFiles } from "../tools/files";
-import { sdkVersion } from "../tools/kit";
-import { buildPages } from "../tools/pages";
+import { buildKit, sdkVersion } from "../tools/kit";
+import { buildPages as buildPagesWith } from "../tools/pages";
 
 // `sanctum-pages build`: an app's pages, its ./ui export, built into pages/
 // in its package with React and ui-sdk left out for the kit to answer.
 
 const made: string[] = [];
+
+// The kit, whose stylesheet a page's leaves out, built once.
+let kitDir: string;
+beforeAll(async () => {
+  kitDir = await mkdtemp(join(tmpdir(), "sanctum-pages-kit-"));
+  await buildKit(kitDir);
+}, 60_000);
+afterAll(() => rm(kitDir, { recursive: true, force: true }));
+
+const buildPages = (dir: string) =>
+  buildPagesWith(dir, { kitStylesheet: join(kitDir, "kit.css") });
 
 afterEach(async () => {
   for (const dir of made.splice(0)) {
@@ -44,7 +55,7 @@ function MainPage(_props: PageProps) {
   return (
     <>
       <PageBar title="Example" />
-      <p className="text-[13px] text-orange">
+      <p className="text-[15.5px] text-orange">
         <icons.Check aria-hidden="true" /> {count}
       </p>
     </>
@@ -95,11 +106,37 @@ describe("an app's pages", () => {
     await buildPages(dir);
     const css = readFileSync(join(dir, "pages/pages.css"), "utf8");
     expect(css).toContain(".text-orange{color:var(--ember-text)}");
-    expect(css).toContain("font-size:13px");
+    expect(css).toContain("font-size:15.5px");
     // Tailwind's base and Sanctum's tokens come with the kit.
     expect(css).not.toContain("--carbon");
     expect(css).not.toMatch(/@layer base\{/);
   }, 60_000);
+
+  it("leave out the utilities the kit's stylesheet has, so each comes once", async () => {
+    const dir = await app(`
+import { defineAppUi } from "@meetsanctum/ui-sdk";
+function MainPage() {
+  return <p className="m-0 mt-auto text-[15.5px]">Example</p>;
+}
+export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { main: MainPage } });
+`);
+    await buildPages(dir);
+    const css = readFileSync(join(dir, "pages/pages.css"), "utf8");
+    const kit = readFileSync(join(kitDir, "kit.css"), "utf8");
+    // ui-sdk's components use both, so only the kit has them, in its order.
+    for (const rule of [".m-0{", ".mt-auto{"]) {
+      expect(kit).toContain(rule);
+      expect(css).not.toContain(rule);
+    }
+    expect(css).toContain("font-size:15.5px");
+  }, 60_000);
+
+  it("don't build without the kit's stylesheet", async () => {
+    const dir = await app(page);
+    await expect(
+      buildPagesWith(dir, { kitStylesheet: join(dir, "missing.css") }),
+    ).rejects.toThrow(/build ui-sdk first/);
+  });
 
   it("come out the same from the same sources", async () => {
     const dir = await app(page);

@@ -332,7 +332,7 @@ describe("a ticket that opens nothing", () => {
 });
 
 describe("an app's pages", () => {
-  it("open at their entry, which the core writes with the kit's import map under the ticket", async () => {
+  it("open at their entry, which the core writes with the kit's import map under the ticket and the kit's start", async () => {
     const { ticket } = await ticketFor();
     await stagePages();
     const response = await get(
@@ -362,17 +362,28 @@ describe("an app's pages", () => {
       `<link rel="stylesheet" href="${pagePath}pages.css">`,
     );
     expect(response.body).toContain(
-      `<script type="module" src="${pagePath}index.js"></script>`,
+      `<link rel="modulepreload" href="${pagePath}index.js">`,
+    );
+    // The kit starts the page: it loads the page's code while it says hello.
+    const start = /<script type="module">(.*?)<\/script>/s.exec(
+      response.body,
+    )![1]!;
+    expect(start).toBe(
+      [
+        `import { startFrame } from "@meetsanctum/ui-sdk";`,
+        `startFrame(() => import("${pagePath}index.js"));`,
+      ].join("\n"),
     );
 
-    // The policy allows the import map by its hash, and loads from the
-    // page's folder and the kit's by their exact addresses.
+    // The policy allows the import map and the start by their hashes, and
+    // loads from the page's folder and the kit's by their exact addresses.
     const origin = "http://localhost:80";
     const policy = response.headers["content-security-policy"] as string;
-    const hash = createHash("sha256").update(importMap).digest("base64");
+    const hash = (script: string) =>
+      createHash("sha256").update(script).digest("base64");
     expect(policy.split("; ")).toEqual([
       "default-src 'none'",
-      `script-src ${origin}${pagePath} ${origin}${kitPath} 'sha256-${hash}'`,
+      `script-src ${origin}${pagePath} ${origin}${kitPath} 'sha256-${hash(importMap)}' 'sha256-${hash(start)}'`,
       `style-src ${origin}${pagePath} ${origin}${kitPath}`,
       `font-src ${origin}${kitPath}`,
       `img-src ${origin}${pagePath} ${origin}${kitPath} data: blob:`,
@@ -392,6 +403,33 @@ describe("an app's pages", () => {
         )
       ).body,
     ).toBe(response.body);
+  });
+
+  it("say their build to a signed-in client, and nobody else", async () => {
+    await stagePages();
+    const asked = await get(core, "/api/pages/apps/sanctum.example", {
+      token,
+    });
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json()).toEqual({ digest: pageDigest });
+    expect(
+      (
+        await get(core, "/api/pages/apps/sanctum.missing", {
+          token,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await get(core, "/api/pages/apps/sanctum.example")).statusCode,
+    ).toBe(401);
+    const { ticket } = await ticketFor();
+    expect(
+      (
+        await get(core, "/api/pages/apps/sanctum.example", {
+          token: ticket,
+        })
+      ).statusCode,
+    ).toBe(401);
   });
 
   it("serve each file they list, as it is", async () => {

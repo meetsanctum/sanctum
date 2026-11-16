@@ -233,12 +233,10 @@ describe("the apps' packages on real images", () => {
     await waitFor("the core", async () =>
       (await fetch(at("/api/health"))).ok ? true : undefined,
     );
+    const authorization = `Bearer ${await signedIn()}`;
     const issued = await fetch(at("/api/pages/ticket"), {
       method: "POST",
-      headers: {
-        authorization: `Bearer ${await signedIn()}`,
-        "content-type": "application/json",
-      },
+      headers: { authorization, "content-type": "application/json" },
       body: "{}",
     });
     const { ticket, kit } = (await issued.json()) as {
@@ -284,11 +282,17 @@ describe("the apps' packages on real images", () => {
           "/package/pages/pages.json",
         ),
       ) as { digest: string; entry: string };
+      // The build a frame's address names is the one staged.
+      const said = await fetch(at(`/api/pages/apps/${id}`), {
+        headers: { authorization },
+      });
+      expect(await said.json(), id).toEqual({ digest });
       const base = `/pages/${ticket}/apps/${id}/${digest}/`;
       const page = await fetch(at(base));
       expect(page.status, id).toBe(200);
       const html = await page.text();
       expect(html).toContain('<script type="importmap">');
+      expect(html).toContain(`startFrame(() => import("${base}${entry}"))`);
       expect(html).toContain(`/pages/${ticket}/kit/${kit!.digest}/react.js`);
       expect((await fetch(at(`${base}${entry}`))).status, id).toBe(200);
     }

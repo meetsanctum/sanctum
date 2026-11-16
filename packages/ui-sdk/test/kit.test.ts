@@ -71,20 +71,31 @@ describe("the kit", { timeout: 60_000 }, () => {
       path.includes("chunks/react-"),
     );
     expect(react).toBeDefined();
-    expect(importsOf("react-dom-client.js")).toContain(react);
+    // What a module loads, through what it loads.
+    const reached = (from: string) => {
+      const found = new Set<string>();
+      const reach = (path: string) => {
+        for (const next of importsOf(path)) {
+          if (!found.has(next)) {
+            found.add(next);
+            reach(next);
+          }
+        }
+      };
+      reach(from);
+      return found;
+    };
+    expect(reached("react-dom-client.js")).toContain(react);
     expect(importsOf("ui-sdk.js")).toContain(react);
     // An icon, through Lucide's shared code.
-    const reached = new Set<string>();
-    const reach = (path: string) => {
-      for (const next of importsOf(path)) {
-        if (!reached.has(next)) {
-          reached.add(next);
-          reach(next);
-        }
-      }
-    };
-    reach("icons/check.js");
-    expect(reached).toContain(react);
+    expect(reached("icons/check.js")).toContain(react);
+    // And one React DOM: the root ui-sdk starts a frame's page with is the
+    // one pages import.
+    const [client] = importsOf("react-dom-client.js").filter((path) =>
+      path.startsWith("chunks/client-"),
+    );
+    expect(client).toBeDefined();
+    expect(importsOf("ui-sdk.js")).toContain(client);
   });
 
   it("has a stylesheet with Sanctum's theme and ui-sdk's classes, and Inter as WOFF2 next to it", () => {

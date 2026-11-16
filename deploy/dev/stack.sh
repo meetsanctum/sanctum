@@ -90,6 +90,7 @@ settings() {
     scheme="http"
     SANCTUM_STACK_CORE_ENV="CORE_PLAIN_HTTP=true"
   fi
+  SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV:+${SANCTUM_STACK_CORE_ENV};}CORE_KIT_DIR=/app/packages/ui-sdk/dist/kit"
   if [[ -n "${CORE_ALLOWED_ORIGINS:-}" ]]; then
     SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV};CORE_ALLOWED_ORIGINS=${CORE_ALLOWED_ORIGINS}"
   fi
@@ -103,8 +104,9 @@ settings() {
 # apart, from the packages the manager stages.
 core_binds() {
   local path binds=""
+  # ui-sdk's build holds the kit the core serves apps' pages with.
   for path in apps/core/dist apps/core/migrations \
-    packages/app-sdk/dist packages/auth-protocol/dist; do
+    packages/app-sdk/dist packages/auth-protocol/dist packages/ui-sdk/dist; do
     [[ -e "$path" ]] && binds+="${root}/${path}:/app/${path}:ro;"
   done
   echo "$binds"
