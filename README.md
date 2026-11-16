@@ -38,8 +38,8 @@ Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
 
 **Devices**
 
-- Pair Zigbee lights, plugs, switches, remotes and motion, temperature,
-  humidity and light-level sensors from Settings.
+- Pair Zigbee lights, plugs, switches, remotes and sensors for doors and
+  windows, motion, temperature, humidity and light level from Settings.
 - Add the ESPHome devices on your network, encrypted with their own keys:
   lights, plugs, buttons and their sensors.
 - Choose what each button on a remote does; a new remote works from its
@@ -51,16 +51,16 @@ Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
 
 **Automations**
 
-- Automations that read as sentences: When, And, Then, with motion, light
-  level, buttons, readings, times and days.
+- Automations that read as sentences: When, And, Then, with motion, doors
+  and windows, light level, buttons, readings, times and days.
 - Each automation's runs, step by step.
 
 **Your home at a glance**
 
 - A Home dashboard with your rooms, and pages for every room and for Lights,
-  Switches, Environment, Presence and Buttons.
-- What the sensors read, where there's motion and how many lights are on, at
-  the top of every dashboard.
+  Switches, Environment, Presence, Security and Buttons.
+- What the sensors read, where there's motion, whether a door or window is
+  open and how many lights are on, at the top of every dashboard.
 - A day and a week of history for every light, switch and sensor.
 - The weather and sun times for where your home is.
 - An activity log of what changed, and who or what changed it.
@@ -77,7 +77,7 @@ Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
 
 ## Coming soon
 
-- More kinds of Zigbee devices, such as contact sensors and covers
+- More kinds of Zigbee devices, such as covers
 - Choosing your Zigbee stick in Settings
 - Day and Evening themes
 - Dashboards you can arrange yourself
