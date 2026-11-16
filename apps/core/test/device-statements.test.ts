@@ -1,6 +1,10 @@
-import type { ActivityInfo } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import type { ActivityInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import moods from "@meetsanctum/moods";
+import { createNaturalLightApp } from "@meetsanctum/natural-light";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
 
+import { entities } from "../src/entities/schema.js";
 import {
   command,
   lampsCore,
@@ -8,11 +12,16 @@ import {
   radio,
   settled,
 } from "./devices-support.js";
-import { get, post, type TestCore } from "./support.js";
+import type { AppPackage } from "./runner-apps.js";
+import { get, post, sharedClient, type TestCore } from "./support.js";
 
 // What the core asks of SQLite for one press of a room's lights button. A
 // statement SQLite has to compile costs far more than running it, so what
-// runs for every command and every report is compiled once and kept.
+// runs for every command and every report, and for every call of an app
+// that follows the lights, is compiled once and kept.
+
+// How long an app, which answers over its socket, gets to follow a press.
+const realClock = { timeout: 5_000 };
 
 // Every statement the core has SQLite compile from here on, by its text.
 function compiled(core: TestCore) {
@@ -26,9 +35,46 @@ function compiled(core: TestCore) {
   return texts;
 }
 
+// The selects among them that read one of these tables.
+function reading(texts: readonly string[], tables: readonly string[]) {
+  const select = new RegExp(`^select .* from "(${tables.join("|")})"`);
+  return texts.filter((text) => select.test(text));
+}
+
+// What a press reads of the core's own: its devices and the activity log,
+// who pressed and with which client, the places, the workflows a change may
+// start, and the entities that say how a room's lights come on.
+const coreTables = [
+  "devices",
+  "device_capabilities",
+  "activity",
+  "auth_tokens",
+  "auth_clients",
+  "people",
+  "home",
+  "floors",
+  "rooms",
+  "zones",
+  "zone_rooms",
+  "workflows",
+  "entities",
+];
+
+// And what the apps that follow the lights ask for as they do: their
+// settings, and whether each is in an update, which listing the apps reads.
+const appTables = [...coreTables, "app_settings", "app_updates"];
+
+const catalogApp = (app: AppPackage["app"], folder: string): AppPackage => ({
+  app,
+  origin: "official",
+  migrationsFolder: fileURLToPath(
+    new URL(`../../../catalog/apps/${folder}/migrations`, import.meta.url),
+  ),
+});
+
 // A room with six lights, all off, and a client following the home.
-async function sixLights() {
-  const context = await lampsCore();
+async function sixLights(options: { apps?: readonly AppPackage[] } = {}) {
+  const context = await lampsCore(options);
   const { core, maya, lamp } = context;
   const token = maya.token;
   for (const each of [2, 3, 4, 5, 6]) {
@@ -49,37 +95,143 @@ async function sixLights() {
   }
   await settled();
   const live = await openLive(core, token);
-  const press = (to: "on" | "off") =>
+  const press = (to: "on" | "off", by: { token: string } = maya) =>
     post(
       core,
       "/api/devices/lights",
       { place: { kind: "room", id: room }, to },
-      { token },
+      by,
     );
   return { ...context, live, press };
 }
 
+// The lights that told the client they are on or off, by their ids.
+function heardFrom(live: Awaited<ReturnType<typeof openLive>>, on: boolean) {
+  const heard = live.messages.filter(
+    (message) =>
+      message.type === "device" &&
+      (
+        message.device as { capabilities: { observed: { on: boolean } }[] }
+      ).capabilities.some((capability) => capability.observed.on === on),
+  );
+  return new Set(heard.map((message) => message.id));
+}
+
 describe("a press of a room's six lights", () => {
-  it("compiles no statement that reads a device or the activity log", async () => {
+  it("compiles no statement that reads what the core keeps", async () => {
     const { core, live, press } = await sixLights();
     const texts = compiled(core);
     expect((await press("on")).json()).toMatchObject({ switched: 6 });
     await settled();
     // Every light said it is on, and the client heard each.
-    const heard = live.messages.filter(
-      (message) =>
-        message.type === "device" &&
-        (
-          message.device as { capabilities: { observed: { on: boolean } }[] }
-        ).capabilities.some((capability) => capability.observed.on),
-    );
-    expect(new Set(heard.map((message) => message.id)).size).toBe(6);
+    expect(heardFrom(live, true).size).toBe(6);
     expect(texts.length).toBeGreaterThan(0);
+    expect(reading(texts, coreTables)).toEqual([]);
+  });
+
+  it("compiles none from a shared client, whose entries keep its name", async () => {
+    const { core, live, press } = await sixLights();
+    const tablet = sharedClient(core);
+    await press("on");
+    await settled();
+    const texts = compiled(core);
+    expect((await press("off", tablet)).json()).toMatchObject({ switched: 6 });
+    await settled();
+    expect(heardFrom(live, false).size).toBe(6);
+    expect(texts.length).toBeGreaterThan(0);
+    expect(reading(texts, coreTables)).toEqual([]);
+    // Each entry of the press names the tablet.
+    const { entries } = (
+      await get(core, "/api/activity?limit=50", tablet)
+    ).json() as { entries: ActivityInfo[] };
     expect(
-      texts.filter((text) =>
-        /^select .* from "(devices|device_capabilities|activity)"/.test(text),
+      entries.filter(
+        ({ who }) => who.kind === "client" && who.name === "Kitchen tablet",
       ),
-    ).toEqual([]);
+    ).toHaveLength(6);
+  });
+
+  it("compiles none for the apps that follow the lights", async () => {
+    // Natural light reads the core's test clock once the core has one.
+    let clock = () => new Date();
+    const { core, maya, live, press } = await sixLights({
+      apps: [
+        catalogApp(moods, "moods"),
+        catalogApp(
+          createNaturalLightApp({ now: () => clock() }),
+          "natural-light",
+        ),
+      ],
+    });
+    clock = core.now;
+    await post(
+      core,
+      "/api/places/home/update",
+      {
+        timeZone: "Europe/Zurich",
+        coordinates: { latitude: 47.3769, longitude: 8.5417 },
+      },
+      maya,
+    );
+    const targets = async () =>
+      (
+        (
+          await get(core, "/api/entities?app=sanctum.natural-light", maya)
+        ).json() as EntityInfo[]
+      ).filter((entity) => entity.type === "naturalLight.target");
+    // What the client heard that Natural light did, by the app's name.
+    const byNaturalLight = () =>
+      live.messages
+        .filter((message) => message.type === "activity")
+        .map((message) => message.entry as ActivityInfo)
+        .filter(
+          ({ who }) => who.kind === "app" && who.name === "Natural light",
+        );
+
+    const texts = compiled(core);
+    expect((await press("on")).json()).toMatchObject({ switched: 6 });
+    // Natural light takes each light in as it sees it come on, which it
+    // reads its settings and where the home is for, publishes what it holds
+    // for each, and sets the colour of those it follows.
+    await vi.waitFor(async () => {
+      expect(await targets()).toHaveLength(6);
+      expect(byNaturalLight().length).toBeGreaterThan(0);
+    }, realClock);
+    await settled();
+    expect(
+      texts.filter((text) => text.startsWith('insert into "entities"')).length,
+    ).toBeGreaterThan(0);
+    expect(reading(texts, appTables)).toEqual([]);
+  });
+});
+
+describe("a list of entities", () => {
+  it("compiles nothing, by app, by type, by both or by neither", async () => {
+    const { core, maya } = await lampsCore();
+    core.db
+      .insert(entities)
+      .values({
+        appId: "sanctum.example",
+        key: "one",
+        type: "example.thing",
+        name: "One",
+        state: {},
+        updatedAt: new Date(),
+      })
+      .run();
+    const texts = compiled(core);
+    for (const [query, found] of [
+      ["", 1],
+      ["?app=sanctum.example", 1],
+      ["?type=example.thing", 1],
+      ["?app=sanctum.example&type=example.thing", 1],
+      ["?app=sanctum.example&type=example.other", 0],
+    ] as const) {
+      expect(
+        (await get(core, `/api/entities${query}`, maya)).json(),
+      ).toHaveLength(found);
+    }
+    expect(reading(texts, ["entities"])).toEqual([]);
   });
 });
 
@@ -109,8 +261,6 @@ describe("a light's adjustments", () => {
     expect(heard.map((entry) => entry.count)).toEqual([1, 2]);
     expect(heard[1]!.id).toBe(heard[0]!.id);
     expect(texts.length).toBeGreaterThan(0);
-    expect(
-      texts.filter((text) => /^select .* from "activity"/.test(text)),
-    ).toEqual([]);
+    expect(reading(texts, ["activity"])).toEqual([]);
   });
 });

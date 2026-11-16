@@ -1,5 +1,5 @@
 import type { AppSettings, SettingsSchema } from "@meetsanctum/app-sdk";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { CoreDatabase } from "../database.js";
@@ -78,13 +78,17 @@ export function createAppSettings(
 ) {
   const now = options.now ?? (() => new Date());
 
+  // An app reads its settings as it works, far more often than anyone
+  // changes them, so the read is compiled once.
+  const chosenBy = db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.appId, sql.placeholder("appId")))
+    .prepare();
+
   // What the household chose for an app, by setting name.
   function chosen(appId: string): Record<string, unknown> {
-    const row = db
-      .select()
-      .from(appSettings)
-      .where(eq(appSettings.appId, appId))
-      .get();
+    const row = chosenBy.get({ appId });
     return isRecord(row?.values) ? row.values : {};
   }
 
