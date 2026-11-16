@@ -3,6 +3,8 @@ node_modules
 
 # Build outputs
 dist
+# Apps' pages, built by `sanctum-pages build` into their packages.
+catalog/apps/*/pages
 build
 out
 .next

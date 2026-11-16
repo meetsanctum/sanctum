@@ -15,9 +15,10 @@ COPY packages/app-sdk/bin packages/app-sdk/bin
 COPY packages/app-testkit/package.json packages/app-testkit/package.json
 COPY packages/auth-protocol/package.json packages/auth-protocol/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
-# Catalog apps' pages use it; the shell bundles them, so the image builds
-# none of it.
+# Catalog apps' pages import it, and it builds them and the kit they import,
+# with the command shim pnpm links when it installs.
 COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
+COPY packages/ui-sdk/bin packages/ui-sdk/bin
 # The catalog apps the image ships, one line each.
 COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json
@@ -31,10 +32,14 @@ COPY packages/typescript-config packages/typescript-config
 COPY packages/app-sdk packages/app-sdk
 COPY packages/app-testkit packages/app-testkit
 COPY packages/auth-protocol packages/auth-protocol
+COPY packages/ui-sdk packages/ui-sdk
 COPY apps/core apps/core
 COPY catalog/apps catalog/apps
 RUN pnpm --filter @meetsanctum/core... --filter "{./catalog/apps/**}..." build
 RUN pnpm --filter @meetsanctum/core deploy --prod --legacy /out
+# The kit: React and ui-sdk as the modules apps' pages import, built with
+# this image, so a home's kit is the one its core came with.
+RUN cp -R packages/ui-sdk/dist/kit /out/kit
 # Catalog apps are Sanctum's own, which the manager stages from here for the
 # core to run apart, each with the official origin; the core reads only their
 # ids here. Each stands alone, with its own production dependencies and its own

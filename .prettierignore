@@ -9,3 +9,6 @@ pnpm-lock.yaml
 **/migrations/meta/*.json
 # Apps' contract snapshots, written by `pnpm manifest`.
 **/sanctum-app.json
+# ui-sdk's report of what the kit offers pages, written by `pnpm --filter
+# @meetsanctum/ui-sdk api`.
+packages/ui-sdk/api.json

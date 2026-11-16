@@ -14,10 +14,11 @@
   "files": [
     "dist",
     "migrations",
+    "pages",
     "sanctum-app.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && sanctum-pages build",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.ui.json",
     "test": "vitest run && sanctum-app manifest --check",

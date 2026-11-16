@@ -1,0 +1,12 @@
+/* The kit's stylesheet, which every app page loads before its own: Tailwind's
+   base, Sanctum's theme, Inter, and the classes ui-sdk's components use. A
+   page's own stylesheet holds only the classes of its own code. */
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/inter/300.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "./theme.css";
+
+@source "./";
