@@ -77,6 +77,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
   let nextId = 0;
   let ui: AppUi | undefined;
   let shown: Shown | undefined;
+  let client: AppClient | undefined;
   let root: Root | undefined;
   // The top bar as last said to the shell, and its actions' handlers, the
   // latest ones: a press of what the shell drew at an older revision is
@@ -185,6 +186,9 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
 
   const draw = () => {
     if (!ui || !shown || hasFailed) return;
+    // Device and context updates keep the client's identity, so effects
+    // that load app data don't run again for unrelated page updates.
+    if (!client || client.app !== shown.app) client = clientOf(shown.app);
     document.documentElement.dataset.mode = shown.context.mode;
     // A device page lies over the device's detail, which shows through.
     if (shown.device) document.documentElement.dataset.surface = "detail";
@@ -201,7 +205,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
         <Framed
           ui={ui}
           shown={shown}
-          client={clientOf(shown.app)}
+          client={client}
           send={send}
           fail={fail}
           sayBar={sayBar}
