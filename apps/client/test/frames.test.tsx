@@ -1,149 +1,39 @@
 // @vitest-environment jsdom
-import type { AppInfo, DeviceInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import {
-  createAppClient,
-  createLiveFeed,
   frameBridge,
   PageBar,
   startFrame,
   useAppClient,
   type AppUi,
-  type CoreBridge,
   type DevicePageProps,
   type PageProps,
-  type ToFrame,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
 import {
   openBridge,
   requestsAllowed,
   tallest,
-  type FrameBridge,
   type FrameEvent,
 } from "../src/frames/bridge";
-
-// An app's page in its frame and the shell's end of it, over a real message
-// channel. jsdom has one window, so it stands for the frame, whose parent it
-// is too; the shell listens on a target of its own, and the frame's window
-// as the shell sees it hands what it's sent to this one.
-
-const info: AppInfo = {
-  id: "sanctum.example",
-  name: "Example",
-  version: "0.1.0",
-  icon: null,
-  pages: ["main", "day"],
-  permissions: [],
-  requests: [],
-  state: "running",
-  settings: null,
-  provides: { entities: [], widgets: [], roomSections: [], devicePages: [] },
-};
-
-const forecast: EntityInfo = {
-  app: "sanctum.example",
-  key: "forecast-1",
-  type: "sanctum.example.forecast",
-  name: "Forecast",
-  state: {},
-  updatedAt: "2026-11-16T12:00:00.000Z",
-};
-
-const context = { mode: "day" as const, temperatureUnit: null, timeZone: null };
-
-let live: ReturnType<typeof createLiveFeed>;
-let json: ReturnType<typeof vi.fn>;
-let shell: EventTarget;
-let opened: FrameBridge[];
-
-// jsdom measures nothing: a page's size is whatever a test says, through
-// the observer the frame watches its page with.
-let resized: (height: number) => void = () => {};
-class Sizes {
-  constructor(private readonly said: ResizeObserverCallback) {}
-  observe(target: Element) {
-    resized = (height) => {
-      target.getBoundingClientRect = () => ({ height }) as DOMRect;
-      this.said([{ target } as ResizeObserverEntry], this as never);
-    };
-  }
-  disconnect() {}
-  unobserve() {}
-}
-
-beforeEach(() => {
-  vi.stubGlobal("ResizeObserver", Sizes);
-  live = createLiveFeed();
-  json = vi.fn(async (path: string) => {
-    if (path === "/api/entities") return [forecast];
-    throw Object.assign(new Error("No such thing"), { code: "not_found" });
-  });
-  shell = new EventTarget();
-  opened = [];
-  location.hash = "#hello=code-1";
-});
-
-afterEach(() => {
-  for (const bridge of opened) bridge.close();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  document.body.innerHTML = "";
-});
-
-const client = () =>
-  createAppClient(info, {
-    json: json as unknown as CoreBridge["json"],
-    live,
-    ask: vi.fn(async () => true),
-  });
-
-const message = (data: unknown, more: object) =>
-  Object.assign(new Event("message"), { data, ...more });
-
-// The shell's end, for the frame whose window is `frame`.
-function shellEnd(frame: Window, code = "code-1") {
-  const events: FrameEvent[] = [];
-  const bridge = openBridge({
-    frame: () => frame,
-    code,
-    client,
-    setup: () => ({
-      type: "setup",
-      app: info,
-      page: "main",
-      params: {},
-      context,
-    }),
-    on: (event) => events.push(event),
-    host: shell as unknown as Window,
-  });
-  opened.push(bridge);
-  return { bridge, events };
-}
-
-// The frame's window as the shell sees it, which passes on what it's sent.
-function frameWindow(take: (data: unknown, ports: MessagePort[]) => void) {
-  return {
-    postMessage: vi.fn((data: unknown, _to: string, ports: MessagePort[]) =>
-      take(data, ports),
-    ),
-  } as unknown as Window & { postMessage: ReturnType<typeof vi.fn> };
-}
-
-// A page in its frame, started by the kit as the core's entry starts it.
-function framed(ui: () => Promise<{ default: AppUi }>) {
-  const frame = frameWindow((data, ports) =>
-    window.dispatchEvent(message(data, { source: window, ports })),
-  );
-  vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => {
-    shell.dispatchEvent(message(data, { source: frame }));
-  });
-  const end = shellEnd(frame);
-  startFrame(ui);
-  return { ...end, frame };
-}
+import {
+  info,
+  context,
+  live,
+  json,
+  shell,
+  opened,
+  resized,
+  client,
+  message,
+  shellEnd,
+  frameWindow,
+  framed,
+  framePort,
+  shellEvents,
+  answerTo,
+} from "./frames-support";
 
 function Main(props: PageProps) {
   const client = useAppClient();
@@ -527,28 +417,6 @@ describe("the shell's end", () => {
       expect(events).toEqual([{ type: "failed", reason: "files" }]);
     },
   );
-
-  // The frame's end of the port, as a page's own code could use it.
-  let shellEvents: FrameEvent[] = [];
-  async function framePort() {
-    let given: MessagePort | undefined;
-    const frame = frameWindow((_data, ports) => (given = ports[0]));
-    shellEvents = shellEnd(frame).events;
-    shell.dispatchEvent(
-      message(
-        { sanctum: "hello", code: "code-1", bridge: frameBridge },
-        { source: frame },
-      ),
-    );
-    const answers: ToFrame[] = [];
-    given!.onmessage = (event: MessageEvent<ToFrame>) =>
-      answers.push(event.data);
-    await vi.waitFor(() => expect(answers[0]?.type).toBe("setup"));
-    return { port: given!, answers };
-  }
-
-  const answerTo = (answers: ToFrame[], id: number) =>
-    answers.find((each) => each.type === "answer" && each.id === id);
 
   it("runs only AppClient's operations, through the app's client", async () => {
     const { port, answers } = await framePort();

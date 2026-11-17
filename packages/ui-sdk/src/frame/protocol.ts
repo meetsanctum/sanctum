@@ -2,6 +2,7 @@ import type {
   AppInfo,
   DeviceInfo,
   LiveMessage,
+  LivePress,
   TemperatureUnit,
 } from "@meetsanctum/app-sdk";
 
@@ -15,7 +16,7 @@ import type { PageParams } from "../app-ui";
 // id, and the shell answers each; it never sends a URL, method or header.
 
 /** The version of what's said here; a client from before a page's can't show it. */
-export const frameBridge = 3;
+export const frameBridge = 4;
 
 /** The first message, from the frame to its parent, before there's a port. */
 export type FrameHello = { sanctum: "hello"; code: string; bridge: number };
@@ -37,11 +38,17 @@ export type FrameOperation =
   | { op: "command"; command: unknown }
   | { op: "entities" }
   | { op: "settings" }
-  | { op: "ask"; permissions: string[] };
+  | { op: "ask"; permissions: string[] }
+  // Ends a capture the page began, answered once the core has.
+  | { op: "release"; capture: number };
 
 export type FromFrame =
   | ({ type: "request"; id: number } & FrameOperation)
   | { type: "subscribe"; on: boolean }
+  // Captures a remote's presses, as the shell's client for the app does:
+  // each press it holds back comes as captured, and an end that wasn't
+  // asked for as captureEnded.
+  | { type: "capture"; capture: number; device: string }
   // The title and actions the shell's top bar shows, new with each revision.
   | {
       type: "bar";
@@ -94,6 +101,8 @@ export type ToFrame =
     }
   | { type: "live"; message: LiveMessage }
   | { type: "refresh" }
+  | { type: "captured"; capture: number; press: LivePress }
+  | { type: "captureEnded"; capture: number; reason: "expired" | "failed" }
   // An action pressed in the top bar, as drawn at that revision.
   | { type: "press"; id: string; revision: number };
 
