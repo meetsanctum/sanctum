@@ -83,6 +83,15 @@ export type Shell = {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
   };
+  // Where the frames that show apps' pages may go. The desktop app holds
+  // each frame to the address named here, which carries its code, and its
+  // loads to that page and the kit (apps/desktop/src/frames.ts). None in a
+  // plain browser.
+  frames?: {
+    // False for an address that isn't an app page's.
+    allow(url: string): Promise<boolean>;
+    end(url: string): Promise<void>;
+  } | null;
   // The window around the page, where the shell draws one: on macOS its
   // traffic lights, which go with the sidebar, and View's Show sidebar or
   // Hide sidebar, ⌃⌘S, which names what it does (apps/desktop/src/menu.ts).
@@ -130,6 +139,7 @@ function browserShell(): Shell {
       },
     },
     trust: null,
+    frames: null,
     preferences: {
       get: async (key) => {
         try {

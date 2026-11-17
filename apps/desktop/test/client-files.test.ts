@@ -75,6 +75,14 @@ describe("the client's files", () => {
     expect(contentSecurityPolicy(true)).toContain(
       "connect-src https: wss: http: ws:;",
     );
+    // Its frames show apps' pages from the core's /pages/ only, over plain
+    // HTTP only in development.
+    expect(contentSecurityPolicy(false)).toContain(
+      "frame-src https://*:*/pages/;",
+    );
+    expect(contentSecurityPolicy(true)).toContain(
+      "frame-src https://*:*/pages/ http://*:*/pages/;",
+    );
     expect(script.headers.get("content-type")).toMatch(/^text\/javascript/);
     expect(missing.status).toBe(404);
   });

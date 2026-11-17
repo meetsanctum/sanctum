@@ -192,6 +192,53 @@ describe("an app's page in its frame", () => {
     port.close();
   });
 
+  it("gives a page that loads again a frame afresh, with a new code", async () => {
+    await show();
+    const first = frame();
+    const code = new URL(first.src).hash;
+    await act(async () => first.dispatchEvent(new Event("load")));
+    expect(frame()).toBe(first);
+    // Reloaded, or sent elsewhere, by its own code.
+    await act(async () => first.dispatchEvent(new Event("load")));
+    expect(address.calls).toBe(2);
+    expect(frame()).not.toBe(first);
+    expect(new URL(frame().src).hash).not.toBe(code);
+  });
+
+  it("names its address to the desktop app before it loads, and ends it after", async () => {
+    const named: string[] = [];
+    const ended: string[] = [];
+    vi.stubGlobal("sanctumShell", {
+      frames: {
+        allow: async (url: string) => {
+          named.push(url);
+          // Not loaded yet: the frame waits for the app's answer.
+          expect(
+            container.querySelector("iframe")?.getAttribute("src"),
+          ).toBeNull();
+          return true;
+        },
+        end: async (url: string) => {
+          ended.push(url);
+        },
+      },
+    });
+    await show();
+    expect(named).toEqual([frame().src]);
+    act(() => root.unmount());
+    expect(ended).toEqual(named);
+    root = createRoot(container);
+  });
+
+  it("doesn't load an address the desktop app refuses", async () => {
+    vi.stubGlobal("sanctumShell", {
+      frames: { allow: async () => false, end: async () => {} },
+    });
+    await show();
+    expect(frame().getAttribute("src")).toBeNull();
+    expect(text()).toContain("Its files didn't load.");
+  });
+
   it("says its files didn't load when the core has none", async () => {
     address.answer = () => Promise.reject(new Error("not_found"));
     await show();

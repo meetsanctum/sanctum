@@ -11,6 +11,7 @@ import { CircleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { looksRunning, NoticeCard } from "../app-state";
+import { getShell } from "../shell";
 import type { HostedApp } from "../apps";
 import { KnotLoader } from "../knot-loader";
 import { PageDoesntMatch } from "../page-mismatch";
@@ -59,6 +60,8 @@ export function AppFrame(props: {
   const [src, setSrc] = useState<{ url: string; code: string }>();
   const [showsLoader, setShowsLoader] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
+  // The code of the address whose page has loaded once.
+  const loads = useRef<{ code?: string }>({});
   const bridge = useRef<FrameBridge>(undefined);
   const context = useMemo<FrameContext>(
     () => ({
@@ -113,22 +116,34 @@ export function AppFrame(props: {
       on,
     });
     bridge.current = opened;
-    pageAddress(id, code).then(
-      ({ kit, url }) => {
+    // The desktop app holds the frame to the address named here, with its
+    // code (apps/desktop/src/frames.ts); a plain browser has no such check.
+    const frames = getShell().frames;
+    let named: string | undefined;
+    pageAddress(id, code)
+      .then(async ({ kit, url }) => {
         if (!isCurrent) return;
-        if (kit?.bridge === frameBridge) setSrc({ url, code });
-        else setPhase(kit && kit.bridge > frameBridge ? "newer" : "files");
-      },
-      () => {
+        if (kit?.bridge !== frameBridge) {
+          return setPhase(kit && kit.bridge > frameBridge ? "newer" : "files");
+        }
+        if (frames) {
+          named = url;
+          if (!(await frames.allow(url)))
+            throw new Error("Not a page's address");
+          if (!isCurrent) return;
+        }
+        setSrc({ url, code });
+      })
+      .catch(() => {
         if (!isCurrent) return;
         forgetPageTicket();
         setPhase("files");
-      },
-    );
+      });
     return () => {
       isCurrent = false;
       opened.close();
       bridge.current = undefined;
+      if (named) void frames?.end(named);
     };
   }, [attempt, id, version]);
 
@@ -222,6 +237,17 @@ export function AppFrame(props: {
         sandbox="allow-scripts"
         allow=""
         referrerPolicy="no-referrer"
+        // A page that loads again, reloaded or sent elsewhere by its own
+        // code, would come back with a code its bridge has used: it gets a
+        // frame afresh instead, with a new one.
+        onLoad={() => {
+          if (!src) return;
+          if (loads.current.code === src.code) {
+            setAttempt((each) => each + 1);
+          } else {
+            loads.current = { code: src.code };
+          }
+        }}
         // Full bleed to the panel's sides and foot, as the page it holds.
         className={cn(
           "-mx-6 -mb-6 min-h-0 grow border-0",

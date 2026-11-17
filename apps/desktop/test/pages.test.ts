@@ -13,7 +13,7 @@ vi.mock("electron", async () => {
   return {
     BrowserWindow: vi.fn(function () {
       return Object.assign(new EventEmitter(), {
-        webContents: { send: vi.fn() },
+        webContents: Object.assign(new EventEmitter(), { send: vi.fn() }),
         loadURL: vi.fn(),
         setWindowButtonVisibility: vi.fn(),
         setWindowButtonPosition: vi.fn(),
@@ -93,6 +93,7 @@ describe("the page's certificate session", () => {
       .calls[0]![0]!;
     const details = {
       url: "https://192.168.1.20/api/health",
+      frame: { parent: null, url: "app://sanctum/" },
     } as Parameters<typeof beforeRequest>[0];
     const callback = vi.fn();
 
@@ -120,7 +121,13 @@ describe("the page's certificate session", () => {
         .calls[0]![0]!;
       const request = (url: string) => {
         const callback = vi.fn();
-        beforeRequest({ url } as Parameters<typeof beforeRequest>[0], callback);
+        beforeRequest(
+          {
+            url,
+            frame: { parent: null, url: "app://sanctum/" },
+          } as Parameters<typeof beforeRequest>[0],
+          callback,
+        );
         return callback;
       };
       expect(request("https://192.168.1.20/api/health")).toHaveBeenCalledWith({
@@ -233,6 +240,97 @@ describe("the window's sidebar", () => {
           .mocked(window.setWindowButtonVisibility)
           .mock.invocationCallOrder.at(-1)!,
       );
+    },
+  );
+});
+
+describe("the frames apps' pages show in", () => {
+  const code = "0123456789abcdef0123456789abcdef";
+  const folder = `/pages/page_${"A".repeat(43)}/apps/sanctum.weather/0123456789abcdef/`;
+  const entry = `https://192.168.1.20:4100${folder}#hello=${code}`;
+  const frame = { parent: {}, url: entry };
+
+  function shown() {
+    const { pages, own } = setUp(Promise.resolve(accept));
+    const window = vi.mocked(BrowserWindow).mock.results[0]!
+      .value as BrowserWindow;
+    const navigate = (url: string, isMainFrame = false) => {
+      const event = { url, isMainFrame, preventDefault: vi.fn() };
+      window.webContents.emit("will-frame-navigate", event);
+      return !event.preventDefault.mock.calls.length;
+    };
+    const beforeRequest = vi.mocked(own.webRequest.onBeforeRequest).mock
+      .calls[0]![0]!;
+    const request = (details: object) => {
+      const callback = vi.fn();
+      beforeRequest(details as Parameters<typeof beforeRequest>[0], callback);
+      return callback.mock.calls[0]![0] as { cancel: boolean };
+    };
+    return { pages, window, navigate, request };
+  }
+
+  it("go only where the page named, and never by a redirect", () => {
+    const { pages, window, navigate } = shown();
+    expect(navigate(entry)).toBe(false);
+    expect(pages.allowFrame(entry)).toBe(true);
+    expect(navigate(entry)).toBe(true);
+    expect(navigate(entry.replace("weather", "moods"))).toBe(false);
+    // The client's own navigations are main.ts's to check.
+    expect(navigate("app://sanctum/", true)).toBe(true);
+    pages.endFrame(entry);
+    expect(navigate(entry)).toBe(false);
+    const redirect = { isMainFrame: false, preventDefault: vi.fn() };
+    window.webContents.emit("will-redirect", redirect);
+    expect(redirect.preventDefault).toHaveBeenCalled();
+  });
+
+  it("load only their own page and the kit", () => {
+    const { pages, request } = shown();
+    pages.allowFrame(entry);
+    const at = (path: string) => `https://192.168.1.20:4100${path}`;
+    expect(
+      request({ url: at(`${folder}index.js`), resourceType: "script", frame })
+        .cancel,
+    ).toBe(false);
+    expect(
+      request({ url: at("/api/devices"), resourceType: "xhr", frame }).cancel,
+    ).toBe(true);
+    // The client's own requests are as before.
+    expect(
+      request({
+        url: at("/api/devices"),
+        resourceType: "xhr",
+        frame: { parent: null, url: "app://sanctum/" },
+      }).cancel,
+    ).toBe(false);
+    // A frame gone while it's asked about gets nothing.
+    const gone = {
+      get parent(): never {
+        throw new Error("Render frame was disposed");
+      },
+    };
+    expect(
+      request({
+        url: at(`${folder}index.js`),
+        resourceType: "script",
+        frame: gone,
+      }).cancel,
+    ).toBe(true);
+  });
+
+  it.each([null, undefined])(
+    "refuses a request whose frame is unavailable (%s)",
+    (frame) => {
+      const { pages, request } = shown();
+      pages.allowFrame(entry);
+      expect(
+        request({
+          url: "https://192.168.1.20:4100/api/devices",
+          resourceType: "xhr",
+          frame,
+          initiatorOrigin: "null",
+        }).cancel,
+      ).toBe(true);
     },
   );
 });

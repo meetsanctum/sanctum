@@ -30,6 +30,15 @@ own origin, `app://sanctum`, and, like every client, talks only to the core.
   This reconnects to the stored home, or returns an unfinished first contact
   to choosing a home. Date refusals are retried once a corrected clock makes
   them valid.
+- **Apps' pages** open in sandboxed frames the core serves under
+  `/pages/` (the page's policy allows frames there and nowhere else). The
+  client names each frame's address, with the code it says hello with,
+  before it loads it, and the main process holds the frame to it
+  (`src/frames.ts`): it goes only to that address, which is its own entry
+  again on a reload, never to another app, build, origin or scheme; its
+  requests reach only its own page's folder and the kit under the same
+  ticket; it is never redirected. The bridge answers only the client's main
+  frame, and a frame gets no preload, permissions or popups.
 - **The core's CORS allowlist** must include `app://sanctum`. On a host the
   manager passes it in the core container's settings.
 
