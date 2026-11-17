@@ -391,9 +391,9 @@ describe("a device's detail", () => {
       apps = [app];
       await show();
       await click(button(tileLabel));
-      expect(dialog()?.textContent).toContain(
-        `test.presses for ${name}: ${kind}`,
-      );
+      expect(
+        dialog()?.querySelector('iframe[title="Presses: Presses"]'),
+      ).toBeTruthy();
       expect(button(kind === "light" ? "Red" : name, dialog()!)).toBeTruthy();
       expect(
         [...dialog()!.querySelectorAll('[role="tab"]')].map((each) =>
@@ -542,9 +542,9 @@ describe("a remote's detail", () => {
 
     expect(dialog()?.querySelector("h2")?.textContent).toBe("Office button");
     expect(dialog()?.textContent).toContain("Office · Idle");
-    expect(dialog()?.textContent).toContain(
-      "test.presses for Office button: button",
-    );
+    expect(
+      dialog()?.querySelector('iframe[title="Presses: Presses"]'),
+    ).toBeTruthy();
     // Then its Activity: its presses and what each did.
     await click(button("Activity", dialog()!));
     expect(dialog()?.textContent).toContain("Last press");

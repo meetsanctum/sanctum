@@ -49,7 +49,7 @@ import { lightsInRoom } from "./targets.js";
 // lights switch, from the snapshot it takes as the room goes dark
 // (schedules/). A room may turn its lights on with motion and off with no
 // motion, which Moods keeps as a workflow each from the core's motion pieces
-// (motion/). Its UI is in ./ui, which the shell bundles.
+// (motion/). Its UI is in ./ui, which opens in frames the core serves.
 
 // What its start keeps of the home, which a resume catches up.
 let running:

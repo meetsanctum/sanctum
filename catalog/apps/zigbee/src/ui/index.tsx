@@ -1,7 +1,7 @@
 import { defineAppUi, PageBar, type PageProps } from "@meetsanctum/ui-sdk";
 import { version } from "../../sanctum-app.json";
 
-// Zigbee's UI, which the shell bundles. Its main page, which the app
+// Zigbee's UI, in a frame the core serves. Its main page, which the app
 // overview opens, says where devices are added and removed: in Settings,
 // since that is the core's.
 

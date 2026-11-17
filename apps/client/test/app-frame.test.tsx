@@ -58,7 +58,6 @@ const info = (over: Partial<AppInfo> = {}): AppInfo => ({
 
 const hosted = (app: AppInfo): HostedApp => ({
   info: app,
-  ui: { id: app.id, version: app.version, pages: {} },
   client: createAppClient(app, {
     json: vi.fn() as unknown as CoreBridge["json"],
     live: createLiveFeed(),

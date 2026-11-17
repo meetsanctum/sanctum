@@ -41,10 +41,9 @@ VITE_SANCTUM_CORE_URL=http://127.0.0.1:<port> \
 CORE_ALLOWED_ORIGINS=http://localhost:5173 pnpm dev
 ```
 
-Apps' pages and device pages open in frames the core serves, rather than
-from the client's bundle, on a client whose `localStorage` has
-`sanctum.framePages` set to `on`. The core lets only the origins it allows show its pages in a
-frame, so for the dev server's shell start the stack with
+Apps' pages and device pages open in frames the core serves; the client
+bundles none of them. The core lets only the origins it allows show its
+pages in a frame, so for the dev server's shell start the stack with
 `CORE_ALLOWED_ORIGINS=http://localhost:5173`. A saved change to an app's
 pages shows in its frame once the stack has staged the new build, about ten
 seconds later: the frame opens afresh on the app's new build. A change that
@@ -96,7 +95,8 @@ manager ── Docker, updates and rollback, backups, certificates, USB and seri
   Zigbee2MQTT), backs up before each update and rolls back when a new version
   isn't healthy.
 - **The shell** (`apps/client`) is the React app behind every screen. Apps'
-  pages are built with `@meetsanctum/ui-sdk` and bundled into it.
+  pages are built with `@meetsanctum/ui-sdk`, served by the core and shown
+  in sandboxed frames, which talk to the shell over a message channel.
 
 ## Repository layout
 

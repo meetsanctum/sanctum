@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { looksRunning } from "../app-state";
 import type { HostedApp } from "../apps";
-import { CoreError } from "../core-fetch";
 import type { PageMismatch } from "../page-mismatch";
 import { getShell } from "../shell";
 import { openBridge, type FrameBridge, type FrameEvent } from "./bridge";
@@ -204,10 +203,17 @@ export function useFrame(options: {
   };
 }
 
-// What the core says an app's pages need, when they don't fit its kit.
+// What the core says an app's pages need, when they don't fit its kit: its
+// refusal (a CoreError) is a 404 whose body says so.
 function misfitOf(error: unknown) {
-  if (!(error instanceof CoreError) || error.status !== 404) return undefined;
-  const { needs } = (error.body ?? {}) as { needs?: unknown };
+  const { status, body } = (error ?? {}) as {
+    status?: unknown;
+    body?: unknown;
+  };
+  if (status !== 404 || typeof body !== "object" || body === null) {
+    return undefined;
+  }
+  const { needs } = body as { needs?: unknown };
   return needs === "sanctum" || needs === "pages" ? needs : undefined;
 }
 

@@ -38,18 +38,7 @@ function ownApp(): HostedApp {
       ],
     },
   };
-  return {
-    info,
-    ui: {
-      id: info.id,
-      version: info.version,
-      pages: {},
-      devicePages: {
-        "example.status": ({ device }) => <p>Status of {device.name}</p>,
-      },
-    },
-    client: { app: info } as AppClient,
-  };
+  return { info, client: { app: info } as AppClient };
 }
 
 const theirs: DeviceInfo = { ...lamp, driver: "sanctum.example" };
@@ -101,7 +90,7 @@ describe("a device's detail", () => {
     expect(pagesOf(lamp, apps)).toEqual([]);
   });
 
-  it("renders a driver's own page for a device with no capabilities before Activity", async () => {
+  it("shows a driver's own page for a device with no capabilities, in its frame, before Activity", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal(
       "ResizeObserver",
@@ -162,9 +151,11 @@ describe("a device's detail", () => {
         live.refresh();
       });
 
-      expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
-        "Status of Hall display",
-      );
+      expect(
+        container.querySelector(
+          '[role="dialog"] iframe[title="Example: Status"]',
+        ),
+      ).toBeTruthy();
       expect(
         [...container.querySelectorAll('[role="tab"]')].map((tab) =>
           tab.getAttribute("aria-label"),
