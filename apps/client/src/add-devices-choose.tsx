@@ -13,8 +13,8 @@ import type { ReactNode } from "react";
 /** A way to add devices, as the first page offers it. */
 export type Way =
   | { kind: "found"; count: number }
-  // A radio, by its app's id, or none from a core that doesn't name them.
-  | { kind: "join"; driver: string | null; name: string }
+  // A radio, by its app's id.
+  | { kind: "join"; driver: string; name: string }
   // A radio whose app waits for what the home never set up.
   | { kind: "notSetUp"; name: string; fix: string };
 

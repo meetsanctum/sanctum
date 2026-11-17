@@ -60,7 +60,7 @@ export function AddDevices(props: {
   rooms: readonly Room[];
   apps: readonly AppInfo[];
   // Adding devices as the core last said it: what drivers found, and which
-  // let devices join or find them. An older core says neither.
+  // let devices join or find them.
   adding?: PairingInfo;
   // The services the home never set up, to say what to plug in.
   notSetUp?: readonly ServiceNotSetUp[];
@@ -70,6 +70,12 @@ export function AddDevices(props: {
   const host = useOverlayHost();
   const [page, setPage] = useState<Page>({ kind: "choose" });
   const [pairing, setPairing] = useState<PairingInfo>();
+  // A command or live update overtakes any read already under way.
+  const pairingRevision = useRef(0);
+  const receivePairing = useCallback((next: PairingInfo) => {
+    pairingRevision.current += 1;
+    setPairing(next);
+  }, []);
   // What joined from the first time this overlay let devices join.
   const [since, setSince] = useState<string>();
   const [problem, setProblem] = useState<string>();
@@ -108,39 +114,50 @@ export function AddDevices(props: {
   }, []);
   // Once stopped, nothing is left to stop; one that failed is tried again
   // as the overlay closes.
-  const close = useCallback(
-    () =>
-      sequence(closePairing).then((closed) => {
-        needsClose.current = false;
-        return closed;
-      }),
-    [sequence],
-  );
+  const close = useCallback(() => {
+    const current = session.current;
+    return sequence(async () => {
+      const requested = pairingRevision.current;
+      const closed = await closePairing();
+      needsClose.current = false;
+      if (
+        current === session.current &&
+        requested === pairingRevision.current
+      ) {
+        receivePairing(closed);
+      }
+      return closed;
+    });
+  }, [sequence, receivePairing]);
 
   const open = useCallback(
-    async (driver: string | null) => {
+    async (driver: string) => {
       if (isDismissing.current) return;
       const current = session.current;
       needsClose.current = true;
       setOpening(true);
       setStopped(false);
       setFailed(false);
+      setStopFailed(false);
       setProblem(undefined);
       try {
         let startedAt = Date.now();
+        let requested = pairingRevision.current;
         const opened = await sequence(() => {
+          // A preceding overlay's close may have finished while this open
+          // was queued. This radio still needs to be stopped when we leave.
+          needsClose.current = true;
           startedAt = Date.now();
+          requested = pairingRevision.current;
           return coreJson<Opened>("/api/devices/pairing/open", {
             method: "POST",
-            json: driver
-              ? { seconds: joinSeconds, drivers: [driver] }
-              : { seconds: joinSeconds },
+            json: { seconds: joinSeconds, drivers: [driver] },
           });
         });
         if (current !== session.current) return;
         offset.current = Date.parse(opened.since) - startedAt;
         setSince((first) => first ?? opened.since);
-        setPairing(opened);
+        if (requested === pairingRevision.current) receivePairing(opened);
       } catch (error) {
         if (current !== session.current) return;
         setFailed(true);
@@ -153,17 +170,16 @@ export function AddDevices(props: {
         if (current === session.current) setOpening(false);
       }
     },
-    [sequence],
+    [sequence, receivePairing],
   );
 
   const stop = async () => {
     const current = session.current;
     setProblem(undefined);
     try {
-      const closed = await close();
+      await close();
       if (current === session.current) {
         setStopped(true);
-        setPairing(closed);
       }
     } catch (error) {
       if (current === session.current) setProblem(deviceProblem(error));
@@ -180,14 +196,25 @@ export function AddDevices(props: {
   };
 
   // Back to the choice; leaving a radio's page stops devices joining it.
-  const back = () => {
+  const back = async () => {
+    if (isDismissing.current) return;
     setProblem(undefined);
-    if (page.kind === "join" && needsClose.current) {
-      void close()
-        .then((closed) => setPairing(closed))
-        .catch(() => undefined);
+    if (page.kind !== "join" || !needsClose.current) {
+      setPage({ kind: "choose" });
+      return;
     }
-    setPage({ kind: "choose" });
+    isDismissing.current = true;
+    const current = session.current;
+    try {
+      await close();
+      if (current === session.current) {
+        setPage({ kind: "choose" });
+      }
+    } catch (error) {
+      if (current === session.current) setProblem(deviceProblem(error));
+    } finally {
+      if (current === session.current) isDismissing.current = false;
+    }
   };
 
   const dismiss = async () => {
@@ -249,21 +276,26 @@ export function AddDevices(props: {
         if (message.type === "device") saveAttempts.current.delete(message.id);
         if (!props.open || message.type !== "pairing") return;
         revision += 1;
-        setPairing(message.pairing);
+        receivePairing(message.pairing);
       },
       refresh() {
         if (!props.open) return;
         const requested = ++revision;
+        const pairingAtRead = pairingRevision.current;
         void coreJson<PairingInfo>("/api/devices/pairing")
           .then((next) => {
-            if (current === session.current && requested === revision) {
+            if (
+              current === session.current &&
+              requested === revision &&
+              pairingAtRead === pairingRevision.current
+            ) {
               setPairing(next);
             }
           })
           .catch(() => undefined);
       },
     });
-  }, [props.open, props.live]);
+  }, [props.open, props.live, receivePairing]);
 
   // Found devices keep their place: one that goes is dropped, unless it was
   // added here or its Add is still waiting, and one that comes goes last.
@@ -306,30 +338,25 @@ export function AddDevices(props: {
     props.apps.find((app) => app.id === id)?.name ?? null;
 
   // The ways the home has: what drivers find, while any does or something
-  // was found; each radio that lets devices join, or one unnamed radio from
-  // an older core; and a radio whose app waits for what was never set up.
-  const drivers = pairing?.drivers ?? props.adding?.drivers;
+  // was found; each radio that lets devices join; and a radio whose app
+  // waits for what was never set up.
+  const drivers = pairing?.drivers ?? props.adding?.drivers ?? [];
   const finders = pairing?.finders ?? props.adding?.finders ?? [];
   const ways: Way[] = [];
   if (finders.length > 0 || shown.length > 0) {
     ways.push({ kind: "found", count: shown.length });
   }
-  if (drivers === undefined) {
-    ways.push({ kind: "join", driver: null, name: "New devices" });
-  } else {
-    for (const driver of drivers) {
-      ways.push({
-        kind: "join",
-        driver,
-        name: appName(driver) ?? "New devices",
-      });
-    }
+  for (const driver of drivers) {
+    ways.push({
+      kind: "join",
+      driver,
+      name: appName(driver) ?? "New devices",
+    });
   }
   const fix = addDevicesHint(props.apps, props.notSetUp);
   const waiting = props.apps.find(
     (app) =>
-      !drivers?.includes(app.id) &&
-      isWaitingForSetUp(app, props.notSetUp ?? []),
+      !drivers.includes(app.id) && isWaitingForSetUp(app, props.notSetUp ?? []),
   );
   if (fix && waiting) {
     ways.push({ kind: "notSetUp", name: waiting.name, fix });
@@ -361,11 +388,11 @@ export function AddDevices(props: {
       ? (pairing?.joined ?? []).filter(
           (each) =>
             Date.parse(each.joinedAt) >= Date.parse(since) &&
-            (page.driver === null || each.driver === page.driver),
+            each.driver === page.driver,
         )
       : [];
   const joining: JoiningState =
-    opening && !pairing?.until
+    opening && secondsLeft === 0
       ? { kind: "opening" }
       : secondsLeft > 0
         ? { kind: "open", secondsLeft }
@@ -414,7 +441,7 @@ export function AddDevices(props: {
           <Button
             variant="link"
             aria-label="Back to Add devices"
-            onClick={back}
+            onClick={() => void back()}
           >
             <ChevronLeft data-icon="inline-start" aria-hidden="true" />
             Add devices
@@ -430,31 +457,35 @@ export function AddDevices(props: {
           {page.kind === "choose" && (
             <ChoosePage ways={ways} onChoose={choose} />
           )}
-          {page.kind === "found" && (
-            <FoundPage
-              shown={shown}
-              added={added}
-              devices={props.devices}
-              rooms={props.rooms}
-              appName={appName}
-              onWorkingChange={(key, isWorking) =>
-                setPendingAdds((before) => {
-                  const next = new Set(before);
-                  if (isWorking) next.add(key);
-                  else next.delete(key);
-                  return next;
-                })
-              }
-              onAdded={(key, device) => {
-                setAdded((before) => ({ ...before, [key]: device }));
-                props.onChanged(device);
-              }}
-              onSave={save}
-            />
+          {(page.kind === "found" || pendingAdds.size > 0) && (
+            // Keep pending adds alive across Back, so returning cannot add
+            // twice and their results still become cards to name and place.
+            <div hidden={page.kind !== "found"}>
+              <FoundPage
+                shown={shown}
+                added={added}
+                devices={props.devices}
+                rooms={props.rooms}
+                appName={appName}
+                onWorkingChange={(key, isWorking) =>
+                  setPendingAdds((before) => {
+                    const next = new Set(before);
+                    if (isWorking) next.add(key);
+                    else next.delete(key);
+                    return next;
+                  })
+                }
+                onAdded={(key, device) => {
+                  setAdded((before) => ({ ...before, [key]: device }));
+                  props.onChanged(device);
+                }}
+                onSave={save}
+              />
+            </div>
           )}
           {page.kind === "join" && (
             <JoiningPage
-              name={page.driver ? page.name : null}
+              name={appName(page.driver)}
               state={joining}
               joined={joinedHere}
               devices={props.devices}
