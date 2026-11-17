@@ -33,6 +33,8 @@ export function createAppAdding(options: {
   removed: Pick<RemovedApps, "get" | "forget">;
   workflows: () => Pick<WorkflowsForApps, "added">;
   devices: Pick<Devices, "ofDriver">;
+  // Finishes the steps of its removal that failed, in this turn.
+  finishRemoval?: (appId: string) => Promise<void>;
   // What clients hear of a driver's devices that show again.
   onDevice?: (change: DeviceChange) => void;
   available: Pick<AvailableApps, "find">;
@@ -88,8 +90,19 @@ export function createAppAdding(options: {
     // The sheet showed another version, as when Sanctum updated meanwhile.
     if (app.version !== version) throw refuse("conflict", detail);
     if (app.shortfalls.length > 0) throw refuse("unavailable", detail);
-    const removal = options.removed.get(appId);
-    // Its removal ends before it can come back.
+    let removal = options.removed.get(appId);
+    // Its removal ends before it can come back: steps that failed when it
+    // was removed are tried again now.
+    if (removal && !removal.isDone) {
+      await options
+        .finishRemoval?.(appId)
+        .catch((error: unknown) =>
+          log(
+            `apps: ${appId}'s removal didn't finish (${error instanceof Error ? error.message : String(error)})`,
+          ),
+        );
+      removal = options.removed.get(appId);
+    }
     if (removal && !removal.isDone) throw refuse("conflict", detail);
     // Who added it is written with it, so neither is without the other.
     const isAdded = options.added.add(appId, who, () => {

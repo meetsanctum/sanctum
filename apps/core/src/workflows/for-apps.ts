@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
@@ -22,6 +22,8 @@ export function createWorkflowsForApps(options: {
   record: RecordActivity;
   // Ends a workflow's runs under way and queued (engine.ts).
   endRuns: (workflowId: string) => void;
+  // A workflow turned back on: its timers, as turning it on sets them.
+  turnedOn: (workflowId: string, graph: WorkflowRow["graph"]) => void;
   now: () => Date;
 }) {
   const { db, record } = options;
@@ -85,40 +87,42 @@ export function createWorkflowsForApps(options: {
     },
 
     /**
-     * For an app added back, once it's installed: turns on the workflows its
-     * removal turned off that nobody changed since and that miss nothing
-     * now, and forgets the rest. Answers the names of those turned on.
+     * For an app added back, once it starts: turns on every workflow a
+     * removal turned off that nobody changed since and that misses nothing
+     * now, with its timers set as turning it on sets them. One still
+     * missing another removed app's pieces or devices keeps its record, for
+     * when that app comes back; one someone changed loses it. Answers the
+     * names of those turned on.
      */
-    added(app: string): string[] {
-      const records = db
-        .select()
-        .from(workflowsOffForApps)
-        .where(eq(workflowsOffForApps.app, app))
-        .all();
+    added(_app: string): string[] {
+      const records = db.select().from(workflowsOffForApps).all();
       const byId = new Map(options.rows().map((row) => [row.id, row]));
       const on: string[] = [];
       db.transaction(() => {
-        for (const off of records) {
-          const workflow = byId.get(off.workflowId);
-          if (
-            workflow &&
+        for (const workflowId of new Set(
+          records.map((each) => each.workflowId),
+        )) {
+          const workflow = byId.get(workflowId);
+          const lastOff = Math.max(
+            ...records
+              .filter((each) => each.workflowId === workflowId)
+              .map((each) => each.updatedAt.getTime()),
+          );
+          const isUnchanged =
+            workflow !== undefined &&
             !workflow.enabled &&
-            workflow.updatedAt.getTime() === off.updatedAt.getTime() &&
-            options.problems(workflow).length === 0
-          ) {
+            workflow.updatedAt.getTime() === lastOff;
+          if (isUnchanged && options.problems(workflow).length > 0) continue;
+          if (isUnchanged) {
             db.update(workflows)
               .set({ enabled: true, updatedAt: options.now() })
-              .where(eq(workflows.id, workflow.id))
+              .where(eq(workflows.id, workflowId))
               .run();
+            options.turnedOn(workflowId, workflow.graph);
             on.push(workflow.name);
           }
           db.delete(workflowsOffForApps)
-            .where(
-              and(
-                eq(workflowsOffForApps.workflowId, off.workflowId),
-                eq(workflowsOffForApps.app, app),
-              ),
-            )
+            .where(eq(workflowsOffForApps.workflowId, workflowId))
             .run();
         }
       });

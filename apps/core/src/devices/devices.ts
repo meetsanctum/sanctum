@@ -537,6 +537,10 @@ export function createDevices(
             : { name, autoNamed: false };
       changing(id, () =>
         db.transaction(() => {
+          // One whose driver was removed is hidden, as if it weren't there.
+          if (!load(id)) {
+            throw new ActionCallError("not_found");
+          }
           if (changes.roomId && !places.hasRoom(changes.roomId)) {
             throw new ActionCallError("not_found");
           }

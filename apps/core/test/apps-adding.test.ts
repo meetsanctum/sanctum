@@ -70,6 +70,9 @@ async function addingWith(
     installs?: (pkg: ApartPackage) => Promise<void>;
     hasInstalled?: boolean;
     refuses?: boolean;
+    finishRemoval?: (
+      removed: ReturnType<typeof createRemovedApps>,
+    ) => (appId: string) => Promise<void>;
   } = {},
 ) {
   const db = await database();
@@ -79,9 +82,11 @@ async function addingWith(
   const installing: string[] = [];
   const logs: string[] = [];
   const installedNow = new Set<string>();
+  const removedApps = createRemovedApps(db, { now: () => at });
   const adding = createAppAdding({
     turns: createListTurns(),
-    removed: createRemovedApps(db, { now: () => at }),
+    removed: removedApps,
+    finishRemoval: options.finishRemoval?.(removedApps),
     workflows: () => ({ added: () => [] }),
     devices: { ofDriver: () => [] },
     gate: {
@@ -183,6 +188,22 @@ describe("adding an app", () => {
 
     removed.done("sanctum.example");
     await adding.add(someone, "sanctum.example", "1.0.0");
+    expect(removed.get("sanctum.example")).toBeUndefined();
+  });
+
+  it("finishes a removal whose last steps failed before adding it back", async () => {
+    const { db, adding } = await addingWith({
+      finishRemoval: (removed) => async (appId) => removed.done(appId),
+    });
+    const removed = createRemovedApps(db, { now: () => at });
+    removed.record(
+      "sanctum.example",
+      {},
+      { name: "Example", version: "1.0.0" },
+    );
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
     expect(removed.get("sanctum.example")).toBeUndefined();
   });
 

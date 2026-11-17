@@ -473,6 +473,7 @@ export async function createModules(
     removed: removedApps,
     workflows: () => workflows.forApps,
     devices,
+    finishRemoval: (appId) => appRemoving.finish(appId),
     onDevice: live.device,
     available: availableApps,
     added: addedApps,

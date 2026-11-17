@@ -158,6 +158,9 @@ export function createAppRemoving(options: {
       return options.turns.take(() => remove(principal, appId));
     },
 
+    /** Finishes one app's removal now, within a turn already taken. */
+    finish,
+
     /** Finishes the removals a core that stopped left part way. */
     resume() {
       return options.turns.take(async () => {

@@ -186,6 +186,34 @@ describe("removing an app", () => {
     },
   );
 
+  it("keeps a workflow's record while what it uses is still missing", async () => {
+    const { core, maya, evening } = await home();
+    await post(core, "/api/apps/test.lamps/remove", {}, maya);
+
+    // Another app comes back first: its lamp is still hidden.
+    expect(core.workflows.forApps.added("test.other")).toEqual([]);
+    expect(await workflow(core, evening)).toMatchObject({ enabled: false });
+
+    // Its first start back turns it on.
+    core.removedApps.forget("test.lamps");
+    await core.startApps([await lampsPackage()]);
+    expect(await workflow(core, evening)).toMatchObject({ enabled: true });
+  });
+
+  it("keeps a hidden device out of reach of changes", async () => {
+    const { core, maya, lamp } = await home();
+    await post(core, "/api/apps/test.lamps/remove", {}, maya);
+
+    const response = await post(
+      core,
+      "/api/devices/update",
+      { id: lamp, name: "Reading lamp" },
+      maya,
+    );
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it("leaves off a workflow someone changed while it was gone", async () => {
     const { core, maya, evening } = await home();
     await post(core, "/api/apps/test.lamps/remove", {}, maya);

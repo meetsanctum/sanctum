@@ -194,6 +194,7 @@ export function createWorkflows(
     named: pieces.named,
     problems: (workflow) => pieces.check(workflow.graph).problems,
     record,
+    turnedOn: (workflowId, graph) => timers.set(row(workflowId), graph),
     endRuns(workflowId) {
       engine.cancelRuns(workflowId);
       engine.forget(workflowId);
