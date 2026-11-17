@@ -16,7 +16,7 @@ import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem, updateDevice } from "./device-parts";
-import { EditDevice } from "./edit-device";
+import { EditDevice, type Editing } from "./edit-device";
 import { Overlay } from "./overlay";
 import { useOverlayHost } from "./overlay-host";
 import {
@@ -104,9 +104,16 @@ export function AddDevices(props: {
   // Rooms made here, until the home's rooms say so too.
   const [madeRooms, setMadeRooms] = useState<Room[]>([]);
   // The device whose removal is being asked about.
-  const [removing, setRemoving] = useState<DeviceInfo>();
+  const [removing, setRemoving] = useState<Editing>();
   // The devices already greeted as new, so that each is greeted once.
   const greeted = useRef(new Set<string>());
+
+  useEffect(() => {
+    const waiting = madeRooms.filter(
+      (made) => !props.rooms.some((room) => room.id === made.id),
+    );
+    if (waiting.length !== madeRooms.length) setMadeRooms(waiting);
+  }, [madeRooms, props.rooms]);
 
   // A request must finish before a later one reaches the radios, including
   // when an open is still waiting on a radio as the overlay closes.
@@ -382,7 +389,7 @@ export function AddDevices(props: {
       setMadeRooms((before) => [...before, room]);
       return room.id;
     },
-    onRemove: setRemoving,
+    onRemove: (device) => setRemoving({ action: "remove", device }),
     isFresh: (id) => !greeted.current.has(id),
     onGreeted: (id) => greeted.current.add(id),
   };
@@ -430,6 +437,13 @@ export function AddDevices(props: {
       container={host.container}
       open={props.open}
       onClose={() => void dismiss()}
+      onEscapeKeyDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-slot="add-devices-new-room"]')
+        )
+          event.preventDefault();
+      }}
       onCovering={host.onCovering}
       title={title}
       subtitle={
@@ -518,11 +532,26 @@ export function AddDevices(props: {
         </div>
       </div>
       <EditDevice
-        editing={removing && { action: "remove", device: removing }}
-        appName={removing ? appName(removing.driver) : null}
+        editing={removing}
+        appName={removing ? appName(removing.device.driver) : null}
         onClose={() => setRemoving(undefined)}
         onChanged={props.onChanged}
-        onRemoved={(id) => props.onRemoved?.(id)}
+        onRemoved={(id) => {
+          saveAttempts.current.delete(id);
+          setPairing((before) =>
+            before
+              ? {
+                  ...before,
+                  joined: before.joined.map((each) =>
+                    each.deviceId === id
+                      ? { ...each, deviceId: null, known: false }
+                      : each,
+                  ),
+                }
+              : before,
+          );
+          props.onRemoved?.(id);
+        }}
         onForgotten={() => undefined}
       />
     </Overlay>

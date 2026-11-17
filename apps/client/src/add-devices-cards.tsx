@@ -338,7 +338,18 @@ function RoomChoice(props: {
 
   if (naming) {
     return (
-      <form onSubmit={add} className="flex flex-col gap-1 text-start">
+      <form
+        data-slot="add-devices-new-room"
+        onSubmit={add}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setNaming(false);
+            setName("");
+          }
+        }}
+        className="flex flex-col gap-1 text-start"
+      >
         <label htmlFor={id} className="text-xs font-medium text-(--silver)">
           New room
         </label>
@@ -349,13 +360,6 @@ function RoomChoice(props: {
             value={name}
             maxLength={60}
             onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                setNaming(false);
-                setName("");
-              }
-            }}
             className="h-8 min-w-0 flex-1 bg-black/14 pointer-coarse:h-11"
           />
           <Button

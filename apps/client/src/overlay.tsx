@@ -34,6 +34,8 @@ export function Overlay(props: {
   container: HTMLElement | null;
   open: boolean;
   onClose: () => void;
+  /** Lets an inline editor handle Escape before the overlay closes. */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
   /** Says it has come over the window, or has gone, its fade out ended. */
   onCovering: (covering: boolean) => void;
   title: string;
@@ -68,6 +70,7 @@ export function Overlay(props: {
           // Frosted Carbon glass is in Evening over a page in either mode.
           data-mode="evening"
           aria-describedby={undefined}
+          onEscapeKeyDown={props.onEscapeKeyDown}
           onOpenAutoFocus={() => {
             opener.current =
               document.activeElement instanceof HTMLElement
