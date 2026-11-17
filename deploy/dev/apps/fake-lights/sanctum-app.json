@@ -12,8 +12,20 @@
   "migrations": null,
   "driver": {
     "hooks": [
-      "command"
-    ]
+      "command",
+      "pairing",
+      "add"
+    ],
+    "questions": {
+      "key": {
+        "label": "Key",
+        "kind": "secret",
+        "help": "Whoever set the plug up has it.",
+        "refusals": {
+          "wrongKey": "That key doesn't match. Check it and try again."
+        }
+      }
+    }
   },
   "permissions": [
     {

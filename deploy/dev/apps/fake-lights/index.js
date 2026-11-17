@@ -2,9 +2,11 @@ import { defineApp, light as lightKind } from "@meetsanctum/app-sdk";
 
 // Pretend lights and contact sensors for a development stack, since a Mac
 // has no Zigbee stick: a driver app like Zigbee, whose lights do what they're
-// told at once and whose contact sensors open and close by themselves. It
-// ships with no host: only a development stack stages it
-// (deploy/dev/stack.Dockerfile).
+// told at once and whose contact sensors open and close by themselves. Add
+// devices can try it out: while it lets devices join, a new light joins a few
+// seconds in and another a little later, and it has found a sensor and a plug
+// on the network, the plug asking for its key ("sanctum"). It ships with no
+// host: only a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
   [
@@ -54,6 +56,98 @@ const reportContact = (ctx, key) =>
   });
 
 let ticking;
+// The context of its run, which lasts until it stops, for what happens
+// after a call has answered, such as a light joining.
+let running;
+
+// What it has found and could add, until someone adds it.
+const found = new Map([
+  [
+    "office-air",
+    {
+      key: "office-air",
+      name: "Office Air",
+      description: "Temperature, humidity",
+      type: null,
+      asks: [],
+    },
+  ],
+  [
+    "desk-plug",
+    {
+      key: "desk-plug",
+      name: "Desk Plug",
+      description: "Needs its key",
+      type: null,
+      asks: ["key"],
+    },
+  ],
+]);
+
+// Lights that join while it lets devices join: the first a few seconds in,
+// the next a little later, each joining, being set up, then ready.
+let joins = [];
+let joined = 0;
+
+function joinLight(ctx, after) {
+  const number = ++joined;
+  const key = `new-light-${number}`;
+  const steps = [
+    [after, () => ctx.devices.joining({ key, stage: "joined" })],
+    [
+      after + 1_500,
+      () =>
+        ctx.devices.joining({
+          key,
+          stage: "interviewing",
+          description: "Fake light",
+        }),
+    ],
+    [
+      after + 3_500,
+      async () => {
+        lights.set(key, {
+          name: `Fake light ${number}`,
+          state: {
+            on: true,
+            brightness: 100,
+            colorMode: "temperature",
+            colorTemperature: 370,
+          },
+        });
+        await registerLight(ctx, key);
+        await report(ctx, key);
+        await ctx.devices.joining({
+          key,
+          stage: "ready",
+          description: "Fake light",
+        });
+      },
+    ],
+  ];
+  for (const [at, step] of steps) {
+    joins.push(setTimeout(() => void step().catch(() => undefined), at));
+  }
+}
+
+const registerLight = (ctx, key) =>
+  ctx.devices.register({
+    key,
+    name: lights.get(key).name,
+    manufacturer: "Sanctum",
+    model: "Fake light",
+    capabilities: [
+      {
+        id: "light",
+        kind: "light",
+        features: {
+          brightness: true,
+          colorTemperature: { min: 153, max: 500 },
+          color: true,
+        },
+      },
+    ],
+  });
 
 const report = (ctx, key) =>
   ctx.devices.report({
@@ -78,24 +172,9 @@ export default defineApp({
   actions: [],
   events: [],
   async start(ctx) {
-    for (const [key, { name }] of lights) {
-      await ctx.devices.register({
-        key,
-        name,
-        manufacturer: "Sanctum",
-        model: "Fake light",
-        capabilities: [
-          {
-            id: "light",
-            kind: "light",
-            features: {
-              brightness: true,
-              colorTemperature: { min: 153, max: 500 },
-              color: true,
-            },
-          },
-        ],
-      });
+    running = ctx;
+    for (const key of lights.keys()) {
+      await registerLight(ctx, key);
       await report(ctx, key);
     }
     for (const [key, { name }] of contacts) {
@@ -109,6 +188,7 @@ export default defineApp({
       await reportContact(ctx, key);
     }
     await ctx.devices.present({ keys: [...lights.keys(), ...contacts.keys()] });
+    await ctx.devices.found([...found.values()]);
     // The core takes a report that says the same again as no change.
     ticking = setInterval(() => {
       for (const key of contacts.keys()) {
@@ -118,6 +198,8 @@ export default defineApp({
   },
   async stop() {
     clearInterval(ticking);
+    joins.forEach(clearTimeout);
+    joins = [];
   },
   driver: {
     async command(ctx, command) {
@@ -126,6 +208,50 @@ export default defineApp({
       if (!light) return;
       light.state = { ...light.state, ...lightKind.desired(command.command) };
       await report(ctx, command.key);
+    },
+    pairing: {
+      async open(_ctx, { seconds }) {
+        joins.forEach(clearTimeout);
+        joins = [];
+        joinLight(running, 5_000);
+        joinLight(running, 9_000);
+        return { until: new Date(Date.now() + seconds * 1000).toISOString() };
+      },
+      async close() {
+        joins.forEach(clearTimeout);
+        joins = [];
+      },
+    },
+    questions: {
+      key: {
+        label: "Key",
+        kind: "secret",
+        help: "Whoever set the plug up has it.",
+        refusals: {
+          wrongKey: "That key doesn't match. Check it and try again.",
+        },
+      },
+    },
+    async add(ctx, { key, answers }) {
+      const device = found.get(key);
+      if (!device) return;
+      if (device.asks.includes("key") && answers.key !== "sanctum") {
+        return { refused: { question: "key", refusal: "wrongKey" } };
+      }
+      await ctx.devices.register({
+        key,
+        name: device.name,
+        manufacturer: "Sanctum",
+        model: "Fake sensor",
+        capabilities: [{ id: "contact", kind: "contact" }],
+      });
+      await ctx.devices.report({
+        key,
+        availability: "online",
+        states: { contact: { open: false } },
+      });
+      found.delete(key);
+      await ctx.devices.found([...found.values()]);
     },
   },
 });

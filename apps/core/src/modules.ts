@@ -333,6 +333,7 @@ export async function createModules(
   const pairing = createPairing({
     drivers: {
       list: () => apps.pairingDrivers(),
+      finders: () => apps.findingDrivers(),
       open: (driver, seconds, actor) =>
         apps.openPairing(driver, seconds, actor),
       close: (driver, actor) => apps.closePairing(driver, actor),

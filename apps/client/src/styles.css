@@ -561,3 +561,78 @@ body {
 .empty p {
   margin: 0 0 8px;
 }
+
+/* Add devices' wait (src/add-devices-joining.tsx): a soft warm glow the
+   knot rests on, breathing, and rings that drift out from it one after
+   another in step with the knot loader's 4.8 s turn. Only transform and
+   opacity move; where motion is reduced, the glow holds still and the rings
+   are not drawn. */
+.add-devices-orb {
+  position: absolute;
+  top: 42px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.add-devices-halo {
+  position: absolute;
+  inset: -120px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(255 236 210 / 20%),
+    rgb(255 236 210 / 6%) 45%,
+    rgb(255 236 210 / 0%) 70%
+  );
+}
+
+.add-devices-ring {
+  position: absolute;
+  inset: -42px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 40%);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .add-devices-halo {
+    animation: add-devices-breathe 4.8s ease-in-out infinite;
+  }
+
+  .add-devices-ring {
+    animation: add-devices-ring 4.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  }
+
+  .add-devices-ring:nth-child(3) {
+    animation-delay: 1.6s;
+  }
+
+  .add-devices-ring:nth-child(4) {
+    animation-delay: 3.2s;
+  }
+}
+
+@keyframes add-devices-breathe {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes add-devices-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(3.4);
+    opacity: 0;
+  }
+}

@@ -17,7 +17,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 // A press on these keeps the overlay open; the pages around them span the
 // glass.
 const content =
-  "[data-slot=swipe-page-content], [data-slot=swipe-pages-tabs], [data-slot=scroll-area-scrollbar]";
+  "[data-slot=swipe-page-content], [data-slot=swipe-pages-tabs], [data-slot=scroll-area-scrollbar], [data-slot=overlay-content]";
 
 // Inside the overlay's content, which stays until its fade out has ended, so
 // this says when it is really gone rather than when it starts to go.
@@ -41,6 +41,8 @@ export function Overlay(props: {
   subtitle?: ReactNode;
   /** What the header starts with, opposite Done. */
   leading?: ReactNode;
+  /** Done in plain words where a page's own buttons carry the colour. */
+  doneVariant?: "outline" | "link";
   children: ReactNode;
 }) {
   const { onClose } = props;
@@ -98,7 +100,7 @@ export function Overlay(props: {
             </div>
             <div className="flex justify-end">
               <DialogPrimitive.Close asChild>
-                <Button variant="outline">Done</Button>
+                <Button variant={props.doneVariant ?? "outline"}>Done</Button>
               </DialogPrimitive.Close>
             </div>
           </header>

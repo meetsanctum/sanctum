@@ -13,8 +13,8 @@ import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
 
 // Adding devices: pairing is the core's flow, whatever the radio. Someone
-// lets new devices join for a while; the core asks every running driver app
-// that can pair to open its network, and the drivers say how each device
+// lets new devices join for a while; the core asks the running driver apps
+// that can pair to open their networks, every one or those named, and the drivers say how each device
 // that joins is getting on until it is ready. Each driver's network closes
 // by itself when its time is up, so nothing of this outlives the core. What
 // drivers found and could add shows beside it (found.ts).
@@ -29,12 +29,18 @@ export const pairingRules = {
 export const pairingRequest = z.object({
   // Zigbee lets devices join for at most 254 seconds at a time.
   seconds: z.number().int().min(1).max(254).default(240),
+  // Only these drivers, as when someone chose Zigbee in Add devices;
+  // without it, every one that can pair.
+  drivers: z.array(z.string().min(1).max(128)).min(1).max(16).optional(),
 });
 
 /** The driver apps that can pair, through the app host. */
 export type PairingDrivers = {
   // Those running now.
   list(): string[];
+  // The running driver apps that add devices they find, as on the home's
+  // network.
+  finders?(): string[];
   open(
     driver: string,
     seconds: number,
@@ -100,12 +106,13 @@ export function createPairing(options: {
       until: until > now().getTime() ? new Date(until).toISOString() : null,
       joined: joined.map((each) => ({ ...each })),
       drivers: drivers.list(),
+      finders: drivers.finders?.() ?? [],
       found: options.found?.() ?? [],
     };
   }
 
-  const toldOf = ({ drivers, found }: PairingInfo) =>
-    JSON.stringify({ drivers, found });
+  const toldOf = ({ drivers, finders, found }: PairingInfo) =>
+    JSON.stringify({ drivers, finders, found });
 
   function changed() {
     const now = info();
@@ -145,8 +152,8 @@ export function createPairing(options: {
   return {
     info,
 
-    // Lets new devices join every driver's network that can pair, for
-    // someone the gate has let through. Opening again while open starts the
+    // Lets new devices join every driver's network that can pair, or only
+    // those the request names, for someone the gate has let through. Opening again while open starts the
     // time again. It answers until when, and since when: what joined from
     // then on is what this person is adding.
     open(
@@ -160,7 +167,10 @@ export function createPairing(options: {
           throw new ActionCallError("invalid_request");
         }
         const since = now();
-        const ids = drivers.list();
+        const named = parsed.data.drivers;
+        const ids = drivers
+          .list()
+          .filter((driver) => named === undefined || named.includes(driver));
         const answers = await Promise.allSettled(
           ids.map(async (driver) => {
             opening.add(driver);

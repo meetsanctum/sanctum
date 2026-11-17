@@ -52,6 +52,7 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
       until: null,
       found: [],
       drivers: [zigbee.id],
+      finders: [],
       joined: [
         {
           driver: zigbee.id,
@@ -116,6 +117,16 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
       await act(async () => {
         [...container.querySelectorAll("button")]
           .find((button) => button.textContent === "Add devices")!
+          .click();
+      });
+      // Zigbee, the radio the sensor joined.
+      await act(async () => {
+        [
+          ...document.querySelectorAll<HTMLButtonElement>(
+            "[role=dialog] button",
+          ),
+        ]
+          .find((button) => button.textContent?.startsWith("Zigbee"))!
           .click();
       });
     }
