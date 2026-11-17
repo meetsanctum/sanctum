@@ -106,8 +106,11 @@ export function DeviceFrame(props: {
         {...shown.frameProps}
         title={`${name}: ${props.title}`}
         style={{ height: phase === "ready" ? height : 0 }}
+        // 4 px past the column on every side, which the page keeps clear
+        // (kit.css), so rings outside a control's edge show whole.
         className={cn(
-          "w-full border-0 bg-transparent",
+          "-mx-[4px] w-[calc(100%+8px)] max-w-none border-0 bg-transparent",
+          phase === "ready" && "-my-[4px]",
           (failed || phase !== "ready") && "invisible",
         )}
       />
