@@ -6,6 +6,8 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
+import { createAddedApps } from "./app-host/added.js";
+import { createAvailableApps } from "./app-host/available.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
 import { createAppHost } from "./app-host/host.js";
@@ -43,6 +45,7 @@ import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
 import { createLiveUpdates } from "./live-updates.js";
+import type { ManagerClient } from "./manager.js";
 import { createPages } from "./pages/pages.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
@@ -87,7 +90,11 @@ export async function createModules(
         // What it found on the home's network (discovery/sightings.ts); tests
         // may leave it out.
         discovery?: SightingsManager["discovery"];
+        // What it staged for this image; tests may leave it out.
+        stagedApps?: ManagerClient["stagedApps"];
       };
+    // The apps this core's image ships, once the core has read them.
+    shippedApps?: () => readonly string[];
     // The host's id, which the manager keeps.
     hostId: () => string | undefined;
     // The home's id, which this database keeps (loadHomeId).
@@ -339,6 +346,7 @@ export async function createModules(
     list: (app) => workflows.kept.list(app),
   };
   const appVersions = createAppVersions(db, { now });
+  const addedApps = createAddedApps(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
   const appUpdates = createAppUpdates({
     db,
@@ -346,6 +354,7 @@ export async function createModules(
     versions: appVersions,
     settings: appSettingsStore,
     manager: options.manager,
+    activity,
     log,
     now: () => now?.() ?? new Date(),
     ...options.appUpdates,
@@ -425,6 +434,23 @@ export async function createModules(
     now: now ?? (() => new Date()),
     log,
   });
+  // What the image ships that the household hasn't added, asked of the
+  // manager briefly, since a client waits for the answer.
+  const availableApps = createAvailableApps({
+    shipped: options.shippedApps ?? (() => []),
+    added: addedApps,
+    staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
+    loadPackage: (appId, folder) =>
+      loadApartPackage(
+        options.packagesDir ?? "/packages",
+        appId,
+        folder,
+        "official",
+      ),
+    pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
+    host: () => options.manager.hostStatus(),
+    log,
+  });
   const workflows = createWorkflows(db, {
     host: apps,
     devices,
@@ -448,7 +474,9 @@ export async function createModules(
   const activityViews = createActivityViews(activity, {
     person: (id) => people.list().find((person) => person.id === id) ?? null,
     client: (id) => auth.clients.name(id),
-    app: (id) => apps.list().find((app) => app.id === id)?.name ?? null,
+    // An app that's gone by the name its entries kept.
+    app: (id) =>
+      apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),
     action: (app, id) => apps.actionTitle(app, id),
     workflow: (id) => workflows.brief(id),
     device: (id) => devices.get(id)?.name ?? null,
@@ -569,6 +597,8 @@ export async function createModules(
     found,
     entities,
     apps,
+    addedApps,
+    availableApps,
     pages,
     workflows,
     history,

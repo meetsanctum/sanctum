@@ -3,11 +3,13 @@ import type {
   AppRunning,
   AppInfo,
   AppSettings,
+  AvailableApp,
   StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { AppHost } from "./host.js";
@@ -16,6 +18,10 @@ import type { AppHost } from "./host.js";
 //
 //   GET  /api/apps                            AppInfo[]: the installed apps,
 //                                             for the app overview
+//   GET  /api/apps/available                  AvailableApp[]: the apps
+//                                             Sanctum brings that the home
+//                                             hasn't added, each with what
+//                                             keeps it from being added now
 //   GET  /api/apps/:appId/manifest            StaticManifest: its
 //                                             sanctum-app.json, for its
 //                                             settings page
@@ -68,9 +74,9 @@ function appIdOf(requestParams: unknown) {
 
 export function registerAppRoutes(
   app: FastifyInstance,
-  options: { host: AppHost; gate: Gate },
+  options: { host: AppHost; available: AvailableApps; gate: Gate },
 ) {
-  const { host, gate } = options;
+  const { host, available, gate } = options;
 
   // The installed apps as clients see them. The origin stays the core's.
   const infos = (): AppInfo[] =>
@@ -84,6 +90,12 @@ export function registerAppRoutes(
     gate.admit(request.principal!, { tier: "read" });
     if (!host.hasInstalled()) throw new ActionCallError("unavailable");
     return infos().sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  // Which apps the home could add is household information too.
+  app.get("/api/apps/available", async (request): Promise<AvailableApp[]> => {
+    gate.admit(request.principal!, { tier: "read" });
+    return available.list();
   });
 
   // What it is, asks for and brings, with its samples: as public as the

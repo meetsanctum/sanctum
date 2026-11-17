@@ -2,6 +2,7 @@ import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { activityWords, lastChangeWords } from "../src/activity/words";
+import { productName } from "../src/brand";
 import { entry } from "./activity-fixtures";
 
 // How each entry of the activity log reads in the client, in a device's list
@@ -514,6 +515,51 @@ describe("an entry's words", () => {
         subject: { type: "dashboard", id: "home", name: "Home", gone: false },
       }),
     ).toEqual({ title: "Rearranged Home", detail: "Alex", problem: false });
+  });
+
+  it("says an app's update and going back ended, by the name kept once it's gone", () => {
+    const ended = (fields: Partial<ActivityInfo>) =>
+      activityWords(
+        entry({
+          kind: "system",
+          source: "sanctum.moods",
+          who: { kind: "sanctum" },
+          app: moods,
+          subject: null,
+          detail: { name: "Moods", from: "0.10.0", to: "0.11.0" },
+          ...fields,
+        }),
+      );
+    expect(ended({ action: "version.update" })).toEqual({
+      title: "Updated Moods to 0.11.0",
+      detail: productName,
+      problem: false,
+    });
+    expect(
+      ended({ action: "version.update", outcome: "failed", reason: "crashed" }),
+    ).toEqual({
+      title: "Moods 0.11.0 didn't start",
+      detail: "It went back to 0.10.0",
+      problem: true,
+    });
+    expect(
+      ended({
+        action: "version.back",
+        detail: { name: "Moods", from: "0.11.0", to: "0.10.0" },
+      }).title,
+    ).toBe("Moods went back to 0.10.0");
+    expect(
+      ended({
+        action: "version.back",
+        outcome: "failed",
+        app: { id: "sanctum.moods", name: null },
+        detail: { name: "Moods", from: "0.11.0", to: "0.10.0" },
+      }),
+    ).toEqual({
+      title: "Moods couldn't go back to 0.10.0",
+      detail: "It stayed on 0.11.0",
+      problem: true,
+    });
   });
 
   it("reads an app's action by its title", () => {

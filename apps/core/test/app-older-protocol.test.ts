@@ -17,8 +17,8 @@ import { claimed, get, post } from "./support.js";
 
 useCleanUps();
 
-const speaksOlder = (from: string) =>
-  `apps: ${id} ${from} speaks a protocol this core doesn't`;
+const cannotRun = (from: string) =>
+  `apps: ${id} ${from} can't run on this core`;
 
 describe("a version from before this core's protocol", () => {
   it("isn't offered to go back to, and going back to it is refused before anything stops", async () => {
@@ -43,7 +43,7 @@ describe("a version from before this core's protocol", () => {
 
     expect(offered.json()).toEqual({ to: null });
     expect(pressed.statusCode).toBe(409);
-    expect(core.logs).toContain(`${speaksOlder("1.0.0")}, so it can't go back`);
+    expect(core.logs).toContain(`${cannotRun("1.0.0")}, so it can't go back`);
     expect(rowOf(core)).toBeUndefined();
     expect(home.containers).toEqual([]);
     expect(stateOf(core, id)).toMatchObject({
@@ -67,9 +67,7 @@ describe("a version from before this core's protocol", () => {
     const next = await home.coreWith(version("2.0.0"));
 
     await running(next, id);
-    expect(next.logs).toContain(
-      `${speaksOlder("1.0.0")}, so it starts on 2.0.0`,
-    );
+    expect(next.logs).toContain(`${cannotRun("1.0.0")}, so it starts on 2.0.0`);
     await vi.waitFor(() => expect(committedOf(next)?.version).toBe("2.0.0"));
     expect(rowOf(next)).toBeUndefined();
     expect(home.containers).not.toContain("1.0.0+test");

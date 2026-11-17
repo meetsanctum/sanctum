@@ -52,6 +52,14 @@ export const appIconSchema = z.object({
 });
 export type AppIcon = z.infer<typeof appIconSchema>;
 
+/**
+ * The version of the app API this core serves, which a manifest's `core`
+ * range must include for the core to run the app. It moves on its own,
+ * apart from Sanctum's version: a major only when an app built for the one
+ * before can no longer run.
+ */
+export const appApiVersion = "1.0.0";
+
 /** The page the app overview opens. */
 export const mainPage = "main";
 
