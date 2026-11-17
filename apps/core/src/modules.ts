@@ -494,6 +494,7 @@ export async function createModules(
     updates: appUpdates,
     workflows: () => workflows.forApps,
     devices,
+    entities,
     activity,
     manager: options.manager,
     onRemoved: live.appRemoved,

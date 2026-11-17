@@ -3,6 +3,7 @@ import type { AppRemoval, DeviceInfo } from "@meetsanctum/app-sdk";
 import type { Activity } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
 import type { DeviceChange, Devices } from "../devices/devices.js";
+import type { Entities } from "../entities/entities.js";
 import type { WorkflowsForApps } from "../workflows/for-apps.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
@@ -31,6 +32,7 @@ export function createAppRemoving(options: {
   updates: Pick<AppUpdates, "shownFor">;
   workflows: () => WorkflowsForApps;
   devices: Pick<Devices, "ofDriver">;
+  entities: Pick<Entities, "removeApp">;
   activity: Pick<Activity, "for">;
   manager: {
     removeAppContainer(app: string): Promise<void>;
@@ -75,6 +77,8 @@ export function createAppRemoving(options: {
     if (options.host.list().some((app) => app.id === appId)) {
       await options.host.remove(appId);
     } else {
+      // What it brought, if a removal that failed part way left it.
+      options.entities.removeApp(appId);
       await options.manager.removeAppContainer(appId);
     }
     const held = await options.manager.servicesHeldBy?.(appId);

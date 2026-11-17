@@ -521,9 +521,18 @@ export function createAppHost(options: {
           // running: both own its context until they end.
           await entry.lifecycle;
           await ended;
-          await stopApp(entry, { reason: "removing" });
-          entry.storage.close();
-          await entry.link.close();
+          // It's gone from the list by now, so what it brought and its
+          // container go even when stopping it fails: removing its
+          // container stops what's left, and only that fails the removal.
+          await stopApp(entry, { reason: "removing" }).catch((error: unknown) =>
+            log(`apps: ${appId} didn't stop cleanly (${message(error)})`),
+          );
+          try {
+            entry.storage.close();
+            await entry.link.close();
+          } catch (error) {
+            log(`apps: ${appId}'s link didn't close (${message(error)})`);
+          }
           options.entities.removeApp(appId);
           await manager.removeAppContainer(appId);
         } finally {

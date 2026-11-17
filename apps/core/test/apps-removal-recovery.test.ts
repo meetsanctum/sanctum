@@ -36,6 +36,29 @@ describe("finishing an app's removal", () => {
     expect(core.removedApps.get(app.id)?.isDone).toBe(true);
   });
 
+  it("takes what it brought and its container even when stopping it fails", async () => {
+    const { manager } = fakeManager();
+    const app = defineApp({
+      ...base,
+      id: "sanctum.example",
+      permissions: [],
+      actions: [],
+      stop: async () => {
+        throw new Error("won't stop");
+      },
+    });
+    const { core } = await apart(app, { manager });
+    await running(core, app.id);
+    const maya = await claimed(core);
+    const removeAppContainer = vi.spyOn(manager, "removeAppContainer");
+
+    const response = await post(core, `/api/apps/${app.id}/remove`, {}, maya);
+
+    expect(response.statusCode).toBe(200);
+    expect(removeAppContainer).toHaveBeenCalledWith(app.id);
+    expect(core.removedApps.get(app.id)?.isDone).toBe(true);
+  });
+
   it.each(["container", "lookup", "release"])(
     "keeps the removal unfinished after a failed %s, then retries it",
     async (failure) => {
@@ -58,6 +81,7 @@ describe("finishing an app's removal", () => {
         updates: { shownFor: () => undefined },
         workflows: () => core.workflows.forApps,
         devices: core.devices,
+        entities: core.entities,
         activity: core.activity,
         manager: { removeAppContainer, servicesHeldBy, releaseService },
         log: () => undefined,
@@ -68,9 +92,12 @@ describe("finishing an app's removal", () => {
         { name: "Example", version: "1.0.0" },
       );
 
+      const removeApp = vi.spyOn(core.entities, "removeApp");
       await removing.resume();
 
       expect(core.removedApps.get("sanctum.example")?.isDone).toBe(false);
+      // What it brought goes, though the app isn't installed any more.
+      expect(removeApp).toHaveBeenCalledWith("sanctum.example");
       removeAppContainer.mockResolvedValue(undefined);
       servicesHeldBy.mockResolvedValue(["mosquitto"]);
       releaseService.mockResolvedValue(undefined);
