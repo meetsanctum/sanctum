@@ -9,6 +9,7 @@ import type {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import type { AppAdding } from "./adding.js";
 import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
@@ -22,6 +23,15 @@ import type { AppHost } from "./host.js";
 //                                             Sanctum brings that the home
 //                                             hasn't added, each with what
 //                                             keeps it from being added now
+//   POST /api/apps/add                        { id, version }: adds one of
+//                                             those at the version its sheet
+//                                             showed, and answers its
+//                                             AppInfo once it's installed;
+//                                             refused as a conflict once it's
+//                                             added or another version is
+//                                             there, and as unavailable while
+//                                             something keeps it from being
+//                                             added
 //   GET  /api/apps/:appId/manifest            StaticManifest: its
 //                                             sanctum-app.json, for its
 //                                             settings page
@@ -58,6 +68,10 @@ const appParams = z.object({ appId: z.string().min(1).max(128) });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedCopy = z.strictObject({ id: z.string().min(1).max(64) });
+const toAdd = z.strictObject({
+  id: z.string().min(1).max(128),
+  version: z.string().min(1).max(64),
+});
 
 const grant = z.strictObject({
   permission: z.string().min(1).max(256),
@@ -74,9 +88,14 @@ function appIdOf(requestParams: unknown) {
 
 export function registerAppRoutes(
   app: FastifyInstance,
-  options: { host: AppHost; available: AvailableApps; gate: Gate },
+  options: {
+    host: AppHost;
+    available: AvailableApps;
+    adding: AppAdding;
+    gate: Gate;
+  },
 ) {
-  const { host, available, gate } = options;
+  const { host, available, adding, gate } = options;
 
   // The installed apps as clients see them. The origin stays the core's.
   const infos = (): AppInfo[] =>
@@ -96,6 +115,15 @@ export function registerAppRoutes(
   app.get("/api/apps/available", async (request): Promise<AvailableApp[]> => {
     gate.admit(request.principal!, { tier: "read" });
     return available.list();
+  });
+
+  // Adding one is the household's to choose, like its grants, on every
+  // client. Its sheet closes onto its settings, which say how its first
+  // start goes as it does.
+  app.post("/api/apps/add", async (request): Promise<AppInfo> => {
+    const parsed = toAdd.safeParse(request.body);
+    if (!parsed.success) throw new ActionCallError("invalid_request");
+    return adding.add(request.principal!, parsed.data.id, parsed.data.version);
   });
 
   // What it is, asks for and brings, with its samples: as public as the

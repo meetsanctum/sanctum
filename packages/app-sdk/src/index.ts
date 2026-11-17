@@ -342,6 +342,18 @@ export type AvailableApp = {
   /** The memory its container gets and the image its data lives on, in MB. */
   memory: number;
   data: number;
+  /**
+   * What it brings to the home, counted from its manifest: whether it's a
+   * driver, which brings devices, and how many widgets, room sections,
+   * pages in a device's detail and workflow pieces.
+   */
+  adds: {
+    devices: boolean;
+    widgets: number;
+    roomSections: number;
+    devicePages: number;
+    pieces: number;
+  };
   shortfalls: AppShortfall[];
 };
 

@@ -204,6 +204,20 @@ export function createCore(
     }
   }
 
+  // An app someone just added, from the package the manager staged for it,
+  // installed as the home's apps are at start. A test's core installs its
+  // own apps, and adds none.
+  async function installAdded(appId: string) {
+    if (replaced.installApps) throw new Error("a test's core adds no app");
+    const packages = await stagedPackages([appId]);
+    if (packages.length === 0) throw new Error("its package isn't staged");
+    await modules!.apps.start(packages, {
+      onTrial: onTrial(),
+      coming: [appId],
+      adding: [appId],
+    });
+  }
+
   const steps: CoreSteps = {
     starting: [
       // Migrates the core's database before anything serves. A core that
@@ -256,6 +270,7 @@ export function createCore(
             version: config.version,
             manager: manager!,
             shippedApps: () => shipped,
+            installAdded: (appId) => installAdded(appId),
             hostId: manager!.hostId,
             homeId,
             pin: () => certificates?.current()?.pin ?? null,

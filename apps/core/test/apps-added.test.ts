@@ -242,6 +242,13 @@ describe("the apps a home could add", () => {
         requests: [],
         memory: 128,
         data: 256,
+        adds: {
+          devices: false,
+          widgets: 0,
+          roomSections: 0,
+          devicePages: 0,
+          pieces: 0,
+        },
         shortfalls: [],
       },
       {
@@ -261,6 +268,13 @@ describe("the apps a home could add", () => {
         ],
         memory: 256,
         data: 512,
+        adds: {
+          devices: false,
+          widgets: 0,
+          roomSections: 0,
+          devicePages: 0,
+          pieces: 0,
+        },
         shortfalls: [{ kind: "pages", needs: "pages" }],
       },
     ]);

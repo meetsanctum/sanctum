@@ -1,4 +1,4 @@
-import type { AvailableApp } from "@meetsanctum/app-sdk";
+import type { AvailableApp, StaticManifest } from "@meetsanctum/app-sdk";
 
 import type { AddedApps } from "./added.js";
 import { shortfallsOf, type HostRoom } from "./fit.js";
@@ -8,6 +8,20 @@ import type { ApartPackage } from "./loader.js";
 // added, each at the version the manager staged for it, with what it asks
 // for and what keeps it from being added now. One not staged yet, as just
 // after an update, waits for its package to be listed.
+
+// What it brings to the home, as its add sheet counts it.
+function addsOf({ driver, provides }: StaticManifest): AvailableApp["adds"] {
+  return {
+    devices: driver !== null,
+    widgets: provides.widgets.length,
+    roomSections: provides.roomSections.length,
+    devicePages: provides.devicePages.length,
+    pieces:
+      provides.triggers.length +
+      provides.conditions.length +
+      provides.steps.length,
+  };
+}
 
 export function createAvailableApps(options: {
   // The apps this core's image ships.
@@ -54,6 +68,7 @@ export function createAvailableApps(options: {
             requests: manifest.permissions,
             memory: manifest.runtime.memory,
             data: manifest.runtime.data,
+            adds: addsOf(manifest),
             shortfalls: shortfallsOf(manifest, { pagesNeed, host }),
           });
         } catch (error) {

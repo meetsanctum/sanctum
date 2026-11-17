@@ -64,6 +64,7 @@ type Installed = {
     | "phase"
     | "since"
     | "isFirstStart"
+    | "isAdding"
     | "waitingFor"
     | "isOwnWait"
     | "failures"
@@ -94,6 +95,9 @@ function runOf({ supervision }: Installed, update?: AppRunUpdate): AppRun {
     ...(update ? { update } : {}),
     since: supervision.since.toISOString(),
     ...(supervision.isFirstStart ? { isFirstStart: true as const } : {}),
+    ...(supervision.isFirstStart && supervision.isAdding
+      ? { isAdding: true as const }
+      : {}),
     ...(supervision.waitingFor ? { waitingFor: supervision.waitingFor } : {}),
     ...(supervision.phase === "waiting" && supervision.isOwnWait
       ? { ownWait: true as const }
