@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat, utimes } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +43,7 @@ describe("what the store keeps", () => {
       build: "kit/9edd26f3b3eae8d8",
       file: "icons/check.js",
     });
+    expect(keptAs(`${page}-chunks/-day.js`)?.file).toBe("-chunks/-day.js");
   });
 
   it.each([
@@ -64,6 +65,19 @@ describe("what the store keeps", () => {
 });
 
 describe("the store", () => {
+  it("keeps case-sensitive file and folder names distinct on disk", async () => {
+    const store = createPageStore(root);
+    const files = ["Icon.svg", "icon.svg", "A/icon.svg", "a/icon.svg"];
+    for (const file of files) {
+      await store.put("host-1", `${page}${file}`, served(file));
+    }
+    for (const file of files) {
+      expect(await (await store.get("host-1", `${page}${file}`))!.text()).toBe(
+        file,
+      );
+    }
+  });
+
   it("gives back a file as the core served it, with its headers but no cookie", async () => {
     const store = createPageStore(root);
     await store.put("host-1", `${page}index.js`, served("export default 1;"));
@@ -98,6 +112,50 @@ describe("the store", () => {
     expect(await stat(old).catch(() => null)).toBeNull();
     expect(await store.get("host-1", `${kit}react.js`)).toBeDefined();
   });
+
+  it("retains a build used during a long session when the app starts again", async () => {
+    let at = Date.parse("2026-11-17T00:00:00Z");
+    const store = createPageStore(root, () => at);
+    await store.put("host-1", `${page}index.js`, served("page"));
+    await store.put("host-1", `${kit}react.js`, served("kit"));
+    at += 31 * 24 * 60 * 60_000;
+    expect(await store.get("host-1", `${page}index.js`)).toBeDefined();
+
+    const restarted = createPageStore(root, () => at);
+    await restarted.prune();
+    expect(
+      await (await restarted.get("host-1", `${page}index.js`))!.text(),
+    ).toBe("page");
+    expect(await restarted.get("host-1", `${kit}react.js`)).toBeUndefined();
+  });
+
+  it.runIf(process.platform !== "win32" && process.getuid?.() !== 0)(
+    "continues cleanup when a build cannot be removed",
+    async () => {
+      const store = createPageStore(root);
+      await store.put("host-1", `${kit}react.js`, served("kit"));
+      await store.put("host-1", `${page}index.js`, served("page"));
+      const kitFolder = join(root, "host-1/kit");
+      const appBuild = join(
+        root,
+        "host-1/apps/sanctum.weather/0123456789abcdef",
+      );
+      await utimes(
+        join(kitFolder, "9edd26f3b3eae8d8"),
+        new Date(0),
+        new Date(0),
+      );
+      await utimes(appBuild, new Date(0), new Date(0));
+      await chmod(kitFolder, 0o500);
+      try {
+        await expect(store.prune()).resolves.toBeUndefined();
+        expect(await stat(appBuild).catch(() => null)).toBeNull();
+        expect(await store.get("host-1", `${kit}react.js`)).toBeDefined();
+      } finally {
+        await chmod(kitFolder, 0o700);
+      }
+    },
+  );
 });
 
 describe("a request of the page's session", () => {

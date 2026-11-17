@@ -8,7 +8,7 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
 // The desktop app's own store of apps' page files and the kit. Chromium
@@ -19,13 +19,15 @@ import { dirname, join } from "node:path";
 // never change under it. The entry, which the core writes under each ticket,
 // is never kept, so a ticket that ends opens nothing even here.
 //
-//   <root>/<host>/kit/<digest>/<file>
-//   <root>/<host>/apps/<app>/<digest>/<file>
+//   <root>/<host>/kit/<digest>/<file's hash>
+//   <root>/<host>/apps/<app>/<digest>/<file's hash>
+//
+// File names are hashed so case-insensitive disks keep distinct files apart.
 //
 // A build no page has used for a month goes.
 
 const pageFile =
-  /^\/pages\/[A-Za-z0-9_-]+\/(kit\/[0-9a-f]+|apps\/[a-z0-9][a-z0-9.-]*\/[0-9a-f]+)\/((?:[A-Za-z0-9_][A-Za-z0-9._-]*\/)*[A-Za-z0-9_][A-Za-z0-9._-]*)$/;
+  /^\/pages\/[A-Za-z0-9_-]+\/(kit\/[0-9a-f]+|apps\/[a-z0-9][a-z0-9.-]*\/[0-9a-f]+)\/((?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*)$/;
 
 // The headers kept with a file, and given back with it.
 const keptHeaders = [
@@ -54,17 +56,14 @@ export function keptAs(url: string) {
 }
 
 const isHost = (host: string) => /^[A-Za-z0-9-]{1,64}$/.test(host);
+const fileKey = (file: string) =>
+  createHash("sha256").update(file).digest("hex");
 
 export function createPageStore(root: string, now: () => number = Date.now) {
-  // The builds used since the app started, whose folders are touched once.
-  const touched = new Set<string>();
-
   const folderOf = (host: string, build: string) =>
     join(root, host, ...build.split("/"));
 
   async function touch(folder: string) {
-    if (touched.has(folder)) return;
-    touched.add(folder);
     const at = new Date(now());
     await utimes(folder, at, at).catch(() => undefined);
   }
@@ -75,7 +74,7 @@ export function createPageStore(root: string, now: () => number = Date.now) {
       const kept = keptAs(url);
       if (!kept || !isHost(host)) return undefined;
       const folder = folderOf(host, kept.build);
-      const path = join(folder, kept.file);
+      const path = join(folder, fileKey(kept.file));
       try {
         const [body, meta] = await Promise.all([
           readFile(path),
@@ -100,7 +99,7 @@ export function createPageStore(root: string, now: () => number = Date.now) {
       }
       const body = Buffer.from(await response.arrayBuffer());
       const folder = folderOf(host, kept.build);
-      const path = join(folder, kept.file);
+      const path = join(folder, fileKey(kept.file));
       await mkdir(dirname(path), { recursive: true });
       // Written aside and moved in, headers first, so a file is either
       // there whole with its headers or not at all.
@@ -133,7 +132,11 @@ export function createPageStore(root: string, now: () => number = Date.now) {
         for (const folder of await builds(host)) {
           const info = await stat(folder).catch(() => undefined);
           if (info && now() - info.mtimeMs > unusedFor) {
-            await rm(folder, { recursive: true, force: true });
+            // A cache that cannot be removed must not prevent startup or
+            // cleanup of the remaining builds.
+            await rm(folder, { recursive: true, force: true }).catch(
+              () => undefined,
+            );
           }
         }
       }
