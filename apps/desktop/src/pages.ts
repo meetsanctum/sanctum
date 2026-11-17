@@ -88,17 +88,16 @@ function readCertificateDecision(certificates: string[], isAccepted: boolean) {
   }
 }
 
-// Whether a request may go ahead as far as frames go: one from the main
-// frame, or from nowhere the page can name, always; one from a frame only
-// to that frame's page and the kit. A frame gone while it was asked about
-// gets nothing.
+// Only the main frame may make unrestricted requests. A subframe reaches
+// its own page and the kit; an unavailable or disposed frame gets nothing.
 function mayFrameLoad(
   page: Page,
   details: { url: string; resourceType: string; frame?: WebFrameMain | null },
 ) {
   try {
     const frame = details.frame;
-    if (!frame || frame.parent === null) return true;
+    if (!frame) return false;
+    if (frame.parent === null) return true;
     return page.frames.mayLoad(
       frame.url,
       details.url,

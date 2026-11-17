@@ -93,6 +93,7 @@ describe("the page's certificate session", () => {
       .calls[0]![0]!;
     const details = {
       url: "https://192.168.1.20/api/health",
+      frame: { parent: null, url: "app://sanctum/" },
     } as Parameters<typeof beforeRequest>[0];
     const callback = vi.fn();
 
@@ -120,7 +121,13 @@ describe("the page's certificate session", () => {
         .calls[0]![0]!;
       const request = (url: string) => {
         const callback = vi.fn();
-        beforeRequest({ url } as Parameters<typeof beforeRequest>[0], callback);
+        beforeRequest(
+          {
+            url,
+            frame: { parent: null, url: "app://sanctum/" },
+          } as Parameters<typeof beforeRequest>[0],
+          callback,
+        );
         return callback;
       };
       expect(request("https://192.168.1.20/api/health")).toHaveBeenCalledWith({
@@ -310,4 +317,20 @@ describe("the frames apps' pages show in", () => {
       }).cancel,
     ).toBe(true);
   });
+
+  it.each([null, undefined])(
+    "refuses a request whose frame is unavailable (%s)",
+    (frame) => {
+      const { pages, request } = shown();
+      pages.allowFrame(entry);
+      expect(
+        request({
+          url: "https://192.168.1.20:4100/api/devices",
+          resourceType: "xhr",
+          frame,
+          initiatorOrigin: "null",
+        }).cancel,
+      ).toBe(true);
+    },
+  );
 });
