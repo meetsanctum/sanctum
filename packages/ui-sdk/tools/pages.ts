@@ -3,11 +3,12 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
-import { build } from "vite";
+import { build, type Plugin } from "vite";
 
 import { digestOf, filesOf, type BuiltFile } from "./files.js";
 import { iconImports, iconModules } from "./icons.js";
 import { kitImports, quietLogs, sdkRoot, sdkVersion } from "./kit.js";
+import { withoutKitRules } from "./styles.js";
 
 // `sanctum-pages build`, run in an app's package as part of its build: its
 // pages, its `./ui` export, built into pages/ in the package, which ships
@@ -75,16 +76,47 @@ function stylesheetOf(uiFolder: string) {
 const isKitImport = (id: string) =>
   Object.hasOwn(kitImports, id) || id.startsWith(iconModules);
 
+// The page's stylesheet without what the kit's already has (./styles.ts).
+function kitRulesLeftOut(kitCss: string): Plugin {
+  return {
+    name: "sanctum-kit-rules-left-out",
+    generateBundle: {
+      order: "post",
+      handler(_options, bundle) {
+        for (const [name, file] of Object.entries(bundle)) {
+          if (file.type !== "asset" || !name.endsWith(".css")) continue;
+          const text =
+            typeof file.source === "string"
+              ? file.source
+              : new TextDecoder().decode(file.source);
+          file.source = withoutKitRules(text, kitCss);
+        }
+      },
+    },
+  };
+}
+
+/** The kit's stylesheet as ui-sdk's build writes it. */
+export const builtKitStylesheet = join(sdkRoot, "dist/kit/kit.css");
+
 /** Builds the pages of the app in `packageDir`, if it has any. */
 export async function buildPages(
   packageDir: string,
+  options: { kitStylesheet?: string } = {},
 ): Promise<PagesManifest | undefined> {
+  const kitStylesheet = options.kitStylesheet ?? builtKitStylesheet;
   const outDir = join(packageDir, pagesFolder);
   // A removed page or failed rebuild must not leave an older build to ship.
   await rm(outDir, { recursive: true, force: true });
   const ui = await uiEntry(packageDir);
   if (ui === undefined) return undefined;
   if (!existsSync(ui)) throw new Error(`No ${ui}: it's the package's ./ui`);
+  if (!existsSync(kitStylesheet)) {
+    throw new Error(
+      `No kit stylesheet at ${kitStylesheet}: build ui-sdk first, since a page's stylesheet leaves out what the kit's has`,
+    );
+  }
+  const kitCss = await readFile(kitStylesheet, "utf8");
   // The entry and stylesheet the build starts from, out of the way.
   const work = join(packageDir, "node_modules/.sanctum-pages");
   await rm(work, { recursive: true, force: true });
@@ -108,7 +140,7 @@ export async function buildPages(
       // Each file says where the others are relative to it, wherever the core serves them.
       base: "./",
       logLevel: "warn",
-      plugins: [tailwindcss(), iconImports()],
+      plugins: [tailwindcss(), iconImports(), kitRulesLeftOut(kitCss)],
       build: {
         outDir,
         emptyOutDir: true,

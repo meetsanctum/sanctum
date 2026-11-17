@@ -28,6 +28,9 @@ export default defineConfig({
     proxy: {
       // The live WebSocket too.
       "/api": { target: coreUrl, ws: true },
+      // Apps' pages in their frames, which the core lets a shell at this
+      // address show when CORE_ALLOWED_ORIGINS names it.
+      "/pages": { target: coreUrl },
     },
   },
 });

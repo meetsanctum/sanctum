@@ -32,3 +32,6 @@ export {
 } from "./components/ui/native-select";
 export { Slider } from "./components/ui/slider";
 export { Switch } from "./components/ui/switch";
+// What an app's page runs on in its frame, and what it says to the shell.
+export { startFrame } from "./frame/runtime";
+export * from "./frame/protocol";

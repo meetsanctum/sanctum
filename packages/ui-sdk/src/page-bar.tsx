@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   createContext,
   useContext,
+  useEffect,
   useSyncExternalStore,
   type ComponentProps,
   type ReactNode,
@@ -21,9 +22,21 @@ import { Button } from "./components/ui/button";
 /** The place in the top bar the shell gives the page on show. */
 export const PageBarSlot = createContext<HTMLElement | null>(null);
 
+/**
+ * Where a page in its frame says its title, which the shell's top bar
+ * shows: the frame can't reach the bar itself.
+ */
+export const PageBarSink = createContext<((title: string) => void) | null>(
+  null,
+);
+
 export function PageBar(props: { title: string; children?: ReactNode }) {
   const slot = useContext(PageBarSlot);
+  const sink = useContext(PageBarSink);
   const isPhone = usePhone();
+  useEffect(() => {
+    sink?.(props.title);
+  }, [sink, props.title]);
   const title = (
     <h1 className="m-0 min-w-0 truncate ps-2 text-xl leading-7 font-normal">
       {props.title}
@@ -34,6 +47,11 @@ export function PageBar(props: { title: string; children?: ReactNode }) {
       {props.children}
     </div>
   );
+  if (sink) {
+    return buttons ? (
+      <header className="flex shrink-0 items-center">{buttons}</header>
+    ) : null;
+  }
   if (!slot) {
     return (
       <header className="flex min-h-11 shrink-0 items-center">

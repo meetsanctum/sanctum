@@ -33,6 +33,12 @@ export type PageTicket = {
 };
 
 /**
+ * `GET /api/pages/apps/:appId`: the build of an installed app's pages the
+ * core serves now, which a frame's address names.
+ */
+export type AppPages = { digest: string };
+
+/**
  * `GET /api/auth/status`: the host's id, the id of the home it serves
  * and whether it is claimed.
  */
