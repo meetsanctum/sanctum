@@ -6,8 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { FieldControl } from "../src/automations/fields";
 import { places } from "./automations-fixtures";
 
-// The place picker offers the home's floors, in their order, before its
-// rooms, and shows a workflow's chosen floor as chosen.
+// The place picker offers the whole home, then its floors in their order,
+// then its rooms, and shows a workflow's chosen floor as chosen.
 
 let container: HTMLDivElement;
 let root: Root;
@@ -46,6 +46,12 @@ it("offers floors in the place picker and keeps the chosen floor selected", asyn
   };
 
   await show({ kind: "room", id: "office" });
+  // From the widest place to the narrowest.
+  expect(
+    [...container.querySelectorAll('[role="option"]')].map(
+      (option) => option.textContent,
+    ),
+  ).toEqual(["The whole home", "Ground floor", "Office", "Living room"]);
   const floor = [
     ...container.querySelectorAll<HTMLElement>('[role="option"]'),
   ].find((option) => option.textContent === "Ground floor");

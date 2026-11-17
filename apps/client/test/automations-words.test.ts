@@ -22,6 +22,7 @@ import {
   nodeParts,
   plain,
   presetOf,
+  sentenceParts,
 } from "../src/automations/words";
 import {
   deviceCondition,
@@ -100,7 +101,32 @@ describe("Automations' words", () => {
           names,
         ),
       ),
-    ).toBe("Turn off the lights in Ground floor");
+    ).toBe("Turn off the lights on Ground floor");
+  });
+
+  it("say what is on a floor where they say what is in a room", () => {
+    const ground = { place: { kind: "floor", id: "ground" } };
+    expect(plain(nodeParts(motion, { config: ground }, names))).toBe(
+      "Motion on Ground floor",
+    );
+    expect(
+      plain(
+        sentenceParts("In {place}, any light is on", lights, ground, names),
+      ),
+    ).toBe("On Ground floor, any light is on");
+    // A room keeps "in", and so does a word that only ends in it.
+    expect(
+      plain(
+        nodeParts(
+          motion,
+          { config: { place: { kind: "room", id: "office" } } },
+          names,
+        ),
+      ),
+    ).toBe("Motion in Office");
+    expect(
+      plain(sentenceParts("Turn {place} again", lights, ground, names)),
+    ).toBe("Turn Ground floor again");
   });
 
   it("read a step while held and chosen lights by their names", () => {
