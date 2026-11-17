@@ -36,7 +36,7 @@ export type JoiningState =
   | { kind: "closed"; why: "time" | "stopped" | "failed" };
 
 export function JoiningPage(props: {
-  // The radio's app, such as Zigbee, or nothing from a core that doesn't say.
+  // The radio's app, such as Zigbee, when its name is known.
   name: string | null;
   state: JoiningState;
   joined: readonly JoinedDevice[];
