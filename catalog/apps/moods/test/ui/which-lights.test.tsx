@@ -126,6 +126,28 @@ describe("Some lights", () => {
       lights: [{ device: "desk", capability: "light" }],
     });
   });
+
+  it("opens with nothing chosen once every room has left the floor", async () => {
+    await show({ kind: "floor", id: "ground" });
+    await show(
+      { kind: "floor", id: "ground" },
+      {
+        ...places,
+        rooms: places.rooms.map((room) => ({ ...room, floorId: "first" })),
+      },
+    );
+    const some = [...container.querySelectorAll('[role="radio"]')].find(
+      (each) => each.textContent === "Some lights",
+    ) as HTMLElement;
+    await act(async () => some.click());
+    expect(onPlace).not.toHaveBeenCalled();
+    expect(
+      container.querySelectorAll('[role="checkbox"]').length,
+    ).toBeGreaterThan(0);
+    expect(
+      container.querySelectorAll('[role="checkbox"][aria-checked="true"]'),
+    ).toHaveLength(0);
+  });
 });
 
 describe("a press for a floor", () => {

@@ -161,6 +161,8 @@ export function WhichLightsPage(props: {
                 pick(current);
                 return;
               }
+              // None left there: the list opens with nothing chosen.
+              setPicked(current);
             }
             setIsPicking(true);
           }}
