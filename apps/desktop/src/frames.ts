@@ -4,9 +4,9 @@
 // trust. The client names each frame's address here before it loads it, and
 // the main process holds every frame to it:
 //
-// - a frame goes only to an address the client named, with its code, which
-//   is its own entry again when it reloads: never to another app, another
-//   build, another origin or a scheme of the app's own;
+// - a frame goes only to an address the client named, which is its own
+//   entry again when it reloads, whatever follows its #: never to another
+//   app, another build, another origin or a scheme of the app's own;
 // - a frame's requests reach only its own page's folder and the kit under
 //   the same ticket, at the same origin;
 // - a frame is never redirected, since the core never redirects one.
@@ -63,9 +63,14 @@ export function createFrameList() {
       named.delete(url);
     },
 
-    /** Whether a frame may go to `url`: an address named with its code. */
+    /**
+     * Whether a frame may go to `url`: a named address, whatever follows
+     * its #. A page may move its own # and reload; only the hello code
+     * lives there, and a code that isn't the frame's gets no port.
+     */
     mayNavigate(url: string) {
-      return named.has(url);
+      const target = withoutHash(url);
+      return [...named.keys()].some((each) => withoutHash(each) === target);
     },
 
     /**

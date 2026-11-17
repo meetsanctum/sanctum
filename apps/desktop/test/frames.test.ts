@@ -51,12 +51,13 @@ describe("a frame", () => {
     return frames;
   };
 
-  it("goes only to the address named for it, its own entry again on a reload", () => {
+  it("goes only to the address named for it, its own entry again on a reload, whatever its #", () => {
     const frames = named();
     expect(frames.mayNavigate(entry)).toBe(true);
+    // A reload after the page moved its own #.
+    expect(frames.mayNavigate(`${origin}${folder}#moved`)).toBe(true);
+    expect(frames.mayNavigate(`${origin}${folder}`)).toBe(true);
     for (const url of [
-      `${origin}${folder}`,
-      `${origin}${folder}#hello=${"f".repeat(32)}`,
       `${origin}/pages/${ticket}/apps/sanctum.moods/0123456789abcdef/#hello=${code}`,
       `${origin}/pages/${ticket}/apps/sanctum.weather/fedcba9876543210/#hello=${code}`,
       `https://example.com${folder}#hello=${code}`,
