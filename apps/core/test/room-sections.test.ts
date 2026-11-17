@@ -221,6 +221,22 @@ describe("room sections", () => {
     ]);
   });
 
+  it.each(["", " \t\n"])(
+    "refuses empty-state text and start labels that are blank (%j)",
+    (blank) => {
+      for (const field of ["text", "label"] as const) {
+        const manifest = toStaticManifest(defineApp(nook()));
+        const empty = manifest.provides.roomSections[0]!.whenEmpty!;
+        if (field === "text") empty.text = blank;
+        else empty.start.label = blank;
+
+        expect(() => checkManifest(manifest)).toThrow(
+          "its manifest is incomplete",
+        );
+      }
+    },
+  );
+
   it("keep the places before 300 for Sanctum's own apps", async () => {
     const early = (app: AppDefinition): AppDefinition => ({
       ...app,

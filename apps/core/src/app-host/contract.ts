@@ -444,8 +444,11 @@ const manifestShape = z.looseObject({
         whenEmpty: z
           .looseObject({
             roomHas: z.enum(capabilityKinds),
-            text: z.string(),
-            start: z.looseObject({ page: z.string(), label: z.string() }),
+            text: z.string().trim().min(1),
+            start: z.looseObject({
+              page: z.string(),
+              label: z.string().trim().min(1),
+            }),
           })
           .nullable(),
       }),
