@@ -19,7 +19,8 @@ import { readMoods } from "../moods/store.js";
 // What each press of a remote does: the household chooses on the remote's
 // Presses page, Moods keeps the choice, and from it a workflow from the
 // core's press trigger to the core's lights step or Moods' own runMood. A
-// choice of lights is a room, a zone, the whole home or chosen lights, and
+// choice of lights is a room, a floor, a zone, the whole home or chosen
+// lights, and
 // what to do with them: switch them, step them brighter or dimmer, or
 // brighten or dim them while a hold lasts. Each press a remote in a room
 // has no choice for keeps its default, in one workflow for all of them: a
@@ -37,9 +38,10 @@ type Db = AppContext["storage"]["db"];
 
 const id = z.string().min(1).max(64);
 
-/** Which lights a press is for: a room's, a zone's, the whole home's, or chosen ones. */
+/** Which lights a press is for: a room's, a floor's, a zone's, the whole home's, or chosen ones. */
 export const pressPlace = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("room"), id }),
+  z.object({ kind: z.literal("floor"), id }),
   z.object({ kind: z.literal("zone"), id }),
   z.object({ kind: z.literal("home") }),
   z.object({
@@ -252,6 +254,20 @@ export function lightKeys(devices: readonly DeviceInfo[]) {
   );
 }
 
+/** Whether the home has the room, floor or zone a press is for. */
+export function placeIn(
+  places: Places,
+  place: { kind: "room" | "floor" | "zone"; id: string },
+) {
+  const list =
+    place.kind === "room"
+      ? places.rooms
+      : place.kind === "floor"
+        ? places.floors
+        : places.zones;
+  return list.some((each) => each.id === place.id);
+}
+
 /**
  * A choice as the home still has what it names: chosen lights the home no
  * longer has are left out, and a choice naming nothing the home has any
@@ -279,12 +295,7 @@ export function stillThere(
         ? choice
         : { ...choice, place: { kind: "lights", lights: kept } };
   }
-  const { kind, id: placeId } = choice.place;
-  return (kind === "room" ? places.rooms : places.zones).some(
-    (each) => each.id === placeId,
-  )
-    ? choice
-    : null;
+  return placeIn(places, choice.place) ? choice : null;
 }
 
 // Leave room for the press label within the core's workflow name limit.

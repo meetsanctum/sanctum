@@ -53,7 +53,8 @@ export const homeChanges = z
     (changes) => Object.values(changes).some((value) => value !== undefined),
     "change the name, the time zone, the coordinates or the temperature unit",
   );
-export const newFloor = z.object({ name, level: level.default(0) });
+// A new floor goes last unless it says where.
+export const newFloor = z.object({ name, level: level.optional() });
 export const floorChanges = z.object({
   id,
   name: name.optional(),
@@ -71,6 +72,8 @@ export const zoneChanges = z.object({
   name: name.optional(),
   roomIds: roomIds.optional(),
 });
+// Every floor, in the household's new order.
+export const floorOrder = z.object({ ids: z.array(id) });
 export const removal = z.object({ id });
 
 // The home's name until the household gives it one.
@@ -108,7 +111,12 @@ export class PlacesError extends Error {
     // location_unavailable: the services that suggest a location did not
     // answer (location.ts). time_zone_needed: coordinates without a time
     // zone, which Weather and natural light could not use.
-    readonly code: "not_found" | "location_unavailable" | "time_zone_needed",
+    // invalid_order: a floors' order that leaves one out or names one twice.
+    readonly code:
+      | "not_found"
+      | "location_unavailable"
+      | "time_zone_needed"
+      | "invalid_order",
     message: string,
   ) {
     super(message);
@@ -164,6 +172,31 @@ export type LocationChange = {
 
 const byName = <T extends { name: string }>(a: T, b: T) =>
   a.name.localeCompare(b.name);
+
+/**
+ * The rooms a room, a floor or a zone covers in these places, or undefined
+ * for one the home doesn't have. A floor covers the rooms on it and may
+ * cover none, as a zone may.
+ */
+export function roomsOfPlace(
+  places: Places,
+  place: { kind: "room" | "floor" | "zone"; id: string },
+): string[] | undefined {
+  switch (place.kind) {
+    case "room":
+      return places.rooms.some((room) => room.id === place.id)
+        ? [place.id]
+        : undefined;
+    case "floor":
+      return places.floors.some((floor) => floor.id === place.id)
+        ? places.rooms
+            .filter((room) => room.floorId === place.id)
+            .map((room) => room.id)
+        : undefined;
+    case "zone":
+      return places.zones.find((zone) => zone.id === place.id)?.roomIds;
+  }
+}
 
 export function createPlaces(
   db: CoreDatabase,
@@ -352,6 +385,14 @@ export function createPlaces(
         .get();
     },
 
+    hasFloor(floorId: string) {
+      return !!db
+        .select({ id: floors.id })
+        .from(floors)
+        .where(eq(floors.id, floorId))
+        .get();
+    },
+
     hasZone(zoneId: string) {
       return !!db
         .select({ id: zones.id })
@@ -420,7 +461,15 @@ export function createPlaces(
       const values = newFloor.parse(input);
       return change(by, "floor.add", () => {
         const at = now();
-        const floor = { id: randomUUID(), ...values };
+        const last = Math.max(
+          -1,
+          ...read.floors.all().map((floor) => floor.level),
+        );
+        const floor = {
+          id: randomUUID(),
+          name: values.name,
+          level: values.level ?? last + 1,
+        };
         db.insert(floors)
           .values({ ...floor, createdAt: at, updatedAt: at })
           .run();
@@ -441,6 +490,40 @@ export function createPlaces(
           throw notFound("floor", floorId);
         }
         return { subjectId: floorId, result: updated };
+      });
+    },
+
+    // Puts the floors in the household's order, numbering them from 0. It
+    // names every floor once, so no floor is left without a place.
+    orderFloors(by: ChangedBy, input: z.input<typeof floorOrder>): Floor[] {
+      const { ids } = floorOrder.parse(input);
+      return change(by, "floor.order", () => {
+        const known = read.floors.all().map((floor) => floor.id);
+        const missing = known.find((floorId) => !ids.includes(floorId));
+        if (missing) {
+          throw new PlacesError(
+            "invalid_order",
+            `The order leaves out floor ${missing}`,
+          );
+        }
+        if (new Set(ids).size !== ids.length) {
+          throw new PlacesError(
+            "invalid_order",
+            "The order names a floor twice",
+          );
+        }
+        const unknown = ids.find((floorId) => !known.includes(floorId));
+        if (unknown) {
+          throw notFound("floor", unknown);
+        }
+        const at = now();
+        ids.forEach((floorId, index) => {
+          db.update(floors)
+            .set({ level: index, updatedAt: at })
+            .where(eq(floors.id, floorId))
+            .run();
+        });
+        return { result: list().floors };
       });
     },
 

@@ -126,7 +126,7 @@ export const deviceCapabilities = sqliteTable(
 export const placeSensing = sqliteTable(
   "place_sensing",
   {
-    // "home", "room:<id>" or "zone:<id>".
+    // "home", "room:<id>", "floor:<id>" or "zone:<id>".
     place: text("place").notNull(),
     // The kind of part it senses with, such as motion.
     kind: text("kind").$type<CapabilityKind>().notNull(),

@@ -2,15 +2,16 @@ import { z } from "zod";
 
 import { defineEntityType } from "./entities.js";
 
-// The lights of a room, a zone, the whole home or chosen lights together:
-// the core switches them for a room's and Lights' button, and its lights
-// condition and step ask about and switch them in workflows, so they work
-// with no lighting app. The step also makes them brighter or dimmer, and
+// The lights of a room, a floor, a zone, the whole home or chosen lights
+// together: the core switches them for a room's, a floor's and Lights'
+// button, and its lights condition and step ask about and switch them in
+// workflows, so they work with no lighting app. The step also makes them brighter or dimmer, and
 // brightens or dims them while a remote's button is held.
 
-/** A room, a zone, the whole home, or chosen lights, whose lights go together. */
+/** A room, a floor, a zone, the whole home, or chosen lights, whose lights go together. */
 export type LightsPlace =
   | { kind: "room"; id: string }
+  | { kind: "floor"; id: string }
   | { kind: "zone"; id: string }
   | { kind: "home" }
   | { kind: "lights"; lights: { device: string; capability: string }[] };
@@ -48,7 +49,7 @@ export type LightsResult = {
 
 // What turning a room's lights on does: an app such as Moods publishes a
 // lights.turnOn entity for a room, and the core reads it by type whenever it
-// turns a room, a zone or the home on, so the rule stays the app's and no
+// turns a room, a floor, a zone or the home on, so the rule stays the app's and no
 // app code runs at the press. Several apps may each publish one for a room:
 // the core goes by the highest-ranked (turnOnRanks). Each light it names
 // stays off or comes on, with a look or as it remembers itself; a light it

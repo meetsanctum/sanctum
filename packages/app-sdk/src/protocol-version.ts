@@ -12,6 +12,8 @@
  * runs again once it's rebuilt.
  */
 // 7 lets a driver refuse adding a device whatever it asked (driver.refusals).
-export const protocolVersion = 7;
+// 8 takes a floor wherever a place is taken: a lights place, a workflow's
+// motion and light level, and a field declared with names("floor").
+export const protocolVersion = 8;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 6;

@@ -10,6 +10,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import type { lightsPlace } from "../src/devices/lights.js";
+
 import type { AppPackage } from "./runner-apps.js";
 import { get, post, type TestCore } from "./support.js";
 
@@ -224,7 +226,10 @@ export const cleanStep = (id: string, where: z.input<typeof place>): Node => ({
 });
 
 /** The core's lights step, switching a place's lights off. */
-export const lightsOff = (id: string, where: z.input<typeof place>): Node => ({
+export const lightsOff = (
+  id: string,
+  where: z.input<typeof lightsPlace>,
+): Node => ({
   id,
   kind: "step",
   piece: "lights",

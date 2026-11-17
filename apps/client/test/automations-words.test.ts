@@ -92,6 +92,15 @@ describe("Automations' words", () => {
         ),
       ),
     ).toBe("Turn on the lights in the whole home");
+    expect(
+      plain(
+        nodeParts(
+          lights,
+          { config: { place: { kind: "floor", id: "ground" }, to: "off" } },
+          names,
+        ),
+      ),
+    ).toBe("Turn off the lights in Ground floor");
   });
 
   it("read a step while held and chosen lights by their names", () => {
