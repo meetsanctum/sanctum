@@ -6,7 +6,14 @@ import type {
   RoomRemoval,
 } from "@meetsanctum/app-sdk";
 import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
-import { DoorOpen, EllipsisVertical, Pencil, Trash2 } from "lucide-react";
+import {
+  DoorOpen,
+  EllipsisVertical,
+  Layers,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,14 +36,26 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { coreDevices } from "./core-devices";
 import { CoreError, coreJson } from "./core-fetch";
+import {
+  EditFloor,
+  FloorsSection,
+  inOrder,
+  type FloorEditing,
+} from "./settings-floors";
 
-// Settings → Rooms: the home's rooms, which the core keeps, with their floor
-// and how many devices are in each, for every client, a shared one too, to
-// add, rename and remove them. Removing one first says what goes with it,
+// Settings → Rooms: the home's floors (settings-floors.tsx), then its rooms,
+// which the core keeps, with their floor and how many devices are in each,
+// for every client, a shared one too, to add, rename and remove them and put
+// each on a floor from its menu. Removing one first says what goes with it,
 // which the core works out.
 
 export function roomDetail(
@@ -125,6 +144,7 @@ export function RoomsSection(props: {
   const [editing, setEditing] = useState<Editing | undefined>(() =>
     props.adding ? { action: "add" } : undefined,
   );
+  const [floorEditing, setFloorEditing] = useState<FloorEditing>();
 
   // What changed while a refresh was on its way is newer than its answer,
   // so it is applied on top of it, as Devices does.
@@ -202,56 +222,115 @@ export function RoomsSection(props: {
     );
   };
 
+  // A floor removed takes its rooms off it; they stay, on no floor.
+  const floorRemoved = (id: string) =>
+    changePlaces((current) => ({
+      ...current,
+      floors: current.floors.filter((each) => each.id !== id),
+      rooms: current.rooms.map((room) =>
+        room.floorId === id ? { ...room, floorId: null } : room,
+      ),
+    }));
+  // The new order shows at once, and the core's answer comes live.
+  const ordered = (ids: string[]) => {
+    changePlaces((current) => inOrder(current, ids));
+    void coreJson("/api/places/floors/order", {
+      method: "POST",
+      json: { ids },
+    }).catch(saved);
+  };
+  const putOnFloor = (room: Room, floorId: string | null) => {
+    changePlaces((current) => ({
+      ...current,
+      rooms: current.rooms.map((each) =>
+        each.id === room.id ? { ...each, floorId } : each,
+      ),
+    }));
+    void coreJson("/api/places/rooms/update", {
+      method: "POST",
+      json: { id: room.id, floorId },
+    }).catch(saved);
+  };
+
   return (
-    <Section
-      id="settings-rooms"
-      title="Rooms"
-      action={
-        <Button size="sm" onClick={() => setEditing({ action: "add" })}>
-          Add room
-        </Button>
-      }
-    >
-      {places &&
-        (places.rooms.length === 0 ? (
-          <p className="m-0 text-[13px] font-medium text-muted-foreground">
-            No rooms yet.
-          </p>
-        ) : (
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {places.rooms.map((room) => (
-              <li key={room.id} className="flex items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
-                >
-                  <DoorOpen className="size-4" />
-                </span>
-                <Row
-                  title={room.name}
-                  detail={roomDetail(room, places.floors, devices)}
-                />
-                <RoomMenu
-                  room={room}
-                  onEdit={(action) => setEditing({ action, room })}
-                />
-              </li>
-            ))}
-          </ul>
-        ))}
-      <EditRoom
-        editing={editing}
-        onClose={() => setEditing(undefined)}
+    <>
+      {places && (
+        <FloorsSection
+          places={places}
+          onEdit={setFloorEditing}
+          onOrder={ordered}
+        />
+      )}
+      <EditFloor
+        editing={floorEditing}
+        places={places}
+        onClose={() => setFloorEditing(undefined)}
         onSaved={saved}
-        onRemoved={removed}
+        onRemoved={floorRemoved}
       />
-    </Section>
+      <Section
+        id="settings-rooms"
+        title="Rooms"
+        action={
+          <Button size="sm" onClick={() => setEditing({ action: "add" })}>
+            Add room
+          </Button>
+        }
+      >
+        {places &&
+          (places.rooms.length === 0 ? (
+            <p className="m-0 text-[13px] font-medium text-muted-foreground">
+              No rooms yet.
+            </p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {places.rooms.map((room) => (
+                <li key={room.id} className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
+                  >
+                    <DoorOpen className="size-4" />
+                  </span>
+                  <Row
+                    title={room.name}
+                    detail={roomDetail(room, places.floors, devices)}
+                  />
+                  <RoomMenu
+                    room={room}
+                    floors={places.floors}
+                    onEdit={(action) => setEditing({ action, room })}
+                    onFloor={(floorId) => putOnFloor(room, floorId)}
+                    onNewFloor={() =>
+                      setFloorEditing({ action: "add", roomId: room.id })
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          ))}
+        <EditRoom
+          editing={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={saved}
+          onRemoved={removed}
+        />
+      </Section>
+    </>
   );
 }
 
+// Not a floor's id, which the core makes as a UUID.
+const noFloor = "no-floor";
+
+// A room's ⋮ menu: Rename, its floor, which shows before the home has any
+// so a household finds floors where it gives a room its place, and Remove.
 function RoomMenu(props: {
   room: Room;
+  floors: readonly Floor[];
   onEdit: (action: "rename" | "remove") => void;
+  onFloor: (floorId: string | null) => void;
+  onNewFloor: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -270,6 +349,33 @@ function RoomMenu(props: {
           <Pencil />
           Rename
         </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Layers />
+            Floor
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            <DropdownMenuRadioGroup
+              value={props.room.floorId ?? noFloor}
+              onValueChange={(value) =>
+                props.onFloor(value === noFloor ? null : value)
+              }
+            >
+              {props.floors.map((floor) => (
+                <DropdownMenuRadioItem key={floor.id} value={floor.id}>
+                  {floor.name}
+                </DropdownMenuRadioItem>
+              ))}
+              <DropdownMenuRadioItem value={noFloor}>
+                No floor
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuItem onSelect={props.onNewFloor} className="mt-1">
+              <Plus />
+              New floor…
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuItem
           variant="destructive"
           onSelect={() => props.onEdit("remove")}
