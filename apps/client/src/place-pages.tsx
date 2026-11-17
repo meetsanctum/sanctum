@@ -4,7 +4,6 @@ import {
   type DeviceCategory,
 } from "@meetsanctum/app-sdk";
 import {
-  Button,
   contactIcon,
   DeviceSections,
   icons,
@@ -29,6 +28,7 @@ import {
   climateMeasures,
   measureNames,
   noRoomName,
+  noRoomSection,
   onMeta,
   readingsOf,
   sectionsByRoom,
@@ -37,6 +37,13 @@ import {
   tilesIn,
   type Reading,
 } from "./device-tiles";
+import { byFloor, FloorSection } from "./floor-groups";
+import {
+  floorLightsButton,
+  LightsButton,
+  lightsButton,
+  type LightsSwitch,
+} from "./lights-button";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -49,6 +56,7 @@ import {
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
+import { SidebarRooms } from "./sidebar-rooms";
 import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
@@ -99,28 +107,6 @@ const readingIcons: Record<Reading["measure"], LucideIcon> = {
 
 export const unitOf = (devices: Devices) =>
   devices.places?.home.temperatureUnit ?? "celsius";
-
-const onCount = (tiles: Tile[]) => tiles.filter((tile) => tile.on).length;
-
-/**
- * What a room's button for all its lights says: what it does, with how
- * many lights are on, since a room's line has no other count of them.
- */
-export const lightsWords = (on: number) =>
-  on === 0
-    ? "Turn lights on"
-    : on === 1
-      ? "Turn 1 light off"
-      : `Turn ${on} lights off`;
-
-/** A room's button for all its lights, as lightsButton makes it. */
-export type LightsSwitch = {
-  on: number;
-  /** Its words with the room's name, where several rooms' buttons are in reach. */
-  label: string;
-  disabled?: boolean;
-  onToggle: () => void;
-};
 
 // A room's or a category's page has its name in the top bar, as a
 // dashboard and an app's page do, and on a phone opening the page
@@ -237,28 +223,6 @@ export function PlaceReadings(props: {
   );
 }
 
-/**
- * A room's button for all its lights. Its words say what it does and its
- * look says how the room is, White while any light is on, so it is no
- * pressed switch to a screen reader: the words already say it.
- */
-export function LightsButton(props: { lights: LightsSwitch }) {
-  const { lights } = props;
-  return (
-    <Button
-      variant="glass"
-      size="chip"
-      aria-label={lights.label}
-      data-on={lights.on > 0 ? "" : undefined}
-      disabled={lights.disabled}
-      onClick={lights.onToggle}
-    >
-      <icons.Lightbulb aria-hidden="true" data-icon="inline-start" />
-      {lightsWords(lights.on)}
-    </Button>
-  );
-}
-
 // The tiles, switched and dimmed through the shell's device state, each
 // opening its device's detail. A refusal or a failure shows on the tile.
 function Sections(props: {
@@ -267,6 +231,8 @@ function Sections(props: {
   onOpen: (tile: Tile) => void;
   /** What a section has between its heading and its tiles. */
   lead?: (section: TileSection) => ReactNode;
+  /** Its headings' level, 3 under a floor's. */
+  level?: 2 | 3;
 }) {
   const { devices } = props;
   return (
@@ -278,36 +244,9 @@ function Sections(props: {
       }
       onOpen={props.onOpen}
       lead={props.lead}
+      level={props.level}
     />
   );
-}
-
-// The button for every light in a room: White while any is on, and saying
-// what it does, "Turn 2 lights off" or "Turn lights on". The core leaves
-// offline lights alone, so while all of them are offline the button is
-// disabled, as their tiles are. The home has no such button: turning every
-// light in it on at once is more than one press should do, so its lights
-// can only be turned off, from Lights' card.
-export function lightsButton(
-  lights: Tile[],
-  room: { id: string; name: string },
-  devices: Devices,
-): LightsSwitch | undefined {
-  if (lights.length === 0) return undefined;
-  const on = onCount(lights);
-  return {
-    on,
-    label: `${lightsWords(on)} in ${room.name}`,
-    disabled: lights.every((tile) => tile.disabled),
-    onToggle: () =>
-      void devices
-        .switchLights(
-          { kind: "room", id: room.id },
-          lights,
-          on > 0 ? "off" : "on",
-        )
-        .catch(() => undefined),
-  };
 }
 
 const statusOrder = [
@@ -700,37 +639,89 @@ export function CategoryPage(props: {
           cards={securityCards(own)}
         />
       )}
-      <Sections
+      <CategorySections
         sections={sectionsByRoom(own, devices.places)}
         devices={devices}
         onOpen={props.openDevice}
-        lead={
-          category.id === "lights"
-            ? (section) => {
-                // The lights in no room are not together, so have no button.
-                const room = devices.places?.rooms.find(
-                  (each) => each.id === section.id,
-                );
-                const lights =
-                  room && lightsButton(section.tiles, room, devices);
-                return lights ? (
-                  <div className="flex">
-                    <LightsButton lights={lights} />
-                  </div>
-                ) : null;
-              }
-            : undefined
-        }
+        isLights={category.id === "lights"}
       />
     </>
   );
 }
 
+// A category's rooms, under their floors once the home has floors
+// (floor-groups.tsx), so a room is where it is on Home. On Lights' page each
+// room has its button for all its lights, and each floor its button that
+// turns them off.
+function CategorySections(props: {
+  sections: TileSection[];
+  devices: Devices;
+  onOpen: (tile: Tile) => void;
+  isLights: boolean;
+}) {
+  const { devices, isLights } = props;
+  const lead = isLights
+    ? (section: TileSection) => {
+        // The lights in no room are not together, so have no button.
+        const room = devices.places?.rooms.find(
+          (each) => each.id === section.id,
+        );
+        const lights = room && lightsButton(section.tiles, room, devices);
+        return lights ? (
+          <div className="flex">
+            <LightsButton lights={lights} />
+          </div>
+        ) : null;
+      }
+    : undefined;
+  const groups = byFloor(devices.places, props.sections, (section) =>
+    section.id === noRoomSection ? null : section.id,
+  );
+  if (!groups) {
+    return (
+      <Sections
+        sections={props.sections}
+        devices={devices}
+        onOpen={props.onOpen}
+        lead={lead}
+      />
+    );
+  }
+  return (
+    <div className="flex shrink-0 flex-col gap-14">
+      {groups.map(({ floor, items }) => (
+        <FloorSection
+          key={floor?.id ?? "other-rooms"}
+          floor={floor}
+          id={`category-floor-${floor?.id ?? "other-rooms"}`}
+          lights={
+            isLights && floor
+              ? floorLightsButton(
+                  items.flatMap((section) => section.tiles),
+                  floor,
+                  devices,
+                )
+              : undefined
+          }
+        >
+          <Sections
+            sections={items}
+            devices={devices}
+            onOpen={props.onOpen}
+            lead={lead}
+            level={3}
+          />
+        </FloorSection>
+      ))}
+    </div>
+  );
+}
+
 // The places in the sidebar, after the dashboards: the categories the home
-// has devices for, then the rooms, each group under its heading. Only Lights
-// says how many are on; the rest would be noise. While any device is in no
-// room, No room comes last among the rooms, the only one in a home that has
-// none yet.
+// has devices for, then the rooms (sidebar-rooms.tsx), each group under its
+// heading. Only Lights says how many are on; the rest would be noise. While
+// any device is in no room, No room comes last among the rooms, the only one
+// in a home that has none yet.
 export function SidebarPlaces(props: {
   devices: Devices;
   /** The place on show, if any. */
@@ -747,7 +738,6 @@ export function SidebarPlaces(props: {
       tiles: tilesIn(category, devices.tiles),
     }))
     .filter((category) => category.tiles.length > 0);
-  const rooms = devices.places?.rooms ?? [];
   const hasNoRoom = inNoRoom(devices).length > 0;
   return (
     <>
@@ -765,30 +755,16 @@ export function SidebarPlaces(props: {
           onSelect={() => open("category", { id: category.id })}
         />
       ))}
-      {(rooms.length > 0 || hasNoRoom) && (
-        <>
-          <SidebarHeading>Rooms</SidebarHeading>
-          {rooms.map((room) => (
-            <SidebarItem
-              key={room.id}
-              icon={icons.DoorOpen}
-              name={room.name}
-              current={
-                current?.page === "room" && current.params.id === room.id
-              }
-              onSelect={() => open("room", { id: room.id })}
-            />
-          ))}
-          {hasNoRoom && (
-            <SidebarItem
-              icon={icons.SquareDashed}
-              name={noRoomName}
-              current={current?.page === noRoomPage}
-              onSelect={() => open(noRoomPage, {})}
-            />
-          )}
-        </>
-      )}
+      <SidebarRooms
+        places={devices.places}
+        currentRoom={
+          current?.page === "room" ? (current.params.id ?? null) : null
+        }
+        hasNoRoom={hasNoRoom}
+        isNoRoomCurrent={current?.page === noRoomPage}
+        openRoom={(id) => open("room", { id })}
+        openNoRoom={() => open(noRoomPage, {})}
+      />
     </>
   );
 }

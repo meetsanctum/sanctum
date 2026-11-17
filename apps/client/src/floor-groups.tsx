@@ -1,0 +1,92 @@
+import type { Floor, Places } from "@meetsanctum/app-sdk";
+import { icons } from "@meetsanctum/ui-sdk";
+import type { ReactNode } from "react";
+
+import { LightsButton, type LightsSwitch } from "./lights-button";
+
+// Rooms under their floors, as Home and the category pages show them once
+// the home has floors: each floor in the household's order, then the rooms
+// on none under "Other rooms". A floor's heading is one row, its name and,
+// on Home and Lights' page, the button that turns its lights off, which
+// starts after the name so the eye finds it there and nothing below moves
+// when it goes. The layers mark hangs at the leading edge, out of the
+// reading line, and everything of the floor aligns with its name, as the
+// sidebar indents rooms under their floor; Other rooms keeps that alignment
+// with no mark, since it isn't a floor. A home with no floors shows its
+// rooms as they always were, with no headings and no indent.
+
+/** What a floor's group holds: the floor, or none for the rooms on no floor. */
+export type FloorGroup<T> = { floor: Floor | null; items: T[] };
+
+/** The words over the rooms on no floor, when the home has floors. */
+export const otherRoomsName = "Other rooms";
+
+/**
+ * Items by the floor of their room, the floors in the household's order,
+ * then those on no floor, in no room or in a room the home no longer has;
+ * none while the home has no floors. Groups with nothing in them go.
+ */
+export function byFloor<T>(
+  places: Places | undefined,
+  items: readonly T[],
+  roomOf: (item: T) => string | null,
+): FloorGroup<T>[] | null {
+  if (!places || places.floors.length === 0) return null;
+  const floorOf = new Map(places.rooms.map((room) => [room.id, room.floorId]));
+  const known = new Set(places.floors.map((floor) => floor.id));
+  const on = (item: T) => {
+    const roomId = roomOf(item);
+    const floorId = roomId === null ? null : (floorOf.get(roomId) ?? null);
+    return floorId !== null && known.has(floorId) ? floorId : null;
+  };
+  return [
+    ...places.floors.map((floor) => ({
+      floor,
+      items: items.filter((item) => on(item) === floor.id),
+    })),
+    { floor: null, items: items.filter((item) => on(item) === null) },
+  ].filter((group) => group.items.length > 0);
+}
+
+/** The rooms on a floor, by id. */
+export const roomsOn = (places: Places | undefined, floor: Floor) =>
+  new Set(
+    (places?.rooms ?? [])
+      .filter((room) => room.floorId === floor.id)
+      .map((room) => room.id),
+  );
+
+export function FloorSection(props: {
+  floor: Floor | null;
+  /** Its heading's id, unique on the page. */
+  id: string;
+  lights?: LightsSwitch;
+  children: ReactNode;
+}) {
+  const { floor, lights } = props;
+  return (
+    <section
+      aria-labelledby={props.id}
+      className="grid shrink-0 grid-cols-[18px_minmax(0,1fr)] gap-x-2 gap-y-5"
+    >
+      {floor ? (
+        <icons.Layers aria-hidden="true" className="size-4.5 self-center" />
+      ) : (
+        <span aria-hidden="true" />
+      )}
+      {/* The row keeps the button's height while it's gone. */}
+      <div className="flex min-h-9 flex-wrap items-center gap-x-3.5 gap-y-2">
+        <h2
+          id={props.id}
+          className="m-0 text-[17px] leading-[22px] font-semibold"
+        >
+          {floor?.name ?? otherRoomsName}
+        </h2>
+        {lights && <LightsButton lights={lights} />}
+      </div>
+      <div className="col-start-2 flex min-w-0 flex-col gap-8">
+        {props.children}
+      </div>
+    </section>
+  );
+}

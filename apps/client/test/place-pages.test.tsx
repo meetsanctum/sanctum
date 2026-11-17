@@ -219,8 +219,8 @@ describe("all the lights of a room", () => {
 
   it("of a room, from its page, through the core", async () => {
     await show("room", "office");
-    const all = button("Turn 1 light off in Office")!;
-    expect(all.textContent).toBe("Turn 1 light off");
+    const all = button("Turn off 1 light in Office")!;
+    expect(all.textContent).toBe("Turn off");
     // Its words say what it does, so it is no pressed switch.
     expect(all.hasAttribute("aria-pressed")).toBe(false);
     expect(all.dataset.on).toBe("");
@@ -233,8 +233,8 @@ describe("all the lights of a room", () => {
   it("cannot be switched while they are all offline", async () => {
     devices = [{ ...lamp, availability: "offline" }];
     await show("room", "office");
-    const all = button("Turn lights on in Office")!;
-    expect(all.textContent).toBe("Turn lights on");
+    const all = button("Turn on lights in Office")!;
+    expect(all.textContent).toBe("Turn on");
     expect(all.dataset.on).toBeUndefined();
     expect(all.disabled).toBe(true);
   });
@@ -299,8 +299,8 @@ describe("the devices in no room", () => {
       ),
     ).not.toContain(tile("Lamp")?.textContent);
     // Its devices are not together, so no button switches all its lights.
-    expect(button("Turn lights on")).toBeUndefined();
-    expect(button("Turn lights on in No room")).toBeUndefined();
+    expect(button("Turn on")).toBeUndefined();
+    expect(button("Turn on lights in No room")).toBeUndefined();
 
     await click(tile("Loose"));
     expect(openDevice).toHaveBeenCalledWith(
