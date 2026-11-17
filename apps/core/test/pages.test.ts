@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { digestOf } from "../src/pages/files.js";
-import { kitFits, kitNeeds } from "../src/pages/pages.js";
+import { kitNeeds } from "../src/pages/pages.js";
 import { ticketGraceMs, ticketWeekMs } from "../src/pages/tickets.js";
 import {
   claimed,
@@ -584,35 +584,27 @@ describe("an app's pages", () => {
 });
 
 describe("pages built for a kit", () => {
-  it("fit any kit of its major from that version on, where below 1.0 the minor is the major", () => {
-    expect(kitFits("0.1.0", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.3")).toBe(true);
-    expect(kitFits("0.1.3", "0.1.0")).toBe(false);
-    expect(kitFits("0.1.0", "0.2.0")).toBe(false);
-    expect(kitFits("1.2.0", "1.4.0")).toBe(true);
-    expect(kitFits("1.4.1", "1.4.0")).toBe(false);
-    expect(kitFits("1.2.0", "2.0.0")).toBe(false);
-    expect(kitFits("not a version", "1.0.0")).toBe(false);
+  it.each([
+    ["0.1.0", "0.1.0", null],
+    ["0.1.0", "0.1.3", null],
+    ["0.1.3", "0.1.0", "sanctum"],
+    ["0.2.0", "0.1.0", "sanctum"],
+    ["0.1.0", "0.2.0", "pages"],
+    ["0.9.0", "1.0.0", "pages"],
+    ["1.0.0", "0.9.0", "sanctum"],
+    ["1.2.0", "1.4.0", null],
+    ["1.4.1", "1.4.0", "sanctum"],
+    ["1.2.0", "2.0.0", "pages"],
+    ["not a version", "1.0.0", "pages"],
     // A prerelease comes before its release, and after the one before it.
-    expect(kitFits("0.1.0", "0.1.0-beta.1")).toBe(false);
-    expect(kitFits("0.1.0-beta.1", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0-beta.2", "0.1.0-beta.10")).toBe(true);
-    expect(kitFits("0.1.0-beta.10", "0.1.0-beta.2")).toBe(false);
-    expect(kitFits("0.1.0-beta", "0.1.0-beta.1")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.1-beta.1")).toBe(true);
-  });
-
-  it("that don't fit need a newer home, or a new build when the home's major is newer", () => {
-    expect(kitNeeds("0.1.0", "0.1.3")).toBeNull();
-    expect(kitNeeds("0.1.3", "0.1.0")).toBe("sanctum");
-    expect(kitNeeds("0.2.0", "0.1.0")).toBe("sanctum");
-    expect(kitNeeds("0.1.0", "0.2.0")).toBe("pages");
-    expect(kitNeeds("0.9.0", "1.0.0")).toBe("pages");
-    expect(kitNeeds("1.0.0", "0.9.0")).toBe("sanctum");
-    expect(kitNeeds("1.4.1", "1.4.0")).toBe("sanctum");
-    expect(kitNeeds("1.2.0", "2.0.0")).toBe("pages");
-    expect(kitNeeds("0.1.0", "0.1.0-beta.1")).toBe("sanctum");
-    expect(kitNeeds("not a version", "1.0.0")).toBe("pages");
+    ["0.1.0", "0.1.0-beta.1", "sanctum"],
+    ["0.1.0-beta.1", "0.1.0", null],
+    ["0.1.0-beta.2", "0.1.0-beta.10", null],
+    ["0.1.0-beta.10", "0.1.0-beta.2", "sanctum"],
+    ["0.1.0-beta", "0.1.0-beta.1", null],
+    ["0.1.0", "0.1.1-beta.1", null],
+  ])("built for %s, served %s, need %s", (builtFor, served, needs) => {
+    expect(kitNeeds(builtFor, served)).toBe(needs);
   });
 
   it.each([
