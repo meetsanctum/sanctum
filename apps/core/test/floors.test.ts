@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { floors } from "../src/places/schema.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
-import { get, post, type TestCore } from "./support.js";
+import { claimed, get, post, testCore, type TestCore } from "./support.js";
 import {
   addWorkflow,
   lightsOff,
@@ -203,6 +204,60 @@ describe("a floor's motion", () => {
 });
 
 describe("floors' order", () => {
+  it("puts a new floor after one at the highest explicit level", async () => {
+    const core = await testCore();
+    const person = await claimed(core);
+    const roof = (
+      await post(
+        core,
+        "/api/places/floors/add",
+        { name: "Roof", level: 200 },
+        person,
+      )
+    ).json();
+    const outside = (
+      await post(core, "/api/places/floors/add", { name: "Outside" }, person)
+    ).json();
+
+    expect((await get(core, "/api/places", person)).json().floors).toEqual([
+      roof,
+      outside,
+    ]);
+    expect(outside.level).toBeGreaterThan(roof.level);
+  });
+
+  it("can order every floor the home allows it to add", async () => {
+    const core = await testCore();
+    const person = await claimed(core);
+    const at = new Date();
+    const existing = Array.from({ length: 200 }, (_, level) => ({
+      id: `floor-${level}`,
+      name: `Floor ${level}`,
+      level,
+      createdAt: at,
+      updatedAt: at,
+    }));
+    core.db.insert(floors).values(existing).run();
+    const added = await post(
+      core,
+      "/api/places/floors/add",
+      { name: "Roof" },
+      person,
+    );
+    expect(added.statusCode).toBe(200);
+    const ids = [added.json().id, ...existing.map((floor) => floor.id)];
+    const ordered = await post(
+      core,
+      "/api/places/floors/order",
+      { ids },
+      person,
+    );
+    expect(ordered.statusCode).toBe(200);
+    expect(ordered.json().map((floor: { id: string }) => floor.id)).toEqual(
+      ids,
+    );
+  });
+
   it("puts a new floor last, and follows the household's order once set", async () => {
     const { core, token, ground, first } = await house();
     const outside = (

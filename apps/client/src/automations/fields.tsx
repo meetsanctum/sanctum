@@ -579,6 +579,11 @@ export function FieldControl(props: {
               label: room.name,
               group: "Rooms",
             })),
+            ...floors.map((floor) => ({
+              value: `floor:${floor.id}`,
+              label: floor.name,
+              group: "Floors",
+            })),
             ...zones.map((zone) => ({
               value: `zone:${zone.id}`,
               label: zone.name,

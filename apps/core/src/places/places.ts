@@ -30,7 +30,6 @@ const id = z.string().min(1).max(64);
 const name = z.string().trim().min(1).max(60);
 const level = z.number().int().min(-20).max(200);
 const roomIds = z.array(id).max(500);
-const floorIds = z.array(id).max(200);
 
 // The home's coordinates, with an optional elevation. An elevation left out
 // stays while the latitude and longitude do (coordinatesAfter), so a client
@@ -74,7 +73,7 @@ export const zoneChanges = z.object({
   roomIds: roomIds.optional(),
 });
 // Every floor, in the household's new order.
-export const floorOrder = z.object({ ids: floorIds });
+export const floorOrder = z.object({ ids: z.array(id) });
 export const removal = z.object({ id });
 
 // The home's name until the household gives it one.
@@ -469,7 +468,7 @@ export function createPlaces(
         const floor = {
           id: randomUUID(),
           name: values.name,
-          level: values.level ?? Math.min(last + 1, 200),
+          level: values.level ?? last + 1,
         };
         db.insert(floors)
           .values({ ...floor, createdAt: at, updatedAt: at })
