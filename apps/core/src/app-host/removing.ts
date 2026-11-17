@@ -140,7 +140,13 @@ export function createAppRemoving(options: {
       options.onDevice?.({ id: device.id, before: device, after: null });
     }
     options.onRemoved?.(appId);
-    await finish(appId);
+    // It's removed once that has committed: a step that fails now is done
+    // again at the next start, and doesn't make the removal fail.
+    await finish(appId).catch((error: unknown) =>
+      log(
+        `apps: ${appId}'s removal finishes at the next start (${message(error)})`,
+      ),
+    );
   }
 
   return {

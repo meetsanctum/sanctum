@@ -27,7 +27,8 @@ describe("finishing an app's removal", () => {
 
     const response = await post(core, `/api/apps/${app.id}/remove`, {}, maya);
 
-    expect(response.statusCode).toBe(500);
+    // It's removed: what's left is done again at the next start.
+    expect(response.statusCode).toBe(200);
     expect(core.apps.has(app.id)).toBe(false);
     expect(core.removedApps.get(app.id)?.isDone).toBe(false);
     manager.removeAppContainer = vi.fn(async () => undefined);
