@@ -3,6 +3,7 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import {
   createAppClient,
   createLiveFeed,
+  frameBridge,
   type CoreBridge,
 } from "@meetsanctum/ui-sdk";
 import { act } from "react";
@@ -71,7 +72,7 @@ beforeEach(() => {
     Promise.resolve({
       ticket: `page_ticket${address.tickets}`,
       expiresAt: new Date(Date.now() + 8 * 24 * 60 * 60_000).toISOString(),
-      kit: { version: "0.1.1", bridge: 1, digest: "kit" },
+      kit: { version: "0.1.2", bridge: frameBridge, digest: "kit" },
     });
   container = document.createElement("div");
   document.body.append(container);
@@ -128,7 +129,7 @@ function hello() {
   }) as typeof target.postMessage);
   window.dispatchEvent(
     Object.assign(new Event("message"), {
-      data: { sanctum: "hello", code, bridge: 1 },
+      data: { sanctum: "hello", code, bridge: frameBridge },
       source: target,
     }),
   );
@@ -272,6 +273,44 @@ describe("an app's page in its frame", () => {
     );
     port.close();
   });
+
+  it("removes the actions when their page stops working", async () => {
+    await show();
+    const port = hello();
+    port.postMessage({
+      type: "bar",
+      title: "Edit mood",
+      actions: [{ id: "save", label: "Save", primary: true }],
+      revision: 1,
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector("button")?.textContent).toBe("Save"),
+    );
+    port.postMessage({ type: "failed", reason: "stopped", message: "Broken" });
+    await vi.waitFor(() => expect(text()).toContain("page stopped working"));
+    expect(
+      [...container.querySelectorAll("button")].map((each) => each.textContent),
+    ).toEqual(["Try again"]);
+    port.close();
+  });
+
+  it.each([1, frameBridge + 1])(
+    "doesn't load a kit of bridge %i",
+    async (bridge) => {
+      address.answer = async () => ({
+        ticket: "page_ticket1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        kit: { version: "0.1.2", bridge, digest: "kit" },
+      });
+      await show();
+      expect(container.querySelector("iframe[src]")).toBeNull();
+      expect(text()).toContain(
+        bridge < frameBridge
+          ? "Its files didn't load."
+          : "To open this page, update this app",
+      );
+    },
+  );
 
   it("says its files didn't load when the core has none", async () => {
     address.answer = () => Promise.reject(new Error("not_found"));

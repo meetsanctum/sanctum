@@ -14,7 +14,7 @@ import type { PageParams } from "../app-ui";
 // id, and the shell answers each; it never sends a URL, method or header.
 
 /** The version of what's said here; a client from before a page's can't show it. */
-export const frameBridge = 1;
+export const frameBridge = 2;
 
 /** The first message, from the frame to its parent, before there's a port. */
 export type FrameHello = { sanctum: "hello"; code: string; bridge: number };

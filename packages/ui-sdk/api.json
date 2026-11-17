@@ -1,5 +1,5 @@
 {
-  "version": "0.1.2",
+  "version": "0.1.3",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2414,7 +2414,7 @@
     "frame/protocol.d.ts": [
       "import type { AppInfo, LiveMessage, TemperatureUnit } from \"@meetsanctum/app-sdk\";",
       "import type { PageParams } from \"../app-ui\";",
-      "export declare const frameBridge = 1;",
+      "export declare const frameBridge = 2;",
       "export type FrameHello = {",
       "    sanctum: \"hello\";",
       "    code: string;",

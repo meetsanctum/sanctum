@@ -95,6 +95,7 @@ export function AppFrame(props: {
             now === "opening" || now === "late" ? "ready" : now,
           );
         case "failed":
+          setBar(undefined);
           return setPhase(event.reason);
         case "bar":
           return setBar(event);
@@ -195,15 +196,19 @@ export function AppFrame(props: {
     <>
       <PageBar
         title={title ?? name}
-        actions={bar?.actions.map((action) => ({
-          ...action,
-          onPress: () =>
-            bridge.current?.send({
-              type: "press",
-              id: action.id,
-              revision: bar.revision,
-            }),
-        }))}
+        actions={
+          failed
+            ? undefined
+            : bar?.actions.map((action) => ({
+                ...action,
+                onPress: () =>
+                  bridge.current?.send({
+                    type: "press",
+                    id: action.id,
+                    revision: bar.revision,
+                  }),
+              }))
+        }
       />
       {failed ? (
         <NoticeCard

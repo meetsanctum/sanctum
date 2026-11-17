@@ -1,5 +1,6 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import { StrictMode, useEffect, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 
 import { AppScope, type AppUi, type PageParams } from "../app-ui";
@@ -77,7 +78,11 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
   let bar = { said: "", revision: 0 };
   let presses = new Map<string, () => void>();
   const sayBar = (title: string, actions: readonly PageBarAction[]) => {
-    presses = new Map(actions.map((action) => [action.id, action.onPress]));
+    presses = new Map(
+      actions
+        .filter((action) => !action.disabled)
+        .map((action) => [action.id, action.onPress]),
+    );
     const drawn = actions.map(({ id, label, primary, disabled }) => ({
       id,
       label,
@@ -95,6 +100,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
   const fail = (failed: Extract<FromFrame, { type: "failed" }>) => {
     if (hasFailed) return;
     hasFailed = true;
+    presses.clear();
     send(failed);
   };
 
@@ -191,6 +197,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
         // The shell puts the app's name back in the bar until the page
         // that shows says its own, even one the same as before.
         bar = { said: "", revision: bar.revision };
+        presses.clear();
         if (shown) {
           shown = {
             ...shown,
@@ -221,7 +228,11 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
         for (const listener of listeners) listener.refresh?.();
         return;
       case "press":
-        if (message.revision === bar.revision) presses.get(message.id)?.();
+        // A press can disable its action: commit that before the next
+        // queued press, as React does for a button's own click.
+        flushSync(() => {
+          if (message.revision === bar.revision) presses.get(message.id)?.();
+        });
         return;
     }
   };
