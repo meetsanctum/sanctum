@@ -468,7 +468,8 @@ const manifestShape = z.looseObject({
 });
 
 /** A manifest read from a package, before the core uses any of its parts. */
-export function checkManifest(manifest: StaticManifest): StaticManifest {
+export function checkManifest(read: StaticManifest): StaticManifest {
+  const manifest = withoutBareEmptyRules(read);
   // A file can say anything: one with parts missing keeps its own package from
   // installing, rather than failing later for every client.
   const shape = manifestShape.safeParse(manifest);
@@ -485,6 +486,35 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
   }
   checkPieces(manifest);
   return manifest;
+}
+
+// A room section whose empty rule names only a kind of device, as apps built
+// before the rule said what it shows and what starts the first do (Moods
+// before 0.11), keeps its section with no empty rule. A version gone back to
+// still installs whole, and a room it has nothing for shows no section.
+function withoutBareEmptyRules(manifest: StaticManifest): StaticManifest {
+  const sections: unknown = manifest.provides?.roomSections;
+  if (!Array.isArray(sections)) return manifest;
+  const bare = (section: unknown) => {
+    const empty = (section as { whenEmpty?: unknown } | null)?.whenEmpty;
+    return (
+      typeof empty === "object" &&
+      empty !== null &&
+      !("text" in empty) &&
+      !("start" in empty)
+    );
+  };
+  if (!sections.some(bare)) return manifest;
+  return {
+    ...manifest,
+    provides: {
+      ...manifest.provides,
+      roomSections: sections.map(
+        (section: StaticManifest["provides"]["roomSections"][number]) =>
+          bare(section) ? { ...section, whenEmpty: null } : section,
+      ),
+    },
+  };
 }
 
 // What defineApp checks where the manifest is made that the manifest alone can

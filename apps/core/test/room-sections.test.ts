@@ -193,10 +193,11 @@ describe("room sections", () => {
       "opens spot, which is not one of its pages",
     ],
     [
-      "an empty rule that says nothing of what it shows",
+      "an empty rule that says what it shows but not what starts the first",
       (manifest: StaticManifest) => {
         manifest.provides.roomSections[0]!.whenEmpty = {
           roomHas: "light",
+          text: "No spots yet.",
         } as never;
       },
       "its manifest is incomplete",
@@ -210,6 +211,22 @@ describe("room sections", () => {
       expect(() => checkManifest(manifest)).toThrow(refusal);
     },
   );
+
+  it("installs an app whose empty rule names only a kind of device, as before it said what it shows, with no empty rule", () => {
+    const manifest = toStaticManifest(defineApp(nook()));
+    Object.assign(manifest.provides.roomSections[0]!, {
+      open: { page: "room", label: "Edit" },
+      whenEmpty: { roomHas: "light" },
+    });
+
+    expect(checkManifest(manifest).provides.roomSections).toEqual([
+      expect.objectContaining({
+        id: "nook.room",
+        open: { page: "room", label: "Edit" },
+        whenEmpty: null,
+      }),
+    ]);
+  });
 
   it("may show buttons, with no page to open and nothing shown empty", () => {
     const manifest = toStaticManifest(defineApp(nook()));
