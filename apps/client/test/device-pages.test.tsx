@@ -8,11 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { HostedApp } from "../src/apps";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail, devicePages } from "../src/device-detail";
+import { forgetPageTicket } from "../src/frames/page-ticket";
 import { useDevices } from "../src/use-devices";
-import { pressesApp } from "./device-detail-app-fixtures";
+import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
 import { kettle, lamp, places, remote } from "./device-detail-fixtures";
 
-vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
+vi.mock("../src/core-fetch", () => ({
+  coreJson: vi.fn(),
+  currentCredential: () => ({ token: "client" }),
+}));
 
 // The pages a device's detail shows: those apps add for its kinds, with what
 // each app may read of it, and a driver's pages on its own devices alone,
@@ -91,6 +95,7 @@ describe("a device's detail", () => {
   });
 
   it("shows a driver's own page for a device with no capabilities, in its frame, before Activity", async () => {
+    forgetPageTicket();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal(
       "ResizeObserver",
@@ -111,6 +116,8 @@ describe("a device's detail", () => {
     document.body.append(container);
     const root = createRoot(container);
     vi.mocked(coreJson).mockImplementation(async (path) => {
+      const page = devicePageAnswer(path, "sanctum.example");
+      if (page) return page;
       if (path === "/api/devices") return [device];
       if (path === "/api/places") return places;
       if (path.startsWith("/api/activity?"))
@@ -152,10 +159,10 @@ describe("a device's detail", () => {
       });
 
       expect(
-        container.querySelector(
-          '[role="dialog"] iframe[title="Example: Status"]',
-        ),
-      ).toBeTruthy();
+        container
+          .querySelector('[role="dialog"] iframe[title="Example: Status"]')
+          ?.getAttribute("src"),
+      ).toContain("/pages/page_ticket/apps/sanctum.example/page/");
       expect(
         [...container.querySelectorAll('[role="tab"]')].map((tab) =>
           tab.getAttribute("aria-label"),
