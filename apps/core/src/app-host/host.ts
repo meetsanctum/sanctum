@@ -428,7 +428,14 @@ export function createAppHost(options: {
       {
         onTrial = false,
         coming = [],
-      }: { onTrial?: boolean; coming?: readonly string[] } = {},
+        adding = [],
+      }: {
+        onTrial?: boolean;
+        coming?: readonly string[];
+        // Those someone just added, which say so until their first start
+        // returns.
+        adding?: readonly string[];
+      } = {},
     ) {
       isOnTrial = onTrial;
       for (const appId of coming) kept.add(appId);
@@ -450,7 +457,9 @@ export function createAppHost(options: {
             const current = await options.updates.packageFor(pkg);
             if (isClosing) break;
             install(current, checked);
-            added.push(installed.get(appId)!);
+            const entry = installed.get(appId)!;
+            if (adding.includes(appId)) entry.supervision.isAdding = true;
+            added.push(entry);
           } catch (error) {
             log(`apps: ${appId} was not installed (${message(error)})`);
           }
@@ -540,6 +549,14 @@ export function createAppHost(options: {
 
     /** Whether the apps it started with are installed, so `list` is the home's apps. */
     hasInstalled: () => hasInstalled,
+
+    /** One installed app as clients list it. */
+    info(appId: string): AppInfo | undefined {
+      const entry = installed.get(appId);
+      return entry
+        ? installedInfoOf(entry, options.updates.shownFor(appId))
+        : undefined;
+    },
 
     list() {
       return [...installed.values()].map((entry) => ({

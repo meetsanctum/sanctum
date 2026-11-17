@@ -1,14 +1,19 @@
-import type { AppInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo, AvailableApp } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
+import { useState } from "react";
 
+import { AddAppSheet } from "./add-app-sheet";
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
+import { useAvailableApps } from "./available-apps";
 import { Row, Section } from "./components";
 
 // Settings → Apps: the apps the home has installed, each opening its own
 // page, Settings → Apps → the app (app-settings.tsx), which the app's own
-// pages open too.
+// pages open too. Then Add apps, the apps the home could add, each with its
+// Add, which opens its sheet (add-app-sheet.tsx); with nothing to add, it
+// isn't there.
 
 /** Settings' page for one app, by its id. */
 export const appSettingsPage = "app";
@@ -43,5 +48,63 @@ export function AppsSection(props: {
         ))}
       </ul>
     </Section>
+  );
+}
+
+export function AddAppsSection(props: {
+  apps: readonly AppInfo[];
+  /** One was added, as the core lists it now. */
+  onAdded: (app: AppInfo) => void;
+}) {
+  const { available, refresh } = useAvailableApps(props.apps);
+  const [adding, setAdding] = useState<AvailableApp>();
+  // The sheet shows the app as last read, and closes if it's gone, as when
+  // another device added it.
+  const shown = adding && available.find((app) => app.id === adding.id);
+  return (
+    <>
+      {available.length > 0 && (
+        <Section
+          id="settings-add-apps"
+          title="Add apps"
+          hint={available.length === 1 ? "1 app" : `${available.length} apps`}
+        >
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {available.map((app) => (
+              <li key={app.id} className="flex min-h-13 items-center gap-3">
+                <AppIcon
+                  icon={app.icon ?? plainIcon}
+                  className="size-9 [&_svg]:size-5"
+                />
+                <Row title={app.name} detail={app.summary ?? ""} />
+                <Button
+                  variant="outline"
+                  className="ms-auto shrink-0"
+                  aria-label={`Add ${app.name}`}
+                  onClick={() => setAdding(app)}
+                >
+                  Add
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+      <AddAppSheet
+        key={shown?.id ?? "none"}
+        app={shown}
+        onAdded={(app) => {
+          // A late answer leaves alone a sheet opened since for another app.
+          setAdding((current) =>
+            current?.id === app.id ? undefined : current,
+          );
+          props.onAdded(app);
+        }}
+        onClose={() => {
+          setAdding(undefined);
+          refresh();
+        }}
+      />
+    </>
   );
 }

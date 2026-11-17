@@ -134,6 +134,7 @@ export function Home(props: {
     read: readApps,
     stop: stopApps,
     appChanged,
+    appAdded,
   } = useInstalledApps(live);
   const refreshId = useRef(0);
   const { dashboards, rename, home } = useDashboards(live);
@@ -531,6 +532,7 @@ export function Home(props: {
                       back={back}
                       apps={installed}
                       onAppChanged={appChanged}
+                      onAppAdded={appAdded}
                       homeBackground={
                         dashboardBackground[
                           dashboards?.find((each) => each.kind === "home")

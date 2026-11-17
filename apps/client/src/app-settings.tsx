@@ -78,7 +78,7 @@ function stateWords(app: AppInfo) {
         text: `Paused · ${needsWords(app)}`,
       };
     case "starting":
-      return { spinner: true, text: "Starting" };
+      return { spinner: true, text: app.run?.isAdding ? "Adding" : "Starting" };
     case "waiting":
       return { dot: "bg-muted-foreground", text: waitingWords(app) };
     case "restarting":

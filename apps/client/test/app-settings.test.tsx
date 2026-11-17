@@ -283,6 +283,24 @@ describe("an app's settings page", () => {
     ).toBeTruthy();
   });
 
+  it("says it's being added until its first start returns", async () => {
+    const since = "2026-11-17T10:00:00.000Z";
+    await show({
+      ...moods,
+      state: "starting",
+      run: { since, isFirstStart: true, isAdding: true },
+    });
+    expect(text()).toContain("Adding");
+
+    await show({
+      ...moods,
+      state: "starting",
+      run: { since, isFirstStart: true },
+    });
+    expect(text()).not.toContain("Adding");
+    expect(text()).toContain("Starting");
+  });
+
   it("has nothing to say of how one in the core's process is running", async () => {
     await show(moods);
 

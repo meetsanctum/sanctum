@@ -12,7 +12,7 @@ import { AppPage } from "./app-settings";
 import { Row, Section } from "./components";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
-import { appSettingsPage, AppsSection } from "./settings-apps";
+import { AddAppsSection, appSettingsPage, AppsSection } from "./settings-apps";
 import { ClientsSection } from "./settings-clients";
 import { DevicesSection } from "./settings-devices";
 import { NeedsAttentionSection } from "./settings-attention";
@@ -69,6 +69,8 @@ export function SettingsPage(props: {
   // An app as the core answered after a change on its page, which the
   // shell takes at once for everything that shows it.
   onAppChanged?: (app: AppInfo) => void;
+  // One was added here, as the core answered.
+  onAppAdded?: (app: AppInfo) => void;
   // Home's background, which an app's previews stand on; mocha unless said.
   homeBackground?: string;
   me?: Me;
@@ -165,6 +167,13 @@ export function SettingsPage(props: {
       <AppsSection
         apps={props.apps}
         onOpen={(id) => props.open(appSettingsPage, { id })}
+      />
+      <AddAppsSection
+        apps={props.apps}
+        onAdded={(app) => {
+          props.onAppAdded?.(app);
+          props.open(appSettingsPage, { id: app.id });
+        }}
       />
       <RoomsSection live={props.live} adding={start === "add-room"} />
       <DevicesSection

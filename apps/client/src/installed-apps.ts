@@ -20,6 +20,9 @@ export function useInstalledApps(live: LiveFeed) {
   const again = useRef<number>(undefined);
   // Grant changes answered while a read is under way.
   const changedApps = useRef(new Map<string, AppInfo>());
+  // Whether the list is the home's, from a read that succeeded: until then
+  // an app announced as it installs is one of many still to come.
+  const hasRead = useRef(false);
 
   /** Reads the list. Any other failure leaves it for the next read. */
   const read = useCallback(async function read(): Promise<void> {
@@ -38,11 +41,16 @@ export function useInstalledApps(live: LiveFeed) {
       return;
     }
     if (id !== readId.current) return;
+    hasRead.current = true;
     setWaiting(false);
-    // Keep grant changes received during this read without dropping the
-    // rest of the list, including when it is the first read. The same list
-    // keeps the apps' clients, so their pages do not reload.
-    const list = next.map((app) => changedApps.current.get(app.id) ?? app);
+    // Keep changes and additions received during this read, including when
+    // it is the first read. The same list keeps the apps' clients, so their
+    // pages do not reload.
+    const byId = new Map(next.map((app) => [app.id, app]));
+    for (const [appId, app] of changedApps.current) byId.set(appId, app);
+    const list = [...byId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
     setInstalled((current) =>
       JSON.stringify(current) === JSON.stringify(list) ? current : list,
     );
@@ -54,13 +62,31 @@ export function useInstalledApps(live: LiveFeed) {
     window.clearTimeout(again.current);
   }, []);
 
-  // An app as the core answered a change of its permissions, which the
-  // shell takes at once for everything that shows it.
+  // An app as the core answered a change of its permissions, or as a live
+  // message has it, which the shell takes at once for everything that
+  // shows it.
   const appChanged = useCallback((changed: AppInfo) => {
     // A read started before this answer must keep these newer grants.
     changedApps.current.set(changed.id, changed);
+    // One that's new, as when someone added it, joins the list in its
+    // place by name.
     setInstalled((current) =>
-      current.map((each) => (each.id === changed.id ? changed : each)),
+      current.some((each) => each.id === changed.id) || !hasRead.current
+        ? current.map((each) => (each.id === changed.id ? changed : each))
+        : [...current, changed].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  }, []);
+  // An app as the core answered adding it. A live message may have brought
+  // it first, and that is as new or newer, as when its first start returned
+  // before the answer: then it stays as the message had it.
+  const appAdded = useCallback((added: AppInfo) => {
+    if (!changedApps.current.has(added.id)) {
+      changedApps.current.set(added.id, added);
+    }
+    setInstalled((current) =>
+      current.some((each) => each.id === added.id)
+        ? current
+        : [...current, added].sort((a, b) => a.name.localeCompare(b.name)),
     );
   }, []);
   // A change made on another client reaches this one at once, so the
@@ -75,5 +101,5 @@ export function useInstalledApps(live: LiveFeed) {
     [live, appChanged],
   );
 
-  return { installed, isWaiting, read, stop, appChanged };
+  return { installed, isWaiting, read, stop, appChanged, appAdded };
 }

@@ -562,6 +562,29 @@ describe("an entry's words", () => {
     });
   });
 
+  it("says who added an app, by the name kept once it's gone", () => {
+    const added = (fields: Partial<ActivityInfo>) =>
+      activityWords(
+        entry({
+          kind: "setup",
+          source: "sanctum.moods",
+          action: "app.add",
+          app: moods,
+          subject: null,
+          detail: { name: "Moods", version: "0.10.0" },
+          ...fields,
+        }),
+      );
+    expect(added({})).toEqual({
+      title: "Added Moods",
+      detail: "Alex",
+      problem: false,
+    });
+    expect(
+      added({ outcome: "refused", app: { id: "sanctum.moods", name: null } }),
+    ).toEqual({ title: "Couldn't add Moods", detail: "Alex", problem: true });
+  });
+
   it("reads an app's action by its title", () => {
     expect(
       activityWords(
