@@ -69,6 +69,8 @@ export function SettingsPage(props: {
   // An app as the core answered after a change on its page, which the
   // shell takes at once for everything that shows it.
   onAppChanged?: (app: AppInfo) => void;
+  // One was added here, as the core answered.
+  onAppAdded?: (app: AppInfo) => void;
   // Home's background, which an app's previews stand on; mocha unless said.
   homeBackground?: string;
   me?: Me;
@@ -169,7 +171,7 @@ export function SettingsPage(props: {
       <AddAppsSection
         apps={props.apps}
         onAdded={(app) => {
-          props.onAppChanged?.(app);
+          props.onAppAdded?.(app);
           props.open(appSettingsPage, { id: app.id });
         }}
       />

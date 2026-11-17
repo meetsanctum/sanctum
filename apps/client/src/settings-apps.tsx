@@ -94,7 +94,10 @@ export function AddAppsSection(props: {
         key={shown?.id ?? "none"}
         app={shown}
         onAdded={(app) => {
-          setAdding(undefined);
+          // A late answer leaves alone a sheet opened since for another app.
+          setAdding((current) =>
+            current?.id === app.id ? undefined : current,
+          );
           props.onAdded(app);
         }}
         onClose={() => {

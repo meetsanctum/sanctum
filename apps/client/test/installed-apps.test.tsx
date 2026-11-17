@@ -16,6 +16,13 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
 const weather = { id: "sanctum.weather", name: "Weather" } as AppInfo;
 const example = { id: "sanctum.example", name: "Example" } as AppInfo;
 
+function InstalledStates() {
+  apps = useInstalledApps(live);
+  return (
+    <>{apps.installed.map((app) => `${app.name} ${app.state}`).join(", ")}</>
+  );
+}
+
 let container: HTMLDivElement;
 let root: Root;
 let live: ReturnType<typeof createLiveFeed>;
@@ -81,5 +88,23 @@ describe("the home's apps", () => {
       await finished;
     });
     expect(container.textContent).toBe("Example, Weather");
+  });
+
+  it("keeps what a live message said of an app over a later answer to adding it", async () => {
+    await act(async () => root.render(<InstalledStates />));
+    vi.mocked(coreJson).mockResolvedValueOnce([weather]);
+    await act(async () => apps.read());
+
+    await act(async () =>
+      live.publish({ type: "app", app: { ...example, state: "running" } }),
+    );
+    await act(async () => apps.appAdded({ ...example, state: "starting" }));
+    expect(container.textContent).toContain("Example running");
+    expect(container.textContent).not.toContain("Example starting");
+
+    // Without a live message first, the answer brings it.
+    const other = { id: "sanctum.other", name: "Other", state: "starting" };
+    await act(async () => apps.appAdded(other as AppInfo));
+    expect(container.textContent).toContain("Other starting");
   });
 });

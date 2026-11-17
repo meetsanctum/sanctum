@@ -197,7 +197,11 @@ export function AddAppSheet(props: {
       }}
     >
       {app && (
-        <DialogContent showCloseButton={false}>
+        // A long list scrolls within the screen, Add with it.
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        >
           <DialogHeader className="gap-3">
             <AppIcon
               icon={app.icon ?? plainIcon}
