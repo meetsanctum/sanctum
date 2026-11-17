@@ -144,8 +144,13 @@ export function createPages(options: {
     // Every request to the core comes through here, so apps' page files and
     // the kit come from the app's own store once fetched; anything else is
     // passed on as it was, through this session's own checks.
+    // A redirect isn't followed here, where no frame is known, but given
+    // back, so the page's own next request meets the checks below again.
     const passOn = (request: Request) =>
-      own.fetch(request, { bypassCustomProtocolHandlers: true });
+      own.fetch(request, {
+        bypassCustomProtocolHandlers: true,
+        redirect: "manual",
+      });
     const answered = (request: Request) =>
       answer(request, {
         store: options.pageStore,

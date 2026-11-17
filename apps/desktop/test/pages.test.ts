@@ -37,6 +37,7 @@ vi.mock("electron", async () => {
           onBeforeSendHeaders: vi.fn(),
         },
         closeAllConnections: vi.fn(async () => {}),
+        fetch: vi.fn(async () => new Response("passed on")),
       })),
     },
   };
@@ -291,6 +292,19 @@ describe("the frames apps' pages show in", () => {
     expect(window.webContents.setWebRTCIPHandlingPolicy).toHaveBeenCalledWith(
       "disable_non_proxied_udp",
     );
+  });
+
+  it("pass on what isn't a page's file, giving a redirect back rather than following it", async () => {
+    const { own } = setUp(Promise.resolve(accept));
+    const handled = vi
+      .mocked(own.protocol.handle)
+      .mock.calls.find(([scheme]) => scheme === "https")![1];
+    const request = new Request("https://192.168.1.20:4100/api/apps");
+    expect(await (await handled(request)).text()).toBe("passed on");
+    expect(own.fetch).toHaveBeenCalledWith(request, {
+      bypassCustomProtocolHandlers: true,
+      redirect: "manual",
+    });
   });
 
   it("go only where the page named, and never by a redirect", () => {
