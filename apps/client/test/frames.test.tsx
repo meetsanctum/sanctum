@@ -349,6 +349,14 @@ describe("a page in its frame", () => {
     });
     used.preventDefault();
     window.dispatchEvent(used);
+    // One the page uses in a listener of its own on the window, which runs
+    // after the kit's, doesn't either.
+    const own = (event: KeyboardEvent) => event.preventDefault();
+    window.addEventListener("keydown", own);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", cancelable: true }),
+    );
+    window.removeEventListener("keydown", own);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(events.filter((event) => event.type === "key")).toHaveLength(1);
     delete document.documentElement.dataset.surface;
