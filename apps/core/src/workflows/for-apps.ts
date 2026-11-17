@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { WorkflowRow } from "./engine.js";
+import type { Pieces } from "./pieces.js";
 import { jobs, workflows, workflowsOffForApps } from "./schema.js";
 
 // What removing an app, and adding it back, does to workflows. The workflows
@@ -15,6 +16,7 @@ import { jobs, workflows, workflowsOffForApps } from "./schema.js";
 export function createWorkflowsForApps(options: {
   db: CoreDatabase;
   rows: () => WorkflowRow[];
+  named: Pieces["named"];
   // What a workflow is missing or gets wrong now (pieces.ts).
   problems: (row: WorkflowRow) => readonly unknown[];
   record: RecordActivity;
@@ -25,13 +27,14 @@ export function createWorkflowsForApps(options: {
   const { db, record } = options;
 
   // The household's workflows that use the app: a node of its own, or a
-  // device it brings named anywhere in the graph.
+  // device it brings named by one of its pieces' schemas.
   function using(app: string, deviceIds: readonly string[]) {
     return options.rows().filter((row) => {
       if (row.app !== null) return false;
       if (row.graph.nodes.some((node) => node.app === app)) return true;
-      const graph = JSON.stringify(row.graph);
-      return deviceIds.some((id) => graph.includes(JSON.stringify(id)));
+      return options
+        .named(row.graph)
+        .some((each) => each.kind === "device" && deviceIds.includes(each.id));
     });
   }
 

@@ -10,6 +10,10 @@ export function createListTurns() {
       last = mine.catch(() => undefined);
       return mine;
     },
+    /** Waits for changes already under way before their database closes. */
+    async settled() {
+      await last;
+    },
   };
 }
 

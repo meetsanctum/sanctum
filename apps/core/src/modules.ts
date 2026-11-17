@@ -411,6 +411,9 @@ export async function createModules(
     onSettings: live.settings,
     onApp(app) {
       live.app(app);
+      // Its first successful start also restores workflows after a restart
+      // interrupted adding it back.
+      if (app.state === "running") workflows.forApps.added(app.id);
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -609,6 +612,7 @@ export async function createModules(
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
+    ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],

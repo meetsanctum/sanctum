@@ -23,9 +23,9 @@ import type { RemovedApps } from "./removed.js";
 //
 // Adding back an app the household removed, while its own data is kept,
 // forgets its removal in the same transaction: a driver's devices show again
-// as they were, and once it's installed, the household's workflows its
-// removal turned off turn back on, but those someone changed since or that
-// miss something now.
+// as they were. Its first successful start restores the household's
+// workflows its removal turned off, unless someone changed them since or
+// they still miss something.
 
 export function createAppAdding(options: {
   gate: Gate;
@@ -118,7 +118,10 @@ export function createAppAdding(options: {
     }
     const info = options.info(appId);
     if (!info) throw new ActionCallError("app_failed");
-    if (removal) options.workflows().added(appId);
+    // An app kept off or paused has no start to wait for.
+    if (removal && (info.state === "off" || info.state === "paused")) {
+      options.workflows().added(appId);
+    }
     return info;
   }
 

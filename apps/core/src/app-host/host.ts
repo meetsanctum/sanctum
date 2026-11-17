@@ -524,10 +524,8 @@ export function createAppHost(options: {
           await stopApp(entry, { reason: "removing" });
           entry.storage.close();
           await entry.link.close();
-          await manager.removeAppContainer(appId).catch((error: unknown) => {
-            log(`apps: ${appId}'s container stays (${message(error)})`);
-          });
           options.entities.removeApp(appId);
+          await manager.removeAppContainer(appId);
         } finally {
           await release();
         }

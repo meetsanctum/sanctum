@@ -29,7 +29,7 @@ import { createJobs, type JobRow, type SunDays } from "./jobs.js";
 import { createKeptGrants } from "./kept-grants.js";
 import { createPieces } from "./pieces.js";
 import { createRuns } from "./runs.js";
-import { workflows } from "./schema.js";
+import { workflows, workflowsOffForApps } from "./schema.js";
 import { hostTimeZone } from "./time.js";
 import { createTimers, lateness } from "./timers.js";
 
@@ -191,6 +191,7 @@ export function createWorkflows(
   const forApps = createWorkflowsForApps({
     db,
     rows: () => rows(),
+    named: pieces.named,
     problems: (workflow) => pieces.check(workflow.graph).problems,
     record,
     endRuns(workflowId) {
@@ -417,6 +418,11 @@ export function createWorkflows(
       const graphChanged =
         input.graph !== undefined && !sameValue(input.graph, current.graph);
       db.transaction(() => {
+        // Every household edit cancels automatic restoration, even in the
+        // same millisecond as the app's removal.
+        db.delete(workflowsOffForApps)
+          .where(eq(workflowsOffForApps.workflowId, input.id))
+          .run();
         db.update(workflows)
           .set({
             ...(input.name !== undefined && { name: input.name }),

@@ -75,24 +75,11 @@ export function createAppRemoving(options: {
     if (options.host.list().some((app) => app.id === appId)) {
       await options.host.remove(appId);
     } else {
-      await options.manager
-        .removeAppContainer(appId)
-        .catch((error: unknown) => {
-          log(`apps: ${appId}'s container stays (${message(error)})`);
-        });
+      await options.manager.removeAppContainer(appId);
     }
-    const held = await options.manager
-      .servicesHeldBy?.(appId)
-      .catch((error: unknown) => {
-        log(`apps: ${appId}'s services stay (${message(error)})`);
-        return [];
-      });
+    const held = await options.manager.servicesHeldBy?.(appId);
     for (const service of held ?? []) {
-      await options.manager
-        .releaseService(service, appId)
-        .catch((error: unknown) => {
-          log(`apps: ${service} stays held for ${appId} (${message(error)})`);
-        });
+      await options.manager.releaseService(service, appId);
     }
     options.removed.done(appId);
   }

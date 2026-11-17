@@ -4,8 +4,14 @@ import { describe, expect, it } from "vitest";
 import { appsRemoved } from "../src/app-host/schema.js";
 import { lampsCore } from "./devices-support.js";
 import { loadAppPackage } from "./runner-apps.js";
-import { fixtureApps, get, post, type TestCore } from "./support.js";
-import { addWorkflow, steps, trigger } from "./workflows-support.js";
+import { fixtureApps, get, post, testCore, type TestCore } from "./support.js";
+import {
+  addWorkflow,
+  noteStep,
+  samplePackage,
+  steps,
+  trigger,
+} from "./workflows-support.js";
 
 // Removing an app from its settings: what leaves the home at once, what the
 // household's workflows do, what's kept, and adding it back while it is.
@@ -84,6 +90,24 @@ describe("removing an app", () => {
     ).toEqual([{ outcome: "ok", subjectId: "test.lamps", kind: "setup" }]);
   });
 
+  it("leaves on an unrelated workflow whose text contains a device's id", async () => {
+    const { core, maya, lamp } = await lampsCore({
+      origin: "official",
+      apps: [samplePackage],
+    });
+    const { id } = await addWorkflow(core, maya.token, {
+      name: "A note",
+      graph: steps(trigger("hand", "manual"), noteStep("note", lamp)),
+    });
+
+    expect(
+      (await get(core, "/api/apps/test.lamps/removal", maya)).json().workflows,
+    ).toEqual([]);
+    await post(core, "/api/apps/test.lamps/remove", {}, maya);
+
+    expect(workflow(core, id)).toMatchObject({ enabled: true });
+  });
+
   it("finishes at start what a core that stopped part way left", async () => {
     const { core } = await home();
     // As a core that stopped after its first transaction leaves it.
@@ -124,9 +148,6 @@ describe("removing an app", () => {
     // As adding it back does, once it's installed again.
     core.removedApps.forget("test.lamps");
     await core.startApps([await lampsPackage()]);
-    const on = core.workflows.forApps.added("test.lamps");
-
-    expect(on).toEqual(["Evening"]);
     expect(await workflow(core, evening)).toMatchObject({
       enabled: true,
     });
@@ -140,21 +161,46 @@ describe("removing an app", () => {
     expect(devices.map((device) => device.id)).toContain(lamp);
   });
 
+  it.each([false, true])(
+    "restores workflows after an interrupted add, with the app kept off: %s",
+    async (isOff) => {
+      const { core, maya, evening } = await home();
+      if (isOff) {
+        expect(
+          (await post(core, "/api/apps/test.lamps/off", { off: true }, maya))
+            .statusCode,
+        ).toBe(200);
+      }
+      await post(core, "/api/apps/test.lamps/remove", {}, maya);
+      core.addedApps.add("test.lamps", {}, () =>
+        core.removedApps.forget("test.lamps"),
+      );
+      await core.stop();
+
+      const restarted = await testCore({
+        dataDir: core.dataDir,
+        apps: [await lampsPackage()],
+      });
+
+      expect(workflow(restarted, evening)).toMatchObject({ enabled: true });
+    },
+  );
+
   it("leaves off a workflow someone changed while it was gone", async () => {
     const { core, maya, evening } = await home();
     await post(core, "/api/apps/test.lamps/remove", {}, maya);
-    core.advance(60_000);
-    await post(
+    // An edit still counts when the clock has the same millisecond.
+    const changed = await post(
       core,
       "/api/workflows/update",
       { id: evening, name: "Evening lights" },
       maya,
     );
+    expect(changed.statusCode).toBe(200);
 
     core.removedApps.forget("test.lamps");
     await core.startApps([await lampsPackage()]);
 
-    expect(core.workflows.forApps.added("test.lamps")).toEqual([]);
     expect(await workflow(core, evening)).toMatchObject({
       enabled: false,
     });
