@@ -573,7 +573,11 @@ export function FieldControl(props: {
       return (
         <OptionList
           label={label}
+          // From the widest place to the narrowest: the whole home, its
+          // floors in their order, its rooms, then the zones that cross
+          // them.
           options={[
+            { value: "home", label: "The whole home", group: "Everywhere" },
             ...floors.map((floor) => ({
               value: `floor:${floor.id}`,
               label: floor.name,
@@ -589,7 +593,6 @@ export function FieldControl(props: {
               label: zone.name,
               group: "Zones",
             })),
-            { value: "home", label: "The whole home", group: "Everywhere" },
           ]}
           selected={
             selected === "home"

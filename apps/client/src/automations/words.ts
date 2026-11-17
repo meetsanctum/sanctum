@@ -316,6 +316,8 @@ export function formatValue(
   return undefined;
 }
 
+const isFloor = (value: unknown) => isRecord(value) && value.kind === "floor";
+
 /** A sentence's text and tokens, from its {field} template. */
 export function sentenceParts(
   template: string,
@@ -334,10 +336,26 @@ export function sentenceParts(
     if (at > 0) parts.push(rest.slice(0, at));
     rest = rest.slice(at + whole.length);
     const field = fields[name!] ?? {};
-    const text = formatValue(field, config[name!], names, style, {
+    const value = config[name!] === undefined ? field.default : config[name!];
+    const text = formatValue(field, value, names, style, {
       piece,
       name,
     });
+    // A floor is a level of the home, so a sentence says what is on it
+    // where it says what is in a room or a zone: "Turn off the lights on
+    // Ground floor", "On Ground floor, any light is on".
+    const before = parts.at(-1);
+    if (
+      text !== undefined &&
+      isFloor(value) &&
+      typeof before === "string" &&
+      /(^|\s)[Ii]n $/.test(before)
+    ) {
+      parts[parts.length - 1] = before.replace(
+        /([Ii])n $/,
+        (_, letter: string) => `${letter === "I" ? "O" : "o"}n `,
+      );
+    }
     // An optional field left out means any; one that is set but names
     // what is gone, or a required one not set yet, is missing.
     parts.push(
