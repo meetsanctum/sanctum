@@ -12,24 +12,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
 import { DeviceFrame } from "../src/frames/device-frame";
+import { CoreError } from "../src/core-fetch";
 import { forgetPageTicket } from "../src/frames/page-ticket";
 
 // An app's page for a device in its frame, inside the device's detail: as
 // tall as the page says, the device sent on as it changes, and an Escape the
 // page leaves closing the detail.
 
-vi.mock("../src/core-fetch", () => ({
+const answers = vi.hoisted(() => ({
+  pages: (): Promise<unknown> => Promise.resolve({ digest: "page" }),
+}));
+vi.mock("../src/core-fetch", async () => ({
+  CoreError: (
+    await vi.importActual<typeof import("../src/core-fetch")>(
+      "../src/core-fetch",
+    )
+  ).CoreError,
   currentCredential: () => ({ token: "client" }),
   coreJson: (path: string) =>
-    Promise.resolve(
-      path === "/api/pages/ticket"
-        ? {
-            ticket: "page_ticket",
-            expiresAt: new Date(Date.now() + 60_000).toISOString(),
-            kit: { version: "0.1.4", bridge: frameBridge, digest: "kit" },
-          }
-        : { digest: "page" },
-    ),
+    path === "/api/pages/ticket"
+      ? Promise.resolve({
+          ticket: "page_ticket",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          kit: { version: "0.1.4", bridge: frameBridge, digest: "kit" },
+        })
+      : answers.pages(),
 }));
 
 const info: AppInfo = {
@@ -46,7 +53,6 @@ const info: AppInfo = {
 };
 const app: HostedApp = {
   info,
-  ui: { id: info.id, version: info.version, pages: {} },
   client: createAppClient(info, {
     json: vi.fn() as unknown as CoreBridge["json"],
     live: createLiveFeed(),
@@ -60,6 +66,7 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   forgetPageTicket();
+  answers.pages = () => Promise.resolve({ digest: "page" });
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -141,5 +148,20 @@ describe("a device page in its frame", () => {
     port.postMessage({ type: "key", key: "Escape" });
     await vi.waitFor(() => expect(onEscape).toHaveBeenCalledOnce());
     port.close();
+  });
+
+  it("says what it needs in the detail, with no top bar, when its pages don't fit the home's kit", async () => {
+    answers.pages = () =>
+      Promise.reject(
+        new CoreError(404, "not_found", { error: "not_found", needs: "pages" }),
+      );
+    await show(() => {});
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "This page needs an update of ESPHome",
+      ),
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("header")).toBeNull();
   });
 });

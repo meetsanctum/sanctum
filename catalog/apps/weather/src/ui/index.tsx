@@ -10,7 +10,7 @@ import { DayList } from "./day-list";
 import { useWeather } from "./use-weather";
 import { version } from "../../sanctum-app.json";
 
-// Weather's UI, which the shell bundles: its main page, with its card as
+// Weather's UI, in a frame the core serves: its main page, with its card as
 // dashboards show it, which the shell draws from what Weather shows
 // (../card.ts), and every day of the forecast. It has no settings of its
 // own: the unit is the home's, in Settings → Household. Weather is the

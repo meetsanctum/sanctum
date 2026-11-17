@@ -98,8 +98,8 @@ export function AppFrame(props: {
     }
   }, [props.shown, phase, shown]);
 
-  if (phase === "newer") {
-    return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
+  if (shown.mismatch) {
+    return <PageDoesntMatch app={app.info} mismatch={shown.mismatch} />;
   }
   return (
     <>

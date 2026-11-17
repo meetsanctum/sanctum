@@ -7,12 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
 import { alex, entry } from "./activity-fixtures";
-import { pressesApp } from "./device-detail-app-fixtures";
+import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
 import { coreJson } from "../src/core-fetch";
 import { useDashboards } from "../src/dashboards";
 import { DeviceDetail } from "../src/device-detail";
 import { timeText } from "../src/device-history-data";
 import { sectionsByRoom } from "../src/device-tiles";
+import { forgetPageTicket } from "../src/frames/page-ticket";
 import { useDevices } from "../src/use-devices";
 import {
   places,
@@ -22,7 +23,10 @@ import {
   remote,
 } from "./device-detail-fixtures";
 
-vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
+vi.mock("../src/core-fetch", () => ({
+  coreJson: vi.fn(),
+  currentCredential: () => ({ token: "client" }),
+}));
 
 // A device's detail: opened from its tile's body, its controls send through
 // core Devices as the tiles do.
@@ -191,6 +195,7 @@ async function show() {
 }
 
 beforeEach(() => {
+  forgetPageTicket();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -207,6 +212,8 @@ beforeEach(() => {
   showActivity = vi.fn();
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init) => {
+    const page = devicePageAnswer(path, "test.presses");
+    if (page) return page;
     if (path === "/api/devices") return devices;
     if (path === "/api/places") return places;
     if (path === "/api/devices/command") {
@@ -391,9 +398,11 @@ describe("a device's detail", () => {
       apps = [app];
       await show();
       await click(button(tileLabel));
-      expect(dialog()?.textContent).toContain(
-        `test.presses for ${name}: ${kind}`,
-      );
+      expect(
+        dialog()
+          ?.querySelector('iframe[title="Presses: Presses"]')
+          ?.getAttribute("src"),
+      ).toContain("/pages/page_ticket/apps/test.presses/page/");
       expect(button(kind === "light" ? "Red" : name, dialog()!)).toBeTruthy();
       expect(
         [...dialog()!.querySelectorAll('[role="tab"]')].map((each) =>
@@ -542,9 +551,11 @@ describe("a remote's detail", () => {
 
     expect(dialog()?.querySelector("h2")?.textContent).toBe("Office button");
     expect(dialog()?.textContent).toContain("Office · Idle");
-    expect(dialog()?.textContent).toContain(
-      "test.presses for Office button: button",
-    );
+    expect(
+      dialog()
+        ?.querySelector('iframe[title="Presses: Presses"]')
+        ?.getAttribute("src"),
+    ).toContain("/pages/page_ticket/apps/test.presses/page/");
     // Then its Activity: its presses and what each did.
     await click(button("Activity", dialog()!));
     expect(dialog()?.textContent).toContain("Last press");

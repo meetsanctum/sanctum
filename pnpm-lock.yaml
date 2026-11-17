@@ -43,24 +43,9 @@ importers:
       '@meetsanctum/brand':
         specifier: workspace:*
         version: link:../../assets/brand
-      '@meetsanctum/esphome':
-        specifier: workspace:*
-        version: link:../../catalog/apps/esphome
-      '@meetsanctum/moods':
-        specifier: workspace:*
-        version: link:../../catalog/apps/moods
-      '@meetsanctum/natural-light':
-        specifier: workspace:*
-        version: link:../../catalog/apps/natural-light
       '@meetsanctum/ui-sdk':
         specifier: workspace:*
         version: link:../../packages/ui-sdk
-      '@meetsanctum/weather':
-        specifier: workspace:*
-        version: link:../../catalog/apps/weather
-      '@meetsanctum/zigbee':
-        specifier: workspace:*
-        version: link:../../catalog/apps/zigbee
       '@serenity-kit/opaque':
         specifier: 1.1.0
         version: 1.1.0

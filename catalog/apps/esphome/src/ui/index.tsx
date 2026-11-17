@@ -3,7 +3,7 @@ import { defineAppUi } from "@meetsanctum/ui-sdk";
 import { DevicePage } from "./device-page";
 import { version } from "../../sanctum-app.json";
 
-// ESPHome's UI, which the shell bundles: its page in the detail of the
+// ESPHome's UI, in a frame the core serves: its page in the detail of the
 // devices it brings.
 
 export default defineAppUi({

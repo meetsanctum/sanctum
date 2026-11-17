@@ -16,8 +16,8 @@ import { createWeather, type WeatherOptions } from "./weather.js";
 // (card.ts). It reads the home's location from the core and reaches only
 // Open-Meteo, and nothing until someone has set the location. The shell
 // writes the card's temperatures in the home's unit, which the household
-// sets in Settings → Household. Its own page is in ./ui, which the shell
-// bundles.
+// sets in Settings → Household. Its own page is in ./ui, which opens in a
+// frame the core serves.
 
 export { weatherCard } from "./card.js";
 export type { WeatherOptions } from "./weather.js";

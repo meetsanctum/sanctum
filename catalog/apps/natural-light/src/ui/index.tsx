@@ -11,7 +11,7 @@ import { LightList } from "./light-list";
 import { useNaturalLight } from "./use-natural-light";
 import { version } from "../../sanctum-app.json";
 
-// Natural light's UI, which the shell bundles: its main page with today's
+// Natural light's UI, in a frame the core serves: its main page with today's
 // curve and the lights, by room, that follow it. Whether it is on and the
 // curve are its preferences, which the shell's settings button at the end of
 // the top bar opens; while it is off, the page says so first, with a link

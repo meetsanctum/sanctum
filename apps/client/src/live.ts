@@ -12,7 +12,7 @@ import { coreUrl } from "./core-url";
 // the token the fetch helper would send to the same core, and reconnects
 // while the token is held, waiting longer each time, or at once when told
 // the core is back. Once it is live, the core's updates reach onMessage,
-// which hands them to the apps' pages (src/apps.tsx).
+// which hands them to the apps' pages in their frames (frames/bridge.ts).
 
 export type LiveState = "connecting" | "live" | "offline";
 
