@@ -507,40 +507,44 @@ export function EditFloor(props: {
                         No rooms yet.
                       </p>
                     ) : (
-                      rooms.map((room) => {
-                        const elsewhere =
-                          room.floorId !== null && room.floorId !== floorId
-                            ? floors.find((each) => each.id === room.floorId)
-                            : undefined;
-                        const id = `floor-room-${room.id}`;
-                        return (
-                          <div
-                            key={room.id}
-                            className="flex items-center gap-3"
-                          >
-                            <Checkbox
-                              id={id}
-                              checked={onIt.has(room.id)}
-                              onCheckedChange={(checked) =>
-                                setOnIt((was) => {
-                                  const next = new Set(was);
-                                  if (checked === true) next.add(room.id);
-                                  else next.delete(room.id);
-                                  return next;
-                                })
-                              }
-                            />
-                            <label htmlFor={id} className="flex-1 text-sm">
-                              {room.name}
-                            </label>
-                            {elsewhere && (
-                              <span className="text-[13px] font-medium text-muted-foreground">
-                                On {elsewhere.name}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
+                      // A home with many rooms scrolls them, so the sheet's
+                      // buttons stay on screen.
+                      <div className="-mx-1 flex max-h-[min(18rem,40dvh)] flex-col gap-2 overflow-y-auto px-1 py-0.5">
+                        {rooms.map((room) => {
+                          const elsewhere =
+                            room.floorId !== null && room.floorId !== floorId
+                              ? floors.find((each) => each.id === room.floorId)
+                              : undefined;
+                          const id = `floor-room-${room.id}`;
+                          return (
+                            <div
+                              key={room.id}
+                              className="flex items-center gap-3"
+                            >
+                              <Checkbox
+                                id={id}
+                                checked={onIt.has(room.id)}
+                                onCheckedChange={(checked) =>
+                                  setOnIt((was) => {
+                                    const next = new Set(was);
+                                    if (checked === true) next.add(room.id);
+                                    else next.delete(room.id);
+                                    return next;
+                                  })
+                                }
+                              />
+                              <label htmlFor={id} className="flex-1 text-sm">
+                                {room.name}
+                              </label>
+                              {elsewhere && (
+                                <span className="text-[13px] font-medium text-muted-foreground">
+                                  On {elsewhere.name}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </fieldset>
                 </>
