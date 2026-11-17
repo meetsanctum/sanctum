@@ -96,23 +96,33 @@ export function createPages(
   // development ui-sdk's build replaces the kit as the core runs.
   let kitChanged: number | undefined;
   let kitLookedAt = -Infinity;
+  let kitChecking: Promise<void> | undefined;
   const indexed = new Map<string, Promise<PagesIndex | null>>();
   const failures = new Map<string, number[]>();
   // Pages built for a kit this one can't stand in for, said once each.
   const misfits = new Set<string>();
 
   async function kitIndex() {
-    if (now().getTime() - kitLookedAt >= 1_000) {
+    if (!kitChecking && now().getTime() - kitLookedAt >= 1_000) {
       kitLookedAt = now().getTime();
-      const changed = await stat(join(kitDir, "kit.json")).then(
-        (found) => found.mtimeMs,
-        () => undefined,
-      );
-      if (changed !== kitChanged) {
-        kitChanged = changed;
-        kit = undefined;
-      }
+      kitChecking = stat(join(kitDir, "kit.json"))
+        .then(
+          (found) => found.mtimeMs,
+          () => undefined,
+        )
+        .then((changed) => {
+          if (changed !== kitChanged) {
+            kitChanged = changed;
+            kit = undefined;
+          }
+        })
+        .finally(() => {
+          kitChecking = undefined;
+        });
     }
+    // A concurrent request waits too, so it cannot use the old index while
+    // another is checking whether the kit changed.
+    await kitChecking;
     kit ??= indexKit(kitDir, log).catch((error: unknown) => {
       log(`pages: the kit couldn't be read (${String(error)})`);
       kit = undefined;

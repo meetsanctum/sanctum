@@ -274,8 +274,12 @@ describe("a kit rebuilt as the core runs", () => {
     await utimes(join(kitDir, "kit.json"), later, later);
     // Looked at again a second later at most.
     core.advance(1_000);
-    const { ticket, kit } = await ticketFor();
+    const [{ ticket, kit }, concurrent] = await Promise.all([
+      ticketFor(),
+      ticketFor(),
+    ]);
     expect(kit?.digest).toBe(rebuiltDigest);
+    expect(concurrent.kit?.digest).toBe(rebuiltDigest);
     const served = await get(
       core,
       `/pages/${ticket}/kit/${rebuiltDigest}/react.js`,

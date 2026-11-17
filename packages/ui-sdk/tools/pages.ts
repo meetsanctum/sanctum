@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
@@ -187,8 +187,25 @@ export async function buildPages(
     );
     const last = `${next}-last`;
     await rm(last, { recursive: true, force: true });
-    await rename(outDir, last).catch(() => undefined);
-    await rename(next, outDir);
+    // A directory copied into an image can live in a read-only lower layer,
+    // where moving it fails with EXDEV. Keep a copy until publication succeeds.
+    const hasPreviousPages = await cp(outDir, last, { recursive: true }).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return false;
+      },
+    );
+    try {
+      await rm(outDir, { recursive: true, force: true });
+      await rename(next, outDir);
+    } catch (error) {
+      if (hasPreviousPages) {
+        await rm(outDir, { recursive: true, force: true });
+        await rename(last, outDir);
+      }
+      throw error;
+    }
     await rm(last, { recursive: true, force: true });
     return manifest;
   } catch (error) {
