@@ -73,6 +73,10 @@ const buttonVariants = cva(
           "text-foreground hover:bg-foreground/5 hover:text-foreground active:bg-foreground/8",
           current,
         ),
+        // A grip to drag something into its place, such as a floor in
+        // Settings: quieter than the ink until it's under the pointer, and
+        // it takes the pointer's moves rather than the page's scroll.
+        grip: "cursor-grab touch-none text-muted-foreground hover:bg-foreground/8 hover:text-foreground active:cursor-grabbing active:bg-foreground/12",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         // Text in the action colour, Light blue on Carbon.

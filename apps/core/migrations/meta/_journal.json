@@ -267,6 +267,13 @@
       "when": 1794776130476,
       "tag": "0037_place-sensing",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794938946876,
+      "tag": "0038_apps-added",
+      "breakpoints": true
     }
   ]
 }

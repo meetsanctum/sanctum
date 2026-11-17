@@ -12,6 +12,7 @@ import {
   rowOf,
   running,
   stateOf,
+  versionEntries,
   versions,
 } from "./app-update-support.js";
 
@@ -56,6 +57,33 @@ describe("an update that works", () => {
       version: "2.0.0",
       folder: "2.0.0+test",
     });
+    // Once, by Sanctum, keeping its name.
+    expect(versionEntries(core)).toEqual([
+      {
+        action: "version.update",
+        outcome: "ok",
+        reason: null,
+        kind: "system",
+        actor: "sanctum",
+        subjectId: id,
+        detail: { name: expect.any(String), from: "1.0.0", to: "2.0.0" },
+      },
+    ]);
+  });
+
+  it("names the app in its entries once it's gone", async () => {
+    const home = await versions();
+    await running(await home.coreWith(version("1.0.0")), id);
+    const core = await home.coreWith(version("2.0.0"));
+    await running(core, id);
+    const name = stateOf(core, id).name;
+
+    await core.apps.remove(id);
+
+    const updated = core.activity
+      .recent()
+      .find((entry) => entry.action === "version.update")!;
+    expect(core.activityViews.info(updated).app).toEqual({ id, name });
   });
 
   it("names the update in the row that commits it", async () => {
@@ -208,6 +236,14 @@ describe("a new version that fails", () => {
       folder: "1.0.0+test",
     });
     expect(rowOf(core)?.failure).toBe("failed_start");
+    expect(versionEntries(core)).toEqual([
+      expect.objectContaining({
+        action: "version.update",
+        outcome: "failed",
+        reason: "failed_start",
+        detail: expect.objectContaining({ from: "1.0.0", to: "2.0.0" }),
+      }),
+    ]);
   });
 
   it("keeps trying to go back when the old package can't be read at first", async () => {

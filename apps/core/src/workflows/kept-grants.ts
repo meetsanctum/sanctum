@@ -65,7 +65,10 @@ export function createKeptGrants(options: {
     const control = (kind: CapabilityKind) =>
       controls.has(kind) ? undefined : missing(controlPermission(kind));
     const hasNamedPlaces = namedIn(piece.config, node.config).some(
-      (named) => named.kind === "room" || named.kind === "zone",
+      (named) =>
+        named.kind === "room" ||
+        named.kind === "floor" ||
+        named.kind === "zone",
     );
     if (hasNamedPlaces && !granted.includes(placesReadPermission)) {
       return missing(placesReadPermission);

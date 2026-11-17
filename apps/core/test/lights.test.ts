@@ -209,7 +209,7 @@ describe("POST /api/devices/lights", () => {
     }
     for (const body of [
       { place: { kind: "home" }, to: "dim" },
-      { place: { kind: "floor", id: "x" }, to: "on" },
+      { place: { kind: "storey", id: "x" }, to: "on" },
       { place: { kind: "home" }, to: "on", extra: true },
     ]) {
       expect((await lights(core, token, body)).statusCode).toBe(400);

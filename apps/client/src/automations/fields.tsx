@@ -239,13 +239,16 @@ function OffsetControl(props: {
   );
 }
 
-// What a node's place is, from its config: a room, a zone or the whole home.
+// What a node's place is, from its config: a room, a floor, a zone or the
+// whole home.
 function placeIn(config: Record<string, unknown>) {
   return Object.values(config).find(
-    (value): value is { kind: "room" | "zone" | "home"; id?: string } =>
+    (
+      value,
+    ): value is { kind: "room" | "floor" | "zone" | "home"; id?: string } =>
       typeof value === "object" &&
       value !== null &&
-      ["room", "zone", "home"].includes(
+      ["room", "floor", "zone", "home"].includes(
         (value as { kind?: unknown }).kind as string,
       ),
   );
@@ -265,9 +268,15 @@ export function lightLevelIn(
       ? null
       : place.kind === "room"
         ? new Set([place.id])
-        : new Set(
-            home.places?.zones.find((zone) => zone.id === place.id)?.roomIds,
-          );
+        : place.kind === "floor"
+          ? new Set(
+              home.places?.rooms
+                .filter((room) => room.floorId === place.id)
+                .map((room) => room.id),
+            )
+          : new Set(
+              home.places?.zones.find((zone) => zone.id === place.id)?.roomIds,
+            );
   const levels = home.devices
     .filter(
       (device) =>
@@ -289,7 +298,12 @@ export function lightLevelIn(
 // What a place is called at the start of a sentence: "Office", "The whole home".
 function placeName(home: Home, place: { kind: string; id?: string }) {
   if (place.kind === "home") return "The whole home";
-  const list = place.kind === "room" ? home.places?.rooms : home.places?.zones;
+  const list =
+    place.kind === "room"
+      ? home.places?.rooms
+      : place.kind === "floor"
+        ? home.places?.floors
+        : home.places?.zones;
   return list?.find((each) => each.id === place.id)?.name;
 }
 
@@ -406,6 +420,7 @@ export function FieldControl(props: {
   const kind = fieldKind(props.field);
   const { home } = props.context;
   const rooms = home.places?.rooms ?? [];
+  const floors = home.places?.floors ?? [];
   const zones = home.places?.zones ?? [];
   const label = String(props.field.title ?? capitalize(props.name));
   switch (kind.kind) {
@@ -541,7 +556,8 @@ export function FieldControl(props: {
           />
         );
       }
-      const list = kind.names === "room" ? rooms : zones;
+      const list =
+        kind.names === "room" ? rooms : kind.names === "floor" ? floors : zones;
       return (
         <OptionList
           label={label}
@@ -558,6 +574,11 @@ export function FieldControl(props: {
         <OptionList
           label={label}
           options={[
+            ...floors.map((floor) => ({
+              value: `floor:${floor.id}`,
+              label: floor.name,
+              group: "Floors",
+            })),
             ...rooms.map((room) => ({
               value: `room:${room.id}`,
               label: room.name,

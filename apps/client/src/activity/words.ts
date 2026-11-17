@@ -390,9 +390,47 @@ function problemWords(problem: unknown) {
   return "It will try again by itself.";
 }
 
+// An app's change of version, which Sanctum makes, by the name the entry
+// kept for once the app is gone.
+function versionEntry(entry: ActivityInfo): Words {
+  const kept = entry.detail?.name;
+  const name =
+    entry.app?.name ?? (typeof kept === "string" ? kept : null) ?? "An app";
+  const from = String(entry.detail?.from ?? "");
+  const to = String(entry.detail?.to ?? "");
+  const ok = entry.outcome === "ok";
+  if (entry.action === "version.update") {
+    return ok
+      ? {
+          title: `Updated ${name} to ${to}`,
+          detail: productName,
+          problem: false,
+        }
+      : {
+          title: `${name} ${to} didn't start`,
+          detail: `It went back to ${from}`,
+          problem: true,
+        };
+  }
+  return ok
+    ? {
+        title: `${name} went back to ${to}`,
+        detail: productName,
+        problem: false,
+      }
+    : {
+        title: `${name} couldn't go back to ${to}`,
+        detail: `It stayed on ${from}`,
+        problem: true,
+      };
+}
+
 function systemEntry(entry: ActivityInfo): Words | null {
   const detail = entry.detail;
   switch (entry.action) {
+    case "version.update":
+    case "version.back":
+      return versionEntry(entry);
     case "sanctum.start": {
       const stoppedAt = detail?.stoppedAt
         ? Date.parse(String(detail.stoppedAt))

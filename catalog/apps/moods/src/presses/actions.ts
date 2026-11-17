@@ -15,6 +15,7 @@ import {
   pressChoice,
   readPresses,
   whileHeld,
+  placeIn,
   type PressChoice,
 } from "./presses.js";
 
@@ -70,23 +71,15 @@ async function exists(ctx: AppContext, choice: PressChoice) {
   if (choice.kind === "mood") {
     return (await readMood(ctx.storage.db, choice.moodId)) !== null;
   }
-  if (choice.kind === "lights" && choice.place.kind === "lights") {
+  if (choice.kind !== "lights") return true;
+  const { place } = choice;
+  if (place.kind === "lights") {
     const lights = lightKeys(await ctx.devices.list());
-    return choice.place.lights.every((light) =>
+    return place.lights.every((light) =>
       lights.has(`${light.device}/${light.capability}`),
     );
   }
-  if (
-    choice.kind === "lights" &&
-    (choice.place.kind === "room" || choice.place.kind === "zone")
-  ) {
-    const places = await ctx.places.list();
-    const { kind, id } = choice.place;
-    return (kind === "room" ? places.rooms : places.zones).some(
-      (each) => each.id === id,
-    );
-  }
-  return true;
+  return place.kind === "home" || placeIn(await ctx.places.list(), place);
 }
 
 export const listPresses = defineAction({

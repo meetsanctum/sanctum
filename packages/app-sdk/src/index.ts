@@ -317,6 +317,35 @@ export type AppInfo = {
 };
 
 /**
+ * What keeps an app from being added now: the app API it targets, which
+ * this Sanctum doesn't serve; its pages, built for a kit this Sanctum can't
+ * serve, as `needs` says which is older; the memory it gets, or the image
+ * its data lives on, beside what is free (in bytes).
+ */
+export type AppShortfall =
+  | { kind: "sanctum"; range: string }
+  | { kind: "pages"; needs: "sanctum" | "pages" }
+  | { kind: "memory"; needs: number; free: number }
+  | { kind: "space"; needs: number; free: number };
+
+/**
+ * An app Sanctum brings that the home hasn't added (GET /api/apps/available),
+ * with what it asks for and what keeps it from being added now, if anything.
+ */
+export type AvailableApp = {
+  id: string;
+  name: string;
+  version: string;
+  summary: string | null;
+  icon: AppIcon | null;
+  requests: PermissionInfo[];
+  /** The memory its container gets and the image its data lives on, in MB. */
+  memory: number;
+  data: number;
+  shortfalls: AppShortfall[];
+};
+
+/**
  * What an app brings to the home, declared so the core and its editors can
  * list it without running the app: its entity types, widgets and room
  * section, and its workflow pieces.
