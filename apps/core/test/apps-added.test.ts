@@ -302,7 +302,7 @@ describe("the apps a home could add", () => {
 });
 
 describe("an app built for another app API", () => {
-  it("isn't installed, and what it brought stays", async () => {
+  it("isn't installed, and the log says why", async () => {
     const newer = defineApp({
       ...base,
       id: "test.newer",
