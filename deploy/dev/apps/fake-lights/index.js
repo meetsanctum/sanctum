@@ -85,49 +85,63 @@ const found = new Map([
 ]);
 
 // Lights that join while it lets devices join: the first a few seconds in,
-// the next a little later, each joining, being set up, then ready.
-let joins = [];
+// the next a little later, each joining, being set up, then ready. Only a
+// light whose time comes while devices may join starts joining; one that
+// has started finishes, even once they no longer may.
+let starts = [];
+let steps = [];
 let joined = 0;
 
-function joinLight(ctx, after) {
-  const number = ++joined;
-  const key = `new-light-${number}`;
-  const steps = [
-    [after, () => ctx.devices.joining({ key, stage: "joined" })],
-    [
-      after + 1_500,
-      () =>
-        ctx.devices.joining({
-          key,
-          stage: "interviewing",
-          description: "Fake light",
-        }),
-    ],
-    [
-      after + 3_500,
-      async () => {
-        lights.set(key, {
-          name: `Fake light ${number}`,
-          state: {
-            on: true,
-            brightness: 100,
-            colorMode: "temperature",
-            colorTemperature: 370,
+function joinLight(ctx, after, until) {
+  if (Date.now() + after >= until) return;
+  starts.push(
+    setTimeout(() => {
+      const number = ++joined;
+      const key = `new-light-${number}`;
+      const stages = [
+        [0, () => ctx.devices.joining({ key, stage: "joined" })],
+        [
+          1_500,
+          () =>
+            ctx.devices.joining({
+              key,
+              stage: "interviewing",
+              description: "Fake light",
+            }),
+        ],
+        [
+          3_500,
+          async () => {
+            lights.set(key, {
+              name: `Fake light ${number}`,
+              state: {
+                on: true,
+                brightness: 100,
+                colorMode: "temperature",
+                colorTemperature: 370,
+              },
+            });
+            await registerLight(ctx, key);
+            await report(ctx, key);
+            await ctx.devices.joining({
+              key,
+              stage: "ready",
+              description: "Fake light",
+            });
           },
-        });
-        await registerLight(ctx, key);
-        await report(ctx, key);
-        await ctx.devices.joining({
-          key,
-          stage: "ready",
-          description: "Fake light",
-        });
-      },
-    ],
-  ];
-  for (const [at, step] of steps) {
-    joins.push(setTimeout(() => void step().catch(() => undefined), at));
-  }
+        ],
+      ];
+      for (const [at, stage] of stages) {
+        steps.push(setTimeout(() => void stage().catch(() => undefined), at));
+      }
+    }, after),
+  );
+}
+
+// Lights not yet joining don't; those joining finish.
+function stopStarts() {
+  starts.forEach(clearTimeout);
+  starts = [];
 }
 
 const registerLight = (ctx, key) =>
@@ -198,8 +212,9 @@ export default defineApp({
   },
   async stop() {
     clearInterval(ticking);
-    joins.forEach(clearTimeout);
-    joins = [];
+    stopStarts();
+    steps.forEach(clearTimeout);
+    steps = [];
   },
   driver: {
     async command(ctx, command) {
@@ -211,15 +226,14 @@ export default defineApp({
     },
     pairing: {
       async open(_ctx, { seconds }) {
-        joins.forEach(clearTimeout);
-        joins = [];
-        joinLight(running, 5_000);
-        joinLight(running, 9_000);
-        return { until: new Date(Date.now() + seconds * 1000).toISOString() };
+        stopStarts();
+        const until = Date.now() + seconds * 1000;
+        joinLight(running, 5_000, until);
+        joinLight(running, 9_000, until);
+        return { until: new Date(until).toISOString() };
       },
       async close() {
-        joins.forEach(clearTimeout);
-        joins = [];
+        stopStarts();
       },
     },
     questions: {
