@@ -5,7 +5,6 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { registerPermission } from "@meetsanctum/app-sdk";
 import {
-  AppScope,
   Button,
   contactIcon,
   deviceKindsOf,
@@ -22,7 +21,6 @@ import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
 import { contactPageName } from "./contact";
 import { DeviceFrame } from "./frames/device-frame";
-import { isDevicePageFramed } from "./frames/framed";
 import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
@@ -90,15 +88,13 @@ export function devicePages(
           };
     if (!isShown(app.info)) return [];
     return app.info.provides.devicePages.flatMap((page) => {
-      const Page = app.ui.devicePages?.[page.id];
-      if (!Page) return [];
       if (page.devices === "own") {
         return device.driver === app.info.id
-          ? [{ app, id: page.id, title: page.title, Page, device: seen }]
+          ? [{ app, id: page.id, title: page.title, device: seen }]
           : [];
       }
       return page.kinds.some((kind) => kinds.includes(kind))
-        ? [{ app, id: page.id, title: page.title, Page, device: seen }]
+        ? [{ app, id: page.id, title: page.title, device: seen }]
         : [];
     });
   });
@@ -374,32 +370,29 @@ function AppPages(props: {
 }) {
   return (
     <div className="flex w-[520px] max-w-full flex-col gap-8">
-      {props.pages.map(({ app, id, title, Page, device }) => (
-        <AppScope key={`${app.info.id}/${id}/${device.id}`} client={app.client}>
-          <div className="flex flex-col gap-3">
-            <AppNotice
-              app={app.info}
-              permissionsAre="settings"
-              openSettings={() => props.openSettings(app.info.id)}
-              openStatus={props.openStatus}
+      {props.pages.map(({ app, id, title, device }) => (
+        <div
+          key={`${app.info.id}/${id}/${device.id}`}
+          className="flex flex-col gap-3"
+        >
+          <AppNotice
+            app={app.info}
+            permissionsAre="settings"
+            openSettings={() => props.openSettings(app.info.id)}
+            openStatus={props.openStatus}
+          />
+          <WhileNotRunning app={app.info} className="flex flex-col">
+            <DeviceFrame
+              app={app}
+              page={id}
+              title={title}
+              device={device}
+              household={props.household}
+              isAway={props.isAway}
+              onEscape={props.onEscape}
             />
-            <WhileNotRunning app={app.info} className="flex flex-col">
-              {isDevicePageFramed(id) ? (
-                <DeviceFrame
-                  app={app}
-                  page={id}
-                  title={title}
-                  device={device}
-                  household={props.household}
-                  isAway={props.isAway}
-                  onEscape={props.onEscape}
-                />
-              ) : (
-                <Page device={device} />
-              )}
-            </WhileNotRunning>
-          </div>
-        </AppScope>
+          </WhileNotRunning>
+        </div>
       ))}
     </div>
   );

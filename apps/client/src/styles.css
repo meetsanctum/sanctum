@@ -4,10 +4,9 @@
 @import "@meetsanctum/ui-sdk/theme.css";
 @import "./shell-frame.css";
 
-/* The UIs the shell hosts bring Tailwind classes of their own: ui-sdk's
-   components and the bundled apps' pages (src/apps.tsx). */
+/* ui-sdk's components, which the shell draws too, bring Tailwind classes
+   of their own. Apps' pages are built with their own stylesheets. */
 @source "../../../packages/ui-sdk/src";
-@source "../../../catalog/apps/*/src/ui/**/*.{ts,tsx}";
 
 /* Only the page paints the mode's background; a part of it in another
    mode, such as the sidebar's frosted glass in Evening over a page in Day,

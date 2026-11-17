@@ -22,8 +22,8 @@ import { targetType } from "./target.js";
 // each, and a Natural light button beside each room's lights button where
 // a light follows (rooms.ts). A switch in its settings turns it off
 // altogether. Workflows can have a light follow it, pause or resume, or
-// bring a room to natural light. Its UI is in ./ui, which the shell
-// bundles.
+// bring a room to natural light. Its UI is in ./ui, which opens in frames
+// the core serves.
 //
 // The check is the app's job every 5 minutes; a light that is on is due
 // every 5 minutes and one that is off every 15 (lights.ts). The core logs

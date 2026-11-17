@@ -16,7 +16,7 @@ import { createBridge, type Bridge, type BridgeOptions } from "./bridge.js";
 // air and asks them how they are when someone asks. The manager runs
 // Zigbee2MQTT and the broker as services for it (services:zigbee2mqtt); the
 // app connects with the broker account the core hands it. Its UI is in ./ui,
-// which the shell bundles.
+// which opens in a frame the core serves.
 
 export type { BridgeOptions } from "./bridge.js";
 

@@ -53,7 +53,6 @@ const info: AppInfo = {
 };
 const app: HostedApp = {
   info,
-  ui: { id: info.id, version: info.version, pages: {} },
   client: createAppClient(info, {
     json: vi.fn() as unknown as CoreBridge["json"],
     live: createLiveFeed(),
