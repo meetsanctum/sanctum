@@ -758,6 +758,7 @@ export function Home(props: {
             live={live}
             home={home}
             onClose={closeDevice}
+            isAway={veil !== undefined}
             onCovering={sidebar.setCovered}
             onShowActivity={(device) => {
               closeDevice();

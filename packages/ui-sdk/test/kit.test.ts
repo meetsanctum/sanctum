@@ -49,7 +49,7 @@ describe("the kit", { timeout: 60_000 }, () => {
       },
     });
     expect(JSON.parse(read("kit.json"))).toEqual(kit);
-    expect(kit.bridge).toBe(2);
+    expect(kit.bridge).toBe(3);
     for (const [, module] of Object.entries(kit.imports)) {
       expect(existsSync(join(dir, module))).toBe(true);
     }

@@ -45,3 +45,14 @@ body {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+
+/* A device page in its frame, over the device's detail, which shows
+   through: laid out as the detail lays out an app's page for a device. */
+:root[data-surface="detail"] {
+  background: transparent;
+}
+
+.frame-device {
+  display: flex;
+  flex-direction: column;
+}
