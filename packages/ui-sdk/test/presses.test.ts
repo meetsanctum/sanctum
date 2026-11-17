@@ -323,6 +323,48 @@ describe("capturing a remote's presses", () => {
     },
   );
 
+  it("releases a capture whose listener threw on a press held before the start's answer", async () => {
+    // The listener's error is the page's own, reported as any unhandled
+    // one is: caught here rather than by the test run.
+    const kept = process.listeners("unhandledRejection");
+    process.removeAllListeners("unhandledRejection");
+    const reported = vi.fn();
+    process.on("unhandledRejection", reported);
+    try {
+      let started!: (capture: PressCapture) => void;
+      const { bridge, json, live } = bridgeWith(
+        () => new Promise((resolve) => (started = resolve)),
+      );
+      const capture = capturePresses(bridge, "remote", {
+        press: () => {
+          throw new Error("The page's own");
+        },
+      });
+      const now = Date.now();
+      live.publish({ ...press("remote"), at: new Date(now).toISOString() });
+      started({
+        id: "held",
+        device: "remote",
+        until: new Date(now + 5 * 60_000).toISOString(),
+      });
+      await vi.waitFor(() =>
+        expect(reported).toHaveBeenCalledWith(
+          new Error("The page's own"),
+          expect.anything(),
+        ),
+      );
+
+      await capture.stop();
+      expect(json).toHaveBeenLastCalledWith("/api/devices/capture/stop", {
+        method: "POST",
+        json: { id: "held" },
+      });
+    } finally {
+      process.removeAllListeners("unhandledRejection");
+      for (const listener of kept) process.on("unhandledRejection", listener);
+    }
+  });
+
   it("waits for a late start and rejects a failed release so it can be retried", async () => {
     let started!: (capture: PressCapture) => void;
     const { bridge, json, live } = bridgeWith(

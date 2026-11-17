@@ -195,6 +195,10 @@ export function capturePresses(
     if (capture?.id === id) capture = undefined;
   }
 
+  // The capture, once the core has answered: true once it began. What
+  // follows, timers and a press held meanwhile, is apart, so a listener
+  // that throws on that press fails as the page's own and never holds up
+  // a stop.
   const starting = bridge
     .json<PressCapture>("/api/devices/capture/start", {
       method: "POST",
@@ -203,29 +207,33 @@ export function capturePresses(
     .then(
       (started) => {
         capture = started;
-        if (isStopped) return;
-        expiry = setTimeout(
-          () => end("expired"),
-          // The two machines' clocks need not agree. Count elapsed time
-          // against their shared lifetime, including the start request.
-          Math.max(
-            0,
-            pressCaptureDurationMs - (performance.now() - requestedAt),
-          ),
-        );
-        if (pendingPress) {
-          const at = Date.parse(pendingPress.at);
-          const until = Date.parse(started.until);
-          if (at >= until - pressCaptureDurationMs && at < until) {
-            listener.press(pendingPress);
-          }
-          pendingPress = undefined;
-        }
+        return true;
       },
-      () => {
-        if (!isStopped) end("failed");
-      },
+      () => false,
     );
+  void starting.then((isStarted) => {
+    if (!isStarted) {
+      if (!isStopped) end("failed");
+      return;
+    }
+    if (isStopped || !capture) return;
+    const started = capture;
+    expiry = setTimeout(
+      () => end("expired"),
+      // The two machines' clocks need not agree. Count elapsed time
+      // against their shared lifetime, including the start request.
+      Math.max(0, pressCaptureDurationMs - (performance.now() - requestedAt)),
+    );
+    if (pendingPress) {
+      const held = pendingPress;
+      pendingPress = undefined;
+      const at = Date.parse(held.at);
+      const until = Date.parse(started.until);
+      if (at >= until - pressCaptureDurationMs && at < until) {
+        listener.press(held);
+      }
+    }
+  });
 
   return {
     /** Ends the capture. A failed release rejects and can be retried. */
