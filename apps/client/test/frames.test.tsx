@@ -13,10 +13,11 @@ import {
   type PageProps,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  capturesAllowed,
   openBridge,
   requestsAllowed,
   tallest,
@@ -92,8 +93,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const client = () =>
-  createAppClient(info, {
+const client = (app = info) =>
+  createAppClient(app, {
     json: json as unknown as CoreBridge["json"],
     live,
     ask: vi.fn(async () => true),
@@ -103,15 +104,15 @@ const message = (data: unknown, more: object) =>
   Object.assign(new Event("message"), { data, ...more });
 
 // The shell's end, for the frame whose window is `frame`.
-function shellEnd(frame: Window, code = "code-1") {
+function shellEnd(frame: Window, code = "code-1", app = info) {
   const events: FrameEvent[] = [];
   const bridge = openBridge({
     frame: () => frame,
     code,
-    client,
+    client: () => client(app),
     setup: () => ({
       type: "setup",
-      app: info,
+      app,
       page: "main",
       params: {},
       context,
@@ -133,14 +134,14 @@ function frameWindow(take: (data: unknown, ports: MessagePort[]) => void) {
 }
 
 // A page in its frame, started by the kit as the core's entry starts it.
-function framed(ui: () => Promise<{ default: AppUi }>) {
+function framed(ui: () => Promise<{ default: AppUi }>, app = info) {
   const frame = frameWindow((data, ports) =>
     window.dispatchEvent(message(data, { source: window, ports })),
   );
   vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => {
     shell.dispatchEvent(message(data, { source: frame }));
   });
-  const end = shellEnd(frame);
+  const end = shellEnd(frame, "code-1", app);
   startFrame(ui);
   return { ...end, frame };
 }
@@ -168,6 +169,24 @@ function Main(props: PageProps) {
 }
 
 const ui: AppUi = { id: info.id, version: info.version, pages: { main: Main } };
+
+// The app as one that reads remotes' buttons, and the core's answer to a
+// capture's start, a new one each time.
+const readsButtons: AppInfo = { ...info, permissions: ["devices.read:button"] };
+function capturesStart() {
+  let started = 0;
+  json.mockImplementation(async (path: string) =>
+    path === "/api/devices/capture/start"
+      ? {
+          id: `capture-${++started}`,
+          device: "remote-1",
+          until: new Date(Date.now() + 60_000).toISOString(),
+        }
+      : undefined,
+  );
+}
+const callsTo = (path: string) =>
+  json.mock.calls.filter(([called]) => called === path);
 
 describe("a page in its frame", () => {
   it("is drawn with what the shell's client for its app answers", async () => {
@@ -435,6 +454,95 @@ describe("a page in its frame", () => {
     delete document.documentElement.dataset.surface;
   });
 
+  it("captures a remote's presses through the shell's client for its app", async () => {
+    capturesStart();
+    function Find() {
+      const client = useAppClient();
+      const [heard, setHeard] = useState("nothing");
+      const capture = useRef<{ stop(): Promise<void> }>(null);
+      return (
+        <>
+          <p>heard {heard}</p>
+          <button
+            onClick={() => {
+              capture.current = client.capturePresses("remote-1", {
+                press: (press) => setHeard(press.action),
+              });
+            }}
+          >
+            Find
+          </button>
+          <button onClick={() => void capture.current?.stop()}>Stop</button>
+        </>
+      );
+    }
+    framed(
+      async () => ({ default: { ...ui, pages: { main: Find } } }),
+      readsButtons,
+    );
+    const button = (name: string) =>
+      [...document.querySelectorAll("button")].find(
+        (each) => each.textContent === name,
+      );
+    await vi.waitFor(() => expect(button("Find")).toBeDefined());
+
+    button("Find")!.click();
+    await vi.waitFor(() =>
+      expect(callsTo("/api/devices/capture/start")).toEqual([
+        [
+          "/api/devices/capture/start",
+          {
+            method: "POST",
+            json: { device: "remote-1", app: info.id },
+            app: info.id,
+          },
+        ],
+      ]),
+    );
+    live.publish({
+      type: "press",
+      device: "remote-1",
+      capability: "button",
+      action: "double",
+      at: new Date().toISOString(),
+      isCaptured: true,
+    });
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("heard double"),
+    );
+
+    button("Stop")!.click();
+    await vi.waitFor(() =>
+      expect(callsTo("/api/devices/capture/stop")).toEqual([
+        [
+          "/api/devices/capture/stop",
+          { method: "POST", json: { id: "capture-1" }, app: info.id },
+        ],
+      ]),
+    );
+  });
+
+  it("refuses a capture its app may not read buttons for, as the shell would", async () => {
+    let refused: unknown;
+    function Find() {
+      const client = useAppClient();
+      useEffect(() => {
+        try {
+          client.capturePresses("remote-1", { press: () => {} });
+        } catch (error) {
+          refused = error;
+        }
+      }, [client]);
+      return <p>finding</p>;
+    }
+    framed(async () => ({ default: { ...ui, pages: { main: Find } } }));
+    await vi.waitFor(() =>
+      expect(String(refused)).toContain(
+        "sanctum.example does not hold devices.read:button",
+      ),
+    );
+  });
+
   it("says its files didn't load", async () => {
     const { events } = framed(async () => {
       throw new TypeError("Failed to fetch dynamically imported module");
@@ -493,10 +601,11 @@ describe("the shell's end", () => {
 
   // The frame's end of the port, as a page's own code could use it.
   let shellEvents: FrameEvent[] = [];
-  async function framePort() {
+  async function framePort(app = info) {
     let given: MessagePort | undefined;
     const frame = frameWindow((_data, ports) => (given = ports[0]));
-    shellEvents = shellEnd(frame).events;
+    const end = shellEnd(frame, "code-1", app);
+    shellEvents = end.events;
     shell.dispatchEvent(
       message(
         { sanctum: "hello", code: "code-1", bridge: frameBridge },
@@ -507,7 +616,7 @@ describe("the shell's end", () => {
     given!.onmessage = (event: MessageEvent<ToFrame>) =>
       answers.push(event.data);
     await vi.waitFor(() => expect(answers[0]?.type).toBe("setup"));
-    return { port: given!, answers };
+    return { port: given!, answers, bridge: end.bridge };
   }
 
   const answerTo = (answers: ToFrame[], id: number) =>
@@ -588,5 +697,42 @@ describe("the shell's end", () => {
       }),
     );
     expect(answers.filter((each) => each.type === "answer")).toHaveLength(1);
+  });
+
+  it("ends a capture its app can't have at once, holds so many, and ends them with the frame", async () => {
+    capturesStart();
+    const ended = (capture: number) => ({
+      type: "captureEnded",
+      capture,
+      reason: "failed",
+    });
+    const blind = await framePort();
+    blind.port.postMessage({ type: "capture", capture: 1, device: "remote-1" });
+    await vi.waitFor(() => expect(blind.answers).toContainEqual(ended(1)));
+    expect(json).not.toHaveBeenCalled();
+
+    const { port, answers, bridge } = await framePort(readsButtons);
+    for (let capture = 1; capture <= capturesAllowed + 1; capture++) {
+      port.postMessage({ type: "capture", capture, device: "remote-1" });
+    }
+    await vi.waitFor(() =>
+      expect(answers).toContainEqual(ended(capturesAllowed + 1)),
+    );
+    await vi.waitFor(() =>
+      expect(callsTo("/api/devices/capture/start")).toHaveLength(
+        capturesAllowed,
+      ),
+    );
+    expect(answers.filter((each) => each.type === "captureEnded")).toEqual([
+      ended(capturesAllowed + 1),
+    ]);
+
+    // What the page held back reaches workflows again once it's gone.
+    bridge.close();
+    await vi.waitFor(() =>
+      expect(callsTo("/api/devices/capture/stop")).toHaveLength(
+        capturesAllowed,
+      ),
+    );
   });
 });

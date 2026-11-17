@@ -1,8 +1,7 @@
 // Which apps' pages the shell shows in frames, loaded from the core, rather
-// than the pages it bundles: every official app's pages and ESPHome's
-// device page, on a client whose storage has `sanctum.framePages` set to
-// `on`. Moods' Presses device page, which captures presses, and every page
-// on any other client, are the bundled ones.
+// than the pages it bundles: every official app's pages and device pages,
+// on a client whose storage has `sanctum.framePages` set to `on`. Every
+// page on any other client is the bundled one.
 
 const framable: ReadonlySet<string> = new Set([
   "sanctum.weather",
@@ -10,7 +9,10 @@ const framable: ReadonlySet<string> = new Set([
   "sanctum.zigbee",
   "sanctum.moods",
 ]);
-const framableDevicePages: ReadonlySet<string> = new Set(["esphome.device"]);
+const framableDevicePages: ReadonlySet<string> = new Set([
+  "esphome.device",
+  "moods.presses",
+]);
 const switchKey = "sanctum.framePages";
 
 /** Whether this client shows an app's pages in frames. */

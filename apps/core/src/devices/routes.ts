@@ -149,11 +149,20 @@ export function registerDeviceRoutes(
   app.post(
     "/api/devices/capture/start",
     async (request): Promise<PressCapture> =>
-      options.presses.capture(request.body, request.principal!.client.id),
+      // A page's capture is its app's, named in the request's header.
+      options.presses.capture(
+        request.body,
+        request.principal!.client.id,
+        request.pageApp?.app ?? null,
+      ),
   );
 
   app.post("/api/devices/capture/stop", async (request, reply) => {
-    options.presses.stopCapture(request.body, request.principal!.client.id);
+    options.presses.stopCapture(
+      request.body,
+      request.principal!.client.id,
+      request.pageApp?.app ?? null,
+    );
     return reply.code(204).send();
   });
 

@@ -15,7 +15,7 @@ import { iconModules, lucideDir, lucideIcons, sdkModule } from "./icons.js";
 // kit.json says what it is and which module answers which import.
 
 /** The kit's bridge with the shell, which a client must speak to show its pages. */
-export const bridgeVersion = 3;
+export const bridgeVersion = 4;
 
 // The folder holding ui-sdk's package.json, from a file inside it, whether
 // that's the built tools in dist/tools or their sources.
