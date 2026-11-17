@@ -152,8 +152,17 @@ export function WhichLightsPage(props: {
           checked={isSome}
           disabled={props.isSaving}
           onClick={() => {
-            if (picked.length > 0 && place.kind !== "lights") pick(picked);
-            else setIsPicking(true);
+            // Some lights starts from the place's lights as they are now,
+            // since a room may have moved to another floor or zone while
+            // the page was open; a draft already open stays as it is.
+            if (place.kind !== "lights" && !isPicking) {
+              const current = lightsOf(place, props.devices, places);
+              if (current.length > 0) {
+                pick(current);
+                return;
+              }
+            }
+            setIsPicking(true);
           }}
         />
       </div>

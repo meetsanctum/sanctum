@@ -38,14 +38,14 @@ let container: HTMLDivElement;
 let root: Root;
 const onPlace = vi.fn(async (_place: PressPlace) => true);
 
-async function show(place: PressPlace) {
+async function show(place: PressPlace, currentPlaces: Places = places) {
   await act(async () => {
     root.render(
       <WhichLightsPage
         device={remote}
         back="Double press"
         place={place}
-        places={places}
+        places={currentPlaces}
         devices={devices}
         doing="Turn on or off"
         dims={false}
@@ -101,6 +101,30 @@ describe("Which lights", () => {
       container.querySelector('[role="radio"][aria-checked="true"]')
         ?.textContent,
     ).toBe("First floor");
+  });
+});
+
+describe("Some lights", () => {
+  it("starts from the floor's lights as they are now, after a room moved off it", async () => {
+    await show({ kind: "floor", id: "ground" });
+    // The kitchen moves upstairs while the page is open.
+    await show(
+      { kind: "floor", id: "ground" },
+      {
+        ...places,
+        rooms: places.rooms.map((room) =>
+          room.id === "kitchen" ? { ...room, floorId: "first" } : room,
+        ),
+      },
+    );
+    const some = [...container.querySelectorAll('[role="radio"]')].find(
+      (each) => each.textContent === "Some lights",
+    ) as HTMLElement;
+    await act(async () => some.click());
+    expect(onPlace).toHaveBeenCalledWith({
+      kind: "lights",
+      lights: [{ device: "desk", capability: "light" }],
+    });
   });
 });
 
