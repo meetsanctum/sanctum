@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppAdds } from "./app-adds";
 import { GoBack, useGoBackTo } from "./app-go-back";
 import { AppIcon } from "./app-icon";
+import { RemoveApp } from "./app-remove";
 import { PermissionsSection } from "./app-permissions";
 import { AppRunningSection } from "./app-running";
 import {
@@ -280,6 +281,7 @@ export function AppPage(props: {
         {app.state !== "off" && !app.alwaysOn && (
           <TurnOff app={app} deviceCount={deviceCount} />
         )}
+        {!app.alwaysOn && <RemoveApp app={app} onRemoved={props.onDone} />}
       </div>
     </>
   );

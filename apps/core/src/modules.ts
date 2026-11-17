@@ -7,6 +7,9 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createAppAdding } from "./app-host/adding.js";
+import { createListTurns } from "./app-host/list-turns.js";
+import { createRemovedApps } from "./app-host/removed.js";
+import { createAppRemoving } from "./app-host/removing.js";
 import { createAddedApps } from "./app-host/added.js";
 import { createAvailableApps } from "./app-host/available.js";
 import { createGate } from "./app-host/gate.js";
@@ -229,10 +232,13 @@ export async function createModules(
       eventBus.publish({ name: "entity.changed", ...change }),
     now,
   });
+  // The apps the household removed, whose devices are hidden meanwhile.
+  const removedApps = createRemovedApps(db, { now });
   const devices = createDevices(db, {
     gate,
     places,
     activity,
+    hiddenDrivers: () => removedApps.ids(),
     deliver: (driver, command, actor) => apps.deliver(driver, command, actor),
     driverRun: (driver) => apps.driverRun(driver),
     removeFromDriver: (driver, removal, actor, hold) =>
@@ -405,6 +411,9 @@ export async function createModules(
     onSettings: live.settings,
     onApp(app) {
       live.app(app);
+      // Its first successful start also restores workflows after a restart
+      // interrupted adding it back.
+      if (app.state === "running") workflows.forApps.added(app.id);
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -443,6 +452,7 @@ export async function createModules(
   const availableApps = createAvailableApps({
     shipped: options.shippedApps ?? (() => []),
     added: addedApps,
+    removed: removedApps,
     staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
     loadPackage: (appId, folder) =>
       loadApartPackage(
@@ -455,8 +465,16 @@ export async function createModules(
     host: () => options.manager.hostStatus(),
     log,
   });
+  // Adding and removing apps take turns.
+  const listTurns = createListTurns();
   const appAdding = createAppAdding({
     gate,
+    turns: listTurns,
+    removed: removedApps,
+    workflows: () => workflows.forApps,
+    devices,
+    finishRemoval: (appId) => appRemoving.finish(appId),
+    onDevice: live.device,
     available: availableApps,
     added: addedApps,
     activity,
@@ -466,6 +484,21 @@ export async function createModules(
       await options.installAdded(pkg);
     },
     info: (appId) => apps.info(appId),
+    log,
+  });
+  const appRemoving = createAppRemoving({
+    gate,
+    turns: listTurns,
+    host: apps,
+    removed: removedApps,
+    updates: appUpdates,
+    workflows: () => workflows.forApps,
+    devices,
+    entities,
+    activity,
+    manager: options.manager,
+    onRemoved: live.appRemoved,
+    onDevice: live.device,
     log,
   });
   const workflows = createWorkflows(db, {
@@ -581,6 +614,7 @@ export async function createModules(
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
+    ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
@@ -617,6 +651,8 @@ export async function createModules(
     addedApps,
     availableApps,
     appAdding,
+    appRemoving,
+    removedApps,
     pages,
     workflows,
     history,

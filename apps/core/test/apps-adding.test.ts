@@ -12,6 +12,8 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import type { Principal } from "../src/auth/clients.js";
 import { createAppAdding } from "../src/app-host/adding.js";
 import { createAddedApps } from "../src/app-host/added.js";
+import { createListTurns } from "../src/app-host/list-turns.js";
+import { createRemovedApps } from "../src/app-host/removed.js";
 import { installedInfoOf } from "../src/app-host/app-info.js";
 import { ActionCallError } from "../src/app-host/errors.js";
 import type { Gate } from "../src/app-host/gate.js";
@@ -68,6 +70,9 @@ async function addingWith(
     installs?: (pkg: ApartPackage) => Promise<void>;
     hasInstalled?: boolean;
     refuses?: boolean;
+    finishRemoval?: (
+      removed: ReturnType<typeof createRemovedApps>,
+    ) => (appId: string) => Promise<void>;
   } = {},
 ) {
   const db = await database();
@@ -77,7 +82,13 @@ async function addingWith(
   const installing: string[] = [];
   const logs: string[] = [];
   const installedNow = new Set<string>();
+  const removedApps = createRemovedApps(db, { now: () => at });
   const adding = createAppAdding({
+    turns: createListTurns(),
+    removed: removedApps,
+    finishRemoval: options.finishRemoval?.(removedApps),
+    workflows: () => ({ added: () => [] }),
+    devices: { ofDriver: () => [] },
     gate: {
       admit: () => {
         if (options.refuses) throw new ActionCallError("forbidden");
@@ -160,6 +171,40 @@ describe("adding an app", () => {
         detail: { name: "Example", version: "1.0.0" },
       },
     ]);
+  });
+
+  it("forgets its removal when it's added back, and not while that's under way", async () => {
+    const { db, adding } = await addingWith();
+    const removed = createRemovedApps(db, { now: () => at });
+    removed.record(
+      "sanctum.example",
+      {},
+      { name: "Example", version: "1.0.0" },
+    );
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    removed.done("sanctum.example");
+    await adding.add(someone, "sanctum.example", "1.0.0");
+    expect(removed.get("sanctum.example")).toBeUndefined();
+  });
+
+  it("finishes a removal whose last steps failed before adding it back", async () => {
+    const { db, adding } = await addingWith({
+      finishRemoval: (removed) => async (appId) => removed.done(appId),
+    });
+    const removed = createRemovedApps(db, { now: () => at });
+    removed.record(
+      "sanctum.example",
+      {},
+      { name: "Example", version: "1.0.0" },
+    );
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(removed.get("sanctum.example")).toBeUndefined();
   });
 
   it("refuses one already added, or added on another client meanwhile", async () => {

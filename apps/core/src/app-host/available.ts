@@ -3,6 +3,7 @@ import type { AvailableApp, StaticManifest } from "@meetsanctum/app-sdk";
 import type { AddedApps } from "./added.js";
 import { shortfallsOf, type HostRoom } from "./fit.js";
 import type { ApartPackage } from "./loader.js";
+import { keptForMs, type RemovedApps } from "./removed.js";
 
 // The apps a home can add: those its image ships that the household hasn't
 // added, each at the version the manager staged for it, with what it asks
@@ -27,6 +28,8 @@ export function createAvailableApps(options: {
   // The apps this core's image ships.
   shipped: () => readonly string[];
   added: Pick<AddedApps, "ids">;
+  // Those the household removed, whose data is kept a while.
+  removed?: Pick<RemovedApps, "get">;
   // What the manager staged, by app, and a staged version's package.
   staged: () => Promise<Record<string, { folder: string }>>;
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
@@ -41,6 +44,20 @@ export function createAvailableApps(options: {
   const { log } = options;
   // Keep the package with the offer, so adding it installs exactly what
   // was checked, even when the manager stages another build meanwhile.
+  function removedOf(appId: string): Pick<AvailableApp, "removed"> {
+    const row = options.removed?.get(appId);
+    return row
+      ? {
+          removed: {
+            at: row.removedAt.toISOString(),
+            keptUntil: new Date(
+              row.removedAt.getTime() + keptForMs,
+            ).toISOString(),
+          },
+        }
+      : {};
+  }
+
   async function read(only?: string) {
     const [staged, host] = await Promise.all([
       options.staged(),
@@ -74,6 +91,7 @@ export function createAvailableApps(options: {
             data: manifest.runtime.data,
             adds: addsOf(manifest),
             shortfalls: shortfallsOf(manifest, { pagesNeed, host }),
+            ...removedOf(appId),
           },
         });
       } catch (error) {

@@ -23,12 +23,13 @@ import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import { createEngine, type WorkflowRow } from "./engine.js";
 import { createFiring } from "./firing.js";
+import { createWorkflowsForApps } from "./for-apps.js";
 import { sameValue } from "./graph.js";
 import { createJobs, type JobRow, type SunDays } from "./jobs.js";
 import { createKeptGrants } from "./kept-grants.js";
 import { createPieces } from "./pieces.js";
 import { createRuns } from "./runs.js";
-import { workflows } from "./schema.js";
+import { workflows, workflowsOffForApps } from "./schema.js";
 import { hostTimeZone } from "./time.js";
 import { createTimers, lateness } from "./timers.js";
 
@@ -187,6 +188,19 @@ export function createWorkflows(
     timers,
   });
   const jobs = createJobs(db, { host, clock });
+  const forApps = createWorkflowsForApps({
+    db,
+    rows: () => rows(),
+    named: pieces.named,
+    problems: (workflow) => pieces.check(workflow.graph).problems,
+    record,
+    turnedOn: (workflowId, graph) => timers.set(row(workflowId), graph),
+    endRuns(workflowId) {
+      engine.cancelRuns(workflowId);
+      engine.forget(workflowId);
+    },
+    now,
+  });
   const runningJobs = new Map<string, Promise<void>>();
 
   // Every workflow, compiled once: each change of a device or an entity
@@ -405,6 +419,11 @@ export function createWorkflows(
       const graphChanged =
         input.graph !== undefined && !sameValue(input.graph, current.graph);
       db.transaction(() => {
+        // Every household edit cancels automatic restoration, even in the
+        // same millisecond as the app's removal.
+        db.delete(workflowsOffForApps)
+          .where(eq(workflowsOffForApps.workflowId, input.id))
+          .run();
         db.update(workflows)
           .set({
             ...(input.name !== undefined && { name: input.name }),
@@ -659,6 +678,9 @@ export function createWorkflows(
     motionChanged: unlessHeld(firing.motionChanged),
     pressed: unlessHeld(firing.pressed),
     entityChanged: unlessHeld(firing.entityChanged),
+
+    /** What removing an app, and adding it back, does to workflows (for-apps.ts). */
+    forApps,
 
     /** Apps' jobs, for the app host. */
     jobs: {

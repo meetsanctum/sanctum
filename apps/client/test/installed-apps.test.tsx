@@ -107,4 +107,27 @@ describe("the home's apps", () => {
     await act(async () => apps.appAdded(other as AppInfo));
     expect(container.textContent).toContain("Other starting");
   });
+
+  it("drops an app removed on any client, and a read under way doesn't bring it back", async () => {
+    vi.mocked(coreJson).mockResolvedValueOnce([example, weather]);
+    await act(async () => apps.read());
+
+    let resolve!: (list: AppInfo[]) => void;
+    const reading = new Promise<AppInfo[]>((done) => (resolve = done));
+    vi.mocked(coreJson).mockReturnValueOnce(reading);
+    let finished!: Promise<void>;
+    await act(async () => {
+      finished = apps.read();
+    });
+    await act(async () =>
+      live.publish({ type: "app.removed", app: "sanctum.example" }),
+    );
+    expect(container.textContent).toBe("Weather");
+
+    await act(async () => {
+      resolve([example, weather]);
+      await finished;
+    });
+    expect(container.textContent).toBe("Weather");
+  });
 });

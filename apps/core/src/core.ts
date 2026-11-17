@@ -325,6 +325,21 @@ export function createCore(
               "start workflows",
               async (cancelled) => {
                 await modules!.apps.committed();
+                if (cancelled.aborted) return;
+                // These stay installed without a successful start to
+                // restore the workflows an interrupted add left off.
+                for (const app of modules!.apps.list()) {
+                  if (app.state === "off" || app.state === "paused") {
+                    modules!.workflows.forApps.added(app.id);
+                  }
+                }
+                // A removal a core that stopped left part way finishes,
+                // past a trial, since a rollback brings back its record.
+                await modules!.appRemoving
+                  .resume()
+                  .catch((error: unknown) =>
+                    log(`apps: removals didn't finish (${String(error)})`),
+                  );
                 if (!cancelled.aborted) modules!.workflows.start({ ticking });
               },
             );
