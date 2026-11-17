@@ -145,6 +145,20 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
     expect(second?.digest).toBe(first?.digest);
   }, 60_000);
 
+  it("keep the last good build when a rebuild fails, and the command fails", async () => {
+    const dir = await app(page);
+    const good = await buildPages(dir);
+    await writeFile(
+      join(dir, "src/ui/index.tsx"),
+      "export default { this is not a page",
+    );
+    await expect(buildPages(dir)).rejects.toThrow();
+    expect(
+      JSON.parse(readFileSync(join(dir, "pages/pages.json"), "utf8")),
+    ).toEqual(good);
+    expect(existsSync(join(dir, "pages/index.js"))).toBe(true);
+  }, 60_000);
+
   it("fail to build with an icon picked by a name computed while the page runs", async () => {
     const dir = await app(`
 import { defineAppUi, icons } from "@meetsanctum/ui-sdk";
@@ -172,7 +186,7 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
     expect(existsSync(join(dir, "pages"))).toBe(false);
   }, 60_000);
 
-  it("removes an earlier build when a rebuild fails", async () => {
+  it("leave nothing of a failed rebuild, but the last good build", async () => {
     const dir = await app(page);
     await buildPages(dir);
     await writeFile(
@@ -180,7 +194,10 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
       `export default missing + ;`,
     );
     await expect(buildPages(dir)).rejects.toThrow();
-    expect(existsSync(join(dir, "pages"))).toBe(false);
+    expect(existsSync(join(dir, "pages/pages.json"))).toBe(true);
     expect(existsSync(join(dir, "node_modules/.sanctum-pages"))).toBe(false);
+    expect(existsSync(join(dir, "node_modules/.sanctum-pages-next"))).toBe(
+      false,
+    );
   }, 60_000);
 });

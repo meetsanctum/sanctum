@@ -239,6 +239,14 @@ describe("an app's page in its frame", () => {
     expect(text()).toContain("Its files didn't load.");
   });
 
+  it("opens afresh on a new build of the same version, as a saved change makes", async () => {
+    await show({ app: info({ build: "0.3.0+aaaa" }) });
+    const first = frame();
+    await show({ app: info({ build: "0.3.0+bbbb" }) });
+    expect(address.calls).toBe(2);
+    expect(frame()).not.toBe(first);
+  });
+
   it("says its files didn't load when the core has none", async () => {
     address.answer = () => Promise.reject(new Error("not_found"));
     await show();

@@ -277,6 +277,8 @@ describe("listing apps", () => {
         id: "test.bridge",
         name: "Bridge",
         version: "0.2.0",
+        // The build it runs, by its staged folder.
+        build: "0.2.0+test",
         icon: null,
         pages: [],
         permissions: ["places.read"],
@@ -303,6 +305,8 @@ describe("listing apps", () => {
         id: "test.rooms",
         name: "Rooms",
         version: "0.2.0",
+        // The build it runs, by its staged folder.
+        build: "0.2.0+test",
         icon: { glyph: "sofa", color: "ember" },
         pages: ["main", "room"],
         permissions: ["places.read"],
