@@ -12,18 +12,10 @@ import {
 import { createPageTickets } from "./tickets.js";
 
 /**
- * Whether a kit can stand in for the one pages were built against: one of
- * its major from that version on, where below 1.0 the minor is the major,
- * and a prerelease comes before its release, as SemVer orders them.
- */
-export function kitFits(builtFor: string, served: string) {
-  return kitNeeds(builtFor, served) === null;
-}
-
-/**
  * What pages that don't fit the kit need, or null when they fit: a newer
  * home, whose kit is older than theirs, or a new build of the app's pages,
- * which were built against an older major than the home's.
+ * which were built against an older major than the home's. Below 1.0 the
+ * minor is the major; a prerelease comes before its release.
  */
 export function kitNeeds(
   builtFor: string,

@@ -346,6 +346,37 @@ describe("an app's page in its frame", () => {
     },
   );
 
+  it.each(["sanctum", "pages", "bridge"])(
+    "asks for the home's kit again when reopening after a %s mismatch",
+    async (needs) => {
+      const ticket = address.answer;
+      address.answer = async () => ({
+        ticket: "page_ticket1",
+        expiresAt: new Date(Date.now() + 8 * 24 * 60 * 60_000).toISOString(),
+        kit: { version: "0.1.0", bridge: frameBridge - 1, digest: "old" },
+      });
+      if (needs !== "bridge") {
+        address.pages = () =>
+          Promise.reject(
+            new CoreError(404, "not_found", { error: "not_found", needs }),
+          );
+      }
+      await show();
+      expect(container.querySelector("iframe[src]")).toBeNull();
+
+      // The home and app have updated while another page was open.
+      address.answer = ticket;
+      address.pages = () => Promise.resolve({ digest: "updated" });
+      await show({ shown: "2" });
+      expect(
+        container.querySelector("iframe[src]")?.getAttribute("src"),
+      ).toContain("/updated/");
+      expect(address.tickets).toBe(2);
+      expect(frame().src).toContain("/pages/page_ticket2/");
+      expect(text()).not.toContain("This page needs");
+    },
+  );
+
   it("opens afresh on a new build of the same version, as a saved change makes", async () => {
     await show({ app: info({ build: "0.3.0+aaaa" }) });
     const first = frame();
