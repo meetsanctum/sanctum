@@ -2,6 +2,7 @@ import { BrowserWindow, session, type Session } from "electron";
 import { X509Certificate } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createPageStore } from "../src/page-store.js";
 import { createPages } from "../src/pages.js";
 import { accept, refuse, type HostTrust } from "../src/trust.js";
 import { testCa } from "./certificates.js";
@@ -56,6 +57,7 @@ function setUp(
       return result;
     },
     isChecking: () => false,
+    host: () => "host-1",
     check: () => false,
     candidate: () => null,
     failure: () => null,
@@ -68,6 +70,7 @@ function setUp(
     allowPlainHttp: false,
     trust: () => trust,
     lockDown: () => {},
+    pageStore: createPageStore("/nowhere"),
   });
   pages.open();
   const own = vi.mocked(session.fromPartition).mock.results[0]!
@@ -266,7 +269,11 @@ describe("the frames apps' pages show in", () => {
       .calls[0]![0]!;
     const request = (details: object) => {
       const callback = vi.fn();
-      beforeRequest(details as Parameters<typeof beforeRequest>[0], callback);
+      // From the page's window, unless a test says otherwise.
+      beforeRequest(
+        { webContentsId: 1, ...details } as Parameters<typeof beforeRequest>[0],
+        callback,
+      );
       return callback.mock.calls[0]![0] as { cancel: boolean };
     };
     return { pages, window, navigate, request };
@@ -318,6 +325,15 @@ describe("the frames apps' pages show in", () => {
         url: at("/api/devices"),
         resourceType: "xhr",
         frame: { parent: null, url: "app://sanctum/" },
+      }).cancel,
+    ).toBe(false);
+    // The app's own pass-on of a request already checked comes from no
+    // window, and goes ahead.
+    expect(
+      request({
+        url: at(`${folder}index.js`),
+        resourceType: "other",
+        webContentsId: undefined,
       }).cancel,
     ).toBe(false);
     // A frame gone while it's asked about gets nothing.

@@ -15,6 +15,7 @@ import {
   serveClient,
 } from "./client-files.js";
 import { createFrameList, type FrameList } from "./frames.js";
+import { answer, type PageStore } from "./page-store.js";
 import { channels } from "./shell.js";
 import { refuse, type HostTrust } from "./trust.js";
 import {
@@ -92,8 +93,16 @@ function readCertificateDecision(certificates: string[], isAccepted: boolean) {
 // its own page and the kit; an unavailable or disposed frame gets nothing.
 function mayFrameLoad(
   page: Page,
-  details: { url: string; resourceType: string; frame?: WebFrameMain | null },
+  details: {
+    url: string;
+    resourceType: string;
+    frame?: WebFrameMain | null;
+    webContentsId?: number;
+  },
 ) {
+  // The main process's own request, from no window, which passes on one
+  // the page made after it was checked here (page-store.ts).
+  if (details.webContentsId === undefined) return true;
   try {
     const frame = details.frame;
     if (!frame) return false;
@@ -115,6 +124,8 @@ export function createPages(options: {
   trust: () => HostTrust;
   // Denies the session every permission.
   lockDown: (session: Session) => void;
+  // Apps' page files and the kit, kept by the host the session trusts.
+  pageStore: PageStore;
 }) {
   const { trust } = options;
   let current: Page | undefined;
@@ -130,6 +141,19 @@ export function createPages(options: {
         allowPlainHttp: options.allowPlainHttp,
       }),
     );
+    // Every request to the core comes through here, so apps' page files and
+    // the kit come from the app's own store once fetched; anything else is
+    // passed on as it was, through this session's own checks.
+    const passOn = (request: Request) =>
+      own.fetch(request, { bypassCustomProtocolHandlers: true });
+    const answered = (request: Request) =>
+      answer(request, {
+        store: options.pageStore,
+        host: () => trust().host(),
+        passOn,
+      });
+    own.protocol.handle("https", answered);
+    if (options.allowPlainHttp) own.protocol.handle("http", answered);
     own.setCertificateVerifyProc((request, callback) => {
       page.verifying += 1;
       const verdict = trust().verify(
