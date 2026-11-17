@@ -38,7 +38,10 @@ own origin, `app://sanctum`, and, like every client, talks only to the core.
   again on a reload, never to another app, build, origin or scheme; its
   requests reach only its own page's folder and the kit under the same
   ticket; it is never redirected. The bridge answers only the client's main
-  frame, and a frame gets no preload, permissions or popups.
+  frame, and a frame gets no bridge, permissions or popups. WebRTC's
+  connections reach STUN and TURN servers whatever a page's policy says, so
+  the preload, which runs in frames too, takes WebRTC out of an app's page
+  before it runs, and the window sends no UDP but through a proxy.
 - **The core's CORS allowlist** must include `app://sanctum`. On a host the
   manager passes it in the core container's settings.
 

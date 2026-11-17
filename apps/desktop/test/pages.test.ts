@@ -13,7 +13,10 @@ vi.mock("electron", async () => {
   return {
     BrowserWindow: vi.fn(function () {
       return Object.assign(new EventEmitter(), {
-        webContents: Object.assign(new EventEmitter(), { send: vi.fn() }),
+        webContents: Object.assign(new EventEmitter(), {
+          send: vi.fn(),
+          setWebRTCIPHandlingPolicy: vi.fn(),
+        }),
         loadURL: vi.fn(),
         setWindowButtonVisibility: vi.fn(),
         setWindowButtonPosition: vi.fn(),
@@ -268,6 +271,20 @@ describe("the frames apps' pages show in", () => {
     };
     return { pages, window, navigate, request };
   }
+
+  it("get the preload, which takes WebRTC out of them, and no UDP but a proxy's", () => {
+    const { window } = shown();
+    const options = vi.mocked(BrowserWindow).mock.calls[0]![0]!;
+    expect(options.webPreferences).toMatchObject({
+      nodeIntegrationInSubFrames: true,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    });
+    expect(window.webContents.setWebRTCIPHandlingPolicy).toHaveBeenCalledWith(
+      "disable_non_proxied_udp",
+    );
+  });
 
   it("go only where the page named, and never by a redirect", () => {
     const { pages, window, navigate } = shown();
