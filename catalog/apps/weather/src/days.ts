@@ -35,3 +35,32 @@ export function daysFromToday(forecast: Forecast, now = new Date()) {
   const today = homeDate(forecast.timeZone, now);
   return forecast.days.filter((day: ForecastDay) => day.date >= today);
 }
+
+/** Where a day's bar runs on a scale: where it starts and how wide it is, each from 0 to 1. */
+export type TemperatureSpan = { start: number; width: number };
+
+/**
+ * Each day's low to high on one scale, from the coldest low to the warmest
+ * high of them all, so the days' bars compare. A day without both has none.
+ */
+export function temperatureSpans(
+  days: ForecastDay[],
+): (TemperatureSpan | null)[] {
+  const known = days.flatMap((day) =>
+    day.temperatureMinC === null || day.temperatureMaxC === null
+      ? []
+      : [day.temperatureMinC, day.temperatureMaxC],
+  );
+  const coldest = Math.min(...known);
+  const span = Math.max(...known) - coldest;
+  return days.map((day) => {
+    if (day.temperatureMinC === null || day.temperatureMaxC === null) {
+      return null;
+    }
+    // Days all at one temperature fill the scale.
+    if (span === 0) return { start: 0, width: 1 };
+    const low = Math.min(day.temperatureMinC, day.temperatureMaxC);
+    const high = Math.max(day.temperatureMinC, day.temperatureMaxC);
+    return { start: (low - coldest) / span, width: (high - low) / span };
+  });
+}
