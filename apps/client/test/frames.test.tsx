@@ -379,7 +379,20 @@ describe("a page in its frame", () => {
       name: "Office button",
     } as unknown as DeviceInfo;
     function Presses(props: DevicePageProps) {
-      return <p>device {props.device.name}</p>;
+      const client = useAppClient();
+      const [entities, setEntities] = useState("none");
+      useEffect(() => {
+        void client.entities().then((list) => {
+          setEntities(list.map((each) => each.key).join(","));
+        });
+      }, [client]);
+      return (
+        <>
+          <p>device {props.device.name}</p>
+          <p>entities {entities}</p>
+          <p>permissions {client.app.permissions.join(",")}</p>
+        </>
+      );
     }
     const frame = frameWindow((data, ports) =>
       window.dispatchEvent(message(data, { source: window, ports })),
@@ -410,11 +423,27 @@ describe("a page in its frame", () => {
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain("device Office button"),
     );
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("entities forecast-1"),
+    );
+    const reads = json.mock.calls.length;
     expect(document.documentElement.dataset.surface).toBe("detail");
     bridge.send({ type: "device", device: { ...device, name: "Desk button" } });
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain("device Desk button"),
     );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(json).toHaveBeenCalledTimes(reads);
+    bridge.send({
+      type: "app",
+      app: { ...info, permissions: ["devices.read:button"] },
+    });
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain(
+        "permissions devices.read:button",
+      ),
+    );
+    await vi.waitFor(() => expect(json).toHaveBeenCalledTimes(reads + 1));
     resized(321);
     await vi.waitFor(() =>
       expect(events).toContainEqual({ type: "size", height: 321 }),
