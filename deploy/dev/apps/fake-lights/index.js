@@ -96,6 +96,8 @@ function joinLight(ctx, after, until) {
   if (Date.now() + after >= until) return;
   starts.push(
     setTimeout(() => {
+      // A timer that fires late, after the window, starts nothing.
+      if (Date.now() >= until) return;
       const number = ++joined;
       const key = `new-light-${number}`;
       const stages = [
