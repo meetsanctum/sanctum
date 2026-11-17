@@ -129,11 +129,16 @@ export function createCore(
   }
 
   // What the manager has staged for this image, which it may still be doing,
-  // so the core doesn't wait for it to serve.
+  // so the core doesn't wait for it to serve: of those, the apps the
+  // household added. A home's first start with its own list of apps records
+  // every app it had (added.ts).
   async function stagedPackages(only?: readonly string[]) {
     const staged = await manager!.stagedApps();
+    const { addedApps } = modules!;
+    addedApps.recordFirst([...shipped, ...Object.keys(staged)]);
+    const added = addedApps.ids();
     const apart = Object.entries(staged).flatMap(([id, { folder }]) =>
-      !started.has(id) && (!only || only.includes(id))
+      added.has(id) && !started.has(id) && (!only || only.includes(id))
         ? [`${id}@${folder}`]
         : [],
     );
@@ -156,6 +161,11 @@ export function createCore(
   // then, but it stops all the same, so Docker tries it again and one on trial
   // rolls back.
   async function installStagedApps(cancelled: AbortSignal) {
+    const { addedApps } = modules!;
+    // Before the first start with the list, every app the image ships is
+    // about to be recorded as added.
+    const atStart = addedApps.listed() ? addedApps.ids() : new Set(shipped);
+    const coming = shipped.filter((id) => atStart.has(id));
     const first = stagedPackages();
     // One the image ships that the manager hasn't staged, as an old manager or
     // one whose staging failed, is asked for again now and then, one ask at a
@@ -164,16 +174,16 @@ export function createCore(
     async function startStaged(missing: readonly string[]) {
       const packages = await stagedPackages(missing);
       if (packages.length === 0) return;
-      await modules!.apps.start(packages, {
-        onTrial: onTrial(),
-        coming: shipped,
-      });
+      await modules!.apps.start(packages, { onTrial: onTrial(), coming });
     }
     void first.then(
       () => {
         if (cancelled.aborted) return;
         askAgain = setInterval(() => {
-          const missing = shipped.filter((id) => !started.has(id));
+          const added = addedApps.ids();
+          const missing = shipped.filter(
+            (id) => added.has(id) && !started.has(id),
+          );
           if (missing.length === 0) return clearInterval(askAgain);
           if (isAsking || cancelled.aborted) return;
           isAsking = true;
@@ -187,7 +197,7 @@ export function createCore(
       () => undefined,
     );
     try {
-      await modules!.apps.start(first, { onTrial: onTrial(), coming: shipped });
+      await modules!.apps.start(first, { onTrial: onTrial(), coming });
     } catch (error) {
       log(`apps: didn't start (${String(error)})`);
       throw error;
@@ -245,6 +255,7 @@ export function createCore(
             kitDir: config.kitDir,
             version: config.version,
             manager: manager!,
+            shippedApps: () => shipped,
             hostId: manager!.hostId,
             homeId,
             pin: () => certificates?.current()?.pin ?? null,

@@ -10,6 +10,8 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Activity } from "../activity/activity.js";
+import type { Outcome } from "../activity/schema.js";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
@@ -87,6 +89,8 @@ export function createAppUpdates(options: {
   versions: AppVersions;
   settings: Pick<AppSettingsStore, "chosen" | "restore" | "settleAfterUndo">;
   manager: AppUpdateManager;
+  // Where a change of version that ends goes, by Sanctum; tests may leave it out.
+  activity?: Pick<Activity, "for">;
   log: (message: string) => void;
   now: () => Date;
   turnPauseMs?: number;
@@ -133,6 +137,28 @@ export function createAppUpdates(options: {
     .where(eq(appUpdates.appId, sql.placeholder("appId")))
     .prepare();
   const rowOf = (appId: string) => updateOf.get({ appId });
+
+  // A change of version that ended, in its commit's transaction, so it's
+  // written once whatever stops the core. It keeps the app's name, for once
+  // the app is gone, and goes by Sanctum: who asked to go back has an entry
+  // of their own. An app's first move changes no version, and a version that
+  // wasn't ready yet is tried again, so neither says anything.
+  function recordEnd(
+    { id: appId, name }: StaticManifest,
+    action: "version.update" | "version.back",
+    outcome: Outcome,
+    { from, to }: { from: string; to: string },
+    reason?: string | null,
+  ) {
+    options.activity?.for(appId)({
+      action,
+      outcome,
+      reason: reason ?? null,
+      actor: "sanctum",
+      subjectId: appId,
+      detail: { name, from, to },
+    });
+  }
 
   function mark(appId: string, change: Partial<AppUpdateRow>) {
     durably(db, () => {
@@ -648,9 +674,12 @@ export function createAppUpdates(options: {
     },
 
     /** In the commit's transaction: the update is over, either way. */
-    committing({ id: appId }: StaticManifest) {
+    committing(manifest: StaticManifest) {
+      const appId = manifest.id;
       const row = rowOf(appId);
+      const span = row && { from: row.fromVersion, to: row.toVersion };
       if (row?.status === "starting" && row.restores) {
+        recordEnd(manifest, "version.back", "ok", span!);
         // On the old version now, staying there until another version arrives.
         db.update(appUpdates)
           .set({
@@ -664,9 +693,19 @@ export function createAppUpdates(options: {
           .where(eq(appUpdates.appId, appId))
           .run();
       } else if (row?.status === "starting") {
-        if (!isMove(row)) versions.settingsBefore(appId, row.settings);
+        if (!isMove(row)) {
+          versions.settingsBefore(appId, row.settings);
+          recordEnd(manifest, "version.update", "ok", span!);
+        }
         db.delete(appUpdates).where(eq(appUpdates.appId, appId)).run();
       } else if (row?.status === "restored") {
+        // Back on the version it was leaving, where going back failed or
+        // the new version did.
+        if (row.restores) {
+          recordEnd(manifest, "version.back", "failed", span!, row.failure);
+        } else if (!row.retryAt && !isMove(row)) {
+          recordEnd(manifest, "version.update", "failed", span!, row.failure);
+        }
         db.update(appUpdates)
           .set({ status: "undone" })
           .where(eq(appUpdates.appId, appId))

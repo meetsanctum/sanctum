@@ -58,6 +58,7 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "apps"
+    | "availableApps"
     | "pages"
     | "workflows"
   > & {
@@ -192,7 +193,11 @@ export function createServer(
         views: options.activityViews,
         gate,
       });
-      registerAppRoutes(core, { host: options.apps, gate });
+      registerAppRoutes(core, {
+        host: options.apps,
+        available: options.availableApps,
+        gate,
+      });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
       // Only the desktop app's shell, and those a development stack allows,
       // may show an app's page in a frame.

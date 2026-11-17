@@ -11,7 +11,8 @@ import type { Kind } from "./schema.js";
 // - setup: what people set up and asked apps to do: people, sign-ins and
 //   clients, rooms, devices joining, moving and leaving, dashboards,
 //   workflows, apps' actions;
-// - system: updates, restores, Sanctum starting and the manager's audit.
+// - system: updates, Sanctum's and each app's, restores, Sanctum starting and
+//   the manager's audit.
 
 const deviceActions = new Set([
   "device.command",
@@ -39,6 +40,7 @@ export function kindOf(entry: {
     source === "manager" ||
     action.startsWith("sanctum.") ||
     action.startsWith("update.") ||
+    action.startsWith("version.") ||
     action.startsWith("restore")
   ) {
     return "system";

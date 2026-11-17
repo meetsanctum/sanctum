@@ -99,3 +99,23 @@ export const appSecrets = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.appId, table.name] })],
 );
+
+// The home's own list of apps: those the household added, when and by whom,
+// which are the apps the core installs. Every other app the image ships is
+// available to add. Who is none for those a home recorded on its first start
+// with this list, as it ran every app its image shipped.
+
+export const appsAdded = sqliteTable("apps_added", {
+  appId: text("app_id").primaryKey(),
+  addedAt: integer("added_at", { mode: "timestamp_ms" }).notNull(),
+  personId: text("person_id"),
+  clientId: text("client_id"),
+});
+
+// Its one row says the home keeps that list, so a home that has no apps is
+// told apart from one that never recorded what it had.
+
+export const appsListed = sqliteTable("apps_listed", {
+  id: integer("id").primaryKey(),
+  since: integer("since", { mode: "timestamp_ms" }).notNull(),
+});

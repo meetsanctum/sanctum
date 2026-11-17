@@ -13,6 +13,7 @@ import {
   rowOf,
   running,
   stateOf,
+  versionEntries,
   versions,
 } from "./app-update-support.js";
 
@@ -214,6 +215,21 @@ describe("going back", () => {
       chosen: true,
     });
     await vi.waitFor(() => expect(home.calls).toContain(`COMMIT ${id}`));
+    // Who asked, and that it went back, once.
+    expect(
+      core.activity
+        .recent()
+        .filter((entry) => entry.action === "go-back")
+        .map((entry) => entry.outcome),
+    ).toEqual(["ok"]);
+    expect(versionEntries(core).slice(-1)).toEqual([
+      expect.objectContaining({
+        action: "version.back",
+        outcome: "ok",
+        actor: "sanctum",
+        detail: expect.objectContaining({ from: "2.0.0", to: "1.0.0" }),
+      }),
+    ]);
   });
 
   it("says it's going back while it does, and offers nothing meanwhile", async () => {
@@ -319,6 +335,13 @@ describe("going back that doesn't work", () => {
     ]);
     // Its copy is still kept, so it can be asked for again.
     expect(await offered(core)).toMatchObject({ version: "1.0.0" });
+    expect(versionEntries(core).slice(-1)).toEqual([
+      expect.objectContaining({
+        action: "version.back",
+        outcome: "failed",
+        detail: expect.objectContaining({ from: "2.0.0", to: "1.0.0" }),
+      }),
+    ]);
   });
 
   it("returns to the newer version if the old one isn't ready, not trying later", async () => {

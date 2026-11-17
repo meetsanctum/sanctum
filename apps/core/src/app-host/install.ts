@@ -1,4 +1,4 @@
-import { appSectionOrderFrom } from "@meetsanctum/app-sdk";
+import { appApiVersion, appSectionOrderFrom } from "@meetsanctum/app-sdk";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { join } from "node:path";
 
@@ -6,6 +6,7 @@ import type { Entities } from "../entities/entities.js";
 import { apartApp, apartStorage } from "./apart.js";
 import type { AppContexts } from "./contexts.js";
 import { checkManifest, contractOf } from "./contract.js";
+import { servesAppApi } from "./fit.js";
 import type { AppGrants } from "./grants.js";
 import type { InstalledApp } from "./installed.js";
 import { createAppLink } from "./link.js";
@@ -60,6 +61,15 @@ export function createAppInstaller(options: {
       throw new Error("another package has the same id");
     }
     const manifest = checkManifest(pkg.apart.manifest);
+    // One built for an app API this core doesn't serve doesn't run, as when
+    // a core's update leaves behind an app its image no longer ships. What
+    // it brought stays, for a version that runs.
+    if (!servesAppApi(manifest)) {
+      checked.add(appId);
+      throw new Error(
+        `it targets app API ${manifest.core}, and this core serves ${appApiVersion}`,
+      );
+    }
     const contract = contractOf(manifest);
     const services = declaredServices(manifest);
     if (services.length > 0 && !mayRunServices.includes(origin)) {

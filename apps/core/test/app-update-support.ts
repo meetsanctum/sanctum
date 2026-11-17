@@ -230,3 +230,19 @@ export const rowOf = (core: TestCore) =>
 
 export const committedOf = (core: TestCore) =>
   core.db.select().from(appVersions).get();
+
+// What the activity log says of its changes of version, oldest first.
+export const versionEntries = (core: TestCore) =>
+  core.activity
+    .recent()
+    .filter((entry) => entry.action.startsWith("version."))
+    .reverse()
+    .map(({ action, outcome, reason, kind, actor, subjectId, detail }) => ({
+      action,
+      outcome,
+      reason,
+      kind,
+      actor,
+      subjectId,
+      detail,
+    }));
