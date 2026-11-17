@@ -42,6 +42,14 @@ own origin, `app://sanctum`, and, like every client, talks only to the core.
   connections reach STUN and TURN servers whatever a page's policy says, so
   the preload, which runs in frames too, takes WebRTC out of an app's page
   before it runs, and the window sends no UDP but through a proxy.
+- **Apps' page files and the kit** are kept in `pages/` in the app's data
+  folder (`src/page-store.ts`): Chromium never keeps a sandboxed frame's
+  files in its HTTP cache, so every open would fetch them all again. Every
+  request of the page's session passes through the main process, which
+  answers a page or kit file from the store, or fetches it and keeps it
+  with the core's headers, by the host it came from and its build's digest.
+  Everything else, and the entry the core writes under each ticket, goes to
+  the core as it was. A build no page has used for a month goes.
 - **The core's CORS allowlist** must include `app://sanctum`. On a host the
   manager passes it in the core container's settings.
 

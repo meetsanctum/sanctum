@@ -150,6 +150,10 @@ export function createHostTrust(options: {
 
     verify,
 
+    // The host the page's session trusts, whose files it may keep; none
+    // while a first contact is checked.
+    host: () => (checking ? null : (pinned?.hostId ?? null)),
+
     // Starts checking the host with `hostId` as a first contact, or with
     // null, ends it. Asking again for the same host keeps its candidate.
     // Returns whether trust changed, and the page needs a fresh session.
