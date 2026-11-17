@@ -15,6 +15,7 @@ import type { Outcome } from "../activity/schema.js";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
+import { servesAppApi } from "./fit.js";
 import { speaksThisCore, type ApartPackage } from "./loader.js";
 import type { InstalledApp } from "./installed.js";
 import { appUpdates } from "./schema.js";
@@ -50,9 +51,8 @@ import type { AppVersions } from "./versions.js";
 // failure: it goes on from the copy it took in, tried again with growing pauses and
 // stopped in the end with Restart. The original goes once its next update commits.
 //
-// A version kept from before the core's protocol, as a core's update that changes the
-// protocol leaves each app's last one, can't run on this core, so the core never goes
-// back to it: nobody is offered it, an update cut short starts the version the core
+// A kept version whose protocol or app API this core doesn't serve can't run on
+// this core, so nobody is offered it, an update cut short starts the version the core
 // brings, and a new version that fails is tried again, as on a first move.
 //
 // An app's own database is the truth for what it owns in the core, so undoing puts
@@ -78,9 +78,11 @@ const goingBackGivesUpAfterMs = 10 * 60_000;
 // The row's from folder on an app's first move.
 const inTheCore = "";
 const isMove = (row: AppUpdateRow) => row.fromFolder === inTheCore;
-// Said of a version kept from before this core's protocol, which it can't run.
-const speaksOlder = (appId: string, version: string) =>
-  `apps: ${appId} ${version} speaks a protocol this core doesn't`;
+// A kept version must fit both the runner's protocol and the app API.
+const canRunPackage = (pkg: ApartPackage) =>
+  speaksThisCore(pkg) && servesAppApi(pkg.apart.manifest);
+const cannotRun = (appId: string, version: string) =>
+  `apps: ${appId} ${version} can't run on this core`;
 
 export function createAppUpdates(options: {
   db: CoreDatabase;
@@ -126,7 +128,7 @@ export function createAppUpdates(options: {
   // Whether this core can run the version in that folder. One whose manifest
   // can't be read throws, so the caller tries again before it decides.
   async function canRun(appId: string, folder: string) {
-    return speaksThisCore(await options.loadPackage(appId, folder));
+    return canRunPackage(await options.loadPackage(appId, folder));
   }
 
   // Whether an app is in an update is asked whenever the apps are listed,
@@ -447,17 +449,17 @@ export function createAppUpdates(options: {
         // With nowhere else to carry on, it goes on from the copy it took in.
         return pkg;
       }
-      // A version from before this core's protocol can't run, so the one the
+      // A version whose protocol or app API doesn't fit can't run, so the one the
       // core brings starts instead. The manager puts back the copy of an
       // update no row speaks for, and the update begins again from there.
-      const unlessOlder = async (other: string, then?: () => void) => {
+      const useIfRunnable = async (other: string, then?: () => void) => {
         const kept = await options.loadPackage(appId, other);
-        if (speaksThisCore(kept)) {
+        if (canRunPackage(kept)) {
           then?.();
           return kept;
         }
         log(
-          `${speaksOlder(appId, kept.apart.manifest.version)}, so it starts on ${pkg.apart.manifest.version}`,
+          `${cannotRun(appId, kept.apart.manifest.version)}, so it starts on ${pkg.apart.manifest.version}`,
         );
         forget(appId);
         return pkg;
@@ -465,7 +467,7 @@ export function createAppUpdates(options: {
       if (row.status === "waiting") {
         // Someone asked to go back, and the core still brings what they left.
         if (row.restores && row.fromFolder === folder) {
-          return unlessOlder(row.toFolder);
+          return useIfRunnable(row.toFolder);
         }
         // Another version arrived while it waited. What it stopped is still there.
         if (row.toFolder !== folder) forget(appId);
@@ -490,7 +492,7 @@ export function createAppUpdates(options: {
         return pkg;
       }
       // The power went after it started and before its commit.
-      return unlessOlder(row.fromFolder, () => {
+      return useIfRunnable(row.fromFolder, () => {
         if (row.status === "starting") mark(appId, { status: "undoing" });
       });
     },
@@ -544,8 +546,8 @@ export function createAppUpdates(options: {
       if (!kept || kept.id !== copyId) return false;
       // Refused here, before anything stops, if it can't be read or run.
       const back = await options.loadPackage(appId, kept.from.folder);
-      if (!speaksThisCore(back)) {
-        log(`${speaksOlder(appId, kept.from.version)}, so it can't go back`);
+      if (!canRunPackage(back)) {
+        log(`${cannotRun(appId, kept.from.version)}, so it can't go back`);
         return false;
       }
       const last = versions.last(appId);
