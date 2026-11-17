@@ -8,10 +8,18 @@ import { z } from "zod";
 export const placesReadPermission = "places.read";
 export const placesLocationPermission = "places.location";
 
+/**
+ * A floor of the home, such as Ground floor or Outside. A room is on one
+ * floor or none, and a floor is a place of its own: its lights, motion and
+ * light level are its rooms' together.
+ */
 export type Floor = {
   id: string;
   name: string;
-  /** Its height in the home: 0 for the ground floor, negative below it. */
+  /**
+   * Its place in the household's order of floors, lowest first, which
+   * every list of floors follows.
+   */
   level: number;
 };
 
@@ -59,6 +67,17 @@ export type Places = {
 export type RoomRemoval = {
   devices: { id: string; name: string }[];
   entities: { app: string; type: string; title: string; count: number }[];
+  workflows: { id: string; name: string }[];
+};
+
+/**
+ * What removing a floor takes with it, for the warning read first
+ * (`GET /api/places/floors/removal?id=`): its rooms, which stay, on no
+ * floor; and the workflows whose config names it, which a remote's presses
+ * kept by an app are among.
+ */
+export type FloorRemoval = {
+  rooms: { id: string; name: string }[];
   workflows: { id: string; name: string }[];
 };
 

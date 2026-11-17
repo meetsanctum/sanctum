@@ -283,15 +283,15 @@ export const stateOperators = [
 export type StateOperator = (typeof stateOperators)[number];
 
 /**
- * What a field of a piece's config can name by its id: a room, a zone or a
- * device, which the core keeps. A piece declares each such field with
+ * What a field of a piece's config can name by its id: a room, a floor, a
+ * zone or a device, which the core keeps. A piece declares each such field with
  * names(), so the core can tell when what a workflow names is gone, and the
  * field's JSON Schema says `names`, for the editor's picker.
  */
-export const namedKinds = ["room", "zone", "device"] as const;
+export const namedKinds = ["room", "floor", "zone", "device"] as const;
 export type NamedKind = (typeof namedKinds)[number];
 
-/** A config field that names a room, a zone or a device by its id. */
+/** A config field that names a room, a floor, a zone or a device by its id. */
 export function names(kind: NamedKind) {
   return z.string().min(1).max(64).meta({ names: kind });
 }

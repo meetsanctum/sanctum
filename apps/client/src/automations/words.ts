@@ -21,6 +21,7 @@ export type FieldSchema = Record<string, unknown>;
 /** What the home calls the things a config names, by their ids. */
 export type Names = {
   room(id: string): string | undefined;
+  floor(id: string): string | undefined;
   zone(id: string): string | undefined;
   device(id: string): { name: string; kinds: string[] } | undefined;
   entity(type: string, key: string): string | undefined;
@@ -32,7 +33,7 @@ export type Token = { field: string; text: string; missing: boolean };
 export type Part = string | Token;
 
 export type FieldKind =
-  | { kind: "names"; names: "room" | "zone" | "device" }
+  | { kind: "names"; names: "room" | "floor" | "zone" | "device" }
   | { kind: "partOf"; of: string }
   | { kind: "entityOf"; type: string }
   | { kind: "place" }
@@ -82,6 +83,7 @@ const isOperators = (values: unknown[]) =>
 export function fieldKind(field: FieldSchema): FieldKind {
   if (
     field.names === "room" ||
+    field.names === "floor" ||
     field.names === "zone" ||
     field.names === "device"
   ) {
@@ -252,6 +254,9 @@ export function formatValue(
       if (value.kind === "home") return "the whole home";
       if (value.kind === "room" && typeof value.id === "string") {
         return names.room(value.id);
+      }
+      if (value.kind === "floor" && typeof value.id === "string") {
+        return names.floor(value.id);
       }
       if (value.kind === "zone" && typeof value.id === "string") {
         return names.zone(value.id);

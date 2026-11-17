@@ -3,12 +3,12 @@ import type { z } from "zod";
 
 import { schemaAt, schemaCheck } from "../app-host/contract.js";
 
-// The rooms, zones, devices and entities a node's config names: the fields
-// its piece's schema declares with names() or entityOf(), found by walking
-// the schema along the config as parsing it would, since the piece acts on
-// what its parse gives. A union follows the option the config takes, as the
-// lights pieces' place does for a room or a zone, and a default, a fallback
-// or a pipe names what it gives. Ids are strings, so a field that only
+// The rooms, floors, zones, devices and entities a node's config names: the
+// fields its piece's schema declares with names() or entityOf(), found by
+// walking the schema along the config as parsing it would, since the piece
+// acts on what its parse gives. A union follows the option the config
+// takes, as the lights pieces' place does for a room, a floor or a zone, and
+// a default, a fallback or a pipe names what it gives. Ids are strings, so a field that only
 // happens to hold one names nothing. Each comes with its field's path in the
 // config, such as place.id, so a problem with it can mark that field in the
 // editor.

@@ -42,7 +42,8 @@ export const home = sqliteTable("home", {
 export const floors = sqliteTable("floors", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  // 0 for the ground floor, negative below it.
+  // Its place in the household's order of floors, lowest first: a new one
+  // goes last, and dragging them in Settings → Rooms numbers them anew.
   level: integer("level").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

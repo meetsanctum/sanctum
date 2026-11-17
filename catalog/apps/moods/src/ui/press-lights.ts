@@ -114,7 +114,11 @@ export function lightsOf(
       : new Set(
           place.kind === "room"
             ? [place.id]
-            : (places?.zones.find((zone) => zone.id === place.id)?.roomIds ??
+            : place.kind === "floor"
+              ? (places?.rooms ?? [])
+                  .filter((room) => room.floorId === place.id)
+                  .map((room) => room.id)
+              : (places?.zones.find((zone) => zone.id === place.id)?.roomIds ??
                 []),
         );
   return chosenLights(

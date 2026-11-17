@@ -90,8 +90,8 @@ export function createWorkflows(
       "has" | "holds" | "isRunning" | "pieces" | "list" | "action" | "invoke"
     >;
     devices: Pick<Devices, "get" | "command">;
-    // The rooms and zones workflows name, which may be removed.
-    places: Pick<PlacesModule, "hasRoom" | "hasZone">;
+    // The rooms, floors and zones workflows name, which may be removed.
+    places: Pick<PlacesModule, "hasRoom" | "hasFloor" | "hasZone">;
     // The lights of a place together, which lights pieces ask about and
     // switch.
     lights: Pick<Lights, "are" | "switch">;
@@ -324,8 +324,9 @@ export function createWorkflows(
     },
 
     /**
-     * The workflows whose config names a room, a zone or a device, by the
-     * fields their pieces declare, for the warning before it is removed.
+     * The workflows whose config names a room, a floor, a zone or a device,
+     * by the fields their pieces declare, for the warning before it is
+     * removed.
      */
     naming(kind: NamedKind, namedId: string): { id: string; name: string }[] {
       return rows()
