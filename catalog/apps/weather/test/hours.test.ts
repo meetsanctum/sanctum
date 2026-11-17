@@ -92,6 +92,24 @@ describe("the weather now", () => {
     });
   });
 
+  it.each([undefined, forecast.hours])(
+    "does not restore old measures when the hourly forecast is absent or exhausted (%#)",
+    (hours) => {
+      expect(weatherNow({ ...forecast, hours }, later(48))).toEqual({
+        temperatureC: 11.4,
+        weatherCode: 63,
+        isDay: true,
+        apparentTemperatureC: null,
+        relativeHumidity: null,
+        dewPointC: null,
+        windSpeedKmh: null,
+        windGustsKmh: null,
+        windDirection: null,
+        uvIndex: null,
+      });
+    },
+  );
+
   it("is unknown without either", () => {
     const empty = { ...forecast, hours: [], current: null };
 

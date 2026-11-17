@@ -1,13 +1,16 @@
 import type { Forecast } from "@meetsanctum/app-sdk";
 
 import { condition, isWet } from "./conditions.js";
+import { homeDate } from "./days.js";
 import { hoursLeftToday, weatherNow } from "./hours.js";
 
 // The rest of the home's day in one sentence, from its hours: whether
 // something falls now and until when, or from when, and otherwise what the
 // sky mostly does. It follows the forecast's own weather codes, as the
-// page's icons do, and says nothing where the forecast has no hours left
+// page's icons do, and says nothing without known hours through the end of
 // today.
+
+const hourMs = 3_600_000;
 
 export type DaySummary =
   /** It falls now, until an hour of today. */
@@ -25,17 +28,26 @@ export function daySummary(
 ): DaySummary | null {
   const hours = hoursLeftToday(forecast, now);
   if (hours.length === 0) return null;
+  // A kept forecast may end partway through today. Its remaining hours
+  // cannot say what happens for the rest of the day.
+  const today = homeDate(forecast.timeZone, now);
+  const end = new Date(Date.parse(hours.at(-1)!.time) + hourMs);
+  if (homeDate(forecast.timeZone, end) === today) return null;
   // The hour it is has the weather now, as the page says it.
   const codes = hours.map((hour, index) =>
     index === 0 ? weatherNow(forecast, now).weatherCode : hour.weatherCode,
   );
   const first = codes[0] ?? null;
-  if (first === null) return null;
+  if (first === null || codes.includes(null)) return null;
   const words = (code: number | null) => condition(code).text;
 
   if (isWet(first)) {
-    const dry = codes.findIndex((code) => !isWet(code));
-    return dry === -1
+    // A dry break is not the end of the rain if it falls again later.
+    const dry = codes.reduce<number>(
+      (end, code, index) => (isWet(code) ? index + 1 : end),
+      0,
+    );
+    return dry === codes.length
       ? { kind: "wet", words: words(first) }
       : { kind: "wet-until", words: words(first), until: hours[dry]!.time };
   }

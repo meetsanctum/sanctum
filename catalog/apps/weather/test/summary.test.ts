@@ -33,6 +33,18 @@ describe("the day's summary", () => {
     expect(sentence(snowing, morning)).toBe("Snow for the rest of the day.");
   });
 
+  it("waits for the last rain to end before saying it will be dry", () => {
+    const rainAgain = withHours((each) => ({
+      weatherCode:
+        each.time >= "2026-10-29T18:00:00.000Z" &&
+        each.time < "2026-10-29T20:00:00.000Z"
+          ? 63
+          : each.weatherCode,
+    }));
+
+    expect(sentence(rainAgain, morning)).toBe("Rain until 20:00, then dry.");
+  });
+
   it("says from when it falls, when it is dry now", () => {
     const showersLater = {
       ...withHours((each) => ({
@@ -93,5 +105,18 @@ describe("the day's summary", () => {
       current: { ...forecast.current!, weatherCode: null },
     };
     expect(daySummary(unknownNow, morning)).toBeNull();
+  });
+
+  it("says nothing when a kept forecast ends before the day's end", () => {
+    expect(daySummary(forecast, later(41))).toBeNull();
+  });
+
+  it("does not treat unknown hours as dry weather", () => {
+    const missingHour = withHours((each) => ({
+      weatherCode:
+        each.time === "2026-10-29T15:00:00.000Z" ? null : each.weatherCode,
+    }));
+
+    expect(daySummary(missingHour, morning)).toBeNull();
   });
 });

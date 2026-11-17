@@ -15,6 +15,7 @@ const label = "text-[13px] leading-[18px] font-medium";
 export function SunCard(props: { sun: SunTimes; now: Date }) {
   const { sun, now } = props;
   const today = sunToday(sun, now);
+  if (!today) return null;
   const path = sunPath(today, now);
   if (!path) {
     // A polar day or night, or the day one begins or ends.

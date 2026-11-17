@@ -57,14 +57,14 @@ const unknown: WeatherNow = {
  * The weather now: as it was fetched while that is recent, and from a
  * forecast kept longer, what it says of the hour it is, which knows the
  * temperature and the sky but no wind, humidity or UV. A forecast without
- * that hour keeps what it fetched.
+ * that hour keeps only the temperature and sky it fetched.
  */
 export function weatherNow(forecast: Forecast, now = new Date()): WeatherNow {
   const hour = hoursFromNow(forecast, now)[0];
   const isRecent =
     now.getTime() - Date.parse(forecast.updatedAt) < currentForMs;
   const current = forecast.current;
-  if (current && (isRecent || !hour)) {
+  if (current && isRecent) {
     return {
       temperatureC: current.temperatureC,
       weatherCode: current.weatherCode,
@@ -78,12 +78,13 @@ export function weatherNow(forecast: Forecast, now = new Date()): WeatherNow {
       uvIndex: current.uvIndex ?? null,
     };
   }
-  if (!hour) return unknown;
+  const kept = hour ?? current;
+  if (!kept) return unknown;
   return {
     ...unknown,
-    temperatureC: hour.temperatureC,
-    weatherCode: hour.weatherCode,
-    isDay: hour.isDay,
+    temperatureC: kept.temperatureC,
+    weatherCode: kept.weatherCode,
+    isDay: kept.isDay,
   };
 }
 

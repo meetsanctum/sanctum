@@ -462,6 +462,41 @@ describe("Weather's page", () => {
     );
   });
 
+  it("keeps old measures unknown after its hours and sun days run out", async () => {
+    vi.setSystemTime(new Date("2026-10-31T09:00:00Z"));
+    const text = await show(fakeClient(shown).client);
+
+    expect(texts(section("Now"), "p")).toEqual([
+      "11°",
+      "Rain",
+      "Feels like – · High 10° · Low 2°",
+    ]);
+    expect(texts(section("Today"), "h3 + p")).toEqual(["0mm", "–", "–", "–"]);
+    expect(section("Next 24 hours")).toBeNull();
+    expect(section("Sun")).toBeNull();
+    expect(text).not.toContain("The sun neither rises nor sets today.");
+  });
+
+  it("shows no summary or rain timing when the rest of today is unknown", async () => {
+    vi.setSystemTime(new Date("2026-10-31T02:30:00Z"));
+    await show(fakeClient(shown).client);
+
+    expect(texts(section("Now"), "p")).toHaveLength(3);
+    expect(texts(section("Today"), "p")[1]).toBe("");
+  });
+
+  it("describes a polar day only when today's sun data is present", async () => {
+    const polarSun: SunTimes = {
+      ...sun,
+      days: sun.days.map((day) => ({ ...day, sunrise: null, sunset: null })),
+    };
+    await show(fakeClient([entity("sun", "sun", polarSun)]).client);
+
+    expect(section("Sun")?.textContent).toBe(
+      "SunThe sun neither rises nor sets today.",
+    );
+  });
+
   it("shows what a forecast with the days and the weather now alone has, and dashes for the rest", async () => {
     const bare: Forecast = {
       timeZone: "Europe/Zurich",
