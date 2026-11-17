@@ -85,8 +85,12 @@ const moodsSection: RoomSectionInfo = {
   kind: "tiles",
   order: 200,
   press: { action: "moods.runMood" },
-  open: { page: "room", label: "Edit" },
-  whenEmpty: { roomHas: "light" },
+  open: { page: "room" },
+  whenEmpty: {
+    roomHas: "light",
+    text: "No moods yet. A mood keeps how the room's lights look, for a tap to bring back.",
+    start: { page: "mood", label: "New mood" },
+  },
 };
 const app = (id: string, name: string, section: RoomSectionInfo): AppInfo => ({
   id,

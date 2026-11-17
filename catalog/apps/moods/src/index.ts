@@ -59,14 +59,15 @@ let running:
 export default defineApp({
   id: "sanctum.moods",
   name: "Moods",
-  version: "0.10.0",
+  version: "0.11.0",
   core: "^1.0.0",
   summary:
     "Moods for each room, and what remotes and motion do with its lights.",
   icon: { glyph: "swatch-book", color: "ember" },
-  // The app overview opens main, every room; Edit beside a room page's
-  // Moods opens room, the room's moods, schedule and turning on, which
-  // opens the mood editor and the editor of a scheduled mood.
+  // The app overview opens main, every room; a room page's Moods heading
+  // opens room, the room's moods, schedule and turning on, which opens
+  // the mood editor and the editor of a scheduled mood. New mood in a room
+  // with no moods yet opens the editor straight away.
   pages: ["main", "room", "mood", "scheduled"],
   // Controlling a kind includes reading it. Rooms and their lights are what
   // moods are; the rest serve presses and motion. Presses start on, so a
@@ -126,10 +127,15 @@ export default defineApp({
         // Moods' place, among the sections Sanctum keeps for its own.
         order: 200,
         press: runMood,
-        open: { page: "room", label: "Edit" },
-        // A room with lights but no moods yet keeps the heading and Edit,
-        // so someone can add the first.
-        whenEmpty: { roomHas: "light" },
+        // The heading opens Moods' page for the room.
+        open: { page: "room" },
+        // A room with lights but no moods yet keeps the heading and says
+        // so, with New mood, which opens the editor for the room's first.
+        whenEmpty: {
+          roomHas: "light",
+          text: "No moods yet. A mood keeps how the room's lights look, for a tap to bring back.",
+          start: { page: "mood", label: "New mood" },
+        },
         preview: [
           { icon: "sparkles", name: "Aurora", active: true },
           { icon: "book-open", name: "Reading", active: false },

@@ -1,5 +1,11 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
-import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  DeviceTile,
+  icons,
+  SectionHeading,
+  type Tile,
+} from "@meetsanctum/ui-sdk";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -105,25 +111,14 @@ export function HomeRooms(props: {
             aria-labelledby={headingId}
             className="flex shrink-0 flex-col gap-3"
           >
-            <h2
+            <SectionHeading
               id={headingId}
-              className="m-0 text-[15px] leading-5 font-medium"
+              onOpen={() =>
+                room ? props.openRoom(room.id) : props.openNoRoom()
+              }
             >
-              <Button
-                variant="ghost"
-                size="inline"
-                type="button"
-                onClick={() =>
-                  room ? props.openRoom(room.id) : props.openNoRoom()
-                }
-              >
-                {place.name}
-                <icons.ChevronRight
-                  aria-hidden="true"
-                  className="size-4 text-white/65"
-                />
-              </Button>
-            </h2>
+              {place.name}
+            </SectionHeading>
             {place.hasLine && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {lights && <LightsButton lights={lights} />}

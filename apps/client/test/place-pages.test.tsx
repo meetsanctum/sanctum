@@ -467,13 +467,16 @@ describe("a room's page", () => {
       [...container.querySelectorAll("h2")].find(
         (each) => each.textContent === text,
       )!;
-    // The same element but for its id and words: no colour, no icon.
-    const looks = (element: Element) =>
-      element.outerHTML
-        .replace(/ id="[^"]*"/, "")
-        .replace(element.textContent!, "");
-    expect(looks(heading("Moods"))).toBe(looks(heading("Lights")));
-    expect(heading("Moods").children).toHaveLength(0);
+    // The same heading, its words in a button that opens Moods' page, with
+    // the chevron every heading that opens a page has: no colour, no icon.
+    const moods = heading("Moods");
+    expect(moods.className).toBe(heading("Lights").className);
+    expect(heading("Lights").children).toHaveLength(0);
+    expect([...moods.children].map((each) => each.tagName)).toEqual(["BUTTON"]);
+    const svgs = moods.querySelectorAll("svg");
+    expect(svgs).toHaveLength(1);
+    expect(svgs[0]!.getAttribute("aria-hidden")).toBe("true");
+    expect(moods.outerHTML).not.toMatch(/style=|ember/);
   });
 
   it("shows a room's moods in their order, the active one pressed, and runs one on a tap", async () => {
@@ -530,20 +533,27 @@ describe("a room's page", () => {
     expect(tile("Work")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("opens the app's page for the room from Edit", async () => {
+  it("opens the app's page for the room from its heading", async () => {
     await show("room", "office");
-    await click(button("Edit"));
+    const heading = container.querySelector("h2 > button");
+    expect(heading?.textContent).toBe("Moods");
+    await click(heading as HTMLButtonElement);
     expect(openApp).toHaveBeenCalledWith("sanctum.moods", "room", {
       placeId: "office",
     });
     expect(tile("Relax")?.disabled).toBe(false);
+    expect(button("New mood")).toBeUndefined();
   });
 
-  it("keeps Moods' heading and Edit in a room with lights but no moods", async () => {
+  it("keeps Moods' heading in a room with lights but no moods, saying so with New mood", async () => {
     entities = [];
     await show("room", "hall");
     expect(headings()).toEqual(["Moods", "Lights"]);
-    expect(button("Edit")).toBeDefined();
+    expect(container.textContent).toContain("No moods yet.");
+    await click(button("New mood"));
+    expect(openApp).toHaveBeenCalledWith("sanctum.moods", "mood", {
+      placeId: "hall",
+    });
   });
 
   it("has no Moods in a room without lights or moods", async () => {

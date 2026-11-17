@@ -17,8 +17,8 @@ import { useMoodsApp } from "./state";
 // Moods' own page, which the app overview opens on every device: every room
 // with lights, what its schedule holds now or next, how many moods it has
 // and what motion does, each opening Moods' page for the room. A room's
-// schedule is reached from here, and from the room page's Edit. Rooms and
-// their lights are the shell's, in the sidebar.
+// schedule is reached from here, and from the room page's Moods heading.
+// Rooms and their lights are the shell's, in the sidebar.
 
 // The scheduled mood holding now, else the next to start, by name.
 function scheduleWords(

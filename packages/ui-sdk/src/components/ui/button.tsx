@@ -108,6 +108,12 @@ const buttonVariants = cva(
         // A choice on a device's glass: at least 48 px, in Body type.
         option:
           "h-auto min-h-12 w-full justify-start gap-2.5 rounded-md py-1.5 ps-4 pe-3.5 text-start text-[17px] leading-[22px] font-normal whitespace-normal",
+        // A section's heading that opens a page, in the heading's own type,
+        // its words where a plain heading's are and 28 px tall around them,
+        // the border included, with what follows them, such as a chevron,
+        // on their baseline.
+        heading:
+          "-ms-1.5 -me-0.75 -my-1 h-auto min-h-7 items-baseline gap-[5px] rounded-xs py-[3px] ps-[5px] pe-[2px] text-[length:inherit] leading-[inherit] font-[inherit]",
         // Words in Label type, such as a section's link.
         label:
           "-mx-1 -my-0.5 h-auto gap-1 rounded-xs px-1 py-0.5 text-[13px] leading-[18px]",

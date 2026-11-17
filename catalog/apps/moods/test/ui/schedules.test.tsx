@@ -224,11 +224,11 @@ describe("a room's schedule", () => {
 
     await press(scheduleRow("Evening"));
     expect(open).toHaveBeenLastCalledWith("scheduled", {
-      room: "office",
+      placeId: "office",
       id: "s3",
     });
     await press(row("Schedule a mood"));
-    expect(open).toHaveBeenLastCalledWith("scheduled", { room: "office" });
+    expect(open).toHaveBeenLastCalledWith("scheduled", { placeId: "office" });
   });
 });
 
@@ -269,7 +269,7 @@ describe("a scheduled mood's editor", () => {
   const selects = () => [...container.querySelectorAll("select")];
 
   it("starts a new one at the first free hour, with a mood not yet scheduled", async () => {
-    await show(ScheduledMoodPage, { room: "office" });
+    await show(ScheduledMoodPage, { placeId: "office" });
 
     expect(container.querySelector("h1")?.textContent).toBe("Schedule a mood");
     const [from, to] = selects();
@@ -283,7 +283,7 @@ describe("a scheduled mood's editor", () => {
   });
 
   it("dims the starts another scheduled mood holds, and ends only up to the next", async () => {
-    await show(ScheduledMoodPage, { room: "office" });
+    await show(ScheduledMoodPage, { placeId: "office" });
     const [from, to] = selects();
 
     const option = (select: HTMLSelectElement, value: string) =>
@@ -299,7 +299,7 @@ describe("a scheduled mood's editor", () => {
   });
 
   it("saves it, and leaves", async () => {
-    await show(ScheduledMoodPage, { room: "office" });
+    await show(ScheduledMoodPage, { placeId: "office" });
     const [from] = selects();
     await choose(from!, "1035");
     await press(row("Night"));
@@ -313,7 +313,7 @@ describe("a scheduled mood's editor", () => {
   });
 
   it("changes one already scheduled, and takes it off the schedule once asked", async () => {
-    await show(ScheduledMoodPage, { room: "office", id: "s3" });
+    await show(ScheduledMoodPage, { placeId: "office", id: "s3" });
     expect(container.querySelector("h1")?.textContent).toBe("Scheduled mood");
     const [from, to] = selects();
     expect([from?.value, to?.value]).toEqual(["1110", "1320"]);
@@ -328,7 +328,7 @@ describe("a scheduled mood's editor", () => {
   });
 
   it("leaves for a scheduled mood that went", async () => {
-    await show(ScheduledMoodPage, { room: "office", id: "gone" });
+    await show(ScheduledMoodPage, { placeId: "office", id: "gone" });
     expect(back).toHaveBeenCalledTimes(1);
   });
 });

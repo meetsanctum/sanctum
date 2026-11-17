@@ -74,8 +74,12 @@ const nook = (state: z.ZodObject = spotState): AppDefinition => ({
         entityType: spotType.id,
         kind: "tiles",
         press: use,
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
+        open: { page: "room" },
+        whenEmpty: {
+          roomHas: "light",
+          text: "No spots yet.",
+          start: { page: "room", label: "Add a spot" },
+        },
       }),
     ],
   },
@@ -106,8 +110,12 @@ describe("room sections", () => {
           kind: "tiles",
           order: 500,
           press: { action: "nook.use" },
-          open: { page: "room", label: "Edit" },
-          whenEmpty: { roomHas: "light" },
+          open: { page: "room" },
+          whenEmpty: {
+            roomHas: "light",
+            text: "No spots yet.",
+            start: { page: "room", label: "Add a spot" },
+          },
         },
       ]);
     }
@@ -169,6 +177,29 @@ describe("room sections", () => {
         manifest.provides.roomSections[0]!.kind = "buttons";
       },
       "shows buttons, which have no heading to open a page from or show empty",
+    ],
+    [
+      "a heading that opens a page it doesn't have",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.open = { page: "rooms" };
+      },
+      "opens rooms, which is not one of its pages",
+    ],
+    [
+      "a first one started from a page it doesn't have",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.whenEmpty!.start.page = "spot";
+      },
+      "opens spot, which is not one of its pages",
+    ],
+    [
+      "an empty rule that says nothing of what it shows",
+      (manifest: StaticManifest) => {
+        manifest.provides.roomSections[0]!.whenEmpty = {
+          roomHas: "light",
+        } as never;
+      },
+      "its manifest is incomplete",
     ],
   ])(
     "keep an app whose manifest gives its section %s from being installed",

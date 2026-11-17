@@ -9,6 +9,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import {
   Button,
+  icons,
   SectionButton,
   SectionHeading,
   SectionTile,
@@ -29,9 +30,10 @@ import { tileKey } from "./device-tiles";
 // section's action through the gate; the lights and switches it could not
 // reach fail on their tiles, and a tap that fails as a whole fails on the
 // section's tile or button. While the app isn't running its tiles and
-// buttons dim, and its tiles say so. Edit beside the heading opens the
-// app's page for the room, on every device: what a room has is the
-// household's, a shared tablet's too.
+// buttons dim, and its tiles say so. The heading opens the app's page for
+// the room, and a room with nothing yet says so with a link to add the
+// first, on every device: what a room has is the household's, a shared
+// tablet's too.
 
 /** One of an app's section tiles, as its entity says. */
 export type SectionEntity = {
@@ -158,8 +160,9 @@ function failedDevices(output: unknown): string[] {
 
 /**
  * One app's section in a room, or nothing for a room it has nothing for,
- * unless its empty rule keeps its heading and link. On Home it is only its
- * tiles, under the room's name (home-dashboard.tsx).
+ * unless its empty rule keeps its heading and says so, with a link to add
+ * the first. On Home it is only its tiles, under the room's name
+ * (home-dashboard.tsx).
  */
 export function RoomSection(props: {
   app: AppInfo;
@@ -168,22 +171,30 @@ export function RoomSection(props: {
   entities: SectionEntities;
   /** Whether the room has a device of each kind, for the empty rule. */
   roomHas: (kind: CapabilityKind) => boolean;
-  /** Opens the app's page for the room, if the shell has it. */
-  onOpen?: () => void;
+  /** Opens one of the app's pages for the room, if the shell has it. */
+  open?: { can: (page: string) => boolean; page: (page: string) => void };
   /** Only its tiles, named for the section, and nothing while it has none. */
   bare?: boolean;
 }) {
-  const { app, section, roomId, entities } = props;
+  const { app, section, roomId, entities, open } = props;
   const tiles = entities.tilesIn(app.id, section, roomId);
   // While the app isn't running its tiles keep their last state, dimmed,
   // and say why, since the core would refuse a tap.
   const notRunning = stateShort(app);
-  const link = section.open && props.onOpen ? section.open : null;
+  const opens = (page: string | undefined) =>
+    open && page !== undefined && open.can(page)
+      ? () => open.page(page)
+      : undefined;
+  const onOpen = opens(section.open?.page);
+  // A core from before a section said what it shows empty sends none of
+  // it, and the section shows nothing then.
+  const empty = section.whenEmpty;
+  const onStart = opens(empty?.start?.page);
   const showsEmpty =
     !props.bare &&
-    link !== null &&
-    section.whenEmpty !== null &&
-    props.roomHas(section.whenEmpty.roomHas);
+    empty !== null &&
+    onStart !== undefined &&
+    props.roomHas(empty.roomHas);
   if (tiles.length === 0 && !showsEmpty) return null;
   const headingId = `section-${app.id}-${roomId}`;
   const grid = (
@@ -209,17 +220,20 @@ export function RoomSection(props: {
   if (props.bare) return grid;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      {/* The link keeps to the heading's line, so the heading sits as the
-          device sections' do. */}
-      <div className="flex items-center gap-3">
-        <SectionHeading id={headingId}>{section.title}</SectionHeading>
-        {link && (
-          <Button variant="link" size="label" onClick={props.onOpen}>
-            {link.label}
-          </Button>
-        )}
-      </div>
-      {tiles.length > 0 && grid}
+      <SectionHeading id={headingId} onOpen={onOpen}>
+        {section.title}
+      </SectionHeading>
+      {tiles.length > 0
+        ? grid
+        : empty && (
+            <p className="m-0 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
+              {empty.text}
+              <Button variant="link" size="label" onClick={onStart}>
+                <icons.Plus aria-hidden="true" />
+                {empty.start.label}
+              </Button>
+            </p>
+          )}
     </section>
   );
 }

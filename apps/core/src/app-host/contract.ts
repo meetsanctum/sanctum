@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   assertDriverProblems,
   appManifestSchema,
+  capabilityKinds,
   roomSectionKinds,
   standardEntityTypes,
   tierSchema,
@@ -438,6 +439,15 @@ const manifestShape = z.looseObject({
         kind: z.enum(roomSectionKinds),
         order: z.number(),
         press: z.looseObject({ action: z.string() }),
+        // What clients draw its heading's link and its empty room from.
+        open: z.looseObject({ page: z.string() }).nullable(),
+        whenEmpty: z
+          .looseObject({
+            roomHas: z.enum(capabilityKinds),
+            text: z.string(),
+            start: z.looseObject({ page: z.string(), label: z.string() }),
+          })
+          .nullable(),
       }),
     ),
     devicePages: z.array(named),
@@ -477,8 +487,9 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
 // What defineApp checks where the manifest is made that the manifest alone can
 // show, since the core reads nothing else of an app: no two of a kind with one
 // id, and a room section over a type the app provides in the tile shape, pressed
-// with one of its own read or write actions, and with no page to open and
-// nothing shown empty when it shows buttons, which have no heading.
+// with one of its own read or write actions, opening only its own pages, and
+// with no page to open and nothing shown empty when it shows buttons, which
+// have no heading.
 function checkPieces(manifest: StaticManifest) {
   const { actions, events, pages, permissions, provides } = manifest;
   const kinds: [string, readonly string[]][] = [
@@ -523,6 +534,13 @@ function checkPieces(manifest: StaticManifest) {
       throw new Error(
         `its room section ${section.id} shows buttons, which have no heading to open a page from or show empty`,
       );
+    }
+    for (const page of [section.open?.page, section.whenEmpty?.start.page]) {
+      if (page !== undefined && !pages.includes(page)) {
+        throw new Error(
+          `its room section ${section.id} opens ${page}, which is not one of its pages`,
+        );
+      }
     }
     const press = actions.find(({ id }) => id === section.press.action);
     if (!press || (press.tier !== "read" && press.tier !== "write")) {

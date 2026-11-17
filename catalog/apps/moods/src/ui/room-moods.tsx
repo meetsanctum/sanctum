@@ -20,8 +20,8 @@ import { MotionSection } from "./motion-section";
 import { ScheduleSection, TurnOnSection, useNow } from "./schedule-sections";
 import { useMoodsApp } from "./state";
 
-// Moods' page for a room, which Edit beside a room page's Moods heading
-// opens, and Moods' main page, with { placeId }: the room's moods as tiles
+// Moods' page for a room, which a room page's Moods heading opens, and
+// Moods' main page, with { placeId }: the room's moods as tiles
 // to drag into order (or move with the arrow keys) and to open in the mood
 // editor, and New mood, which opens the editor on the lights as they are;
 // then its schedule, how its lights turn on, and what motion does to them.
@@ -198,7 +198,7 @@ export function RoomMoodsPage(props: PageProps) {
                 const moved = dragged.current;
                 dragged.current = false;
                 if (moved && event.detail > 0) return;
-                open("mood", { room: roomId, id: mood.id });
+                open("mood", { placeId: roomId, id: mood.id });
               }}
               {...editHandlers(mood)}
             >
@@ -212,7 +212,7 @@ export function RoomMoodsPage(props: PageProps) {
             <SectionTile
               icon={icons.Plus}
               name="New mood"
-              onClick={() => open("mood", { room: roomId })}
+              onClick={() => open("mood", { placeId: roomId })}
             />
           )}
         </div>
@@ -235,7 +235,10 @@ export function RoomMoodsPage(props: PageProps) {
             timeZone={places.home.timeZone}
             now={now}
             open={(id) =>
-              open("scheduled", id ? { room: roomId, id } : { room: roomId })
+              open(
+                "scheduled",
+                id ? { placeId: roomId, id } : { placeId: roomId },
+              )
             }
           />
           <TurnOnSection

@@ -253,7 +253,7 @@ describe("a room's moods", () => {
     await show(RoomMoodsPage, { placeId: "office" });
     expect(container.querySelector("h1")?.textContent).toBe("Office moods");
     await press("New mood");
-    expect(open).toHaveBeenLastCalledWith("mood", { room: "office" });
+    expect(open).toHaveBeenLastCalledWith("mood", { placeId: "office" });
 
     await act(async () => {
       button("Edit Relax")!.dispatchEvent(
@@ -266,7 +266,7 @@ describe("a room's moods", () => {
 
     await press("Edit Work");
     expect(open).toHaveBeenLastCalledWith("mood", {
-      room: "office",
+      placeId: "office",
       id: "work",
     });
     expect(calls("moods.runMood")).toEqual([]);
@@ -312,7 +312,7 @@ async function typeName(text: string) {
 
 describe("the mood editor", () => {
   it("keeps the captured draft when live lights change before the first edit", async () => {
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     await pressTile("From the lights");
     await report(lightDevice("lamp", "Lamp", { on: true, brightness: 90 }));
     await typeName("Reading");
@@ -323,7 +323,7 @@ describe("the mood editor", () => {
   });
 
   it("restores lights that arrive during a preview to their arrival state", async () => {
-    await show(MoodPage, { room: "office", id: "work" });
+    await show(MoodPage, { placeId: "office", id: "work" });
     await press("Preview on the lights");
     await report(lightDevice("extra", "Extra", { on: true, brightness: 65 }));
     expect(calls("moods.previewMood").at(-1)).toMatchObject({
@@ -344,7 +344,7 @@ describe("the mood editor", () => {
   });
 
   it("captures a new mood from the room's lights as they are", async () => {
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     await pressTile("From the lights");
     expect(button("Save")?.disabled).toBe(true);
     await typeName(" Reading ");
@@ -369,7 +369,7 @@ describe("the mood editor", () => {
   });
 
   it("has Cancel and Save beside its title, its way out, and Delete at its foot", async () => {
-    await show(MoodPage, { room: "office", id: "work" });
+    await show(MoodPage, { placeId: "office", id: "work" });
     const bar = [...container.querySelectorAll("header button")].map(
       (each) => each.textContent,
     );
@@ -381,7 +381,7 @@ describe("the mood editor", () => {
   });
 
   it("leaves a new mood's first step on Cancel, adding nothing", async () => {
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     await press("Cancel");
     expect(back).toHaveBeenCalledTimes(1);
     expect(calls("moods.createMood")).toEqual([]);
@@ -389,7 +389,7 @@ describe("the mood editor", () => {
   });
 
   it("previews the draft on the lights as it changes, and puts them back on cancel", async () => {
-    await show(MoodPage, { room: "office", id: "work" });
+    await show(MoodPage, { placeId: "office", id: "work" });
     expect(button("Save")?.disabled).toBe(true);
     await press("Preview on the lights");
     expect(calls("moods.previewMood")).toEqual([
@@ -429,7 +429,7 @@ describe("the mood editor", () => {
   });
 
   it("puts the lights back when the page goes mid-preview", async () => {
-    await show(MoodPage, { room: "office", id: "work" });
+    await show(MoodPage, { placeId: "office", id: "work" });
     await press("Preview on the lights");
     await act(async () => {
       root.render(null);
@@ -441,7 +441,7 @@ describe("the mood editor", () => {
   });
 
   it("cancels queued draft changes before restoring after an in-flight preview", async () => {
-    await show(MoodPage, { room: "office", id: "work" });
+    await show(MoodPage, { placeId: "office", id: "work" });
     let finish!: () => void;
     const pending = new Promise<{ switched: number; failed: never[] }>(
       (resolve) => {
@@ -470,7 +470,7 @@ describe("the mood editor", () => {
   });
 
   it("keeps a saved preview when the editor unmounts", async () => {
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     await pressTile("From the lights");
     await typeName("Reading");
     await press("Preview on the lights");
@@ -485,7 +485,7 @@ describe("the mood editor", () => {
   });
 
   it("deletes a mood once asked twice, and leaves once", async () => {
-    await show(MoodPage, { room: "office", id: "relax" });
+    await show(MoodPage, { placeId: "office", id: "relax" });
     await press("Delete mood");
     expect(calls("moods.deleteMood")).toEqual([]);
     await press("Delete");
@@ -495,7 +495,7 @@ describe("the mood editor", () => {
 
   it("says when deleting fails, and stays", async () => {
     refusals["moods.deleteMood"] = "conflict";
-    await show(MoodPage, { room: "office", id: "relax" });
+    await show(MoodPage, { placeId: "office", id: "relax" });
     await press("Delete mood");
     await press("Delete");
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
@@ -520,7 +520,7 @@ describe("smart moods", () => {
 
   it("are offered with the lights as they are, the room's own as added", async () => {
     moods = [relax, aurora];
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     expect(
       [...container.querySelectorAll("h2")].map((each) => each.textContent),
     ).toEqual(["Your own", "Colour", "Calm", "Energy"]);
@@ -534,7 +534,7 @@ describe("smart moods", () => {
   });
 
   it("are added with a brightness and a light left off, previewed on the way", async () => {
-    await show(MoodPage, { room: "office" });
+    await show(MoodPage, { placeId: "office" });
     await pressTile("Library");
     expect(container.querySelector("h1")?.textContent).toBe("Library");
     await press("Preview on the lights");
@@ -590,7 +590,7 @@ describe("smart moods", () => {
 
   it("change their settings only, once something changed", async () => {
     moods = [aurora];
-    await show(MoodPage, { room: "office", id: "aurora" });
+    await show(MoodPage, { placeId: "office", id: "aurora" });
     expect(container.querySelector("#mood-name")).toBeNull();
     expect(button("Save")?.disabled).toBe(true);
     await pressTile("Lamp");

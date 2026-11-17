@@ -1,15 +1,51 @@
 import type { ReactNode } from "react";
 
+import { Button } from "./components/ui/button";
 import { DeviceTile } from "./device-tile";
 import type { Tile, TileSection } from "./tiles";
 
 // Every section's heading looks the same, whoever adds the section: neutral,
-// in the page's own style, with no app colour and no app icon.
-export function SectionHeading(props: { id: string; children: string }) {
+// in the page's own style, with no app colour and no app icon. Given
+// `onOpen`, it opens a page of its own, such as Moods' page for the room,
+// with a chevron after its words. The chevron's shape says it opens a page,
+// so it stays as quiet as the heading, in the secondary ink rather than
+// the action colour, which a page keeps for its few actions.
+export function SectionHeading(props: {
+  id: string;
+  children: string;
+  onOpen?: () => void;
+}) {
   return (
-    <h2 id={props.id} className="m-0 text-[15px] leading-5 font-medium">
-      {props.children}
+    <h2 id={props.id} className="m-0 flex text-[15px] leading-5 font-medium">
+      {props.onOpen ? (
+        <Button variant="ghost" size="heading" onClick={props.onOpen}>
+          {props.children}
+          <Chevron />
+        </Button>
+      ) : (
+        props.children
+      )}
     </h2>
+  );
+}
+
+// As tall as the words' capitals and resting on their baseline, so it sits
+// with them at any text size: centred on the line instead, it rides high
+// beside lower-case letters.
+function Chevron() {
+  return (
+    <svg
+      viewBox="0 0 13 13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="size-[0.73em] text-muted-foreground"
+    >
+      <path d="M1.5 2 6.5 7 1.5 12" />
+    </svg>
   );
 }
 

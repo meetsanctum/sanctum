@@ -58,7 +58,7 @@ function initial(
 export function ScheduledMoodPage(props: PageProps) {
   const { places, moods, schedules } = useMoodsApp();
   const { back } = props;
-  const { room: roomId = "", id } = props.params;
+  const { placeId: roomId = "", id } = props.params;
   const room = places?.rooms.find((each) => each.id === roomId);
   const schedule = schedules.of(roomId);
   const editing = id

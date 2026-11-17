@@ -501,12 +501,10 @@ export function RoomPage(props: {
       roomId={room.id}
       entities={entities}
       roomHas={(kind) => kinds.has(kind)}
-      onOpen={
-        section.open && props.canOpen(app.id, section.open.page)
-          ? () =>
-              props.openApp(app.id, section.open!.page, { placeId: room.id })
-          : undefined
-      }
+      open={{
+        can: (page) => props.canOpen(app.id, page),
+        page: (page) => props.openApp(app.id, page, { placeId: room.id }),
+      }}
     />
   );
   return (

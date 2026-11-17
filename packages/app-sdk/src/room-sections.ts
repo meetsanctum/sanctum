@@ -125,23 +125,34 @@ export interface RoomSectionDefinition {
    */
   readonly press: ActionDefinition;
   /**
-   * A page of the app that a link beside the heading opens, with
-   * `{ placeId }`, such as Moods' page for the room. Tiles only, since
-   * buttons have no heading.
+   * A page of the app that the heading opens, with `{ placeId }`, such as
+   * Moods' page for the room: the heading is then a link, with a chevron
+   * after its title. Tiles only, since buttons have no heading.
    */
-  readonly open?: { readonly page: string; readonly label: string };
+  readonly open?: { readonly page: string };
   /**
-   * When a room has nothing for the section, it still shows its heading
-   * and `open` if the room has a device of this kind, so someone can add
-   * the first. Otherwise a room with nothing has no
-   * section. Tiles only, since it needs `open`.
+   * When a room has nothing for the section but has a device of this kind,
+   * it still shows its heading, then `text` and a link that opens `start`
+   * with `{ placeId }`, so someone can add the first: Moods' "No moods
+   * yet." and New mood. Otherwise a room with nothing has no section.
+   * Tiles only, since buttons have no heading.
    */
-  readonly whenEmpty?: { readonly roomHas: CapabilityKind };
+  readonly whenEmpty?: RoomSectionEmpty;
   /**
    * Sample tiles or buttons for its preview on the app's settings page,
    * such as Moods' Aurora and Evening, one of them active.
    */
   readonly preview?: readonly SampleTile[];
+}
+
+/** What a section shows in a room that could have something but has nothing. */
+export interface RoomSectionEmpty {
+  /** A kind of device the room has, such as light for Moods. */
+  readonly roomHas: CapabilityKind;
+  /** What it says, a sentence or two, such as "No moods yet." */
+  readonly text: string;
+  /** The page a link after it opens, and the link's words, such as New mood. */
+  readonly start: { readonly page: string; readonly label: string };
 }
 
 export function defineRoomSection(
@@ -160,8 +171,13 @@ export type RoomSectionInfo = {
   order: number;
   /** The action a tap calls. */
   press: { action: string };
-  open: { page: string; label: string } | null;
-  whenEmpty: { roomHas: CapabilityKind } | null;
+  /** The page its heading opens. */
+  open: { page: string } | null;
+  whenEmpty: {
+    roomHas: CapabilityKind;
+    text: string;
+    start: { page: string; label: string };
+  } | null;
 };
 
 export function roomSectionInfo(
@@ -174,8 +190,17 @@ export function roomSectionInfo(
     kind: section.kind,
     order: section.order ?? defaultSectionOrder,
     press: { action: section.press.id },
-    open: section.open ? { ...section.open } : null,
-    whenEmpty: section.whenEmpty ? { ...section.whenEmpty } : null,
+    open: section.open ? { page: section.open.page } : null,
+    whenEmpty: section.whenEmpty
+      ? {
+          roomHas: section.whenEmpty.roomHas,
+          text: section.whenEmpty.text,
+          start: {
+            page: section.whenEmpty.start.page,
+            label: section.whenEmpty.start.label,
+          },
+        }
+      : null,
   };
 }
 
@@ -321,15 +346,8 @@ export function assertRoomSections(app: AppDefinition) {
         `Room section "${id}" previews 1 to ${sampleTilesMax} sample tiles, each with an icon, a name and whether it is active`,
       );
     }
-    if (
-      open !== undefined &&
-      (!pages.includes(open?.page) ||
-        typeof open.label !== "string" ||
-        !open.label.trim())
-    ) {
-      throw new Error(
-        `Room section "${id}" opens one of the app's pages, with a label`,
-      );
+    if (open !== undefined && !pages.includes(open?.page)) {
+      throw new Error(`Room section "${id}" opens one of the app's pages`);
     }
     if (whenEmpty !== undefined) {
       const kind = whenEmpty?.roomHas;
@@ -347,9 +365,17 @@ export function assertRoomSections(app: AppDefinition) {
           `Room section "${id}" is shown empty for rooms with a ${kind}, which the app does not read`,
         );
       }
-      if (!open) {
+      if (typeof whenEmpty.text !== "string" || !whenEmpty.text.trim()) {
+        throw new Error(`Room section "${id}" says something when empty`);
+      }
+      const start = whenEmpty.start;
+      if (
+        !pages.includes(start?.page) ||
+        typeof start.label !== "string" ||
+        !start.label.trim()
+      ) {
         throw new Error(
-          `Room section "${id}" is shown empty only to offer what it opens`,
+          `Room section "${id}" starts the first from one of the app's pages, with a label`,
         );
       }
     }

@@ -66,8 +66,12 @@ describe("Moods", () => {
           id: "moods.runMood",
           tier: "write",
         }),
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
+        open: { page: "room" },
+        whenEmpty: {
+          roomHas: "light",
+          text: "No moods yet. A mood keeps how the room's lights look, for a tap to bring back.",
+          start: { page: "mood", label: "New mood" },
+        },
         // What its settings page previews: a room's moods, one running.
         preview: [
           { icon: "sparkles", name: "Aurora", active: true },

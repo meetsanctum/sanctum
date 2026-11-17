@@ -43,6 +43,11 @@ const action = (id: string, tier: "read" | "write" | "destructive") =>
   });
 const runMood = action("moods.runMood", "write");
 const deleteMood = action("moods.deleteMood", "destructive");
+const empty = {
+  roomHas: "light",
+  text: "No moods yet.",
+  start: { page: "mood", label: "New mood" },
+} as const;
 const section = defineRoomSection({
   id: "moods.room",
   title: "Moods",
@@ -50,8 +55,8 @@ const section = defineRoomSection({
   kind: "tiles",
   order: 200,
   press: runMood,
-  open: { page: "room", label: "Edit" },
-  whenEmpty: { roomHas: "light" },
+  open: { page: "room" },
+  whenEmpty: empty,
 });
 
 function app(
@@ -64,7 +69,7 @@ function app(
     version: "0.1.0",
     core: "^1.0.0",
     icon: { glyph: "sofa", color: "ember" },
-    pages: ["main", "room"],
+    pages: ["main", "room", "mood"],
     permissions: [{ id: "devices.control:light", reason: "For the test." }],
     actions: [runMood, deleteMood],
     events: [],
@@ -86,8 +91,12 @@ describe("a room section", () => {
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
+        open: { page: "room" },
+        whenEmpty: {
+          roomHas: "light",
+          text: "No moods yet.",
+          start: { page: "mood", label: "New mood" },
+        },
         preview: null,
       },
     ]);
@@ -146,28 +155,33 @@ describe("a room section", () => {
     ],
     [
       "a page the app does not have",
-      { open: { page: "rooms", label: "Edit" } },
-      /opens one of the app's pages/,
-    ],
-    [
-      "no label for what it opens",
-      { open: { page: "room", label: "" } },
+      { open: { page: "rooms" } },
       /opens one of the app's pages/,
     ],
     [
       "an empty rule for a kind of device that is not one",
-      { whenEmpty: { roomHas: "camera" as "light" } },
+      { whenEmpty: { ...empty, roomHas: "camera" as "light" } },
       /kind of device/,
     ],
     [
       "an empty rule for a kind it does not read",
-      { whenEmpty: { roomHas: "switch" } },
+      { whenEmpty: { ...empty, roomHas: "switch" } },
       /does not read/,
     ],
     [
-      "an empty rule with nothing to open",
-      { open: undefined },
-      /only to offer what it opens/,
+      "an empty rule that says nothing",
+      { whenEmpty: { ...empty, text: " " } },
+      /says something when empty/,
+    ],
+    [
+      "an empty rule starting from a page the app does not have",
+      { whenEmpty: { ...empty, start: { page: "moods", label: "New mood" } } },
+      /starts the first from one of the app's pages/,
+    ],
+    [
+      "an empty rule with no label for its start",
+      { whenEmpty: { ...empty, start: { page: "mood", label: "" } } },
+      /starts the first from one of the app's pages/,
     ],
   ])("refuses %s", (_name, changes, error) => {
     expect(() => defineApp(app(changes))).toThrow(error);
