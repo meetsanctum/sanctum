@@ -27,7 +27,7 @@ import type { AppUpdates } from "./updates.js";
 export function createAppRemoving(options: {
   gate: Gate;
   turns: ListTurns;
-  host: Pick<AppHost, "list" | "remove" | "manifest">;
+  host: Pick<AppHost, "list" | "remove" | "manifest" | "uninstall">;
   removed: RemovedApps;
   updates: Pick<AppUpdates, "shownFor">;
   workflows: () => WorkflowsForApps;
@@ -75,6 +75,8 @@ export function createAppRemoving(options: {
     // An installed app stops and its container goes; one a core that
     // stopped part way left isn't installed, and only its container goes.
     if (options.host.list().some((app) => app.id === appId)) {
+      // Its last tidying, while it still runs.
+      await options.host.uninstall(appId);
       await options.host.remove(appId);
     } else {
       // What it brought, if a removal that failed part way left it.

@@ -30,7 +30,12 @@ import type { AppUpdates } from "./updates.js";
 import { createAppContexts } from "./contexts.js";
 import { createEventsForApps } from "./events-for-apps.js";
 import { createDriverCalls } from "./drivers.js";
-import { ActionCallError, type ActionCallErrorCode } from "./errors.js";
+import {
+  ActionCallError,
+  TimedOut,
+  withTimeout,
+  type ActionCallErrorCode,
+} from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { AppGrants } from "./grants.js";
 import type { InstalledApp } from "./installed.js";
@@ -49,6 +54,7 @@ import { createSupervisor, type AppContainerManager } from "./supervisor.js";
 import type { AppsOff } from "./off.js";
 import type { EmittedEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import { createApartStarts } from "./apart-starts.js";
+import { uninstallLimitMs } from "./apart.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 import { createLanPolicies } from "./lan.js";
 import { createAppInstaller } from "./install.js";
@@ -556,6 +562,26 @@ export function createAppHost(options: {
 
     /** Whether the apps it started with are installed, so `list` is the home's apps. */
     hasInstalled: () => hasInstalled,
+
+    /**
+     * Runs its uninstall hook as someone removes it, if it runs now, acting
+     * as itself with what it holds: a failure or a hook that runs past its
+     * time is logged, and the removal goes on.
+     */
+    async uninstall(appId: string) {
+      const entry = installed.get(appId);
+      const running = entry?.running;
+      const run = entry?.app.uninstall;
+      if (!entry || !running || !run || stateOf(entry) !== "running") return;
+      await withTimeout(
+        Promise.resolve().then(() => run.call(entry.app, running.ctx)),
+        uninstallLimitMs,
+      ).catch((error: unknown) =>
+        log(
+          `apps: ${appId} didn't tidy up as it was removed (${error instanceof TimedOut ? "timed out" : message(error)})`,
+        ),
+      );
+    },
 
     /** One installed app as clients list it. */
     info(appId: string): AppInfo | undefined {

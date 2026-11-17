@@ -425,6 +425,15 @@ export interface AppDefinition extends AppManifestFields {
   /** Runs when the core stops or removes the app. */
   stop?(ctx: AppContext, info: StopInfo): Promise<void>;
   /**
+   * Runs when someone removes the app, while it still runs, before it stops:
+   * the last tidying outside the home, such as letting a cloud service know
+   * it's gone. It has 30 seconds, acting as the app with the permissions it
+   * holds, and may run again for the same removal. The removal goes on
+   * whether it ends or not. Its own data stays a while, so adding it back
+   * brings back what it had.
+   */
+  uninstall?(ctx: AppContext): Promise<void>;
+  /**
    * A driver app's side of the Drivers contract: the core hands it every
    * command for its own devices, as the actor behind the command. It
    * resolves once the command is on its way; the device's report confirms
