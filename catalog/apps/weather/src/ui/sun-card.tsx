@@ -24,7 +24,7 @@ export function SunCard(props: { sun: SunTimes; now: Date }) {
     return (
       <PageSection id="weather-sun" title="Sun">
         <p className="m-0 px-2 py-1.5 text-[15px] leading-[22px]">
-          {today?.sunrise || today?.sunset
+          {today.sunrise || today.sunset
             ? `Sunrise ${time(today.sunrise)} · Sunset ${time(today.sunset)}`
             : "The sun neither rises nor sets today."}
         </p>

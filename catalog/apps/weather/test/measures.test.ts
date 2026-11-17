@@ -49,11 +49,15 @@ describe("what falls today", () => {
     const until = "2026-10-29T15:00:00.000Z";
 
     expect(
-      fallLine(rain, { kind: "wet-until", words: "Rain", until }, time),
+      fallLine(
+        rain,
+        { kind: "wet-until", words: "Rain", until, hasBreaks: false },
+        time,
+      ),
     ).toBe("Until 15:00");
-    expect(fallLine(rain, { kind: "wet", words: "Rain" }, time)).toBe(
-      "Rest of the day",
-    );
+    expect(
+      fallLine(rain, { kind: "wet", words: "Rain", hasBreaks: true }, time),
+    ).toBe("Rest of the day");
     expect(
       fallLine(rain, { kind: "dry-until", words: "Rain", until }, time),
     ).toBe("From 15:00");

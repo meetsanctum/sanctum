@@ -5,18 +5,18 @@ import { homeDate } from "./days.js";
 import { hoursLeftToday, weatherNow } from "./hours.js";
 
 // The rest of the home's day in one sentence, from its hours: whether
-// something falls now and until when, or from when, and otherwise what the
-// sky mostly does. It follows the forecast's own weather codes, as the
+// something falls now and until when, on and off where it pauses on the
+// way, or from when, and otherwise what the sky mostly does. It follows the forecast's own weather codes, as the
 // page's icons do, and says nothing without known hours through the end of
 // today.
 
 const hourMs = 3_600_000;
 
 export type DaySummary =
-  /** It falls now, until an hour of today. */
-  | { kind: "wet-until"; words: string; until: string }
-  /** It falls now and through the hours left. */
-  | { kind: "wet"; words: string }
+  /** It falls now, until an hour of today, with dry hours between or none. */
+  | { kind: "wet-until"; words: string; until: string; hasBreaks: boolean }
+  /** It falls now and to the day's end, with dry hours between or none. */
+  | { kind: "wet"; words: string; hasBreaks: boolean }
   /** Nothing falls now, but from an hour of today on it does. */
   | { kind: "dry-until"; until: string; words: string }
   /** Nothing falls in the hours left: the sky they mostly have. */
@@ -42,14 +42,21 @@ export function daySummary(
   const words = (code: number | null) => condition(code).text;
 
   if (isWet(first)) {
-    // A dry break is not the end of the rain if it falls again later.
+    // It is dry only after the last hour something falls: a dry hour before
+    // that is a break, which the sentence says as on and off.
     const dry = codes.reduce<number>(
       (end, code, index) => (isWet(code) ? index + 1 : end),
       0,
     );
+    const hasBreaks = codes.slice(0, dry).some((code) => !isWet(code));
     return dry === codes.length
-      ? { kind: "wet", words: words(first) }
-      : { kind: "wet-until", words: words(first), until: hours[dry]!.time };
+      ? { kind: "wet", words: words(first), hasBreaks }
+      : {
+          kind: "wet-until",
+          words: words(first),
+          until: hours[dry]!.time,
+          hasBreaks,
+        };
   }
   const wet = codes.findIndex(isWet);
   if (wet !== -1) {
@@ -74,11 +81,13 @@ export function summarySentence(
   summary: DaySummary,
   time: (instant: string) => string,
 ) {
-  if (summary.kind === "wet-until") {
-    return `${summary.words} until ${time(summary.until)}, then dry.`;
-  }
-  if (summary.kind === "wet") {
-    return `${summary.words} for the rest of the day.`;
+  if (summary.kind === "wet-until" || summary.kind === "wet") {
+    const falls = summary.hasBreaks
+      ? `${summary.words} on and off`
+      : summary.words;
+    return summary.kind === "wet"
+      ? `${falls} for the rest of the day.`
+      : `${falls} until ${time(summary.until)}, then dry.`;
   }
   if (summary.kind === "dry-until") {
     return `Dry until ${time(summary.until)}, then ${summary.words.toLowerCase()}.`;

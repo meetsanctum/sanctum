@@ -20,6 +20,7 @@ describe("the day's summary", () => {
       kind: "wet-until",
       words: "Rain",
       until: "2026-10-29T15:00:00.000Z",
+      hasBreaks: false,
     });
     expect(sentence(forecast, morning)).toBe("Rain until 15:00, then dry.");
   });
@@ -33,7 +34,7 @@ describe("the day's summary", () => {
     expect(sentence(snowing, morning)).toBe("Snow for the rest of the day.");
   });
 
-  it("waits for the last rain to end before saying it will be dry", () => {
+  it("says on and off, to the last of it, when it pauses and falls again", () => {
     const rainAgain = withHours((each) => ({
       weatherCode:
         each.time >= "2026-10-29T18:00:00.000Z" &&
@@ -42,7 +43,23 @@ describe("the day's summary", () => {
           : each.weatherCode,
     }));
 
-    expect(sentence(rainAgain, morning)).toBe("Rain until 20:00, then dry.");
+    expect(daySummary(rainAgain, morning)).toEqual({
+      kind: "wet-until",
+      words: "Rain",
+      until: "2026-10-29T20:00:00.000Z",
+      hasBreaks: true,
+    });
+    expect(sentence(rainAgain, morning)).toBe(
+      "Rain on and off until 20:00, then dry.",
+    );
+    // A shower in the day's last hour, after a dry evening.
+    const rainAtNight = withHours((each) => ({
+      weatherCode:
+        each.time === "2026-10-29T22:00:00.000Z" ? 80 : each.weatherCode,
+    }));
+    expect(sentence(rainAtNight, morning)).toBe(
+      "Rain on and off for the rest of the day.",
+    );
   });
 
   it("says from when it falls, when it is dry now", () => {
