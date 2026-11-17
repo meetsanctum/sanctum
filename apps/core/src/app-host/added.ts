@@ -52,8 +52,8 @@ export function createAddedApps(
 
     /**
      * Records that someone added an app, from now on installed as the home's,
-     * with what `alongside` writes in the same transaction. Whether it wasn't
-     * added already.
+     * with the home's list and what `alongside` writes in the same transaction.
+     * Whether it wasn't added already.
      */
     add(
       appId: string,
@@ -61,17 +61,24 @@ export function createAddedApps(
       alongside: () => void = () => undefined,
     ) {
       return durably(db, () => {
+        const at = now();
         const inserted = db
           .insert(appsAdded)
           .values({
             appId,
-            addedAt: now(),
+            addedAt: at,
             personId: who.personId ?? null,
             clientId: who.clientId ?? null,
           })
           .onConflictDoNothing()
           .run();
         if (inserted.changes === 0) return false;
+        // An explicit choice establishes the list even if startup found no
+        // apps. Packages staged after it must not be adopted as existing apps.
+        db.insert(appsListed)
+          .values({ id: 1, since: at })
+          .onConflictDoNothing()
+          .run();
         alongside();
         return true;
       });

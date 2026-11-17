@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { coreJson } from "./core-fetch";
 
 // The apps the home could add (GET /api/apps/available), read as Settings
-// opens and again whenever the home's apps change, as when one was added
-// here or on another device. A read that fails, as from a core that has no
-// such list, leaves it as it was.
+// opens, whenever the home's apps change and after closing an add sheet, so
+// another look checks what's changed. A read that fails leaves it as it was.
 
 export function useAvailableApps(installed: readonly AppInfo[]) {
   const [available, setAvailable] = useState<AvailableApp[]>([]);
+  const [revision, setRevision] = useState(0);
   // Which apps the home has, not how each is doing.
   const ids = installed
     .map((app) => app.id)
@@ -27,8 +27,11 @@ export function useAvailableApps(installed: readonly AppInfo[]) {
     return () => {
       isCurrent = false;
     };
-  }, [ids]);
+  }, [ids, revision]);
   // One added meanwhile isn't offered while the list is read again.
   const has = new Set(ids.split(" "));
-  return available.filter((app) => !has.has(app.id));
+  return {
+    available: available.filter((app) => !has.has(app.id)),
+    refresh: () => setRevision((current) => current + 1),
+  };
 }

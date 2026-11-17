@@ -207,5 +207,32 @@ describe("Add apps", () => {
       "Example changed meanwhile, as when it was added on another device. Close this and look again.",
     );
     expect(onAdded).not.toHaveBeenCalled();
+
+    available = [{ ...example, version: "1.1.0" }];
+    await press(dialog()!, "Cancel");
+    await press(container, "Add Example");
+    await press(dialog()!, "Add Example");
+    expect(coreJson).toHaveBeenLastCalledWith("/api/apps/add", {
+      method: "POST",
+      json: { id: "sanctum.example", version: "1.1.0" },
+    });
+  });
+
+  it("checks what is short again when the sheet is closed", async () => {
+    available = [
+      {
+        ...example,
+        shortfalls: [{ kind: "memory", needs: 128, free: 60 }],
+      },
+    ];
+    await render();
+    await press(container, "Add Example");
+    expect(buttonIn(dialog()!, "Add Example")!.disabled).toBe(true);
+
+    available = [example];
+    await press(dialog()!, "Cancel");
+    await press(container, "Add Example");
+    expect(buttonIn(dialog()!, "Add Example")!.disabled).toBe(false);
+    expect(dialog()!.textContent).toContain("It needs these to work:");
   });
 });

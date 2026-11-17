@@ -1,4 +1,4 @@
-import type { AppInfo, AvailableApp } from "@meetsanctum/app-sdk";
+import type { AppInfo } from "@meetsanctum/app-sdk";
 
 import type { Activity } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
@@ -7,6 +7,7 @@ import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule } from "./grants.js";
+import type { ApartPackage } from "./loader.js";
 
 // Adding an app the home's image brings, from its add sheet: it must still be
 // one the home could add, at the version the sheet showed, with nothing
@@ -18,13 +19,13 @@ import { permissionsRule } from "./grants.js";
 
 export function createAppAdding(options: {
   gate: Gate;
-  available: Pick<AvailableApps, "list">;
+  available: Pick<AvailableApps, "find">;
   added: Pick<AddedApps, "add" | "ids">;
   activity: Pick<Activity, "for">;
   // Whether the home's apps are installed, so the list is complete.
   hasInstalled: () => boolean;
   // Installs and starts an app the household just added.
-  install: (appId: string) => Promise<void>;
+  install: (pkg: ApartPackage) => Promise<void>;
   // How the home's apps are listed now, for the answer.
   info: (appId: string) => AppInfo | undefined;
   log: (message: string) => void;
@@ -65,10 +66,9 @@ export function createAppAdding(options: {
     // listed yet.
     if (!options.hasInstalled()) throw new ActionCallError("unavailable");
     if (options.added.ids().has(appId)) throw refuse("conflict");
-    const app: AvailableApp | undefined = (await options.available.list()).find(
-      (each) => each.id === appId,
-    );
-    if (!app) throw new ActionCallError("not_found");
+    const offered = await options.available.find(appId);
+    if (!offered) throw new ActionCallError("not_found");
+    const { app, pkg } = offered;
     const detail = { name: app.name, version: app.version };
     // The sheet showed another version, as when Sanctum updated meanwhile.
     if (app.version !== version) throw refuse("conflict", detail);
@@ -85,7 +85,7 @@ export function createAppAdding(options: {
     );
     if (!isAdded) throw refuse("conflict", detail);
     try {
-      await options.install(appId);
+      await options.install(pkg);
     } catch (error) {
       // It stays added, and the next start installs it.
       log(

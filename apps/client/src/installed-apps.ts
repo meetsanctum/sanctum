@@ -43,10 +43,14 @@ export function useInstalledApps(live: LiveFeed) {
     if (id !== readId.current) return;
     hasRead.current = true;
     setWaiting(false);
-    // Keep grant changes received during this read without dropping the
-    // rest of the list, including when it is the first read. The same list
-    // keeps the apps' clients, so their pages do not reload.
-    const list = next.map((app) => changedApps.current.get(app.id) ?? app);
+    // Keep changes and additions received during this read, including when
+    // it is the first read. The same list keeps the apps' clients, so their
+    // pages do not reload.
+    const byId = new Map(next.map((app) => [app.id, app]));
+    for (const [appId, app] of changedApps.current) byId.set(appId, app);
+    const list = [...byId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
     setInstalled((current) =>
       JSON.stringify(current) === JSON.stringify(list) ? current : list,
     );

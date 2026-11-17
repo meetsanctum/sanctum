@@ -1,4 +1,8 @@
-import { loadApartPackages, shippedApps } from "./app-host/loader.js";
+import {
+  loadApartPackages,
+  shippedApps,
+  type ApartPackage,
+} from "./app-host/loader.js";
 import { createCoreCertificates } from "./certificate.js";
 import type { CoreConfig } from "./config.js";
 import { openCoreDatabase, type CoreDatabase } from "./database.js";
@@ -204,14 +208,14 @@ export function createCore(
     }
   }
 
-  // An app someone just added, from the package the manager staged for it,
+  // An app someone just added, from the exact package checked at Add,
   // installed as the home's apps are at start. A test's core installs its
   // own apps, and adds none.
-  async function installAdded(appId: string) {
+  async function installAdded(pkg: ApartPackage) {
     if (replaced.installApps) throw new Error("a test's core adds no app");
-    const packages = await stagedPackages([appId]);
-    if (packages.length === 0) throw new Error("its package isn't staged");
-    await modules!.apps.start(packages, {
+    const appId = pkg.apart.manifest.id;
+    started.add(appId);
+    await modules!.apps.start([pkg], {
       onTrial: onTrial(),
       coming: [appId],
       adding: [appId],
@@ -270,7 +274,7 @@ export function createCore(
             version: config.version,
             manager: manager!,
             shippedApps: () => shipped,
-            installAdded: (appId) => installAdded(appId),
+            installAdded: (pkg) => installAdded(pkg),
             hostId: manager!.hostId,
             homeId,
             pin: () => certificates?.current()?.pin ?? null,

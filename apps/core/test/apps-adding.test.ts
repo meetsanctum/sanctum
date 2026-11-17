@@ -15,6 +15,7 @@ import { createAddedApps } from "../src/app-host/added.js";
 import { installedInfoOf } from "../src/app-host/app-info.js";
 import { ActionCallError } from "../src/app-host/errors.js";
 import type { Gate } from "../src/app-host/gate.js";
+import type { ApartPackage } from "../src/app-host/loader.js";
 import { appsAdded } from "../src/app-host/schema.js";
 import { newSupervision } from "../src/app-host/supervisor.js";
 import { openCoreDatabase } from "../src/database.js";
@@ -64,7 +65,7 @@ const someone = {
 async function addingWith(
   options: {
     available?: AvailableApp[];
-    installs?: (appId: string) => Promise<void>;
+    installs?: (pkg: ApartPackage) => Promise<void>;
     hasInstalled?: boolean;
     refuses?: boolean;
   } = {},
@@ -82,7 +83,33 @@ async function addingWith(
         if (options.refuses) throw new ActionCallError("forbidden");
       },
     } as unknown as Gate,
-    available: { list: async () => options.available ?? [esphome] },
+    available: {
+      find: async (appId) => {
+        const app = (options.available ?? [esphome]).find(
+          (each) => each.id === appId,
+        );
+        if (!app) return undefined;
+        return {
+          app,
+          pkg: {
+            origin: "official",
+            apart: {
+              manifest: toStaticManifest(
+                defineApp({
+                  ...base,
+                  id: app.id,
+                  version: app.version,
+                  permissions: [],
+                  actions: [],
+                }),
+              ),
+              folder: `${app.version}+test`,
+              digest: "test",
+            },
+          },
+        };
+      },
+    },
     added,
     activity: {
       for: (source) => (entry) => {
@@ -93,7 +120,8 @@ async function addingWith(
     hasInstalled: () => options.hasInstalled ?? true,
     install:
       options.installs ??
-      (async (appId) => {
+      (async (pkg) => {
+        const appId = pkg.apart.manifest.id;
         installing.push(appId);
         installedNow.add(appId);
       }),

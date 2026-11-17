@@ -56,7 +56,7 @@ export function AddAppsSection(props: {
   /** One was added, as the core lists it now. */
   onAdded: (app: AppInfo) => void;
 }) {
-  const available = useAvailableApps(props.apps);
+  const { available, refresh } = useAvailableApps(props.apps);
   const [adding, setAdding] = useState<AvailableApp>();
   // The sheet shows the app as last read, and closes if it's gone, as when
   // another device added it.
@@ -97,7 +97,10 @@ export function AddAppsSection(props: {
           setAdding(undefined);
           props.onAdded(app);
         }}
-        onClose={() => setAdding(undefined)}
+        onClose={() => {
+          setAdding(undefined);
+          refresh();
+        }}
       />
     </>
   );

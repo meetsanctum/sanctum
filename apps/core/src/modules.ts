@@ -19,7 +19,7 @@ import { createAppGrants } from "./app-host/grants.js";
 import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
-import { loadApartPackage } from "./app-host/loader.js";
+import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets } from "./app-host/secrets.js";
@@ -98,7 +98,7 @@ export async function createModules(
     shippedApps?: () => readonly string[];
     // Installs and starts an app the household just added, from the package
     // the manager staged for it (core.ts).
-    installAdded?: (appId: string) => Promise<void>;
+    installAdded?: (pkg: ApartPackage) => Promise<void>;
     // The host's id, which the manager keeps.
     hostId: () => string | undefined;
     // The home's id, which this database keeps (loadHomeId).
@@ -461,9 +461,9 @@ export async function createModules(
     added: addedApps,
     activity,
     hasInstalled: () => apps.hasInstalled(),
-    install: async (appId) => {
+    install: async (pkg) => {
       if (!options.installAdded) throw new Error("this core installs no app");
-      await options.installAdded(appId);
+      await options.installAdded(pkg);
     },
     info: (appId) => apps.info(appId),
     log,

@@ -107,6 +107,32 @@ describe("a home's first start with its own list", () => {
   });
 });
 
+describe("the first app someone adds", () => {
+  it("establishes the home's list before any more packages arrive", async () => {
+    const db = await database();
+    const at = new Date("2026-11-17T12:00:00Z");
+    const added = createAddedApps(db, { now: () => at });
+    expect(added.recordFirst([])).toBe(false);
+
+    expect(added.add("sanctum.example", { clientId: "client-1" })).toBe(true);
+    expect(added.listed()).toBe(true);
+    expect(db.select().from(appsListed).all()).toEqual([{ id: 1, since: at }]);
+    expect(added.recordFirst(["sanctum.example", "sanctum.other"])).toBe(false);
+    expect([...added.ids()]).toEqual(["sanctum.example"]);
+  });
+
+  it("records neither the app nor the list if its activity entry fails", async () => {
+    const added = createAddedApps(await database());
+    expect(() =>
+      added.add("sanctum.example", { clientId: "client-1" }, () => {
+        throw new Error("the entry could not be written");
+      }),
+    ).toThrow("the entry could not be written");
+    expect(added.listed()).toBe(false);
+    expect([...added.ids()]).toEqual([]);
+  });
+});
+
 describe("what keeps an app from being added", () => {
   const host = {
     memory: { total: 2048 * mebibyte, available: 1024 * mebibyte },

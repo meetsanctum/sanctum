@@ -39,27 +39,31 @@ export function createAvailableApps(options: {
   log: (message: string) => void;
 }) {
   const { log } = options;
-  return {
-    async list(): Promise<AvailableApp[]> {
-      const [staged, host] = await Promise.all([
-        options.staged(),
-        options.host().catch(() => null),
-      ]);
-      // A development stack's image ships no apps: it brings what the
-      // manager staged from the worktree.
-      const shipped = options.shipped();
-      const added = options.added.ids();
-      const ids = (shipped.length > 0 ? shipped : Object.keys(staged)).filter(
-        (id) => !added.has(id),
-      );
-      const apps: AvailableApp[] = [];
-      for (const appId of ids) {
-        const folder = staged[appId]?.folder;
-        if (!folder) continue;
-        try {
-          const { manifest } = (await options.loadPackage(appId, folder)).apart;
-          const pagesNeed = await options.pagesNeedIn(appId, folder);
-          apps.push({
+  // Keep the package with the offer, so adding it installs exactly what
+  // was checked, even when the manager stages another build meanwhile.
+  async function read(only?: string) {
+    const [staged, host] = await Promise.all([
+      options.staged(),
+      options.host().catch(() => null),
+    ]);
+    // A development stack's image ships no apps: it brings what the
+    // manager staged from the worktree.
+    const shipped = options.shipped();
+    const added = options.added.ids();
+    const ids = (shipped.length > 0 ? shipped : Object.keys(staged)).filter(
+      (id) => !added.has(id) && (only === undefined || id === only),
+    );
+    const apps: { app: AvailableApp; pkg: ApartPackage }[] = [];
+    for (const appId of ids) {
+      const folder = staged[appId]?.folder;
+      if (!folder) continue;
+      try {
+        const pkg = await options.loadPackage(appId, folder);
+        const { manifest } = pkg.apart;
+        const pagesNeed = await options.pagesNeedIn(appId, folder);
+        apps.push({
+          pkg,
+          app: {
             id: appId,
             name: manifest.name,
             version: manifest.version,
@@ -70,14 +74,25 @@ export function createAvailableApps(options: {
             data: manifest.runtime.data,
             adds: addsOf(manifest),
             shortfalls: shortfallsOf(manifest, { pagesNeed, host }),
-          });
-        } catch (error) {
-          log(
-            `apps: ${appId} can't be offered (${error instanceof Error ? error.message : String(error)})`,
-          );
-        }
+          },
+        });
+      } catch (error) {
+        log(
+          `apps: ${appId} can't be offered (${error instanceof Error ? error.message : String(error)})`,
+        );
       }
-      return apps.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return apps;
+  }
+
+  return {
+    async list(): Promise<AvailableApp[]> {
+      return (await read())
+        .map(({ app }) => app)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    async find(appId: string) {
+      return (await read(appId))[0];
     },
   };
 }
