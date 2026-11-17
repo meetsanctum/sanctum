@@ -57,6 +57,16 @@ describe("a floor's line and order", () => {
     ]);
   });
 
+  it("keeps floors added while an optimistic order was on its way", () => {
+    const outside = { id: "outside", name: "Outside", level: 2 };
+    expect(
+      inOrder({ ...places, floors: [...places.floors, outside] }, [
+        "first",
+        "ground",
+      ]).floors,
+    ).toEqual([{ ...first, level: 0 }, { ...ground, level: 1 }, outside]);
+  });
+
   it("says first that its rooms stay and which workflows use it", () => {
     expect(
       floorRemovalWarning({
@@ -330,6 +340,111 @@ describe("Settings → Rooms' floors", () => {
     ]);
   });
 
+  it("retries room assignments without adding the floor a second time", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    let hasFailed = false;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (
+        path === "/api/places/rooms/update" &&
+        (init?.json as { id: string }).id === "office" &&
+        !hasFailed
+      ) {
+        hasFailed = true;
+        throw new Error("Connection lost");
+      }
+      return original(path, init);
+    });
+    await show();
+    await act(async () => button("Add floor").click());
+    await type(dialog()!.querySelector("input")!, "Outside");
+    await check("hall");
+    await check("office");
+    await act(async () => button("Add").click());
+
+    expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
+      "Try again.",
+    );
+    await type(dialog()!.querySelector("input")!, "Garden");
+    await check("hall");
+    await act(async () => button("Add").click());
+
+    expect(sent("/api/places/floors/add")).toEqual([{ name: "Outside" }]);
+    expect(places.floors.filter((floor) => floor.id === "new-floor")).toEqual([
+      { id: "new-floor", name: "Garden", level: 2 },
+    ]);
+    expect(places.rooms.find((room) => room.id === "office")?.floorId).toBe(
+      "new-floor",
+    );
+    expect(places.rooms.find((room) => room.id === "hall")?.floorId).toBeNull();
+    expect(dialog()).toBeNull();
+  });
+
+  it("keeps a late floor save separate from the next editor opening", async () => {
+    await show();
+    await act(async () => button("Add floor").click());
+    await type(dialog()!.querySelector("input")!, "Outside");
+    let finish!: () => void;
+    const answer = new Promise<void>((resolve) => (finish = resolve));
+    vi.mocked(coreJson).mockImplementationOnce(async () => {
+      await answer;
+      const floor = { id: "outside", name: "Outside", level: 2 };
+      places = { ...places, floors: [...places.floors, floor] };
+      return floor;
+    });
+    await act(async () => button("Add").click());
+    await act(async () => button("Cancel").click());
+    await act(async () => button("Add floor").click());
+    await type(dialog()!.querySelector("input")!, "Basement");
+
+    await act(async () => finish());
+    expect(dialog()!.querySelector("input")!.value).toBe("Basement");
+    expect(button("Add").disabled).toBe(false);
+    await act(async () => button("Add").click());
+
+    expect(places.floors.map((floor) => floor.name)).toEqual([
+      "Ground floor",
+      "First floor",
+      "Outside",
+      "Basement",
+    ]);
+    expect(sent("/api/places/floors/update")).toEqual([]);
+    expect(dialog()).toBeNull();
+  });
+
+  it("saves only the room choices changed in the editor over live changes", async () => {
+    await show();
+    await open("Ground floor: more");
+    await act(async () => item("Edit").click());
+    await type(dialog()!.querySelector("input")!, "Downstairs");
+    await check("hall");
+
+    places = {
+      ...places,
+      rooms: [
+        { ...bedroom, floorId: "ground" },
+        hall,
+        { ...kitchen, floorId: "first" },
+        office,
+        { id: "studio", name: "Studio", floorId: "ground" },
+      ],
+    };
+    await act(async () => live.publish({ type: "places", places }));
+    await act(async () => button("Save").click());
+
+    expect(sent("/api/places/rooms/update")).toEqual([
+      { id: "hall", floorId: null },
+    ]);
+    expect(places.rooms.find((room) => room.id === "kitchen")?.floorId).toBe(
+      "first",
+    );
+    expect(places.rooms.find((room) => room.id === "bedroom")?.floorId).toBe(
+      "ground",
+    );
+    expect(places.rooms.find((room) => room.id === "studio")?.floorId).toBe(
+      "ground",
+    );
+  });
+
   it("moves a floor with the arrow keys from its grip, saying where it went", async () => {
     await show();
     const grip = document.querySelector<HTMLButtonElement>(
@@ -360,6 +475,47 @@ describe("Settings → Rooms' floors", () => {
       ),
     );
     expect(sent("/api/places/floors/order")).toHaveLength(1);
+  });
+
+  it("keeps a floor added live during a drag in the saved order", async () => {
+    await show();
+    const grip = document.querySelector<HTMLButtonElement>(
+      "button[aria-label='Move Ground floor']",
+    )!;
+    const row = document
+      .querySelector("button[aria-label='Move First floor']")!
+      .closest("li")!;
+    row.getBoundingClientRect = () => ({ top: 40, bottom: 80 }) as DOMRect;
+    const pointer = (type: string, y: number) =>
+      act(async () => {
+        const event = new MouseEvent(type, {
+          button: 0,
+          clientY: y,
+          bubbles: true,
+        });
+        Object.defineProperty(event, "pointerId", { value: 1 });
+        grip.dispatchEvent(event);
+      });
+    await pointer("pointerdown", 10);
+    places = {
+      ...places,
+      floors: [...places.floors, { id: "outside", name: "Outside", level: 2 }],
+    };
+    await act(async () => live.publish({ type: "places", places }));
+    expect(section().textContent).toContain("Outside");
+
+    await pointer("pointermove", 60);
+    const added = document
+      .querySelector("button[aria-label='Move Outside']")!
+      .closest("li")!;
+    added.getBoundingClientRect = () => ({ top: 80, bottom: 120 }) as DOMRect;
+    await pointer("pointermove", 100);
+    await pointer("pointerup", 100);
+
+    expect(sent("/api/places/floors/order")).toEqual([
+      { ids: ["first", "outside", "ground"] },
+    ]);
+    expect(section().textContent).toMatch(/First floor.*Outside.*Ground floor/);
   });
 
   it("puts a room on a floor from its menu, or starts a new floor with it", async () => {

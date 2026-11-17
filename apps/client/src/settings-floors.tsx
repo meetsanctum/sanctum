@@ -84,10 +84,16 @@ export function floorRemovalWarning(removal: FloorRemoval): string[] {
 
 /** The floors in a new order, numbered from 0 as the core numbers them. */
 export function inOrder(places: Places, ids: readonly string[]): Places {
-  const floors = ids.flatMap((id, level) => {
+  const ordered = ids.flatMap((id) => {
     const floor = places.floors.find((each) => each.id === id);
-    return floor ? [{ ...floor, level }] : [];
+    return floor ? [floor] : [];
   });
+  // Another client may have added a floor since this order was chosen.
+  const added = places.floors.filter((floor) => !ids.includes(floor.id));
+  const floors = [...ordered, ...added].map((floor, level) => ({
+    ...floor,
+    level,
+  }));
   return { ...places, floors };
 }
 
@@ -130,11 +136,7 @@ export function FloorsSection(props: {
   });
 
   const ids = places.floors.map((floor) => floor.id);
-  const shown = moving
-    ? moving.ids.flatMap(
-        (id) => places.floors.find((floor) => floor.id === id) ?? [],
-      )
-    : places.floors;
+  const shown = moving ? inOrder(places, moving.ids).floors : places.floors;
   const nameOf = (id: string) =>
     places.floors.find((floor) => floor.id === id)?.name ?? "The floor";
 
@@ -166,12 +168,13 @@ export function FloorsSection(props: {
     onPointerMove(event: PointerEvent<HTMLButtonElement>) {
       if (moving?.pointerId !== event.pointerId) return;
       // The row under the pointer makes room for the dragged one.
-      for (const other of moving.ids) {
+      const current = shown.map((floor) => floor.id);
+      for (const other of current) {
         if (other === id) continue;
         const box = rows.current.get(other)?.getBoundingClientRect();
         if (box && event.clientY >= box.top && event.clientY <= box.bottom) {
-          const next = moving.ids.filter((each) => each !== id);
-          next.splice(moving.ids.indexOf(other), 0, id);
+          const next = current.filter((each) => each !== id);
+          next.splice(current.indexOf(other), 0, id);
           setMoving({ ...moving, ids: next });
           break;
         }
@@ -180,7 +183,7 @@ export function FloorsSection(props: {
     onPointerUp(event: PointerEvent<HTMLButtonElement>) {
       if (moving?.pointerId !== event.pointerId) return;
       setMoving(null);
-      order(moving.ids);
+      order(inOrder(places, moving.ids).floors.map((floor) => floor.id));
     },
     onPointerCancel(event: PointerEvent<HTMLButtonElement>) {
       if (moving?.pointerId === event.pointerId) setMoving(null);
@@ -319,6 +322,11 @@ export function EditFloor(props: {
   const [removal, setRemoval] = useState<FloorRemoval>();
   const [problem, setProblem] = useState<string>();
   const [working, setWorking] = useState(false);
+  // Keep successful writes for this opening: retrying a partial save must
+  // reuse its floor, and untouched room choices must leave live changes alone.
+  const draft = useRef<{ floor?: Floor; rooms: Set<string> }>({
+    rooms: new Set(),
+  });
 
   // The places as the sheet opened with them, so a change elsewhere doesn't
   // reset what someone is choosing.
@@ -330,17 +338,20 @@ export function EditFloor(props: {
     const opened = props.editing;
     const rooms = placesRef.current?.rooms ?? [];
     setName(opened?.action === "edit" ? opened.floor.name : "");
-    setOnIt(
-      new Set(
-        opened?.action === "edit"
-          ? rooms
-              .filter((room) => room.floorId === opened.floor.id)
-              .map((room) => room.id)
-          : opened?.action === "add" && opened.roomId
-            ? [opened.roomId]
-            : [],
-      ),
+    const assigned = new Set(
+      opened?.action === "edit"
+        ? rooms
+            .filter((room) => room.floorId === opened.floor.id)
+            .map((room) => room.id)
+        : [],
     );
+    draft.current = {
+      floor: opened && opened.action !== "add" ? opened.floor : undefined,
+      rooms: assigned,
+    };
+    const selected = new Set(assigned);
+    if (opened?.action === "add" && opened.roomId) selected.add(opened.roomId);
+    setOnIt(selected);
     setRemoval(undefined);
     setProblem(undefined);
     setWorking(false);
@@ -373,7 +384,8 @@ export function EditFloor(props: {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || working || current.current !== editing) return;
+    const saving = draft.current;
     setWorking(true);
     setProblem(undefined);
     try {
@@ -384,33 +396,34 @@ export function EditFloor(props: {
         });
         props.onRemoved(editing.floor.id);
       } else {
-        const id =
-          editing.action === "add"
-            ? (
-                await coreJson<Floor>("/api/places/floors/add", {
-                  method: "POST",
-                  json: { name: name.trim() },
-                })
-              ).id
-            : editing.floor.id;
-        if (editing.action === "edit" && name.trim() !== editing.floor.name) {
-          await coreJson("/api/places/floors/update", {
+        if (!saving.floor) {
+          saving.floor = await coreJson<Floor>("/api/places/floors/add", {
+            method: "POST",
+            json: { name: name.trim() },
+          });
+        }
+        const { id } = saving.floor;
+        if (name.trim() !== saving.floor.name) {
+          saving.floor = await coreJson<Floor>("/api/places/floors/update", {
             method: "POST",
             json: { id, name: name.trim() },
           });
         }
         for (const room of rooms) {
           const wanted = onIt.has(room.id);
-          if (wanted === (room.floorId === id)) continue;
+          if (wanted === saving.rooms.has(room.id)) continue;
           await coreJson("/api/places/rooms/update", {
             method: "POST",
             json: { id: room.id, floorId: wanted ? id : null },
           });
+          if (wanted) saving.rooms.add(room.id);
+          else saving.rooms.delete(room.id);
         }
         props.onSaved();
       }
       if (current.current === editing) props.onClose();
     } catch (error) {
+      props.onSaved();
       if (current.current !== editing) return;
       setWorking(false);
       setProblem(floorProblem(error));
