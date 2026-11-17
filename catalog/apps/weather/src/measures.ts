@@ -32,7 +32,7 @@ export function fallOf(day: ForecastDay | undefined): Fall {
 /**
  * The line under what falls: until when, or from when, by the day's
  * summary, and whether any has fallen where no more comes. Empty where the
- * forecast has no hours to tell.
+ * forecast has no hours to tell, or no total to say whether any fell.
  */
 export function fallLine(
   fall: Fall,
@@ -43,9 +43,8 @@ export function fallLine(
   if (summary.kind === "wet-until") return `Until ${time(summary.until)}`;
   if (summary.kind === "wet") return "Rest of the day";
   if (summary.kind === "dry-until") return `From ${time(summary.until)}`;
-  return fall.amount !== null && fall.amount > 0
-    ? "No more today"
-    : "None today";
+  if (fall.amount === null) return "";
+  return fall.amount > 0 ? "No more today" : "None today";
 }
 
 const compass = [

@@ -71,6 +71,14 @@ describe("what falls today", () => {
         time,
       ),
     ).toBe("None today");
+    // Dry hours ahead don't say that none fell before them.
+    expect(
+      fallLine(
+        { kind: "rain", amount: null },
+        { kind: "dry", words: "Clear" },
+        time,
+      ),
+    ).toBe("");
     expect(fallLine(rain, null, time)).toBe("");
   });
 });

@@ -15,7 +15,7 @@ export function Heading(props: { id: string; children: string }) {
   );
 }
 
-/** A percentage in Weather's colour, such as a chance of rain; nothing below a fifth, in a slot that keeps its place. */
+/** The chance of rain or snow as a percentage in Weather's colour; nothing below a fifth, in a slot that keeps its place. */
 export function Chance(props: { percent: number | null; className: string }) {
   const isShown = props.percent !== null && props.percent >= 20;
   return (
@@ -23,7 +23,7 @@ export function Chance(props: { percent: number | null; className: string }) {
       {isShown && (
         <>
           {Math.round(props.percent!)}%
-          <span className="sr-only"> chance of rain</span>
+          <span className="sr-only"> chance of rain or snow</span>
         </>
       )}
     </span>

@@ -243,8 +243,8 @@ describe("Weather's page", () => {
     expect(labels[7]).toBe(friday);
     expect(labels[8]).toMatch(column(2));
     // The weather now, then each hour's own.
-    expect(columns[0]?.textContent).toBe("Now11°80% chance of rain");
-    expect(columns[2]?.textContent).toMatch(/12°80% chance of rain$/);
+    expect(columns[0]?.textContent).toBe("Now11°80% chance of rain or snow");
+    expect(columns[2]?.textContent).toMatch(/12°80% chance of rain or snow$/);
     expect(columns[3]?.textContent).toMatch(/11°$/);
     expect(
       columns.map((each) =>
@@ -320,7 +320,7 @@ describe("Weather's page", () => {
 
     const chances = (title: string, rows: string) =>
       texts(section(title), `${rows} .text-cyan`).map((each) =>
-        each?.replace(" chance of rain", ""),
+        each?.replace(" chance of rain or snow", ""),
       );
     // From the hour it is: unknown, then 19% and unknown, then 20%.
     expect(chances("Next 24 hours", "ol > li").slice(0, 2)).toEqual([
@@ -338,7 +338,9 @@ describe("Weather's page", () => {
     ];
     // Yesterday, which the forecast still holds, is left out.
     expect(rows).toHaveLength(4);
-    expect(rows[0]?.textContent).toBe("Today80% chance of rainLow 6°High 14°");
+    expect(rows[0]?.textContent).toBe(
+      "Today80% chance of rain or snowLow 6°High 14°",
+    );
     expect(rows[1]?.textContent).toBe(`${friday}Low 7°High 13°`);
     expect(
       rows.map((each) => each.querySelector("svg")?.getAttribute("aria-label")),
@@ -608,7 +610,7 @@ describe("Weather's page", () => {
       "Feels like 49° · High 58° · Low 43°",
     ]);
     expect(texts(section("Next 10 days"), "ul > li")[0]).toBe(
-      "Today80% chance of rainLow 43°High 58°",
+      "Today80% chance of rain or snowLow 43°High 58°",
     );
     expect(texts(section("Today"), "p").at(-1)).toBe("Dew point 44°");
     // The days' bars are the same in either unit.
