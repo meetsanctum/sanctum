@@ -73,8 +73,9 @@ export function createAddedApps(
           .onConflictDoNothing()
           .run();
         if (inserted.changes === 0) return false;
-        // An explicit choice establishes the list even if startup found no
-        // apps. Packages staged after it must not be adopted as existing apps.
+        // Someone chose an app, so the home keeps its list from now on, even
+        // when its start knew of none: an app staged later isn't recorded as
+        // one it had.
         db.insert(appsListed)
           .values({ id: 1, since: at })
           .onConflictDoNothing()
