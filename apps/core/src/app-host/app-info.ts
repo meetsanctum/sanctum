@@ -53,6 +53,8 @@ export function appInfoOf(
 /** What the core knows of an installed app that says whether it runs. */
 type Installed = {
   manifest: StaticManifest;
+  // The folder of the build it runs.
+  apartIn?: string;
   origin?: string;
   granted: readonly string[];
   settings: SettingsSchema | null;
@@ -118,6 +120,7 @@ export function installedInfoOf(
       state: appStateOf(entry),
       settings: entry.settings,
     }),
+    ...(entry.apartIn ? { build: entry.apartIn } : {}),
     run: runOf(entry, update),
     ...(entry.origin === "system" ? { alwaysOn: true as const } : {}),
   };

@@ -8,6 +8,7 @@ import {
   rename,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -246,6 +247,44 @@ describe("the kit", () => {
     );
     expect(climbing.statusCode).not.toBe(200);
     expect(climbing.body).not.toContain("imports");
+  });
+});
+
+describe("a kit rebuilt as the core runs", () => {
+  it("is read again once its kit.json changes, as ui-sdk's build makes it in development", async () => {
+    expect((await ticketFor()).kit?.digest).toBe(kitDigest);
+    const rebuilt = { ...kitFiles, "react.js": "export const useState = 2;" };
+    const rebuiltDigest = digestOf(
+      Object.entries(rebuilt).map(([name, body]) => [
+        name,
+        { sha256: sha256(body) },
+      ]),
+    );
+    await writeAll(kitDir, {
+      ...rebuilt,
+      "kit.json": JSON.stringify({
+        version: "0.1.0",
+        bridge: 1,
+        digest: rebuiltDigest,
+        stylesheet: "kit.css",
+        imports: { react: "react.js" },
+      }),
+    });
+    const later = new Date(Date.now() + 5_000);
+    await utimes(join(kitDir, "kit.json"), later, later);
+    // Looked at again a second later at most.
+    core.advance(1_000);
+    const [{ ticket, kit }, concurrent] = await Promise.all([
+      ticketFor(),
+      ticketFor(),
+    ]);
+    expect(kit?.digest).toBe(rebuiltDigest);
+    expect(concurrent.kit?.digest).toBe(rebuiltDigest);
+    const served = await get(
+      core,
+      `/pages/${ticket}/kit/${rebuiltDigest}/react.js`,
+    );
+    expect(served.body).toBe(rebuilt["react.js"]);
   });
 });
 
