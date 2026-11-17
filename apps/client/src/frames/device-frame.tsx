@@ -107,8 +107,8 @@ export function DeviceFrame(props: {
         // 4 px past the column on every side, which the page keeps clear
         // (kit.css), so rings outside a control's edge show whole.
         className={cn(
-          "-mx-1 w-[calc(100%+8px)] max-w-none border-0 bg-transparent",
-          phase === "ready" && "-my-1",
+          "-mx-[4px] w-[calc(100%+8px)] max-w-none border-0 bg-transparent",
+          phase === "ready" && "-my-[4px]",
           (failed || phase !== "ready") && "invisible",
         )}
       />
