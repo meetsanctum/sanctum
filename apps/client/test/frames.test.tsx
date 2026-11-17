@@ -3,6 +3,7 @@ import type { AppInfo, EntityInfo } from "@meetsanctum/app-sdk";
 import {
   createAppClient,
   createLiveFeed,
+  frameBridge,
   PageBar,
   startFrame,
   useAppClient,
@@ -158,7 +159,12 @@ describe("a page in its frame", () => {
     // Asked as the app, which the core answers with what it may see.
     expect(json).toHaveBeenCalledWith("/api/entities", { app: info.id });
     expect(events).toContainEqual({ type: "ready" });
-    expect(events).toContainEqual({ type: "bar", title: "Forecast" });
+    expect(events).toContainEqual({
+      type: "bar",
+      title: "Forecast",
+      actions: [],
+      revision: 1,
+    });
     // Its title is the shell's to show; the frame draws none.
     expect(document.querySelector("h1")).toBeNull();
     expect(document.documentElement.dataset.mode).toBe("day");
@@ -194,6 +200,160 @@ describe("a page in its frame", () => {
     );
   });
 
+  it("describes its top bar's actions, and acts on a press of what the shell drew", async () => {
+    let saves = 0;
+    function Editor() {
+      const [busy, setBusy] = useState(false);
+      return (
+        <>
+          <PageBar
+            title="Edit mood"
+            actions={[
+              { id: "cancel", label: "Cancel", onPress: () => setBusy(true) },
+              {
+                id: "save",
+                label: "Save",
+                primary: true,
+                disabled: busy,
+                onPress: () => (saves += 1),
+              },
+            ]}
+          />
+          <p>busy {String(busy)}</p>
+        </>
+      );
+    }
+    const { bridge, events } = framed(async () => ({
+      default: { ...ui, pages: { main: Editor } },
+    }));
+    const bars = () =>
+      events.filter(
+        (event): event is Extract<FrameEvent, { type: "bar" }> =>
+          event.type === "bar",
+      );
+    await vi.waitFor(() => expect(bars()).toHaveLength(1));
+    expect(bars()[0]).toEqual({
+      type: "bar",
+      title: "Edit mood",
+      actions: [
+        { id: "cancel", label: "Cancel" },
+        { id: "save", label: "Save", primary: true },
+      ],
+      revision: 1,
+    });
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    await vi.waitFor(() => expect(saves).toBe(1));
+    // Cancel dims Save: a new revision, and a press of the old one is dropped.
+    bridge.send({ type: "press", id: "cancel", revision: 1 });
+    await vi.waitFor(() => expect(bars()).toHaveLength(2));
+    expect(bars()[1]!.revision).toBe(2);
+    expect(bars()[1]!.actions[1]).toEqual({
+      id: "save",
+      label: "Save",
+      primary: true,
+      disabled: true,
+    });
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    bridge.send({ type: "press", id: "save", revision: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(saves).toBe(1);
+  });
+
+  it("dims a busy action before handling another queued press", async () => {
+    const save = vi.fn();
+    function Editor() {
+      const [isBusy, setIsBusy] = useState(false);
+      return (
+        <PageBar
+          title="Edit mood"
+          actions={[
+            {
+              id: "save",
+              label: "Save",
+              disabled: isBusy,
+              onPress: () => {
+                save();
+                setIsBusy(true);
+              },
+            },
+          ]}
+        />
+      );
+    }
+    const { bridge, events } = framed(async () => ({
+      default: { ...ui, pages: { main: Editor } },
+    }));
+    await vi.waitFor(() =>
+      expect(events).toContainEqual(expect.objectContaining({ type: "bar" })),
+    );
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    await vi.waitFor(() =>
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "bar", revision: 2 }),
+      ),
+    );
+    expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("forgets the previous page's actions while the next page has no bar", async () => {
+    const save = vi.fn();
+    function Editor() {
+      return (
+        <PageBar
+          title="Edit mood"
+          actions={[{ id: "save", label: "Save", onPress: save }]}
+        />
+      );
+    }
+    const { bridge, events } = framed(async () => ({
+      default: {
+        ...ui,
+        pages: { main: Editor, day: () => <p>Loading the next page</p> },
+      },
+    }));
+    await vi.waitFor(() =>
+      expect(events).toContainEqual(expect.objectContaining({ type: "bar" })),
+    );
+    bridge.send({ type: "show", page: "day", params: {} });
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("Loading the next page"),
+    );
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("forgets the actions of a page that stops working", async () => {
+    const save = vi.fn();
+    function Editor() {
+      const [isBroken, setIsBroken] = useState(false);
+      if (isBroken) throw new Error("Broken editor");
+      return (
+        <>
+          <PageBar
+            title="Edit mood"
+            actions={[{ id: "save", label: "Save", onPress: save }]}
+          />
+          <button onClick={() => setIsBroken(true)}>Break the editor</button>
+        </>
+      );
+    }
+    const { bridge, events } = framed(async () => ({
+      default: { ...ui, pages: { main: Editor } },
+    }));
+    await vi.waitFor(() =>
+      expect(events).toContainEqual(expect.objectContaining({ type: "bar" })),
+    );
+    document.querySelector("button")!.click();
+    await vi.waitFor(() =>
+      expect(events).toContainEqual({ type: "failed", reason: "stopped" }),
+    );
+    bridge.send({ type: "press", id: "save", revision: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("says its files didn't load", async () => {
     const { events } = framed(async () => {
       throw new TypeError("Failed to fetch dynamically imported module");
@@ -221,7 +381,7 @@ describe("the shell's end", () => {
   it("answers only its frame's window, with the code in its address", () => {
     const frame = frameWindow(() => {});
     shellEnd(frame);
-    const hello = { sanctum: "hello", code: "code-1", bridge: 1 };
+    const hello = { sanctum: "hello", code: "code-1", bridge: frameBridge };
     shell.dispatchEvent(message(hello, { source: window }));
     shell.dispatchEvent(
       message({ ...hello, code: "code-2" }, { source: frame }),
@@ -234,27 +394,31 @@ describe("the shell's end", () => {
     expect(frame.postMessage).toHaveBeenCalledOnce();
   });
 
-  it("can't be opened by a page of another bridge", () => {
-    const frame = frameWindow(() => {});
-    const { events } = shellEnd(frame);
-    shell.dispatchEvent(
-      message(
-        { sanctum: "hello", code: "code-1", bridge: 2 },
-        { source: frame },
-      ),
-    );
-    expect(frame.postMessage).not.toHaveBeenCalled();
-    expect(events).toEqual([{ type: "failed", reason: "files" }]);
-  });
+  it.each([1, frameBridge + 1])(
+    "can't be opened by a page of bridge %i",
+    (bridge) => {
+      const frame = frameWindow(() => {});
+      const { events } = shellEnd(frame);
+      shell.dispatchEvent(
+        message(
+          { sanctum: "hello", code: "code-1", bridge },
+          { source: frame },
+        ),
+      );
+      expect(frame.postMessage).not.toHaveBeenCalled();
+      expect(events).toEqual([{ type: "failed", reason: "files" }]);
+    },
+  );
 
   // The frame's end of the port, as a page's own code could use it.
+  let shellEvents: FrameEvent[] = [];
   async function framePort() {
     let given: MessagePort | undefined;
     const frame = frameWindow((_data, ports) => (given = ports[0]));
-    shellEnd(frame);
+    shellEvents = shellEnd(frame).events;
     shell.dispatchEvent(
       message(
-        { sanctum: "hello", code: "code-1", bridge: 1 },
+        { sanctum: "hello", code: "code-1", bridge: frameBridge },
         { source: frame },
       ),
     );
@@ -293,6 +457,24 @@ describe("the shell's end", () => {
     expect(json).toHaveBeenCalledWith("/api/apps/sanctum.example/settings", {
       app: info.id,
     });
+  });
+
+  it("draws no top bar a page describes beyond what it may", async () => {
+    const { port } = await framePort();
+    const bar = (actions: unknown) =>
+      port.postMessage({ type: "bar", title: "Edit", actions, revision: 1 });
+    // Four actions, two primaries, or the same id twice.
+    bar([1, 2, 3, 4].map((n) => ({ id: `a${n}`, label: "A" })));
+    bar([
+      { id: "a", label: "A", primary: true },
+      { id: "b", label: "B", primary: true },
+    ]);
+    bar([
+      { id: "a", label: "A" },
+      { id: "a", label: "B" },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(shellEvents.filter((event) => event.type === "bar")).toEqual([]);
   });
 
   it("refuses more than so many waiting at once", async () => {

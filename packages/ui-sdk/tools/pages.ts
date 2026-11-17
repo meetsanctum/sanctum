@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
@@ -106,10 +106,17 @@ export async function buildPages(
 ): Promise<PagesManifest | undefined> {
   const kitStylesheet = options.kitStylesheet ?? builtKitStylesheet;
   const outDir = join(packageDir, pagesFolder);
-  // A removed page or failed rebuild must not leave an older build to ship.
-  await rm(outDir, { recursive: true, force: true });
+  // The build goes aside and takes pages/' place whole once it succeeds, so
+  // one that fails, as a half-written page saved in development does,
+  // leaves the last good one, and the command fails. A package without
+  // pages any more keeps none.
+  const next = join(packageDir, "node_modules/.sanctum-pages-next");
+  await rm(next, { recursive: true, force: true });
   const ui = await uiEntry(packageDir);
-  if (ui === undefined) return undefined;
+  if (ui === undefined) {
+    await rm(outDir, { recursive: true, force: true });
+    return undefined;
+  }
   if (!existsSync(ui)) throw new Error(`No ${ui}: it's the package's ./ui`);
   if (!existsSync(kitStylesheet)) {
     throw new Error(
@@ -142,7 +149,7 @@ export async function buildPages(
       logLevel: "warn",
       plugins: [tailwindcss(), iconImports(), kitRulesLeftOut(kitCss)],
       build: {
-        outDir,
+        outDir: next,
         emptyOutDir: true,
         minify: true,
         target: "es2022",
@@ -175,12 +182,34 @@ export async function buildPages(
       files,
     };
     await writeFile(
-      join(outDir, pagesManifestName),
+      join(next, pagesManifestName),
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
+    const last = `${next}-last`;
+    await rm(last, { recursive: true, force: true });
+    // A directory copied into an image can live in a read-only lower layer,
+    // where moving it fails with EXDEV. Keep a copy until publication succeeds.
+    const hasPreviousPages = await cp(outDir, last, { recursive: true }).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return false;
+      },
+    );
+    try {
+      await rm(outDir, { recursive: true, force: true });
+      await rename(next, outDir);
+    } catch (error) {
+      if (hasPreviousPages) {
+        await rm(outDir, { recursive: true, force: true });
+        await rename(last, outDir);
+      }
+      throw error;
+    }
+    await rm(last, { recursive: true, force: true });
     return manifest;
   } catch (error) {
-    await rm(outDir, { recursive: true, force: true });
+    await rm(next, { recursive: true, force: true });
     throw error;
   } finally {
     await rm(work, { recursive: true, force: true });

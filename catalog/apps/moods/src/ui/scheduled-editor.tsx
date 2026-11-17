@@ -160,17 +160,19 @@ function Editor(props: {
 
   return (
     <>
-      <PageBar title={editing ? "Scheduled mood" : "Schedule a mood"}>
-        <Button variant="outline" onClick={leave} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          onClick={() => void save()}
-          disabled={busy || !mood || !ends.includes(draft.end)}
-        >
-          Save
-        </Button>
-      </PageBar>
+      <PageBar
+        title={editing ? "Scheduled mood" : "Schedule a mood"}
+        actions={[
+          { id: "cancel", label: "Cancel", disabled: busy, onPress: leave },
+          {
+            id: "save",
+            label: "Save",
+            primary: true,
+            disabled: busy || !mood || !ends.includes(draft.end),
+            onPress: () => void save(),
+          },
+        ]}
+      />
       <PageSection
         id="when-heading"
         title="When"

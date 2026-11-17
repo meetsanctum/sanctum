@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { addressKey } from "../auth/limits.js";
@@ -86,17 +87,42 @@ export function createPages(
 ) {
   const { packagesDir, kitDir, runningPackage, now, log } = options;
   const tickets = createPageTickets(db, { now });
-  // The kit doesn't change while the core runs, and each folder of an app's
-  // versions never changes once staged, so each is indexed once. One that
+  // Each folder of an app's versions never changes once staged, so each is
+  // indexed once, and the kit once each time its kit.json changes. One that
   // couldn't be read, as when a file went while it was read, is tried again
   // next time rather than kept failed.
   let kit: Promise<KitIndex | null> | undefined;
+  // When its kit.json last changed, looked at once a second at most: in
+  // development ui-sdk's build replaces the kit as the core runs.
+  let kitChanged: number | undefined;
+  let kitLookedAt = -Infinity;
+  let kitChecking: Promise<void> | undefined;
   const indexed = new Map<string, Promise<PagesIndex | null>>();
   const failures = new Map<string, number[]>();
   // Pages built for a kit this one can't stand in for, said once each.
   const misfits = new Set<string>();
 
-  function kitIndex() {
+  async function kitIndex() {
+    if (!kitChecking && now().getTime() - kitLookedAt >= 1_000) {
+      kitLookedAt = now().getTime();
+      kitChecking = stat(join(kitDir, "kit.json"))
+        .then(
+          (found) => found.mtimeMs,
+          () => undefined,
+        )
+        .then((changed) => {
+          if (changed !== kitChanged) {
+            kitChanged = changed;
+            kit = undefined;
+          }
+        })
+        .finally(() => {
+          kitChecking = undefined;
+        });
+    }
+    // A concurrent request waits too, so it cannot use the old index while
+    // another is checking whether the kit changed.
+    await kitChecking;
     kit ??= indexKit(kitDir, log).catch((error: unknown) => {
       log(`pages: the kit couldn't be read (${String(error)})`);
       kit = undefined;

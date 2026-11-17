@@ -53,7 +53,9 @@ export function AppFrame(props: {
   const { name } = app.info;
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<Phase>("opening");
-  const [title, setTitle] = useState<string>();
+  // The page's own title and actions for the top bar, once it says them.
+  const [bar, setBar] = useState<Extract<FrameEvent, { type: "bar" }>>();
+  const title = bar?.title;
   // Where the frame loads from, with the code in its address. Each address
   // gets a frame of its own: one that differs only after its # would be a
   // jump within the page already there, which keeps the old code.
@@ -77,12 +79,13 @@ export function AppFrame(props: {
     latest.current = { ...props, context };
   });
 
-  // A frame afresh, for each try and each version the app runs.
-  const { id, version } = app.info;
+  // A frame afresh, for each try and each build the app runs: an update,
+  // or in development a saved change, once the stack has staged it.
+  const { id, version, build } = app.info;
   useEffect(() => {
     let isCurrent = true;
     setPhase("opening");
-    setTitle(undefined);
+    setBar(undefined);
     setSrc(undefined);
     setShowsLoader(false);
     const on = (event: FrameEvent) => {
@@ -93,9 +96,10 @@ export function AppFrame(props: {
             now === "opening" || now === "late" ? "ready" : now,
           );
         case "failed":
+          setBar(undefined);
           return setPhase(event.reason);
         case "bar":
-          return setTitle(event.title);
+          return setBar(event);
         case "open":
           return latest.current.open(event.page, event.params);
         case "back":
@@ -145,7 +149,7 @@ export function AppFrame(props: {
       bridge.current = undefined;
       if (named) void frames?.end(named);
     };
-  }, [attempt, id, version]);
+  }, [attempt, id, version, build]);
 
   // What changes while it's open, said to the page in it.
   useEffect(() => {
@@ -162,7 +166,7 @@ export function AppFrame(props: {
     const { page, params } = latest.current;
     if (phase === "opening" || phase === "ready") {
       // The app's name until the new page says its own title.
-      setTitle(undefined);
+      setBar(undefined);
       bridge.current?.send({ type: "show", page, params });
     } else {
       setAttempt((each) => each + 1);
@@ -182,7 +186,7 @@ export function AppFrame(props: {
       clearTimeout(loader);
       clearTimeout(late);
     };
-  }, [phase, waits, attempt, id, version]);
+  }, [phase, waits, attempt, id, version, build]);
 
   if (phase === "newer") {
     return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
@@ -191,7 +195,22 @@ export function AppFrame(props: {
     !waits && (phase === "late" || phase === "files" || phase === "stopped");
   return (
     <>
-      <PageBar title={title ?? name} />
+      <PageBar
+        title={title ?? name}
+        actions={
+          failed
+            ? undefined
+            : bar?.actions.map((action) => ({
+                ...action,
+                onPress: () =>
+                  bridge.current?.send({
+                    type: "press",
+                    id: action.id,
+                    revision: bar.revision,
+                  }),
+              }))
+        }
+      />
       {failed ? (
         <NoticeCard
           Icon={CircleAlert}
