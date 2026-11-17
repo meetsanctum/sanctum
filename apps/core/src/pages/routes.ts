@@ -1,4 +1,8 @@
-import type { AppPages, PageTicket } from "@meetsanctum/auth-protocol";
+import type {
+  AppPages,
+  AppPagesMisfit,
+  PageTicket,
+} from "@meetsanctum/auth-protocol";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -69,16 +73,25 @@ export function registerPageRoutes(
       .send({ error: "not_found" });
 
   // The build of an app's pages a frame's address names, which changes as
-  // the app updates; none for an app without pages that fit the kit.
+  // the app updates; none for an app without pages that fit the kit, and
+  // for pages that don't, what they need.
   app.get<{ Params: { appId: string } }>(
     "/api/pages/apps/:appId",
     async (request, reply) => {
       if (request.principal!.scope !== "full") {
         throw new AuthError("forbidden");
       }
-      const found = await pages.pagesOf(request.params.appId);
-      if (!found) return nothing(reply);
-      const answer: AppPages = { digest: found.digest };
+      const fit = await pages.fitOf(request.params.appId);
+      if (fit && "needs" in fit) {
+        const misfit: AppPagesMisfit = { error: "not_found", needs: fit.needs };
+        return reply.code(404).header("cache-control", "no-store").send(misfit);
+      }
+      const kit = await pages.kit();
+      if (!fit || !kit) return nothing(reply);
+      const answer: AppPages = {
+        digest: fit.pages.digest,
+        kit: { version: kit.version, bridge: kit.bridge, digest: kit.digest },
+      };
       return answer;
     },
   );

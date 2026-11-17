@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
+import { CoreError } from "../src/core-fetch";
 import { AppFrame } from "../src/frames/app-frame";
 import { forgetPageTicket } from "../src/frames/page-ticket";
 
@@ -20,10 +21,16 @@ import { forgetPageTicket } from "../src/frames/page-ticket";
 
 const address = vi.hoisted(() => ({
   answer: (): Promise<unknown> => Promise.resolve(),
+  pages: (): Promise<unknown> => Promise.resolve({ digest: "page" }),
   calls: 0,
   tickets: 0,
 }));
-vi.mock("../src/core-fetch", () => ({
+vi.mock("../src/core-fetch", async () => ({
+  CoreError: (
+    await vi.importActual<typeof import("../src/core-fetch")>(
+      "../src/core-fetch",
+    )
+  ).CoreError,
   currentCredential: () => ({ token: "client" }),
   coreJson: (path: string) => {
     if (path === "/api/pages/ticket") {
@@ -31,7 +38,7 @@ vi.mock("../src/core-fetch", () => ({
       return address.answer();
     }
     address.calls++;
-    return Promise.resolve({ digest: "page" });
+    return address.pages();
   },
 }));
 
@@ -68,6 +75,7 @@ beforeEach(() => {
   forgetPageTicket();
   address.calls = 0;
   address.tickets = 0;
+  address.pages = () => Promise.resolve({ digest: "page" });
   address.answer = () =>
     Promise.resolve({
       ticket: `page_ticket${address.tickets}`,
@@ -306,9 +314,64 @@ describe("an app's page in its frame", () => {
       expect(container.querySelector("iframe[src]")).toBeNull();
       expect(text()).toContain(
         bridge < frameBridge
-          ? "Its files didn't load."
+          ? "This page needs a newer Sanctum"
           : "To open this page, update this app",
       );
+      expect(text()).not.toContain("Try again");
+    },
+  );
+
+  it.each([
+    [
+      "sanctum",
+      "This page needs a newer Sanctum",
+      "Update Sanctum to open it.",
+    ],
+    [
+      "pages",
+      "This page needs an update of Weather",
+      "It was made for an older Sanctum.",
+    ],
+  ])(
+    "says what pages that don't fit the home's kit need: %s",
+    async (needs, title, line) => {
+      address.pages = () =>
+        Promise.reject(
+          new CoreError(404, "not_found", { error: "not_found", needs }),
+        );
+      await show();
+      expect(container.querySelector("iframe[src]")).toBeNull();
+      expect(text()).toContain(title);
+      expect(text()).toContain(line);
+      expect(text()).toContain("What Weather adds to the home keeps working.");
+    },
+  );
+
+  it.each(["sanctum", "pages", "bridge"])(
+    "reads the home's kit afresh when reopening after a %s mismatch, keeping its ticket",
+    async (needs) => {
+      const current = { version: "0.1.2", bridge: frameBridge, digest: "kit" };
+      const old = { version: "0.1.0", bridge: frameBridge - 1, digest: "old" };
+      address.pages =
+        needs === "bridge"
+          ? () => Promise.resolve({ digest: "page", kit: old })
+          : () =>
+              Promise.reject(
+                new CoreError(404, "not_found", { error: "not_found", needs }),
+              );
+      await show();
+      expect(container.querySelector("iframe[src]")).toBeNull();
+      expect(text()).toContain("This page needs");
+
+      // The home and app have updated while another page was open: the
+      // ticket other frames hold stays, and the kit is the one served now.
+      address.pages = () =>
+        Promise.resolve({ digest: "updated", kit: current });
+      await show({ shown: "2" });
+      expect(frame().src).toContain("/pages/page_ticket1/");
+      expect(frame().src).toContain("/updated/");
+      expect(address.tickets).toBe(1);
+      expect(text()).not.toContain("This page needs");
     },
   );
 

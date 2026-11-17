@@ -64,8 +64,10 @@ export function DeviceFrame(props: {
     // Only a change of the device itself is news to the page.
   }, [props.device]);
 
-  if (phase === "newer") {
-    return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
+  if (shown.mismatch) {
+    return (
+      <PageDoesntMatch app={app.info} mismatch={shown.mismatch} isDevicePage />
+    );
   }
   return (
     <>

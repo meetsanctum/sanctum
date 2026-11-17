@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { digestOf } from "../src/pages/files.js";
-import { kitFits } from "../src/pages/pages.js";
+import { kitNeeds } from "../src/pages/pages.js";
 import { ticketGraceMs, ticketWeekMs } from "../src/pages/tickets.js";
 import {
   claimed,
@@ -450,7 +450,10 @@ describe("an app's pages", () => {
       token,
     });
     expect(asked.statusCode).toBe(200);
-    expect(asked.json()).toEqual({ digest: pageDigest });
+    expect(asked.json()).toEqual({
+      digest: pageDigest,
+      kit: { version: "0.1.0", bridge: 1, digest: kitDigest },
+    });
     expect(
       (
         await get(core, "/api/pages/apps/sanctum.missing", {
@@ -584,23 +587,43 @@ describe("an app's pages", () => {
 });
 
 describe("pages built for a kit", () => {
-  it("fit any kit of its major from that version on, where below 1.0 the minor is the major", () => {
-    expect(kitFits("0.1.0", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.3")).toBe(true);
-    expect(kitFits("0.1.3", "0.1.0")).toBe(false);
-    expect(kitFits("0.1.0", "0.2.0")).toBe(false);
-    expect(kitFits("1.2.0", "1.4.0")).toBe(true);
-    expect(kitFits("1.4.1", "1.4.0")).toBe(false);
-    expect(kitFits("1.2.0", "2.0.0")).toBe(false);
-    expect(kitFits("not a version", "1.0.0")).toBe(false);
+  it.each([
+    ["0.1.0", "0.1.0", null],
+    ["0.1.0", "0.1.3", null],
+    ["0.1.3", "0.1.0", "sanctum"],
+    ["0.2.0", "0.1.0", "sanctum"],
+    ["0.1.0", "0.2.0", "pages"],
+    ["0.9.0", "1.0.0", "pages"],
+    ["1.0.0", "0.9.0", "sanctum"],
+    ["1.2.0", "1.4.0", null],
+    ["1.4.1", "1.4.0", "sanctum"],
+    ["1.2.0", "2.0.0", "pages"],
+    ["not a version", "1.0.0", "pages"],
     // A prerelease comes before its release, and after the one before it.
-    expect(kitFits("0.1.0", "0.1.0-beta.1")).toBe(false);
-    expect(kitFits("0.1.0-beta.1", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0-beta.2", "0.1.0-beta.10")).toBe(true);
-    expect(kitFits("0.1.0-beta.10", "0.1.0-beta.2")).toBe(false);
-    expect(kitFits("0.1.0-beta", "0.1.0-beta.1")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.1-beta.1")).toBe(true);
+    ["0.1.0", "0.1.0-beta.1", "sanctum"],
+    ["0.1.0-beta.1", "0.1.0", null],
+    ["0.1.0-beta.2", "0.1.0-beta.10", null],
+    ["0.1.0-beta.10", "0.1.0-beta.2", "sanctum"],
+    ["0.1.0-beta", "0.1.0-beta.1", null],
+    ["0.1.0", "0.1.1-beta.1", null],
+  ])("built for %s, served %s, need %s", (builtFor, served, needs) => {
+    expect(kitNeeds(builtFor, served)).toBe(needs);
   });
+
+  it.each([
+    ["0.2.0", "sanctum"],
+    ["0.0.5", "pages"],
+  ])(
+    "built for %s, say what they need to whoever asks for their build",
+    async (builtFor, needs) => {
+      await stagePages(undefined, undefined, builtFor);
+      const asked = await get(core, "/api/pages/apps/sanctum.example", {
+        token,
+      });
+      expect(asked.statusCode).toBe(404);
+      expect(asked.json()).toEqual({ error: "not_found", needs });
+    },
+  );
 
   it("aren't served by a core whose kit can't stand in for theirs, which it says once", async () => {
     const { ticket } = await ticketFor();
