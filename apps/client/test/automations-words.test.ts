@@ -129,6 +129,34 @@ describe("Automations' words", () => {
     ).toBe("Turn Ground floor again");
   });
 
+  it("use a default floor's preposition until another place is chosen", () => {
+    const piece = {
+      ...motion,
+      config: {
+        type: "object",
+        properties: {
+          place: { place: true, default: { kind: "floor", id: "ground" } },
+        },
+      },
+      card: { name: "Motion in {place}", specifics: null },
+    };
+    expect(plain(nodeParts(piece, { config: {} }, names))).toBe(
+      "Motion on Ground floor",
+    );
+    expect(cardOf(piece, { config: {} }, names).name).toBe(
+      "Motion on Ground floor",
+    );
+    expect(
+      plain(
+        nodeParts(
+          piece,
+          { config: { place: { kind: "room", id: "office" } } },
+          names,
+        ),
+      ),
+    ).toBe("Motion in Office");
+  });
+
   it("read a step while held and chosen lights by their names", () => {
     expect(
       plain(

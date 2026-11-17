@@ -336,7 +336,8 @@ export function sentenceParts(
     if (at > 0) parts.push(rest.slice(0, at));
     rest = rest.slice(at + whole.length);
     const field = fields[name!] ?? {};
-    const text = formatValue(field, config[name!], names, style, {
+    const value = config[name!] === undefined ? field.default : config[name!];
+    const text = formatValue(field, value, names, style, {
       piece,
       name,
     });
@@ -346,7 +347,7 @@ export function sentenceParts(
     const before = parts.at(-1);
     if (
       text !== undefined &&
-      isFloor(config[name!]) &&
+      isFloor(value) &&
       typeof before === "string" &&
       /(^|\s)[Ii]n $/.test(before)
     ) {
