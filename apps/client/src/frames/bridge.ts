@@ -3,6 +3,7 @@ import {
   isFrameHello,
   type AppClient,
   type CapabilityCommand,
+  type FrameBarAction,
   type FramePort,
   type PageParams,
   type ToFrame,
@@ -21,7 +22,12 @@ import {
 export type FrameEvent =
   | { type: "ready" }
   | { type: "failed"; reason: "files" | "stopped" }
-  | { type: "bar"; title: string }
+  | {
+      type: "bar";
+      title: string;
+      actions: FrameBarAction[];
+      revision: number;
+    }
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" };
@@ -89,9 +95,14 @@ export function openBridge(options: {
         return request(message);
       case "subscribe":
         return live(message.on === true);
-      case "bar":
-        if (isText(message.title)) on({ type: "bar", title: message.title });
+      case "bar": {
+        const { title, revision } = message;
+        const actions = barActionsOf(message.actions);
+        if (isText(title) && actions && isRevision(revision)) {
+          on({ type: "bar", title, actions, revision });
+        }
         return;
+      }
       case "open":
         if (isText(message.page) && isParams(message.params)) {
           on({ type: "open", page: message.page, params: message.params });
@@ -222,6 +233,30 @@ const refusal = (
   ok: false,
   error: code ? { message, code } : { message },
 });
+
+// The top bar's actions as a page describes them: at most three, the
+// primary one at most, each a word to draw; anything else is none.
+function barActionsOf(value: unknown): FrameBarAction[] | undefined {
+  if (!Array.isArray(value) || value.length > 3) return undefined;
+  const actions: FrameBarAction[] = [];
+  for (const each of value as Partial<Record<string, unknown>>[]) {
+    if (typeof each !== "object" || each === null) return undefined;
+    const { id, label, primary, disabled } = each;
+    if (!isText(id) || !isText(label) || label.length > 40) return undefined;
+    actions.push({
+      id,
+      label,
+      ...(primary === true ? { primary: true } : {}),
+      ...(disabled === true ? { disabled: true } : {}),
+    });
+  }
+  const ids = new Set(actions.map((action) => action.id));
+  const primaries = actions.filter((action) => action.primary).length;
+  return ids.size === actions.length && primaries <= 1 ? actions : undefined;
+}
+
+const isRevision = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
 
 const isText = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= longestText;

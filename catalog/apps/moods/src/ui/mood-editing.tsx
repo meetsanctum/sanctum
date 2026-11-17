@@ -193,24 +193,28 @@ export function EditorHeader(
 ) {
   return (
     <>
-      <PageBar title={props.title}>
-        {"editing" in props ? (
-          <>
-            <CancelButton
-              onClick={() => void props.editing.cancel()}
-              disabled={props.editing.busy}
-            />
-            <Button
-              onClick={props.onSave}
-              disabled={props.editing.busy || !props.canSave}
-            >
-              Save
-            </Button>
-          </>
-        ) : (
-          <CancelButton onClick={props.onCancel} />
-        )}
-      </PageBar>
+      <PageBar
+        title={props.title}
+        actions={
+          "editing" in props
+            ? [
+                {
+                  id: "cancel",
+                  label: "Cancel",
+                  disabled: props.editing.busy,
+                  onPress: () => void props.editing.cancel(),
+                },
+                {
+                  id: "save",
+                  label: "Save",
+                  primary: true,
+                  disabled: props.editing.busy || !props.canSave,
+                  onPress: props.onSave,
+                },
+              ]
+            : [{ id: "cancel", label: "Cancel", onPress: props.onCancel }]
+        }
+      />
       <p className="m-0 shrink-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
         {props.room}
       </p>
@@ -235,20 +239,6 @@ export function PreviewButton(props: {
         Preview on the lights
       </Button>
     </div>
-  );
-}
-
-/**
- * The editors' way out, which keeps nothing and leaves.
- */
-export function CancelButton(props: {
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Button variant="outline" onClick={props.onClick} disabled={props.disabled}>
-      Cancel
-    </Button>
   );
 }
 

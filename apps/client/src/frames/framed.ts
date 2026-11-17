@@ -1,12 +1,13 @@
 // Which apps' pages the shell shows in frames, loaded from the core, rather
-// than the pages it bundles: Weather's, Natural light's and Zigbee's, on a
-// client whose storage has `sanctum.framePages` set to `on`. Every other
-// app's pages, and these on any other client, are the bundled ones.
+// than the pages it bundles: every official app's, on a client whose
+// storage has `sanctum.framePages` set to `on`. Their device pages, and
+// every page on any other client, are the bundled ones.
 
 const framable: ReadonlySet<string> = new Set([
   "sanctum.weather",
   "sanctum.natural-light",
   "sanctum.zigbee",
+  "sanctum.moods",
 ]);
 const switchKey = "sanctum.framePages";
 

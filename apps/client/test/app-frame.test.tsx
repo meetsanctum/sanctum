@@ -183,7 +183,12 @@ describe("an app's page in its frame", () => {
   it("shows the page's title, and the app's name again when another page shows", async () => {
     await show();
     const port = hello();
-    port.postMessage({ type: "bar", title: "Forecast" });
+    port.postMessage({
+      type: "bar",
+      title: "Forecast",
+      actions: [],
+      revision: 1,
+    });
     await vi.waitFor(() =>
       expect(container.querySelector("h1")?.textContent).toBe("Forecast"),
     );
@@ -237,6 +242,35 @@ describe("an app's page in its frame", () => {
     await show();
     expect(frame().getAttribute("src")).toBeNull();
     expect(text()).toContain("Its files didn't load.");
+  });
+
+  it("draws the page's actions in the top bar, and says which was pressed, at which revision", async () => {
+    await show();
+    const port = hello();
+    const said: unknown[] = [];
+    port.onmessage = (event) => said.push(event.data);
+    port.postMessage({
+      type: "bar",
+      title: "Edit mood",
+      actions: [
+        { id: "cancel", label: "Cancel" },
+        { id: "save", label: "Save", primary: true, disabled: true },
+      ],
+      revision: 3,
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Edit mood"),
+    );
+    const buttons = [...container.querySelectorAll("button")];
+    const save = buttons.find((each) => each.textContent === "Save")!;
+    expect(save.disabled).toBe(true);
+    await act(async () =>
+      buttons.find((each) => each.textContent === "Cancel")!.click(),
+    );
+    await vi.waitFor(() =>
+      expect(said).toContainEqual({ type: "press", id: "cancel", revision: 3 }),
+    );
+    port.close();
   });
 
   it("says its files didn't load when the core has none", async () => {

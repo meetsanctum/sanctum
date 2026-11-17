@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { AppScope, type AppUi, type PageParams } from "../app-ui";
 import type { AppClient, LiveListener } from "../client";
 import { HomeTimeZoneProvider } from "../home-time-zone";
-import { PageBarSink } from "../page-bar";
+import { PageBarSink, type PageBarAction } from "../page-bar";
 import { TemperatureUnitProvider } from "../temperature-unit";
 import {
   frameBridge,
@@ -71,6 +71,24 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
   let ui: AppUi | undefined;
   let shown: Shown | undefined;
   let root: Root | undefined;
+  // The top bar as last said to the shell, and its actions' handlers, the
+  // latest ones: a press of what the shell drew at an older revision is
+  // dropped.
+  let bar = { said: "", revision: 0 };
+  let presses = new Map<string, () => void>();
+  const sayBar = (title: string, actions: readonly PageBarAction[]) => {
+    presses = new Map(actions.map((action) => [action.id, action.onPress]));
+    const drawn = actions.map(({ id, label, primary, disabled }) => ({
+      id,
+      label,
+      ...(primary ? { primary: true } : {}),
+      ...(disabled ? { disabled: true } : {}),
+    }));
+    const said = JSON.stringify([title, drawn]);
+    if (said === bar.said) return;
+    bar = { said, revision: bar.revision + 1 };
+    send({ type: "bar", title, actions: drawn, revision: bar.revision });
+  };
   // Said once: the page's files didn't load, or React gave up on it. An
   // error a page catches, or one in a handler that leaves it drawn, isn't.
   let hasFailed = false;
@@ -137,6 +155,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
           client={clientOf(shown.app)}
           send={send}
           fail={fail}
+          sayBar={sayBar}
         />
       </StrictMode>,
     );
@@ -169,6 +188,9 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
         if (shown) shown = { ...shown, context: message.context };
         return draw();
       case "show":
+        // The shell puts the app's name back in the bar until the page
+        // that shows says its own, even one the same as before.
+        bar = { said: "", revision: bar.revision };
         if (shown) {
           shown = {
             ...shown,
@@ -198,6 +220,9 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
       case "refresh":
         for (const listener of listeners) listener.refresh?.();
         return;
+      case "press":
+        if (message.revision === bar.revision) presses.get(message.id)?.();
+        return;
     }
   };
 }
@@ -208,8 +233,9 @@ function Framed(props: {
   client: AppClient;
   send: (message: FromFrame) => void;
   fail: (failed: Extract<FromFrame, { type: "failed" }>) => void;
+  sayBar: (title: string, actions: readonly PageBarAction[]) => void;
 }) {
-  const { ui, shown, client, send, fail } = props;
+  const { ui, shown, client, send, fail, sayBar } = props;
   const Page = ui.pages[shown.page];
   useEffect(() => {
     if (Page) send({ type: "ready" });
@@ -230,7 +256,7 @@ function Framed(props: {
         unit={shown.context.temperatureUnit ?? undefined}
       >
         <HomeTimeZoneProvider timeZone={shown.context.timeZone ?? undefined}>
-          <PageBarSink.Provider value={(title) => send({ type: "bar", title })}>
+          <PageBarSink.Provider value={sayBar}>
             <Provider>
               <main className="frame-page">
                 <Page
