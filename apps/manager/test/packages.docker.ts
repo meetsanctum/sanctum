@@ -286,7 +286,8 @@ describe("the apps' packages on real images", () => {
       const said = await fetch(at(`/api/pages/apps/${id}`), {
         headers: { authorization },
       });
-      expect(await said.json(), id).toEqual({ digest });
+      // With the kit the core serves now, the one the ticket names.
+      expect(await said.json(), id).toEqual({ digest, kit });
       const base = `/pages/${ticket}/apps/${id}/${digest}/`;
       const page = await fetch(at(base));
       expect(page.status, id).toBe(200);
