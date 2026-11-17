@@ -14,7 +14,7 @@ import type { PageParams } from "../app-ui";
 // id, and the shell answers each; it never sends a URL, method or header.
 
 /** The version of what's said here; a client from before a page's can't show it. */
-export const frameBridge = 1;
+export const frameBridge = 2;
 
 /** The first message, from the frame to its parent, before there's a port. */
 export type FrameHello = { sanctum: "hello"; code: string; bridge: number };
@@ -41,13 +41,27 @@ export type FrameOperation =
 export type FromFrame =
   | ({ type: "request"; id: number } & FrameOperation)
   | { type: "subscribe"; on: boolean }
-  | { type: "bar"; title: string }
+  // The title and actions the shell's top bar shows, new with each revision.
+  | {
+      type: "bar";
+      title: string;
+      actions: FrameBarAction[];
+      revision: number;
+    }
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" }
   | { type: "ready" }
   // Its files didn't load, or it stopped working once drawn.
   | { type: "failed"; reason: "files" | "stopped"; message: string };
+
+/** An action in the top bar as the shell draws it, without its handler. */
+export type FrameBarAction = {
+  id: string;
+  label: string;
+  primary?: boolean;
+  disabled?: boolean;
+};
 
 export type ToFrame =
   | {
@@ -68,7 +82,9 @@ export type ToFrame =
       error: { message: string; code?: string };
     }
   | { type: "live"; message: LiveMessage }
-  | { type: "refresh" };
+  | { type: "refresh" }
+  // An action pressed in the top bar, as drawn at that revision.
+  | { type: "press"; id: string; revision: number };
 
 /** Whether a message is a frame's hello, before anything else is believed of it. */
 export function isFrameHello(data: unknown): data is FrameHello {

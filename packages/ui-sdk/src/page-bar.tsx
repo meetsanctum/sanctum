@@ -23,33 +23,70 @@ import { Button } from "./components/ui/button";
 export const PageBarSlot = createContext<HTMLElement | null>(null);
 
 /**
- * Where a page in its frame says its title, which the shell's top bar
- * shows: the frame can't reach the bar itself.
+ * One of a page's actions in the top bar, such as Cancel, Save or Done: a
+ * word on a button, the page's one primary filled. A page in a frame
+ * describes them, and the shell draws them, since the frame can't reach the
+ * bar; a press comes back to `onPress`.
  */
-export const PageBarSink = createContext<((title: string) => void) | null>(
-  null,
-);
+export type PageBarAction = {
+  id: string;
+  label: string;
+  primary?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+};
 
-export function PageBar(props: { title: string; children?: ReactNode }) {
+/**
+ * Where a page in its frame says its title and its actions, which the
+ * shell's top bar shows: the frame can't reach the bar itself.
+ */
+export const PageBarSink = createContext<
+  ((title: string, actions: readonly PageBarAction[]) => void) | null
+>(null);
+
+export function PageBar(props: {
+  title: string;
+  /** Its actions, at most three, which a page in a frame shows only this way. */
+  actions?: readonly PageBarAction[];
+  children?: ReactNode;
+}) {
   const slot = useContext(PageBarSlot);
   const sink = useContext(PageBarSink);
   const isPhone = usePhone();
+  const actions = props.actions ?? none;
   useEffect(() => {
-    sink?.(props.title);
-  }, [sink, props.title]);
+    sink?.(props.title, actions);
+  }, [sink, props.title, actions]);
   const title = (
     <h1 className="m-0 min-w-0 truncate ps-2 text-xl leading-7 font-normal">
       {props.title}
     </h1>
   );
-  const buttons = props.children && (
+  const hasButtons = actions.length > 0 || !!props.children;
+  const buttons = hasButtons && (
     <div className="ms-auto flex shrink-0 items-center gap-2 ps-3">
+      {actions.map((action) => (
+        <Button
+          key={action.id}
+          variant={action.primary ? "default" : "outline"}
+          disabled={action.disabled}
+          onClick={action.onPress}
+        >
+          {action.label}
+        </Button>
+      ))}
       {props.children}
     </div>
   );
+  // In a frame the shell draws the title and the actions; anything else
+  // in the bar stays in the page.
   if (sink) {
-    return buttons ? (
-      <header className="flex shrink-0 items-center">{buttons}</header>
+    return props.children ? (
+      <header className="flex shrink-0 items-center">
+        <div className="ms-auto flex shrink-0 items-center gap-2 ps-3">
+          {props.children}
+        </div>
+      </header>
     ) : null;
   }
   if (!slot) {
@@ -110,6 +147,8 @@ export function PageBarButton({
     </Button>
   );
 }
+
+const none: readonly PageBarAction[] = [];
 
 // A phone is narrower than Tailwind's `sm`, as `max-sm:` utilities have it.
 const phoneQuery = "(width < 40rem)";

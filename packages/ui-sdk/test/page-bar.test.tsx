@@ -5,7 +5,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "../src/components/ui/button";
-import { PageBar, PageBarButton, PageBarSlot } from "../src/page-bar";
+import {
+  PageBar,
+  PageBarButton,
+  PageBarSink,
+  PageBarSlot,
+} from "../src/page-bar";
 
 let container: HTMLDivElement;
 let slot: HTMLDivElement;
@@ -120,4 +125,57 @@ it("makes a header of its own outside the shell", async () => {
     ["", "Save"],
   ]);
   expect(slot.childElementCount).toBe(0);
+});
+
+describe("its actions", () => {
+  const actions = (pressed: string[], disabled = false) => [
+    { id: "cancel", label: "Cancel", onPress: () => pressed.push("cancel") },
+    {
+      id: "save",
+      label: "Save",
+      primary: true,
+      disabled,
+      onPress: () => pressed.push("save"),
+    },
+  ];
+
+  it("are buttons in the top bar, the primary filled, as the page's own", async () => {
+    screenWidth(1280);
+    const pressed: string[] = [];
+    await act(async () => {
+      root.render(
+        <PageBarSlot.Provider value={slot}>
+          <PageBar title="Edit mood" actions={actions(pressed, true)} />
+        </PageBarSlot.Provider>,
+      );
+    });
+    const [cancel, save] = slot.querySelectorAll("button");
+    expect(buttonsIn(slot)).toEqual([
+      ["Cancel", null],
+      ["Save", null],
+    ]);
+    expect(save!.disabled).toBe(true);
+    expect(save!.className).not.toBe(cancel!.className);
+    await act(async () => cancel!.click());
+    expect(pressed).toEqual(["cancel"]);
+  });
+
+  it("go to the shell from a page in a frame, which draws none of them", async () => {
+    screenWidth(1280);
+    const said = vi.fn();
+    await act(async () => {
+      root.render(
+        <PageBarSink.Provider value={said}>
+          <PageBar title="Edit mood" actions={actions([])} />
+        </PageBarSink.Provider>,
+      );
+    });
+    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(said).toHaveBeenLastCalledWith(
+      "Edit mood",
+      expect.arrayContaining([
+        expect.objectContaining({ id: "save", label: "Save", primary: true }),
+      ]),
+    );
+  });
 });

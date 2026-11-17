@@ -1,5 +1,4 @@
 import {
-  Button,
   PageBar,
   icons,
   SectionTile,
@@ -164,11 +163,10 @@ export function RoomMoodsPage(props: PageProps) {
 
   return (
     <>
-      <PageBar title={`${room.name} moods`}>
-        <Button variant="outline" onClick={back}>
-          Done
-        </Button>
-      </PageBar>
+      <PageBar
+        title={`${room.name} moods`}
+        actions={[{ id: "done", label: "Done", onPress: back }]}
+      />
       <section
         aria-labelledby="moods-heading"
         className="flex shrink-0 flex-col gap-2"
