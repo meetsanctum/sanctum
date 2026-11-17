@@ -230,12 +230,20 @@ export function createPages(options: {
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
+        // The preload runs in frames too, where it gives no bridge and takes
+        // WebRTC out of an app's page (preload.cts).
+        nodeIntegrationInSubFrames: true,
         spellcheck: false,
       },
     });
     if (process.platform === "darwin") {
       page.lights = createWindowLights(page.window);
     }
+    // No WebRTC traffic over UDP but through a proxy, which there isn't:
+    // behind taking WebRTC out of frames, the page needs none.
+    page.window.webContents.setWebRTCIPHandlingPolicy(
+      "disable_non_proxied_udp",
+    );
     // A frame goes only to the address the client named for it, and is
     // never redirected; the main frame's navigations are main.ts's.
     page.window.webContents.on("will-frame-navigate", (event) => {
