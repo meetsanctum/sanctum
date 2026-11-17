@@ -8,6 +8,7 @@ import {
   rename,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { digestOf } from "../src/pages/files.js";
-import { kitFits } from "../src/pages/pages.js";
+import { kitNeeds } from "../src/pages/pages.js";
 import { ticketGraceMs, ticketWeekMs } from "../src/pages/tickets.js";
 import {
   claimed,
@@ -249,6 +250,44 @@ describe("the kit", () => {
   });
 });
 
+describe("a kit rebuilt as the core runs", () => {
+  it("is read again once its kit.json changes, as ui-sdk's build makes it in development", async () => {
+    expect((await ticketFor()).kit?.digest).toBe(kitDigest);
+    const rebuilt = { ...kitFiles, "react.js": "export const useState = 2;" };
+    const rebuiltDigest = digestOf(
+      Object.entries(rebuilt).map(([name, body]) => [
+        name,
+        { sha256: sha256(body) },
+      ]),
+    );
+    await writeAll(kitDir, {
+      ...rebuilt,
+      "kit.json": JSON.stringify({
+        version: "0.1.0",
+        bridge: 1,
+        digest: rebuiltDigest,
+        stylesheet: "kit.css",
+        imports: { react: "react.js" },
+      }),
+    });
+    const later = new Date(Date.now() + 5_000);
+    await utimes(join(kitDir, "kit.json"), later, later);
+    // Looked at again a second later at most.
+    core.advance(1_000);
+    const [{ ticket, kit }, concurrent] = await Promise.all([
+      ticketFor(),
+      ticketFor(),
+    ]);
+    expect(kit?.digest).toBe(rebuiltDigest);
+    expect(concurrent.kit?.digest).toBe(rebuiltDigest);
+    const served = await get(
+      core,
+      `/pages/${ticket}/kit/${rebuiltDigest}/react.js`,
+    );
+    expect(served.body).toBe(rebuilt["react.js"]);
+  });
+});
+
 describe("a ticket that opens nothing", () => {
   it("gets the same answer as a file that isn't there, so nobody learns what a home has", async () => {
     const { ticket } = await ticketFor();
@@ -411,7 +450,10 @@ describe("an app's pages", () => {
       token,
     });
     expect(asked.statusCode).toBe(200);
-    expect(asked.json()).toEqual({ digest: pageDigest });
+    expect(asked.json()).toEqual({
+      digest: pageDigest,
+      kit: { version: "0.1.0", bridge: 1, digest: kitDigest },
+    });
     expect(
       (
         await get(core, "/api/pages/apps/sanctum.missing", {
@@ -545,23 +587,43 @@ describe("an app's pages", () => {
 });
 
 describe("pages built for a kit", () => {
-  it("fit any kit of its major from that version on, where below 1.0 the minor is the major", () => {
-    expect(kitFits("0.1.0", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.3")).toBe(true);
-    expect(kitFits("0.1.3", "0.1.0")).toBe(false);
-    expect(kitFits("0.1.0", "0.2.0")).toBe(false);
-    expect(kitFits("1.2.0", "1.4.0")).toBe(true);
-    expect(kitFits("1.4.1", "1.4.0")).toBe(false);
-    expect(kitFits("1.2.0", "2.0.0")).toBe(false);
-    expect(kitFits("not a version", "1.0.0")).toBe(false);
+  it.each([
+    ["0.1.0", "0.1.0", null],
+    ["0.1.0", "0.1.3", null],
+    ["0.1.3", "0.1.0", "sanctum"],
+    ["0.2.0", "0.1.0", "sanctum"],
+    ["0.1.0", "0.2.0", "pages"],
+    ["0.9.0", "1.0.0", "pages"],
+    ["1.0.0", "0.9.0", "sanctum"],
+    ["1.2.0", "1.4.0", null],
+    ["1.4.1", "1.4.0", "sanctum"],
+    ["1.2.0", "2.0.0", "pages"],
+    ["not a version", "1.0.0", "pages"],
     // A prerelease comes before its release, and after the one before it.
-    expect(kitFits("0.1.0", "0.1.0-beta.1")).toBe(false);
-    expect(kitFits("0.1.0-beta.1", "0.1.0")).toBe(true);
-    expect(kitFits("0.1.0-beta.2", "0.1.0-beta.10")).toBe(true);
-    expect(kitFits("0.1.0-beta.10", "0.1.0-beta.2")).toBe(false);
-    expect(kitFits("0.1.0-beta", "0.1.0-beta.1")).toBe(true);
-    expect(kitFits("0.1.0", "0.1.1-beta.1")).toBe(true);
+    ["0.1.0", "0.1.0-beta.1", "sanctum"],
+    ["0.1.0-beta.1", "0.1.0", null],
+    ["0.1.0-beta.2", "0.1.0-beta.10", null],
+    ["0.1.0-beta.10", "0.1.0-beta.2", "sanctum"],
+    ["0.1.0-beta", "0.1.0-beta.1", null],
+    ["0.1.0", "0.1.1-beta.1", null],
+  ])("built for %s, served %s, need %s", (builtFor, served, needs) => {
+    expect(kitNeeds(builtFor, served)).toBe(needs);
   });
+
+  it.each([
+    ["0.2.0", "sanctum"],
+    ["0.0.5", "pages"],
+  ])(
+    "built for %s, say what they need to whoever asks for their build",
+    async (builtFor, needs) => {
+      await stagePages(undefined, undefined, builtFor);
+      const asked = await get(core, "/api/pages/apps/sanctum.example", {
+        token,
+      });
+      expect(asked.statusCode).toBe(404);
+      expect(asked.json()).toEqual({ error: "not_found", needs });
+    },
+  );
 
   it("aren't served by a core whose kit can't stand in for theirs, which it says once", async () => {
     const { ticket } = await ticketFor();

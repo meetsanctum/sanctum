@@ -2,10 +2,10 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import { createLiveFeed, type CoreBridge } from "@meetsanctum/ui-sdk";
 import { describe, expect, it, vi } from "vitest";
 
-import { hostedApps, opens, pageOf } from "../src/apps";
+import { hasPage, hostedApps, opens } from "../src/apps";
 
-// The apps the shell hosts: those the core lists as installed whose UI it
-// bundles, each with a client limited to what the core says it holds.
+// The apps the shell hosts: every one the core lists as installed, each with
+// a client limited to what the core says it holds, and the pages it lists.
 
 const app = (id: string, name: string, pages: string[] = []): AppInfo => ({
   id,
@@ -27,7 +27,7 @@ const bridge = (): CoreBridge => ({
 });
 
 describe("hosted apps", () => {
-  it("are the installed apps the shell has a UI for", () => {
+  it("are the installed apps, in the core's order, whatever their pages", () => {
     const hosted = hostedApps(
       [
         app("sanctum.zigbee", "Zigbee", ["main"]),
@@ -39,6 +39,7 @@ describe("hosted apps", () => {
     expect(hosted.map((each) => each.info.id)).toEqual([
       "sanctum.zigbee",
       "sanctum.moods",
+      "sanctum.example",
     ]);
   });
 
@@ -70,16 +71,15 @@ describe("hosted apps", () => {
     expect(opens(older!)).toBe(false);
   });
 
-  it("opens only pages that are both installed and bundled", () => {
+  it("open only the pages the core lists", () => {
     const [moods] = hostedApps(
-      [app("sanctum.moods", "Moods", ["room", "missing", "constructor"])],
+      [app("sanctum.moods", "Moods", ["room", "constructor"])],
       bridge(),
     );
-    expect(pageOf(moods, "room")).toBe(moods!.ui.pages.room);
-    expect(pageOf(moods, "category")).toBeUndefined();
-    expect(pageOf(moods, "main")).toBeUndefined();
-    expect(pageOf(moods, "missing")).toBeUndefined();
-    expect(pageOf(moods, "constructor")).toBeUndefined();
-    expect(pageOf(undefined, "main")).toBeUndefined();
+    expect(hasPage(moods, "room")).toBe(true);
+    expect(hasPage(moods, "constructor")).toBe(true);
+    expect(hasPage(moods, "main")).toBe(false);
+    expect(hasPage(moods, "toString")).toBe(false);
+    expect(hasPage(undefined, "main")).toBe(false);
   });
 });

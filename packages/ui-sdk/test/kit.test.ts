@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { frameBridge } from "../src/frame/protocol";
 import { digestOf, listFiles } from "../tools/files";
 import { lucideIcons } from "../tools/icons";
 import { buildKit, sdkVersion, type KitManifest } from "../tools/kit";
@@ -34,7 +35,7 @@ describe("the kit", { timeout: 60_000 }, () => {
   it("says its version, bridge, digest, stylesheet and which module answers each import", async () => {
     expect(kit).toEqual({
       version: sdkVersion(),
-      bridge: 1,
+      bridge: frameBridge,
       // What the build says it wrote is what's on disk.
       digest: digestOf(await listFiles(dir, ["kit.json"])),
       stylesheet: "kit.css",
@@ -48,6 +49,7 @@ describe("the kit", { timeout: 60_000 }, () => {
       },
     });
     expect(JSON.parse(read("kit.json"))).toEqual(kit);
+    expect(kit.bridge).toBe(4);
     for (const [, module] of Object.entries(kit.imports)) {
       expect(existsSync(join(dir, module))).toBe(true);
     }

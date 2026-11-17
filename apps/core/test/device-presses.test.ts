@@ -411,12 +411,15 @@ describe("capturing a remote's presses", () => {
 });
 
 describe("an app's page capturing a remote's presses", () => {
+  // The app's page names its app in the request's header, as the shell's
+  // bridge does.
+  const asPage = { "x-sanctum-app": "test.presses" };
   const capture = (core: TestCore, token: string, device: string) =>
     post(
       core,
       "/api/devices/capture/start",
-      { device, app: "test.presses" },
-      { token },
+      { device },
+      { token, headers: asPage },
     );
   const grant = (
     core: TestCore,
@@ -457,8 +460,8 @@ describe("an app's page capturing a remote's presses", () => {
         await post(
           other.core,
           "/api/devices/capture/start",
-          { device: other.office, app: "test.missing" },
-          other.maya,
+          { device: other.office },
+          { ...other.maya, headers: { "x-sanctum-app": "test.missing" } },
         )
       ).statusCode,
     ).toBe(404);
@@ -513,7 +516,50 @@ describe("an app's page capturing a remote's presses", () => {
     await radio.pressButton("remote-1", "single");
     expect(await noted(core, maya.token, workflow)).toBe(0);
 
+    await post(
+      core,
+      "/api/devices/capture/stop",
+      { id },
+      { ...maya, headers: asPage },
+    );
+    await radio.pressButton("remote-1", "single");
+    expect(await noted(core, maya.token, workflow)).toBe(1);
+  });
+
+  it("is the app's, whatever the body says, and only its page or the shell's own stop it as they began", async () => {
+    const listener = pressListener(["devices.read:button"]);
+    const { core, maya, office } = await remotesHome([listener.pkg]);
+    const { id: workflow } = await addWorkflow(core, maya.token, {
+      graph: steps(pressTrigger(office, "single"), noteStep("note")),
+    });
+
+    // An app named in the body, as an older client sends it, is the
+    // shell's capture, and the app's page can't end it.
+    const shells = (
+      await post(
+        core,
+        "/api/devices/capture/start",
+        { device: office, app: "test.presses" },
+        maya,
+      )
+    ).json();
+    await post(
+      core,
+      "/api/devices/capture/stop",
+      { id: shells.id },
+      { ...maya, headers: asPage },
+    );
+    await radio.pressButton("remote-1", "single");
+    expect(await noted(core, maya.token, workflow)).toBe(0);
+    await post(core, "/api/devices/capture/stop", { id: shells.id }, maya);
+
+    // The app's page's capture ends when its app may no longer read
+    // buttons, and the shell's own stop doesn't end it.
+    const { id } = (await capture(core, maya.token, office)).json();
     await post(core, "/api/devices/capture/stop", { id }, maya);
+    await radio.pressButton("remote-1", "single");
+    expect(await noted(core, maya.token, workflow)).toBe(0);
+    await grant(core, maya.token, "devices.read:button", false);
     await radio.pressButton("remote-1", "single");
     expect(await noted(core, maya.token, workflow)).toBe(1);
   });

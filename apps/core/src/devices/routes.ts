@@ -43,7 +43,7 @@ import type { Presses } from "./presses.js";
 //   GET  /api/devices/pairing        PairingInfo
 //   POST /api/devices/pairing/open   { seconds? } → PairingInfo & { since }
 //   POST /api/devices/pairing/close  PairingInfo
-//   POST /api/devices/capture/start  { device, app? } → PressCapture
+//   POST /api/devices/capture/start  { device } → PressCapture
 //   POST /api/devices/capture/stop   { id }
 //   POST /api/devices/firmware/check { id } → DeviceInfo
 //   POST /api/devices/firmware/update { id } → DeviceInfo
@@ -149,11 +149,20 @@ export function registerDeviceRoutes(
   app.post(
     "/api/devices/capture/start",
     async (request): Promise<PressCapture> =>
-      options.presses.capture(request.body, request.principal!.client.id),
+      // A page's capture is its app's, named in the request's header.
+      options.presses.capture(
+        request.body,
+        request.principal!.client.id,
+        request.pageApp?.app ?? null,
+      ),
   );
 
   app.post("/api/devices/capture/stop", async (request, reply) => {
-    options.presses.stopCapture(request.body, request.principal!.client.id);
+    options.presses.stopCapture(
+      request.body,
+      request.principal!.client.id,
+      request.pageApp?.app ?? null,
+    );
     return reply.code(204).send();
   });
 

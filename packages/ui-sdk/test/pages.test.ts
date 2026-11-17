@@ -1,12 +1,25 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { digestOf, listFiles } from "../tools/files";
 import { buildKit, sdkVersion } from "../tools/kit";
 import { buildPages as buildPagesWith } from "../tools/pages";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, cp: vi.fn(fs.cp), rename: vi.fn(fs.rename) };
+});
 
 // `sanctum-pages build`: an app's pages, its ./ui export, built into pages/
 // in its package with React and ui-sdk left out for the kit to answer.
@@ -25,6 +38,8 @@ const buildPages = (dir: string) =>
   buildPagesWith(dir, { kitStylesheet: join(kitDir, "kit.css") });
 
 afterEach(async () => {
+  vi.mocked(cp).mockReset();
+  vi.mocked(rename).mockReset();
   for (const dir of made.splice(0)) {
     await rm(dir, { recursive: true, force: true });
   }
@@ -145,6 +160,84 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
     expect(second?.digest).toBe(first?.digest);
   }, 60_000);
 
+  it("keep the last good build when a rebuild fails, and the command fails", async () => {
+    const dir = await app(page);
+    const good = await buildPages(dir);
+    await writeFile(
+      join(dir, "src/ui/index.tsx"),
+      "export default { this is not a page",
+    );
+    await expect(buildPages(dir)).rejects.toThrow();
+    expect(
+      JSON.parse(readFileSync(join(dir, "pages/pages.json"), "utf8")),
+    ).toEqual(good);
+    expect(existsSync(join(dir, "pages/index.js"))).toBe(true);
+    expect(existsSync(join(dir, "node_modules/.sanctum-pages"))).toBe(false);
+    expect(existsSync(join(dir, "node_modules/.sanctum-pages-next"))).toBe(
+      false,
+    );
+  }, 60_000);
+
+  it.each(["copying the old pages", "publishing the new pages"])(
+    "keep the last good pages when %s fails",
+    async (step) => {
+      const dir = await app(page);
+      const good = await buildPages(dir);
+      await writeFile(
+        join(dir, "src/ui/index.tsx"),
+        page.replace("useState(0)", "useState(1)"),
+      );
+      const failure = new Error("The new pages could not take their place");
+      if (step === "publishing the new pages") {
+        vi.mocked(rename).mockRejectedValueOnce(failure);
+      } else {
+        vi.mocked(cp).mockRejectedValueOnce(failure);
+      }
+
+      await expect(buildPages(dir)).rejects.toThrow(failure);
+      expect(await listFiles(join(dir, "pages"), ["pages.json"])).toEqual(
+        good!.files,
+      );
+      expect(existsSync(join(dir, "node_modules/.sanctum-pages-next"))).toBe(
+        false,
+      );
+      expect(
+        existsSync(join(dir, "node_modules/.sanctum-pages-next-last")),
+      ).toBe(false);
+      // A failed publication does not prevent the next saved change building.
+      expect((await buildPages(dir))?.digest).not.toBe(good?.digest);
+    },
+    60_000,
+  );
+
+  it("rebuild pages copied into a container image, whose directory cannot be moved", async () => {
+    const dir = await app(page);
+    const good = await buildPages(dir);
+    const fs =
+      await vi.importActual<typeof import("node:fs/promises")>(
+        "node:fs/promises",
+      );
+    vi.mocked(rename).mockImplementation((from, to) => {
+      if (from === join(dir, "pages")) {
+        return Promise.reject(
+          Object.assign(new Error("Cannot move a lower layer"), {
+            code: "EXDEV",
+          }),
+        );
+      }
+      return fs.rename(from, to);
+    });
+    await writeFile(
+      join(dir, "src/ui/index.tsx"),
+      page.replace("useState(0)", "useState(1)"),
+    );
+    const built = await buildPages(dir);
+    expect(built?.digest).not.toBe(good?.digest);
+    expect(await listFiles(join(dir, "pages"), ["pages.json"])).toEqual(
+      built!.files,
+    );
+  }, 60_000);
+
   it("fail to build with an icon picked by a name computed while the page runs", async () => {
     const dir = await app(`
 import { defineAppUi, icons } from "@meetsanctum/ui-sdk";
@@ -170,17 +263,5 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
     await writeFile(join(dir, "package.json"), JSON.stringify({ exports: {} }));
     expect(await buildPages(dir)).toBeUndefined();
     expect(existsSync(join(dir, "pages"))).toBe(false);
-  }, 60_000);
-
-  it("removes an earlier build when a rebuild fails", async () => {
-    const dir = await app(page);
-    await buildPages(dir);
-    await writeFile(
-      join(dir, "src/ui/index.tsx"),
-      `export default missing + ;`,
-    );
-    await expect(buildPages(dir)).rejects.toThrow();
-    expect(existsSync(join(dir, "pages"))).toBe(false);
-    expect(existsSync(join(dir, "node_modules/.sanctum-pages"))).toBe(false);
   }, 60_000);
 });

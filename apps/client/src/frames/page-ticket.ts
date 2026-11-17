@@ -59,5 +59,11 @@ export async function pageAddress(appId: string, code: string) {
     coreJson<AppPages>(`/api/pages/apps/${encodeURIComponent(appId)}`),
   ]);
   const path = `/pages/${ticket.ticket}/apps/${encodeURIComponent(appId)}/${pages.digest}/`;
-  return { kit: ticket.kit, url: `${coreUrl(path)}#hello=${code}` };
+  // The kit as the core serves it now, asked for with each opening, rather
+  // than as it was when the ticket was issued: a home that updated since
+  // keeps the ticket. A core from before says only the ticket's.
+  return {
+    kit: pages.kit ?? ticket.kit,
+    url: `${coreUrl(path)}#hello=${code}`,
+  };
 }

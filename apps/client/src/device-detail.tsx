@@ -5,7 +5,6 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { registerPermission } from "@meetsanctum/app-sdk";
 import {
-  AppScope,
   Button,
   contactIcon,
   deviceKindsOf,
@@ -15,12 +14,13 @@ import {
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
 import { Blocks, Footprints, House, Sun, Thermometer } from "lucide-react";
-import { useEffect, useId } from "react";
+import { useEffect, useId, type ComponentProps } from "react";
 
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
 import { contactPageName } from "./contact";
+import { DeviceFrame } from "./frames/device-frame";
 import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
@@ -88,15 +88,13 @@ export function devicePages(
           };
     if (!isShown(app.info)) return [];
     return app.info.provides.devicePages.flatMap((page) => {
-      const Page = app.ui.devicePages?.[page.id];
-      if (!Page) return [];
       if (page.devices === "own") {
         return device.driver === app.info.id
-          ? [{ app, id: page.id, title: page.title, Page, device: seen }]
+          ? [{ app, id: page.id, title: page.title, device: seen }]
           : [];
       }
       return page.kinds.some((kind) => kinds.includes(kind))
-        ? [{ app, id: page.id, title: page.title, Page, device: seen }]
+        ? [{ app, id: page.id, title: page.title, device: seen }]
         : [];
     });
   });
@@ -114,6 +112,8 @@ export function DeviceDetail(props: {
   /** What is on Home, which its header changes. */
   home: OnHome;
   onClose: () => void;
+  /** Whether the home is away, as while it updates, which its apps' pages wait out. */
+  isAway?: boolean;
   /** Says it has come over the window, or has gone. */
   onCovering: (covering: boolean) => void;
   /** Opens the home's Activity, showing this device's. */
@@ -211,6 +211,9 @@ export function DeviceDetail(props: {
                 pages={pages}
                 openSettings={props.onOpenAppSettings}
                 openStatus={props.onOpenStatus}
+                household={devices.places?.home}
+                isAway={props.isAway ?? false}
+                onEscape={onClose}
               />
             ),
           },
@@ -361,23 +364,35 @@ function AppPages(props: {
   pages: ReturnType<typeof devicePages>;
   openSettings: (app: string) => void;
   openStatus: () => void;
+  household: ComponentProps<typeof DeviceFrame>["household"];
+  isAway: boolean;
+  onEscape: () => void;
 }) {
   return (
     <div className="flex w-[520px] max-w-full flex-col gap-8">
-      {props.pages.map(({ app, id, Page, device }) => (
-        <AppScope key={`${app.info.id}/${id}/${device.id}`} client={app.client}>
-          <div className="flex flex-col gap-3">
-            <AppNotice
-              app={app.info}
-              permissionsAre="settings"
-              openSettings={() => props.openSettings(app.info.id)}
-              openStatus={props.openStatus}
+      {props.pages.map(({ app, id, title, device }) => (
+        <div
+          key={`${app.info.id}/${id}/${device.id}`}
+          className="flex flex-col gap-3"
+        >
+          <AppNotice
+            app={app.info}
+            permissionsAre="settings"
+            openSettings={() => props.openSettings(app.info.id)}
+            openStatus={props.openStatus}
+          />
+          <WhileNotRunning app={app.info} className="flex flex-col">
+            <DeviceFrame
+              app={app}
+              page={id}
+              title={title}
+              device={device}
+              household={props.household}
+              isAway={props.isAway}
+              onEscape={props.onEscape}
             />
-            <WhileNotRunning app={app.info} className="flex flex-col">
-              <Page device={device} />
-            </WhileNotRunning>
-          </div>
-        </AppScope>
+          </WhileNotRunning>
+        </div>
       ))}
     </div>
   );

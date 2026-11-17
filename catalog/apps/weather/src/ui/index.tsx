@@ -9,13 +9,14 @@ import { useWeather } from "./use-weather";
 import { updatedWords } from "./words";
 import { version } from "../../sanctum-app.json";
 
-// Weather's UI: its one page. Where there is the room, the weather now
-// stands on the left with when the forecast was fetched at its foot, and the
-// next 24 hours run across the right, over the next ten days beside today's
-// measures and the sun; narrower, the same follow one another in one column,
-// with when it was fetched last. Nothing on it can be pressed, and it has no
-// settings of its own: the unit is the home's, in Settings → Household.
-// Weather is the household's, so every client shows the same.
+// Weather's UI, in a frame the core serves: its one page. Where there is the
+// room, the weather now stands on the left with when the forecast was
+// fetched at its foot, and the next 24 hours run across the right, over the
+// next ten days beside today's measures and the sun; narrower, the same
+// follow one another in one column, with when it was fetched last. Nothing
+// on it can be pressed, and it has no settings of its own: the unit is the
+// home's, in Settings → Household. Weather is the household's, so every
+// client shows the same.
 
 const words = "m-0 max-w-md text-[15px] leading-[22px] text-muted-foreground";
 

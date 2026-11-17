@@ -1,7 +1,6 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 import {
   Button,
-  frameBridge,
   PageBar,
   type FrameContext,
   type PageParams,
@@ -10,29 +9,18 @@ import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { looksRunning, NoticeCard } from "../app-state";
-import { getShell } from "../shell";
+import { NoticeCard } from "../app-state";
 import type { HostedApp } from "../apps";
 import { KnotLoader } from "../knot-loader";
 import { PageDoesntMatch } from "../page-mismatch";
-import { openBridge, type FrameBridge, type FrameEvent } from "./bridge";
-import { forgetPageTicket, pageAddress } from "./page-ticket";
+import type { FrameEvent } from "./bridge";
+import { possessive, useFrame } from "./use-frame";
 
-// An app's page in a frame of its own, loaded from the core under this
-// client's page ticket, sandboxed with nothing to connect to but the shell.
-// Until the page says it's ready the top bar shows the app's name and the
-// page stays in its colour; after 0.4 s the knot loader says it's opening.
-// The home comes first: while it's away the page's timer waits, so a home
-// that's updating is never called a page failing. The app comes next: while
-// it isn't running its own notice shows over the page. Only then the page:
-// one that doesn't answer in 10 s, whose files didn't load, or that stopped
-// working once drawn says so, with Try again, which loads it afresh.
-
-// "newer" is a home whose kit speaks a newer bridge than this client.
-type Phase = "opening" | "ready" | "late" | "files" | "stopped" | "newer";
-
-const loaderAfterMs = 400;
-const answerWithinMs = 10_000;
+// An app's page in a frame of its own (use-frame.ts). Until the page says
+// it's ready the top bar shows the app's name and the page stays in its
+// colour; after 0.4 s the knot loader says it's opening. The page's title
+// and actions go in the shell's top bar, which the frame can't reach, and
+// another of the app's pages shows in the same frame.
 
 export function AppFrame(props: {
   app: HostedApp;
@@ -51,18 +39,9 @@ export function AppFrame(props: {
 }) {
   const { app, mode, household } = props;
   const { name } = app.info;
-  const [attempt, setAttempt] = useState(0);
-  const [phase, setPhase] = useState<Phase>("opening");
-  const [title, setTitle] = useState<string>();
-  // Where the frame loads from, with the code in its address. Each address
-  // gets a frame of its own: one that differs only after its # would be a
-  // jump within the page already there, which keeps the old code.
-  const [src, setSrc] = useState<{ url: string; code: string }>();
-  const [showsLoader, setShowsLoader] = useState(false);
-  const frame = useRef<HTMLIFrameElement>(null);
-  // The code of the address whose page has loaded once.
-  const loads = useRef<{ code?: string }>({});
-  const bridge = useRef<FrameBridge>(undefined);
+  // The page's own title and actions for the top bar, once it says them.
+  const [bar, setBar] = useState<Extract<FrameEvent, { type: "bar" }>>();
+  const title = bar?.title;
   const context = useMemo<FrameContext>(
     () => ({
       mode,
@@ -71,31 +50,25 @@ export function AppFrame(props: {
     }),
     [mode, household?.temperatureUnit, household?.timeZone],
   );
-  // What the frame's messages act on, as the shell has it now.
-  const latest = useRef({ ...props, context });
+  const latest = useRef(props);
   useEffect(() => {
-    latest.current = { ...props, context };
+    latest.current = props;
   });
 
-  // A frame afresh, for each try and each version the app runs.
-  const { id, version } = app.info;
-  useEffect(() => {
-    let isCurrent = true;
-    setPhase("opening");
-    setTitle(undefined);
-    setSrc(undefined);
-    setShowsLoader(false);
-    const on = (event: FrameEvent) => {
-      if (!isCurrent) return;
+  const shown = useFrame({
+    app,
+    context,
+    isAway: props.isAway,
+    setup: () => ({
+      page: latest.current.page,
+      params: latest.current.params,
+    }),
+    on(event) {
       switch (event.type) {
-        case "ready":
-          return setPhase((now) =>
-            now === "opening" || now === "late" ? "ready" : now,
-          );
         case "failed":
-          return setPhase(event.reason);
+          return setBar(undefined);
         case "bar":
-          return setTitle(event.title);
+          return setBar(event);
         case "open":
           return latest.current.open(event.page, event.params);
         case "back":
@@ -103,58 +76,14 @@ export function AppFrame(props: {
         case "openSettings":
           return latest.current.openSettings();
       }
-    };
-    const code = helloCode();
-    const opened = openBridge({
-      frame: () => frame.current?.contentWindow ?? null,
-      code,
-      client: () => latest.current.app.client,
-      setup: () => {
-        const { app, page, params, context } = latest.current;
-        return { type: "setup", app: app.info, page, params, context };
-      },
-      on,
-    });
-    bridge.current = opened;
-    // The desktop app holds the frame to the address named here, with its
-    // code (apps/desktop/src/frames.ts); a plain browser has no such check.
-    const frames = getShell().frames;
-    let named: string | undefined;
-    pageAddress(id, code)
-      .then(async ({ kit, url }) => {
-        if (!isCurrent) return;
-        if (kit?.bridge !== frameBridge) {
-          return setPhase(kit && kit.bridge > frameBridge ? "newer" : "files");
-        }
-        if (frames) {
-          named = url;
-          if (!(await frames.allow(url)))
-            throw new Error("Not a page's address");
-          if (!isCurrent) return;
-        }
-        setSrc({ url, code });
-      })
-      .catch(() => {
-        if (!isCurrent) return;
-        forgetPageTicket();
-        setPhase("files");
-      });
-    return () => {
-      isCurrent = false;
-      opened.close();
-      bridge.current = undefined;
-      if (named) void frames?.end(named);
-    };
-  }, [attempt, id, version]);
+    },
+  });
+  const { phase, failed } = shown;
 
-  // What changes while it's open, said to the page in it.
-  useEffect(() => {
-    bridge.current?.send({ type: "app", app: app.info });
-    bridge.current?.renew();
-  }, [app.info]);
-  useEffect(() => {
-    bridge.current?.send({ type: "context", context });
-  }, [context]);
+  // A new frame starts with the app's name in the bar.
+  const { id, version, build } = app.info;
+  useEffect(() => setBar(undefined), [shown.frameKey, id, version, build]);
+
   const shownBefore = useRef(props.shown);
   useEffect(() => {
     if (shownBefore.current === props.shown) return;
@@ -162,36 +91,34 @@ export function AppFrame(props: {
     const { page, params } = latest.current;
     if (phase === "opening" || phase === "ready") {
       // The app's name until the new page says its own title.
-      setTitle(undefined);
-      bridge.current?.send({ type: "show", page, params });
+      setBar(undefined);
+      shown.send({ type: "show", page, params });
     } else {
-      setAttempt((each) => each + 1);
+      shown.again();
     }
-  }, [props.shown, phase]);
+  }, [props.shown, phase, shown]);
 
-  const isRunning = looksRunning(app.info);
-  const waits = props.isAway || !isRunning;
-  useEffect(() => {
-    if (phase !== "opening" || waits) return;
-    const loader = setTimeout(() => setShowsLoader(true), loaderAfterMs);
-    const late = setTimeout(
-      () => setPhase((now) => (now === "opening" ? "late" : now)),
-      answerWithinMs,
-    );
-    return () => {
-      clearTimeout(loader);
-      clearTimeout(late);
-    };
-  }, [phase, waits, attempt, id, version]);
-
-  if (phase === "newer") {
-    return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
+  if (shown.mismatch) {
+    return <PageDoesntMatch app={app.info} mismatch={shown.mismatch} />;
   }
-  const failed =
-    !waits && (phase === "late" || phase === "files" || phase === "stopped");
   return (
     <>
-      <PageBar title={title ?? name} />
+      <PageBar
+        title={title ?? name}
+        actions={
+          failed
+            ? undefined
+            : bar?.actions.map((action) => ({
+                ...action,
+                onPress: () =>
+                  shown.send({
+                    type: "press",
+                    id: action.id,
+                    revision: bar.revision,
+                  }),
+              }))
+        }
+      />
       {failed ? (
         <NoticeCard
           Icon={CircleAlert}
@@ -209,20 +136,13 @@ export function AppFrame(props: {
             .filter(Boolean)
             .join(" ")}
           action={
-            <Button
-              variant="outline"
-              onClick={() => {
-                forgetPageTicket();
-                setAttempt((each) => each + 1);
-              }}
-            >
+            <Button variant="outline" onClick={shown.tryAgain}>
               Try again
             </Button>
           }
         />
       ) : (
-        phase === "opening" &&
-        showsLoader && (
+        shown.showsLoader && (
           <div role="status" className="flex items-center gap-3">
             <KnotLoader className="size-7 shrink-0 text-(--secondary)" />
             <p className="m-0 text-muted-foreground">Opening {name}</p>
@@ -230,24 +150,9 @@ export function AppFrame(props: {
         )
       )}
       <iframe
-        key={src?.code ?? "opening"}
-        ref={frame}
-        src={src?.url}
+        key={shown.frameKey}
+        {...shown.frameProps}
         title={title ?? name}
-        sandbox="allow-scripts"
-        allow=""
-        referrerPolicy="no-referrer"
-        // A page that loads again, reloaded or sent elsewhere by its own
-        // code, would come back with a code its bridge has used: it gets a
-        // frame afresh instead, with a new one.
-        onLoad={() => {
-          if (!src) return;
-          if (loads.current.code === src.code) {
-            setAttempt((each) => each + 1);
-          } else {
-            loads.current = { code: src.code };
-          }
-        }}
         // Full bleed to the panel's sides and foot, as the page it holds.
         className={cn(
           "-mx-6 -mb-6 min-h-0 grow border-0",
@@ -255,17 +160,5 @@ export function AppFrame(props: {
         )}
       />
     </>
-  );
-}
-
-function possessive(name: string) {
-  return name.endsWith("s") ? `${name}'` : `${name}'s`;
-}
-
-// The code a frame says hello with, which only its address carries.
-function helloCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
   );
 }
