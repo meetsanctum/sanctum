@@ -4,6 +4,7 @@ import {
   type Certificate,
   type Session,
   type WebContents,
+  type WebFrameMain,
 } from "electron";
 import { X509Certificate } from "node:crypto";
 
@@ -13,6 +14,7 @@ import {
   isClientUrl,
   serveClient,
 } from "./client-files.js";
+import { createFrameList, type FrameList } from "./frames.js";
 import { channels } from "./shell.js";
 import { refuse, type HostTrust } from "./trust.js";
 import {
@@ -57,6 +59,8 @@ type Page = {
   verifying: number;
   isRetired: boolean;
   decisions: Map<string, CertificateDecision>;
+  // The frames the client named for apps' pages (frames.ts).
+  frames: FrameList;
 };
 
 type CertificateDecision = {
@@ -81,6 +85,27 @@ function readCertificateDecision(certificates: string[], isAccepted: boolean) {
   } catch {
     // A malformed chain cannot become valid after a clock correction.
     return undefined;
+  }
+}
+
+// Whether a request may go ahead as far as frames go: one from the main
+// frame, or from nowhere the page can name, always; one from a frame only
+// to that frame's page and the kit. A frame gone while it was asked about
+// gets nothing.
+function mayFrameLoad(
+  page: Page,
+  details: { url: string; resourceType: string; frame?: WebFrameMain | null },
+) {
+  try {
+    const frame = details.frame;
+    if (!frame || frame.parent === null) return true;
+    return page.frames.mayLoad(
+      frame.url,
+      details.url,
+      details.resourceType === "subFrame",
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -141,6 +166,11 @@ export function createPages(options: {
     // wall clock too, so a clock correction cannot retain stale trust or a
     // cached date refusal after those dates become valid.
     own.webRequest.onBeforeRequest((details, callback) => {
+      // A frame's loads reach only its own page and the kit.
+      if (!mayFrameLoad(page, details)) {
+        callback({ cancel: true });
+        return;
+      }
       if (isClientUrl(details.url)) {
         callback({ cancel: false });
         return;
@@ -170,6 +200,7 @@ export function createPages(options: {
       verifying: 0,
       isRetired: false,
       decisions: new Map(),
+      frames: createFrameList(),
     } as Page;
     page.session = pageSession(page);
     page.window = new BrowserWindow({
@@ -206,6 +237,16 @@ export function createPages(options: {
     if (process.platform === "darwin") {
       page.lights = createWindowLights(page.window);
     }
+    // A frame goes only to the address the client named for it, and is
+    // never redirected; the main frame's navigations are main.ts's.
+    page.window.webContents.on("will-frame-navigate", (event) => {
+      if (!event.isMainFrame && !page.frames.mayNavigate(event.url)) {
+        event.preventDefault();
+      }
+    });
+    page.window.webContents.on("will-redirect", (event) => {
+      if (!event.isMainFrame) event.preventDefault();
+    });
     void page.window.loadURL(`${clientOrigin}/`);
     page.window.on("closed", () => {
       page.lights?.stop();
@@ -266,6 +307,13 @@ export function createPages(options: {
     // overlay in the client hides them too, at once.
     setWindowControls(visible: boolean, by: number) {
       current?.lights?.set(visible, by);
+    },
+
+    // The address of a frame the current page shows an app's page in, and
+    // its end (frames.ts).
+    allowFrame: (url: string) => current?.frames.allow(url) ?? false,
+    endFrame(url: string) {
+      current?.frames.end(url);
     },
 
     // The View menu's Show sidebar or Hide sidebar, for the page to act on.

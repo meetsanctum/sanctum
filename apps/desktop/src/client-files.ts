@@ -27,10 +27,13 @@ const contentTypes: Record<string, string> = {
 // fonts it ships. It reaches the core wherever the host is on the home
 // network, so connections may go to any address: over HTTPS and WSS, and
 // plain HTTP only in development. Every one is checked against the pin
-// (trust.ts).
+// (trust.ts). Its frames show apps' pages from the core's /pages/, wherever
+// the host is; the main process holds each to the address the client named
+// for it (frames.ts).
 export function contentSecurityPolicy(allowPlainHttp: boolean) {
   return [
     "default-src 'self'",
+    `frame-src https://*:*/pages/${allowPlainHttp ? " http://*:*/pages/" : ""}`,
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",

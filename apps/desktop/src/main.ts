@@ -60,10 +60,12 @@ protocol.registerSchemesAsPrivileged([
 
 let pages: Pages | undefined;
 
-// Only the client's own page may use the bridge, in the current window.
+// Only the client's own page may use the bridge, in the current window, and
+// only from its main frame: never from a frame an app's page runs in.
 function fromClient(event: IpcMainEvent | IpcMainInvokeEvent) {
   return (
-    isClientUrl(event.senderFrame?.url ?? "") &&
+    event.senderFrame?.parent === null &&
+    isClientUrl(event.senderFrame.url) &&
     pages?.isCurrent(event.sender) === true
   );
 }
@@ -252,6 +254,8 @@ void app.whenReady().then(async () => {
     },
   );
   handle(channels.trustResumed, () => shown.resumed());
+  handle(channels.frameAllow, (url: string) => shown.allowFrame(String(url)));
+  handle(channels.frameEnd, (url: string) => shown.endFrame(String(url)));
   handle(channels.trustCandidate, () => trust.candidate());
   handle(channels.trustFailure, (url: string) => trust.failure(String(url)));
   handle(channels.preferenceGet, (key: string) => preferences.get(String(key)));

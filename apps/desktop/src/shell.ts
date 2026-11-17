@@ -48,6 +48,8 @@ export const channels = {
   windowControls: "window:controls",
   sidebar: "window:sidebar",
   toggleSidebar: "window:toggle-sidebar",
+  frameAllow: "frames:allow",
+  frameEnd: "frames:end",
 } as const;
 
 // Whether the page has a sidebar and shows it, for the View menu's item:

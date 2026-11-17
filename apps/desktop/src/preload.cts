@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld("sanctumShell", {
     set: (key: string, value: string) =>
       ipcRenderer.invoke("preferences:set", key, value),
   },
+  frames: {
+    allow: (url: string) => ipcRenderer.invoke("frames:allow", url),
+    end: (url: string) => ipcRenderer.invoke("frames:end", url),
+  },
   window: {
     setControls: (visible: boolean, by = 0) =>
       ipcRenderer.invoke("window:controls", visible, by),
