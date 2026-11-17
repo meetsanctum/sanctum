@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { looksRunning } from "../app-state";
 import type { HostedApp } from "../apps";
+import { CoreError } from "../core-fetch";
+import type { PageMismatch } from "../page-mismatch";
 import { getShell } from "../shell";
 import { openBridge, type FrameBridge, type FrameEvent } from "./bridge";
 import { forgetPageTicket, pageAddress } from "./page-ticket";
@@ -19,11 +21,11 @@ import { forgetPageTicket, pageAddress } from "./page-ticket";
 // The app comes next: while it isn't running, its own notice is the shell's.
 // Only then the page: one that doesn't answer in 10 s, whose files didn't
 // load, or that stopped working once drawn says so, and Try again loads it
-// afresh.
+// afresh. A page that can't work with this client or this home says which
+// is too old instead (page-mismatch.tsx).
 
-// "newer" is a home whose kit speaks a newer bridge than this client.
 export type FramePhase =
-  "opening" | "ready" | "late" | "files" | "stopped" | "newer";
+  "opening" | "ready" | "late" | "files" | "stopped" | "mismatch";
 
 const loaderAfterMs = 400;
 const answerWithinMs = 10_000;
@@ -44,6 +46,7 @@ export function useFrame(options: {
   const { app, context } = options;
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<FramePhase>("opening");
+  const [mismatch, setMismatch] = useState<PageMismatch>();
   // Where the frame loads from, with the code in its address. Each address
   // gets a frame of its own: one that differs only after its # would be a
   // jump within the page already there, which keeps the old code.
@@ -65,6 +68,7 @@ export function useFrame(options: {
   useEffect(() => {
     let isCurrent = true;
     setPhase("opening");
+    setMismatch(undefined);
     setSrc(undefined);
     setShowsLoader(false);
     const on = (event: FrameEvent) => {
@@ -99,8 +103,14 @@ export function useFrame(options: {
     pageAddress(id, code)
       .then(async ({ kit, url }) => {
         if (!isCurrent) return;
-        if (kit?.bridge !== frameBridge) {
-          return setPhase(kit && kit.bridge > frameBridge ? "newer" : "files");
+        if (!kit) return setPhase("files");
+        if (kit.bridge !== frameBridge) {
+          // A kit that speaks a newer bridge needs a newer client, and one
+          // that speaks an older one a newer home.
+          setMismatch({
+            needs: kit.bridge > frameBridge ? "client" : "sanctum",
+          });
+          return setPhase("mismatch");
         }
         if (frames) {
           named = url;
@@ -110,8 +120,13 @@ export function useFrame(options: {
         }
         setSrc({ url, code });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!isCurrent) return;
+        const needs = misfitOf(error);
+        if (needs) {
+          setMismatch({ needs });
+          return setPhase("mismatch");
+        }
         forgetPageTicket();
         setPhase("files");
       });
@@ -150,6 +165,8 @@ export function useFrame(options: {
     !waits && (phase === "late" || phase === "files" || phase === "stopped");
   return {
     phase,
+    /** Why the page can't open here, when it's this client or this home that's too old. */
+    mismatch: phase === "mismatch" ? mismatch : undefined,
     failed,
     showsLoader: phase === "opening" && showsLoader && !failed,
     /** Says something to the page, once it has its port. */
@@ -185,6 +202,13 @@ export function useFrame(options: {
       },
     },
   };
+}
+
+// What the core says an app's pages need, when they don't fit its kit.
+function misfitOf(error: unknown) {
+  if (!(error instanceof CoreError) || error.status !== 404) return undefined;
+  const { needs } = (error.body ?? {}) as { needs?: unknown };
+  return needs === "sanctum" || needs === "pages" ? needs : undefined;
 }
 
 export function possessive(name: string) {

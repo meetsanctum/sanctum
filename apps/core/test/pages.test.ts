@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { digestOf } from "../src/pages/files.js";
-import { kitFits } from "../src/pages/pages.js";
+import { kitFits, kitNeeds } from "../src/pages/pages.js";
 import { ticketGraceMs, ticketWeekMs } from "../src/pages/tickets.js";
 import {
   claimed,
@@ -601,6 +601,34 @@ describe("pages built for a kit", () => {
     expect(kitFits("0.1.0-beta", "0.1.0-beta.1")).toBe(true);
     expect(kitFits("0.1.0", "0.1.1-beta.1")).toBe(true);
   });
+
+  it("that don't fit need a newer home, or a new build when the home's major is newer", () => {
+    expect(kitNeeds("0.1.0", "0.1.3")).toBeNull();
+    expect(kitNeeds("0.1.3", "0.1.0")).toBe("sanctum");
+    expect(kitNeeds("0.2.0", "0.1.0")).toBe("sanctum");
+    expect(kitNeeds("0.1.0", "0.2.0")).toBe("pages");
+    expect(kitNeeds("0.9.0", "1.0.0")).toBe("pages");
+    expect(kitNeeds("1.0.0", "0.9.0")).toBe("sanctum");
+    expect(kitNeeds("1.4.1", "1.4.0")).toBe("sanctum");
+    expect(kitNeeds("1.2.0", "2.0.0")).toBe("pages");
+    expect(kitNeeds("0.1.0", "0.1.0-beta.1")).toBe("sanctum");
+    expect(kitNeeds("not a version", "1.0.0")).toBe("pages");
+  });
+
+  it.each([
+    ["0.2.0", "sanctum"],
+    ["0.0.5", "pages"],
+  ])(
+    "built for %s, say what they need to whoever asks for their build",
+    async (builtFor, needs) => {
+      await stagePages(undefined, undefined, builtFor);
+      const asked = await get(core, "/api/pages/apps/sanctum.example", {
+        token,
+      });
+      expect(asked.statusCode).toBe(404);
+      expect(asked.json()).toEqual({ error: "not_found", needs });
+    },
+  );
 
   it("aren't served by a core whose kit can't stand in for theirs, which it says once", async () => {
     const { ticket } = await ticketFor();

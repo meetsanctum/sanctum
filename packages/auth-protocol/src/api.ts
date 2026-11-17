@@ -39,6 +39,12 @@ export type PageTicket = {
 export type AppPages = { digest: string };
 
 /**
+ * Its refusal when the app's pages don't fit the home's kit: they need a
+ * newer home ("sanctum") or a new build of the app's pages ("pages").
+ */
+export type AppPagesMisfit = { error: "not_found"; needs: "sanctum" | "pages" };
+
+/**
  * `GET /api/auth/status`: the host's id, the id of the home it serves
  * and whether it is claimed.
  */

@@ -17,6 +17,18 @@ import { createPageTickets } from "./tickets.js";
  * and a prerelease comes before its release, as SemVer orders them.
  */
 export function kitFits(builtFor: string, served: string) {
+  return kitNeeds(builtFor, served) === null;
+}
+
+/**
+ * What pages that don't fit the kit need, or null when they fit: a newer
+ * home, whose kit is older than theirs, or a new build of the app's pages,
+ * which were built against an older major than the home's.
+ */
+export function kitNeeds(
+  builtFor: string,
+  served: string,
+): "sanctum" | "pages" | null {
   const parse = (version: string) => {
     const match =
       /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
@@ -31,10 +43,19 @@ export function kitFits(builtFor: string, served: string) {
   };
   const want = parse(builtFor);
   const have = parse(served);
-  if (!want || !have) return false;
-  if (want.core[0] !== have.core[0]) return false;
-  if (want.core[0] === 0 && want.core[1] !== have.core[1]) return false;
-  return compareVersions(have, want) >= 0;
+  // Pages that name no version a kit can match need building again.
+  if (!want || !have) return "pages";
+  const major = (version: { core: readonly number[] }) =>
+    version.core[0] === 0 ? [0, version.core[1]!] : [version.core[0]!, 0];
+  const [wantMajor, wantMinor] = major(want);
+  const [haveMajor, haveMinor] = major(have);
+  if (wantMajor !== haveMajor || wantMinor !== haveMinor) {
+    return haveMajor! > wantMajor! ||
+      (haveMajor === wantMajor && haveMinor! > wantMinor!)
+      ? "pages"
+      : "sanctum";
+  }
+  return compareVersions(have, want) >= 0 ? null : "sanctum";
 }
 
 // SemVer's precedence: the numbers, then a release after its prereleases,
@@ -131,45 +152,61 @@ export function createPages(
     return kit;
   }
 
+  // An installed app's pages at the version it runs, or none; for pages
+  // built for a kit this core's can't stand in for, what they need.
+  async function fitOf(
+    appId: string,
+  ): Promise<
+    | { pages: PagesIndex & { name: string } }
+    | { needs: "sanctum" | "pages" }
+    | null
+  > {
+    const running = runningPackage(appId);
+    if (!running) return null;
+    const key = `${appId}/${running.folder}`;
+    let found = indexed.get(key);
+    if (!found) {
+      found = indexPages(
+        join(packagesDir, appId, running.folder, "pages"),
+        log,
+      ).catch((error: unknown) => {
+        log(`pages: ${appId}'s pages couldn't be read (${String(error)})`);
+        indexed.delete(key);
+        return null;
+      });
+      indexed.set(key, found);
+    }
+    const pages = await found;
+    const served = await kitIndex();
+    if (!pages || !served) return null;
+    const needs = kitNeeds(pages.kit, served.version);
+    if (needs) {
+      if (!misfits.has(key)) {
+        misfits.add(key);
+        log(
+          `pages: ${appId}'s pages need kit ${pages.kit}, and this core's is ${served.version}`,
+        );
+      }
+      return { needs };
+    }
+    return { pages: { ...pages, name: running.name } };
+  }
+
   return {
     tickets,
 
     /** The kit this core serves, or none where its image has none. */
     kit: kitIndex,
 
+    fitOf,
+
     /**
      * An installed app's pages at the version it runs, or none: none too
      * when they were built for a kit this core's can't stand in for.
      */
     async pagesOf(appId: string) {
-      const running = runningPackage(appId);
-      if (!running) return null;
-      const key = `${appId}/${running.folder}`;
-      let found = indexed.get(key);
-      if (!found) {
-        found = indexPages(
-          join(packagesDir, appId, running.folder, "pages"),
-          log,
-        ).catch((error: unknown) => {
-          log(`pages: ${appId}'s pages couldn't be read (${String(error)})`);
-          indexed.delete(key);
-          return null;
-        });
-        indexed.set(key, found);
-      }
-      const pages = await found;
-      const served = await kitIndex();
-      if (!pages || !served) return null;
-      if (!kitFits(pages.kit, served.version)) {
-        if (!misfits.has(key)) {
-          misfits.add(key);
-          log(
-            `pages: ${appId}'s pages need kit ${pages.kit}, and this core's is ${served.version}`,
-          );
-        }
-        return null;
-      }
-      return { ...pages, name: running.name };
+      const fit = await fitOf(appId);
+      return fit && "pages" in fit ? fit.pages : null;
     },
 
     /** Whether an address has sent too many tickets that open nothing. */
