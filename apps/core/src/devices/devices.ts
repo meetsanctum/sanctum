@@ -75,6 +75,9 @@ export function createDevices(
     deliver: Deliver;
     // Which run of a driver app this is, which each start changes.
     driverRun?: (driver: string) => number | undefined;
+    // The drivers the household removed: their devices are hidden, kept for
+    // when the driver is added back.
+    hiddenDrivers?: () => ReadonlySet<string>;
     removeFromDriver?: RemoveFromDriver;
     // Called after a change has committed, so live clients can follow.
     onChange?: (change: DeviceChange) => void;
@@ -125,12 +128,17 @@ export function createDevices(
     );
   }
 
+  const hidden = () => options.hiddenDrivers?.() ?? new Set<string>();
+
   function load(id: string): DeviceInfo | null {
     const device = reads.device(id);
-    return device ? deviceInfo(device, reads.capabilities(id)) : null;
+    return device && !hidden().has(device.driver)
+      ? deviceInfo(device, reads.capabilities(id))
+      : null;
   }
 
-  function loadAll(): DeviceInfo[] {
+  // Every device, those of removed drivers too.
+  function loadEvery(): DeviceInfo[] {
     const byDevice = new Map<string, CapabilityRow[]>();
     for (const capability of reads.everyCapability()) {
       byDevice.set(capability.deviceId, [
@@ -142,6 +150,11 @@ export function createDevices(
       .everyDevice()
       .map((device) => deviceInfo(device, byDevice.get(device.id) ?? []))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function loadAll(): DeviceInfo[] {
+    const gone = hidden();
+    return loadEvery().filter((device) => !gone.has(device.driver));
   }
 
   // One of a kind this build doesn't have counts as none, as in deviceInfo.
@@ -411,6 +424,11 @@ export function createDevices(
     get(id: string, view: View = {}): DeviceInfo | null {
       const device = load(id);
       return device && viewOf(device, view);
+    },
+
+    /** A driver's devices, hidden or not, as when it's removed or added back. */
+    ofDriver(driver: string): DeviceInfo[] {
+      return loadEvery().filter((device) => device.driver === driver);
     },
 
     // A client's command: the gate admits the principal behind it.

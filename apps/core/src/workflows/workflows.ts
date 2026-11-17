@@ -23,6 +23,7 @@ import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import { createEngine, type WorkflowRow } from "./engine.js";
 import { createFiring } from "./firing.js";
+import { createWorkflowsForApps } from "./for-apps.js";
 import { sameValue } from "./graph.js";
 import { createJobs, type JobRow, type SunDays } from "./jobs.js";
 import { createKeptGrants } from "./kept-grants.js";
@@ -187,6 +188,17 @@ export function createWorkflows(
     timers,
   });
   const jobs = createJobs(db, { host, clock });
+  const forApps = createWorkflowsForApps({
+    db,
+    rows: () => rows(),
+    problems: (workflow) => pieces.check(workflow.graph).problems,
+    record,
+    endRuns(workflowId) {
+      engine.cancelRuns(workflowId);
+      engine.forget(workflowId);
+    },
+    now,
+  });
   const runningJobs = new Map<string, Promise<void>>();
 
   // Every workflow, compiled once: each change of a device or an entity
@@ -659,6 +671,9 @@ export function createWorkflows(
     motionChanged: unlessHeld(firing.motionChanged),
     pressed: unlessHeld(firing.pressed),
     entityChanged: unlessHeld(firing.entityChanged),
+
+    /** What removing an app, and adding it back, does to workflows (for-apps.ts). */
+    forApps,
 
     /** Apps' jobs, for the app host. */
     jobs: {

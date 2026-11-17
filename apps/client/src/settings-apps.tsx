@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
+import { dayWords } from "./app-go-back";
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
 import { useAvailableApps } from "./available-apps";
@@ -13,7 +14,8 @@ import { Row, Section } from "./components";
 // page, Settings → Apps → the app (app-settings.tsx), which the app's own
 // pages open too. Then Add apps, the apps the home could add, each with its
 // Add, which opens its sheet (add-app-sheet.tsx); with nothing to add, it
-// isn't there.
+// isn't there. One the household removed says until when its data is kept,
+// since adding it back meanwhile brings back what it had.
 
 /** Settings' page for one app, by its id. */
 export const appSettingsPage = "app";
@@ -76,7 +78,14 @@ export function AddAppsSection(props: {
                   icon={app.icon ?? plainIcon}
                   className="size-9 [&_svg]:size-5"
                 />
-                <Row title={app.name} detail={app.summary ?? ""} />
+                <Row
+                  title={app.name}
+                  detail={
+                    app.removed
+                      ? `Removed on ${dayWords(app.removed.at)}. Its data is kept until ${dayWords(app.removed.keptUntil)}.`
+                      : (app.summary ?? "")
+                  }
+                />
                 <Button
                   variant="outline"
                   className="ms-auto shrink-0"

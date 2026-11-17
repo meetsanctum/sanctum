@@ -325,6 +325,13 @@ export function createCore(
               "start workflows",
               async (cancelled) => {
                 await modules!.apps.committed();
+                // A removal a core that stopped left part way finishes,
+                // past a trial, since a rollback brings back its record.
+                void modules!.appRemoving
+                  .resume()
+                  .catch((error: unknown) =>
+                    log(`apps: removals didn't finish (${String(error)})`),
+                  );
                 if (!cancelled.aborted) modules!.workflows.start({ ticking });
               },
             );

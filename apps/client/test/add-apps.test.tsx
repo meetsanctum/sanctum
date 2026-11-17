@@ -119,6 +119,22 @@ describe("Add apps", () => {
     expect(buttonIn(container, "Add Example")).toBeDefined();
   });
 
+  it("says until when the data of one the household removed is kept", async () => {
+    available = [
+      {
+        ...example,
+        removed: {
+          at: "2026-11-17T12:00:00.000Z",
+          keptUntil: "2026-12-17T12:00:00.000Z",
+        },
+      },
+    ];
+    await render();
+    expect(container.textContent).toContain(
+      "Removed on 17 November. Its data is kept until 17 December.",
+    );
+  });
+
   it("isn't there with nothing to add, nor offers one the home has now", async () => {
     available = [];
     await render();

@@ -355,6 +355,23 @@ export type AvailableApp = {
     pieces: number;
   };
   shortfalls: AppShortfall[];
+  /**
+   * When someone removed it, if they did, and until when its own data is
+   * kept: adding it back meanwhile brings back what it had.
+   */
+  removed?: { at: string; keptUntil: string };
+};
+
+/**
+ * What removing an installed app takes from the home, for its dialog
+ * (GET /api/apps/:appId/removal): a driver's devices, the household's
+ * workflows that use it and turn off, and its widgets and room sections.
+ */
+export type AppRemoval = {
+  devices: number;
+  workflows: { id: string; name: string }[];
+  widgets: number;
+  roomSections: number;
 };
 
 /**
