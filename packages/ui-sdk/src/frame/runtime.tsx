@@ -159,11 +159,14 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
     send({ type: "size", height });
   });
   // An Escape the page didn't use goes to the shell, which may close what
-  // the frame is in: a key pressed in the frame never reaches it.
+  // the frame is in: a key pressed in the frame never reaches it. Whether
+  // the page used it is known once every listener has had it, its own on
+  // the window too, which this one, added first, would run before.
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !event.defaultPrevented) {
-      send({ type: "key", key: "Escape" });
-    }
+    if (event.key !== "Escape") return;
+    setTimeout(() => {
+      if (!event.defaultPrevented) send({ type: "key", key: "Escape" });
+    });
   });
 
   const draw = () => {
