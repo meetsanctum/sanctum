@@ -1,6 +1,8 @@
 import type {
   AppInfo,
+  DeviceInfo,
   LiveMessage,
+  LivePress,
   TemperatureUnit,
 } from "@meetsanctum/app-sdk";
 
@@ -14,7 +16,7 @@ import type { PageParams } from "../app-ui";
 // id, and the shell answers each; it never sends a URL, method or header.
 
 /** The version of what's said here; a client from before a page's can't show it. */
-export const frameBridge = 2;
+export const frameBridge = 4;
 
 /** The first message, from the frame to its parent, before there's a port. */
 export type FrameHello = { sanctum: "hello"; code: string; bridge: number };
@@ -36,11 +38,17 @@ export type FrameOperation =
   | { op: "command"; command: unknown }
   | { op: "entities" }
   | { op: "settings" }
-  | { op: "ask"; permissions: string[] };
+  | { op: "ask"; permissions: string[] }
+  // Ends a capture the page began, answered once the core has.
+  | { op: "release"; capture: number };
 
 export type FromFrame =
   | ({ type: "request"; id: number } & FrameOperation)
   | { type: "subscribe"; on: boolean }
+  // Captures a remote's presses, as the shell's client for the app does:
+  // each press it holds back comes as captured, and an end that wasn't
+  // asked for as captureEnded.
+  | { type: "capture"; capture: number; device: string }
   // The title and actions the shell's top bar shows, new with each revision.
   | {
       type: "bar";
@@ -53,7 +61,12 @@ export type FromFrame =
   | { type: "openSettings" }
   | { type: "ready" }
   // Its files didn't load, or it stopped working once drawn.
-  | { type: "failed"; reason: "files" | "stopped"; message: string };
+  | { type: "failed"; reason: "files" | "stopped"; message: string }
+  // How tall the page is drawn, for a device page's frame to fit it.
+  | { type: "size"; height: number }
+  // A key the page didn't use, which the shell may act on: Escape closes a
+  // device's detail.
+  | { type: "key"; key: "Escape" };
 
 /** An action in the top bar as the shell draws it, without its handler. */
 export type FrameBarAction = {
@@ -70,8 +83,13 @@ export type ToFrame =
       page: string;
       params: PageParams;
       context: FrameContext;
+      // For a device page: the device as the app may see it, whose page
+      // `page` names among the app's device pages.
+      device?: DeviceInfo;
     }
   | { type: "app"; app: AppInfo }
+  // The device a device page shows, as it changes.
+  | { type: "device"; device: DeviceInfo }
   | { type: "context"; context: FrameContext }
   | { type: "show"; page: string; params: PageParams }
   | { type: "answer"; id: number; ok: true; value: unknown }
@@ -83,6 +101,8 @@ export type ToFrame =
     }
   | { type: "live"; message: LiveMessage }
   | { type: "refresh" }
+  | { type: "captured"; capture: number; press: LivePress }
+  | { type: "captureEnded"; capture: number; reason: "expired" | "failed" }
   // An action pressed in the top bar, as drawn at that revision.
   | { type: "press"; id: string; revision: number };
 

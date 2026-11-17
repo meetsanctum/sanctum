@@ -42,10 +42,10 @@ export type Press = {
   isCaptured: boolean;
 };
 
+// The app whose page asks is the one its request's header names, as for
+// every page's request, never one in the body, which is left out.
 export const captureRequest = z.object({
   device: z.string().min(1).max(64),
-  // The app whose page asks, if any.
-  app: z.string().min(1).max(128).optional(),
 });
 export const captureRef = z.object({ id: z.string().min(1).max(64) });
 
@@ -189,12 +189,12 @@ export function createPresses(options: {
      * Holds a remote's presses back from apps and workflows for a while, as
      * someone picks one, for the client that asks; every client may.
      */
-    capture(input: unknown, client: string): PressCapture {
+    capture(input: unknown, client: string, app: string | null): PressCapture {
       const parsed = captureRequest.safeParse(input);
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
       }
-      const { device, app = null } = parsed.data;
+      const { device } = parsed.data;
       const refused = app && options.captureRefusal?.(app);
       if (refused) {
         throw new ActionCallError(refused);
@@ -212,13 +212,17 @@ export function createPresses(options: {
       return { id, device, until: new Date(until).toISOString() };
     },
 
-    /** Ends one of the client's captures, which may have ended already. */
-    stopCapture(input: unknown, client: string) {
+    /**
+     * Ends one of the client's captures, which may have ended already: only
+     * as the same app's page, or the shell, as it began.
+     */
+    stopCapture(input: unknown, client: string, app: string | null) {
       const parsed = captureRef.safeParse(input);
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
       }
-      if (captures.get(parsed.data.id)?.client === client) {
+      const found = captures.get(parsed.data.id);
+      if (found?.client === client && found.app === app) {
         captures.delete(parsed.data.id);
       }
     },

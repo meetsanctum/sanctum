@@ -1,5 +1,7 @@
+import { pressCaptureDurationMs } from "@meetsanctum/app-sdk";
 import {
   frameBridge,
+  deviceKindsOf,
   isFrameHello,
   type AppClient,
   type CapabilityCommand,
@@ -16,7 +18,8 @@ import {
 // the app's, so nothing it sends is believed until checked: it asks only
 // for AppClient's operations by name, each run through the shell's client
 // for that app, which limits it to what the app may do, and at most so many
-// at once.
+// at once. A capture of a remote's presses runs in the shell too, and ends
+// with the frame.
 
 /** What the frame tells the shell, once checked. */
 export type FrameEvent =
@@ -30,17 +33,23 @@ export type FrameEvent =
     }
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
-  | { type: "openSettings" };
+  | { type: "openSettings" }
+  | { type: "size"; height: number }
+  | { type: "key"; key: "Escape" };
 
 export type FrameBridge = {
   send(message: ToFrame): void;
-  /** Its live updates through the app's client now, as its grants change. */
+  /** Its live updates and captures, held to the app's current state and grants. */
   renew(): void;
   close(): void;
 };
 
 // Requests a frame may have waiting at once; more are refused, not queued.
 export const requestsAllowed = 32;
+// Captures a frame may hold at once; another ends as it begins.
+export const capturesAllowed = 4;
+// The tallest a page says it is that's believed, in pixels.
+export const tallest = 20_000;
 // A bar title or page name longer than this isn't one.
 const longestText = 200;
 
@@ -58,6 +67,9 @@ export function openBridge(options: {
   const { frame, code, client, setup, on, host = window } = options;
   let port: MessagePort | undefined;
   let unsubscribe: (() => void) | undefined;
+  // The page's captures by its number for each: stopped ones stay until
+  // their release succeeds, so a failed one can be tried again.
+  const captures = new Map<number, { stop(): Promise<void> }>();
   let waiting = 0;
   let isAsking = false;
   let isClosed = false;
@@ -95,6 +107,8 @@ export function openBridge(options: {
         return request(message);
       case "subscribe":
         return live(message.on === true);
+      case "capture":
+        return capture(message.capture, message.device);
       case "bar": {
         const { title, revision } = message;
         const actions = barActionsOf(message.actions);
@@ -112,6 +126,21 @@ export function openBridge(options: {
       case "openSettings":
       case "ready":
         return on({ type: message.type });
+      case "size": {
+        const { height } = message;
+        if (
+          typeof height === "number" &&
+          Number.isInteger(height) &&
+          height >= 0 &&
+          height <= tallest
+        ) {
+          on({ type: "size", height });
+        }
+        return;
+      }
+      case "key":
+        if (message.key === "Escape") on({ type: "key", key: "Escape" });
+        return;
       case "failed":
         return on({
           type: "failed",
@@ -123,7 +152,10 @@ export function openBridge(options: {
   function request(message: Partial<Record<string, unknown>>) {
     const { id } = message;
     if (typeof id !== "number" || !Number.isInteger(id)) return;
-    const operation = operationOf(client(), message);
+    const operation =
+      message.op === "release"
+        ? releaseOf(message.capture)
+        : operationOf(client(), message);
     if (!operation) {
       return send(refusal(id, "That isn't something a page can ask for"));
     }
@@ -158,6 +190,50 @@ export function openBridge(options: {
     );
   }
 
+  function capture(id: unknown, device: unknown) {
+    if (!isCount(id) || captures.has(id)) return;
+    let handle: { stop(): Promise<void> } | undefined;
+    const ended = (reason: "expired" | "failed") => {
+      if (isClosed || captures.get(id) !== handle) return;
+      endCapture(id, reason);
+    };
+    // One the page can't have ends at once, as one that couldn't start.
+    if (!isText(device) || captures.size >= capturesAllowed) {
+      return send({ type: "captureEnded", capture: id, reason: "failed" });
+    }
+    try {
+      handle = client().capturePresses(device, {
+        press: (press) => {
+          if (!isClosed && captures.get(id) === handle) {
+            send({ type: "captured", capture: id, press });
+          }
+        },
+        ended,
+      });
+    } catch {
+      return send({ type: "captureEnded", capture: id, reason: "failed" });
+    }
+    captures.set(id, handle);
+  }
+
+  function endCapture(id: number, reason: "expired" | "failed") {
+    send({ type: "captureEnded", capture: id, reason });
+    // An end can precede a successful release. Keep its handle until
+    // cleanup succeeds, so the page can retry a failed release.
+    void releaseOf(id)!().catch(() => undefined);
+  }
+
+  // Ends one of the page's captures, which may have ended already.
+  function releaseOf(id: unknown): (() => Promise<unknown>) | undefined {
+    if (!isCount(id)) return undefined;
+    return async () => {
+      const handle = captures.get(id);
+      if (!handle) return;
+      await handle.stop();
+      if (captures.get(id) === handle) captures.delete(id);
+    };
+  }
+
   function live(on: boolean) {
     if (on && !unsubscribe) {
       unsubscribe = client().subscribe({
@@ -173,6 +249,13 @@ export function openBridge(options: {
   return {
     send,
     renew() {
+      const app = client().app;
+      if (
+        app.state !== "running" ||
+        !deviceKindsOf(app.permissions).reads.has("button")
+      ) {
+        for (const id of captures.keys()) endCapture(id, "failed");
+      }
       if (!unsubscribe) return;
       live(false);
       live(true);
@@ -180,11 +263,26 @@ export function openBridge(options: {
     close() {
       isClosed = true;
       host.removeEventListener("message", hello);
+      // What the page held back reaches workflows again.
+      for (const handle of captures.values()) {
+        stopAfterClosing(handle, performance.now() + pressCaptureDurationMs);
+      }
+      captures.clear();
       unsubscribe?.();
       unsubscribe = undefined;
       port?.close();
     },
   };
+}
+
+// Once the frame is gone, the shell owns retries until the core's capture
+// expires. There is no page left to act on a failed release.
+function stopAfterClosing(handle: { stop(): Promise<void> }, until: number) {
+  void handle.stop().catch(() => {
+    if (performance.now() < until) {
+      setTimeout(() => stopAfterClosing(handle, until), 5_000);
+    }
+  });
 }
 
 // The operation a request names, run through the app's client, or none for
@@ -255,8 +353,9 @@ function barActionsOf(value: unknown): FrameBarAction[] | undefined {
   return ids.size === actions.length && primaries <= 1 ? actions : undefined;
 }
 
-const isRevision = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value > 0;
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+const isRevision = isCount;
 
 const isText = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= longestText;

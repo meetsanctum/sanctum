@@ -41,9 +41,9 @@ VITE_SANCTUM_CORE_URL=http://127.0.0.1:<port> \
 CORE_ALLOWED_ORIGINS=http://localhost:5173 pnpm dev
 ```
 
-Apps' pages open in frames the core serves, rather than from the
-client's bundle, on a client whose `localStorage` has `sanctum.framePages`
-set to `on`. The core lets only the origins it allows show its pages in a
+Apps' pages and device pages open in frames the core serves, rather than
+from the client's bundle, on a client whose `localStorage` has
+`sanctum.framePages` set to `on`. The core lets only the origins it allows show its pages in a
 frame, so for the dev server's shell start the stack with
 `CORE_ALLOWED_ORIGINS=http://localhost:5173`. A saved change to an app's
 pages shows in its frame once the stack has staged the new build, about ten

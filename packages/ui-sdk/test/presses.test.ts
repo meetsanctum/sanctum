@@ -277,8 +277,9 @@ describe("capturing a remote's presses", () => {
     );
 
     const capture = capturePresses(bridge, "remote", { press: vi.fn() });
-    await capture.stop();
+    const stopping = capture.stop();
     started({ id: "late", device: "remote", until: inFiveMinutes() });
+    await stopping;
 
     await vi.waitFor(() =>
       expect(json).toHaveBeenLastCalledWith("/api/devices/capture/stop", {
@@ -305,12 +306,13 @@ describe("capturing a remote's presses", () => {
       };
       live.publish(event);
       expect(pressed).not.toHaveBeenCalled();
-      if (kind === "stopped") await capture.stop();
+      const stopping = kind === "stopped" ? capture.stop() : undefined;
       started({
         id: "pending",
         device: "remote",
         until: new Date(now + 5 * 60_000).toISOString(),
       });
+      await stopping;
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (kind === "captured") {
         expect(pressed).toHaveBeenCalledExactlyOnceWith(event);
@@ -321,26 +323,69 @@ describe("capturing a remote's presses", () => {
     },
   );
 
-  it("releases a late start after stopping, reporting its cleanup failure", async () => {
+  it("releases a capture whose listener threw on a press held before the start's answer", async () => {
+    // The listener's error is the page's own, reported as any unhandled
+    // one is: caught here rather than by the test run.
+    const kept = process.listeners("unhandledRejection");
+    process.removeAllListeners("unhandledRejection");
+    const reported = vi.fn();
+    process.on("unhandledRejection", reported);
+    try {
+      let started!: (capture: PressCapture) => void;
+      const { bridge, json, live } = bridgeWith(
+        () => new Promise((resolve) => (started = resolve)),
+      );
+      const capture = capturePresses(bridge, "remote", {
+        press: () => {
+          throw new Error("The page's own");
+        },
+      });
+      const now = Date.now();
+      live.publish({ ...press("remote"), at: new Date(now).toISOString() });
+      started({
+        id: "held",
+        device: "remote",
+        until: new Date(now + 5 * 60_000).toISOString(),
+      });
+      await vi.waitFor(() =>
+        expect(reported).toHaveBeenCalledWith(
+          new Error("The page's own"),
+          expect.anything(),
+        ),
+      );
+
+      await capture.stop();
+      expect(json).toHaveBeenLastCalledWith("/api/devices/capture/stop", {
+        method: "POST",
+        json: { id: "held" },
+      });
+    } finally {
+      process.removeAllListeners("unhandledRejection");
+      for (const listener of kept) process.on("unhandledRejection", listener);
+    }
+  });
+
+  it("waits for a late start and rejects a failed release so it can be retried", async () => {
     let started!: (capture: PressCapture) => void;
     const { bridge, json, live } = bridgeWith(
       () => new Promise((resolve) => (started = resolve)),
     );
     const pressed = vi.fn();
-    const ended = vi.fn(() => void capture.stop());
-    const capture = capturePresses(bridge, "remote", {
-      press: pressed,
-      ended,
+    const ended = vi.fn();
+    const capture = capturePresses(bridge, "remote", { press: pressed, ended });
+    let hasStopped = false;
+    const stopping = capture.stop().then(() => {
+      hasStopped = true;
     });
-    await capture.stop();
+    await Promise.resolve();
+    expect(hasStopped).toBe(false);
     json.mockRejectedValueOnce(new Error("offline"));
     started({ id: "late", device: "remote", until: inFiveMinutes() });
-    await vi.waitFor(() => expect(json).toHaveBeenCalledTimes(3));
+    await expect(stopping).rejects.toThrow("offline");
     live.publish(press("remote"));
     expect(pressed).not.toHaveBeenCalled();
-    // The failed release says so, and the retry its listener makes then
-    // releases the capture it now knows the id of.
-    expect(ended).toHaveBeenCalledExactlyOnceWith("failed");
+    expect(ended).not.toHaveBeenCalled();
+    await capture.stop();
     expect(json).toHaveBeenCalledTimes(3);
   });
 });
