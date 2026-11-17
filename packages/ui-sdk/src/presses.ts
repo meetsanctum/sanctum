@@ -117,9 +117,7 @@ export type PressCaptureListener = {
   /**
    * The capture ended without being stopped: after five minutes, or when
    * it could not start or the core no longer held it, as after a restart,
-   * which a press reaching workflows shows. Start another to go on. Also reports failure
-   * to release a capture whose start completed after it was stopped;
-   * this can report another failure after a reconnect ended the capture.
+   * which a press reaching workflows shows. Start another to go on.
    */
   ended?(reason: "expired" | "failed"): void;
 };
@@ -197,22 +195,15 @@ export function capturePresses(
     if (capture?.id === id) capture = undefined;
   }
 
-  void bridge
+  const starting = bridge
     .json<PressCapture>("/api/devices/capture/start", {
       method: "POST",
       json: { device, ...(app && { app }) },
     })
     .then(
       (started) => {
-        if (isStopped) {
-          capture = started;
-          // Reconnect may already have reported an end before we knew
-          // the capture id. Report this separate cleanup failure too,
-          // so the caller can retry stop now that the id is available.
-          void release(started.id).catch(() => listener.ended?.("failed"));
-          return;
-        }
         capture = started;
+        if (isStopped) return;
         expiry = setTimeout(
           () => end("expired"),
           // The two machines' clocks need not agree. Count elapsed time
@@ -243,6 +234,9 @@ export function capturePresses(
       pendingPress = undefined;
       clearTimeout(expiry);
       unsubscribe();
+      // A stop is complete only once even a pending start has been
+      // released. Its failure then rejects this same, retryable stop.
+      await starting;
       if (capture) {
         await release(capture.id);
       }

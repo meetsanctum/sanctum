@@ -1,5 +1,7 @@
+import { pressCaptureDurationMs } from "@meetsanctum/app-sdk";
 import {
   frameBridge,
+  deviceKindsOf,
   isFrameHello,
   type AppClient,
   type CapabilityCommand,
@@ -37,7 +39,7 @@ export type FrameEvent =
 
 export type FrameBridge = {
   send(message: ToFrame): void;
-  /** Its live updates through the app's client now, as its grants change. */
+  /** Its live updates and captures, held to the app's current state and grants. */
   renew(): void;
   close(): void;
 };
@@ -193,8 +195,7 @@ export function openBridge(options: {
     let handle: { stop(): Promise<void> } | undefined;
     const ended = (reason: "expired" | "failed") => {
       if (isClosed || captures.get(id) !== handle) return;
-      captures.delete(id);
-      send({ type: "captureEnded", capture: id, reason });
+      endCapture(id, reason);
     };
     // One the page can't have ends at once, as one that couldn't start.
     if (!isText(device) || captures.size >= capturesAllowed) {
@@ -213,6 +214,13 @@ export function openBridge(options: {
       return send({ type: "captureEnded", capture: id, reason: "failed" });
     }
     captures.set(id, handle);
+  }
+
+  function endCapture(id: number, reason: "expired" | "failed") {
+    send({ type: "captureEnded", capture: id, reason });
+    // An end can precede a successful release. Keep its handle until
+    // cleanup succeeds, so the page can retry a failed release.
+    void releaseOf(id)!().catch(() => undefined);
   }
 
   // Ends one of the page's captures, which may have ended already.
@@ -241,6 +249,13 @@ export function openBridge(options: {
   return {
     send,
     renew() {
+      const app = client().app;
+      if (
+        app.state !== "running" ||
+        !deviceKindsOf(app.permissions).reads.has("button")
+      ) {
+        for (const id of captures.keys()) endCapture(id, "failed");
+      }
       if (!unsubscribe) return;
       live(false);
       live(true);
@@ -250,7 +265,7 @@ export function openBridge(options: {
       host.removeEventListener("message", hello);
       // What the page held back reaches workflows again.
       for (const handle of captures.values()) {
-        void handle.stop().catch(() => undefined);
+        stopAfterClosing(handle, performance.now() + pressCaptureDurationMs);
       }
       captures.clear();
       unsubscribe?.();
@@ -258,6 +273,16 @@ export function openBridge(options: {
       port?.close();
     },
   };
+}
+
+// Once the frame is gone, the shell owns retries until the core's capture
+// expires. There is no page left to act on a failed release.
+function stopAfterClosing(handle: { stop(): Promise<void> }, until: number) {
+  void handle.stop().catch(() => {
+    if (performance.now() < until) {
+      setTimeout(() => stopAfterClosing(handle, until), 5_000);
+    }
+  });
 }
 
 // The operation a request names, run through the app's client, or none for

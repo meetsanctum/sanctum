@@ -43,7 +43,7 @@ import type { Presses } from "./presses.js";
 //   GET  /api/devices/pairing        PairingInfo
 //   POST /api/devices/pairing/open   { seconds? } → PairingInfo & { since }
 //   POST /api/devices/pairing/close  PairingInfo
-//   POST /api/devices/capture/start  { device, app? } → PressCapture
+//   POST /api/devices/capture/start  { device } → PressCapture
 //   POST /api/devices/capture/stop   { id }
 //   POST /api/devices/firmware/check { id } → DeviceInfo
 //   POST /api/devices/firmware/update { id } → DeviceInfo

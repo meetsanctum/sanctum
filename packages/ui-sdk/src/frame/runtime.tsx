@@ -123,46 +123,50 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
 
   // The page's client: AppClient's methods, each an operation the shell
   // runs through its own client for this app.
-  const clientOf = (app: AppInfo): AppClient => ({
-    app,
-    call: (actionId, input) => request({ op: "call", actionId, input }),
-    places: () => request({ op: "places" }),
-    devices: () => request({ op: "devices" }),
-    command: (command) => request({ op: "command", command }),
-    entities: () => request({ op: "entities" }),
-    settings: () => request({ op: "settings" }),
-    ask: (permissions) =>
-      request({
-        op: "ask",
-        permissions:
-          typeof permissions === "string" ? [permissions] : [...permissions],
-      }),
-    // The shell runs the capture through its client for the app, which
-    // refuses one the app may not read buttons for, as the page is told
-    // here first.
-    capturePresses(device, listener) {
-      if (!deviceKindsOf(app.permissions).reads.has("button")) {
-        throw new Error(`${app.id} does not hold devices.read:button`);
-      }
-      const capture = ++nextCapture;
-      captures.set(capture, listener);
-      send({ type: "capture", capture, device });
-      return {
-        stop() {
-          captures.delete(capture);
-          return request<void>({ op: "release", capture });
-        },
-      };
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      if (listeners.size === 1) send({ type: "subscribe", on: true });
-      return () => {
-        if (!listeners.delete(listener)) return;
-        if (listeners.size === 0) send({ type: "subscribe", on: false });
-      };
-    },
-  });
+  const clientOf = (app: AppInfo): AppClient => {
+    let permissions = [...app.permissions];
+    return {
+      app,
+      call: (actionId, input) => request({ op: "call", actionId, input }),
+      places: () => request({ op: "places" }),
+      devices: () => request({ op: "devices" }),
+      command: (command) => request({ op: "command", command }),
+      entities: () => request({ op: "entities" }),
+      settings: () => request({ op: "settings" }),
+      async ask(requested) {
+        const ids =
+          typeof requested === "string" ? [requested] : [...requested];
+        const granted = await request<boolean>({ op: "ask", permissions: ids });
+        if (granted) permissions = [...permissions, ...ids];
+        return granted;
+      },
+      // The shell runs the capture through its client for the app, which
+      // refuses one the app may not read buttons for, as the page is told
+      // here first.
+      capturePresses(device, listener) {
+        if (!deviceKindsOf(permissions).reads.has("button")) {
+          throw new Error(`${app.id} does not hold devices.read:button`);
+        }
+        const capture = ++nextCapture;
+        captures.set(capture, listener);
+        send({ type: "capture", capture, device });
+        return {
+          stop() {
+            captures.delete(capture);
+            return request<void>({ op: "release", capture });
+          },
+        };
+      },
+      subscribe(listener) {
+        listeners.add(listener);
+        if (listeners.size === 1) send({ type: "subscribe", on: true });
+        return () => {
+          if (!listeners.delete(listener)) return;
+          if (listeners.size === 0) send({ type: "subscribe", on: false });
+        };
+      },
+    };
+  };
 
   // How tall the page is drawn, said as it changes, for a device page's
   // frame to fit it.
