@@ -574,15 +574,15 @@ export function FieldControl(props: {
         <OptionList
           label={label}
           options={[
-            ...rooms.map((room) => ({
-              value: `room:${room.id}`,
-              label: room.name,
-              group: "Rooms",
-            })),
             ...floors.map((floor) => ({
               value: `floor:${floor.id}`,
               label: floor.name,
               group: "Floors",
+            })),
+            ...rooms.map((room) => ({
+              value: `room:${room.id}`,
+              label: room.name,
+              group: "Rooms",
             })),
             ...zones.map((zone) => ({
               value: `zone:${zone.id}`,

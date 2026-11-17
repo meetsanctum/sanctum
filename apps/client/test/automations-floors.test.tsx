@@ -6,6 +6,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { FieldControl } from "../src/automations/fields";
 import { places } from "./automations-fixtures";
 
+// The place picker offers the home's floors, in their order, before its
+// rooms, and shows a workflow's chosen floor as chosen.
+
 let container: HTMLDivElement;
 let root: Root;
 
