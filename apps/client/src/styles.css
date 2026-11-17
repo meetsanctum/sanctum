@@ -636,3 +636,75 @@ body {
     opacity: 0;
   }
 }
+
+/* Add devices greets a device new to the home once, as its card appears
+   (src/add-devices-cards.tsx): a warm light sweeps across the card, and a
+   light's round glows as a bulb switching on, then both are gone. Only
+   transform and opacity move; where motion is reduced, the round's glow
+   only fades in and out. */
+.add-devices-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.add-devices-sweep::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -70%;
+  width: 70%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 204 120 / 22%),
+    rgb(255 159 10 / 30%),
+    rgb(255 230 180 / 20%),
+    transparent
+  );
+  opacity: 0;
+}
+
+.add-devices-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #ffe2a8, #ff9f0a 78%);
+  opacity: 0;
+  animation: add-devices-glow 2.6s ease 0.5s both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .add-devices-sweep::before {
+    animation: add-devices-sweep 1.5s cubic-bezier(0.3, 0.1, 0.2, 1) 0.5s both;
+  }
+}
+
+@keyframes add-devices-sweep {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(245%);
+    opacity: 0;
+  }
+}
+
+@keyframes add-devices-glow {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}

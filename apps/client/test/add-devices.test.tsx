@@ -595,4 +595,139 @@ describe("Add devices, with what drivers found", () => {
       requests.filter((each) => each.path === "/api/devices/pairing/open"),
     ).toHaveLength(2);
   });
+
+  async function chooseInMenu(menu: string, item: string) {
+    const trigger = document.querySelector<HTMLButtonElement>(
+      `button[aria-label="${menu}"]`,
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    const found = [
+      ...document.querySelectorAll<HTMLElement>(
+        "[role=menuitem], [role=menuitemradio]",
+      ),
+    ].find((candidate) => candidate.textContent === item)!;
+    await act(async () => found.click());
+  }
+
+  const kitchenSensor = () =>
+    light("sensor-1", "Kitchen sensor", {
+      driver: "sanctum.example",
+      driverName: "Kitchen sensor",
+    });
+
+  it("greets a device new to the home once, as its card turns green", async () => {
+    const added = kitchenSensor();
+    answers.kitchen = () => ({ added });
+    devices = [added];
+    await show();
+    await way("Devices found");
+    await act(async () => named("Add Kitchen sensor").click());
+
+    expect(page().querySelector(".add-devices-sweep")).not.toBeNull();
+    // A light's round glows as a bulb switching on.
+    expect(page().querySelector(".add-devices-glow")).not.toBeNull();
+
+    await act(async () => named("Back to Add devices").click());
+    await way("Devices found");
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
+    expect(page().querySelector(".add-devices-sweep")).toBeNull();
+  });
+
+  it("makes a new room in place and puts the device in it", async () => {
+    const added = kitchenSensor();
+    answers.kitchen = () => ({ added });
+    devices = [added];
+    const hall = { ...office, id: "hall", name: "Hall" };
+    const answered = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init = {}) =>
+      path === "/api/places/rooms/add"
+        ? (requests.push({ path, json: init.json }), hall)
+        : answered(path, init),
+    );
+    await show();
+    await way("Devices found");
+    await act(async () => named("Add Kitchen sensor").click());
+
+    await chooseInMenu("Kitchen sensor: room", "New room…");
+    const field = page().querySelector<HTMLInputElement>("form input")!;
+    expect(field.labels![0]!.textContent).toBe("New room");
+    expect(document.activeElement).toBe(field);
+    await type(field, "Hall");
+    await act(async () =>
+      [...page().querySelectorAll("button")]
+        .find((button) => button.textContent === "Add room")!
+        .click(),
+    );
+
+    expect(requests).toContainEqual({
+      path: "/api/places/rooms/add",
+      json: { name: "Hall" },
+    });
+    expect(requests).toContainEqual({
+      path: "/api/devices/update",
+      json: { id: "sensor-1", roomId: "hall" },
+    });
+    // Back to the menu.
+    expect(
+      [...page().querySelectorAll("label")].map((label) => label.textContent),
+    ).not.toContain("New room");
+  });
+
+  it("removes a device Sanctum can't use, after asking", async () => {
+    const unusable = light("odd", "Unknown Device", { capabilities: [] });
+    devices = [unusable];
+    adding = {
+      ...adding,
+      joined: [
+        {
+          driver: "sanctum.zigbee",
+          key: "0x9",
+          stage: "ready",
+          description: null,
+          deviceId: "odd",
+          known: false,
+          joinedAt: "2026-10-29T12:00:01.000Z",
+        },
+      ],
+    };
+    const removed = vi.fn();
+    await act(async () =>
+      root.render(
+        <AddDevices
+          open
+          onOpenChange={() => undefined}
+          devices={devices}
+          rooms={[office]}
+          apps={[zigbee, example]}
+          adding={adding}
+          live={live}
+          onChanged={() => undefined}
+          onRemoved={removed}
+        />,
+      ),
+    );
+    await way("Zigbee");
+
+    expect(page().textContent).toContain(
+      "Sanctum can't use this device. Keep it in a room, or remove it.",
+    );
+    await act(async () => named("Remove Unknown Device").click());
+    const asking = [...document.querySelectorAll("[role=dialog]")].at(-1)!;
+    expect(asking.textContent).toContain("Remove Unknown Device?");
+    await act(async () =>
+      [...asking.querySelectorAll("button")]
+        .find((button) => button.textContent === "Remove")!
+        .click(),
+    );
+
+    expect(requests).toContainEqual({
+      path: "/api/devices/remove",
+      json: { id: "odd", force: false },
+    });
+    expect(removed).toHaveBeenCalledWith("odd");
+  });
 });

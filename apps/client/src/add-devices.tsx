@@ -9,13 +9,14 @@ import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { DeviceChanges } from "./add-devices-cards";
+import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
 import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem, updateDevice } from "./device-parts";
+import { EditDevice } from "./edit-device";
 import { Overlay } from "./overlay";
 import { useOverlayHost } from "./overlay-host";
 import {
@@ -66,6 +67,8 @@ export function AddDevices(props: {
   notSetUp?: readonly ServiceNotSetUp[];
   live: LiveFeed;
   onChanged: (device: DeviceInfo) => void;
+  // A device removed here, from a card Sanctum can't use.
+  onRemoved?: (id: string) => void;
 }) {
   const host = useOverlayHost();
   const [page, setPage] = useState<Page>({ kind: "choose" });
@@ -98,6 +101,12 @@ export function AddDevices(props: {
     new Set(),
   );
   const saveAttempts = useRef(new Map<string, symbol>());
+  // Rooms made here, until the home's rooms say so too.
+  const [madeRooms, setMadeRooms] = useState<Room[]>([]);
+  // The device whose removal is being asked about.
+  const [removing, setRemoving] = useState<DeviceInfo>();
+  // The devices already greeted as new, so that each is greeted once.
+  const greeted = useRef(new Set<string>());
 
   // A request must finish before a later one reaches the radios, including
   // when an open is still waiting on a radio as the overlay closes.
@@ -356,6 +365,28 @@ export function AddDevices(props: {
     }
   };
 
+  const rooms = [
+    ...props.rooms,
+    ...madeRooms.filter(
+      (made) => !props.rooms.some((room) => room.id === made.id),
+    ),
+  ];
+  const work: CardWork = {
+    rooms,
+    onSave: save,
+    onAddRoom: async (name) => {
+      const room = await coreJson<Room>("/api/places/rooms/add", {
+        method: "POST",
+        json: { name },
+      });
+      setMadeRooms((before) => [...before, room]);
+      return room.id;
+    },
+    onRemove: setRemoving,
+    isFresh: (id) => !greeted.current.has(id),
+    onGreeted: (id) => greeted.current.add(id),
+  };
+
   const joinedHere =
     page.kind === "join" && since
       ? (pairing?.joined ?? []).filter(
@@ -435,7 +466,6 @@ export function AddDevices(props: {
               shown={shown}
               added={added}
               devices={props.devices}
-              rooms={props.rooms}
               appName={appName}
               onWorkingChange={(key, isWorking) =>
                 setPendingAdds((before) => {
@@ -449,7 +479,7 @@ export function AddDevices(props: {
                 setAdded((before) => ({ ...before, [key]: device }));
                 props.onChanged(device);
               }}
-              onSave={save}
+              work={work}
             />
           )}
           {page.kind === "join" && (
@@ -458,11 +488,10 @@ export function AddDevices(props: {
               state={joining}
               joined={joinedHere}
               devices={props.devices}
-              rooms={props.rooms}
               seconds={joinSeconds}
               onStop={() => void stop()}
               onStartAgain={() => void open(page.driver)}
-              onSave={save}
+              work={work}
             />
           )}
           <p role="status" className="sr-only">
@@ -488,6 +517,14 @@ export function AddDevices(props: {
           )}
         </div>
       </div>
+      <EditDevice
+        editing={removing && { action: "remove", device: removing }}
+        appName={removing ? appName(removing.driver) : null}
+        onClose={() => setRemoving(undefined)}
+        onChanged={props.onChanged}
+        onRemoved={(id) => props.onRemoved?.(id)}
+        onForgotten={() => undefined}
+      />
     </Overlay>
   );
 }
