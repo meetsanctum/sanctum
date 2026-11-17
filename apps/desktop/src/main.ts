@@ -26,6 +26,7 @@ import {
   type SidebarState,
   type StoredHost,
 } from "./shell.js";
+import { createPageStore } from "./page-store.js";
 import { createPages, type Pages } from "./pages.js";
 import { createPreferenceStore } from "./preferences.js";
 import { createHostTrust, type HostTrust } from "./trust.js";
@@ -226,12 +227,15 @@ void app.whenReady().then(async () => {
   );
   const trust: HostTrust = createHostTrust({ credentials });
   await trust.start();
+  const pageStore = createPageStore(join(app.getPath("userData"), "pages"));
+  void pageStore.prune();
   const shown = createPages({
     clientRoot,
     preload: join(here, "preload.cjs"),
     allowPlainHttp,
     trust: () => trust,
     lockDown: (own) => lockDown([own]),
+    pageStore,
   });
   pages = shown;
   handle(channels.deviceName, deviceName);
