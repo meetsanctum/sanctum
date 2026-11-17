@@ -5,18 +5,24 @@ import { DeviceTile } from "./device-tile";
 import type { Tile, TileSection } from "./tiles";
 
 // Every section's heading looks the same, whoever adds the section: neutral,
-// in the page's own style, with no app colour and no app icon. Given
+// in the page's own style, with no app colour and no app icon. Its level is
+// 2, or 3 under a heading of its own, such as a floor's over its rooms. Given
 // `onOpen`, it opens a page of its own, such as Moods' page for the room,
 // with a chevron after its words. The chevron's shape says it opens a page,
 // so it stays as quiet as the heading, in the secondary ink rather than
 // the action colour, which a page keeps for its few actions.
 export function SectionHeading(props: {
   id: string;
+  level?: 2 | 3;
   children: string;
   onOpen?: () => void;
 }) {
+  const Heading = props.level === 3 ? "h3" : "h2";
   return (
-    <h2 id={props.id} className="m-0 flex text-[15px] leading-5 font-medium">
+    <Heading
+      id={props.id}
+      className="m-0 flex text-[15px] leading-5 font-medium"
+    >
       {props.onOpen ? (
         <Button variant="ghost" size="heading" onClick={props.onOpen}>
           {props.children}
@@ -25,7 +31,7 @@ export function SectionHeading(props: {
       ) : (
         props.children
       )}
-    </h2>
+    </Heading>
   );
 }
 
@@ -52,9 +58,11 @@ function Chevron() {
 // Tiles on the grid, in their sections, each tile a row three cells wide.
 // Given `onOpen`, each tile opens its device's detail and its icon switches
 // it. Given `lead`, a section has what it returns between its heading and
-// its tiles, such as a button for the whole section.
+// its tiles, such as a button for the whole section. Given `level`, their
+// headings are at that level.
 export function DeviceSections(props: {
   sections: TileSection[];
+  level?: 2 | 3;
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
   onOpen?: (tile: Tile) => void;
@@ -66,7 +74,9 @@ export function DeviceSections(props: {
       aria-labelledby={`room-${section.id}`}
       className="flex flex-col gap-3"
     >
-      <SectionHeading id={`room-${section.id}`}>{section.title}</SectionHeading>
+      <SectionHeading id={`room-${section.id}`} level={props.level}>
+        {section.title}
+      </SectionHeading>
       {props.lead?.(section)}
       <div className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)">
         {section.tiles.map((tile) => (

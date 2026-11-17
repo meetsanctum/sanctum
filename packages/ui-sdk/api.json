@@ -1,5 +1,5 @@
 {
-  "version": "0.1.7",
+  "version": "0.1.8",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2763,11 +2763,13 @@
       "import type { Tile, TileSection } from \"./tiles\";",
       "export declare function SectionHeading(props: {",
       "    id: string;",
+      "    level?: 2 | 3;",
       "    children: string;",
       "    onOpen?: () => void;",
       "}): import(\"react\").JSX.Element;",
       "export declare function DeviceSections(props: {",
       "    sections: TileSection[];",
+      "    level?: 2 | 3;",
       "    onToggle: (tile: Tile) => void;",
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
