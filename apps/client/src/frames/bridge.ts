@@ -30,7 +30,9 @@ export type FrameEvent =
     }
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
-  | { type: "openSettings" };
+  | { type: "openSettings" }
+  | { type: "size"; height: number }
+  | { type: "key"; key: "Escape" };
 
 export type FrameBridge = {
   send(message: ToFrame): void;
@@ -41,6 +43,8 @@ export type FrameBridge = {
 
 // Requests a frame may have waiting at once; more are refused, not queued.
 export const requestsAllowed = 32;
+// The tallest a page says it is that's believed, in pixels.
+export const tallest = 20_000;
 // A bar title or page name longer than this isn't one.
 const longestText = 200;
 
@@ -112,6 +116,21 @@ export function openBridge(options: {
       case "openSettings":
       case "ready":
         return on({ type: message.type });
+      case "size": {
+        const { height } = message;
+        if (
+          typeof height === "number" &&
+          Number.isInteger(height) &&
+          height >= 0 &&
+          height <= tallest
+        ) {
+          on({ type: "size", height });
+        }
+        return;
+      }
+      case "key":
+        if (message.key === "Escape") on({ type: "key", key: "Escape" });
+        return;
       case "failed":
         return on({
           type: "failed",

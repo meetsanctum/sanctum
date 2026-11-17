@@ -1,4 +1,4 @@
-import type { AppInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,6 +29,8 @@ type Shown = {
   page: string;
   params: PageParams;
   context: FrameContext;
+  // For a device page, the device it shows.
+  device?: DeviceInfo;
   // A new page on show starts afresh, as a new route does in the shell.
   generation: number;
 };
@@ -143,16 +145,39 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
     },
   });
 
+  // How tall the page is drawn, said as it changes, for a device page's
+  // frame to fit it.
+  let height = -1;
+  // The page's own height, not the document's, which is at least the
+  // frame's and so could never shrink it.
+  const sizes = new ResizeObserver(([entry]) => {
+    if (!entry) return;
+    const next = Math.ceil(entry.target.getBoundingClientRect().height);
+    if (next === height) return;
+    height = next;
+    send({ type: "size", height });
+  });
+  // An Escape the page didn't use goes to the shell, which may close what
+  // the frame is in: a key pressed in the frame never reaches it.
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !event.defaultPrevented) {
+      send({ type: "key", key: "Escape" });
+    }
+  });
+
   const draw = () => {
     if (!ui || !shown || hasFailed) return;
     document.documentElement.dataset.mode = shown.context.mode;
-    root ??= createRoot(
-      document.body.appendChild(document.createElement("div")),
-      {
+    // A device page lies over the device's detail, which shows through.
+    if (shown.device) document.documentElement.dataset.surface = "detail";
+    if (!root) {
+      const holder = document.body.appendChild(document.createElement("div"));
+      sizes.observe(holder);
+      root = createRoot(holder, {
         onUncaughtError: (error) =>
           fail({ type: "failed", reason: "stopped", message: String(error) }),
-      },
-    );
+      });
+    }
     root.render(
       <StrictMode>
         <Framed
@@ -184,8 +209,12 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
           page: message.page,
           params: message.params,
           context: message.context,
+          ...(message.device ? { device: message.device } : {}),
           generation: 0,
         };
+        return draw();
+      case "device":
+        if (shown?.device) shown = { ...shown, device: message.device };
         return draw();
       case "app":
         if (shown) shown = { ...shown, app: message.app };
@@ -247,7 +276,10 @@ function Framed(props: {
   sayBar: (title: string, actions: readonly PageBarAction[]) => void;
 }) {
   const { ui, shown, client, send, fail, sayBar } = props;
-  const Page = ui.pages[shown.page];
+  const { device } = shown;
+  const DevicePage = device ? ui.devicePages?.[shown.page] : undefined;
+  const AppPage = device ? undefined : ui.pages[shown.page];
+  const Page = DevicePage ?? AppPage;
   useEffect(() => {
     if (Page) send({ type: "ready" });
     else {
@@ -269,17 +301,23 @@ function Framed(props: {
         <HomeTimeZoneProvider timeZone={shown.context.timeZone ?? undefined}>
           <PageBarSink.Provider value={sayBar}>
             <Provider>
-              <main className="frame-page">
-                <Page
-                  key={`${shown.page}:${shown.generation}`}
-                  params={shown.params}
-                  open={(page, params = {}) =>
-                    send({ type: "open", page, params })
-                  }
-                  back={() => send({ type: "back" })}
-                  openSettings={() => send({ type: "openSettings" })}
-                />
-              </main>
+              {DevicePage && device ? (
+                <main className="frame-device">
+                  <DevicePage device={device} />
+                </main>
+              ) : AppPage ? (
+                <main className="frame-page">
+                  <AppPage
+                    key={`${shown.page}:${shown.generation}`}
+                    params={shown.params}
+                    open={(page, params = {}) =>
+                      send({ type: "open", page, params })
+                    }
+                    back={() => send({ type: "back" })}
+                    openSettings={() => send({ type: "openSettings" })}
+                  />
+                </main>
+              ) : null}
             </Provider>
           </PageBarSink.Provider>
         </HomeTimeZoneProvider>

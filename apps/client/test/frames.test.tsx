@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AppInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo, DeviceInfo, EntityInfo } from "@meetsanctum/app-sdk";
 import {
   createAppClient,
   createLiveFeed,
@@ -9,6 +9,7 @@ import {
   useAppClient,
   type AppUi,
   type CoreBridge,
+  type DevicePageProps,
   type PageProps,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
@@ -18,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   openBridge,
   requestsAllowed,
+  tallest,
   type FrameBridge,
   type FrameEvent,
 } from "../src/frames/bridge";
@@ -56,7 +58,23 @@ let json: ReturnType<typeof vi.fn>;
 let shell: EventTarget;
 let opened: FrameBridge[];
 
+// jsdom measures nothing: a page's size is whatever a test says, through
+// the observer the frame watches its page with.
+let resized: (height: number) => void = () => {};
+class Sizes {
+  constructor(private readonly said: ResizeObserverCallback) {}
+  observe(target: Element) {
+    resized = (height) => {
+      target.getBoundingClientRect = () => ({ height }) as DOMRect;
+      this.said([{ target } as ResizeObserverEntry], this as never);
+    };
+  }
+  disconnect() {}
+  unobserve() {}
+}
+
 beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", Sizes);
   live = createLiveFeed();
   json = vi.fn(async (path: string) => {
     if (path === "/api/entities") return [forecast];
@@ -70,6 +88,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const bridge of opened) bridge.close();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
@@ -354,6 +373,68 @@ describe("a page in its frame", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
+  it("shows a device page with its device, as it changes, and says its height", async () => {
+    const device = {
+      id: "remote-1",
+      name: "Office button",
+    } as unknown as DeviceInfo;
+    function Presses(props: DevicePageProps) {
+      return <p>device {props.device.name}</p>;
+    }
+    const frame = frameWindow((data, ports) =>
+      window.dispatchEvent(message(data, { source: window, ports })),
+    );
+    vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => {
+      shell.dispatchEvent(message(data, { source: frame }));
+    });
+    const events: FrameEvent[] = [];
+    const bridge = openBridge({
+      frame: () => frame,
+      code: "code-1",
+      client,
+      setup: () => ({
+        type: "setup",
+        app: info,
+        page: "example.presses",
+        params: {},
+        context,
+        device,
+      }),
+      on: (event) => events.push(event),
+      host: shell as unknown as Window,
+    });
+    opened.push(bridge);
+    startFrame(async () => ({
+      default: { ...ui, devicePages: { "example.presses": Presses } },
+    }));
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("device Office button"),
+    );
+    expect(document.documentElement.dataset.surface).toBe("detail");
+    bridge.send({ type: "device", device: { ...device, name: "Desk button" } });
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("device Desk button"),
+    );
+    resized(321);
+    await vi.waitFor(() =>
+      expect(events).toContainEqual({ type: "size", height: 321 }),
+    );
+    // An Escape the page leaves goes to the shell; one it uses doesn't.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await vi.waitFor(() =>
+      expect(events).toContainEqual({ type: "key", key: "Escape" }),
+    );
+    const used = new KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+    });
+    used.preventDefault();
+    window.dispatchEvent(used);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(events.filter((event) => event.type === "key")).toHaveLength(1);
+    delete document.documentElement.dataset.surface;
+  });
+
   it("says its files didn't load", async () => {
     const { events } = framed(async () => {
       throw new TypeError("Failed to fetch dynamically imported module");
@@ -475,6 +556,23 @@ describe("the shell's end", () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(shellEvents.filter((event) => event.type === "bar")).toEqual([]);
+  });
+
+  it("believes no height but a whole one up to its limit, and no key but Escape", async () => {
+    const { port } = await framePort();
+    for (const height of [-1, 1.5, tallest + 1, "10"]) {
+      port.postMessage({ type: "size", height });
+    }
+    port.postMessage({ type: "key", key: "Enter" });
+    port.postMessage({ type: "size", height: 400 });
+    await vi.waitFor(() =>
+      expect(shellEvents).toContainEqual({ type: "size", height: 400 }),
+    );
+    expect(
+      shellEvents.filter(
+        (event) => event.type === "size" || event.type === "key",
+      ),
+    ).toEqual([{ type: "size", height: 400 }]);
   });
 
   it("refuses more than so many waiting at once", async () => {
