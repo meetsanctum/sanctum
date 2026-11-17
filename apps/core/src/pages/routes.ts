@@ -86,8 +86,12 @@ export function registerPageRoutes(
         const misfit: AppPagesMisfit = { error: "not_found", needs: fit.needs };
         return reply.code(404).header("cache-control", "no-store").send(misfit);
       }
-      if (!fit) return nothing(reply);
-      const answer: AppPages = { digest: fit.pages.digest };
+      const kit = await pages.kit();
+      if (!fit || !kit) return nothing(reply);
+      const answer: AppPages = {
+        digest: fit.pages.digest,
+        kit: { version: kit.version, bridge: kit.bridge, digest: kit.digest },
+      };
       return answer;
     },
   );

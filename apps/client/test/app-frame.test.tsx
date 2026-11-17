@@ -348,32 +348,29 @@ describe("an app's page in its frame", () => {
   );
 
   it.each(["sanctum", "pages", "bridge"])(
-    "asks for the home's kit again when reopening after a %s mismatch",
+    "reads the home's kit afresh when reopening after a %s mismatch, keeping its ticket",
     async (needs) => {
-      const ticket = address.answer;
-      address.answer = async () => ({
-        ticket: "page_ticket1",
-        expiresAt: new Date(Date.now() + 8 * 24 * 60 * 60_000).toISOString(),
-        kit: { version: "0.1.0", bridge: frameBridge - 1, digest: "old" },
-      });
-      if (needs !== "bridge") {
-        address.pages = () =>
-          Promise.reject(
-            new CoreError(404, "not_found", { error: "not_found", needs }),
-          );
-      }
+      const current = { version: "0.1.2", bridge: frameBridge, digest: "kit" };
+      const old = { version: "0.1.0", bridge: frameBridge - 1, digest: "old" };
+      address.pages =
+        needs === "bridge"
+          ? () => Promise.resolve({ digest: "page", kit: old })
+          : () =>
+              Promise.reject(
+                new CoreError(404, "not_found", { error: "not_found", needs }),
+              );
       await show();
       expect(container.querySelector("iframe[src]")).toBeNull();
+      expect(text()).toContain("This page needs");
 
-      // The home and app have updated while another page was open.
-      address.answer = ticket;
-      address.pages = () => Promise.resolve({ digest: "updated" });
+      // The home and app have updated while another page was open: the
+      // ticket other frames hold stays, and the kit is the one served now.
+      address.pages = () =>
+        Promise.resolve({ digest: "updated", kit: current });
       await show({ shown: "2" });
-      expect(
-        container.querySelector("iframe[src]")?.getAttribute("src"),
-      ).toContain("/updated/");
-      expect(address.tickets).toBe(2);
-      expect(frame().src).toContain("/pages/page_ticket2/");
+      expect(frame().src).toContain("/pages/page_ticket1/");
+      expect(frame().src).toContain("/updated/");
+      expect(address.tickets).toBe(1);
       expect(text()).not.toContain("This page needs");
     },
   );

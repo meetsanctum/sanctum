@@ -450,7 +450,10 @@ describe("an app's pages", () => {
       token,
     });
     expect(asked.statusCode).toBe(200);
-    expect(asked.json()).toEqual({ digest: pageDigest });
+    expect(asked.json()).toEqual({
+      digest: pageDigest,
+      kit: { version: "0.1.0", bridge: 1, digest: kitDigest },
+    });
     expect(
       (
         await get(core, "/api/pages/apps/sanctum.missing", {

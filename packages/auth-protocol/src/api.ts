@@ -34,9 +34,13 @@ export type PageTicket = {
 
 /**
  * `GET /api/pages/apps/:appId`: the build of an installed app's pages the
- * core serves now, which a frame's address names.
+ * core serves now, which a frame's address names, and the kit it serves
+ * them with now (a core from before it says none).
  */
-export type AppPages = { digest: string };
+export type AppPages = {
+  digest: string;
+  kit?: { version: string; bridge: number; digest: string };
+};
 
 /**
  * Its refusal when the app's pages don't fit the home's kit: they need a
