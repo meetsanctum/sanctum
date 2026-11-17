@@ -13,8 +13,8 @@ import {
 } from "./press-lights";
 import { Button } from "@meetsanctum/ui-sdk";
 
-// Which lights a press is for: the remote's room, a zone with it, all
-// lights, or some lights, chosen from a list of the home's lights by room.
+// Which lights a press is for: the remote's room, its floor, a zone with
+// it, all lights, or some lights, chosen from a list of the home's lights by room.
 // A choice applies at once, as the press's own page does.
 
 export function WhichLightsPage(props: {
@@ -35,6 +35,7 @@ export function WhichLightsPage(props: {
 }) {
   const { device, places, place } = props;
   const room = places?.rooms.find((each) => each.id === device.roomId);
+  const floor = places?.floors.find((each) => each.id === room?.floorId);
   const zones = (places?.zones ?? []).filter(
     (zone) => room && zone.roomIds.includes(room.id),
   );
@@ -65,6 +66,15 @@ export function WhichLightsPage(props: {
           },
         ]
       : []),
+    ...(floor
+      ? [
+          {
+            key: `floor:${floor.id}`,
+            label: floor.name,
+            place: { kind: "floor", id: floor.id } as const,
+          },
+        ]
+      : []),
     ...zones.map((zone) => ({
       key: `zone:${zone.id}`,
       label: zone.name,
@@ -72,15 +82,25 @@ export function WhichLightsPage(props: {
     })),
     { key: "home", label: "All lights", place: { kind: "home" } },
   ];
-  // A saved room or zone stays visible if the remote has moved since.
+  // A saved room, floor or zone stays visible if the remote has moved
+  // since.
   if (
-    (place.kind === "room" || place.kind === "zone") &&
+    (place.kind === "room" ||
+      place.kind === "floor" ||
+      place.kind === "zone") &&
     !options.some((option) => option.key === `${place.kind}:${place.id}`)
   ) {
-    const list = place.kind === "room" ? places?.rooms : places?.zones;
+    const list =
+      place.kind === "room"
+        ? places?.rooms
+        : place.kind === "floor"
+          ? places?.floors
+          : places?.zones;
     options.push({
       key: `${place.kind}:${place.id}`,
-      label: list?.find((each) => each.id === place.id)?.name ?? "Its room",
+      label:
+        list?.find((each) => each.id === place.id)?.name ??
+        (place.kind === "floor" ? "Its floor" : "Its room"),
       place,
     });
   }

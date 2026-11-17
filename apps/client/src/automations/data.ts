@@ -139,6 +139,7 @@ export function namesOf(
 ): Names {
   return {
     room: (id) => places?.rooms.find((room) => room.id === id)?.name,
+    floor: (id) => places?.floors.find((floor) => floor.id === id)?.name,
     zone: (id) => places?.zones.find((zone) => zone.id === id)?.name,
     device: (id) => {
       const device = devices.find((each) => each.id === id);

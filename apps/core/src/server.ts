@@ -104,6 +104,7 @@ export function createServer(
         not_found: 404,
         location_unavailable: 502,
         time_zone_needed: 400,
+        invalid_order: 400,
       } as const;
       return reply.code(status[error.code]).send({ error: error.code });
     }

@@ -21,37 +21,39 @@ import { ActionCallError } from "../app-host/errors.js";
 import type { Gate } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { Entities } from "../entities/entities.js";
-import type { PlacesModule } from "../places/places.js";
+import { roomsOfPlace, type PlacesModule } from "../places/places.js";
 import type { Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
 import type { View } from "./views.js";
 
-// The lights of a room, a zone or the whole home together: a room's and
-// Lights' button, and the lights condition and step of workflows, so they
-// work with no lighting app. Toggling turns them all off while any is on,
-// and on otherwise. A light that is offline is left alone and does not
-// count, and "all off" means none is on: a light that has yet to report
-// counts as not on. Each light's command passes the gate as the caller,
-// like any other. What turning a room on brings is an app's rule, such as
-// Moods' scheduled mood, natural light's look or what the room was before it
-// went dark: the app publishes it as the room's lights.turnOn entity, which
-// the core reads by type here, so no app code runs at the press, and the
-// highest-ranked rule for a room holds. A zone or the home go room by room.
-// Without one, every light comes on at full brightness, unless the core
-// holds a look for it, so a light dimmed to nothing before it went off
-// can't come back looking as if it never came on. A workflow whose place is
-// a room or a zone that was removed is broken.
-// Chosen lights are a place of their own, and a workflow with one of them
-// removed is broken too. The step also makes lights brighter or dimmer by a
-// fifth of their range, and brightens or dims them while the remote's
-// button that ran it is held (holds.ts); lights that cannot dim are left
-// alone by both.
+// The lights of a room, a floor, a zone or the whole home together: a
+// room's, a floor's and Lights' button, and the lights condition and step
+// of workflows, so they work with no lighting app. Toggling turns them all
+// off while any is on, and on otherwise. A light that is offline is left
+// alone and does not count, and "all off" means none is on: a light that
+// has yet to report counts as not on. Each light's command passes the gate
+// as the caller, like any other. What turning a room on brings is an app's
+// rule, such as Moods' scheduled mood, natural light's look or what the
+// room was before it went dark: the app publishes it as the room's
+// lights.turnOn entity, which the core reads by type here, so no app code
+// runs at the press, and the highest-ranked rule for a room holds. A
+// floor, a zone or the home go room by room. Without one, every light comes
+// on at full brightness, unless the core holds a look for it, so a light
+// dimmed to nothing before it went off can't come back looking as if it
+// never came on. A workflow whose place is a room, a floor or a zone that
+// was removed is broken. Chosen lights are a place of their own, and a
+// workflow with one of them removed is broken too. The step also makes
+// lights brighter or dimmer by a fifth of their range, and brightens or
+// dims them while the remote's button that ran it is held (holds.ts);
+// lights that cannot dim are left alone by both.
 
 // A place's schema says `place`, so Automations' editor offers one picker
-// for the room, the zone or the home rather than a field for each part.
+// for the room, the floor, the zone or the home rather than a field for
+// each part.
 export const lightsPlace = z
   .discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("room"), id: names("room") }),
+    z.strictObject({ kind: z.literal("floor"), id: names("floor") }),
     z.strictObject({ kind: z.literal("zone"), id: names("zone") }),
     z.strictObject({ kind: z.literal("home") }),
     z.strictObject({
@@ -238,15 +240,11 @@ export function createLights(options: {
   }
 
   // The rooms a place covers, or none for the whole home and chosen
-  // lights. A room or zone the home does not have is refused rather than
-  // taken for one with no lights.
+  // lights. A room, floor or zone the home does not have is refused rather
+  // than taken for one with no lights.
   function roomsOf(place: LightsPlace): ReadonlySet<string> | null {
     if (place.kind === "home" || place.kind === "lights") return null;
-    const places = options.places.list();
-    const rooms =
-      place.kind === "room"
-        ? places.rooms.some((room) => room.id === place.id) && [place.id]
-        : places.zones.find((zone) => zone.id === place.id)?.roomIds;
+    const rooms = roomsOfPlace(options.places.list(), place);
     if (!rooms) {
       throw new ActionCallError("not_found");
     }
