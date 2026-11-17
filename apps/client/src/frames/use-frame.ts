@@ -104,9 +104,6 @@ export function useFrame(options: {
         if (!isCurrent) return;
         if (!kit) return setPhase("files");
         if (kit.bridge !== frameBridge) {
-          // The ticket also keeps a snapshot of the kit. Reopening after
-          // an update must ask what the home serves now.
-          forgetPageTicket();
           // A kit that speaks a newer bridge needs a newer client, and one
           // that speaks an older one a newer home.
           setMismatch({
@@ -124,12 +121,14 @@ export function useFrame(options: {
       })
       .catch((error: unknown) => {
         if (!isCurrent) return;
-        forgetPageTicket();
+        // A mismatch keeps the ticket, which other frames may hold: the
+        // core keeps only a client's newest few.
         const needs = misfitOf(error);
         if (needs) {
           setMismatch({ needs });
           return setPhase("mismatch");
         }
+        forgetPageTicket();
         setPhase("files");
       });
     return () => {
