@@ -12,6 +12,7 @@ import { byFloor } from "../src/floor-groups";
 import { HomeRooms } from "../src/home-dashboard";
 import { CategoryPage } from "../src/place-pages";
 import { useSectionEntities } from "../src/room-sections";
+import { getShell } from "../src/shell";
 import { SidebarRooms } from "../src/sidebar-rooms";
 import { useDevices } from "../src/use-devices";
 
@@ -166,6 +167,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -298,7 +300,7 @@ describe("the sidebar's floors", () => {
       "false",
     );
     expect(
-      localStorage.getItem("sanctum.preference.sidebar.foldedFloors"),
+      localStorage.getItem("sanctum.preference.sidebar.folded-floors"),
     ).toBe('["ground"]');
 
     // Another start of the sidebar keeps it folded.
@@ -306,5 +308,48 @@ describe("the sidebar's floors", () => {
     await sidebar("kitchen");
     await act(async () => {});
     expect(rows()).toContain("Ground floor2");
+  });
+
+  it("keeps folds with a key the desktop preference store accepts", async () => {
+    const saved = new Map<string, string>();
+    const preferences = getShell().preferences;
+    vi.spyOn(preferences, "get").mockImplementation(
+      async (key) => saved.get(key) ?? null,
+    );
+    vi.spyOn(preferences, "set").mockImplementation(async (key, value) => {
+      if (!/^[a-z][a-z0-9.-]{0,63}$/.test(key)) {
+        throw new TypeError("Not a preference to keep");
+      }
+      saved.set(key, value);
+    });
+    await sidebar();
+    await act(async () => floorRow("Ground floor").click());
+    await act(async () => root.render(<nav />));
+    await sidebar();
+    expect(floorRow("Ground floor").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("preserves an early fold and the other saved folds when preferences arrive late", async () => {
+    let answer!: (value: string | null) => void;
+    vi.spyOn(getShell().preferences, "get").mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    await sidebar();
+    await act(async () => floorRow("Ground floor").click());
+    await act(async () => answer('["first"]'));
+    expect(floorRow("Ground floor").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(floorRow("First floor").getAttribute("aria-expanded")).toBe("false");
+    await act(async () => root.render(<nav />));
+    await sidebar();
+    expect(floorRow("Ground floor").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(floorRow("First floor").getAttribute("aria-expanded")).toBe("false");
   });
 });

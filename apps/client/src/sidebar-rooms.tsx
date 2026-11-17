@@ -16,48 +16,65 @@ import { SidebarHeading, SidebarItem } from "./sidebar-item";
 // what it folded, as it keeps the sidebar collapsed or not. The rows open
 // pages and fold; none switches a light.
 
-const preferenceKey = "sidebar.foldedFloors";
+const preferenceKey = "sidebar.folded-floors";
 
 function useFolded() {
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const [state, setState] = useState({
+    folded: new Set<string>(),
+    changed: new Set<string>(),
+    isLoaded: false,
+  });
   useEffect(() => {
     let isStopped = false;
-    getShell()
-      .preferences.get(preferenceKey)
-      .then(
-        (kept) => {
-          if (isStopped || !kept) return;
-          try {
-            const ids: unknown = JSON.parse(kept);
-            if (Array.isArray(ids)) {
-              setFolded(
-                new Set(
-                  ids.filter((id): id is string => typeof id === "string"),
-                ),
-              );
-            }
-          } catch {
-            // Kept by another version, or broken: everything shows.
-          }
-        },
-        () => undefined,
-      );
+    async function load() {
+      let folded = new Set<string>();
+      try {
+        const kept = await getShell().preferences.get(preferenceKey);
+        const ids: unknown = kept ? JSON.parse(kept) : [];
+        if (Array.isArray(ids)) {
+          folded = new Set(
+            ids.filter((id): id is string => typeof id === "string"),
+          );
+        }
+      } catch {
+        // Unreadable preferences leave every floor open.
+      }
+      if (isStopped) return;
+      setState((was) => {
+        const next = new Set(folded);
+        // A choice made while reading takes precedence for that floor.
+        for (const id of was.changed) {
+          if (was.folded.has(id)) next.add(id);
+          else next.delete(id);
+        }
+        return { ...was, folded: next, isLoaded: true };
+      });
+    }
+    void load();
     return () => {
       isStopped = true;
     };
   }, []);
+  useEffect(() => {
+    if (!state.isLoaded || state.changed.size === 0) return;
+    // Read before saving so an early choice keeps the other saved folds.
+    // Where it cannot be kept, it is remembered until the app restarts.
+    void getShell()
+      .preferences.set(preferenceKey, JSON.stringify([...state.folded]))
+      .catch(() => undefined);
+  }, [state]);
   const toggle = (id: string) =>
-    setFolded((was) => {
-      const next = new Set(was);
+    setState((was) => {
+      const next = new Set(was.folded);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      // Where it cannot be kept, it is remembered until the app restarts.
-      getShell()
-        .preferences.set(preferenceKey, JSON.stringify([...next]))
-        .catch(() => undefined);
-      return next;
+      return {
+        ...was,
+        folded: next,
+        changed: new Set(was.changed).add(id),
+      };
     });
-  return { folded, toggle };
+  return { folded: state.folded, toggle };
 }
 
 export function SidebarRooms(props: {
