@@ -279,6 +279,12 @@ export type AppInfo = {
   id: string;
   name: string;
   version: string;
+  /**
+   * The build of that version it runs: a new one comes with each update,
+   * and in development with each saved change, and a page shown in a frame
+   * opens afresh when it does.
+   */
+  build?: string;
   /** The oldest version of its pages that work with it, if any don't. */
   oldestPage?: string;
   icon: AppIcon | null;

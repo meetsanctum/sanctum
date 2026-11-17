@@ -79,8 +79,9 @@ export function AppFrame(props: {
     latest.current = { ...props, context };
   });
 
-  // A frame afresh, for each try and each version the app runs.
-  const { id, version } = app.info;
+  // A frame afresh, for each try and each build the app runs: an update,
+  // or in development a saved change, once the stack has staged it.
+  const { id, version, build } = app.info;
   useEffect(() => {
     let isCurrent = true;
     setPhase("opening");
@@ -148,7 +149,7 @@ export function AppFrame(props: {
       bridge.current = undefined;
       if (named) void frames?.end(named);
     };
-  }, [attempt, id, version]);
+  }, [attempt, id, version, build]);
 
   // What changes while it's open, said to the page in it.
   useEffect(() => {
@@ -185,7 +186,7 @@ export function AppFrame(props: {
       clearTimeout(loader);
       clearTimeout(late);
     };
-  }, [phase, waits, attempt, id, version]);
+  }, [phase, waits, attempt, id, version, build]);
 
   if (phase === "newer") {
     return <PageDoesntMatch app={app.info} mismatch={{ needs: "client" }} />;
