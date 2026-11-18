@@ -507,7 +507,7 @@ export function DevicesSection(props: {
       title="Devices"
       hint={
         devices &&
-        ([updatesHint(devices), foundHint(addable?.found)]
+        ([updatesHint(devices), foundHint(addable)]
           .filter(Boolean)
           .join(" · ") ||
           undefined)

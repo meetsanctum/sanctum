@@ -197,16 +197,22 @@ describe("Lights' card", () => {
 });
 
 describe("a room's lights on Lights' page", () => {
-  it("have the room's button under its name, which says what it does", async () => {
+  it("start with the room's switch, the power symbol alone, which says what it does", async () => {
     await show("lights");
 
     const office = button("Turn off 1 light in Office")!;
-    expect(office.textContent).toBe("Turn off");
-    expect(office.dataset.on).toBe("");
+    expect(office.textContent).toBe("");
+    expect(office.querySelector("svg.lucide-power")).not.toBeNull();
+    expect(office.title).toBe("Turn off 1 light in Office");
+    expect(office.dataset.look).toBe("on");
     expect(office.hasAttribute("aria-pressed")).toBe(false);
+    // First in the room's grid, before its lights' tiles.
+    const grid = office.closest(".tile-grid")!;
+    expect(grid.firstElementChild?.contains(office)).toBe(true);
+    expect(grid.querySelectorAll("button").length).toBeGreaterThan(1);
     const hall = button("Turn on lights in Hall")!;
-    expect(hall.textContent).toBe("Turn on");
-    expect(hall.dataset.on).toBeUndefined();
+    expect(hall.title).toBe("Turn on lights in Hall");
+    expect(hall.dataset.look).toBe("off");
 
     await click(office);
     await click(hall);

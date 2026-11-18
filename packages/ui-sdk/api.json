@@ -1,5 +1,5 @@
 {
-  "version": "0.1.11",
+  "version": "0.1.12",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2351,7 +2351,7 @@
       "import { type VariantProps } from \"class-variance-authority\";",
       "declare const buttonVariants: (props?: ({",
       "    variant?: \"destructive\" | \"link\" | \"tile\" | \"default\" | \"row\" | \"option\" | \"outline\" | \"ghost\" | \"glass\" | \"on-tile\" | \"placeholder\" | \"grip\" | \"choice\" | null | undefined;",
-      "    size?: \"app\" | \"tile\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"label\" | \"option\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | null | undefined;",
+      "    size?: \"app\" | \"tile\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"label\" | \"option\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | null | undefined;",
       "} & import(\"class-variance-authority/types\").ClassProp) | undefined) => string;",
       "declare function Button({ className, variant, size, asChild, ...props }: React.ComponentProps<\"button\"> & VariantProps<typeof buttonVariants> & {",
       "    asChild?: boolean;",
@@ -2777,6 +2777,7 @@
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
       "    lead?: (section: TileSection) => ReactNode;",
+      "    first?: (section: TileSection) => ReactNode;",
       "}): import(\"react\").JSX.Element[];"
     ],
     "tiles.d.ts": [

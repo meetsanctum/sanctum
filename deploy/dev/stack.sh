@@ -273,7 +273,7 @@ dev() {
   pnpm turbo watch build dev --concurrency=30 \
     --filter=@meetsanctum/core... --filter=@meetsanctum/manager... \
     --filter='./catalog/apps/*' --filter=@meetsanctum/client... \
-    --filter=@meetsanctum/website
+    --filter=@meetsanctum/website --filter=@meetsanctum/docs
 }
 
 seed() {

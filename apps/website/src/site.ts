@@ -5,5 +5,6 @@ export const siteUrl = (
   process.env.SITE_URL || "https://meetsanctum.com"
 ).replace(/\/+$/, "");
 
+export const docsUrl = "https://docs.meetsanctum.com";
 export const repositoryUrl = "https://github.com/meetsanctum/sanctum";
 export const xUrl = "https://x.com/meetsanctum";

@@ -9,6 +9,8 @@ build
 out
 .next
 next-env.d.ts
+# Astro's generated types for the docs
+.astro
 *.tsbuildinfo
 .turbo
 coverage

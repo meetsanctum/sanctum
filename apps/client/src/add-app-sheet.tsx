@@ -167,6 +167,7 @@ export function AddAppSheet(props: {
   onAdding?: () => void;
   onAdded: (app: AppInfo) => void;
   onClose: () => void | Promise<void>;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { app } = props;
   const [pending, setPending] = useState<"add" | "close">();
@@ -221,6 +222,7 @@ export function AddAppSheet(props: {
         <DialogContent
           showCloseButton={false}
           className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+          onCloseAutoFocus={props.onCloseAutoFocus}
         >
           <DialogHeader className="gap-3">
             <AppIcon
