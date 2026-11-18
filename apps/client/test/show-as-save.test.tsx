@@ -133,17 +133,28 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
   }
 
   async function choose(title: string) {
-    const label = where === "Settings" ? "more" : "show as";
+    // On a card in Add devices, the choices are side by side.
+    if (where === "Add devices") {
+      await act(async () => {
+        [
+          ...document.querySelectorAll<HTMLButtonElement>(
+            `[aria-label="${sensor.name}: show as"] button`,
+          ),
+        ]
+          .find((choice) => choice.textContent === title)!
+          .click();
+      });
+      return;
+    }
+    const label = "more";
     await enter(
       document.querySelector(`button[aria-label="${sensor.name}: ${label}"]`)!,
     );
-    if (where === "Settings") {
-      await enter(
-        [...document.querySelectorAll("[role=menuitem]")].find(
-          (item) => item.textContent === "Show as",
-        )!,
-      );
-    }
+    await enter(
+      [...document.querySelectorAll("[role=menuitem]")].find(
+        (item) => item.textContent === "Show as",
+      )!,
+    );
     await act(async () => {
       [...document.querySelectorAll<HTMLElement>("[role=menuitemradio]")]
         .find((item) => item.textContent === title)!

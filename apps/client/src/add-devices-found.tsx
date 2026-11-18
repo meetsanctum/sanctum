@@ -1,9 +1,4 @@
-import type {
-  AddResult,
-  DeviceInfo,
-  FoundDevice,
-  Room,
-} from "@meetsanctum/app-sdk";
+import type { AddResult, DeviceInfo, FoundDevice } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -14,7 +9,7 @@ import {
   DeviceCard,
   ReadyCard,
   TypeIcon,
-  type DeviceChanges,
+  type CardWork,
 } from "./add-devices-cards";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem } from "./device-parts";
@@ -49,11 +44,10 @@ export function FoundPage(props: {
   shown: readonly FoundDevice[];
   added: Record<string, DeviceInfo>;
   devices: readonly DeviceInfo[];
-  rooms: readonly Room[];
   appName: (id: string) => string | null;
   onWorkingChange: (key: string, isWorking: boolean) => void;
   onAdded: (key: string, device: DeviceInfo) => void;
-  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<void>;
+  work: CardWork;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -75,9 +69,9 @@ export function FoundPage(props: {
                 device={device}
                 line={each.description}
                 done="Added"
-                rooms={props.rooms}
+                isNew
+                work={props.work}
                 index={index}
-                onSave={props.onSave}
               />
             ) : (
               <FoundCard
