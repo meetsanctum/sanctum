@@ -2,7 +2,7 @@ import type { DeviceRegistration } from "@meetsanctum/app-sdk";
 
 import { capabilityMappings, type CapabilityMapping } from "./exposes.js";
 import { versionOf } from "./firmware.js";
-import type { ZigbeeDevice, ZigbeeExpose } from "./types.js";
+import { access, type ZigbeeDevice, type ZigbeeExpose } from "./types.js";
 import { stringValue } from "./values.js";
 
 // Zigbee2MQTT's device list (`bridge/devices`) onto the devices the driver
@@ -37,16 +37,19 @@ function identifyOf(
   battery: boolean,
 ): Record<string, string> | null {
   if (battery) return null;
-  const settable = (property: string, value: string) =>
-    exposes.some(
+  const findProperty = (name: string, value: string) =>
+    exposes.find(
       (expose) =>
         expose.type === "enum" &&
-        expose.property === property &&
-        ((expose.access ?? 0) & 2) !== 0 &&
+        (expose.name === name || expose.property === name) &&
+        typeof expose.property === "string" &&
+        ((expose.access ?? 0) & access.set) !== 0 &&
         (expose.values ?? []).includes(value),
-    );
-  if (settable("effect", "blink")) return { effect: "blink" };
-  if (settable("identify", "identify")) return { identify: "identify" };
+    )?.property;
+  const effect = findProperty("effect", "blink");
+  if (effect) return { [effect]: "blink" };
+  const identify = findProperty("identify", "identify");
+  if (identify) return { [identify]: "identify" };
   return null;
 }
 

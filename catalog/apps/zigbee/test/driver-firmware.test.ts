@@ -508,6 +508,26 @@ describe("having a device show itself", () => {
     expect(sets(name).at(-1)!.payload).toEqual({ identify: "identify" });
   });
 
+  it.each([effect, identify])(
+    "uses the exposed property for $name on an endpoint",
+    async (expose) => {
+      const core = await running();
+      const property = `${expose.property}_l1`;
+      const { key, name } = await joined(core, [
+        lightExpose(),
+        { ...expose, endpoint: "l1", property },
+      ]);
+      expect(core.registered.get(key)).toMatchObject({ identify: true });
+
+      await core.identify(key);
+      await core.until(() => sets(name).length > 0, "identify request");
+
+      expect(sets(name).at(-1)!.payload).toEqual({
+        [property]: expose.values[0],
+      });
+    },
+  );
+
   it("refuses a device on a battery, which sleeps, and one that can't", async () => {
     const core = await running();
     const sleeping = await joined(core, [lightExpose(), identify], {

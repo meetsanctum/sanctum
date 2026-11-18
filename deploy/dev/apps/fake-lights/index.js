@@ -60,6 +60,17 @@ let ticking;
 // after a call has answered, such as a light joining.
 let running;
 
+// A blink keeps its original state until it finishes or a command ends it.
+const blinking = new Map();
+
+function stopBlink(key) {
+  const blink = blinking.get(key);
+  if (!blink) return;
+  blink.timers.forEach(clearTimeout);
+  lights.get(key).state = blink.was;
+  blinking.delete(key);
+}
+
 // What it has found and could add, until someone adds it.
 const found = new Map([
   [
@@ -219,25 +230,35 @@ export default defineApp({
     stopStarts();
     steps.forEach(clearTimeout);
     steps = [];
+    for (const key of blinking.keys()) stopBlink(key);
+    running = undefined;
   },
   driver: {
     async command(ctx, command) {
       const light = lights.get(command.key);
       // A contact sensor takes no commands, and the core sends it none.
       if (!light) return;
+      stopBlink(command.key);
       light.state = { ...light.state, ...lightKind.desired(command.command) };
       await report(ctx, command.key);
     },
     // Blinks: off and on again three times, then as it was.
-    async identify(ctx, { key }) {
+    async identify(_ctx, { key }) {
       const light = lights.get(key);
-      if (!light) return;
-      const was = light.state;
+      const ctx = running;
+      if (!light || !ctx) return;
+      stopBlink(key);
+      const blink = { was: light.state, timers: [] };
+      blinking.set(key, blink);
       for (let flash = 0; flash < 6; flash += 1) {
-        setTimeout(() => {
-          light.state = flash === 5 ? was : { ...was, on: flash % 2 === 1 };
-          void report(ctx, key).catch(() => undefined);
-        }, flash * 300);
+        blink.timers.push(
+          setTimeout(() => {
+            const { was } = blink;
+            light.state = flash % 2 === 0 ? { ...was, on: !was.on } : was;
+            if (flash === 5) blinking.delete(key);
+            void report(ctx, key).catch(() => undefined);
+          }, flash * 300),
+        );
       }
     },
     pairing: {
