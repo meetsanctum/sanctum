@@ -56,11 +56,20 @@ it("offers an app the home could add once its devices announce themselves", asyn
     ),
   );
   const fake = fakeManager();
+  let finishStaging!: () => void;
+  const firstStaging = new Promise<void>((resolve) => {
+    finishStaging = resolve;
+  });
+  let isFirstStaging = true;
   const manager: CoreManager = {
     ...fake.manager,
-    stagedApps: async () => ({
-      [appId]: { version: "1.0.0", folder: "1.0.0" },
-    }),
+    async stagedApps() {
+      if (isFirstStaging) {
+        isFirstStaging = false;
+        await firstStaging;
+      }
+      return { [appId]: { version: "1.0.0", folder: "1.0.0" } };
+    },
     hostId: () => undefined,
     reportClaimed: async () => undefined,
     signCertificate: async () => {
@@ -94,8 +103,13 @@ it("offers an app the home could add once its devices announce themselves", asyn
       },
     },
   );
-  onTestFinished(() => core.stop().then(() => undefined));
+  onTestFinished(async () => {
+    finishStaging();
+    await core.stop();
+  });
   await core.start();
+  expect(core.modules!.apps.hasInstalled()).toBe(false);
+  finishStaging();
   const pairing = () => core.modules!.pairing.info();
 
   await vi.waitFor(
@@ -116,4 +130,7 @@ it("offers an app the home could add once its devices announce themselves", asyn
   );
   // Nothing found reaches an app the home doesn't have.
   expect(pairing().found).toEqual([]);
+
+  fake.network.take(kitchen);
+  await vi.waitFor(() => expect(pairing().offers).toEqual([]));
 });

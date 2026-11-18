@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type {
-  AppInfo,
   AvailableApp,
   DeviceOffer,
   PairingInfo,
@@ -45,7 +44,7 @@ const example: AvailableApp = {
   },
   shortfalls: [],
 };
-const added = { ...zigbee, id: "sanctum.example", name: "Example" } as AppInfo;
+const added = { ...zigbee, id: "sanctum.example", name: "Example" };
 
 let root: Root;
 let container: HTMLDivElement;
@@ -108,12 +107,11 @@ const cards = () =>
       "[role=dialog] [data-slot=overlay-content] li",
     ),
   ].map((card) => card.textContent);
-const press = (name: string) =>
-  act(async () =>
-    [...document.querySelectorAll("button")]
-      .find((each) => each.textContent?.startsWith(name))!
-      .click(),
-  );
+const press = (name: string) => act(async () => button(name).click());
+const button = (name: string) =>
+  [...document.querySelectorAll("button")].find((each) =>
+    each.textContent?.startsWith(name),
+  )!;
 // The add sheet, over the overlay.
 const sheet = () =>
   [...document.querySelectorAll("[role=dialog]")].find((each) =>
@@ -166,12 +164,46 @@ describe("an app offered for devices found", () => {
 
   it("stays on the first page on Cancel", async () => {
     await show();
+    const opener = button("Example");
+    await act(async () => opener.focus());
     await press("Example");
 
     await press("Cancel");
 
     expect(sheet()).toBeUndefined();
     expect(cards()).toHaveLength(2);
+    await vi.waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it("drops a pending sheet when another way is chosen", async () => {
+    adding = { ...adding, finders: ["sanctum.zigbee"] };
+    let finishListing!: (apps: AvailableApp[]) => void;
+    const listing = new Promise<AvailableApp[]>((resolve) => {
+      finishListing = resolve;
+    });
+    vi.mocked(coreJson).mockReturnValueOnce(listing);
+    await show();
+    await press("Example");
+
+    await press("Devices found");
+    await act(async () => finishListing([example]));
+
+    expect(sheet()).toBeUndefined();
+    await press("Add devices");
+    expect(sheet()).toBeUndefined();
+  });
+
+  it("returns focus to Add devices if the offer disappeared", async () => {
+    await show();
+    const overlay = document.querySelector('[role="dialog"]');
+    await press("Example");
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: { ...adding, offers: [] } }),
+    );
+
+    await press("Cancel");
+
+    await vi.waitFor(() => expect(document.activeElement).toBe(overlay));
   });
 
   it("opens nothing once it was added elsewhere", async () => {

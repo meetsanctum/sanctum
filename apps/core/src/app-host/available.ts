@@ -114,6 +114,7 @@ export function createAvailableApps(options: {
       apps,
       isComplete,
       isEmpty: Object.keys(staged).length === 0 && shipped.length === 0,
+      hasShipped: shipped.length > 0,
     };
   }
 
@@ -129,12 +130,14 @@ export function createAvailableApps(options: {
      * a manager that is still staging.
      */
     async listing() {
-      const { apps, isComplete, isEmpty } = await read(undefined, {
+      const { apps, isComplete, isEmpty, hasShipped } = await read(undefined, {
         requireAnswer: true,
       });
       return {
         apps: apps.map(({ app }) => app),
         isComplete: isComplete && !isEmpty,
+        // A development stack can stage apps as the worktree builds them.
+        isCacheable: isComplete && hasShipped,
       };
     },
     async find(appId: string) {

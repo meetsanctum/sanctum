@@ -438,9 +438,8 @@ export async function createModules(
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
       // A driver that starts or stops lets devices join, or lists what it
-      // found, or no longer does; one added is no longer offered.
+      // found, or no longer does.
       pairing.refresh();
-      void deviceOffers.check();
     },
     net: createNet(options.fetch ?? publicInternet()),
     log,
@@ -528,6 +527,9 @@ export async function createModules(
     activity,
     hasInstalled: () => apps.hasInstalled(),
     install: async (pkg) => {
+      // The app has been recorded and its offer ends even if it can't start.
+      pairing.refresh();
+      void deviceOffers.check();
       if (!options.installAdded) throw new Error("this core installs no app");
       await options.installAdded(pkg);
     },
@@ -562,6 +564,7 @@ export async function createModules(
     onRemoved(appId) {
       live.appRemoved(appId);
       // Removed, it can be offered again.
+      pairing.refresh();
       void deviceOffers.check();
     },
     onDevice: live.device,
@@ -667,10 +670,11 @@ export async function createModules(
     ],
   ]);
 
-  // Stop new workflow runs and hardware checks before waiting on shutdown.
+  // Stop new workflow runs and offer checks before waiting on shutdown.
   const stopNewWork = [
     ["workflows", () => workflows.interrupt()],
     ["look for sticks", () => hardwareOffers.interrupt()],
+    ["check Add devices' offers", () => deviceOffers.interrupt()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
   // firmware's deadlines are the last that change a device, so the bus closes

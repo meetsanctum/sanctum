@@ -118,10 +118,9 @@ export function createPairing(options: {
   const toldOf = ({ drivers, finders, found, offers }: PairingInfo) =>
     JSON.stringify({ drivers, finders, found, offers });
 
-  function changed() {
-    const now = info();
-    told = toldOf(now);
-    options.onChange?.(now);
+  function changed(pairing = info()) {
+    told = toldOf(pairing);
+    options.onChange?.(pairing);
   }
 
   function end() {
@@ -334,7 +333,8 @@ export function createPairing(options: {
     // hear of it when that changes which drivers let devices join, what was
     // found or what's offered.
     refresh() {
-      if (toldOf(info()) !== told) changed();
+      const pairing = info();
+      if (toldOf(pairing) !== told) changed(pairing);
     },
 
     // Forgets the timer, as when the core stops.

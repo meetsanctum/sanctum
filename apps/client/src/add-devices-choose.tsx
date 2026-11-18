@@ -4,8 +4,6 @@ import { cn } from "cn";
 import { Radio, Wifi } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { offerFoundWords } from "./add-devices-offer";
-
 // Add devices' first page: what are you adding? A card for each way the home
 // can add devices, side by side: the devices drivers found, with how many,
 // and each radio that lets new devices join, by its app's name. The whole
@@ -26,7 +24,7 @@ export type Way =
 
 export function ChoosePage(props: {
   ways: readonly Way[];
-  onChoose: (way: Way) => void;
+  onChoose: (way: Way, button: HTMLButtonElement) => void;
 }) {
   return (
     <div className="flex flex-col items-center gap-9 pt-[max(2rem,8vh)]">
@@ -51,7 +49,7 @@ export function ChoosePage(props: {
               style={{ animationDelay: `${80 + index * 80}ms` }}
               className="flex motion-safe:animate-in motion-safe:fill-mode-both motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-500 motion-reduce:animate-in motion-reduce:fill-mode-both motion-reduce:fade-in-0 sm:w-66"
             >
-              <WayCard way={way} onChoose={() => props.onChoose(way)} />
+              <WayCard way={way} onChoose={props.onChoose} />
             </li>
           ))}
         </ul>
@@ -60,7 +58,10 @@ export function ChoosePage(props: {
   );
 }
 
-function WayCard(props: { way: Way; onChoose: () => void }) {
+function WayCard(props: {
+  way: Way;
+  onChoose: (way: Way, button: HTMLButtonElement) => void;
+}) {
   const { way } = props;
   const isOff = way.kind === "notSetUp";
   const badge =
@@ -76,7 +77,7 @@ function WayCard(props: { way: Way; onChoose: () => void }) {
       variant="choice"
       size="choice"
       disabled={isOff}
-      onClick={props.onChoose}
+      onClick={(event) => props.onChoose(way, event.currentTarget)}
       className={cn("group/way", isOff && "bg-white/5 from-white/5 to-white/5")}
     >
       <Round dim={isOff}>
@@ -104,7 +105,7 @@ function WayCard(props: { way: Way; onChoose: () => void }) {
           : way.kind === "join"
             ? "Lights, sensors and remotes"
             : way.kind === "offer"
-              ? offerFoundWords(way.offer)
+              ? `${way.offer.found} ${way.offer.name} ${way.offer.found === 1 ? "device" : "devices"} found`
               : way.fix}
       </span>
       <span className="mt-auto flex w-full flex-col items-center gap-3.5 pt-4">

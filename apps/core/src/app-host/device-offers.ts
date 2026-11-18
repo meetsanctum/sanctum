@@ -15,7 +15,7 @@ import type { AvailableApps } from "./available.js";
 // the services those apps would look for, and counts what it finds; the
 // sightings reach no app until one is added and granted them.
 
-// How soon a list that couldn't be read whole is read again.
+// How often to check a list that couldn't be read whole or can change.
 const againMs = 60_000;
 
 type Offered = { app: string; name: string; services: readonly string[] };
@@ -37,12 +37,12 @@ export function createDeviceOffers(options: {
   // The apps offered, or what they'd look for, changed.
   onChange: () => void;
   log: (message: string) => void;
-  againMs?: number;
 }) {
   const { log } = options;
   let offered: Offered[] = [];
-  // The home's list the offers were read for, so a change reads them again.
-  let readFor: string | undefined;
+  // The catalog can be reused until the home's app list changes.
+  let checkedFor: string | undefined;
+  let isCacheFresh = false;
   let reading: Promise<void> | undefined;
   let isAgain = false;
   let timer: NodeJS.Timeout | undefined;
@@ -51,32 +51,22 @@ export function createDeviceOffers(options: {
   const listKey = () => [...options.added.ids()].sort().join("\n");
   // An app added since the last read is no longer offered.
   const current = () => {
+    if (offered.length === 0) return offered;
     const added = options.added.ids();
     return offered.filter(({ app }) => !added.has(app));
   };
 
   async function read() {
-    const key = listKey();
-    let next: Offered[];
-    let isComplete: boolean;
-    try {
-      const listing = await options.available.listing();
-      next = offeredOf(listing.apps);
-      isComplete = listing.isComplete;
-    } catch (error) {
-      log(`apps: Add devices' offers weren't read (${String(error)})`);
-      return;
-    }
-    if (isClosed) return;
+    const listing = await options.available.listing();
+    if (isClosed || isAgain) return;
+    let next = offeredOf(listing.apps);
     // An app only part of the list showed stays offered until it's read.
-    if (!isComplete) {
-      const kept = offered.filter(
-        (each) => !next.some(({ app }) => app === each.app),
-      );
+    if (!listing.isComplete) {
+      const listed = new Set(listing.apps.map(({ id }) => id));
+      const kept = offered.filter(({ app }) => !listed.has(app));
       next = [...next, ...kept];
-    } else {
-      readFor = key;
     }
+    isCacheFresh = listing.isCacheable;
     const changed = JSON.stringify(next) !== JSON.stringify(offered);
     offered = next;
     if (changed) options.onChange();
@@ -85,19 +75,32 @@ export function createDeviceOffers(options: {
   // One read at a time; a change while one is under way reads again after.
   function check() {
     if (isClosed || !options.hasInstalled()) return Promise.resolve();
-    if (reading) {
-      isAgain = true;
-      return reading;
+    const key = listKey();
+    if (key !== checkedFor) {
+      checkedFor = key;
+      isCacheFresh = false;
+      isAgain = reading !== undefined;
     }
-    if (readFor === listKey()) return Promise.resolve();
-    reading = read().finally(() => {
-      reading = undefined;
-      if (isAgain) {
-        isAgain = false;
-        void check();
-      }
-    });
+    if (reading) return reading;
+    if (isCacheFresh) return Promise.resolve();
+    reading = read()
+      .catch((error: unknown) => {
+        if (!isClosed)
+          log(`apps: Add devices' offers weren't read (${String(error)})`);
+      })
+      .finally(() => {
+        reading = undefined;
+        if (isAgain) {
+          isAgain = false;
+          void check();
+        }
+      });
     return reading;
+  }
+
+  function interrupt() {
+    isClosed = true;
+    clearInterval(timer);
   }
 
   return {
@@ -120,20 +123,19 @@ export function createDeviceOffers(options: {
     /** The home's list may have changed: reads the offers again if so. */
     check,
 
-    /** Reads the offers now, and again while they couldn't be read whole. */
+    /** Reads now and checks for changes later. */
     start() {
+      if (isClosed || timer) return;
       void check();
-      // A list read whole isn't read again until the home's list changes.
-      timer = setInterval(() => void check(), options.againMs ?? againMs);
+      timer = setInterval(() => void check(), againMs);
       timer.unref();
     },
 
+    interrupt,
+
     async close() {
-      isClosed = true;
-      clearInterval(timer);
+      interrupt();
       await reading;
     },
   };
 }
-
-export type DeviceOffers = ReturnType<typeof createDeviceOffers>;

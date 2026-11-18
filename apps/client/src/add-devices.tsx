@@ -116,8 +116,14 @@ export function AddDevices(props: {
   // The device whose removal is being asked about.
   const [removing, setRemoving] = useState<Editing>();
   // The app whose add sheet is open, from its offer.
-  const [offered, setOffered] = useState<DeviceOffer>();
+  const [offered, setOffered] = useState<{
+    offer: DeviceOffer;
+    opener: HTMLButtonElement;
+    dialog: HTMLElement | null;
+    session: number;
+  }>();
   const closeOffer = useCallback(() => setOffered(undefined), []);
+  const backButton = useRef<HTMLButtonElement>(null);
   // The devices already greeted as new, so that each is greeted once.
   const greeted = useRef(new Set<string>());
 
@@ -209,10 +215,19 @@ export function AddDevices(props: {
     }
   };
 
-  const choose = (way: Way) => {
+  const choose = (way: Way, opener: HTMLButtonElement) => {
     setProblem(undefined);
+    setOffered(
+      way.kind === "offer"
+        ? {
+            offer: way.offer,
+            opener,
+            dialog: opener.closest<HTMLElement>('[role="dialog"]'),
+            session: session.current,
+          }
+        : undefined,
+    );
     if (way.kind === "found") setPage({ kind: "found" });
-    if (way.kind === "offer") setOffered(way.offer);
     if (way.kind === "join") {
       setPage(way);
       void open(way.driver);
@@ -507,6 +522,7 @@ export function AddDevices(props: {
       leading={
         page.kind !== "choose" && (
           <Button
+            ref={backButton}
             variant="outline"
             aria-label="Back to Add devices"
             onClick={() => void back()}
@@ -589,16 +605,28 @@ export function AddDevices(props: {
           )}
         </div>
       </div>
-      <OfferedAppSheet
-        offer={offered}
-        onAdded={() => {
-          setOffered(undefined);
-          // What it finds is added from there.
-          setPage({ kind: "found" });
-        }}
-        onClose={closeOffer}
-        onProblem={setProblem}
-      />
+      {props.open && page.kind === "choose" && offered && (
+        <OfferedAppSheet
+          key={offered.offer.app}
+          offer={offered.offer}
+          onAdded={() => {
+            if (offered.session !== session.current) return;
+            setOffered(undefined);
+            // What it finds is added from there.
+            setPage({ kind: "found" });
+          }}
+          onClose={closeOffer}
+          onProblem={setProblem}
+          restoreFocus={() => {
+            if (offered.session !== session.current) return;
+            const { opener, dialog } = offered;
+            (opener.isConnected
+              ? opener
+              : (backButton.current ?? dialog)
+            )?.focus();
+          }}
+        />
+      )}
       <EditDevice
         editing={removing}
         appName={removing ? appName(removing.device.driver) : null}

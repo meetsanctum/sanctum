@@ -1,5 +1,5 @@
 import type { AvailableApp, Sighting } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDeviceOffers } from "../src/app-host/device-offers.js";
 
@@ -30,6 +30,7 @@ function home() {
   const state = {
     available: [finder, other] as AvailableApp[],
     isComplete: true,
+    hasShipped: true,
     fails: false,
     added: new Set<string>(),
     hasInstalled: true,
@@ -37,24 +38,24 @@ function home() {
     reads: 0,
     changes: 0,
   };
+  const listing = vi.fn(async () => {
+    state.reads += 1;
+    if (state.fails) throw new Error("The manager didn't answer");
+    return {
+      apps: state.available.filter(({ id }) => !state.added.has(id)),
+      isComplete: state.isComplete,
+      isCacheable: state.isComplete && state.hasShipped,
+    };
+  });
   const offers = createDeviceOffers({
-    available: {
-      listing: async () => {
-        state.reads += 1;
-        if (state.fails) throw new Error("The manager didn't answer");
-        return {
-          apps: state.available.filter(({ id }) => !state.added.has(id)),
-          isComplete: state.isComplete,
-        };
-      },
-    },
+    available: { listing },
     added: { ids: () => state.added },
     hasInstalled: () => state.hasInstalled,
     sightings: () => state.sightings,
     onChange: () => void (state.changes += 1),
     log: () => undefined,
   });
-  return { offers, state };
+  return { offers, state, listing };
 }
 
 describe("Add devices' offers", () => {
@@ -102,6 +103,52 @@ describe("Add devices' offers", () => {
     expect(state.changes).toBe(1);
   });
 
+  it("reads again if an app was added and removed during a read", async () => {
+    const { offers, state, listing } = home();
+    type Listing = Awaited<ReturnType<typeof listing>>;
+    let finishListing!: (value: Listing) => void;
+    const first = new Promise<Listing>((resolve) => {
+      finishListing = resolve;
+    });
+    listing.mockReturnValueOnce(first);
+    const reading = offers.check();
+
+    state.added.add(finder.id);
+    void offers.check();
+    const apps = state.available.filter(({ id }) => !state.added.has(id));
+    state.added.delete(finder.id);
+    void offers.check();
+    finishListing({ apps, isComplete: true, isCacheable: true });
+
+    await reading;
+    await offers.check();
+    expect(offers.services()).toEqual(["_example._tcp"]);
+    expect(listing).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the apps staged by a development stack until shutdown", async () => {
+    const { offers, state } = home();
+    vi.useFakeTimers();
+    try {
+      state.hasShipped = false;
+      state.available = [other];
+      offers.start();
+      await offers.check();
+      expect(offers.services()).toEqual([]);
+
+      state.available = [other, finder];
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(offers.services()).toEqual(["_example._tcp"]);
+
+      offers.interrupt();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(state.reads).toBe(2);
+    } finally {
+      await offers.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("waits for the home's list before reading", async () => {
     const { offers, state } = home();
     state.hasInstalled = false;
@@ -147,6 +194,18 @@ describe("Add devices' offers", () => {
     await offers.check();
 
     expect(offers.services()).toEqual(["_example._tcp"]);
+  });
+
+  it("drops a service a new build no longer requests even during a part read", async () => {
+    const { offers, state } = home();
+    state.hasShipped = false;
+    await offers.check();
+    state.available = [{ ...finder, requests: [] }];
+    state.isComplete = false;
+
+    await offers.check();
+
+    expect(offers.services()).toEqual([]);
   });
 
   it("reads nothing more once closed", async () => {

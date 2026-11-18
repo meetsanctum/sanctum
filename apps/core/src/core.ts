@@ -375,9 +375,15 @@ export function createCore(
       // offered in Add devices, once the home's list is known.
       [
         "start Add devices' offers",
-        (cancelled) => {
+        () => {
           updatePending!.whenCommitted(() => {
-            if (!cancelled.aborted) modules!.deviceOffers.start();
+            lifecycle.ownBackgroundTask(
+              "start Add devices' offers",
+              async (cancelled) => {
+                await modules!.apps.whenInstalled();
+                if (!cancelled.aborted) modules!.deviceOffers.start();
+              },
+            );
           });
         },
       ],

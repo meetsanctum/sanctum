@@ -1,4 +1,4 @@
-import type { AppInfo, AvailableApp, DeviceOffer } from "@meetsanctum/app-sdk";
+import type { AvailableApp, DeviceOffer } from "@meetsanctum/app-sdk";
 import { useEffect, useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
@@ -10,10 +10,6 @@ import { coreJson } from "./core-fetch";
 // then, since it needs the local network and so asks rather than adding
 // itself. Added, it finds them, and they're added from Devices found.
 
-/** "2 ESPHome devices found", on its card. */
-export const offerFoundWords = ({ name, found }: DeviceOffer) =>
-  `${found} ${name} ${found === 1 ? "device" : "devices"} found`;
-
 /** "2 ESPHome devices were found", above the sheet's title. */
 const leadWords = ({ name, found }: DeviceOffer) =>
   found === 1
@@ -21,20 +17,18 @@ const leadWords = ({ name, found }: DeviceOffer) =>
     : `${found} ${name} devices were found`;
 
 export function OfferedAppSheet(props: {
-  /** The offer pressed; none while no sheet is open. */
-  offer: DeviceOffer | undefined;
-  onAdded: (app: AppInfo) => void;
+  offer: DeviceOffer;
+  onAdded: () => void;
   onClose: () => void;
+  restoreFocus: () => void;
   /** Its sheet couldn't be read. */
   onProblem: (problem: string) => void;
 }) {
   const { offer, onClose, onProblem } = props;
-  const appId = offer?.app;
+  const appId = offer.app;
   const [app, setApp] = useState<AvailableApp>();
 
   useEffect(() => {
-    setApp(undefined);
-    if (!appId) return;
     let isCurrent = true;
     void coreJson<AvailableApp[]>("/api/apps/available")
       .then((list) => {
@@ -56,11 +50,14 @@ export function OfferedAppSheet(props: {
 
   return (
     <AddAppSheet
-      key={appId ?? "none"}
       app={app}
-      lead={offer && leadWords(offer)}
+      lead={leadWords(offer)}
       onAdded={props.onAdded}
       onClose={onClose}
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        props.restoreFocus();
+      }}
     />
   );
 }
