@@ -1,9 +1,9 @@
-import type { DeviceInfo, JoinedDevice, Room } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-import { JoinedCard, type DeviceChanges } from "./add-devices-cards";
+import { JoinedCard, type CardWork } from "./add-devices-cards";
 import { foundKey } from "./add-devices-found";
 import { KnotLoader } from "./knot-loader";
 import { knotPath } from "./knot";
@@ -41,15 +41,18 @@ export function JoiningPage(props: {
   state: JoiningState;
   joined: readonly JoinedDevice[];
   devices: readonly DeviceInfo[];
-  rooms: readonly Room[];
   // How long it lets devices join each time.
   seconds: number;
   onStop: () => void;
   onStartAgain: () => void;
-  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<void>;
+  work: CardWork;
 }) {
   const { state } = props;
-  const hasJoined = props.joined.length > 0;
+  // A device removed here is gone from the list it joined.
+  const joined = props.joined.filter(
+    (each) => !(each.stage === "ready" && each.deviceId === null),
+  );
+  const hasJoined = joined.length > 0;
   const isLooking = state.kind !== "closed";
   // Calm and centred until a device joins; then at the top over the cards.
   const isWaiting = isLooking && !hasJoined;
@@ -151,7 +154,7 @@ export function JoiningPage(props: {
           aria-label="Devices that joined"
           className="m-0 grid w-full list-none grid-cols-2 gap-3 p-0 sm:grid-cols-4 sm:gap-4"
         >
-          {props.joined.map((each, index) => (
+          {joined.map((each, index) => (
             <JoinedCard
               key={foundKey(each)}
               joined={each}
@@ -159,8 +162,7 @@ export function JoiningPage(props: {
               device={props.devices.find(
                 (device) => device.id === each.deviceId,
               )}
-              rooms={props.rooms}
-              onSave={props.onSave}
+              work={props.work}
             />
           ))}
         </ul>

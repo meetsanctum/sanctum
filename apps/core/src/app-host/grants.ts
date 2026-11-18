@@ -18,7 +18,10 @@ import { appGrants } from "./schema.js";
 // app needs and an optional one its out-of-the-box behaviour needs
 // (startsOn), and leaves every other optional one off until the app's page
 // asks for it where it is used. A permission keeps the answer it has, so a
-// home keeps what its apps held before.
+// home keeps what its apps held before. A new version of an app the home
+// has run asks again: a new optional one starts off, since startsOn is for
+// what an app does once it's added, and a needed one someone must allow
+// first (waiting.ts) has no answer until they do.
 
 // Granting an app a permission, or taking it away.
 export const permissionsRule: Rule = { tier: "write" };
@@ -49,11 +52,16 @@ export function createAppGrants(
   }
 
   return {
-    // Answers each permission the app asks for that has no answer yet.
-    adopt(app: AppAsking): void {
+    /**
+     * Answers each permission the app asks for that has no answer yet: as
+     * an update when it's a new version of an app the home has run, leaving
+     * out what waits for someone to allow it.
+     */
+    adopt(app: AppAsking, asUpdate?: { waits: readonly string[] }): void {
       const known = rows(app.id);
       const unanswered = app.permissions.filter(
-        (request) => !known.has(request.id),
+        (request) =>
+          !known.has(request.id) && !asUpdate?.waits.includes(request.id),
       );
       if (unanswered.length === 0) return;
       const updatedAt = now();
@@ -62,12 +70,36 @@ export function createAppGrants(
           unanswered.map((request) => ({
             appId: app.id,
             permission: request.id,
-            granted: grantedAtFirst(request),
+            granted: asUpdate
+              ? request.needed === true
+              : grantedAtFirst(request),
             updatedAt,
           })),
         )
         .onConflictDoNothing()
         .run();
+    },
+
+    /** Each permission's answer, by its id. */
+    answers(appId: string): ReadonlyMap<string, boolean> {
+      return rows(appId);
+    },
+
+    /**
+     * Grants each permission, as someone allowing a version that waits, in
+     * the caller's transaction.
+     */
+    grantAll(appId: string, permissions: readonly string[]) {
+      const set = { granted: true, updatedAt: now() };
+      for (const permission of permissions) {
+        db.insert(appGrants)
+          .values({ appId, permission, ...set })
+          .onConflictDoUpdate({
+            target: [appGrants.appId, appGrants.permission],
+            set,
+          })
+          .run();
+      }
     },
 
     // What the app may do now: the permissions it asks for that are

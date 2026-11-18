@@ -80,6 +80,7 @@ describe("removing an app", () => {
         appId: "test.lamps",
         name: "Lamps",
         isDone: true,
+        isDeleting: false,
       }),
     ]);
     expect(

@@ -662,6 +662,9 @@ function deviceEntry(
           ? "Checked its connection: it didn't answer"
           : "Checked its connection",
       );
+    case "device.identify":
+      // Only a blink that didn't happen is kept.
+      return said("Couldn't blink");
     case "history.keep":
       return said("History kept again");
     case "history.forget":
@@ -733,6 +736,18 @@ function setupEntry(entry: ActivityInfo): Words | null {
           ? "Changed app settings"
           : "Couldn't change app settings",
       );
+    case "app.delete": {
+      const kept = entry.detail?.name;
+      const app =
+        entry.app?.name ?? (typeof kept === "string" ? kept : null) ?? "an app";
+      const ok = entry.outcome === "ok";
+      return {
+        title: ok ? `Deleted ${app}'s data` : `Couldn't delete ${app}'s data`,
+        // Sanctum, once its 30 days were over, or whoever asked.
+        detail: whoWords(entry.who),
+        problem: !ok,
+      };
+    }
     case "app.add":
     case "app.remove": {
       // By the name the entry kept, for an app that's gone since; the app
@@ -772,6 +787,12 @@ function setupEntry(entry: ActivityInfo): Words | null {
         entry.outcome === "ok"
           ? "Went back to the app's version before"
           : "Couldn't go back to the app's version before",
+      );
+    case "allow-update":
+      return said(
+        entry.outcome === "ok"
+          ? "Allowed the app's new version"
+          : "Couldn't allow the app's new version",
       );
     case "home.update":
       return said("Changed the home's details");

@@ -91,6 +91,9 @@ export function createAppAdding(options: {
     if (app.version !== version) throw refuse("conflict", detail);
     if (app.shortfalls.length > 0) throw refuse("unavailable", detail);
     let removal = options.removed.get(appId);
+    // A failed deletion may already have erased part of its data. It must
+    // finish before the app can start afresh.
+    if (removal?.isDeleting) throw refuse("conflict", detail);
     // Its removal ends before it can come back: steps that failed when it
     // was removed are tried again now.
     if (removal && !removal.isDone) {

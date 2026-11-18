@@ -9,7 +9,9 @@ export type Operation =
   | { kind: "core-update"; version: string }
   | { kind: "core-restart" }
   | { kind: "service-image"; service: string; to: string }
-  | { kind: "app-update"; app: string; to: string };
+  | { kind: "app-update"; app: string; to: string }
+  // Deleting a removed app's data, or a service's nothing needs any more.
+  | { kind: "data-delete"; of: string };
 
 export class OperationConflictError extends Error {
   constructor(readonly holder: Operation) {
@@ -18,7 +20,9 @@ export class OperationConflictError extends Error {
         ? "An update is already running"
         : holder.kind === "core-restart"
           ? "A restart is already running"
-          : `${holder.kind === "app-update" ? holder.app : holder.service} is moving to another version`,
+          : holder.kind === "data-delete"
+            ? `${holder.of}'s data is being deleted`
+            : `${holder.kind === "app-update" ? holder.app : holder.service} is moving to another version`,
     );
   }
 }

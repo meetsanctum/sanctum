@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `identify` integer DEFAULT false NOT NULL;

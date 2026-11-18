@@ -212,6 +212,7 @@ describe("apps' images on real Docker", () => {
     await stage("test.swapped", database);
     await stage("test.grow-swapped", database);
     await stage("test.gone", database);
+    await stage("test.deleted", database);
     await stage("test.filler", filling);
     await stage("test.large", filling);
   }, 600_000);
@@ -225,6 +226,7 @@ describe("apps' images on real Docker", () => {
       "test.swapped",
       "test.grow-swapped",
       "test.gone",
+      "test.deleted",
       "test.filler",
       "test.large",
     ]) {
@@ -527,6 +529,36 @@ describe("apps' images on real Docker", () => {
     expect(more.code).toBe("ENOSPC");
     expect(more.written).toBeGreaterThan(40);
   }, 300_000);
+
+  it("deletes a removed app's image and its volume, and not while it's in use", async () => {
+    await start("test.deleted");
+    await report("test.deleted", 1);
+
+    const inUse = await api("DELETE", "/api/apps/test.deleted/data");
+    expect(inUse.status).toBe(409);
+
+    await api("DELETE", "/api/apps/test.deleted/container");
+    const deleted = await api("DELETE", "/api/apps/test.deleted/data");
+    expect(deleted.status).toBe(204);
+
+    expect(
+      await inManager("sh", "-c", `ls ${image("test.deleted")} || echo gone`),
+    ).toContain("gone");
+    expect(await docker("volume", "ls", "--format", "{{.Name}}")).not.toContain(
+      "test.deleted",
+    );
+    expect((await api("GET", "/api/host/status")).body).not.toMatchObject({
+      storage: {
+        images: expect.arrayContaining([
+          expect.objectContaining({ app: "test.deleted" }),
+        ]),
+      },
+    });
+    // Asked again, there's nothing left to do.
+    expect((await api("DELETE", "/api/apps/test.deleted/data")).status).toBe(
+      204,
+    );
+  });
 
   it("leaves no helper behind", async () => {
     expect(

@@ -114,6 +114,7 @@ function device(
         ? firmware()
         : firmware({ version: null, updatable: false, sleeps: true }),
     probe: kind === "light",
+    identify: false,
     battery: kind === "light" ? null : 64,
     batteryLow: null,
     shownAs: null,

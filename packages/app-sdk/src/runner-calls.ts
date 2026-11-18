@@ -78,6 +78,9 @@ const driverHooks: Record<DriverHook, (driver: Driver) => Hook | undefined> = {
   probe: (driver) =>
     driver.probe &&
     ((ctx, params) => driver.probe!(ctx, params as DriverDevice)),
+  identify: (driver) =>
+    driver.identify &&
+    ((ctx, params) => driver.identify!(ctx, params as DriverDevice)),
   repair: (driver) =>
     driver.repair &&
     ((ctx, params) => driver.repair!(ctx, params as DriverRepair)),

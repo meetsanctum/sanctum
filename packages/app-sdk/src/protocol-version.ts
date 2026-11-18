@@ -15,6 +15,8 @@
 // 8 takes a floor wherever a place is taken: a lights place, a workflow's
 // motion and light level, and a field declared with names("floor").
 // 9 calls an app's uninstall hook as someone removes it.
-export const protocolVersion = 9;
+// 10 lets a driver have a device show itself (driver.identify), and register
+// whether it can.
+export const protocolVersion = 10;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 6;

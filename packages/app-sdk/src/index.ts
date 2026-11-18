@@ -259,6 +259,22 @@ const memberId = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/;
 export { isOlderVersion } from "./contract.js";
 
 /** An installed app as clients see it (GET /api/apps). */
+/**
+ * A newer version of an app that needs permissions the household hasn't
+ * granted, so it waits for someone to allow them: the app runs the version
+ * it has meanwhile. When that version can't run on this Sanctum, the app is
+ * on this one instead, paused until someone allows it.
+ */
+export type AppWaitingUpdate = {
+  /** What allowing it names, so an answer for a version since replaced is refused. */
+  id: string;
+  version: string;
+  /** The staged build, which can share a version number with the running build. */
+  build: string;
+  /** Only what it newly needs, each with its reason. */
+  needs: PermissionInfo[];
+};
+
 export type AppInfo = {
   id: string;
   name: string;
@@ -287,6 +303,8 @@ export type AppInfo = {
   state: AppState;
   /** More of that state, for an app that runs in its own container. */
   run?: AppRun;
+  /** A newer version waiting for someone to allow what it newly needs. */
+  waiting?: AppWaitingUpdate;
   /** A system app, which can't be turned off, so nothing offers to. */
   alwaysOn?: true;
   /** Its preferences' schema, for the form in Settings → Apps → the app; null when it has none. */
@@ -414,6 +432,7 @@ const driverHooks = [
   "remove",
   "firmware",
   "probe",
+  "identify",
   "repair",
   "discovered",
   "add",

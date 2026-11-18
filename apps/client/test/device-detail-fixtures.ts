@@ -27,6 +27,7 @@ export const lamp: DeviceInfo = {
   lastSeenAt: null,
   firmware: null,
   probe: false,
+  identify: false,
   battery: null,
   batteryLow: null,
   shownAs: null,

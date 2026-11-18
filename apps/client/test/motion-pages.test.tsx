@@ -76,6 +76,7 @@ function motionSensor(
     lastSeenAt: null,
     firmware: null,
     probe: false,
+    identify: false,
     battery: 87,
     batteryLow: null,
     shownAs: null,

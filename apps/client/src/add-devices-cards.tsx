@@ -4,13 +4,27 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Input } from "@meetsanctum/ui-sdk";
+import { Button, Input } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
+import { Segments } from "./automations/fields";
 import { productName } from "./brand";
-import { DeviceIcon, RoomPicker, ShowAsPicker } from "./device-parts";
+import { coreJson } from "./core-fetch";
+import {
+  DeviceIcon,
+  deviceProblem,
+  RoomPicker,
+  showAsOf,
+} from "./device-parts";
 import { KnotLoader } from "./knot-loader";
 
 // The cards of Add devices, one for each device found, joining or added:
@@ -18,13 +32,30 @@ import { KnotLoader } from "./knot-loader";
 // room, set right on the card. A card says how a device got on by its look:
 // neutral while it waits or joins, green with a check once it is added or
 // ready, red where it did not finish joining. Cards in a row are as tall as
-// the tallest, and grow with their words rather than cut them off.
+// the tallest, and grow with their words rather than cut them off. A device
+// added or ready for the first time while someone watches is greeted once: a
+// warm light sweeps across its card, and a light's round glows as a bulb
+// switching on.
 
 /** What a card saves of its device. */
 export type DeviceChanges = {
   name?: string | null;
   roomId?: string | null;
   shownAs?: DeviceType | null;
+};
+
+/** What the cards of a page can do, from Add devices. */
+export type CardWork = {
+  rooms: readonly Room[];
+  // Answers whether it was saved.
+  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<boolean>;
+  // Makes a room of this name, answering its id.
+  onAddRoom: (name: string) => Promise<string>;
+  // Asks whether to remove a device, first.
+  onRemove: (device: DeviceInfo) => void;
+  // Whether a device is yet to be greeted, and that it was.
+  isFresh: (id: string) => boolean;
+  onGreeted: (id: string) => void;
 };
 
 /**
@@ -99,6 +130,8 @@ export function CardRound(props: {
   tone?: Tone;
   // Read out where the check stands for words, such as "Ready".
   done?: string;
+  // Glows once, as a bulb switching on.
+  glows?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -106,10 +139,11 @@ export function CardRound(props: {
       <span
         aria-hidden="true"
         className={cn(
-          "flex size-12 items-center justify-center rounded-full [&_svg:not(.knot-loader)]:size-5.5",
+          "relative flex size-12 items-center justify-center overflow-hidden rounded-full [&_svg:not(.knot-loader)]:relative [&_svg:not(.knot-loader)]:size-5.5",
           rounds[props.tone ?? "neutral"],
         )}
       >
+        {props.glows && <span className="add-devices-glow" />}
         {props.children}
       </span>
       {props.done && (
@@ -166,33 +200,265 @@ export function ReadyCard(props: {
   // What it is, or that it joined again.
   line: string | null;
   done: string;
-  rooms: readonly Room[];
+  // Whether it is new to the home, to be greeted as it appears.
+  isNew: boolean;
+  work: CardWork;
   index?: number;
-  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<void>;
 }) {
-  const { device } = props;
+  const { device, work } = props;
+  // Decided as it appears, so that the greeting runs once and to its end.
+  const [greets] = useState(() => props.isNew && work.isFresh(device.id));
+  useEffect(() => {
+    if (greets) work.onGreeted(device.id);
+  }, [greets, work, device.id]);
+  const isLight = device.capabilities.some((each) => each.kind === "light");
   return (
     <DeviceCard tone="success" index={props.index}>
-      <CardRound tone="success" done={props.done}>
+      {greets && <span aria-hidden="true" className="add-devices-sweep" />}
+      <CardRound tone="success" done={props.done} glows={greets && isLight}>
         <TypeIcon device={device} />
       </CardRound>
       <NameField
         device={device}
-        onSave={(name) => void props.onSave(device, { name })}
+        onSave={(name) => void work.onSave(device, { name })}
       />
       {props.line && <CardLine className="mt-2">{props.line}</CardLine>}
-      <CardFoot>
-        <ShowAsPicker
+      <CardFoot className="flex-col flex-nowrap items-stretch gap-2">
+        <ShowAsChoice device={device} work={work} />
+        <RoomChoice
           device={device}
-          onChange={(shownAs) => void props.onSave(device, { shownAs })}
-        />
-        <RoomPicker
-          device={device}
-          rooms={props.rooms}
-          onChange={(roomId) => void props.onSave(device, { roomId })}
+          work={work}
+          beside={device.identify && <BlinkButton device={device} />}
         />
       </CardFoot>
     </DeviceCard>
+  );
+}
+
+// Blink: has the device show itself, as a light blinks, so a person sees
+// which one it is. It says so while the device blinks, and why where it
+// couldn't.
+function BlinkButton(props: { device: DeviceInfo }) {
+  const [blinking, setBlinking] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const timer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const blink = async () => {
+    setProblem(undefined);
+    setBlinking(true);
+    try {
+      await coreJson("/api/devices/identify", {
+        method: "POST",
+        json: { id: props.device.id },
+      });
+      // About as long as a device takes to blink and settle.
+      timer.current = window.setTimeout(() => setBlinking(false), 2_500);
+    } catch (error) {
+      setBlinking(false);
+      setProblem(deviceProblem(error));
+    }
+  };
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={blinking}
+        aria-label={`Blink ${props.device.name}`}
+        onClick={() => void blink()}
+      >
+        {blinking ? "Blinking…" : "Blink"}
+      </Button>
+      {problem && (
+        <p
+          role="alert"
+          className="m-0 basis-full text-xs text-(--ruby-on-carbon)"
+        >
+          {problem}
+        </p>
+      )}
+    </>
+  );
+}
+
+// A device Sanctum can't use: named and placed all the same, or removed.
+function UnusableCard(props: {
+  device: DeviceInfo;
+  work: CardWork;
+  index?: number;
+}) {
+  const { device, work } = props;
+  return (
+    <DeviceCard index={props.index}>
+      <CardRound>
+        <TypeIcon device={device} />
+      </CardRound>
+      <NameField
+        device={device}
+        onSave={(name) => void work.onSave(device, { name })}
+      />
+      <CardLine className="mt-2">
+        {`${productName} can't use this device. Keep it in a room, or remove it.`}
+      </CardLine>
+      <CardFoot className="flex-col flex-nowrap items-stretch gap-2">
+        <ShowAsChoice device={device} work={work} />
+        <RoomChoice
+          device={device}
+          work={work}
+          beside={
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Remove ${device.name}`}
+              onClick={() => work.onRemove(device)}
+            >
+              Remove
+            </Button>
+          }
+        />
+      </CardFoot>
+    </DeviceCard>
+  );
+}
+
+// What a device is shown as, where its type may be shown as another: the
+// choices side by side under their label, the one in effect chosen.
+function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
+  const id = useId();
+  const showAs = showAsOf(props.device);
+  if (!showAs) return null;
+  return (
+    <div className="flex flex-col gap-1 text-start">
+      <span id={id} className="text-xs font-medium text-(--silver)">
+        Show as
+      </span>
+      <Segments
+        label={`${props.device.name}: show as`}
+        options={showAs.options.map((option) => ({
+          value: option.id,
+          label: option.title,
+        }))}
+        selected={showAs.current}
+        wraps
+        onSelect={(value) =>
+          void props.work.onSave(props.device, {
+            shownAs: showAs.choice(value),
+          })
+        }
+      />
+    </div>
+  );
+}
+
+// Which room a device is in, with New room… at the end of the menu, which
+// makes one right here: its name in a labelled field, and Add room puts the
+// device in it. Escape, or leaving it empty, goes back to the menu.
+function RoomChoice(props: {
+  device: DeviceInfo;
+  work: CardWork;
+  // Beside the menu, such as Remove.
+  beside?: ReactNode;
+}) {
+  const { device, work } = props;
+  const id = useId();
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const [working, setWorking] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const field = useRef<HTMLInputElement>(null);
+  // Which naming this is, so that one given up with Escape moves nothing;
+  // and the room it made, so that trying again moves the device there
+  // rather than making another.
+  const attempt = useRef(0);
+  const made = useRef<string>(undefined);
+  useEffect(() => {
+    if (naming) field.current?.focus();
+  }, [naming]);
+
+  const leave = () => {
+    attempt.current += 1;
+    made.current = undefined;
+    setNaming(false);
+    setName("");
+    setProblem(undefined);
+    setWorking(false);
+  };
+
+  const add = async (event: FormEvent) => {
+    event.preventDefault();
+    const wanted = name.trim();
+    if (!wanted || working) return;
+    const mine = ++attempt.current;
+    setWorking(true);
+    setProblem(undefined);
+    try {
+      const roomId = made.current ?? (await work.onAddRoom(wanted));
+      // A room made after Escape is left alone, not kept for the next try.
+      if (mine !== attempt.current) return;
+      made.current = roomId;
+      const moved = await work.onSave(device, { roomId });
+      if (mine !== attempt.current) return;
+      // The overlay says why it couldn't; the form stays to try again.
+      if (moved) leave();
+    } catch (error) {
+      if (mine === attempt.current) setProblem(deviceProblem(error));
+    } finally {
+      if (mine === attempt.current) setWorking(false);
+    }
+  };
+
+  if (naming) {
+    return (
+      <form
+        data-slot="add-devices-new-room"
+        onSubmit={add}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            leave();
+          }
+        }}
+        className="flex flex-col gap-1 text-start"
+      >
+        <label htmlFor={id} className="text-xs font-medium text-(--silver)">
+          New room
+        </label>
+        <div className="flex gap-1.5">
+          <Input
+            id={id}
+            ref={field}
+            value={name}
+            maxLength={60}
+            onChange={(event) => setName(event.target.value)}
+            className="h-8 min-w-0 flex-1 bg-black/14 pointer-coarse:h-11"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            disabled={working || !name.trim()}
+          >
+            {working ? "Adding…" : "Add room"}
+          </Button>
+        </div>
+        {problem && (
+          <p role="alert" className="m-0 text-xs text-(--ruby-on-carbon)">
+            {problem}
+          </p>
+        )}
+      </form>
+    );
+  }
+  return (
+    <div className="flex flex-wrap justify-center gap-1.5">
+      <RoomPicker
+        device={device}
+        rooms={work.rooms}
+        onChange={(roomId) => void work.onSave(device, { roomId })}
+        onNewRoom={() => setNaming(true)}
+      />
+      {props.beside}
+    </div>
   );
 }
 
@@ -202,36 +468,15 @@ export function ReadyCard(props: {
 export function JoinedCard(props: {
   joined: JoinedDevice;
   device?: DeviceInfo;
-  rooms: readonly Room[];
+  work: CardWork;
   index?: number;
-  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<void>;
 }) {
   const { joined, device } = props;
   const words = stageText(joined, device);
   if (joined.stage === "ready" && device) {
     if (device.capabilities.length === 0) {
       return (
-        <DeviceCard index={props.index}>
-          <CardRound>
-            <TypeIcon device={device} />
-          </CardRound>
-          <NameField
-            device={device}
-            onSave={(name) => void props.onSave(device, { name })}
-          />
-          <CardLine className="mt-2">{`${words}.`}</CardLine>
-          <CardFoot>
-            <ShowAsPicker
-              device={device}
-              onChange={(shownAs) => void props.onSave(device, { shownAs })}
-            />
-            <RoomPicker
-              device={device}
-              rooms={props.rooms}
-              onChange={(roomId) => void props.onSave(device, { roomId })}
-            />
-          </CardFoot>
-        </DeviceCard>
+        <UnusableCard device={device} work={props.work} index={props.index} />
       );
     }
     return (
@@ -239,9 +484,9 @@ export function JoinedCard(props: {
         device={device}
         line={joined.known ? "Joined again" : joined.description}
         done={words}
-        rooms={props.rooms}
+        isNew={!joined.known}
+        work={props.work}
         index={props.index}
-        onSave={props.onSave}
       />
     );
   }

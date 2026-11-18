@@ -141,6 +141,9 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
       quietMs?: number;
       // No app at all, as a core whose image brings none.
       none?: boolean;
+      // Whether every permission it asks for is granted first, as most
+      // tests want; otherwise the core answers them as a home's does.
+      allowed?: boolean;
     } = {},
   ) {
     await latest?.apps.close();
@@ -170,6 +173,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
         },
       },
       manager,
+      allowed: options.allowed,
       apart: options.none ? [] : [packageOf(definition, options.folder)],
       ...(options.onTrial ? { onTrial: true } : {}),
     });

@@ -91,6 +91,7 @@ export const driverHooks = [
   "firmware.update",
   "firmware.stop",
   "probe",
+  "identify",
   "repair",
   "discovered",
   "add",

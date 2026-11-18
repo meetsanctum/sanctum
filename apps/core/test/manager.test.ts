@@ -91,6 +91,7 @@ describe("what the manager can do", () => {
       memoryLimits: false,
       discovery: false,
       lan: false,
+      deletesData: false,
     });
   });
 
@@ -108,6 +109,7 @@ describe("what the manager can do", () => {
         memoryLimits: true,
         discovery: false,
         lan: false,
+        deletesData: false,
       }),
     );
     expect(logs).toContain("manager: can run apps");

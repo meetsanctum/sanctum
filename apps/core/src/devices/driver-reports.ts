@@ -114,6 +114,7 @@ export function createDriverReports(
               ...registration.firmware,
             },
             probe: registration.probe,
+            identify: registration.identify,
             // A device its driver registers is on its network.
             leftAt: null,
             updatedAt: at,

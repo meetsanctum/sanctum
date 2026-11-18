@@ -103,6 +103,7 @@ export function apartApp(
               },
             }),
             ...has("probe", { probe: hook("probe") }),
+            ...has("identify", { identify: hook("identify") }),
             ...has("repair", { repair: hook("repair") }),
             ...has("discovered", { discovered: hook("discovered") }),
             ...has("add", { add: hook("add") }),

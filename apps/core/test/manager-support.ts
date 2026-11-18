@@ -92,7 +92,11 @@ export type TestManager = ServiceManager &
   UpdateManager &
   StatusManager &
   PowerManager &
-  SpaceManager & { discovery?: SightingsManager["discovery"] };
+  SpaceManager & {
+    discovery?: SightingsManager["discovery"];
+    deleteAppData?: (app: string) => Promise<void>;
+    eraseServiceData?: (service: string) => Promise<void>;
+  };
 
 // A manager that runs every service it is asked for, and remembers what it
 // was asked. It has never updated the host, and cannot now. It restarts and
@@ -147,12 +151,15 @@ export function fakeManager() {
       return [...lan.loaded].reverse().find((each) => each.app === app)?.policy;
     },
   };
+  // What it was asked to delete, as it was asked.
+  const deleted: string[] = [];
   const manager: TestManager = {
     capabilities: () => ({
       appContainers: true,
       memoryLimits: true,
       discovery: true,
       lan: lan.can,
+      deletesData: true,
     }),
     async discovery(after, services) {
       network.asked.push([...services]);
@@ -196,6 +203,12 @@ export function fakeManager() {
     },
     async stopAppContainer() {},
     async removeAppContainer() {},
+    async deleteAppData(app: string) {
+      deleted.push(`data ${app}`);
+    },
+    async eraseServiceData(service: string) {
+      deleted.push(`service ${service}`);
+    },
     appContainer: async () => ({ state: "stopped" }),
     appUsage: async () => ({
       memoryBytes: null,
@@ -303,7 +316,7 @@ export function fakeManager() {
       return { freed: 1_300_000_000 };
     },
   };
-  return { manager, calls, kept, updates, network, lan };
+  return { manager, calls, kept, updates, network, lan, deleted };
 }
 
 export type SocketRequest = { method: string; url: string; body: unknown };

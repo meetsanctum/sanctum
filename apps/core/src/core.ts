@@ -358,6 +358,16 @@ export function createCore(
       ["start the manager's audit", () => modules!.managerAudit?.start()],
       ["start discovery", () => modules!.discovery?.start()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
+      // A removed app's data goes once its 30 days are over, those that ran
+      // out while the home was off first.
+      [
+        "start removed apps' deadlines",
+        (cancelled) => {
+          updatePending!.whenCommitted(() => {
+            if (!cancelled.aborted) modules!.appDeleting.start();
+          });
+        },
+      ],
       // A reset leaves the host unclaimed, and the manager then makes a new
       // CA, so the core reports first and asks for its certificate after.
       // Until the manager answers, the core waits and serves nothing.

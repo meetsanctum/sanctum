@@ -643,6 +643,9 @@ export function DevicesSection(props: {
         notSetUp={props.notSetUp}
         live={props.live}
         onChanged={changed}
+        onRemoved={(id) =>
+          update((current) => current.filter((each) => each.id !== id))
+        }
       />
     </Section>
   );
