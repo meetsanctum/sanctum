@@ -6,6 +6,7 @@ import {
   type EntityInfo,
   type PieceWords,
   type Room,
+  type SampleTile,
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
@@ -25,6 +26,7 @@ import type { ReactNode } from "react";
 import { Sentence } from "./automations/parts";
 import type { Part } from "./automations/words";
 import { Section } from "./components";
+import { RowSquares } from "./room-sections";
 
 // What an app adds to the home, on its settings page: a driver's devices,
 // its widgets and room section, each drawn by the shell from the manifest's
@@ -126,6 +128,20 @@ function HomeSlice(props: {
       </div>
     </div>
   );
+}
+
+// A section's samples as its tiles or squares, which press nothing.
+function samplesOf(tiles: readonly SampleTile[], iconOnly = false) {
+  return tiles.map((tile) => (
+    <SectionTile
+      key={tile.name}
+      iconOnly={iconOnly}
+      icon={tileIconOf[tile.icon]}
+      name={tile.name}
+      active={tile.active}
+      onClick={() => undefined}
+    />
+  ));
 }
 
 export function AppAdds(props: {
@@ -244,16 +260,13 @@ export function AppAdds(props: {
                   />
                 </span>
                 <div className="tile-grid auto-rows-(--cell)">
-                  {tiles.map((tile) => (
-                    <SectionTile
-                      key={tile.name}
-                      iconOnly={isButtons}
-                      icon={tileIconOf[tile.icon]}
-                      name={tile.name}
-                      active={tile.active}
-                      onClick={() => undefined}
-                    />
-                  ))}
+                  {isButtons ? (
+                    <RowSquares count={tiles.length}>
+                      {samplesOf(tiles, true)}
+                    </RowSquares>
+                  ) : (
+                    samplesOf(tiles)
+                  )}
                 </div>
               </HomeSlice>
             )}

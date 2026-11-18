@@ -12,7 +12,7 @@ import {
   tileIconOf,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
@@ -198,14 +198,11 @@ export const isRowEmpty = (row: RoomRowParts) =>
  * Kitchen") and is White while any light is on, then apps' buttons, square
  * with their icon alone, then apps' tiles with their names. The switch says
  * whether the lights are on, the rest which look they have, so at most one
- * of those is lit: Natural light before a mood that matches the curve.
- * A running app's current look wins over an app's last known look.
- * Each is named with the room, since several rooms' are in reach on Home.
- * While every light is offline the core can
- * reach none, so the whole row dims; while an app isn't running its own
- * buttons and tiles dim and say so. On a phone the squares share the first
- * half of the row's first line, two to a line, so they line up with the
- * tiles below.
+ * of those is lit: Natural light before a mood that matches the curve, and
+ * a running app's look before the last one a paused app said. Each is named
+ * with the room, since several rooms' are in reach on Home. While every
+ * light is offline the core can reach none, so the whole row dims; while an
+ * app isn't running its own buttons and tiles dim and say so.
  */
 export function RoomRow(props: {
   row: RoomRowParts;
@@ -244,10 +241,7 @@ export function RoomRow(props: {
       className="tile-grid auto-rows-(--cell)"
     >
       {squares > 0 && (
-        <div
-          className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap)"
-          style={{ gridRow: `span ${Math.ceil(squares / 2)}` }}
-        >
+        <RowSquares count={squares}>
           {row.lights && (
             <SectionTile
               iconOnly
@@ -260,9 +254,25 @@ export function RoomRow(props: {
             />
           )}
           {row.buttons.map((each) => tileOf(each, true))}
-        </div>
+        </RowSquares>
       )}
       {row.tiles.map((each) => tileOf(each, false))}
+    </div>
+  );
+}
+
+/**
+ * A row's squares, in a tile grid: a cell each, and on a phone, whose grid
+ * is six columns, the first half of the row's first line between them, two
+ * to a line, so they line up with the tiles below.
+ */
+export function RowSquares(props: { count: number; children: ReactNode }) {
+  return (
+    <div
+      className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap)"
+      style={{ gridRow: `span ${Math.ceil(props.count / 2)}` }}
+    >
+      {props.children}
     </div>
   );
 }

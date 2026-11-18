@@ -447,6 +447,10 @@ describe("an app's settings page", () => {
         ["", "Aurora", "true"],
         ["", "Night", "false"],
       ]);
+      // On a phone they share the first half of the line, as in a room's row.
+      expect(
+        preview.querySelector("button")!.parentElement!.className,
+      ).toContain("max-sm:col-span-3");
     } finally {
       roomSections[0] = tiles;
     }
