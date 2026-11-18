@@ -369,7 +369,7 @@ export function HomeStatus(props: {
   return (
     <section
       aria-label="Home status"
-      className="grid shrink-0 auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+      className="tile-grid shrink-0 auto-rows-(--cell)"
     >
       {shown.map((each) => {
         return (
@@ -378,7 +378,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "col-span-3" : "col-span-2"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${each.wide ? "col-span-3" : "col-span-2 max-sm:col-span-3"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"

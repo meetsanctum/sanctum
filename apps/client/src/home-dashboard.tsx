@@ -164,7 +164,7 @@ export function HomeRooms(props: {
           <div
             role="group"
             aria-label="On Home"
-            className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+            className="tile-grid auto-rows-(--cell)"
           >
             {place.onHome.map((tile) => (
               <DeviceTile

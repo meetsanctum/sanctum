@@ -5,6 +5,22 @@
 /* shadcn's dark variant is the Evening mode. */
 @custom-variant dark (&:where([data-mode="evening"], [data-mode="evening"] *));
 
+/* Shell tile grids and shared device sections use six equal columns on a
+   phone, so two three-cell tiles fit side by side. Widgets span that grid. */
+@utility tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--cell));
+  gap: var(--cell-gap);
+
+  @variant max-sm {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+
+    & > [data-slot="widget-card"] {
+      grid-column: 1 / -1;
+    }
+  }
+}
+
 /* The brand's tokens. */
 :root {
   /* The two backgrounds; each is the ink of the other. */
@@ -47,8 +63,7 @@
   /* Corners: one radius for cards, scaled down for buttons, fields, menus
      and swatches (--radius-xs to --radius-4xl in the theme below). */
   --radius: 15px;
-  /* The dashboard's grid: square cells that keep their size, as many across
-     as fit, with 12 px between them. A tile spans whole cells. */
+  /* A tile spans whole cells, each 64 px high with 12 px between them. */
   --cell: 64px;
   --cell-gap: 12px;
 
