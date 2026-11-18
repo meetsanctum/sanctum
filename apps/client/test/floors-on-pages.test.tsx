@@ -208,24 +208,22 @@ describe("Home with floors", () => {
 
   it("leads a floor's heading with its mark, and indents its rooms only wider than a phone", async () => {
     await show(<HomeHarness />);
-    const row = (id: string) =>
-      container.querySelector(`#${id}`)!.parentElement!.parentElement!;
-    const ground = row("home-floor-ground");
-    expect(ground.firstElementChild?.matches("svg.lucide-layers")).toBe(true);
-    const rooms = ground.nextElementSibling!;
-    expect(rooms.classList.contains("col-start-2")).toBe(true);
-    expect(rooms.classList.contains("max-sm:col-start-1")).toBe(true);
+    const findSection = (id: string) =>
+      container.querySelector(`section[aria-labelledby="${id}"]`)!;
+    const ground = findSection("home-floor-ground");
+    const groundHeading = ground.firstElementChild!;
     expect(
-      ground.parentElement!.classList.contains(
-        "max-sm:grid-cols-[minmax(0,1fr)]",
+      groundHeading.firstElementChild?.matches(
+        'svg.lucide-layers[aria-hidden="true"]',
       ),
     ).toBe(true);
-    // Other rooms has no mark: aligned with the floors' names by padding
-    // wider than a phone, at the edge on one.
-    const other = row("home-floor-other-rooms");
-    expect(other.querySelector("svg")).toBeNull();
-    expect(other.classList.contains("sm:ps-6.5")).toBe(true);
-    expect(ground.classList.contains("sm:ps-6.5")).toBe(false);
+    expect(groundHeading.classList).not.toContain("sm:ps-6.5");
+    const other = findSection("home-floor-other-rooms");
+    const otherHeading = other.firstElementChild!;
+    expect(otherHeading.querySelector("svg.lucide-layers")).toBeNull();
+    expect(otherHeading.classList).toContain("sm:ps-6.5");
+    expect(ground.lastElementChild?.classList).toContain("sm:ps-6.5");
+    expect(other.lastElementChild?.classList).toContain("sm:ps-6.5");
   });
 
   it("turns a floor's lights off from its heading, while any is on", async () => {
