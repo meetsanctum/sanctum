@@ -733,6 +733,18 @@ function setupEntry(entry: ActivityInfo): Words | null {
           ? "Changed app settings"
           : "Couldn't change app settings",
       );
+    case "app.delete": {
+      const kept = entry.detail?.name;
+      const app =
+        entry.app?.name ?? (typeof kept === "string" ? kept : null) ?? "an app";
+      const ok = entry.outcome === "ok";
+      return {
+        title: ok ? `Deleted ${app}'s data` : `Couldn't delete ${app}'s data`,
+        // Sanctum, once its 30 days were over, or whoever asked.
+        detail: whoWords(entry.who),
+        problem: !ok,
+      };
+    }
     case "app.add":
     case "app.remove": {
       // By the name the entry kept, for an app that's gone since; the app

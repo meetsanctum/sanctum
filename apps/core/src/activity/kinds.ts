@@ -10,7 +10,7 @@ import type { Kind } from "./schema.js";
 //   called on its own;
 // - setup: what people set up and asked apps to do: people, sign-ins and
 //   clients, rooms, devices joining, moving and leaving, dashboards,
-//   workflows, apps' actions;
+//   workflows, apps' actions, and adding, removing and deleting apps;
 // - system: updates, Sanctum's and each app's, restores, Sanctum starting and
 //   the manager's audit.
 
@@ -53,6 +53,8 @@ export function kindOf(entry: {
     return "devices";
   }
   if (action === "workflow.run") return "automations";
+  // Adding, removing and deleting an app's data, Sanctum's own deadline too.
+  if (action.startsWith("app.")) return "setup";
   if (isApp(source) && entry.actor) return "automations";
   return "setup";
 }

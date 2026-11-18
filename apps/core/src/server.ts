@@ -61,6 +61,7 @@ export function createServer(
     | "availableApps"
     | "appAdding"
     | "appRemoving"
+    | "appDeleting"
     | "pages"
     | "workflows"
   > & {
@@ -201,6 +202,7 @@ export function createServer(
         available: options.availableApps,
         adding: options.appAdding,
         removing: options.appRemoving,
+        deleting: options.appDeleting,
         gate,
       });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });

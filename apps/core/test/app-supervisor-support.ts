@@ -46,6 +46,7 @@ export function setUp(
         memoryLimits: true,
         discovery: false,
         lan: false,
+        deletesData: false,
       }),
       startAppContainer: async (app) => {
         started.push(app);

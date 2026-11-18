@@ -1,5 +1,5 @@
 import { pbkdf2Sync } from "node:crypto";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import { createOperations } from "../src/operations.js";
 import { mosquittoImage } from "../src/services/mosquitto.js";
 import {
   createServices,
+  ServiceBusyError,
   ServiceRequestError,
   UnknownServiceError,
 } from "../src/services/services.js";
@@ -403,6 +404,35 @@ describe("services", () => {
     expect(
       docker.container("sanctum-zigbee2mqtt")?.options.HostConfig?.Devices,
     ).toEqual([expect.objectContaining({ PathOnHost: conbee })]);
+  });
+
+  it("erases a service's data once no app needs it, and not before", async () => {
+    const { dataDir, docker, dev, services, onChange } = await setup();
+    await dev.plug(zbt2, "ttyACM0");
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    const backups = join(dataDir, "backups");
+    await mkdir(join(backups, "zigbee2mqtt-20261101T000000-2.14.1"), {
+      recursive: true,
+    });
+
+    await expect(services.eraseData("zigbee2mqtt")).rejects.toThrow(
+      ServiceBusyError,
+    );
+    expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(true);
+
+    onChange.mockImplementation(() => services.reconcile());
+    await services.release("zigbee2mqtt", app);
+    await services.reconcile();
+    await services.eraseData("zigbee2mqtt");
+    await services.eraseData("zigbee2mqtt");
+
+    expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(false);
+    expect(await readdir(backups)).toEqual([]);
+    // The broker's is no app's to erase.
+    await expect(services.eraseData("mosquitto")).rejects.toThrow(
+      UnknownServiceError,
+    );
   });
 
   it("removes services no app needs, and keeps their data", async () => {

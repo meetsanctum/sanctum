@@ -240,6 +240,8 @@ export const capabilities = z.object({
   // manager from before either doesn't say.
   discovery: z.boolean().default(false),
   lan: z.boolean().default(false),
+  // Whether it deletes a removed app's data, and a service's.
+  deletesData: z.boolean().default(false),
 });
 export type ManagerCapabilities = z.infer<typeof capabilities>;
 export const noCapabilities: ManagerCapabilities = {
@@ -247,6 +249,7 @@ export const noCapabilities: ManagerCapabilities = {
   memoryLimits: false,
   discovery: false,
   lan: false,
+  deletesData: false,
 };
 
 // What the manager found on the home's network: what changed after the

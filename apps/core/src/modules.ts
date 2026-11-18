@@ -7,6 +7,7 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createAppAdding } from "./app-host/adding.js";
+import { createAppDeleting } from "./app-host/deleting.js";
 import { createListTurns } from "./app-host/list-turns.js";
 import { createRemovedApps } from "./app-host/removed.js";
 import { createAppRemoving } from "./app-host/removing.js";
@@ -94,6 +95,10 @@ export async function createModules(
         // What it found on the home's network (discovery/sightings.ts); tests
         // may leave it out.
         discovery?: SightingsManager["discovery"];
+        // Deleting a removed app's data, and a service's (deleting.ts); tests
+        // may leave them out.
+        deleteAppData?: ManagerClient["deleteAppData"];
+        eraseServiceData?: ManagerClient["eraseServiceData"];
         // What it staged for this image; tests may leave it out.
         stagedApps?: ManagerClient["stagedApps"];
       };
@@ -486,6 +491,19 @@ export async function createModules(
     info: (appId) => apps.info(appId),
     log,
   });
+  // Deleting a removed app's data, by Delete now or after its 30 days.
+  const appDeleting = createAppDeleting({
+    db,
+    gate,
+    turns: listTurns,
+    removed: removedApps,
+    added: addedApps,
+    activity,
+    manager: options.manager,
+    entities,
+    now,
+    log,
+  });
   const appRemoving = createAppRemoving({
     gate,
     turns: listTurns,
@@ -618,6 +636,7 @@ export async function createModules(
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
+    ["stop removed apps' deadlines", () => appDeleting.close()],
     ["close the bus", () => eventBus.close()],
     ["stop history", () => history.close()],
     ["stop pairing", () => pairing.stop()],
@@ -652,6 +671,7 @@ export async function createModules(
     availableApps,
     appAdding,
     appRemoving,
+    appDeleting,
     removedApps,
     pages,
     workflows,

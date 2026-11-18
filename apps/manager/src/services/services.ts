@@ -9,10 +9,14 @@ import {
   type DockerClientLike,
 } from "../docker.js";
 import {
+  inspectService,
   reconcileServiceContainer,
   removeServiceContainer,
   stopServiceContainer,
 } from "./containers.js";
+import { assertManaged } from "../docker-resources.js";
+import { isNotFound } from "../docker.js";
+import { pruneSnapshots } from "../update/backup.js";
 import type { Operations } from "../operations.js";
 import { createImageChanges } from "./image-change.js";
 import { mosquittoPasswordHash, mosquittoUrl } from "./mosquitto.js";
@@ -53,6 +57,8 @@ type Observed = Omit<ServiceStatus, "name" | "apps">;
 
 // A request the manager cannot act on, such as an unknown coordinator.
 export class ServiceRequestError extends Error {}
+/** What's asked of a service can't happen now, as erasing one an app holds. */
+export class ServiceBusyError extends Error {}
 export class UnknownServiceError extends Error {}
 
 // Reverse-DNS app ids, as packages/app-sdk requires them.
@@ -289,6 +295,41 @@ export function createServices(options: {
       if (!brokerState || (brokerState.apps[name] ?? []).includes(app)) {
         throw new Error("The broker has not confirmed the service revocation");
       }
+    },
+
+    // Deletes a service's own data, once no app needs it and it has stopped,
+    // as when the household deletes the data of the app that used it: its
+    // volumes and the copies its image changes kept. Erasing Zigbee2MQTT's
+    // erases the Zigbee network, so every device must be paired again.
+    // Asked again once it's done, it does nothing.
+    async eraseData(name: string) {
+      const definition = forApps(name);
+      await options.operations.claim(
+        { kind: "data-delete", of: name },
+        async () => {
+          if ((store.current().apps[name] ?? []).length > 0) {
+            throw new ServiceBusyError(`An app still needs ${name}`);
+          }
+          if (await inspectService(docker, name)) {
+            throw new ServiceBusyError(`${name} hasn't stopped yet`);
+          }
+          for (const volumeName of definition.dataVolumes ?? []) {
+            const volume = docker.getVolume(volumeName);
+            const found = await volume.inspect().catch((error: unknown) => {
+              if (isNotFound(error)) return null;
+              throw error;
+            });
+            if (!found) continue;
+            assertManaged({
+              labels: found.Labels,
+              name: `${volumeName} volume`,
+            });
+            await volume.remove();
+          }
+          await pruneSnapshots(join(options.dataDir, "backups"), `${name}-`, 0);
+          log(`Erased ${name}'s data`);
+        },
+      );
     },
 
     async zigbeeCoordinators() {

@@ -330,6 +330,48 @@ sync -f "$file"
       log(`Grew ${app}'s image to ${sizeMb} MB`);
     },
 
+    // Deletes its image and its record, with any it set aside as damaged, as
+    // when the household deletes a removed app's data. Docker refuses while a
+    // container still has the volume, and so does this.
+    async remove(app: string) {
+      const name = imageVolumeName(app);
+      const volume = docker.getVolume(name);
+      const found = await volume.inspect().catch((error: unknown) => {
+        if (isNotFound(error)) return null;
+        throw error;
+      });
+      if (found) {
+        assertManaged(
+          { labels: found.Labels, name: `${name} volume` },
+          "app-data",
+        );
+        try {
+          await volume.remove();
+        } catch (error) {
+          throw new AppRefusal(
+            `${app}'s data is still in use (${errorMessage(error)})`,
+            409,
+          );
+        }
+      }
+      const { code, output } = await helper(`file=${seenByHelper(`${app}.img`)}
+for device in $(losetup -j "$file" -n -O NAME); do
+  losetup -d "$device" || exit 21
+done
+rm -f "$file" ${seenByHelper("")}${app}.damaged-*.img
+`);
+      if (code !== 0) {
+        throw new Error(`Could not delete ${app}'s image: ${output.trim()}`);
+      }
+      await syncPath(folder).catch(() => undefined);
+      const state = await read();
+      if (app in state.images) {
+        delete state.images[app];
+        await writeJson(statePath, state);
+      }
+      log(`Deleted ${app}'s image`);
+    },
+
     async has(app: string) {
       const record = (await read()).images[app];
       // A damaged image still belongs to an app that has run. Its previous

@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -66,6 +67,16 @@ function fakeHelper(folder: string) {
     }
     if (script.includes("Filesystem UUID")) {
       return { code: 0, output: `${state.uuidOnDisk ?? ""}\n` };
+    }
+    if (script.includes("losetup -d")) {
+      const name = /file=\S+\/(\S+)\.img/.exec(script)![1]!;
+      state.attached.delete(`${name}.img`);
+      for (const file of await readdir(folder)) {
+        if (file === `${name}.img` || file.startsWith(`${name}.damaged-`)) {
+          await rm(join(folder, file));
+        }
+      }
+      return { code: 0, output: "" };
     }
     throw new Error(`The fake helper doesn't know: ${script}`);
   };
@@ -423,5 +434,39 @@ describe("growing one", () => {
     await images.grow(app, 512);
 
     expect((await records()).images[app]?.sizeMb).toBe(512);
+  });
+});
+
+describe("deleting one", () => {
+  it("takes its volume, its file, any set aside as damaged, and its record", async () => {
+    const { docker, folder, images, records } = await setup();
+    await images.ensure(app, 256);
+    await writeFile(join(folder, `${app}.damaged-20261117.img`), "old");
+
+    await images.remove(app);
+
+    expect(docker.volumes.has(volume)).toBe(false);
+    expect(await readdir(folder)).toEqual([]);
+    expect((await records()).images[app]).toBeUndefined();
+    expect(await images.has(app)).toBe(false);
+  });
+
+  it("does nothing more for one that's gone", async () => {
+    const { images } = await setup();
+    await images.ensure(app, 256);
+    await images.remove(app);
+
+    await expect(images.remove(app)).resolves.toBeUndefined();
+  });
+
+  it("is refused while a container still has its volume", async () => {
+    const { docker, folder, images } = await setup();
+    await images.ensure(app, 256);
+    docker.containers.set("app", {
+      options: { HostConfig: { Binds: [`${volume}:/data`] } },
+    } as never);
+
+    await expect(images.remove(app)).rejects.toMatchObject({ status: 409 });
+    expect(await readdir(folder)).toEqual([`${app}.img`]);
   });
 });

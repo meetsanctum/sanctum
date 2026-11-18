@@ -11,6 +11,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import type { AppAdding } from "./adding.js";
+import type { AppDeleting } from "./deleting.js";
 import type { AppRemoving } from "./removing.js";
 import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
@@ -40,6 +41,12 @@ import type { AppHost } from "./host.js";
 //   POST /api/apps/:appId/remove              removes it, but a system app
 //                                             (forbidden), and not while it
 //                                             updates or goes back (conflict)
+//   POST /api/apps/:appId/data/delete         deletes a removed app's data
+//                                             now; refused (conflict) while
+//                                             its removal is under way or
+//                                             it's added again, and
+//                                             unavailable with a manager
+//                                             that can't
 //   GET  /api/apps/:appId/manifest            StaticManifest: its
 //                                             sanctum-app.json, for its
 //                                             settings page
@@ -101,10 +108,11 @@ export function registerAppRoutes(
     available: AvailableApps;
     adding: AppAdding;
     removing: AppRemoving;
+    deleting: AppDeleting;
     gate: Gate;
   },
 ) {
-  const { host, available, adding, removing, gate } = options;
+  const { host, available, adding, removing, deleting, gate } = options;
 
   // The installed apps as clients see them. The origin stays the core's.
   const infos = (): AppInfo[] =>
@@ -145,6 +153,13 @@ export function registerAppRoutes(
   // hears it's gone as it is.
   app.post("/api/apps/:appId/remove", async (request) => {
     await removing.remove(request.principal!, appIdOf(request.params));
+    return {};
+  });
+
+  // Deleting a removed app's data at once, rather than after its 30 days:
+  // the household's to choose, like removing it.
+  app.post("/api/apps/:appId/data/delete", async (request) => {
+    await deleting.deleteNow(request.principal!, appIdOf(request.params));
     return {};
   });
 
