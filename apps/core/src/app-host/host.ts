@@ -594,6 +594,9 @@ export function createAppHost(options: {
     /** Whether the apps it started with are installed, so `list` is the home's apps. */
     hasInstalled: () => hasInstalled,
 
+    /** Resolves once the apps it started with are installed. */
+    whenInstalled: () => installing,
+
     /** One installed app as clients list it. */
     info(appId: string): AppInfo | undefined {
       const entry = installed.get(appId);

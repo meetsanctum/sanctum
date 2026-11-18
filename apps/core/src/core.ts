@@ -371,6 +371,22 @@ export function createCore(
           });
         },
       ],
+      // An app the home could add for devices found on its network is
+      // offered in Add devices, once the home's list is known.
+      [
+        "start Add devices' offers",
+        () => {
+          updatePending!.whenCommitted(() => {
+            lifecycle.ownBackgroundTask(
+              "start Add devices' offers",
+              async (cancelled) => {
+                await modules!.apps.whenInstalled();
+                if (!cancelled.aborted) modules!.deviceOffers.start();
+              },
+            );
+          });
+        },
+      ],
       // A removed app's data goes once its 30 days are over, those that ran
       // out while the home was off first.
       [

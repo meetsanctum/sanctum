@@ -15,6 +15,7 @@ const empty: PairingInfo = {
   joined: [],
   drivers: [],
   finders: [],
+  offers: [],
   found: [],
 };
 const found: PairingInfo = {
@@ -52,7 +53,7 @@ async function show() {
   const container = document.createElement("div");
   root = createRoot(container);
   function Hint() {
-    return <span>{foundHint(useAdding(live)?.found)}</span>;
+    return <span>{foundHint(useAdding(live))}</span>;
   }
   await act(async () => root!.render(<Hint />));
   return container;
@@ -81,5 +82,15 @@ describe("found devices refreshes", () => {
     await act(async () => first.resolve(empty));
 
     expect(container.textContent).toBe("1 found on your network");
+  });
+
+  it("counts the devices an app the home could add found", async () => {
+    vi.mocked(coreJson).mockResolvedValueOnce({
+      ...found,
+      offers: [{ app: "sanctum.example", name: "Example", found: 2 }],
+    });
+    const container = await show();
+
+    expect(container.textContent).toBe("3 found on your network");
   });
 });

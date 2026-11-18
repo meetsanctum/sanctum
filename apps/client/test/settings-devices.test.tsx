@@ -73,6 +73,7 @@ describe("Settings → Devices", () => {
       joined: [],
       drivers: ["sanctum.zigbee"],
       finders: [],
+      offers: [],
       found: [],
     };
     requests = [];

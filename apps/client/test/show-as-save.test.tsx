@@ -53,6 +53,7 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
       found: [],
       drivers: [zigbee.id],
       finders: [],
+      offers: [],
       joined: [
         {
           driver: zigbee.id,

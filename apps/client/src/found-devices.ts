@@ -1,4 +1,4 @@
-import type { FoundDevice, PairingInfo } from "@meetsanctum/app-sdk";
+import type { PairingInfo } from "@meetsanctum/app-sdk";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
@@ -40,7 +40,15 @@ export function useAdding(live: LiveFeed) {
   return adding;
 }
 
-/** What Settings → Devices' heading says while found devices wait to be added. */
-export function foundHint(found: readonly FoundDevice[] | undefined) {
-  return found?.length ? `${found.length} found on your network` : undefined;
+/**
+ * What Settings → Devices' heading says while found devices wait to be
+ * added, those an app the home could add found too.
+ */
+export function foundHint(
+  adding: Partial<Pick<PairingInfo, "found" | "offers">> | undefined,
+) {
+  const count =
+    (adding?.found?.length ?? 0) +
+    (adding?.offers?.reduce((sum, { found }) => sum + found, 0) ?? 0);
+  return count > 0 ? `${count} found on your network` : undefined;
 }
