@@ -1,5 +1,6 @@
 import {
   permissionIds,
+  type AppWaitingUpdate,
   type StaticManifest,
   type AppSettings,
 } from "@meetsanctum/app-sdk";
@@ -26,7 +27,7 @@ type Chosen = {
   manifest: StaticManifest;
   granted: string[];
   grantsRevision: number;
-  waiting?: { moreMemoryMb?: number };
+  waiting?: AppWaitingUpdate;
 };
 
 function message(error: unknown) {
@@ -74,7 +75,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
   // Someone turned an app off or on.
   onOff?: (entry: Entry, off: boolean) => void;
   // Tries again an update that waits for room.
-  onRetryRoom?: (entry: Entry) => Promise<void>;
+  onRetryRoom: (entry: Entry, signal?: AbortSignal) => Promise<void>;
   log: (message: string) => void;
 }) {
   const { installed, gate, record, log } = options;
@@ -327,10 +328,11 @@ export function createAppChoices<Entry extends Chosen>(options: {
     setOff,
 
     /** Tries again each update that waits for room, one app at a time. */
-    async retryRoomWaits() {
+    async retryRoomWaits(signal?: AbortSignal) {
       for (const entry of [...installed.values()]) {
+        if (signal?.aborted) return;
         if (entry.waiting?.moreMemoryMb !== undefined) {
-          await options.onRetryRoom?.(entry);
+          await options.onRetryRoom(entry, signal);
         }
       }
     },

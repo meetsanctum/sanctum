@@ -390,9 +390,15 @@ export function createCore(
       // An update that waits for room starts once there's some.
       [
         "start trying updates that wait for room",
-        (cancelled) => {
+        () => {
           updatePending!.whenCommitted(() => {
-            if (!cancelled.aborted) modules!.roomWaits.start();
+            lifecycle.ownBackgroundTask(
+              "start trying updates that wait for room",
+              async (cancelled) => {
+                await modules!.apps.whenInstalled();
+                if (!cancelled.aborted) modules!.roomWaits.start();
+              },
+            );
           });
         },
       ],

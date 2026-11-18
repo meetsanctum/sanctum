@@ -401,13 +401,15 @@ export async function createModules(
     holds: (pkg) => waitingUpdates.holds(pkg),
   });
   const grantsStore = createAppGrants(db, { now });
+  const appsOff = createAppsOff(db, { now });
   // An update that needs what nobody has allowed waits for someone to.
   const waitingUpdates = createWaitingUpdates({
     db,
     versions: appVersions,
     grants: grantsStore,
     loadPackage,
-    room: updateRoom({ manager: options.manager, grants: grantsStore }),
+    off: appsOff,
+    room: updateRoom({ manager: options.manager, grants: grantsStore, log }),
     log,
     now,
   });
@@ -442,7 +444,7 @@ export async function createModules(
       jobs: appJobs,
       workflows: keptWorkflows,
     }),
-    off: createAppsOff(db, { now }),
+    off: appsOff,
     onSettings: live.settings,
     onApp(app) {
       live.app(app);
@@ -522,7 +524,7 @@ export async function createModules(
   });
   // An update that waits for room is tried again until there's some.
   const roomWaits = createRoomWaits({
-    retry: () => apps.retryRoomWaits(),
+    retry: (signal) => apps.retryRoomWaits(signal),
     log,
   });
   // An app the home could add for devices found on its network is offered
@@ -708,6 +710,7 @@ export async function createModules(
     ["workflows", () => workflows.interrupt()],
     ["look for sticks", () => hardwareOffers.interrupt()],
     ["check Add devices' offers", () => deviceOffers.interrupt()],
+    ["try updates that wait for room", () => roomWaits.interrupt()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
   // firmware's deadlines are the last that change a device, so the bus closes

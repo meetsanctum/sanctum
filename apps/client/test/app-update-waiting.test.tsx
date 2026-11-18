@@ -18,6 +18,7 @@ import {
 } from "../src/attention";
 import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
+import { NeedsAttentionSection } from "../src/settings-attention";
 import { entry } from "./activity-fixtures";
 
 // A newer version that waits for someone to allow what it newly needs: what
@@ -213,6 +214,26 @@ describe("an update that waits for room", () => {
 
     expect(host.textContent).toContain("It needs 64 MB more memory.");
     expect(button("Review")).toBeUndefined();
+  });
+
+  it("opens the app's settings from Needs attention", async () => {
+    const shown = { ...app(), waiting: forRoom };
+    const openApp = vi.fn();
+    await act(async () =>
+      root.render(
+        <NeedsAttentionSection
+          apps={[shown]}
+          devices={[]}
+          rooms={[]}
+          onOpenApp={openApp}
+        />,
+      ),
+    );
+
+    expect(host.textContent).toContain("it needs 64 MB more memory");
+    expect(button("Review")).toBeUndefined();
+    await press("Open settings");
+    expect(openApp).toHaveBeenCalledWith(shown.id);
   });
 });
 

@@ -1,7 +1,7 @@
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
-import { needOf } from "./fit.js";
 import type { AppGrants } from "./grants.js";
 import type { ApartPackage } from "./loader.js";
+import { declaredServices, servicePermission } from "./services.js";
 
 // An update that needs more memory than is left beside the other apps waits
 // for room, the app staying on its version (waiting.ts), and starts by itself
@@ -9,30 +9,51 @@ import type { ApartPackage } from "./loader.js";
 // removes one: the core tries each such update again every minute, as a step
 // of starting, until it stops.
 
-const everyMs = 60_000;
+const retryEveryMs = 60_000;
 
-/**
- * How much more memory a version needs than is left, in MB, having held it
- * in the manager when there's room: undefined when it fits, when the manager
- * keeps no count or can't answer, or when only its data is short, as its start
- * still checks.
- */
+type UpdateRoom =
+  | { kind: "held"; release: () => Promise<void> }
+  | { kind: "short"; moreMemoryMb: number };
+
+/** Asks the manager to hold room, or confirms how much memory is short. */
 export function updateRoom(options: {
   manager: Pick<ManagerClient, "capabilities"> &
-    Partial<Pick<ManagerClient, "reserveForApp" | "appCapacity">>;
-  grants: Pick<AppGrants, "answers">;
+    Partial<
+      Pick<
+        ManagerClient,
+        "reserveForApp" | "appCapacity" | "releaseAppReservation"
+      >
+    >;
+  grants: Pick<AppGrants, "of">;
+  log: (message: string) => void;
 }) {
   const { manager } = options;
-  return async (pkg: ApartPackage): Promise<number | undefined> => {
-    const { id, runtime, permissions } = pkg.apart.manifest;
+  return async (pkg: ApartPackage): Promise<UpdateRoom | undefined> => {
     if (!manager.capabilities().reserves || !manager.reserveForApp) return;
-    const need = needOf(
-      { memory: runtime.memory, data: runtime.data, requests: permissions },
-      options.grants.answers(id),
-    );
+    const manifest = pkg.apart.manifest;
+    const { id, runtime } = manifest;
+    const granted = options.grants.of(manifest);
+    const need = {
+      memoryMb: runtime.memory,
+      dataMb: runtime.data,
+      services: declaredServices(manifest).filter((name) =>
+        granted.includes(servicePermission(name)),
+      ),
+    };
     try {
-      await manager.reserveForApp(id, need);
-      return undefined;
+      const reservation = await manager.reserveForApp(id, need);
+      return {
+        kind: "held",
+        async release() {
+          try {
+            await manager.releaseAppReservation?.(id, reservation.id);
+          } catch (error) {
+            options.log(
+              `apps: ${id}'s reservation wasn't released (${String(error)})`,
+            );
+          }
+        },
+      };
     } catch (error) {
       if (!(error instanceof ManagerRefusal) || error.status !== 409) return;
     }
@@ -40,27 +61,26 @@ export function updateRoom(options: {
       .appCapacity?.([{ app: id, ...need }])
       .catch(() => null);
     const room = counted?.[id];
-    if (!room) return need.memoryMb;
-    const more = Math.ceil(room.memoryNeedsMb - room.memoryFreeMb);
-    return more > 0 ? more : undefined;
+    if (!room) return;
+    const moreMemoryMb = Math.ceil(room.memoryNeedsMb - room.memoryFreeMb);
+    if (moreMemoryMb > 0) return { kind: "short", moreMemoryMb };
   };
 }
 
 export function createRoomWaits(options: {
   // Tries each update that waits for room again.
-  retry: () => Promise<void>;
+  retry: (signal: AbortSignal) => Promise<void>;
   log: (message: string) => void;
-  everyMs?: number;
 }) {
+  const stopping = new AbortController();
   let timer: NodeJS.Timeout | undefined;
   let trying: Promise<void> | undefined;
-  let isClosed = false;
 
   // One try at a time: the manager may take a while to answer.
   function tryAgain() {
-    if (isClosed || trying) return;
+    if (stopping.signal.aborted || trying) return;
     trying = options
-      .retry()
+      .retry(stopping.signal)
       .catch((error: unknown) => {
         options.log(
           `apps: updates waiting for room weren't tried (${String(error)})`,
@@ -71,19 +91,23 @@ export function createRoomWaits(options: {
       });
   }
 
+  function interrupt() {
+    stopping.abort();
+    clearInterval(timer);
+  }
+
   return {
     start() {
-      if (isClosed || timer) return;
-      timer = setInterval(tryAgain, options.everyMs ?? everyMs);
+      if (stopping.signal.aborted || timer) return;
+      timer = setInterval(tryAgain, retryEveryMs);
       timer.unref();
     },
 
+    interrupt,
+
     async close() {
-      isClosed = true;
-      clearInterval(timer);
+      interrupt();
       await trying;
     },
   };
 }
-
-export type RoomWaits = ReturnType<typeof createRoomWaits>;

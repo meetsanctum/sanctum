@@ -3,10 +3,12 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { durably, type CoreDatabase } from "../database.js";
-import { servesAppApi } from "./fit.js";
 import type { AppGrants } from "./grants.js";
-import { speaksThisCore, type ApartPackage } from "./loader.js";
+import type { ApartPackage } from "./loader.js";
+import type { AppsOff } from "./off.js";
+import type { updateRoom } from "./room-waits.js";
 import { appUpdatesWaiting } from "./schema.js";
+import { canRunPackage } from "./update-packages.js";
 import type { AppVersions } from "./versions.js";
 
 // An update that needs a permission the household hasn't granted waits for
@@ -39,10 +41,8 @@ export function createWaitingUpdates(options: {
   grants: Pick<AppGrants, "answers" | "grantAll">;
   // A version staged in its folder, as the core reads any app that runs apart.
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
-  // How much more memory this version needs than is left, in MB, having held
-  // it in the manager when there's room: undefined when it fits, or when the
-  // manager can't say, as its start still checks.
-  room?: (pkg: ApartPackage) => Promise<number | undefined>;
+  off: Pick<AppsOff, "isOff">;
+  room: ReturnType<typeof updateRoom>;
   log: (message: string) => void;
   now?: () => Date;
   // How long before reading the version the app runs again, after a read
@@ -87,9 +87,7 @@ export function createWaitingUpdates(options: {
     for (let tries = 1; ; tries += 1) {
       try {
         const pkg = await options.loadPackage(appId, folder);
-        return speaksThisCore(pkg) && servesAppApi(pkg.apart.manifest)
-          ? pkg
-          : undefined;
+        return canRunPackage(pkg) ? pkg : undefined;
       } catch (error) {
         if (tries >= 3) {
           log(
@@ -163,25 +161,41 @@ export function createWaitingUpdates(options: {
       const isNew = last !== undefined && last.folder !== folder;
       const needs = isNew ? newlyNeeded(pkg) : [];
       if (needs.length === 0) {
-        const more = isNew ? await options.room?.(pkg) : undefined;
-        const running =
-          more !== undefined && last!.folder
-            ? await runningNow(appId, last!.folder)
-            : undefined;
-        // One that fits goes ahead, and so does one whose version before
-        // can't run here, as its start then says there isn't room.
-        if (more === undefined || !running) {
-          if (rowOf(appId)) forget(appId);
-          return pkg;
+        const isRunnableUpdate = isNew && canRunPackage(pkg);
+        const isOff = pkg.origin !== "system" && options.off.isOff(appId);
+        const room =
+          isRunnableUpdate && !isOff ? await options.room(pkg) : undefined;
+        try {
+          const before = rowOf(appId);
+          // Keep the last confirmed shortfall for this build while it's off
+          // or the manager can't confirm a reservation.
+          const moreMemoryMb =
+            room?.kind === "short"
+              ? room.moreMemoryMb
+              : isRunnableUpdate && !room && before?.folder === folder
+                ? before.moreMemoryMb
+                : null;
+          if (moreMemoryMb !== null && last?.folder) {
+            const running = await runningNow(appId, last.folder);
+            if (running) {
+              record(pkg, [], moreMemoryMb);
+              log(
+                `apps: ${appId} ${version} waits for ${moreMemoryMb} MB more memory`,
+              );
+              return running;
+            }
+          }
+          if (before) forget(appId);
+        } catch (error) {
+          if (room?.kind === "held") await room.release();
+          throw error;
         }
-        record(pkg, [], more);
-        log(`apps: ${appId} ${version} waits for ${more} MB more memory`);
-        return running;
+        return pkg;
       }
       record(pkg, needs);
       // One the core ran in its own process can only run apart now.
-      const running = last!.folder
-        ? await runningNow(appId, last!.folder)
+      const running = last?.folder
+        ? await runningNow(appId, last.folder)
         : undefined;
       if (!running) {
         log(
@@ -210,32 +224,51 @@ export function createWaitingUpdates(options: {
     },
 
     /**
-     * Tries again a version that waits for room: its package to update to,
-     * no longer waiting, once there's room (the manager then holds it), or
-     * nothing while there isn't, with how much more it needs now.
+     * Tries again a version that waits for room. It starts with a reservation
+     * or keeps waiting with the latest shortfall or required permissions.
      */
-    async retry(appId: string): Promise<ApartPackage | undefined> {
+    async retry(
+      appId: string,
+      when: {
+        canRetry: () => boolean;
+        start: (pkg: ApartPackage) => void;
+      },
+    ): Promise<void> {
       const row = rowOf(appId);
-      if (!row || row.needs.length > 0 || row.moreMemoryMb === null) {
-        return undefined;
-      }
+      if (!row || row.moreMemoryMb === null) return;
+      const isCurrent = () => when.canRetry() && rowOf(appId)?.id === row.id;
       const pkg = await options.loadPackage(appId, row.folder);
-      const more = await options.room?.(pkg);
-      if (rowOf(appId)?.id !== row.id) return undefined;
-      if (more !== undefined) {
-        if (more !== row.moreMemoryMb) {
+      if (!isCurrent()) return;
+      if (!canRunPackage(pkg)) {
+        throw new Error(`${row.version} can't run on this core`);
+      }
+      const needs = newlyNeeded(pkg);
+      if (needs.length > 0) {
+        record(pkg, needs);
+        return;
+      }
+      const room = await options.room(pkg);
+      if (!room) return;
+      let isTakingRoom = false;
+      try {
+        if (!isCurrent()) return;
+        if (room.kind === "short") {
+          if (room.moreMemoryMb === row.moreMemoryMb) return;
           durably(db, () => {
             db.update(appUpdatesWaiting)
-              .set({ moreMemoryMb: more })
+              .set({ moreMemoryMb: room.moreMemoryMb })
               .where(eq(appUpdatesWaiting.appId, appId))
               .run();
           });
+          return;
         }
-        return undefined;
+        forget(appId);
+        isTakingRoom = true;
+        log(`apps: ${appId} ${row.version} has room now`);
+        when.start(pkg);
+      } finally {
+        if (!isTakingRoom && room.kind === "held") await room.release();
       }
-      forget(appId);
-      log(`apps: ${appId} ${row.version} has room now`);
-      return pkg;
     },
 
     /** What the version that waits needs, as clients see it. */
@@ -262,10 +295,10 @@ export function createWaitingUpdates(options: {
       when: { canAllow: () => boolean; alongside: () => void },
     ): Promise<ApartPackage | undefined> {
       const row = rowOf(appId);
-      if (row?.id !== id) return undefined;
+      if (row?.id !== id || row.moreMemoryMb !== null) return undefined;
       const pkg = await options.loadPackage(appId, row.folder);
       // Allowing one this core can't run would grant it and run nothing.
-      if (!speaksThisCore(pkg) || !servesAppApi(pkg.apart.manifest)) {
+      if (!canRunPackage(pkg)) {
         throw new Error(`${row.version} can't run on this core`);
       }
       if (rowOf(appId)?.id !== id || !when.canAllow()) return undefined;

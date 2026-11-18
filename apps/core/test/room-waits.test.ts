@@ -33,12 +33,18 @@ describe("trying updates that wait for room again", () => {
   it("waits for a try under way, and its close waits for it too", async () => {
     let finish!: () => void;
     const retry = vi.fn(
-      () => new Promise<void>((resolve) => (finish = resolve)),
+      (_signal: AbortSignal) =>
+        new Promise<void>((resolve) => (finish = resolve)),
     );
     const waits = createRoomWaits({ retry, log: () => undefined });
     waits.start();
 
     await vi.advanceTimersByTimeAsync(180_000);
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    waits.interrupt();
+    expect(retry.mock.calls[0]?.[0].aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(retry).toHaveBeenCalledTimes(1);
 
     let closed = false;

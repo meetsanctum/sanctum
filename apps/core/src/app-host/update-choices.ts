@@ -3,9 +3,8 @@ import type { AppUpdates } from "./updates.js";
 import type { WaitingUpdates } from "./waiting.js";
 
 // Applying someone's choice of version while the app can be removed,
-// replaced or sent back during the package read. Going back and allowing an
-// update take turns for an app, so the second sees what the first did: one
-// that replaced the app leaves nothing current for the other.
+// replaced or sent back during the package read. Going back, allowing an
+// update and retrying a wait for room take turns for an app.
 export function createAppUpdateChoices(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   updates: Pick<AppUpdates, "startGoingBack" | "swapTo" | "shownFor">;
@@ -41,34 +40,42 @@ export function createAppUpdateChoices(options: {
     ): Promise<false | "unavailable" | "replaced" | "inPlace"> =>
       inTurn(entry.app.id, () => allowUpdate(entry, id, alongside)),
 
-    onRetryRoom: (entry: InstalledApp) =>
-      inTurn(entry.app.id, () => retryRoom(entry)),
+    onRetryRoom: (entry: InstalledApp, signal?: AbortSignal) =>
+      inTurn(entry.app.id, () => retryRoom(entry, signal)),
   };
 
-  // An update that waited for room starts once there is some: the manager
-  // holds that room until its container starts.
-  async function retryRoom(entry: InstalledApp) {
+  async function retryRoom(entry: InstalledApp, signal?: AbortSignal) {
     const appId = entry.app.id;
-    if (installed.get(appId) !== entry || entry.supervision.isEnded) return;
-    let pkg;
+    const grantsRevision = entry.grantsRevision;
+    const isCurrent = () =>
+      installed.get(appId) === entry && !entry.supervision.isEnded;
+    const canRetry = () =>
+      !signal?.aborted &&
+      !entry.off &&
+      isCurrent() &&
+      entry.grantsRevision === grantsRevision;
+    if (!canRetry()) return;
     try {
-      pkg = await waiting.retry(appId);
+      await waiting.retry(appId, {
+        canRetry,
+        start: (pkg) => {
+          delete entry.waiting;
+          updates.swapTo(entry, pkg);
+        },
+      });
     } catch (error) {
       log(`apps: ${appId}'s update wasn't tried again (${String(error)})`);
       return;
     }
-    if (installed.get(appId) !== entry || entry.supervision.isEnded) return;
-    if (!pkg) {
-      // It may need more or less than it did.
-      const now = waiting.of(appId);
-      if (now?.moreMemoryMb !== entry.waiting?.moreMemoryMb) {
-        entry.waiting = now;
-        options.announce(entry);
-      }
-      return;
+    if (!isCurrent()) return;
+    const now = waiting.of(appId);
+    if (
+      now?.id !== entry.waiting?.id ||
+      now?.moreMemoryMb !== entry.waiting?.moreMemoryMb
+    ) {
+      entry.waiting = now;
+      options.announce(entry);
     }
-    delete entry.waiting;
-    updates.swapTo(entry, pkg);
   }
 
   async function goBack(entry: InstalledApp, copyId: string) {
