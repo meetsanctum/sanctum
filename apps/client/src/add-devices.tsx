@@ -8,11 +8,17 @@ import type {
 import { Button, ScrollArea, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronLeft } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
-import { FoundPage, foundKey, notFoundHint } from "./add-devices-found";
+import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
@@ -80,6 +86,7 @@ export function AddDevices(props: {
 }) {
   const host = useOverlayHost();
   const [page, setPage] = useState<Page>({ kind: "choose" });
+  const scrollArea = useRef<HTMLDivElement>(null);
   const [pairing, setPairing] = useState<PairingInfo>();
   // A command or live update overtakes any read already under way.
   const pairingRevision = useRef(0);
@@ -288,6 +295,15 @@ export function AddDevices(props: {
       if (needsClose.current) void close().catch(() => undefined);
     };
   }, [props.open, close]);
+
+  // Start the new page at its top without remounting pending device cards.
+  useLayoutEffect(() => {
+    if (!props.open) return;
+    const viewport = scrollArea.current?.querySelector<HTMLElement>(
+      "[data-slot=scroll-area-viewport]",
+    );
+    if (viewport) viewport.scrollTop = 0;
+  }, [page.kind, props.open]);
 
   // A save can finish after the overlay closes, so keep following live
   // devices.
@@ -504,7 +520,7 @@ export function AddDevices(props: {
         page.kind === "found" &&
         shown.length > 0 && (
           <p className="m-0 text-center text-sm text-(--silver)">
-            {notFoundHint}
+            Don't see yours? Check it's switched on and connected to your Wi‑Fi.
           </p>
         )
       }
@@ -523,7 +539,7 @@ export function AddDevices(props: {
     >
       {/* The page scrolls between the header and the footer, fading out
           under each as far as its own padding reaches. */}
-      <ScrollArea type="scroll" className={pageScroll}>
+      <ScrollArea ref={scrollArea} type="scroll" className={pageScroll}>
         <div
           data-slot="overlay-content"
           className="mx-auto flex w-full max-w-245 min-w-0 flex-1 flex-col gap-6 ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] pt-4 pb-[calc(32px+env(safe-area-inset-bottom))]"

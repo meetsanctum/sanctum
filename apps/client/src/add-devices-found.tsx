@@ -25,10 +25,6 @@ import { QuestionField, type Refused } from "./device-questions";
 export const foundKey = (found: { driver: string; key: string }) =>
   `${found.driver}\u0000${found.key}`;
 
-/** Under what was found, however many it was. */
-export const notFoundHint =
-  "Don't see yours? Check it's switched on and connected to your Wi‑Fi.";
-
 function addProblem(error: unknown, appName: string | null) {
   if (error instanceof CoreError) {
     switch (error.code) {

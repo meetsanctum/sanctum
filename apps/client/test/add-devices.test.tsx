@@ -322,6 +322,21 @@ describe("Add devices, with what drivers found", () => {
     expect(page().textContent).not.toContain("Don't see yours?");
   });
 
+  it("starts each page at the top even when the previous page was scrolled", async () => {
+    await show();
+    const viewport = page().closest<HTMLElement>(
+      "[data-slot=scroll-area-viewport]",
+    )!;
+
+    viewport.scrollTop = 100;
+    await way("Devices found");
+    expect(viewport.scrollTop).toBe(0);
+
+    viewport.scrollTop = 200;
+    await act(async () => named("Back to Add devices").click());
+    expect(viewport.scrollTop).toBe(0);
+  });
+
   it("adds one that asks nothing at once, and has it named and placed", async () => {
     const added = light("sensor-1", "Kitchen sensor", {
       driver: "sanctum.example",
