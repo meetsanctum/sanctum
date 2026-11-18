@@ -19,8 +19,24 @@ export default async function Page() {
           <span>{productName}</span>
         </a>
         <nav className="elsewhere" aria-label={`${productName} elsewhere`}>
-          <a className="chip docs" href={docsUrl}>
-            Docs
+          <a
+            className="chip docs"
+            href={docsUrl}
+            aria-label={`${productName} docs`}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 6.5C10.5 5.3 8.3 4.75 4 4.75v13.5c4.3 0 6.5.55 8 1.75 1.5-1.2 3.7-1.75 8-1.75V4.75c-4.3 0-6.5.55-8 1.75ZM12 6.5V20" />
+            </svg>
+            <span className="word">Docs</span>
           </a>
           <a
             className="chip github"
@@ -49,7 +65,7 @@ export default async function Page() {
               </span>
             )}
           </a>
-          <a className="chip" href={xUrl} aria-label={`${productName} on X`}>
+          <a className="chip x" href={xUrl} aria-label={`${productName} on X`}>
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path
                 fill="currentColor"

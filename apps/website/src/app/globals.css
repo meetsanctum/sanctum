@@ -732,12 +732,21 @@ footer a {
     justify-content: center;
   }
 
+  .chip.docs,
   .chip.github {
     padding: 0;
   }
 
   .chip .word,
   .chip .stars {
+    display: none;
+  }
+}
+
+/* The smallest phones have no room for every chip beside the logo: X goes,
+   still linked from the text under the headline. */
+@media (max-width: 360px) {
+  .chip.x {
     display: none;
   }
 }
