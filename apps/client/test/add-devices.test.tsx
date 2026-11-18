@@ -3,6 +3,7 @@ import type {
   AppInfo,
   DeviceInfo,
   FoundDevice,
+  JoinedDevice,
   PairingInfo,
 } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
@@ -52,6 +53,14 @@ const plug: FoundDevice = {
   type: null,
   asks: [key],
   refusals: {},
+};
+const joiningDevice: Omit<JoinedDevice, "stage"> = {
+  driver: zigbee.id,
+  key: "0x9",
+  description: null,
+  deviceId: null,
+  known: false,
+  joinedAt: "2026-10-29T12:00:01.000Z",
 };
 
 describe("Add devices, with what drivers found", () => {
@@ -578,24 +587,37 @@ describe("Add devices, with what drivers found", () => {
     );
   });
 
-  it("says when the time is up, and starts again", async () => {
-    await show();
-    await way("Zigbee");
+  it.each(["no joins", "a failed join"])(
+    "gives Start again priority when time is up with %s",
+    async (outcome) => {
+      const hasFailedJoin = outcome === "a failed join";
+      if (hasFailedJoin)
+        adding.joined = [{ ...joiningDevice, stage: "failed" }];
+      const dialog = await show();
+      await way("Zigbee");
 
-    await act(async () => vi.advanceTimersByTime(240_000));
-    expect(page().querySelector("h3")!.textContent).toBe("Time's up");
-    expect(page().textContent).toContain(
-      "Zigbee devices can't join right now. Start again to give them another 4 minutes.",
-    );
+      await act(async () => vi.advanceTimersByTime(240_000));
+      expect(page().querySelector("h3")!.textContent).toBe("Time's up");
+      expect(page().textContent.includes("Device failed to join")).toBe(
+        hasFailedJoin,
+      );
+      expect(page().textContent).toContain(
+        "Zigbee devices can't join right now. Start again to give them another 4 minutes.",
+      );
 
-    const again = [...page().querySelectorAll("button")].find(
-      (button) => button.textContent === "Start again",
-    )!;
-    await act(async () => again.click());
-    expect(
-      requests.filter((each) => each.path === "/api/devices/pairing/open"),
-    ).toHaveLength(2);
-  });
+      const buttons = [...dialog.querySelectorAll("button")];
+      const again = buttons.find(
+        (button) => button.textContent === "Start again",
+      )!;
+      const done = buttons.find((button) => button.textContent === "Done")!;
+      expect(again.dataset.variant).toBe("default");
+      expect(done.dataset.variant).toBe("outline");
+      await act(async () => again.click());
+      expect(
+        requests.filter((each) => each.path === "/api/devices/pairing/open"),
+      ).toHaveLength(2);
+    },
+  );
 
   async function chooseInMenu(menu: string, item: string) {
     const trigger = document.querySelector<HTMLButtonElement>(
@@ -686,20 +708,9 @@ describe("Add devices, with what drivers found", () => {
   it("removes a device Sanctum can't use, after asking", async () => {
     const unusable = light("odd", "Unknown Device", { capabilities: [] });
     devices = [unusable];
-    adding = {
-      ...adding,
-      joined: [
-        {
-          driver: "sanctum.zigbee",
-          key: "0x9",
-          stage: "ready",
-          description: null,
-          deviceId: "odd",
-          known: false,
-          joinedAt: "2026-10-29T12:00:01.000Z",
-        },
-      ],
-    };
+    adding.joined = [
+      { ...joiningDevice, stage: "ready", deviceId: unusable.id },
+    ];
     const removed = vi.fn();
     await act(async () =>
       root.render(

@@ -125,7 +125,8 @@ What is under which licence, and what neither covers, is in
   found").
 - Widget titles in the app's colour, but room sections' headings neutral like
   the shell's own; one primary action per widget or card at most, and an
-  overlay's Back and Done are outlined, never in Electric blue.
+  overlay's Back and Done are outlined, except that Done is the primary
+  action where closing is what is left to do.
 - One layout for tablets, desktops and phones: nothing reachable only by
   touch (a tap on empty space, a swipe, a long press), since a mouse never
   finds it.

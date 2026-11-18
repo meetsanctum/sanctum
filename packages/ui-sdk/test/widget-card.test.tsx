@@ -150,7 +150,9 @@ describe("a card", () => {
     );
     expect(card.querySelector("h2")?.textContent).toBe("Board");
     expect(card.querySelector("h2")?.style.color).toBe("var(--leaf-text)");
-    expect(card.style.gridColumn).toBe("span 4 / span 4");
+    expect(card.dataset.slot).toBe("widget-card");
+    expect(card.style.getPropertyValue("--widget-columns")).toBe("4");
+    expect(card.classList.contains("col-span-(--widget-columns)")).toBe(true);
     expect(card.style.gridRow).toBe("span 4 / span 4");
   });
 

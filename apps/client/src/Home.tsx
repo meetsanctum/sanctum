@@ -565,15 +565,6 @@ export function Home(props: {
                           devices={devices}
                           apps={installed}
                           entities={sectionEntities}
-                          openApp={(app, page, params) =>
-                            opener(app)(page, params)
-                          }
-                          canOpen={(app, page) =>
-                            hasPage(
-                              apps.find((each) => each.info.id === app),
-                              page,
-                            )
-                          }
                           openDevice={openDevice}
                           back={back}
                         />

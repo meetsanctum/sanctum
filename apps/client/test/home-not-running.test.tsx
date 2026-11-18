@@ -81,8 +81,6 @@ const moods: AppInfo = {
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
       },
     ],
     devicePages: [],

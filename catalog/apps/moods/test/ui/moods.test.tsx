@@ -17,9 +17,9 @@ import type { RoomSchedule } from "../../src/ui/schedules";
 import { MoodsProvider } from "../../src/ui/state";
 import { fakeClient } from "./support";
 
-// Moods' page for a room's moods, which Edit beside a room page's Moods
-// heading opens, and the mood editor it opens. The room page's section of
-// moods, which runs them, is the shell's (apps/client).
+// Moods' page for a room's moods, which its main page opens, and the mood
+// editor it opens. The moods in a room's row, which run them, are the
+// shell's (apps/client).
 
 const places: Places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },

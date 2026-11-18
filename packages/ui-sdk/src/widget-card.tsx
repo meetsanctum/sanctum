@@ -7,7 +7,13 @@ import type {
   WidgetValue,
 } from "@meetsanctum/app-sdk";
 import { Check } from "lucide-react";
-import { useId, useRef, useState, type ReactNode } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { Button } from "./components/ui/button";
 import { useHomeTimeZone } from "./home-time-zone";
@@ -99,11 +105,14 @@ export function WidgetCard(props: {
   return (
     <article
       aria-labelledby={titleId}
-      className="flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]"
-      style={{
-        gridColumn: `span ${props.size.columns} / span ${props.size.columns}`,
-        gridRow: `span ${props.size.rows} / span ${props.size.rows}`,
-      }}
+      data-slot="widget-card"
+      className="col-span-(--widget-columns) flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]"
+      style={
+        {
+          "--widget-columns": props.size.columns,
+          gridRow: `span ${props.size.rows} / span ${props.size.rows}`,
+        } as CSSProperties
+      }
     >
       <h2
         id={titleId}

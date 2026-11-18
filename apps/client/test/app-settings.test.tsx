@@ -416,36 +416,41 @@ describe("an app's settings page", () => {
   it("previews its room section on Home's background, and says where it is", async () => {
     await show(moods);
 
-    expect(text()).toContain("In 2 rooms, under each room's name");
+    expect(text()).toContain("In 2 rooms, in each room's row");
     const preview = container.querySelector('[role="img"]')!;
     expect(preview.getAttribute("aria-label")).toBe(
-      "A preview of Moods' tiles under a room's name: Aurora, which is on and Night",
+      "A preview of Moods' tiles in a room's row: Aurora, which is on and Night",
     );
     expect(preview.textContent).toBe("OfficeAuroraNight");
     expect(preview.className).toContain("home-slice");
   });
 
-  it("previews room buttons beside a room's lights", async () => {
+  it("previews room buttons as squares in a room's row", async () => {
     const { roomSections } = manifests[moods.id]!.provides;
     const tiles = roomSections[0]!;
     roomSections[0] = { ...tiles, kind: "buttons" };
     try {
       await show(moods);
 
-      expect(text()).toContain("In 2 rooms, beside each room's lights");
+      expect(text()).toContain("In 2 rooms, in each room's row");
       const preview = container.querySelector('[role="img"]')!;
       expect(preview.getAttribute("aria-label")).toBe(
-        "A preview of Moods' buttons beside a room's lights: Aurora, which is on and Night",
+        "A preview of Moods' buttons in a room's row: Aurora, which is on and Night",
       );
       expect(
         [...preview.querySelectorAll("button")].map((each) => [
           each.textContent,
+          each.title,
           each.getAttribute("aria-pressed"),
         ]),
       ).toEqual([
-        ["Aurora", "true"],
-        ["Night", "false"],
+        ["", "Aurora", "true"],
+        ["", "Night", "false"],
       ]);
+      // On a phone they share the first half of the line, as in a room's row.
+      expect(
+        preview.querySelector("button")!.parentElement!.className,
+      ).toContain("max-sm:col-span-3");
     } finally {
       roomSections[0] = tiles;
     }
@@ -464,7 +469,7 @@ describe("an app's settings page", () => {
     );
     await show(moods);
 
-    expect(text()).toContain("In 1 room, under each room's name");
+    expect(text()).toContain("In 1 room, in each room's row");
   });
 
   it("previews its widget from its sample, as Home draws it", async () => {

@@ -9,11 +9,10 @@ import { MoodsProvider } from "./state";
 import { version } from "../../sanctum-app.json";
 
 // Moods' UI, in frames the core serves: its main page, every room, which the
-// app overview opens; its page for a room, which Edit beside the room page's
-// Moods heading opens too; and the mood editor and a scheduled mood's editor
-// it opens, sharing what its provider loads; and the Presses page it adds to
-// a remote's detail. The shell draws rooms, their devices and Moods' section
-// of moods itself.
+// app overview opens; its page for a room, which the main page opens; and
+// the mood editor and a scheduled mood's editor it opens, sharing what its
+// provider loads; and the Presses page it adds to a remote's detail. The
+// shell draws rooms, their devices and the moods in each room's row itself.
 
 export default defineAppUi({
   id: "sanctum.moods",

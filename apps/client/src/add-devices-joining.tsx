@@ -46,6 +46,7 @@ export function JoiningPage(props: {
   name: string | null;
   state: JoiningState;
   joined: readonly JoinedDevice[];
+  isDonePrimary: boolean;
   devices: readonly DeviceInfo[];
   // How long it lets devices join each time.
   seconds: number;
@@ -53,11 +54,7 @@ export function JoiningPage(props: {
   onStartAgain: () => void;
   work: CardWork;
 }) {
-  const { state } = props;
-  // A device removed here is gone from the list it joined.
-  const joined = props.joined.filter(
-    (each) => !(each.stage === "ready" && each.deviceId === null),
-  );
+  const { state, joined } = props;
   const hasJoined = joined.length > 0;
   const isLooking = state.kind !== "closed";
   // Calm and centred until a device joins; then at the top over the cards.
@@ -168,7 +165,10 @@ export function JoiningPage(props: {
               Stop looking
             </Button>
           ) : (
-            <Button onClick={props.onStartAgain}>
+            <Button
+              variant={props.isDonePrimary ? "outline" : "default"}
+              onClick={props.onStartAgain}
+            >
               {state.why === "failed" ? "Try again" : "Start again"}
             </Button>
           )}
