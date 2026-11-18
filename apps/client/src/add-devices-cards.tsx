@@ -10,8 +10,10 @@ import { Check, CircleAlert } from "lucide-react";
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -103,17 +105,22 @@ const rounds: Record<Tone, string> = {
 export function DeviceCard(props: {
   tone?: Tone;
   index?: number;
+  waitMs?: number;
   label?: string;
   children: ReactNode;
 }) {
   return (
     <li
       aria-label={props.label}
-      // Each card rises in a little after the one before it.
-      style={{ animationDelay: `${(props.index ?? 0) * 80}ms` }}
+      style={
+        {
+          "--card-stagger": `${(props.index ?? 0) * 80}ms`,
+          "--card-wait": `${props.waitMs ?? 0}ms`,
+        } as CSSProperties
+      }
       className={cn(
         "relative flex min-h-55 flex-col items-center rounded-lg bg-linear-to-b px-4 pt-4.5 pb-4 text-center",
-        "motion-safe:animate-in motion-safe:fill-mode-both motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-500 motion-reduce:animate-in motion-reduce:fill-mode-both motion-reduce:fade-in-0",
+        "animate-in fill-mode-both fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:animation-duration-500 motion-safe:[animation-delay:calc(var(--card-stagger)+var(--card-wait))] motion-reduce:[animation-delay:var(--card-stagger)]",
         tones[props.tone ?? "neutral"],
       )}
     >
@@ -195,7 +202,7 @@ export function CardFoot(props: { children: ReactNode; className?: string }) {
 }
 
 // A device added or ready, named and placed right here: green with a check.
-export function ReadyCard(props: {
+export function ReadyCardContent(props: {
   device: DeviceInfo;
   // What it is, or that it joined again.
   line: string | null;
@@ -203,7 +210,6 @@ export function ReadyCard(props: {
   // Whether it is new to the home, to be greeted as it appears.
   isNew: boolean;
   work: CardWork;
-  index?: number;
 }) {
   const { device, work } = props;
   // Decided as it appears, so that the greeting runs once and to its end.
@@ -213,7 +219,7 @@ export function ReadyCard(props: {
   }, [greets, work, device.id]);
   const isLight = device.capabilities.some((each) => each.kind === "light");
   return (
-    <DeviceCard tone="success" index={props.index}>
+    <>
       {greets && <span aria-hidden="true" className="add-devices-sweep" />}
       <CardRound tone="success" done={props.done} glows={greets && isLight}>
         <TypeIcon device={device} />
@@ -231,7 +237,7 @@ export function ReadyCard(props: {
           beside={device.identify && <BlinkButton device={device} />}
         />
       </CardFoot>
-    </DeviceCard>
+    </>
   );
 }
 
@@ -282,14 +288,10 @@ function BlinkButton(props: { device: DeviceInfo }) {
 }
 
 // A device Sanctum can't use: named and placed all the same, or removed.
-function UnusableCard(props: {
-  device: DeviceInfo;
-  work: CardWork;
-  index?: number;
-}) {
+function UnusableCardContent(props: { device: DeviceInfo; work: CardWork }) {
   const { device, work } = props;
   return (
-    <DeviceCard index={props.index}>
+    <>
       <CardRound>
         <TypeIcon device={device} />
       </CardRound>
@@ -317,7 +319,7 @@ function UnusableCard(props: {
           }
         />
       </CardFoot>
-    </DeviceCard>
+    </>
   );
 }
 
@@ -352,7 +354,7 @@ function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
 
 // Which room a device is in, with New room… at the end of the menu, which
 // makes one right here: its name in a labelled field, and Add room puts the
-// device in it. Escape, or leaving it empty, goes back to the menu.
+// device in it. Cancel or Escape goes back to the menu.
 function RoomChoice(props: {
   device: DeviceInfo;
   work: CardWork;
@@ -366,18 +368,26 @@ function RoomChoice(props: {
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string>();
   const field = useRef<HTMLInputElement>(null);
+  const roomTrigger = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
   // Which naming this is, so that one given up with Escape moves nothing;
   // and the room it made, so that trying again moves the device there
   // rather than making another.
   const attempt = useRef(0);
   const made = useRef<string>(undefined);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (naming) field.current?.focus();
+    else if (restoreFocus.current) {
+      restoreFocus.current = false;
+      roomTrigger.current?.focus();
+    }
   }, [naming]);
 
   const leave = () => {
     attempt.current += 1;
     made.current = undefined;
+    restoreFocus.current =
+      field.current?.form?.contains(document.activeElement) ?? false;
     setNaming(false);
     setName("");
     setProblem(undefined);
@@ -423,15 +433,18 @@ function RoomChoice(props: {
         <label htmlFor={id} className="text-xs font-medium text-(--silver)">
           New room
         </label>
-        <div className="flex gap-1.5">
-          <Input
-            id={id}
-            ref={field}
-            value={name}
-            maxLength={60}
-            onChange={(event) => setName(event.target.value)}
-            className="h-8 min-w-0 flex-1 bg-black/14 pointer-coarse:h-11"
-          />
+        <Input
+          id={id}
+          ref={field}
+          value={name}
+          maxLength={60}
+          onChange={(event) => setName(event.target.value)}
+          className="h-8 bg-black/14 pointer-coarse:h-11"
+        />
+        <div className="mt-1 flex flex-wrap justify-end gap-1.5">
+          <Button type="button" variant="ghost" size="sm" onClick={leave}>
+            Cancel
+          </Button>
           <Button
             type="submit"
             variant="outline"
@@ -452,6 +465,7 @@ function RoomChoice(props: {
   return (
     <div className="flex flex-wrap justify-center gap-1.5">
       <RoomPicker
+        triggerRef={roomTrigger}
         device={device}
         rooms={work.rooms}
         onChange={(roomId) => void work.onSave(device, { roomId })}
@@ -470,52 +484,56 @@ export function JoinedCard(props: {
   device?: DeviceInfo;
   work: CardWork;
   index?: number;
+  waitMs?: number;
 }) {
-  const { joined, device } = props;
+  const { joined, device, index, waitMs } = props;
+  const isReady = joined.stage === "ready" && device !== undefined;
+  const isUsable = isReady && device.capabilities.length > 0;
   const words = stageText(joined, device);
-  if (joined.stage === "ready" && device) {
-    if (device.capabilities.length === 0) {
-      return (
-        <UnusableCard device={device} work={props.work} index={props.index} />
-      );
-    }
-    return (
-      <ReadyCard
-        device={device}
-        line={joined.known ? "Joined again" : joined.description}
-        done={words}
-        isNew={!joined.known}
-        work={props.work}
-        index={props.index}
-      />
-    );
-  }
-  if (joined.stage === "failed") {
-    return (
-      <DeviceCard tone="error" index={props.index}>
-        <CardRound tone="error">
-          <CircleAlert />
-        </CardRound>
-        <span className="mt-3.5 text-[15.5px] font-semibold">{words}</span>
-        <CardLine>Reset it, then start again.</CardLine>
-      </DeviceCard>
-    );
-  }
-  const working = joined.stage === "joined" || joined.stage === "interviewing";
+  const hasFailed = joined.stage === "failed";
+  const isWorking =
+    joined.stage === "joined" || joined.stage === "interviewing";
+  // Keep the same list item as the device progresses, so its entrance runs once.
   return (
-    <DeviceCard index={props.index}>
-      <CardRound>
-        {working ? (
-          <KnotLoader className="size-7" />
-        ) : (
-          <TypeIcon device={device} />
-        )}
-      </CardRound>
-      {/* A device the home has goes by its name while it joins again. */}
-      <span className="mt-3.5 text-[15.5px] font-semibold">
-        {device?.name ?? joined.description ?? "New device"}
-      </span>
-      <CardLine>{working ? words : `${words}.`}</CardLine>
+    <DeviceCard
+      index={index}
+      waitMs={waitMs}
+      tone={isUsable ? "success" : hasFailed ? "error" : "neutral"}
+    >
+      {isUsable ? (
+        <ReadyCardContent
+          device={device}
+          line={joined.known ? "Joined again" : joined.description}
+          done={words}
+          isNew={!joined.known}
+          work={props.work}
+        />
+      ) : isReady ? (
+        <UnusableCardContent device={device} work={props.work} />
+      ) : hasFailed ? (
+        <>
+          <CardRound tone="error">
+            <CircleAlert />
+          </CardRound>
+          <span className="mt-3.5 text-[15.5px] font-semibold">{words}</span>
+          <CardLine>Reset it, then start again.</CardLine>
+        </>
+      ) : (
+        <>
+          <CardRound>
+            {isWorking ? (
+              <KnotLoader className="size-7" />
+            ) : (
+              <TypeIcon device={device} />
+            )}
+          </CardRound>
+          {/* A device the home has goes by its name while it joins again. */}
+          <span className="mt-3.5 text-[15.5px] font-semibold">
+            {device?.name ?? joined.description ?? "New device"}
+          </span>
+          <CardLine>{isWorking ? words : `${words}.`}</CardLine>
+        </>
+      )}
     </DeviceCard>
   );
 }

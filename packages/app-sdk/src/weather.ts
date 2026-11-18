@@ -65,8 +65,30 @@ export const forecastDaySchema = z.object({
   precipitationProbabilityMax: z.number().min(0).max(100).nullable(),
   /** The WMO weather code (Open-Meteo's weather_code), such as 61 for light rain. */
   weatherCode: z.number().int().nullable(),
+  /** All that falls that day, rain and snow as water, in millimetres. */
+  precipitationSumMm: z.number().nullable().optional(),
+  /** The snow that falls that day, in centimetres. */
+  snowfallSumCm: z.number().nullable().optional(),
+  /** The highest UV index that day. */
+  uvIndexMax: z.number().nullable().optional(),
 });
 export type ForecastDay = z.infer<typeof forecastDaySchema>;
+
+export const forecastHourSchema = z.object({
+  /** When the hour starts. */
+  time: instant,
+  temperatureC: z.number().nullable(),
+  weatherCode: z.number().int().nullable(),
+  /** Whether the sun is up, for the icon. */
+  isDay: z.boolean().nullable(),
+  /** The chance of rain or snow that hour, in percent. */
+  precipitationProbability: z.number().min(0).max(100).nullable(),
+  /** All that falls that hour, rain and snow as water, in millimetres. */
+  precipitationMm: z.number().nullable(),
+  /** The snow that falls that hour, in centimetres. */
+  snowfallCm: z.number().nullable(),
+});
+export type ForecastHour = z.infer<typeof forecastHourSchema>;
 
 export const forecastSchema = z.object({
   timeZone,
@@ -79,10 +101,22 @@ export const forecastSchema = z.object({
       weatherCode: z.number().int().nullable(),
       /** Whether the sun is up, for the icon. */
       isDay: z.boolean().nullable(),
+      /** What the air feels like, with the wind and the humidity. */
+      apparentTemperatureC: z.number().nullable().optional(),
+      /** In percent. */
+      relativeHumidity: z.number().min(0).max(100).nullable().optional(),
+      dewPointC: z.number().nullable().optional(),
+      windSpeedKmh: z.number().nullable().optional(),
+      windGustsKmh: z.number().nullable().optional(),
+      /** Where the wind comes from, in degrees clockwise from north. */
+      windDirection: z.number().min(0).max(360).nullable().optional(),
+      uvIndex: z.number().nullable().optional(),
     })
     .nullable(),
   /** Day by day from the home's today on, up to 16 days. */
   days: z.array(forecastDaySchema).max(16),
+  /** Hour by hour from the hour it was fetched in, up to two days. */
+  hours: z.array(forecastHourSchema).max(48).optional(),
 });
 export type Forecast = z.infer<typeof forecastSchema>;
 

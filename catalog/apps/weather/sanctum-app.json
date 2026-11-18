@@ -1,7 +1,7 @@
 {
   "id": "sanctum.weather",
   "name": "Weather",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "core": "^1.0.0",
   "protocol": 10,
   "summary": "The forecast and sun times for where your home is.",
@@ -163,6 +163,60 @@
                         "boolean",
                         "null"
                       ]
+                    },
+                    "apparentTemperatureC": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "relativeHumidity": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "dewPointC": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "windSpeedKmh": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "windGustsKmh": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "windDirection": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 360
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "uvIndex": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -223,6 +277,24 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "precipitationSumMm": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "snowfallSumCm": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "uvIndexMax": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -231,6 +303,78 @@
                   "temperatureMinC",
                   "precipitationProbabilityMax",
                   "weatherCode"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "hours": {
+              "maxItems": 48,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "temperatureC": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "weatherCode": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "isDay": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "precipitationProbability": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "precipitationMm": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "snowfallCm": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "time",
+                  "temperatureC",
+                  "weatherCode",
+                  "isDay",
+                  "precipitationProbability",
+                  "precipitationMm",
+                  "snowfallCm"
                 ],
                 "additionalProperties": false
               }

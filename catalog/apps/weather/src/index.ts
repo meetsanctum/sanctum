@@ -29,7 +29,9 @@ export function createWeatherApp(options: WeatherOptions = {}) {
   return defineApp({
     id: "sanctum.weather",
     name: "Weather",
-    version: "0.3.0",
+    // 0.4.0: the forecast hour by hour, with how the air feels, its
+    // humidity, the wind, the UV index and what falls each day.
+    version: "0.4.0",
     core: "^1.0.0",
     summary: "The forecast and sun times for where your home is.",
     icon: { glyph: "cloud-sun", color: "sky" },

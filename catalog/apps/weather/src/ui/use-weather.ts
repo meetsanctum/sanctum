@@ -1,27 +1,41 @@
 import type {
   EntityInfo,
   Forecast,
+  SunTimes,
   TemperatureUnit,
-  WidgetContent,
 } from "@meetsanctum/app-sdk";
 import { useAppClient, useTemperatureUnit } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
-// What Weather brings to the home, as its page shows it: its own card and
-// forecast, read once and then followed live, and the unit the home shows
-// temperatures in.
+// What Weather brings to the home, as its page shows it: its own sun and
+// forecast, read once and then followed live, the unit the home shows
+// temperatures in, and the time, minute by minute, so the hours and the sun
+// move on while the page stays open.
 
 export type WeatherView = {
   loaded: boolean;
   unit: TemperatureUnit;
-  /** What its card says, which the shell draws. */
-  card: WidgetContent | null;
+  /** The home's sun, which Weather publishes once the home has a location. */
+  sun: SunTimes | null;
   forecast: Forecast | null;
+  now: Date;
 };
+
+const minuteMs = 60_000;
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), minuteMs);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
 
 export function useWeather(): WeatherView {
   const client = useAppClient();
   const unit = useTemperatureUnit();
+  const now = useNow();
   const [entities, setEntities] = useState<EntityInfo[]>();
 
   useEffect(() => {
@@ -74,7 +88,8 @@ export function useWeather(): WeatherView {
     // Until the unit is known, no temperature shows in the other one.
     loaded: entities !== undefined && unit !== undefined,
     unit: unit ?? "celsius",
-    card: own("weather.card") as WidgetContent | null,
+    sun: own("sun") as SunTimes | null,
     forecast: own("weather.forecast") as Forecast | null,
+    now,
   };
 }

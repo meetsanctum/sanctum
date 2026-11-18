@@ -125,15 +125,40 @@ export function fakeCore(app: AppDefinition) {
   };
 }
 
-// Open-Meteo's answer for two days in Zurich.
+// Open-Meteo's answer for two days in Zurich, and three hours from ten in
+// the morning there.
 export const openMeteoAnswer = {
-  current: { temperature_2m: 11.4, weather_code: 2, is_day: 1 },
+  utc_offset_seconds: 3600,
+  current: {
+    temperature_2m: 11.4,
+    apparent_temperature: 9.8,
+    relative_humidity_2m: 74,
+    dew_point_2m: 6.9,
+    weather_code: 2,
+    is_day: 1,
+    wind_speed_10m: 14.2,
+    wind_gusts_10m: 22.3,
+    wind_direction_10m: 268,
+    uv_index: 1.2,
+  },
+  hourly: {
+    time: ["2026-10-29T10:00", "2026-10-29T11:00", "2026-10-29T12:00"],
+    temperature_2m: [11.2, 12.1, 13],
+    weather_code: [2, 3, 61],
+    is_day: [1, 1, 1],
+    precipitation_probability: [10, 20, 65],
+    precipitation: [0, 0, 0.4],
+    snowfall: [0, 0, 0],
+  },
   daily: {
     time: ["2026-10-29", "2026-10-30"],
     temperature_2m_max: [14.2, 12.8],
     temperature_2m_min: [6.1, 7.4],
     precipitation_probability_max: [10, 65],
     weather_code: [2, 61],
+    precipitation_sum: [0.4, 6.5],
+    snowfall_sum: [0, 0],
+    uv_index_max: [2.4, 1.1],
   },
 };
 
