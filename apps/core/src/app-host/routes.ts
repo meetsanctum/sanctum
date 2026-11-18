@@ -64,6 +64,10 @@ import type { AppHost } from "./host.js";
 //   GET  /api/apps/:appId/go-back             { to }: what going back from its
 //                                             last update would return to, or null
 //   POST /api/apps/:appId/go-back             { id }: goes back to the confirmed copy
+//   POST /api/apps/:appId/update/allow        { id }: allows the version that
+//                                             waits (AppInfo.waiting), granting
+//                                             what it newly needs and starting
+//                                             its update; conflict for another id
 //   GET  /api/apps/:appId/running             { running }: how one in its own
 //                                             container is running now, or null
 //   POST /api/apps/:appId/permissions/update  { permission, granted }:
@@ -259,6 +263,19 @@ export function registerAppRoutes(
       principal: request.principal!,
       appId: appIdOf(request.params),
       copyId: confirmed.data.id,
+    });
+    return {};
+  });
+
+  // A newer version that waits for what it newly needs, as its Review sheet
+  // showed it. What it says next arrives as it changes.
+  app.post("/api/apps/:appId/update/allow", async (request) => {
+    const named = confirmedCopy.safeParse(request.body);
+    if (!named.success) throw new ActionCallError("invalid_request");
+    await host.allowUpdate({
+      principal: request.principal!,
+      appId: appIdOf(request.params),
+      id: named.data.id,
     });
     return {};
   });

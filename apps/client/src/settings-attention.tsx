@@ -11,10 +11,12 @@ import { useState } from "react";
 
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
-import { isGivenUp, RestartButton } from "./app-state";
+import { RestartButton } from "./app-state";
+import { ReviewUpdate } from "./app-update-waiting";
 import {
   appAttentionText,
   appsNotRunning,
+  isStopped,
   attentionDetail,
   attentionText,
   isProblem,
@@ -130,7 +132,7 @@ function RowButton(props: {
 // An app's name over what is wrong: in red with a sign for one that
 // stopped, plain for one paused.
 function AppLine(props: { app: AppInfo }) {
-  const stopped = isGivenUp(props.app);
+  const stopped = isStopped(props.app);
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
       <span className="truncate text-sm font-medium">{props.app.name}</span>
@@ -344,7 +346,16 @@ export function NeedsAttentionSection(props: {
               className="size-8 [&_svg]:size-4"
             />
             <AppLine app={app} />
-            {app.state === "failed" ? (
+            {app.waiting ? (
+              <span className={fixPlace}>
+                <ReviewUpdate
+                  app={app}
+                  waiting={app.waiting}
+                  variant="outline"
+                  size="sm"
+                />
+              </span>
+            ) : app.state === "failed" ? (
               <span className={fixPlace}>
                 <RestartButton app={app} variant="outline" size="sm" />
               </span>

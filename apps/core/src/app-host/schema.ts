@@ -1,3 +1,4 @@
+import type { PermissionInfo } from "@meetsanctum/app-sdk";
 import {
   integer,
   primaryKey,
@@ -125,6 +126,22 @@ export const appsListed = sqliteTable("apps_listed", {
 // its removal is done, so a core that stopped part way finishes it at start.
 // Adding it back deletes the row. While it's here, a driver's devices are
 // hidden rather than gone.
+
+// An update that waits for someone to allow what it newly needs: the app
+// keeps running the version it has. One row per app, for the newest version
+// the image brings, replaced when a newer one arrives. Its id is what an
+// answer names, so one given for a version since replaced is refused.
+export const appUpdatesWaiting = sqliteTable("app_updates_waiting", {
+  appId: text("app_id").primaryKey(),
+  id: text("id").notNull(),
+  version: text("version").notNull(),
+  // The staged build that waits.
+  folder: text("folder").notNull(),
+  // The permissions it needs that the household hasn't granted, each with
+  // its reason as that version gives it.
+  needs: text("needs", { mode: "json" }).$type<PermissionInfo[]>().notNull(),
+  since: integer("since", { mode: "timestamp_ms" }).notNull(),
+});
 
 export const appsRemoved = sqliteTable("apps_removed", {
   appId: text("app_id").primaryKey(),

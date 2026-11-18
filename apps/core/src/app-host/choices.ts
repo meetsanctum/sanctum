@@ -26,6 +26,7 @@ type Chosen = {
   manifest: StaticManifest;
   granted: string[];
   grantsRevision: number;
+  waiting?: unknown;
 };
 
 function message(error: unknown) {
@@ -61,6 +62,13 @@ export function createAppChoices<Entry extends Chosen>(options: {
   onRestart?: (entry: Entry) => boolean;
   // Someone asked to go back from an app's last update: whether it can.
   onGoBack?: (entry: Entry, copyId: string) => Promise<boolean>;
+  // Someone allowed the version that waits, named by its id: false when it
+  // wasn't still the one waiting; otherwise whether it replaces the one that
+  // runs, or is the one installed, paused for want of what was granted.
+  onAllowUpdate?: (
+    entry: Entry,
+    id: string,
+  ) => Promise<false | "replaced" | "inPlace">;
   // Someone turned an app off or on.
   onOff?: (entry: Entry, off: boolean) => void;
   log: (message: string) => void;
@@ -133,6 +141,39 @@ export function createAppChoices<Entry extends Chosen>(options: {
       throw new ActionCallError("conflict");
     }
     record(appId, "go-back", who, "ok");
+  }
+
+  // Allows the newer version that waits for what it newly needs, which the
+  // client shows first, granting those and starting its update. Like its
+  // grants, it's the household's to choose.
+  async function allowUpdate(request: {
+    principal: Principal;
+    appId: string;
+    id: string;
+  }) {
+    const { principal, appId, id } = request;
+    const entry = entryOf(appId);
+    const action = "allow-update";
+    const who = admit(principal, appId, action, permissionsRule);
+    const allowed = await options.onAllowUpdate?.(entry, id);
+    if (!allowed) {
+      record(appId, action, who, "refused", "conflict");
+      throw new ActionCallError("conflict");
+    }
+    record(appId, action, who, "ok");
+    // Paused on it, it takes them as any permission switched on.
+    if (allowed === "inPlace" && installed.get(appId) === entry) {
+      const before = entry.granted;
+      entry.granted = options.grants.of(entry.manifest);
+      entry.grantsRevision += 1;
+      delete entry.waiting;
+      options.eventsForApps.permissions(appId, before, entry.granted);
+      for (const permission of entry.granted) {
+        if (!before.includes(permission)) {
+          options.onPermission?.(entry, permission, true);
+        }
+      }
+    }
   }
 
   // Turns an app off or on, in its settings. Like its grants, it's the household's
@@ -273,6 +314,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
     setPermission,
     restart,
     goBack,
+    allowUpdate,
     setOff,
   };
 }

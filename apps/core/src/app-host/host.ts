@@ -52,6 +52,8 @@ import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 import { createLanPolicies } from "./lan.js";
 import { createAppInstaller } from "./install.js";
+import type { AppVersions } from "./versions.js";
+import type { WaitingUpdates } from "./waiting.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -99,6 +101,8 @@ export function createAppHost(options: {
   grants: AppGrants;
   commits: AppCommits;
   updates: AppUpdates;
+  versions: Pick<AppVersions, "last">;
+  waiting: WaitingUpdates;
   off: AppsOff;
   // Someone changed an app's settings.
   onSettings?: (appId: string, settings: AppSettings) => void;
@@ -199,6 +203,8 @@ export function createAppHost(options: {
     entities: options.entities,
     updates: options.updates,
     grants: options.grants,
+    versions: options.versions,
+    waiting: options.waiting,
     off: options.off,
     appServices,
     supervisor: () => supervisor,
@@ -299,6 +305,23 @@ export function createAppHost(options: {
         log(`apps: ${entry.app.id} can't go back (${String(error)})`);
         return false;
       }),
+    // The version that waits takes the place of the one that runs, as a
+    // failed update's does, and its start is then the update. One paused on
+    // it takes what was granted in place.
+    async onAllowUpdate(entry, id) {
+      const allowed = await options.waiting
+        .allow(entry.app.id, id)
+        .catch((error: unknown) => {
+          log(`apps: ${entry.app.id} can't update (${String(error)})`);
+          return undefined;
+        });
+      if (!allowed) return false;
+      if (allowed.apart.folder === entry.apartIn) return "inPlace";
+      void apartStarts.replace(entry, allowed).catch((error: unknown) => {
+        log(`apps: ${entry.app.id} didn't update (${String(error)})`);
+      });
+      return "replaced";
+    },
     gate,
     record,
     settings: options.settings,
@@ -454,9 +477,20 @@ export function createAppHost(options: {
             // binds the same path.
             await removals.get(appId);
             if (isClosing) break;
-            const current = await options.updates.packageFor(pkg);
+            // One someone is adding is as its sheet showed, and an update
+            // under way goes on as it began; otherwise one that needs what
+            // nobody allowed waits.
+            const stage = options.updates.shownFor(appId)?.stage;
+            const isAdding = adding.includes(appId);
+            if (isAdding) options.waiting.forget(appId);
+            const chosen =
+              isAdding || stage === "updating" || stage === "goingBack"
+                ? pkg
+                : await options.waiting.choose(pkg);
             if (isClosing) break;
-            install(current, checked);
+            const current = await options.updates.packageFor(chosen);
+            if (isClosing) break;
+            install(current, checked, { isAdding });
             const entry = installed.get(appId)!;
             if (adding.includes(appId)) entry.supervision.isAdding = true;
             added.push(entry);
