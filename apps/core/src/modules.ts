@@ -387,6 +387,7 @@ export async function createModules(
     now: () => now?.() ?? new Date(),
     ...options.appUpdates,
     loadPackage,
+    holds: (pkg) => waitingUpdates.holds(pkg),
   });
   const grantsStore = createAppGrants(db, { now });
   // An update that needs what nobody has allowed waits for someone to.

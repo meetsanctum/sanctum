@@ -18,13 +18,20 @@ export function createAppUpdateChoices(options: {
     async onGoBack(entry: InstalledApp, copyId: string) {
       try {
         if (!(await updates.startGoingBack(entry, copyId))) return false;
-        waiting.forget(entry.app.id);
-        delete entry.waiting;
-        return true;
       } catch (error) {
         log(`apps: ${entry.app.id} can't go back (${String(error)})`);
         return false;
       }
+      // It's going back now, whatever follows. A wait it keeps meanwhile
+      // can't be allowed while it does, and the next start forgets it, as
+      // the version it went back from.
+      delete entry.waiting;
+      try {
+        waiting.forget(entry.app.id);
+      } catch (error) {
+        log(`apps: ${entry.app.id}'s waiting update stays (${String(error)})`);
+      }
+      return true;
     },
 
     async onAllowUpdate(

@@ -90,6 +90,43 @@ export function createWaitingUpdates(options: {
     }
   }
 
+  // Records that this version waits for what it needs. The same build
+  // needing the same keeps its id, so an answer given before a restart still
+  // counts, and never grants what it didn't show.
+  function record(pkg: ApartPackage, needs: WaitingRow["needs"]) {
+    const { id: appId, version } = pkg.apart.manifest;
+    const { folder } = pkg.apart;
+    const before = rowOf(appId);
+    const isSame =
+      before?.folder === folder && ids(before.needs) === ids(needs);
+    const row: WaitingRow = {
+      appId,
+      id: isSame ? before.id : randomUUID(),
+      version,
+      folder,
+      needs,
+      since: before?.folder === folder ? before.since : now(),
+    };
+    durably(db, () => {
+      db.insert(appUpdatesWaiting)
+        .values(row)
+        .onConflictDoUpdate({ target: appUpdatesWaiting.appId, set: row })
+        .run();
+    });
+  }
+
+  function of(appId: string): AppWaitingUpdate | undefined {
+    const row = rowOf(appId);
+    return (
+      row && {
+        id: row.id,
+        version: row.version,
+        build: row.folder,
+        needs: row.needs,
+      }
+    );
+  }
+
   return {
     /**
      * Which package to install of an app the image brings, by what its
@@ -101,34 +138,18 @@ export function createWaitingUpdates(options: {
       const { id: appId, version } = pkg.apart.manifest;
       const { folder } = pkg.apart;
       const last = options.versions.last(appId);
-      const needs =
-        last?.folder && last.folder !== folder ? newlyNeeded(pkg) : [];
+      // A version the home has run, from a staged folder or, before its
+      // first move, from the core's own process.
+      const needs = last && last.folder !== folder ? newlyNeeded(pkg) : [];
       if (needs.length === 0) {
         if (rowOf(appId)) forget(appId);
         return pkg;
       }
-      const before = rowOf(appId);
-      const row: WaitingRow = {
-        appId,
-        // The same build needing the same keeps its id, so an answer given
-        // before a restart still counts, and never grants what it didn't
-        // show.
-        id:
-          before?.folder === folder && ids(before.needs) === ids(needs)
-            ? before.id
-            : randomUUID(),
-        version,
-        folder,
-        needs,
-        since: before?.folder === folder ? before.since : now(),
-      };
-      durably(db, () => {
-        db.insert(appUpdatesWaiting)
-          .values(row)
-          .onConflictDoUpdate({ target: appUpdatesWaiting.appId, set: row })
-          .run();
-      });
-      const running = await runningNow(appId, last!.folder!);
+      record(pkg, needs);
+      // One the core ran in its own process can only run apart now.
+      const running = last!.folder
+        ? await runningNow(appId, last!.folder)
+        : undefined;
       if (!running) {
         log(
           `apps: ${appId} ${version} waits for ${ids(needs)}, and what it runs can't run here, so it stops until someone allows it`,
@@ -139,18 +160,24 @@ export function createWaitingUpdates(options: {
       return running;
     },
 
-    /** What the version that waits needs, as clients see it. */
-    of(appId: string): AppWaitingUpdate | undefined {
-      const row = rowOf(appId);
-      return (
-        row && {
-          id: row.id,
-          version: row.version,
-          build: row.folder,
-          needs: row.needs,
-        }
+    /**
+     * Whether a version tried again later, after it wasn't ready, now needs
+     * what nobody has allowed, as when someone switched it off meanwhile: it
+     * then waits, as clients see it, instead of taking the place of the one
+     * that runs.
+     */
+    holds(pkg: ApartPackage): AppWaitingUpdate | undefined {
+      const needs = newlyNeeded(pkg);
+      if (needs.length === 0) return undefined;
+      record(pkg, needs);
+      log(
+        `apps: ${pkg.apart.manifest.id} ${pkg.apart.manifest.version} waits for ${ids(needs)}`,
       );
+      return of(pkg.apart.manifest.id);
     },
+
+    /** What the version that waits needs, as clients see it. */
+    of,
 
     get: rowOf,
 
@@ -172,6 +199,10 @@ export function createWaitingUpdates(options: {
       const row = rowOf(appId);
       if (row?.id !== id) return undefined;
       const pkg = await options.loadPackage(appId, row.folder);
+      // Allowing one this core can't run would grant it and run nothing.
+      if (!speaksThisCore(pkg) || !servesAppApi(pkg.apart.manifest)) {
+        throw new Error(`${row.version} can't run on this core`);
+      }
       if (rowOf(appId)?.id !== id || !when.canAllow()) return undefined;
       // A permission switched off since it showed would leave it paused.
       const needs = newlyNeeded(pkg);

@@ -98,6 +98,9 @@ export function createAppUpdates(options: {
   retryAfterMs?: number;
   // A version staged in its folder, as the core reads any app that runs apart.
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
+  // Whether a version tried again now waits for someone to allow what it
+  // needs (waiting.ts), and how clients see that.
+  holds?: (pkg: ApartPackage) => InstalledApp["waiting"];
 }) {
   const { db, versions, settings, manager, log, now } = options;
   const turnPauseMs = options.turnPauseMs ?? defaultTurnPauseMs;
@@ -109,6 +112,7 @@ export function createAppUpdates(options: {
     waits: (entry: InstalledApp, why: string, again?: () => void) => void;
     replace: (entry: InstalledApp, pkg: ApartPackage) => Promise<void>;
     isCurrent: (entry: InstalledApp) => boolean;
+    announce: (entry: InstalledApp) => void;
   };
   let isClosed = false;
   let catchingUp: NodeJS.Timeout | undefined;
@@ -274,6 +278,15 @@ export function createAppUpdates(options: {
         .loadPackage(appId, row.toFolder)
         .then((pkg) => {
           if (!isWaiting() || !host.isCurrent(entry) || entry.off) return;
+          // What it needs may have been switched off meanwhile: then it
+          // waits for someone, and the version that runs stays.
+          const held = options.holds?.(pkg);
+          if (held) {
+            forget(appId);
+            entry.waiting = held;
+            host.announce(entry);
+            return;
+          }
           // Keep the row until the new entry arrives: a failed or cancelled swap
           // must leave enough on disk to try again, including after a restart.
           const replace = () => {

@@ -19,15 +19,22 @@ export function createUpdatePackages(options: {
   const { rowOf, forget, loadPackage, now, log } = options;
 
   return {
-    /** Whether this build belongs to the change of version already under way. */
+    /**
+     * Whether the change of version recorded for it decides this build: one
+     * under way, or the build it went back from or that failed, which it
+     * stays away from until its time to try again, so what it needs can't
+     * undo someone's Go back.
+     */
     isUnderWay(pkg: ApartPackage): boolean {
       const row = rowOf(pkg.apart.manifest.id);
-      return (
-        row !== undefined &&
-        row.status !== "undone" &&
-        (row.fromFolder === pkg.apart.folder ||
-          row.toFolder === pkg.apart.folder)
-      );
+      const { folder } = pkg.apart;
+      if (!row) return false;
+      if (row.status === "undone") {
+        return (
+          row.toFolder === folder && !(row.retryAt && row.retryAt <= now())
+        );
+      }
+      return row.fromFolder === folder || row.toFolder === folder;
     },
 
     /**

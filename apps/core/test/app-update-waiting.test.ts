@@ -1,3 +1,4 @@
+import { NotReady } from "@meetsanctum/app-sdk";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
@@ -404,6 +405,123 @@ describe("an update that needs a new permission", () => {
       ).statusCode,
     ).toBe(409);
     expect(answerOf(core, "people.read")).toBeUndefined();
+  });
+
+  it("keeps someone's Go back across a restart, whatever it needs", async () => {
+    const home = await versions();
+    const optional = { ...people, needed: false, startsOn: true };
+    const first = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      asAHome,
+    );
+    await running(first, id);
+    const maya = await claimed(first);
+    const two = version("2.0.0", { permissions: [people] });
+    const second = await home.coreWith(two, asAHome);
+    await running(second, id);
+    await vi.waitFor(() => expect(home.journal.size).toBe(0));
+    const back = await second.apps.goBackOption(id);
+    await post(second, `/api/apps/${id}/go-back`, { id: back!.id }, maya);
+    await vi.waitFor(() => expect(committedOf(second)?.version).toBe("1.0.0"));
+    await running(second, id);
+    await post(
+      second,
+      `/api/apps/${id}/permissions/update`,
+      { permission: "people.read", granted: false },
+      maya,
+    );
+
+    const again = await home.coreWith(two, asAHome);
+    await running(again, id);
+    expect(stateOf(again, id)).toMatchObject({ version: "1.0.0" });
+    expect(stateOf(again, id).waiting).toBeUndefined();
+    await post(
+      again,
+      `/api/apps/${id}/permissions/update`,
+      { permission: "people.read", granted: true },
+      maya,
+    );
+
+    const later = await home.coreWith(two, asAHome);
+    await running(later, id);
+    expect(stateOf(later, id).version).toBe("1.0.0");
+  });
+
+  it("waits on an app's first move out of the core, stopped until someone allows it", async () => {
+    const home = await versions();
+    await home.ranInTheCore(version("1.0.0"));
+
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      asAHome,
+    );
+
+    await vi.waitFor(() =>
+      expect(stateOf(core, id)).toMatchObject({
+        version: "2.0.0",
+        state: "paused",
+        waiting: { version: "2.0.0" },
+      }),
+    );
+    expect(answerOf(core, "people.read")).toBeUndefined();
+  });
+
+  it("isn't allowed when the version that waits can't run here", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), asAHome);
+    await running(before, id);
+    const maya = await claimed(before);
+    const two = version("2.0.0", { permissions: [people] });
+    const core = await home.coreWith(two, asAHome);
+    await running(core, id);
+    home.builtForAnOlderProtocol(two);
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: stateOf(core, id).waiting!.id },
+      maya,
+    );
+
+    expect(answer.statusCode).toBe(503);
+    expect(answerOf(core, "people.read")).toBeUndefined();
+    expect(stateOf(core, id).waiting?.version).toBe("2.0.0");
+  });
+
+  it("waits when a version tried again now needs what was switched off", async () => {
+    let isReady = false;
+    const home = await versions();
+    const optional = { ...people, needed: false, startsOn: true };
+    const before = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      asAHome,
+    );
+    await running(before, id);
+    const maya = await claimed(before);
+    const core = await home.coreWith(
+      version("2.0.0", {
+        permissions: [people],
+        start: async () => {
+          if (!isReady) throw new NotReady("Waiting for something");
+        },
+      }),
+      { ...asAHome, retryAfterMs: 200 },
+    );
+    await vi.waitFor(() => expect(home.calls).toContain(`UNDO ${id}`));
+    await running(core, id);
+    await post(
+      core,
+      `/api/apps/${id}/permissions/update`,
+      { permission: "people.read", granted: false },
+      maya,
+    );
+    isReady = true;
+
+    await vi.waitFor(() =>
+      expect(stateOf(core, id).waiting?.version).toBe("2.0.0"),
+    );
+    expect(stateOf(core, id).version).toBe("1.0.0");
+    expect(committedOf(core)?.version).toBe("1.0.0");
   });
 
   it("stops the app when what it runs can't run here, until someone allows it", async () => {

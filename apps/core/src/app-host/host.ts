@@ -473,14 +473,20 @@ export function createAppHost(options: {
             await removals.get(appId);
             if (isClosing) break;
             // One someone is adding is as its sheet showed, and an update
-            // under way goes on as it began; otherwise one that needs what
-            // nobody allowed waits.
+            // under way goes on as it began, as does staying on the version
+            // before one someone went back from, which waits for nothing;
+            // otherwise one that needs what nobody allowed waits.
             const isAdding = adding.includes(appId);
-            if (isAdding) options.waiting.forget(appId);
+            const isDecided = options.updates.isUnderWay(pkg);
+            if (
+              isAdding ||
+              (isDecided &&
+                options.updates.shownFor(appId)?.stage === "wentBack")
+            ) {
+              options.waiting.forget(appId);
+            }
             const chosen =
-              isAdding || options.updates.isUnderWay(pkg)
-                ? pkg
-                : await options.waiting.choose(pkg);
+              isAdding || isDecided ? pkg : await options.waiting.choose(pkg);
             if (isClosing) break;
             const current = await options.updates.packageFor(chosen);
             if (isClosing) break;
