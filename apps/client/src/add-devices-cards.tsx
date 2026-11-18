@@ -47,7 +47,8 @@ export type DeviceChanges = {
 /** What the cards of a page can do, from Add devices. */
 export type CardWork = {
   rooms: readonly Room[];
-  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<void>;
+  // Answers whether it was saved.
+  onSave: (device: DeviceInfo, changes: DeviceChanges) => Promise<boolean>;
   // Makes a room of this name, answering its id.
   onAddRoom: (name: string) => Promise<string>;
   // Asks whether to remove a device, first.
@@ -365,25 +366,44 @@ function RoomChoice(props: {
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string>();
   const field = useRef<HTMLInputElement>(null);
+  // Which naming this is, so that one given up with Escape moves nothing;
+  // and the room it made, so that trying again moves the device there
+  // rather than making another.
+  const attempt = useRef(0);
+  const made = useRef<string>(undefined);
   useEffect(() => {
     if (naming) field.current?.focus();
   }, [naming]);
+
+  const leave = () => {
+    attempt.current += 1;
+    made.current = undefined;
+    setNaming(false);
+    setName("");
+    setProblem(undefined);
+    setWorking(false);
+  };
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
     const wanted = name.trim();
     if (!wanted || working) return;
+    const mine = ++attempt.current;
     setWorking(true);
     setProblem(undefined);
     try {
-      const roomId = await work.onAddRoom(wanted);
-      await work.onSave(device, { roomId });
-      setNaming(false);
-      setName("");
+      const roomId = made.current ?? (await work.onAddRoom(wanted));
+      // A room made after Escape is left alone, not kept for the next try.
+      if (mine !== attempt.current) return;
+      made.current = roomId;
+      const moved = await work.onSave(device, { roomId });
+      if (mine !== attempt.current) return;
+      // The overlay says why it couldn't; the form stays to try again.
+      if (moved) leave();
     } catch (error) {
-      setProblem(deviceProblem(error));
+      if (mine === attempt.current) setProblem(deviceProblem(error));
     } finally {
-      setWorking(false);
+      if (mine === attempt.current) setWorking(false);
     }
   };
 
@@ -395,8 +415,7 @@ function RoomChoice(props: {
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
-            setNaming(false);
-            setName("");
+            leave();
           }
         }}
         className="flex flex-col gap-1 text-start"
