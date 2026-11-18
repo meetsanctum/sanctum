@@ -113,9 +113,13 @@ export function createDeviceOffers(options: {
     list(): DeviceOffer[] {
       const sightings = options.sightings();
       return current().flatMap(({ app, name, services }) => {
-        const found = sightings.filter((each) =>
-          services.includes(each.service),
-        ).length;
+        // A device that announces two of its services is one device: each
+        // counts once, by the host it announces.
+        const found = new Set(
+          sightings
+            .filter((each) => services.includes(each.service))
+            .map((each) => each.host.toLowerCase()),
+        ).size;
         return found > 0 ? [{ app, name, found }] : [];
       });
     },

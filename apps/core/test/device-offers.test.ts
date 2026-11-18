@@ -76,6 +76,30 @@ describe("Add devices' offers", () => {
     ]);
   });
 
+  it("counts a device that announces two of the services it looks for once", async () => {
+    const { offers, state } = home();
+    state.available = [
+      {
+        ...finder,
+        requests: [
+          ...finder.requests,
+          { id: "discover:mdns:_example-setup._tcp" },
+        ],
+      } as AvailableApp,
+    ];
+    await offers.check();
+
+    state.sightings = [
+      sighting("kitchen"),
+      sighting("kitchen", "_example-setup._tcp"),
+      sighting("hall"),
+    ];
+
+    expect(offers.list()).toEqual([
+      { app: "sanctum.example", name: "Example", found: 2 },
+    ]);
+  });
+
   it("offers nothing once the app is added, and again once it's removed", async () => {
     const { offers, state } = home();
     state.sightings = [sighting("kitchen")];
