@@ -361,6 +361,16 @@ export function createCore(
       ["start the manager's audit", () => modules!.managerAudit?.start()],
       ["start discovery", () => modules!.discovery?.start()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
+      // A Zigbee stick plugged in while the home has no app for it offers
+      // that app, once the home's list is known.
+      [
+        "start looking for sticks",
+        (cancelled) => {
+          updatePending!.whenCommitted(() => {
+            if (!cancelled.aborted) modules!.hardwareOffers.start();
+          });
+        },
+      ],
       // A removed app's data goes once its 30 days are over, those that ran
       // out while the home was off first.
       [

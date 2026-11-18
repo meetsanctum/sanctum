@@ -24,6 +24,7 @@ import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import { createHardwareOffers } from "./app-host/hardware-offers.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
@@ -100,6 +101,9 @@ export async function createModules(
         // may leave them out.
         deleteAppData?: ManagerClient["deleteAppData"];
         eraseServiceData?: ManagerClient["eraseServiceData"];
+        // The Zigbee sticks plugged in (hardware-offers.ts); tests may leave
+        // it out.
+        zigbeeSticks?: ManagerClient["zigbeeSticks"];
         // What it staged for this image; tests may leave it out.
         stagedApps?: ManagerClient["stagedApps"];
       };
@@ -470,10 +474,23 @@ export async function createModules(
     shipped: options.shippedApps ?? (() => []),
     added: addedApps,
     removed: removedApps,
-    staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
+    staged: async (check) =>
+      (await options.manager.stagedApps?.(5_000, check)) ?? {},
     loadPackage: loadStagedPackage,
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
     host: () => options.manager.hostStatus(),
+    log,
+  });
+  // A Zigbee stick plugged in brings up its app's add sheet.
+  const hardwareOffers = createHardwareOffers({
+    db,
+    gate,
+    added: addedApps,
+    available: availableApps,
+    manager: options.manager,
+    hasInstalled: () => apps.hasInstalled(),
+    onOffer: live.offer,
+    now,
     log,
   });
   // Adding and removing apps take turns.
@@ -488,6 +505,7 @@ export async function createModules(
     onDevice: live.device,
     available: availableApps,
     added: addedApps,
+    offers: hardwareOffers,
     activity,
     hasInstalled: () => apps.hasInstalled(),
     install: async (pkg) => {
@@ -626,9 +644,10 @@ export async function createModules(
     ],
   ]);
 
-  // No workflow run starts once the core is stopping.
+  // Stop new workflow runs and hardware checks before waiting on shutdown.
   const stopNewWork = [
     ["workflows", () => workflows.interrupt()],
+    ["look for sticks", () => hardwareOffers.interrupt()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
   // firmware's deadlines are the last that change a device, so the bus closes
@@ -637,6 +656,7 @@ export async function createModules(
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
+    ["finish looking for sticks", () => hardwareOffers.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
@@ -680,6 +700,7 @@ export async function createModules(
     appAdding,
     appRemoving,
     appDeleting,
+    hardwareOffers,
     removedApps,
     pages,
     workflows,

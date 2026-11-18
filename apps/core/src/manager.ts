@@ -25,6 +25,7 @@ import {
   updateStatus,
   versionList,
   type LanVersion,
+  zigbeeSticks,
 } from "./manager-answers.js";
 
 // The core reaches the manager over a Unix socket that only the two of them
@@ -467,7 +468,10 @@ export function createManagerClient(options: {
     // The packages staged for this core's image, which can take a while on an update.
     // An old manager or one that can't run apps has none, and one that doesn't answer
     // is asked again until `withinMs` is up: apps wait for this, but the core doesn't.
-    async stagedApps(withinMs = 180_000) {
+    async stagedApps(
+      withinMs = 180_000,
+      { requireAnswer = false }: { requireAnswer?: boolean } = {},
+    ) {
       const deadline = Date.now() + withinMs;
       while (!closed) {
         const remainingMs = deadline - Date.now();
@@ -486,13 +490,29 @@ export function createManagerClient(options: {
             error instanceof ManagerRefusal ||
             Date.now() + retry.firstMs >= deadline
           ) {
+            if (requireAnswer) throw error;
             log(`manager: no staged apps (${String(error)})`);
             return {};
           }
           if (!closed) await pause(retry.firstMs);
         }
       }
+      if (requireAnswer) {
+        throw new ManagerUnavailable("The manager did not list staged apps");
+      }
       return {};
+    },
+
+    // The Zigbee sticks plugged in that the manager recognises, by the host's
+    // path; a serial adapter it doesn't know isn't one.
+    async zigbeeSticks() {
+      const { candidates } = parseBody(
+        zigbeeSticks,
+        await once("GET", "/api/services/zigbee2mqtt/coordinator"),
+      );
+      return candidates
+        .filter((candidate) => candidate.profileId !== null)
+        .map(({ path, label }) => ({ path, label }));
     },
 
     // What Go back would return to, while its copy and package are still there.

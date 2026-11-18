@@ -60,6 +60,7 @@ import { maintenanceSettingsPage } from "./settings-maintenance";
 import { statusSettingsPage } from "./settings-status";
 import { appSettingsPage } from "./settings-apps";
 import { SetupGuide, SetupLeft, type SetupTarget } from "./setup-guide";
+import { StickOffer } from "./stick-offer";
 import { getShell, type FoundHost, type StoredHost } from "./shell";
 import { ShellFrame } from "./shell-frame";
 import { useSidebarLayout } from "./sidebar-state";
@@ -751,6 +752,14 @@ export function Home(props: {
             }}
           />
           {permissionSheet.sheet}
+          <StickOffer
+            live={live}
+            isOnline={!isVeiled && core.state === "online"}
+            onAdded={(app) => {
+              appAdded(app);
+              settingsOf(app.id)();
+            }}
+          />
         </ShellFrame>
       </OverlayHostProvider>
     </Household>

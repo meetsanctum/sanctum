@@ -1,5 +1,5 @@
 import type { ActivityInfo } from "./activity.js";
-import type { AppInfo } from "./index.js";
+import type { AppInfo, HardwareOffer } from "./index.js";
 import type { DashboardInfo } from "./dashboards.js";
 import type { DeviceInfo } from "./devices.js";
 import type { EntityInfo } from "./entities.js";
@@ -90,6 +90,13 @@ export type LiveActivity = { type: "activity"; entry: ActivityInfo };
  */
 export type LiveSystem = { type: "system"; going: "restart" | "shutdown" };
 
+/**
+ * A Zigbee stick plugged in brings up its app's add sheet, or that ended:
+ * null once someone answered on any client or it was unplugged. Only the
+ * shell gets it.
+ */
+export type LiveOffer = { type: "offer"; offer: HardwareOffer | null };
+
 export type LiveMessage =
   | LiveDevice
   | LivePress
@@ -102,4 +109,5 @@ export type LiveMessage =
   | LiveDashboards
   | LivePins
   | LiveActivity
+  | LiveOffer
   | LiveSystem;

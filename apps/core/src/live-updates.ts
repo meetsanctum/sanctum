@@ -9,12 +9,14 @@ import type {
   LiveDashboards,
   LiveDevice,
   LiveEntity,
+  LiveOffer,
   LivePairing,
   LivePins,
   LivePlaces,
   LivePress,
   LiveSettings,
   LiveSystem,
+  HardwareOffer,
   PairingInfo,
   Places,
 } from "@meetsanctum/app-sdk";
@@ -151,6 +153,13 @@ export function createLiveUpdates(
         admitted(principal, pairingRules.read)
           ? { type: "pairing", pairing }
           : undefined,
+      );
+    },
+
+    // A Zigbee stick plugged in, offering its app, or that ended.
+    offer(offer: HardwareOffer | null) {
+      connections.publish((principal): LiveOffer | undefined =>
+        reads(principal) ? { type: "offer", offer } : undefined,
       );
     },
 

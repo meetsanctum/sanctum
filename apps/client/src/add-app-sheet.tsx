@@ -160,11 +160,16 @@ export function Asks(props: { requests: readonly PermissionInfo[] }) {
 export function AddAppSheet(props: {
   /** The app to add; none while the sheet is closed. */
   app: AvailableApp | undefined;
+  /** What brought it up, above its title, as a stick plugged in. */
+  lead?: string;
+  offerId?: string;
+  /** Someone pressed Add, whose answer the sheet then shows. */
+  onAdding?: () => void;
   onAdded: (app: AppInfo) => void;
-  onClose: () => void;
+  onClose: () => void | Promise<void>;
 }) {
   const { app } = props;
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"add" | "close">();
   const [problem, setProblem] = useState<string>();
   const needed = app?.requests.filter((request) => request.needed) ?? [];
   const startsOn =
@@ -175,18 +180,32 @@ export function AddAppSheet(props: {
 
   const add = async () => {
     if (!app) return;
-    setPending(true);
+    setPending("add");
     setProblem(undefined);
+    props.onAdding?.();
     try {
       const added = await coreJson<AppInfo>("/api/apps/add", {
         method: "POST",
-        json: { id: app.id, version: app.version },
+        json: { id: app.id, version: app.version, offerId: props.offerId },
       });
       props.onAdded(added);
     } catch (error) {
       setProblem(problemOf(error, app));
     } finally {
-      setPending(false);
+      setPending(undefined);
+    }
+  };
+
+  const close = async () => {
+    if (pending) return;
+    setPending("close");
+    setProblem(undefined);
+    try {
+      await props.onClose();
+    } catch {
+      setProblem("That did not work. Try again.");
+    } finally {
+      setPending(undefined);
     }
   };
 
@@ -194,7 +213,7 @@ export function AddAppSheet(props: {
     <Dialog
       open={app !== undefined}
       onOpenChange={(next) => {
-        if (!next && !pending) props.onClose();
+        if (!next) void close();
       }}
     >
       {app && (
@@ -208,6 +227,11 @@ export function AddAppSheet(props: {
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />
+            {props.lead && (
+              <p className="m-0 text-sm font-medium text-muted-foreground">
+                {props.lead}
+              </p>
+            )}
             <DialogTitle>Add {app.name}?</DialogTitle>
             {blocked ? (
               <DialogDescription className="rounded-md bg-muted px-3 py-2.5 text-foreground">
@@ -246,16 +270,16 @@ export function AddAppSheet(props: {
           <DialogFooter>
             <Button
               variant="outline"
-              disabled={pending}
-              onClick={props.onClose}
+              disabled={pending !== undefined}
+              onClick={() => void close()}
             >
               Cancel
             </Button>
             <Button
-              disabled={pending || blocked !== undefined}
+              disabled={pending !== undefined || blocked !== undefined}
               onClick={() => void add()}
             >
-              {pending ? "Adding…" : `Add ${app.name}`}
+              {pending === "add" ? "Adding…" : `Add ${app.name}`}
             </Button>
           </DialogFooter>
         </DialogContent>

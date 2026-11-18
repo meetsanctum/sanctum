@@ -279,6 +279,19 @@ describe("what's staged for this core", () => {
     expect(await client.stagedApps(5)).toEqual({});
   });
 
+  it("reports a failed lookup when the caller needs a definite answer", async () => {
+    // A pause before asking again that outlasts the time left makes the
+    // first 503 the answer.
+    const { client } = await answering(
+      [{ status: 503, body: { error: "Staging is under way" } }],
+      10_000,
+    );
+
+    await expect(
+      client.stagedApps(2_000, { requireAnswer: true }),
+    ).rejects.toThrow("Staging is under way");
+  });
+
   it("does not ask again after its startup budget expires during a retry pause", async () => {
     const { client } = await answering(
       [{ status: 503 }, { status: 200, body: { apps: weather } }],

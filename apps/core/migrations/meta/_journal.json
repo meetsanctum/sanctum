@@ -302,6 +302,13 @@
       "when": 1795004047400,
       "tag": "0042_app_updates_waiting",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1795011563512,
+      "tag": "0043_sticks_seen",
+      "breakpoints": true
     }
   ]
 }
