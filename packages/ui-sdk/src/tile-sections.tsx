@@ -42,7 +42,7 @@ export function DeviceSections(props: {
         {section.title}
       </SectionHeading>
       {props.lead?.(section)}
-      <div className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)">
+      <div className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6">
         {section.tiles.map((tile) => (
           <DeviceTile
             key={tile.key}

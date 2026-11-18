@@ -212,7 +212,7 @@ export function EditHome(props: { devices: Devices; home: OnHome }) {
               <div
                 role="group"
                 aria-label={`${place.name} on ${home.name}`}
-                className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+                className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6"
               >
                 {shown.map(({ device, tile }) => (
                   <EditTile
@@ -265,7 +265,7 @@ export function EditHome(props: { devices: Devices; home: OnHome }) {
                 <div
                   role="group"
                   aria-label={`${place.name}, not on ${home.name}`}
-                  className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+                  className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6"
                 >
                   {place.others.map(({ device, tile }) => (
                     <EditTile

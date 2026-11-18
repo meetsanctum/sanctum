@@ -55,7 +55,7 @@ export function SummaryCards(props: {
       // Keep list semantics in Safari when the markers are hidden.
       role="list"
       aria-label={props.label}
-      className="m-0 grid shrink-0 list-none grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) p-0"
+      className="m-0 grid shrink-0 list-none grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6 p-0"
     >
       {props.cards.map((card) => (
         <SummaryCard key={card.id} card={card} />

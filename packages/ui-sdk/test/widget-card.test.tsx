@@ -142,7 +142,7 @@ async function render(
 }
 
 describe("a card", () => {
-  it("is titled in its app's colour and takes its size on the grid", async () => {
+  it("is titled in its app's colour and takes its size on the grid, the whole line on a phone", async () => {
     const card = await render(list);
 
     expect(card.getAttribute("aria-labelledby")).toBe(
@@ -150,7 +150,9 @@ describe("a card", () => {
     );
     expect(card.querySelector("h2")?.textContent).toBe("Board");
     expect(card.querySelector("h2")?.style.color).toBe("var(--leaf-text)");
-    expect(card.style.gridColumn).toBe("span 4 / span 4");
+    expect(card.style.getPropertyValue("--columns")).toBe("4");
+    expect(card.className).toContain("col-span-(--columns)");
+    expect(card.className).toContain("max-sm:col-span-full");
     expect(card.style.gridRow).toBe("span 4 / span 4");
   });
 

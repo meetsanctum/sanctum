@@ -134,7 +134,7 @@ function HomeSlice(props: {
 }
 
 const grid =
-  "grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)";
+  "grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6";
 
 export function AppAdds(props: {
   app: AppInfo;

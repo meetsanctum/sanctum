@@ -48,7 +48,10 @@
      and swatches (--radius-xs to --radius-4xl in the theme below). */
   --radius: 15px;
   /* The dashboard's grid: square cells that keep their size, as many across
-     as fit, with 12 px between them. A tile spans whole cells. */
+     as fit, with 12 px between them. A tile spans whole cells. On a phone
+     (narrower than 40rem) a grid is six equal columns instead, each tile
+     grid saying so with max-sm:grid-cols-6, so a three-cell tile is half
+     the line and two fit side by side. */
   --cell: 64px;
   --cell-gap: 12px;
 
