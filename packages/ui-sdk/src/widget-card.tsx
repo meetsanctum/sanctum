@@ -105,11 +105,11 @@ export function WidgetCard(props: {
   return (
     <article
       aria-labelledby={titleId}
-      // On a phone's six columns a widget takes the whole line.
-      className="col-span-(--columns) flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px] max-sm:col-span-full"
+      data-slot="widget-card"
+      className="col-span-(--widget-columns) flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]"
       style={
         {
-          "--columns": props.size.columns,
+          "--widget-columns": props.size.columns,
           gridRow: `span ${props.size.rows} / span ${props.size.rows}`,
         } as CSSProperties
       }

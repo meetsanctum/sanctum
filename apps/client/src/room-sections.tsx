@@ -190,7 +190,7 @@ export function RoomSection(props: {
     <div
       role={props.bare ? "group" : undefined}
       aria-label={props.bare ? section.title : undefined}
-      className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6"
+      className="tile-grid auto-rows-(--cell)"
     >
       {tiles.map((entity) => (
         <SectionTile

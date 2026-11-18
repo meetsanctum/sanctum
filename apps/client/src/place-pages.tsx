@@ -369,7 +369,7 @@ export function HomeStatus(props: {
   return (
     <section
       aria-label="Home status"
-      className="grid shrink-0 auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6"
+      className="tile-grid shrink-0 auto-rows-(--cell)"
     >
       {shown.map((each) => {
         return (

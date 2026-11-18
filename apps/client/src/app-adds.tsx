@@ -133,9 +133,6 @@ function HomeSlice(props: {
   );
 }
 
-const grid =
-  "grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6";
-
 export function AppAdds(props: {
   app: AppInfo;
   manifest: StaticManifest;
@@ -193,7 +190,7 @@ export function AppAdds(props: {
                   background={props.background}
                   label={`A preview of the ${widget.title} card, with sample content`}
                 >
-                  <div className={grid}>
+                  <div className="tile-grid auto-rows-(--cell)">
                     <WidgetCard
                       title={widget.title}
                       color={app.icon?.color ?? null}
@@ -270,7 +267,7 @@ export function AppAdds(props: {
                     ))}
                   </div>
                 ) : (
-                  <div className={grid}>
+                  <div className="tile-grid auto-rows-(--cell)">
                     {tiles.map((tile) => (
                       <SectionTile
                         key={tile.name}

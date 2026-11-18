@@ -64,7 +64,7 @@ export function HomeWidgets(props: {
   );
   if (shown.length === 0) return null;
   return (
-    <div className="grid shrink-0 auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap) max-sm:grid-cols-6">
+    <div className="tile-grid shrink-0 auto-rows-(--cell)">
       {shown.map(({ app, widget, card }) => (
         <WidgetCard
           key={entityKey(card.app, card.key)}
