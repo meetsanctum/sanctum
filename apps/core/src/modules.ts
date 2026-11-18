@@ -23,7 +23,11 @@ import { createAppGrants } from "./app-host/grants.js";
 import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
-import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import {
+  loadApartPackage,
+  originOf,
+  type ApartPackage,
+} from "./app-host/loader.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
@@ -374,7 +378,7 @@ export async function createModules(
         options.packagesDir ?? "/packages",
         appId,
         folder,
-        "official",
+        originOf(appId),
       ));
   const appUpdates = createAppUpdates({
     db,
@@ -482,7 +486,7 @@ export async function createModules(
         options.packagesDir ?? "/packages",
         appId,
         folder,
-        "official",
+        originOf(appId),
       ),
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
     host: () => options.manager.hostStatus(),

@@ -27,19 +27,20 @@ import {
 import { followedLights, roomButtons } from "./schema.js";
 import { targetKey } from "./target.js";
 
-// Natural light's button for each room, beside the room's button for all its
-// lights, on its page and on Home: a room section of buttons, drawn by the
-// shell from a `naturalLight.room` entity for each room where a light
-// follows. It shows only while natural light is on and the home has a
-// location.
+// Natural light's tile for each room, in the room's row after its switch,
+// on its page and on Home: a room section of buttons, a square tile with the
+// sun, drawn by the shell from a `naturalLight.room` entity for each room
+// where a light follows. It shows only while natural light is on and the
+// home has a location.
 //
 // It is White while every light in the room that is on follows the curve,
-// neither paused nor dimmed, and at least one is on; lights that are off don't count, but a
-// light that is on and doesn't follow does. A press while it is White
-// switches every light in the room off. Otherwise it brings the room to
-// natural light: every light that follows comes on at the curve, any pause
-// ended, and every other light that is on goes off, so the room looks the
-// same after every press. Offline lights are left alone and don't count.
+// neither paused nor dimmed, and at least one is on; lights that are off
+// don't count, but a light that is on and doesn't follow does. Natural light
+// is a look, as a mood is, so a press never switches the room off: it brings
+// the room to natural light, every light that follows on at the curve, any
+// pause or dim ended, and every other light that is on off, so the room looks
+// the same after every press. Leaving natural light is choosing a mood or
+// switching the room off. Offline lights are left alone and don't count.
 //
 // Each such room also has natural light's rule for turning it on, a
 // standard lights.turnOn ranked as a look: every light that follows comes
@@ -386,26 +387,8 @@ async function eachLight(
   return failed.filter((each) => each !== null);
 }
 
-/** Switches every light in the room that is on off. */
-export async function switchRoomOff(
-  ctx: AppContext,
-  runForLight: RunForLight,
-  placeId: string,
-): Promise<Failed[]> {
-  const lights = lightsIn(await ctx.devices.list(), placeId).filter(
-    (light) => light.capability.state?.on === true,
-  );
-  return eachLight(ctx, runForLight, lights, async (light) => {
-    await ctx.devices.command({
-      device: light.device.id,
-      capability: light.capability.id,
-      command: { on: false },
-    });
-  });
-}
-
-// Both directions of a room's button need natural light to be available,
-// even if the button is still on screen after its settings changed.
+// Bringing a room to natural light needs it to be available, even if the
+// room's tile is still on screen after its settings changed.
 async function requireRoomSun(
   ctx: AppContext,
   options: FollowOptions,
@@ -476,27 +459,4 @@ export async function bringRoom(
       brightness: look.brightness ?? null,
     });
   });
-}
-
-/**
- * A press of a room's button: off while the room is on natural light,
- * otherwise to natural light.
- */
-export async function toggleRoom(
-  ctx: AppContext,
-  options: FollowOptions,
-  runForLight: RunForLight,
-  placeId: string,
-): Promise<Failed[]> {
-  const state = roomStateOf(
-    placeId,
-    await ctx.devices.list(),
-    await rowsOf(ctx),
-    ctx.appId,
-  );
-  if (state?.active) {
-    await requireRoomSun(ctx, options, options.now());
-    return switchRoomOff(ctx, runForLight, placeId);
-  }
-  return bringRoom(ctx, options, runForLight, placeId);
 }

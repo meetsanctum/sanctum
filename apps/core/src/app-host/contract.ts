@@ -477,8 +477,7 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
 // What defineApp checks where the manifest is made that the manifest alone can
 // show, since the core reads nothing else of an app: no two of a kind with one
 // id, and a room section over a type the app provides in the tile shape, pressed
-// with one of its own read or write actions, and with no page to open and
-// nothing shown empty when it shows buttons, which have no heading.
+// with one of its own read or write actions.
 function checkPieces(manifest: StaticManifest) {
   const { actions, events, pages, permissions, provides } = manifest;
   const kinds: [string, readonly string[]][] = [
@@ -514,14 +513,6 @@ function checkPieces(manifest: StaticManifest) {
     if (problems.length > 0) {
       throw new Error(
         `its room section ${section.id} shows ${type.id}, but ${problems.join(", ")}`,
-      );
-    }
-    if (
-      section.kind === "buttons" &&
-      (section.open != null || section.whenEmpty != null)
-    ) {
-      throw new Error(
-        `its room section ${section.id} shows buttons, which have no heading to open a page from or show empty`,
       );
     }
     const press = actions.find(({ id }) => id === section.press.action);

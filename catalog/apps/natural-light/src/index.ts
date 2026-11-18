@@ -19,7 +19,7 @@ import { targetType } from "./target.js";
 // from where the home is, so it needs no other app. Every light that takes
 // a colour temperature follows it unless the household leaves it out, new
 // ones too (choices.ts), and it brings a `naturalLight.target` entity for
-// each, and a Natural light button beside each room's lights button where
+// each, and a Natural light tile in each room's row, after its switch, where
 // a light follows (rooms.ts). A switch in its settings turns it off
 // altogether. Workflows can have a light follow it, pause or resume, or
 // bring a room to natural light. Its UI is in ./ui, which opens in frames
@@ -48,22 +48,14 @@ function timingOf(options: NaturalLightOptions): Timing {
 export function createNaturalLightApp(options: NaturalLightOptions = {}) {
   const timing = timingOf(options);
   const runForLight = createRunForLight();
-  const {
-    follow,
-    followRoom,
-    toggleRoom,
-    bringRoom,
-    resume,
-    pause,
-    preview,
-    check,
-  } = naturalLightActions(timing, runForLight);
+  const { follow, followRoom, bringRoom, resume, pause, preview, check } =
+    naturalLightActions(timing, runForLight);
   let follower: ReturnType<typeof createFollower> | undefined;
 
   return defineApp({
     id: "sanctum.natural-light",
     name: "Natural light",
-    version: "0.1.0",
+    version: "0.2.0",
     core: "^1.0.0",
     summary: "Lights that follow the colour of daylight through the day.",
     icon: { glyph: "sun", color: "sun" },
@@ -98,7 +90,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
           kind: "buttons",
           // Sanctum's own, as Moods' tiles are.
           order: 200,
-          press: toggleRoom,
+          press: bringRoom,
           preview: [{ icon: "sun", name: "Natural light", active: true }],
         }),
       ],
@@ -106,16 +98,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
     // The curve (settings.ts).
     settings: naturalLightSettings,
     migrations: "migrations",
-    actions: [
-      follow,
-      followRoom,
-      toggleRoom,
-      bringRoom,
-      resume,
-      pause,
-      preview,
-      check,
-    ],
+    actions: [follow, followRoom, bringRoom, resume, pause, preview, check],
     events: [],
     async start(ctx) {
       // Kept by the core across restarts; scheduling it again keeps its

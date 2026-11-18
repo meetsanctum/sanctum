@@ -4,24 +4,22 @@ import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
 import { byFloor, FloorSection, roomsOn } from "./floor-groups";
-import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
+import { floorLightsButton, lightsButton } from "./lights-button";
 import { placeMotionText } from "./motion";
 import { PlaceReadings, unitOf } from "./place-pages";
 import {
-  buttonsIn,
-  RoomButtons,
-  RoomSection,
-  sectionsInOrder,
+  isRowEmpty,
+  RoomRow,
+  roomRowOf,
   type SectionEntities,
 } from "./room-sections";
 import type { Devices } from "./use-devices";
 
 // Home's rooms: after the home's status, each room by name that has
-// something to show, under its name, which opens its page. A room's line has
-// the button for all its lights, apps' buttons for the room and what its
-// motion and sensors say, as its page's header does; then its apps'
-// sections, its moods first, as on its page but with no heading of their
-// own; then its devices on Home, in the household's order. Devices on Home
+// something to show, under its name, which opens its page. A room's line
+// says what its motion and sensors say, as its page's header does; then its
+// row, its switch, Natural light and its moods, as on its page; then its
+// devices on Home, in the household's order. Devices on Home
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put
 // on it, so a sensor needs no tile here for its readings. A room with
@@ -48,43 +46,33 @@ export function HomeRooms(props: {
 }) {
   const { devices, entities } = props;
   const places = homePlaces(devices, props.onHome);
-  const sections = sectionsInOrder(props.apps, "tiles");
-  const buttonSections = sectionsInOrder(props.apps, "buttons");
   const unit = unitOf(devices);
   const now = Date.now();
   // Devices with no room have no line of their own and no sections.
   const shown = places.flatMap((place) => {
     const { room, own, onHome } = place;
-    const roomSections = room
-      ? sections.filter(
-          ({ app, section }) =>
-            entities.tilesIn(app.id, section, room.id).length > 0,
+    const row = room
+      ? roomRowOf(
+          props.apps,
+          entities,
+          room.id,
+          lightsButton(
+            own.filter((tile) => tile.kind === "light"),
+            room,
+            devices,
+          ),
         )
-      : [];
-    const lights = room
-      ? lightsButton(
-          own.filter((tile) => tile.kind === "light"),
-          room,
-          devices,
-        )
-      : undefined;
-    const buttons = room ? buttonsIn(buttonSections, entities, room.id) : [];
+      : null;
     const motion = room ? placeMotionText(own, now) : null;
     const contact = room ? placeContacts(own) : null;
     const readings = room ? readingsOf(sensorReadings(own), unit) : [];
-    const hasLine =
-      !!lights ||
-      buttons.length > 0 ||
-      !!motion ||
-      !!contact ||
-      readings.length > 0;
-    return hasLine || roomSections.length > 0 || onHome.length > 0
+    const hasLine = !!motion || !!contact || readings.length > 0;
+    const hasRow = row !== null && !isRowEmpty(row);
+    return hasLine || hasRow || onHome.length > 0
       ? [
           {
             ...place,
-            sections: roomSections,
-            lights,
-            buttons,
+            row: hasRow ? row : null,
             motion,
             contact,
             readings,
@@ -105,7 +93,7 @@ export function HomeRooms(props: {
   // A room's section; its heading is a level down under a floor's.
   const roomSection = (place: (typeof shown)[number], level: 2 | 3) => {
     const headingId = `home-${place.id}`;
-    const { room, lights } = place;
+    const { room } = place;
     const Heading = level === 3 ? "h3" : "h2";
     return (
       <section
@@ -133,33 +121,16 @@ export function HomeRooms(props: {
           </Button>
         </Heading>
         {place.hasLine && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {lights && <LightsButton lights={lights} />}
-            <RoomButtons
-              buttons={place.buttons}
-              roomName={place.name}
-              entities={entities}
-            />
-            <PlaceReadings
-              motion={place.motion}
-              contact={place.contact}
-              readings={place.readings}
-              className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
-            />
-          </div>
+          <PlaceReadings
+            motion={place.motion}
+            contact={place.contact}
+            readings={place.readings}
+            className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
+          />
         )}
-        {room &&
-          place.sections.map(({ app, section }) => (
-            <RoomSection
-              key={app.id}
-              app={app}
-              section={section}
-              roomId={room.id}
-              entities={entities}
-              roomHas={() => false}
-              bare
-            />
-          ))}
+        {place.row && (
+          <RoomRow row={place.row} roomName={place.name} entities={entities} />
+        )}
         {place.onHome.length > 0 && (
           <div
             role="group"

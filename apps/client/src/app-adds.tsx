@@ -9,12 +9,7 @@ import {
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
-import {
-  SectionButton,
-  SectionTile,
-  tileIconOf,
-  WidgetCard,
-} from "@meetsanctum/ui-sdk";
+import { SectionTile, tileIconOf, WidgetCard } from "@meetsanctum/ui-sdk";
 import {
   ChevronRight,
   FileText,
@@ -233,19 +228,13 @@ export function AppAdds(props: {
               detail={
                 rooms.length === 0
                   ? "In no room yet"
-                  : isButtons
-                    ? `In ${many(rooms.length, "room")}, beside each room's lights`
-                    : `In ${many(rooms.length, "room")}, under each room's name`
+                  : `In ${many(rooms.length, "room")}, in each room's row`
               }
             />
             {tiles.length > 0 && (
               <HomeSlice
                 background={props.background}
-                label={
-                  isButtons
-                    ? `A preview of ${possessive(app.name)} buttons beside a room's lights: ${list(samples)}`
-                    : `A preview of ${possessive(app.name)} tiles under a room's name: ${list(samples)}`
-                }
+                label={`A preview of ${possessive(app.name)} ${isButtons ? "buttons" : "tiles"} in a room's row: ${list(samples)}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[15px] leading-5 font-medium text-white">
                   {room?.name ?? "Living room"}
@@ -254,31 +243,18 @@ export function AppAdds(props: {
                     className="size-4 text-white/65"
                   />
                 </span>
-                {isButtons ? (
-                  <div className="flex flex-wrap gap-2">
-                    {tiles.map((tile) => (
-                      <SectionButton
-                        key={tile.name}
-                        icon={tileIconOf[tile.icon]}
-                        name={tile.name}
-                        active={tile.active}
-                        onClick={() => undefined}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="tile-grid auto-rows-(--cell)">
-                    {tiles.map((tile) => (
-                      <SectionTile
-                        key={tile.name}
-                        icon={tileIconOf[tile.icon]}
-                        name={tile.name}
-                        active={tile.active}
-                        onClick={() => undefined}
-                      />
-                    ))}
-                  </div>
-                )}
+                <div className="tile-grid auto-rows-(--cell)">
+                  {tiles.map((tile) => (
+                    <SectionTile
+                      key={tile.name}
+                      iconOnly={isButtons}
+                      icon={tileIconOf[tile.icon]}
+                      name={tile.name}
+                      active={tile.active}
+                      onClick={() => undefined}
+                    />
+                  ))}
+                </div>
               </HomeSlice>
             )}
           </Section>

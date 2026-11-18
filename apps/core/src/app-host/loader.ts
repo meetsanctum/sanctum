@@ -15,6 +15,17 @@ import { join } from "node:path";
 export const origins = ["system", "official", "third-party"] as const;
 export type Origin = (typeof origins)[number];
 
+// The apps of the core's image that are part of Sanctum itself: they can't be
+// turned off or removed. Moods is one, since what a room's lights do is in it:
+// its moods in the room's row, its schedule and what turning the room on
+// brings.
+const systemApps: readonly string[] = ["sanctum.moods"];
+
+/** The origin of a package the core's image ships, by its app's id. */
+export function originOf(appId: string): Origin {
+  return systemApps.includes(appId) ? "system" : "official";
+}
+
 // An app, in its own container, of which the core knows its running version's
 // manifest as its folder of packages holds it: never the one bundled in the
 // core's image, which can be newer until its update starts.
@@ -66,7 +77,7 @@ export async function loadApartPackages(
     const [appId = "", folder = ""] = each.split("@");
     try {
       packages.push(
-        await loadApartPackage(packagesDir, appId, folder, "official"),
+        await loadApartPackage(packagesDir, appId, folder, originOf(appId)),
       );
     } catch (error) {
       log(
