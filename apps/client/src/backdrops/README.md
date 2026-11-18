@@ -10,11 +10,13 @@ which asks for no credit; it is given here anyway.
 | `lake-at-sundown.webp` | [Sundown over a Swiss lake](https://unsplash.com/photos/1ExecpaQ_ck)                 | Ante Hamersmit   |
 | `red-dusk.webp`        | [Dramatic sunset over a dark mountain lake](https://unsplash.com/photos/umxkP4d251w) | Josh Behunin     |
 
-Each is blurred ahead of time, so the page needs no live blur: scaled to
-960 px wide, blurred with a Gaussian whose sigma is 2% of that width (Core
-Image's `CIGaussianBlur`), darkened until no channel under the sheet (10% to
-90% across, below the top 12%) is brighter than 105, the lightness of the
-mocha dashboard background's lightest corner, and saved as WebP at quality 90.
+Each is scaled to 960 px wide and blurred ahead of time so the page needs no
+live blur. The Gaussian blur (Core Image's `CIGaussianBlur`) uses a sigma of
+2% of that width. Before WebP encoding at quality 90, the image is darkened
+to target a maximum of 105 per RGB channel under the sheet (10% to 90% across,
+below the top 12%), a little above the lightness of the dashboard
+background's lightest part, so the sheet's glass keeps the contrast it has
+on a dashboard.
 The photo's edges are extended before it is scaled, so no partly transparent
 edge row blurs into a pale band. That is blurred enough that the landscape is
 only vaguely recognisable, and small enough, about 6 KB, to scale up to any
