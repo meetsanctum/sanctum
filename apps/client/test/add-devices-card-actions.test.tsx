@@ -28,6 +28,7 @@ describe("actions on a device's Add devices card", () => {
     until: "2026-10-29T12:04:00.000Z",
     drivers: [zigbee.id],
     finders: [],
+    offers: [],
     found: [],
     joined: [
       {

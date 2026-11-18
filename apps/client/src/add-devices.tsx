@@ -1,6 +1,7 @@
 import type {
   AppInfo,
   DeviceInfo,
+  DeviceOffer,
   FoundDevice,
   PairingInfo,
   Room,
@@ -13,6 +14,7 @@ import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
 import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
+import { OfferedAppSheet } from "./add-devices-offer";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem, updateDevice } from "./device-parts";
@@ -28,11 +30,13 @@ import {
 // Adding devices, for everyone, whatever the radio: an overlay of frosted
 // glass over the whole window that first asks what you are adding. The
 // devices drivers found, as on the home's network, are one way; each radio
-// that lets new devices join is another, by its app's name. Each way is a
-// page of its own with Back; only a radio's page lets devices join, that
-// radio's alone, for four minutes, and leaving it or closing the overlay
-// stops them. A device added or ready is named and put in a room on its
-// card. Closing the overlay empties every answer typed in it.
+// that lets new devices join is another, by its app's name. An app the home
+// could add for devices found on its network opens its add sheet, and once
+// it's added, Devices found. Each way is a page of its own with Back; only a
+// radio's page lets devices join, that radio's alone, for four minutes, and
+// leaving it or closing the overlay stops them. A device added or ready is
+// named and put in a room on its card. Closing the overlay empties every
+// answer typed in it.
 
 type Opened = PairingInfo & { since: string };
 type Page =
@@ -111,6 +115,9 @@ export function AddDevices(props: {
   const [madeRooms, setMadeRooms] = useState<Room[]>([]);
   // The device whose removal is being asked about.
   const [removing, setRemoving] = useState<Editing>();
+  // The app whose add sheet is open, from its offer.
+  const [offered, setOffered] = useState<DeviceOffer>();
+  const closeOffer = useCallback(() => setOffered(undefined), []);
   // The devices already greeted as new, so that each is greeted once.
   const greeted = useRef(new Set<string>());
 
@@ -205,6 +212,7 @@ export function AddDevices(props: {
   const choose = (way: Way) => {
     setProblem(undefined);
     if (way.kind === "found") setPage({ kind: "found" });
+    if (way.kind === "offer") setOffered(way.offer);
     if (way.kind === "join") {
       setPage(way);
       void open(way.driver);
@@ -266,6 +274,7 @@ export function AddDevices(props: {
     isDismissing.current = false;
     needsClose.current = false;
     setPage({ kind: "choose" });
+    setOffered(undefined);
     setStopFailed(false);
     setStopped(false);
     setFailed(false);
@@ -368,6 +377,9 @@ export function AddDevices(props: {
       driver,
       name: appName(driver) ?? "New devices",
     });
+  }
+  for (const offer of pairing?.offers ?? props.adding?.offers ?? []) {
+    ways.push({ kind: "offer", offer });
   }
   const fix = addDevicesHint(props.apps, props.notSetUp);
   const waiting = props.apps.find(
@@ -569,6 +581,16 @@ export function AddDevices(props: {
           )}
         </div>
       </div>
+      <OfferedAppSheet
+        offer={offered}
+        onAdded={() => {
+          setOffered(undefined);
+          // What it finds is added from there.
+          setPage({ kind: "found" });
+        }}
+        onClose={closeOffer}
+        onProblem={setProblem}
+      />
       <EditDevice
         editing={removing}
         appName={removing ? appName(removing.device.driver) : null}

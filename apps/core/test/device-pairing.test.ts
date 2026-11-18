@@ -33,6 +33,7 @@ describe("adding devices", () => {
       since: "2026-10-26T12:00:00.000Z",
       drivers: ["test.lamps"],
       finders: ["test.lamps"],
+      offers: [],
       found: [],
       joined: [],
     });
@@ -59,6 +60,7 @@ describe("adding devices", () => {
       ],
       drivers: ["test.lamps"],
       finders: ["test.lamps"],
+      offers: [],
       found: [],
     });
     // Named after what it is, next to the light the home has already.
@@ -151,6 +153,7 @@ describe("adding devices", () => {
       joined: [],
       drivers: ["test.lamps"],
       finders: ["test.lamps"],
+      offers: [],
       found: [],
     });
     expect(radio.pairing.at(-1)).toEqual({
@@ -172,6 +175,7 @@ describe("adding devices", () => {
           joined: [],
           drivers: ["test.lamps"],
           finders: ["test.lamps"],
+          offers: [],
           found: [],
         },
       },
@@ -182,6 +186,7 @@ describe("adding devices", () => {
           joined: [],
           drivers: ["test.lamps"],
           finders: ["test.lamps"],
+          offers: [],
           found: [],
         },
       },

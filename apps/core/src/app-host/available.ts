@@ -123,6 +123,20 @@ export function createAvailableApps(options: {
         .map(({ app }) => app)
         .sort((a, b) => a.name.localeCompare(b.name));
     },
+    /**
+     * Every app it could add, and whether that's all of them: an unstaged
+     * or unreadable package may hold more, and nothing staged at all may be
+     * a manager that is still staging.
+     */
+    async listing() {
+      const { apps, isComplete, isEmpty } = await read(undefined, {
+        requireAnswer: true,
+      });
+      return {
+        apps: apps.map(({ app }) => app),
+        isComplete: isComplete && !isEmpty,
+      };
+    },
     async find(appId: string) {
       return (await read(appId)).apps[0];
     },

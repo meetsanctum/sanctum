@@ -61,6 +61,20 @@ export type PairingInfo = {
   finders: string[];
   /** The devices running drivers found and could add, which the home doesn't have. */
   found: FoundDevice[];
+  /** The apps the home could add for devices found on its network. */
+  offers: DeviceOffer[];
+};
+
+/**
+ * An app the home could add that finds its devices on the home's network,
+ * offered in Add devices once some of them announce themselves.
+ */
+export type DeviceOffer = {
+  /** The app, by id, and its name. */
+  app: string;
+  name: string;
+  /** How many of its devices were found. */
+  found: number;
 };
 
 /** What the core asks of a driver app to remove one of its devices (driver.remove). */

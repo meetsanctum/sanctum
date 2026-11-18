@@ -24,6 +24,7 @@ import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import { createDeviceOffers } from "./app-host/device-offers.js";
 import { createHardwareOffers } from "./app-host/hardware-offers.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
@@ -351,6 +352,7 @@ export async function createModules(
     },
     deviceId: (driver, key) => devices.idFor(driver, key),
     found: () => found.list(),
+    offers: () => deviceOffers.list(),
     record: activity.for("devices"),
     onChange: live.pairing,
     log,
@@ -442,8 +444,9 @@ export async function createModules(
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
       // A driver that starts or stops lets devices join, or lists what it
-      // found, or no longer does.
+      // found, or no longer does; one added is no longer offered.
       pairing.refresh();
+      void deviceOffers.check();
     },
     net: createNet(options.fetch ?? publicInternet()),
     log,
@@ -461,8 +464,14 @@ export async function createModules(
           capabilities: () => options.manager.capabilities(),
           discovery: (after, services) => lookFor(after, services),
         },
-        services: () => apps.discoveryServices(),
-        onChange: () => apps.discoveryChanged(),
+        // And those of the apps Add devices could offer.
+        services: () => [
+          ...new Set([...apps.discoveryServices(), ...deviceOffers.services()]),
+        ],
+        onChange: () => {
+          apps.discoveryChanged();
+          pairing.refresh();
+        },
         log,
       })
     : undefined;
@@ -503,6 +512,16 @@ export async function createModules(
     hasInstalled: () => apps.hasInstalled(),
     onOffer: live.offer,
     now,
+    log,
+  });
+  // An app the home could add for devices found on its network is offered
+  // in Add devices.
+  const deviceOffers = createDeviceOffers({
+    available: availableApps,
+    added: addedApps,
+    hasInstalled: () => apps.hasInstalled(),
+    sightings: () => sightings?.list() ?? [],
+    onChange: () => pairing.refresh(),
     log,
   });
   // Adding and removing apps take turns.
@@ -552,7 +571,11 @@ export async function createModules(
     entities,
     activity,
     manager: options.manager,
-    onRemoved: live.appRemoved,
+    onRemoved(appId) {
+      live.appRemoved(appId);
+      // Removed, it can be offered again.
+      void deviceOffers.check();
+    },
     onDevice: live.device,
     log,
   });
@@ -669,6 +692,7 @@ export async function createModules(
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
     ["finish looking for sticks", () => hardwareOffers.close()],
+    ["stop Add devices' offers", () => deviceOffers.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
@@ -713,6 +737,7 @@ export async function createModules(
     appRemoving,
     appDeleting,
     hardwareOffers,
+    deviceOffers,
     removedApps,
     pages,
     workflows,

@@ -1,6 +1,7 @@
 import {
   deviceJoining,
   type Actor,
+  type DeviceOffer,
   type FoundDevice,
   type JoinedDevice,
   type PairingInfo,
@@ -67,6 +68,8 @@ export function createPairing(options: {
   deviceId: (driver: string, key: string) => string | null;
   // The devices drivers found and could add.
   found?: () => FoundDevice[];
+  // The apps the home could add for devices found on its network.
+  offers?: () => DeviceOffer[];
   record: RecordActivity;
   // Called after every change, so live clients can follow.
   onChange?: (pairing: PairingInfo) => void;
@@ -108,11 +111,12 @@ export function createPairing(options: {
       drivers: drivers.list(),
       finders: drivers.finders?.() ?? [],
       found: options.found?.() ?? [],
+      offers: options.offers?.() ?? [],
     };
   }
 
-  const toldOf = ({ drivers, finders, found }: PairingInfo) =>
-    JSON.stringify({ drivers, finders, found });
+  const toldOf = ({ drivers, finders, found, offers }: PairingInfo) =>
+    JSON.stringify({ drivers, finders, found, offers });
 
   function changed() {
     const now = info();
@@ -325,9 +329,10 @@ export function createPairing(options: {
       if (naming.length > 0) changed();
     },
 
-    // A driver started or stopped, found devices, or the home gained or lost
-    // a device: clients hear of it when that changes which drivers let
-    // devices join or what was found.
+    // A driver started or stopped, found devices, the home gained or lost
+    // a device, or devices an app it could add finds came or went: clients
+    // hear of it when that changes which drivers let devices join, what was
+    // found or what's offered.
     refresh() {
       if (toldOf(info()) !== told) changed();
     },

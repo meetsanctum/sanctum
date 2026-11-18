@@ -39,6 +39,7 @@ describe("Add devices navigation while requests finish", () => {
       joined: [],
       drivers: [zigbee.id],
       finders: [zigbee.id],
+      offers: [],
       found: [
         {
           driver: zigbee.id,

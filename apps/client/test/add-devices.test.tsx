@@ -74,6 +74,7 @@ describe("Add devices, with what drivers found", () => {
       joined: [],
       drivers: ["sanctum.zigbee"],
       finders: [],
+      offers: [],
       found: [sensor, plug],
     };
     requests = [];
@@ -174,7 +175,7 @@ describe("Add devices, with what drivers found", () => {
 
   it("says what to plug in where the home never had a Zigbee adapter, and otherwise that nothing adds devices", async () => {
     // No app lets devices join: Zigbee waits for its adapter.
-    adding = { until: null, joined: [], drivers: [], finders: [], found: [] };
+    adding = { ...adding, drivers: [], found: [] };
     const render = (notSetUp?: Parameters<typeof AddDevices>[0]["notSetUp"]) =>
       act(async () =>
         root.render(
@@ -227,7 +228,7 @@ describe("Add devices, with what drivers found", () => {
   it.each(["off", "paused", "failed", "stopped", "waiting"] as const)(
     "does not suggest an adapter when the app is %s for a reason of the core's",
     async (state) => {
-      adding = { until: null, joined: [], drivers: [], finders: [], found: [] };
+      adding = { ...adding, drivers: [], found: [] };
       await act(async () =>
         root.render(
           <AddDevices
