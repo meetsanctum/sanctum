@@ -98,17 +98,21 @@ it("offers an app the home could add once its devices announce themselves", asyn
   await core.start();
   const pairing = () => core.modules!.pairing.info();
 
-  await vi.waitFor(() =>
-    expect(fake.network.asked.at(-1)).toEqual(["_example._tcp"]),
+  await vi.waitFor(
+    () => expect(fake.network.asked.at(-1)).toEqual(["_example._tcp"]),
+    // Looking for nothing, discovery asks again a second later.
+    { timeout: 5_000 },
   );
   expect(pairing().offers).toEqual([]);
 
   fake.network.put(kitchen);
 
-  await vi.waitFor(() =>
-    expect(pairing().offers).toEqual([
-      { app: appId, name: "Example", found: 1 },
-    ]),
+  await vi.waitFor(
+    () =>
+      expect(pairing().offers).toEqual([
+        { app: appId, name: "Example", found: 1 },
+      ]),
+    { timeout: 5_000 },
   );
   // Nothing found reaches an app the home doesn't have.
   expect(pairing().found).toEqual([]);
