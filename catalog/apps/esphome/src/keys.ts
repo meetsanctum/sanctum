@@ -7,7 +7,6 @@ import {
   type Session,
   type Timings,
 } from "./connection.js";
-import type { Mapping } from "./entities.js";
 
 // Keys Sanctum gives. A device built to be given its key later waits for
 // one, taking connections encrypted with a key of all zeros: that keeps
@@ -137,35 +136,4 @@ export async function takeKeyOff(
   } finally {
     if (own) session.client.disconnect();
   }
-}
-
-const measureWords = {
-  temperature: "temperature",
-  humidity: "humidity",
-  illuminance: "light level",
-} as const;
-
-const kindWords = {
-  light: "light",
-  switch: "switch",
-  button: "buttons",
-  motion: "motion",
-  contact: "open or closed",
-} as const;
-
-/** What a device has, as its found row says: "temperature, humidity, motion". */
-export function partsOf(mapping: Mapping): string | null {
-  const words = new Set<string>();
-  for (const { capability } of mapping.mapped) {
-    if (capability.kind === "sensor") {
-      const { measures } = capability.features as {
-        measures: keyof typeof measureWords;
-      };
-      words.add(measureWords[measures]);
-    } else {
-      words.add(kindWords[capability.kind as keyof typeof kindWords]);
-    }
-  }
-  const text = [...words].filter(Boolean).join(", ");
-  return text ? text.slice(0, 120) : null;
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { maxAppSecrets } from "@meetsanctum/app-sdk";
 
-import { secretOf } from "../src/driver.js";
+import { makerOf, secretOf } from "../src/driver.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
 import {
   add,
@@ -46,6 +46,12 @@ describe("finding devices", () => {
       waiting: true,
       kind: "sensor",
     });
+    const made = await home.plugIn({
+      name: "atom",
+      psk: null,
+      waiting: true,
+      project: "M5Stack.Atom Lite",
+    });
     const rows = () =>
       home.core.found.map(({ key, name, description, asks }) => ({
         key,
@@ -54,11 +60,13 @@ describe("finding devices", () => {
         asks: asks.map((each) => each.id),
       }));
 
-    // One waiting for a key says what it has, once a connection under the
-    // zero key has told it.
+    // One waiting for a key says who made it, once a connection under the
+    // zero key has told it: its project's maker, or its chip's.
     await home.core.until(
-      () => rows().at(-1)?.description === "temperature",
-      "what it has",
+      () =>
+        rows().at(-2)?.description === "Espressif" &&
+        rows().at(-1)?.description === "M5Stack",
+      "who made them",
     );
     expect(rows()).toEqual([
       {
@@ -76,7 +84,13 @@ describe("finding devices", () => {
       {
         key: keyOf(waiting.options.mac),
         name: "new",
-        description: "temperature",
+        description: "Espressif",
+        asks: [],
+      },
+      {
+        key: keyOf(made.options.mac),
+        name: "atom",
+        description: "M5Stack",
         asks: [],
       },
     ]);
@@ -95,6 +109,24 @@ describe("finding devices", () => {
     expect(home.core.found).toEqual([]);
   });
 
+  it("refreshes a waiting device's maker when its project changes", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      psk: null,
+      waiting: true,
+      project: "M5Stack.Atom Lite",
+    });
+    const description = () => home.core.found[0]?.description;
+    await home.core.until(() => description() === "M5Stack", "the first maker");
+
+    await device.unplug();
+    device.options.project = "Example.Lamp";
+    await device.listen();
+    await announce(home.core, device);
+
+    await home.core.until(() => description() === "Example", "the new maker");
+  });
+
   it("closes a pending description connection when the app stops", async () => {
     home = await startHome();
     const device = await home.plugIn();
@@ -110,6 +142,44 @@ describe("finding devices", () => {
   });
 });
 
+describe("who made a device", () => {
+  const board = { manufacturer: "Espressif", model: "esp32dev" };
+
+  it("is its project's maker, and it is its product", () => {
+    expect(makerOf({ ...board, projectName: "M5Stack.Atom Lite" })).toEqual({
+      manufacturer: "M5Stack",
+      model: "Atom Lite",
+    });
+  });
+
+  it("limits each label after separating the maker from the product", () => {
+    const longMaker = "M".repeat(122);
+    expect(makerOf({ ...board, projectName: `${longMaker}.Lamp` })).toEqual({
+      manufacturer: longMaker.slice(0, 120),
+      model: "Lamp",
+    });
+    const longModel = "L".repeat(124);
+    expect(makerOf({ ...board, projectName: `Co.${longModel}` })).toEqual({
+      manufacturer: "Co",
+      model: longModel.slice(0, 120),
+    });
+    const makerBeforeEmoji = "M".repeat(119);
+    expect(
+      makerOf({ ...board, projectName: `${makerBeforeEmoji}😀.X` }),
+    ).toEqual({ manufacturer: makerBeforeEmoji, model: "X" });
+  });
+
+  it("is its chip's maker, and it is its project or its board, otherwise", () => {
+    expect(makerOf(board)).toEqual(board);
+    for (const projectName of ["Lamp", ".Lamp", "Maker.", " . ", "A.B.C"]) {
+      expect(makerOf({ ...board, projectName })).toEqual({
+        manufacturer: "Espressif",
+        model: projectName.trim() || "esp32dev",
+      });
+    }
+  });
+});
+
 describe("adding a device", () => {
   it("takes the key it was flashed with, keeping it before the device", async () => {
     home = await startHome();
@@ -122,6 +192,7 @@ describe("adding a device", () => {
     expect(home.core.registered.get(key)).toMatchObject({
       name: "Porch light",
       manufacturer: "Espressif",
+      model: "esp32dev",
       firmware: { version: "2026.10.2", updatable: false, sleeps: false },
       capabilities: [{ id: "light-bulb", kind: "light" }],
     });
@@ -132,6 +203,17 @@ describe("adding a device", () => {
     );
     // One connection checked the key and goes on as its own.
     expect(device.connections).toBe(1);
+  });
+
+  it("names its maker and product from its project", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ project: "M5Stack.Atom Lite" });
+    const key = await add(home.core, device);
+
+    expect(home.core.registered.get(key)).toMatchObject({
+      manufacturer: "M5Stack",
+      model: "Atom Lite",
+    });
   });
 
   it("refuses a key that doesn't match, or isn't a key, and keeps nothing", async () => {

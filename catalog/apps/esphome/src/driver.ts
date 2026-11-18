@@ -25,14 +25,7 @@ import {
 } from "./connection.js";
 import { mapEntities, signalOf, type Mapping } from "./entities.js";
 import { createFacts, type Facts } from "./facts.js";
-import {
-  giveKey,
-  givenOf,
-  newKey,
-  partsOf,
-  takeKeyOff,
-  zeroKey,
-} from "./keys.js";
+import { giveKey, givenOf, newKey, takeKeyOff, zeroKey } from "./keys.js";
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { lightCommandOf, stateOf } from "./states.js";
 
@@ -70,6 +63,35 @@ type Owned = {
   removing: boolean;
 };
 
+// Keep the core's length limit without cutting a Unicode character in half.
+const label = (text: string | undefined) =>
+  text
+    ?.trim()
+    .slice(0, 120)
+    .replace(/[\uD800-\uDBFF]$/u, "") || null;
+
+/**
+ * Who made a device and what it is. A project named as ESPHome asks, maker
+ * and product ("M5Stack.Atom Lite"), says both. Otherwise use the firmware's
+ * manufacturer and the whole project name or board.
+ */
+export function makerOf(
+  info: Pick<Session["info"], "projectName" | "manufacturer" | "model">,
+) {
+  if (info.projectName) {
+    const [maker, product, extra] = info.projectName.split(".", 3);
+    const manufacturer = label(maker);
+    const model = label(product);
+    if (extra === undefined && manufacturer && model) {
+      return { manufacturer, model };
+    }
+  }
+  return {
+    manufacturer: label(info.manufacturer),
+    model: label(info.projectName) ?? label(info.model),
+  };
+}
+
 /** What a session says the device is, for the core's record. */
 function registrationOf(
   mac: string,
@@ -77,13 +99,10 @@ function registrationOf(
   mapping: Mapping,
 ): DeviceRegistration {
   const { info } = session;
-  const label = (text: string | undefined) =>
-    text?.trim().slice(0, 120) || null;
   return {
     key: mac,
     name: label(info.friendlyName) ?? label(info.name) ?? mac,
-    manufacturer: label(info.manufacturer),
-    model: label(info.projectName) ?? label(info.model),
+    ...makerOf(info),
     capabilities: mapping.mapped.map((each) => each.capability),
     firmware: {
       version: label(info.esphomeVersion),
@@ -111,11 +130,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   let stopped = false;
   // Found devices go to the core one list at a time, in order.
   let listing = Promise.resolve();
-  // What each device waiting for a key has, by MAC, for the version it
-  // runs, as a connection under the zero key told it.
+  // Who made each device waiting for a key, as its zero-key connection said.
   const described = new Map<
     string,
-    { version: string | null; parts: string | null }
+    Pick<Announced, "version" | "projectName"> & { maker: string | null }
   >();
   const describing = new Map<AbortController, Promise<void>>();
   // Devices removed with the key Sanctum gave them still on them, as when
@@ -145,10 +163,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         for (const each of listed) {
           const row = { key: each.mac, name: each.name.slice(0, 120) };
           if (each.encryption === "waiting") {
-            const parts = described.get(each.mac)?.parts;
+            const maker = described.get(each.mac)?.maker;
             found.push({
               ...row,
-              description: parts ?? "Gets an encryption key of its own",
+              description: maker ?? "Gets an encryption key of its own",
               asks: [],
             });
           } else if (each.encryption === "none") {
@@ -379,16 +397,23 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return connectOnce({ mac, key, address, timings });
   }
 
-  // What a device waiting for a key has, once for each version it runs,
-  // over a connection under the zero key.
+  // Who made a device waiting for a key, over a connection under the zero
+  // key: once for each version and project it announces, since a device
+  // reflashed with another project may run the same ESPHome version.
   function describe(found: Announced): Promise<void> {
     const before = described.get(found.mac);
-    if (stopped || (before && before.version === found.version)) {
+    if (
+      stopped ||
+      (before &&
+        before.version === found.version &&
+        before.projectName === found.projectName)
+    ) {
       return Promise.resolve();
     }
     const description = {
       version: found.version,
-      parts: null as string | null,
+      projectName: found.projectName,
+      maker: null as string | null,
     };
     described.set(found.mac, description);
     const address = addressOf(found.mac);
@@ -406,7 +431,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (!("session" in result)) return;
         result.session.client.disconnect();
         if (stopped || described.get(found.mac) !== description) return;
-        description.parts = partsOf(mapEntities(result.session.entities));
+        description.maker = makerOf(result.session.info).manufacturer;
         await listFound();
       } finally {
         describing.delete(controller);
