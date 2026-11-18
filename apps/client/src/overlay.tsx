@@ -84,7 +84,7 @@ export function Overlay(props: {
           {/* The veil's glass, in Evening over a page in either mode. Over
               the top bar, whose strip on macOS would otherwise still move
               the window under the overlay; its header moves it instead. */}
-          <VeilGlass className="overlay z-10 flex flex-col outline-none [-webkit-app-region:no-drag] duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+          <VeilGlass className="overlay z-10 flex flex-col outline-none [-webkit-app-region:no-drag] animation-duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
             <WhileCovering onCovering={props.onCovering} />
             {/* Its sides keep their buttons' width, and the title takes what
               is left, ending in an ellipsis where it does not fit. It is

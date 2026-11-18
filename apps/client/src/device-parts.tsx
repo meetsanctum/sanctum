@@ -17,6 +17,7 @@ import {
   Thermometer,
   type LucideIcon,
 } from "lucide-react";
+import type { Ref } from "react";
 
 import { productName } from "./brand";
 import {
@@ -180,6 +181,7 @@ export function RoomPicker(props: {
   device: DeviceInfo;
   rooms: readonly Room[];
   onChange: (roomId: string | null) => void;
+  triggerRef?: Ref<HTMLButtonElement>;
   disabled?: boolean;
   // What it says while the device is in no room.
   unset?: string;
@@ -191,6 +193,7 @@ export function RoomPicker(props: {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          ref={props.triggerRef}
           variant="outline"
           size="sm"
           disabled={props.disabled}

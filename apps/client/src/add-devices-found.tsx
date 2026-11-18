@@ -8,7 +8,7 @@ import {
   CardLine,
   CardRound,
   DeviceCard,
-  ReadyCard,
+  ReadyCardContent,
   TypeIcon,
   type CardWork,
 } from "./add-devices-cards";
@@ -73,15 +73,15 @@ export function FoundPage(props: {
                 ) ?? props.added[key])
               : undefined;
             return device ? (
-              <ReadyCard
-                key={key}
-                device={device}
-                line={each.description}
-                done="Added"
-                isNew
-                work={props.work}
-                index={index}
-              />
+              <DeviceCard key={key} tone="success" index={index}>
+                <ReadyCardContent
+                  device={device}
+                  line={each.description}
+                  done="Added"
+                  isNew
+                  work={props.work}
+                />
+              </DeviceCard>
             ) : (
               <FoundCard
                 key={key}
