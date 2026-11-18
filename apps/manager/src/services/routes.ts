@@ -2,10 +2,12 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 
 import {
+  ServiceBusyError,
   ServiceRequestError,
   UnknownServiceError,
   type Services,
 } from "./services.js";
+import { OperationConflictError } from "../operations.js";
 import { zigbeeAdapters } from "./zigbee-coordinator-profiles.js";
 
 // The services API on the manager's socket, which only the core reaches. The
@@ -16,6 +18,9 @@ import { zigbeeAdapters } from "./zigbee-coordinator-profiles.js";
 //   PUT    /api/services/:service/apps/:app      the app needs it; returns
 //                                                its connection details
 //   DELETE /api/services/:service/apps/:app      the app no longer needs it
+//   DELETE /api/services/:service/data           erase its own data once no
+//                                                app needs it and it has
+//                                                stopped; refused (409) before
 //   GET    /api/services/zigbee2mqtt/coordinator the coordinators plugged in
 //   PUT    /api/services/zigbee2mqtt/coordinator choose one: { path, adapter? }
 
@@ -31,6 +36,9 @@ function fail(reply: FastifyReply, error: unknown) {
   }
   if (error instanceof ServiceRequestError) {
     return reply.code(400).send({ error: error.message });
+  }
+  if (error instanceof ServiceBusyError) {
+    return reply.code(409).send({ error: error.message });
   }
   throw error;
 }
@@ -80,6 +88,21 @@ export function registerServiceRoutes(
       return fail(reply, error);
     }
   });
+
+  app.delete<{ Params: { service: string } }>(
+    "/api/services/:service/data",
+    async (request, reply) => {
+      try {
+        await services.eraseData(request.params.service);
+        return reply.code(204).send();
+      } catch (error) {
+        if (error instanceof OperationConflictError) {
+          return reply.code(409).send({ error: error.message });
+        }
+        return fail(reply, error);
+      }
+    },
+  );
 
   app.get("/api/services/zigbee2mqtt/coordinator", async () =>
     services.zigbeeCoordinators(),

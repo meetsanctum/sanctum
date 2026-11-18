@@ -134,4 +134,8 @@ export const appsRemoved = sqliteTable("apps_removed", {
   name: text("name").notNull(),
   version: text("version").notNull(),
   isDone: integer("is_done", { mode: "boolean" }).notNull(),
+  // Deletion has begun, so adding must wait until every part has gone.
+  isDeleting: integer("is_deleting", { mode: "boolean" })
+    .notNull()
+    .default(false),
 });

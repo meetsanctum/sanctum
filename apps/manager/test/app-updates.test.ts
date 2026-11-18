@@ -61,6 +61,7 @@ function setup(
       images: {
         has: async () => options.hasImage ?? true,
         ensure: async () => "the-volume",
+        remove: async (id: string) => void said.push(`remove image ${id}`),
       } as never,
       maintenance: {
         run: async (
@@ -780,5 +781,35 @@ describe("what staging must keep", () => {
     expect(restarted.foldersInUse()).toEqual([
       { app, folder: request.from.folder },
     ]);
+  });
+});
+
+describe("deleting a removed app's data", () => {
+  it("takes its image, its copies and what Go back kept, and forgets its versions", async () => {
+    const { start, said } = setup();
+    const { operations, updates } = await start();
+    await updates.begin(app, request);
+    await updates.commit(app, request.id);
+    const copies = join(dataDir, "app-copies", app);
+
+    await updates.deleteData(app);
+
+    expect(said).toContain(`remove image ${app}`);
+    expect(await readdir(copies).catch(() => "gone")).toBe("gone");
+    expect(await updates.kept(app)).toBeNull();
+    expect(updates.foldersInUse()).toEqual([]);
+    expect(await operations.current()).toBeNull();
+    // It stays forgotten across a restart.
+    const { updates: restarted } = await start();
+    expect(restarted.foldersInUse()).toEqual([]);
+  });
+
+  it("is refused while an update of it is under way", async () => {
+    const { updates } = await setup().start();
+    await updates.begin(app, request);
+
+    await expect(updates.deleteData(app)).rejects.toThrow(
+      /is moving to another version/,
+    );
   });
 });

@@ -399,6 +399,27 @@ export function createManagerClient(options: {
       await once("DELETE", appContainerPath(app), undefined, 30_000);
     },
 
+    // Deletes a removed app's image, its update copies and what Go back
+    // kept. Refused while anything still has them.
+    async deleteAppData(app: string) {
+      await once(
+        "DELETE",
+        `/api/apps/${encodeURIComponent(app)}/data`,
+        undefined,
+        60_000,
+      );
+    },
+
+    // Erases a service's own data, once no app needs it and it has stopped.
+    async eraseServiceData(service: string) {
+      await once(
+        "DELETE",
+        `/api/services/${encodeURIComponent(service)}/data`,
+        undefined,
+        60_000,
+      );
+    },
+
     // An app's update (apps/manager/src/apps/updates.ts). Taking the slot, stopping
     // it and copying its database can take a while, as can putting that back.
     async beginAppUpdate(

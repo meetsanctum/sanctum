@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, rename, stat } from "node:fs/promises";
+import { access, mkdir, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { assertManaged, managedLabels, type Log } from "../docker-resources.js";
@@ -35,6 +35,14 @@ const mebibyte = 1024 * 1024;
 const keptForUpdates = 1536 * mebibyte;
 
 export const defaultImageMb = 256;
+
+// What a file or folder that isn't there answers, for one that may be gone.
+function unlessMissing<T>(value: T) {
+  return (error: unknown): T => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return value;
+    throw error;
+  };
+}
 export const smallestImageMb = 64;
 export const largestImageMb = 4096;
 
@@ -79,10 +87,23 @@ export function createAppImages(options: {
   const read = async () =>
     (await readJson<ImagesState>(statePath)) ?? { images: {} };
 
-  async function note(app: string, record: ImageRecord) {
-    const state = await read();
-    state.images[app] = record;
-    await writeJson(statePath, state);
+  // Changes to the records take turns, so a deletion and an image made for
+  // another app can't each write over the other's.
+  let recording: Promise<unknown> = Promise.resolve();
+  function changeRecords(change: (state: ImagesState) => void) {
+    const next = recording.then(async () => {
+      const state = await read();
+      change(state);
+      await writeJson(statePath, state);
+    });
+    recording = next.catch(() => undefined);
+    return next;
+  }
+
+  function note(app: string, record: ImageRecord) {
+    return changeRecords((state) => {
+      state.images[app] = record;
+    });
   }
 
   async function exists(path: string) {
@@ -328,6 +349,66 @@ sync -f "$file"
       await syncFileSystem(fileOf(app));
       await note(app, { ...record, sizeMb });
       log(`Grew ${app}'s image to ${sizeMb} MB`);
+    },
+
+    // Deletes its image and its record, with any it set aside as damaged, as
+    // when the household deletes a removed app's data. Docker refuses while a
+    // container still has the volume, and so does this.
+    async remove(app: string) {
+      const name = imageVolumeName(app);
+      const volume = docker.getVolume(name);
+      const found = await volume.inspect().catch((error: unknown) => {
+        if (isNotFound(error)) return null;
+        throw error;
+      });
+      if (found) {
+        assertManaged(
+          { labels: found.Labels, name: `${name} volume` },
+          "app-data",
+        );
+        try {
+          await volume.remove();
+        } catch (error) {
+          throw new AppRefusal(
+            `${app}'s data is still in use (${errorMessage(error)})`,
+            409,
+          );
+        }
+      }
+      // Its image, one a failed make left unfinished, and only its own copies
+      // set aside as damaged, named by the time they were: another app's id
+      // may begin with this one's. A damaged copy may still be attached.
+      const damaged = new RegExp(
+        `^${app.replace(/[.]/g, "\\.")}\\.damaged-\\d{8}T\\d{9}Z\\.img$`,
+      );
+      const files = [
+        `${app}.img`,
+        `${app}.img.partial`,
+        ...(await readdir(folder).catch(unlessMissing([] as string[]))).filter(
+          (file) => damaged.test(file),
+        ),
+      ];
+      // A file that's gone was deleted before; any other failure leaves the
+      // rest for the next try.
+      const { code, output } = await helper(`for file in ${files
+        .map((file) => `"${seenByHelper(file)}"`)
+        .join(" ")}; do
+  [ -e "$file" ] || continue
+  devices=$(losetup -j "$file" -n -O NAME) || exit 21
+  for device in $devices; do
+    losetup -d "$device" || exit 21
+  done
+  rm -f "$file" || exit 22
+done
+`);
+      if (code !== 0) {
+        throw new Error(`Could not delete ${app}'s image: ${output.trim()}`);
+      }
+      await syncPath(folder).catch(unlessMissing(undefined));
+      await changeRecords((state) => {
+        delete state.images[app];
+      });
+      log(`Deleted ${app}'s image`);
     },
 
     async has(app: string) {

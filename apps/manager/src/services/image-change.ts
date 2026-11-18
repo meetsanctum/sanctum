@@ -371,6 +371,9 @@ export function createImageChanges(options: {
   }
 
   return {
+    // Before its data is erased: a copy a crash left still has its volume.
+    removeCopyContainer,
+
     // A restore must finish even when nothing needs the service now or its
     // hardware is absent. Otherwise its journal would hold the slot forever.
     async resume(service: string) {

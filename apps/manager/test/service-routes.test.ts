@@ -254,4 +254,28 @@ describe("the services API", () => {
     expect(response.statusCode).toBe(503);
     expect(nested.statusCode).toBe(503);
   });
+
+  it("erases a service's data only once no app needs it", async () => {
+    const { server } = await manager();
+    await server.inject({
+      method: "PUT",
+      url: "/api/services/zigbee2mqtt/apps/sanctum.zigbee",
+    });
+
+    const held = await server.inject({
+      method: "DELETE",
+      url: "/api/services/zigbee2mqtt/data",
+    });
+    expect(held.statusCode).toBe(409);
+
+    await server.inject({
+      method: "DELETE",
+      url: "/api/services/zigbee2mqtt/apps/sanctum.zigbee",
+    });
+    const erased = await server.inject({
+      method: "DELETE",
+      url: "/api/services/zigbee2mqtt/data",
+    });
+    expect(erased.statusCode).toBe(204);
+  });
 });

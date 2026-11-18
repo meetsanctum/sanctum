@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
+import { DeleteAppData } from "./app-delete-data";
 import { dayWords } from "./app-go-back";
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
@@ -15,7 +16,8 @@ import { Row, Section } from "./components";
 // pages open too. Then Add apps, the apps the home could add, each with its
 // Add, which opens its sheet (add-app-sheet.tsx); with nothing to add, it
 // isn't there. One the household removed says until when its data is kept,
-// since adding it back meanwhile brings back what it had.
+// since adding it back meanwhile brings back what it had, and offers to
+// delete it now (app-delete-data.tsx).
 
 /** Settings' page for one app, by its id. */
 export const appSettingsPage = "app";
@@ -73,27 +75,34 @@ export function AddAppsSection(props: {
         >
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {available.map((app) => (
-              <li key={app.id} className="flex min-h-13 items-center gap-3">
-                <AppIcon
-                  icon={app.icon ?? plainIcon}
-                  className="size-9 [&_svg]:size-5"
-                />
-                <Row
-                  title={app.name}
-                  detail={
-                    app.removed
-                      ? `Removed on ${dayWords(app.removed.at)}. Its data is kept until ${dayWords(app.removed.keptUntil)}.`
-                      : (app.summary ?? "")
-                  }
-                />
-                <Button
-                  variant="outline"
-                  className="ms-auto shrink-0"
-                  aria-label={`Add ${app.name}`}
-                  onClick={() => setAdding(app)}
-                >
-                  Add
-                </Button>
+              <li key={app.id} className="flex flex-col gap-1">
+                <div className="flex min-h-13 items-center gap-3">
+                  <AppIcon
+                    icon={app.icon ?? plainIcon}
+                    className="size-9 [&_svg]:size-5"
+                  />
+                  <Row
+                    title={app.name}
+                    detail={
+                      app.removed
+                        ? `Removed on ${dayWords(app.removed.at)}. Its data is kept until ${dayWords(app.removed.keptUntil)}.`
+                        : (app.summary ?? "")
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    className="ms-auto shrink-0"
+                    aria-label={`Add ${app.name}`}
+                    onClick={() => setAdding(app)}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {app.removed && (
+                  <div className="ps-12">
+                    <DeleteAppData app={app} onDeleted={refresh} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
