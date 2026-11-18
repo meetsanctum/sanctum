@@ -1,5 +1,6 @@
 import type { AddResult, DeviceInfo, FoundDevice } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -7,7 +8,7 @@ import {
   CardLine,
   CardRound,
   DeviceCard,
-  ReadyCard,
+  ReadyCardContent,
   TypeIcon,
   type CardWork,
 } from "./add-devices-cards";
@@ -49,9 +50,17 @@ export function FoundPage(props: {
   onAdded: (key: string, device: DeviceInfo) => void;
   work: CardWork;
 }) {
+  const isEmpty = props.shown.length === 0;
   return (
-    <div className="flex flex-col gap-6">
-      {props.shown.length > 0 && (
+    // With nothing found, what it says sits in the middle of the window, as
+    // a radio's page waits there.
+    <div
+      className={cn(
+        "flex flex-col gap-6",
+        isEmpty && "flex-1 justify-center pb-16",
+      )}
+    >
+      {!isEmpty && (
         <ul
           aria-label="Devices found"
           className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-4 sm:gap-4"
@@ -64,15 +73,15 @@ export function FoundPage(props: {
                 ) ?? props.added[key])
               : undefined;
             return device ? (
-              <ReadyCard
-                key={key}
-                device={device}
-                line={each.description}
-                done="Added"
-                isNew
-                work={props.work}
-                index={index}
-              />
+              <DeviceCard key={key} tone="success" index={index}>
+                <ReadyCardContent
+                  device={device}
+                  line={each.description}
+                  done="Added"
+                  isNew
+                  work={props.work}
+                />
+              </DeviceCard>
             ) : (
               <FoundCard
                 key={key}
@@ -89,7 +98,7 @@ export function FoundPage(props: {
         </ul>
       )}
       <p className="m-0 text-center text-sm text-(--silver)">
-        {props.shown.length > 0
+        {!isEmpty
           ? "Don't see yours? Check it's switched on and connected to your Wi‑Fi."
           : "Nothing found yet. Check your device is switched on and connected to your Wi‑Fi."}
       </p>

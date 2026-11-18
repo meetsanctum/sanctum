@@ -680,10 +680,21 @@ describe("Settings → Devices", () => {
     ];
     expect(cards()).toHaveLength(1);
     expect(cards()[0]!.textContent).toBe("New deviceSetting up…");
-    // Once one joins, the line under the heading has done its job.
-    expect(dialog.textContent).not.toContain("can join for 4 minutes");
+    const firstCard = cards()[0] as HTMLLIElement;
+    expect(firstCard.style.getPropertyValue("--card-wait")).toBe("450ms");
+    // Once one joins, the line under the heading has done its job: only a
+    // copy hidden from assistive technology stays while it fades out.
+    const waitingLines = [...dialog.querySelectorAll("p")].filter((line) =>
+      line.textContent.includes("can join for 4 minutes"),
+    );
+    expect(waitingLines).toHaveLength(1);
+    expect(waitingLines[0]!.getAttribute("aria-hidden")).toBe("true");
 
     const added = light("bulb", "Light 2");
+    // Two that come together after the move rise in at once, neither
+    // waiting for the other.
+    const later = { ...joining, key: "0x3" };
+    const alsoLater = { ...joining, key: "0x4" };
     devices = [...devices, added];
     await act(async () => {
       live.publish({ type: "device", id: "bulb", device: added });
@@ -698,6 +709,8 @@ describe("Settings → Devices", () => {
               deviceId: "bulb",
               description: "Hue Essential White and Color Ambiance A60",
             },
+            later,
+            alsoLater,
           ],
         },
       });
@@ -706,7 +719,14 @@ describe("Settings → Devices", () => {
       'input[aria-label="Name for Hue Essential White and Color Ambiance A60"]',
     )!;
     expect(name.value).toBe("Light 2");
-    expect(cards()[0]!.querySelector('[aria-label="Ready"]')).not.toBeNull();
+    expect(cards()[0]).toBe(firstCard);
+    expect(firstCard.querySelector('[aria-label="Ready"]')).not.toBeNull();
+    const laterCard = cards()[1] as HTMLLIElement;
+    expect(laterCard.style.getPropertyValue("--card-wait")).toBe("0ms");
+    expect(laterCard.style.getPropertyValue("--card-stagger")).toBe("0ms");
+    const alsoLaterCard = cards()[2] as HTMLLIElement;
+    expect(alsoLaterCard.style.getPropertyValue("--card-wait")).toBe("0ms");
+    expect(alsoLaterCard.style.getPropertyValue("--card-stagger")).toBe("0ms");
 
     await type(name, "Desk lamp");
     await act(async () =>

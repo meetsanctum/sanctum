@@ -485,11 +485,10 @@ export function AddDevices(props: {
             : "None found"
           : undefined
       }
-      doneVariant="link"
       leading={
         page.kind !== "choose" && (
           <Button
-            variant="link"
+            variant="outline"
             aria-label="Back to Add devices"
             onClick={() => void back()}
           >
@@ -510,7 +509,10 @@ export function AddDevices(props: {
           {(page.kind === "found" || pendingAdds.size > 0) && (
             // Keep pending adds alive across Back, so returning cannot add
             // twice and their results still become cards to name and place.
-            <div hidden={page.kind !== "found"}>
+            <div
+              hidden={page.kind !== "found"}
+              className="flex flex-1 flex-col"
+            >
               <FoundPage
                 shown={shown}
                 added={added}

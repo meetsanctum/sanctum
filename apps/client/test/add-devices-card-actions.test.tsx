@@ -224,9 +224,9 @@ describe("actions on a device's Add devices card", () => {
 
     expect(closed).not.toHaveBeenCalled();
     expect(document.querySelector("form input")).toBeNull();
-    expect(
-      document.querySelector('button[aria-label="Unknown Device: room"]'),
-    ).not.toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Unknown Device: room",
+    );
   });
 
   async function typeName(field: HTMLInputElement, name: string) {
@@ -300,6 +300,18 @@ describe("actions on a device's Add devices card", () => {
       method: "POST",
       json: { id: device.id, roomId: den.id },
     });
+  });
+
+  it("leaves room naming with Cancel, making no room", async () => {
+    await join();
+    await typeName(await newRoom(), hall.name);
+    await click("Cancel");
+
+    expect(document.querySelector("form input")).toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Unknown Device: room",
+    );
+    expect(calls("/api/places/rooms/add")).toHaveLength(0);
   });
 
   it("drops a created room after the home confirms and removes it", async () => {
