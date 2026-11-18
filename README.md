@@ -153,8 +153,8 @@ Open [install.md](apps/website/public/install.md) to read it yourself first.
    when your Mac asks. It lists your new home: choose Set up, enter your
    name, a username and a password, and add your first light.
 
-[The full guide](docs/install.md) has each step in more detail, and what to
-do when one goes wrong.
+[The full guide](https://docs.meetsanctum.com/install/) has each step in more
+detail, and what to do when one goes wrong.
 
 ### Easier ways are on the way
 
@@ -170,8 +170,8 @@ licences:
 - **The product** is under the
   [GNU Affero General Public License, version 3 only](LICENSE)
   (`AGPL-3.0-only`): the core, the manager, the client, the desktop app, the
-  website, `deploy/`, and anything else not in a package with a licence of
-  its own.
+  website, the docs, `deploy/`, and anything else not in a package with a
+  licence of its own.
 - **What apps build on** is under the
   [Apache License 2.0](packages/app-sdk/LICENSE) (`Apache-2.0`): every
   package in `packages/` and every app in `catalog/apps/`, each with its own
