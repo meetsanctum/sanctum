@@ -6,14 +6,17 @@ import { LightsButton, type LightsSwitch } from "./lights-button";
 
 // Rooms under their floors, as Home and the category pages show them once
 // the home has floors: each floor in the household's order, then the rooms
-// on none under "Other rooms". A floor's heading is one row, its name and,
-// on Home and Lights' page, its switch that turns its lights off, the power
-// symbol alone as a room's switch has it, which starts after the name so
-// the eye finds it there and nothing below moves when it goes. The layers mark hangs at the leading edge, out of the
-// reading line, and everything of the floor aligns with its name, as the
-// sidebar indents rooms under their floor; Other rooms keeps that alignment
-// with no mark, since it isn't a floor. A home with no floors shows its
-// rooms as they always were, with no headings and no indent.
+// on none under "Other rooms". A floor's heading is one row: the layers
+// mark, its name and, on Home and Lights' page, its switch that turns its
+// lights off, the power symbol alone as a room's switch has it, which
+// starts after the name so the eye finds it there and nothing below moves
+// when it goes. Wider than a phone, the mark hangs at the leading edge, out
+// of the reading line, and everything of the floor aligns with its name, as
+// the sidebar indents rooms under their floor. The rooms and the Other
+// rooms heading share an inset equal to the mark's width plus its gap.
+// On a phone, the mark leads the heading's line, and the rooms and the
+// Other rooms heading start at the page's edge. A home with no floors
+// shows its rooms with no floor headings or indent.
 
 /** What a floor's group holds: the floor, or none for the rooms on no floor. */
 export type FloorGroup<T> = { floor: Floor | null; items: T[] };
@@ -67,24 +70,24 @@ export function FloorSection(props: {
   return (
     <section
       aria-labelledby={props.id}
-      className="grid shrink-0 grid-cols-[18px_minmax(0,1fr)] gap-x-2 gap-y-5"
+      className="flex shrink-0 flex-col gap-5"
     >
-      {floor ? (
-        <icons.Layers aria-hidden="true" className="size-4.5 self-center" />
-      ) : (
-        <span aria-hidden="true" />
-      )}
-      {/* The row keeps the switch's height while it's gone. */}
-      <div className="flex min-h-9 flex-wrap items-center gap-x-3.5 gap-y-2">
-        <h2
-          id={props.id}
-          className="m-0 text-[17px] leading-[22px] font-semibold"
-        >
-          {floor?.name ?? otherRoomsName}
-        </h2>
-        {lights && <LightsButton lights={lights} />}
+      <div className={`flex items-center gap-2${floor ? "" : " sm:ps-6.5"}`}>
+        {floor && (
+          <icons.Layers aria-hidden="true" className="size-4.5 shrink-0" />
+        )}
+        {/* The row keeps the switch's height while it's gone. */}
+        <div className="flex min-h-9 min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2">
+          <h2
+            id={props.id}
+            className="m-0 text-[17px] leading-[22px] font-semibold"
+          >
+            {floor?.name ?? otherRoomsName}
+          </h2>
+          {lights && <LightsButton lights={lights} />}
+        </div>
       </div>
-      <div className="col-start-2 flex min-w-0 flex-col gap-8">
+      <div className="flex min-w-0 flex-col gap-8 sm:ps-6.5">
         {props.children}
       </div>
     </section>

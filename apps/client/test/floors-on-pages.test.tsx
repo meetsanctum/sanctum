@@ -206,6 +206,26 @@ describe("Home with floors", () => {
     ]);
   });
 
+  it("leads a floor's heading with its mark, and indents its rooms only wider than a phone", async () => {
+    await show(<HomeHarness />);
+    const findSection = (id: string) =>
+      container.querySelector(`section[aria-labelledby="${id}"]`)!;
+    const ground = findSection("home-floor-ground");
+    const groundHeading = ground.firstElementChild!;
+    expect(
+      groundHeading.firstElementChild?.matches(
+        'svg.lucide-layers[aria-hidden="true"]',
+      ),
+    ).toBe(true);
+    expect(groundHeading.classList).not.toContain("sm:ps-6.5");
+    const other = findSection("home-floor-other-rooms");
+    const otherHeading = other.firstElementChild!;
+    expect(otherHeading.querySelector("svg.lucide-layers")).toBeNull();
+    expect(otherHeading.classList).toContain("sm:ps-6.5");
+    expect(ground.lastElementChild?.classList).toContain("sm:ps-6.5");
+    expect(other.lastElementChild?.classList).toContain("sm:ps-6.5");
+  });
+
   it("turns a floor's lights off from its heading, while any is on", async () => {
     await show(<HomeHarness />);
     const off = button("Turn off 2 lights on Ground floor");
