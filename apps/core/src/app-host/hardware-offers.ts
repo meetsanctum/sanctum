@@ -120,8 +120,16 @@ export function createHardwareOffers(options: {
       markSeen(fresh);
       return;
     }
-    log(`apps: ${fresh.map((stick) => stick.label).join(", ")} plugged in`);
-    set({ id: randomUUID(), app: app.id, sticks: fresh });
+    // A stick unplugged while that was read offers nothing; one the
+    // manager can't say about now waits for the next look.
+    const now = await options.manager.zigbeeSticks().catch(() => undefined);
+    if (isStopping || !now) return;
+    const plugged = fresh.filter((stick) =>
+      now.some((each) => each.path === stick.path),
+    );
+    if (plugged.length === 0) return;
+    log(`apps: ${plugged.map((stick) => stick.label).join(", ")} plugged in`);
+    set({ id: randomUUID(), app: app.id, sticks: plugged });
   }
 
   // One look at a time: the manager may take a while to answer.

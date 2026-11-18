@@ -9,7 +9,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { coreJson } from "../src/core-fetch";
+import { CoreError, coreJson } from "../src/core-fetch";
 import { StickOffer } from "../src/stick-offer";
 
 // A Zigbee stick plugged in brings up its app's add sheet on this client, and
@@ -91,6 +91,10 @@ const show = (isOnline = true) =>
     ),
   );
 
+// The calls the client made to one path, in order.
+const callsTo = (path: string) =>
+  vi.mocked(coreJson).mock.calls.filter(([called]) => called === path);
+
 const dialog = () => document.body.querySelector('[role="dialog"]');
 const button = (name: string) =>
   [...document.body.querySelectorAll("button")].find(
@@ -101,10 +105,12 @@ const later = (ms: number) =>
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((answer) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((answer, fail) => {
     resolve = answer;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe("a stick plugged in", () => {
@@ -140,17 +146,45 @@ describe("a stick plugged in", () => {
 
     await act(async () => button("Cancel")!.click());
     expect(dialog()).toBeNull();
+    // Each Cancel says no to the core, the second too.
+    const no = {
+      method: "POST",
+      json: { id: "offer-1" },
+    };
+    expect(callsTo("/api/hardware/offer/dismiss")).toEqual([
+      ["/api/hardware/offer/dismiss", no],
+      ["/api/hardware/offer/dismiss", no],
+    ]);
   });
 
   it("names the offer when adding its app", async () => {
     await show();
+    expect(callsTo("/api/apps/add")).toEqual([]);
 
     await act(async () => button("Add Example")!.click());
 
-    expect(coreJson).toHaveBeenCalledWith("/api/apps/add", {
-      method: "POST",
-      json: { id: "sanctum.example", version: "1.0.0", offerId: "offer-1" },
-    });
+    expect(callsTo("/api/apps/add")).toEqual([
+      [
+        "/api/apps/add",
+        {
+          method: "POST",
+          json: { id: "sanctum.example", version: "1.0.0", offerId: "offer-1" },
+        },
+      ],
+    ]);
+  });
+
+  it("stays until its Add answers, though the offer ends meanwhile", async () => {
+    const adding = deferred<never>();
+    await show();
+    vi.mocked(coreJson).mockReturnValueOnce(adding.promise);
+    await act(async () => button("Add Example")!.click());
+
+    await hear({ type: "offer", offer: null });
+    expect(dialog()).not.toBeNull();
+
+    await act(async () => adding.reject(new CoreError(500, "app_failed")));
+    expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
   });
 
   it("closes once it ends on another client or is unplugged", async () => {
@@ -199,8 +233,10 @@ describe("a stick plugged in", () => {
     await show(false);
     expect(dialog()).toBeNull();
 
+    const reads = callsTo("/api/hardware/offer").length;
     vi.mocked(coreJson).mockResolvedValueOnce({ offer: null });
     await show();
+    expect(callsTo("/api/hardware/offer")).toHaveLength(reads + 1);
     expect(dialog()).toBeNull();
   });
 

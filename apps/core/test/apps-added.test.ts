@@ -283,6 +283,8 @@ describe("the apps a home could add", () => {
     added: string[];
     staged: string[];
     broken?: string[];
+    // Zigbee's pages fit this home's kit, so nothing keeps it back.
+    fits?: boolean;
   }) {
     const logs: string[] = [];
     const apps = createAvailableApps({
@@ -297,7 +299,7 @@ describe("the apps a home could add", () => {
         return packageOf(manifests.get(appId)!);
       },
       pagesNeedIn: async (appId) =>
-        appId === "sanctum.zigbee" ? "pages" : null,
+        appId === "sanctum.zigbee" && !options.fits ? "pages" : null,
       host: async () => null,
       log: (line) => logs.push(line),
     });
@@ -378,6 +380,7 @@ describe("the apps a home could add", () => {
       shipped: ["sanctum.weather", "sanctum.zigbee"],
       added,
       staged,
+      fits: true,
     });
 
     expect(
@@ -391,6 +394,22 @@ describe("the apps a home could add", () => {
     );
     added.push("sanctum.zigbee");
     expect(await apps.findWithPermission("services:zigbee2mqtt")).toBeNull();
+  });
+
+  it("can't tell yet while the one it finds can't be added, or nothing is staged", async () => {
+    const short = available({
+      shipped: ["sanctum.zigbee"],
+      added: [],
+      staged: ["sanctum.zigbee"],
+    });
+    expect(
+      await short.apps.findWithPermission("services:zigbee2mqtt"),
+    ).toBeUndefined();
+
+    const empty = available({ shipped: [], added: [], staged: [] });
+    expect(
+      await empty.apps.findWithPermission("services:zigbee2mqtt"),
+    ).toBeUndefined();
   });
 
   it("in a development stack, whose image ships none, what's staged", async () => {

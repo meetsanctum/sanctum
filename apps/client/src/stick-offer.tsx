@@ -70,12 +70,25 @@ export function StickOffer(props: {
   onAdded: (app: AppInfo) => void;
 }) {
   const offer = useHardwareOffer(props.live, props.isOnline);
-  if (!offer) return null;
-  return <OfferedApp key={offer.id} offer={offer} onAdded={props.onAdded} />;
+  // The offer ends everywhere as its add commits, before the app has
+  // installed: this client's sheet stays until its own Add has answered,
+  // so it shows what came of it.
+  const [adding, setAdding] = useState<HardwareOffer>();
+  const shown = adding ?? offer;
+  if (!shown) return null;
+  return (
+    <OfferedApp
+      key={shown.id}
+      offer={shown}
+      onAdding={(isAdding) => setAdding(isAdding ? shown : undefined)}
+      onAdded={props.onAdded}
+    />
+  );
 }
 
 function OfferedApp(props: {
   offer: HardwareOffer;
+  onAdding: (isAdding: boolean) => void;
   onAdded: (app: AppInfo) => void;
 }) {
   const { offer } = props;
@@ -113,6 +126,7 @@ function OfferedApp(props: {
     <AddAppSheet
       app={app}
       offerId={offer.id}
+      onAdding={props.onAdding}
       lead={
         offer.sticks.length > 1
           ? "Zigbee sticks were plugged in"

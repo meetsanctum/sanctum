@@ -110,7 +110,11 @@ export function createAvailableApps(options: {
         );
       }
     }
-    return { apps, isComplete };
+    return {
+      apps,
+      isComplete,
+      isEmpty: Object.keys(staged).length === 0 && shipped.length === 0,
+    };
   }
 
   return {
@@ -124,16 +128,21 @@ export function createAvailableApps(options: {
     },
     /**
      * Finds an app that asks for this permission. Null means none. Undefined
-     * means an unstaged or unreadable package could still contain one.
+     * means it can't tell yet: an unstaged or unreadable package could hold
+     * one, nothing is staged at all, as a development stack's manager may
+     * answer while staging fails, or the one it found can't be added now,
+     * as for want of memory, which can change.
      */
     async findWithPermission(permissionId: string) {
-      const { apps, isComplete } = await read(undefined, {
+      const { apps, isComplete, isEmpty } = await read(undefined, {
         requireAnswer: true,
       });
       const matches = apps
         .filter(({ app }) => app.requests.some(({ id }) => id === permissionId))
         .sort((left, right) => left.app.name.localeCompare(right.app.name));
-      return matches[0]?.app ?? (isComplete ? null : undefined);
+      const found = matches[0]?.app;
+      if (found) return found.shortfalls.length > 0 ? undefined : found;
+      return isComplete && !isEmpty ? null : undefined;
     },
   };
 }

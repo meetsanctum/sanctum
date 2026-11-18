@@ -281,12 +281,12 @@ describe("what's staged for this core", () => {
 
   it("reports a failed lookup when the caller needs a definite answer", async () => {
     const { client } = await answering([
-      { status: 503, body: { error: "Wait" } },
+      { status: 503, body: { error: "Staging is under way" } },
     ]);
 
     await expect(
-      client.stagedApps(5, { requireAnswer: true }),
-    ).rejects.toThrow();
+      client.stagedApps(10_000, { requireAnswer: true }),
+    ).rejects.toThrow("Staging is under way");
   });
 
   it("does not ask again after its startup budget expires during a retry pause", async () => {

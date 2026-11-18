@@ -163,6 +163,8 @@ export function AddAppSheet(props: {
   /** What brought it up, above its title, as a stick plugged in. */
   lead?: string;
   offerId?: string;
+  /** Whether its Add is under way, until the core answers. */
+  onAdding?: (isAdding: boolean) => void;
   onAdded: (app: AppInfo) => void;
   onClose: () => void | Promise<void>;
 }) {
@@ -180,6 +182,7 @@ export function AddAppSheet(props: {
     if (!app) return;
     setPending("add");
     setProblem(undefined);
+    props.onAdding?.(true);
     try {
       const added = await coreJson<AppInfo>("/api/apps/add", {
         method: "POST",
@@ -190,6 +193,7 @@ export function AddAppSheet(props: {
       setProblem(problemOf(error, app));
     } finally {
       setPending(undefined);
+      props.onAdding?.(false);
     }
   };
 

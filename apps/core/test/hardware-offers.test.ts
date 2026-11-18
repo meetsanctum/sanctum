@@ -41,6 +41,8 @@ async function home(options: { dataDir?: string } = {}) {
     fails: false,
     hasInstalled: true,
     isCatalogComplete: true,
+    // What happens while the catalog is read.
+    whileLooking: () => undefined as void,
     heard: [] as (HardwareOffer | null)[],
   };
   const offers = createHardwareOffers({
@@ -48,10 +50,14 @@ async function home(options: { dataDir?: string } = {}) {
     gate: { admit: () => undefined } as unknown as Gate,
     added: { ids: () => state.added },
     available: {
-      findWithPermission: async (permissionId) =>
-        state.available.find((app) =>
-          app.requests.some(({ id }) => id === permissionId),
-        ) ?? (state.isCatalogComplete ? null : undefined),
+      findWithPermission: async (permissionId) => {
+        state.whileLooking();
+        return (
+          state.available.find((app) =>
+            app.requests.some(({ id }) => id === permissionId),
+          ) ?? (state.isCatalogComplete ? null : undefined)
+        );
+      },
     },
     hasInstalled: () => state.hasInstalled,
     manager: {
@@ -208,6 +214,19 @@ describe("a Zigbee stick plugged in", () => {
     offers.interrupt();
     await offers.close();
     await scan;
+
+    expect(offers.current()).toBeNull();
+    expect(state.heard).toEqual([]);
+  });
+
+  it("offers nothing for a stick unplugged while its app was looked up", async () => {
+    const { offers, state } = await home();
+    state.sticks = [zbt2];
+    state.whileLooking = () => {
+      state.sticks = [];
+    };
+
+    await offers.look();
 
     expect(offers.current()).toBeNull();
     expect(state.heard).toEqual([]);
