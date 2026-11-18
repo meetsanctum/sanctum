@@ -20,7 +20,7 @@ import { QuestionField, type Refused } from "./device-questions";
 // for each, with Add, which asks in place what its driver needs, such as its
 // key, a refused answer saying why under its field. A device added here
 // stays, green, to be named and placed. While nothing is found, it says what
-// to check.
+// to check; once something is, the overlay's footer asks after the rest.
 
 export const foundKey = (found: { driver: string; key: string }) =>
   `${found.driver}\u0000${found.key}`;
@@ -55,12 +55,14 @@ export function FoundPage(props: {
     // With nothing found, what it says sits in the middle of the window, as
     // a radio's page waits there.
     <div
-      className={cn(
-        "flex flex-col gap-6",
-        isEmpty && "flex-1 justify-center pb-16",
-      )}
+      className={cn("flex flex-col", isEmpty && "flex-1 justify-center pb-16")}
     >
-      {!isEmpty && (
+      {isEmpty ? (
+        <p className="m-0 text-center text-sm text-(--silver)">
+          Nothing found yet. Check your device is switched on and connected to
+          your Wi‑Fi.
+        </p>
+      ) : (
         <ul
           aria-label="Devices found"
           className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-4 sm:gap-4"
@@ -97,11 +99,6 @@ export function FoundPage(props: {
           })}
         </ul>
       )}
-      <p className="m-0 text-center text-sm text-(--silver)">
-        {!isEmpty
-          ? "Don't see yours? Check it's switched on and connected to your Wi‑Fi."
-          : "Nothing found yet. Check your device is switched on and connected to your Wi‑Fi."}
-      </p>
     </div>
   );
 }

@@ -180,6 +180,7 @@ describe("Add devices, with what drivers found", () => {
     expect(page().textContent).toContain(
       "Nothing found yet. Check your device is switched on and connected to your Wi‑Fi.",
     );
+    expect(document.querySelector("[data-slot=overlay-footer]")).toBeNull();
   });
 
   it("says what to plug in where the home never had a Zigbee adapter, and otherwise that nothing adds devices", async () => {
@@ -311,6 +312,30 @@ describe("Add devices, with what drivers found", () => {
       "Living room plugneeds its encryption keyEncryption keyAddUnder api: encryption: key in its configuration.",
     ]);
     expect(named("Add Kitchen sensor")).not.toBeNull();
+    // What to check for the rest stays along the bottom as the cards scroll.
+    expect(page().closest("[data-slot=scroll-area]")).not.toBeNull();
+    expect(
+      document.querySelector("[role=dialog] [data-slot=overlay-footer]")!
+        .textContent,
+    ).toBe(
+      "Don't see yours? Check it's switched on and connected to your Wi‑Fi.",
+    );
+    expect(page().textContent).not.toContain("Don't see yours?");
+  });
+
+  it("starts each page at the top even when the previous page was scrolled", async () => {
+    await show();
+    const viewport = page().closest<HTMLElement>(
+      "[data-slot=scroll-area-viewport]",
+    )!;
+
+    viewport.scrollTop = 100;
+    await way("Devices found");
+    expect(viewport.scrollTop).toBe(0);
+
+    viewport.scrollTop = 200;
+    await act(async () => named("Back to Add devices").click());
+    expect(viewport.scrollTop).toBe(0);
   });
 
   it("adds one that asks nothing at once, and has it named and placed", async () => {
