@@ -69,6 +69,7 @@ function motionSensor(
     lastSeenAt: new Date(now - 2 * minute).toISOString(),
     firmware: null,
     probe: false,
+    identify: false,
     battery: 87,
     batteryLow: null,
     shownAs: null,

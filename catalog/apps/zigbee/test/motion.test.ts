@@ -72,6 +72,7 @@ describe("a motion sensor's exposes", () => {
       ],
       firmware: { sleeps: true },
       probe: false,
+      identify: false,
     });
     expect(
       motion.features.safeParse(entry?.registration.capabilities[1]?.features)

@@ -82,6 +82,7 @@ export function deviceInfo(
     lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
     firmware: device.firmware,
     probe: device.probe,
+    identify: device.identify,
     battery: device.battery,
     batteryLow: device.batteryLow,
     leftAt: device.leftAt?.toISOString() ?? null,

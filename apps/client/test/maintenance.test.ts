@@ -53,6 +53,7 @@ function device(
     capabilities: [],
     firmware: firmware({ updatable: false, sleeps: true }),
     probe: false,
+    identify: false,
     battery: 64,
     batteryLow: null,
     shownAs: null,

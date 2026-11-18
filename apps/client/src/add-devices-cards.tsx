@@ -18,6 +18,7 @@ import {
 
 import { Segments } from "./automations/fields";
 import { productName } from "./brand";
+import { coreJson } from "./core-fetch";
 import {
   DeviceIcon,
   deviceProblem,
@@ -224,9 +225,59 @@ export function ReadyCard(props: {
       {props.line && <CardLine className="mt-2">{props.line}</CardLine>}
       <CardFoot className="flex-col flex-nowrap items-stretch gap-2">
         <ShowAsChoice device={device} work={work} />
-        <RoomChoice device={device} work={work} />
+        <RoomChoice
+          device={device}
+          work={work}
+          beside={device.identify && <BlinkButton device={device} />}
+        />
       </CardFoot>
     </DeviceCard>
+  );
+}
+
+// Blink: has the device show itself, as a light blinks, so a person sees
+// which one it is. It says so while the device blinks, and why where it
+// couldn't.
+function BlinkButton(props: { device: DeviceInfo }) {
+  const [blinking, setBlinking] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const timer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const blink = async () => {
+    setProblem(undefined);
+    setBlinking(true);
+    try {
+      await coreJson("/api/devices/identify", {
+        method: "POST",
+        json: { id: props.device.id },
+      });
+      // About as long as a device takes to blink and settle.
+      timer.current = window.setTimeout(() => setBlinking(false), 2_500);
+    } catch (error) {
+      setBlinking(false);
+      setProblem(deviceProblem(error));
+    }
+  };
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={blinking}
+        aria-label={`Blink ${props.device.name}`}
+        onClick={() => void blink()}
+      >
+        {blinking ? "Blinking…" : "Blink"}
+      </Button>
+      {problem && (
+        <p
+          role="alert"
+          className="m-0 basis-full text-xs text-(--ruby-on-carbon)"
+        >
+          {problem}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -399,7 +450,7 @@ function RoomChoice(props: {
     );
   }
   return (
-    <div className="flex justify-center gap-1.5">
+    <div className="flex flex-wrap justify-center gap-1.5">
       <RoomPicker
         device={device}
         rooms={work.rooms}

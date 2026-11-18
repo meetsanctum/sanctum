@@ -101,6 +101,7 @@ describe("an app's static manifest", () => {
           driver: {
             command: async () => {},
             probe: async () => {},
+            identify: async () => {},
             pairing: {
               open: async () => ({ until: null }),
               close: async () => {},
@@ -110,7 +111,9 @@ describe("an app's static manifest", () => {
       ),
     );
 
-    expect(manifest.driver).toEqual({ hooks: ["command", "pairing", "probe"] });
+    expect(manifest.driver).toEqual({
+      hooks: ["command", "pairing", "probe", "identify"],
+    });
   });
 
   it("has each piece's words, with their sample values", () => {

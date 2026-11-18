@@ -49,6 +49,7 @@ import type { Presses } from "./presses.js";
 //   POST /api/devices/firmware/update { id } → DeviceInfo
 //   POST /api/devices/firmware/stop  { id } → DeviceInfo
 //   POST /api/devices/probe          { id } → ProbeResult
+//   POST /api/devices/identify       { id } → {}
 //   POST /api/devices/repair         { id, answers } → RepairResult
 //   POST /api/devices/add            { driver, key, answers } → AddResult
 
@@ -179,6 +180,16 @@ export function registerDeviceRoutes(
       },
     );
   }
+
+  app.post("/api/devices/identify", async (request) => {
+    const { actor, who } = admitted(
+      request.principal!,
+      firmwareRules.identify,
+      "device.identify",
+    );
+    await options.firmware.identify(actor, who, request.body);
+    return {};
+  });
 
   app.post("/api/devices/probe", async (request): Promise<ProbeResult> => {
     const { actor, who } = admitted(

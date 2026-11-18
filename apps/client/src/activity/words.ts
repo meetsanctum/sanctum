@@ -662,6 +662,9 @@ function deviceEntry(
           ? "Checked its connection: it didn't answer"
           : "Checked its connection",
       );
+    case "device.identify":
+      // Only a blink that didn't happen is kept.
+      return said("Couldn't blink");
     case "history.keep":
       return said("History kept again");
     case "history.forget":

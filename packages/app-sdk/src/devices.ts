@@ -599,6 +599,8 @@ export type DeviceInfo = {
   firmware: FirmwareInfo | null;
   /** Whether Check connection can ask it how it is now (driver.probe). */
   probe: boolean;
+  /** Whether it can show itself, as a light blinks (driver.identify). */
+  identify: boolean;
   /**
    * Its battery's charge in percent, as its driver last reported it; null
    * for a device on mains power and one that has not said.
@@ -723,6 +725,9 @@ export const deviceRegistration = z.strictObject({
   // Whether the driver can ask it how it is now (driver.probe): a device
   // that sleeps, or has nothing to read, cannot be asked.
   probe: z.boolean().default(false),
+  // Whether the driver can have it show itself (driver.identify): a light
+  // that blinks, or a device with a light of its own that is awake.
+  identify: z.boolean().default(false),
 });
 export type DeviceRegistration = Omit<
   z.input<typeof deviceRegistration>,

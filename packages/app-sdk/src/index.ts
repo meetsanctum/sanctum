@@ -414,6 +414,7 @@ const driverHooks = [
   "remove",
   "firmware",
   "probe",
+  "identify",
   "repair",
   "discovered",
   "add",
