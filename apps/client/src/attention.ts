@@ -143,7 +143,10 @@ export const isStopped = (app: AppInfo) =>
  * nor is one waiting, which starts by itself.
  */
 export function appAttentionText(app: AppInfo) {
-  if (app.waiting) return waitingAttentionText(app, app.waiting);
+  // The version it has failing says so first.
+  if (app.waiting && !isGivenUp(app)) {
+    return waitingAttentionText(app, app.waiting);
+  }
   const back = wentBackFor(app);
   if (back) return wentBackWords(app, back);
   switch (app.state) {
@@ -160,7 +163,7 @@ export function appAttentionText(app: AppInfo) {
 
 /** What a screen reader hears of an app that isn't running. */
 export function appAttentionSpoken(app: AppInfo) {
-  if (app.waiting) {
+  if (app.waiting && !isGivenUp(app)) {
     return isStoppedFor(app, app.waiting)
       ? `${app.name} isn't running`
       : `${app.name} ${app.waiting.version} is waiting`;
@@ -283,13 +286,14 @@ export function attentionTile(
     const [app] = apps as [AppInfo];
     return {
       title: app.name,
-      value: app.waiting
-        ? isStoppedFor(app, app.waiting)
-          ? "Not running"
-          : `${app.waiting.version} waits`
-        : wentBackFor(app)
-          ? `Back on ${app.version}`
-          : (stateShort(app) ?? "Not running"),
+      value:
+        app.waiting && !isGivenUp(app)
+          ? isStoppedFor(app, app.waiting)
+            ? "Not running"
+            : `${app.waiting.version} waits`
+          : wentBackFor(app)
+            ? `Back on ${app.version}`
+            : (stateShort(app) ?? "Not running"),
       label: spoken[0]!,
       problem,
       opens: "settings" as const,

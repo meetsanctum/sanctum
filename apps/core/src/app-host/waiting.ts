@@ -36,9 +36,13 @@ export function createWaitingUpdates(options: {
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
   log: (message: string) => void;
   now?: () => Date;
+  // How long before reading the version the app runs again, after a read
+  // that failed.
+  readPauseMs?: number;
 }) {
   const { db, log } = options;
   const now = options.now ?? (() => new Date());
+  const readPauseMs = options.readPauseMs ?? 250;
 
   const rowOf = (appId: string) =>
     db
@@ -64,16 +68,25 @@ export function createWaitingUpdates(options: {
     );
   }
 
-  // The version the app runs, if this core can still run it.
+  // The version the app runs, if this core can still run it. A read that
+  // fails is tried again, since one that can't be read isn't one that can't
+  // run; only one that still can't be read stops the app as that would.
   async function runningNow(appId: string, folder: string) {
-    try {
-      const pkg = await options.loadPackage(appId, folder);
-      return speaksThisCore(pkg) && servesAppApi(pkg.apart.manifest)
-        ? pkg
-        : undefined;
-    } catch (error) {
-      log(`apps: ${appId}'s version before can't be read (${String(error)})`);
-      return undefined;
+    for (let tries = 1; ; tries += 1) {
+      try {
+        const pkg = await options.loadPackage(appId, folder);
+        return speaksThisCore(pkg) && servesAppApi(pkg.apart.manifest)
+          ? pkg
+          : undefined;
+      } catch (error) {
+        if (tries >= 3) {
+          log(
+            `apps: ${appId}'s version before can't be read (${String(error)})`,
+          );
+          return undefined;
+        }
+        await new Promise((resolve) => setTimeout(resolve, readPauseMs));
+      }
     }
   }
 
@@ -97,9 +110,13 @@ export function createWaitingUpdates(options: {
       const before = rowOf(appId);
       const row: WaitingRow = {
         appId,
-        // The same build keeps its id, so an answer given before a restart
-        // still counts.
-        id: before?.folder === folder ? before.id : randomUUID(),
+        // The same build needing the same keeps its id, so an answer given
+        // before a restart still counts, and never grants what it didn't
+        // show.
+        id:
+          before?.folder === folder && ids(before.needs) === ids(needs)
+            ? before.id
+            : randomUUID(),
         version,
         folder,
         needs,
@@ -141,19 +158,33 @@ export function createWaitingUpdates(options: {
 
     /**
      * Someone allows the version that waits, named by its id: what it newly
-     * needs is granted and it's no longer waiting, in one transaction, and
-     * this answers its package to install in place of the one that runs.
-     * Nothing, and nothing changed, for another id or one that can't be read.
+     * needs is granted and it's no longer waiting, with what `alongside`
+     * writes, in one transaction, and this answers its package to install in
+     * place of the one that runs. Nothing, and nothing changed, for another
+     * id, or one that now needs more than it showed, which waits anew under
+     * another id. A package that can't be read throws, changing nothing.
      */
     async allow(
       appId: string,
       id: string,
-      canAllow: () => boolean,
+      when: { canAllow: () => boolean; alongside: () => void },
     ): Promise<ApartPackage | undefined> {
       const row = rowOf(appId);
       if (row?.id !== id) return undefined;
       const pkg = await options.loadPackage(appId, row.folder);
-      if (rowOf(appId)?.id !== id || !canAllow()) return undefined;
+      if (rowOf(appId)?.id !== id || !when.canAllow()) return undefined;
+      // A permission switched off since it showed would leave it paused.
+      const needs = newlyNeeded(pkg);
+      const shown = new Set(row.needs.map((request) => request.id));
+      if (needs.some((request) => !shown.has(request.id))) {
+        durably(db, () => {
+          db.update(appUpdatesWaiting)
+            .set({ id: randomUUID(), needs })
+            .where(eq(appUpdatesWaiting.appId, appId))
+            .run();
+        });
+        return undefined;
+      }
       durably(db, () => {
         options.grants.grantAll(
           appId,
@@ -162,6 +193,7 @@ export function createWaitingUpdates(options: {
         db.delete(appUpdatesWaiting)
           .where(eq(appUpdatesWaiting.appId, appId))
           .run();
+        when.alongside();
       });
       log(`apps: ${appId} ${row.version} is allowed`);
       return pkg;

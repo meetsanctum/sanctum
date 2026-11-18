@@ -346,16 +346,8 @@ export function NeedsAttentionSection(props: {
               className="size-8 [&_svg]:size-4"
             />
             <AppLine app={app} />
-            {app.waiting ? (
-              <span className={fixPlace}>
-                <ReviewUpdate
-                  app={app}
-                  waiting={app.waiting}
-                  variant="outline"
-                  size="sm"
-                />
-              </span>
-            ) : app.state === "failed" ? (
+            {/* What gets the version it has running again comes first. */}
+            {app.state === "failed" ? (
               <span className={fixPlace}>
                 <RestartButton app={app} variant="outline" size="sm" />
               </span>
@@ -368,6 +360,15 @@ export function NeedsAttentionSection(props: {
                   Open Status
                 </RowButton>
               )
+            ) : app.waiting ? (
+              <span className={fixPlace}>
+                <ReviewUpdate
+                  app={app}
+                  waiting={app.waiting}
+                  variant="outline"
+                  size="sm"
+                />
+              </span>
             ) : (
               props.onOpenApp && (
                 <RowButton

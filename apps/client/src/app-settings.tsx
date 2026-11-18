@@ -246,8 +246,13 @@ export function AppPage(props: {
           </p>
         )}
       </div>
-      {/* Stopped for want of what a new version needs, its notice says so. */}
-      {!(app.waiting && isStoppedFor(app, app.waiting)) && (
+      {/* Stopped for want of what a new version needs, its notice says so;
+          one turned off still offers Turn on. */}
+      {!(
+        app.waiting &&
+        isStoppedFor(app, app.waiting) &&
+        app.state !== "off"
+      ) && (
         <AppNotice
           app={app}
           permissionsAre="below"

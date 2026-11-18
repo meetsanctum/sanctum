@@ -68,7 +68,9 @@ export function createAppChoices<Entry extends Chosen>(options: {
   onAllowUpdate?: (
     entry: Entry,
     id: string,
-  ) => Promise<false | "replaced" | "inPlace">;
+    // Its entry, written in the transaction that grants what it needs.
+    alongside: () => void,
+  ) => Promise<false | "unavailable" | "replaced" | "inPlace">;
   // Someone turned an app off or on.
   onOff?: (entry: Entry, off: boolean) => void;
   log: (message: string) => void;
@@ -155,12 +157,17 @@ export function createAppChoices<Entry extends Chosen>(options: {
     const entry = entryOf(appId);
     const action = "allow-update";
     const who = admit(principal, appId, action, permissionsRule);
-    const allowed = await options.onAllowUpdate?.(entry, id);
+    const allowed = await options.onAllowUpdate?.(entry, id, () =>
+      record(appId, action, who, "ok"),
+    );
+    if (allowed === "unavailable") {
+      record(appId, action, who, "failed", "unavailable");
+      throw new ActionCallError("unavailable");
+    }
     if (!allowed) {
       record(appId, action, who, "refused", "conflict");
       throw new ActionCallError("conflict");
     }
-    record(appId, action, who, "ok");
     // Paused on it, it takes them as any permission switched on.
     if (allowed === "inPlace" && installed.get(appId) === entry) {
       const before = entry.granted;

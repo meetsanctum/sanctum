@@ -151,6 +151,108 @@ describe("an update that needs a new permission", () => {
     ]);
   });
 
+  it("waits anew when it needs more than it showed, granting nothing", async () => {
+    const home = await versions();
+    const optional = { ...people, needed: false, startsOn: true };
+    const before = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      asAHome,
+    );
+    await running(before, id);
+    const maya = await claimed(before);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people, places] }),
+      asAHome,
+    );
+    await running(core, id);
+    const shown = stateOf(core, id).waiting!;
+    expect(shown.needs.map((request) => request.id)).toEqual(["places.read"]);
+    // Someone switches off what the new version also needs.
+    await post(
+      core,
+      `/api/apps/${id}/permissions/update`,
+      { permission: "people.read", granted: false },
+      maya,
+    );
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: shown.id },
+      maya,
+    );
+
+    expect(answer.statusCode).toBe(409);
+    expect(answerOf(core, "places.read")).toBeUndefined();
+    const now = stateOf(core, id).waiting!;
+    expect(now.id).not.toBe(shown.id);
+    expect(now.needs.map((request) => request.id)).toEqual([
+      "people.read",
+      "places.read",
+    ]);
+  });
+
+  it("answers unavailable when its package can't be read, and can be asked again", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), asAHome);
+    await running(before, id);
+    const maya = await claimed(before);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      asAHome,
+    );
+    await running(core, id);
+    const { id: waitingId } = stateOf(core, id).waiting!;
+    home.packagesUnreadableFor(1);
+
+    const first = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waitingId },
+      maya,
+    );
+    expect(first.statusCode).toBe(503);
+    expect(answerOf(core, "people.read")).toBeUndefined();
+
+    const again = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waitingId },
+      maya,
+    );
+    expect(again.statusCode).toBe(200);
+    expect(allowing(core).map((entry) => entry.outcome)).toEqual([
+      "ok",
+      "failed",
+    ]);
+  });
+
+  it("keeps its id across a restart only while it needs the same", async () => {
+    const home = await versions();
+    const optional = { ...people, needed: false, startsOn: true };
+    const before = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      asAHome,
+    );
+    await running(before, id);
+    const two = version("2.0.0", { permissions: [people, places] });
+    const first = await home.coreWith(two, asAHome);
+    await running(first, id);
+    const shown = stateOf(first, id).waiting!;
+    first.db
+      .update(appGrants)
+      .set({ granted: false })
+      .where(
+        and(eq(appGrants.appId, id), eq(appGrants.permission, "people.read")),
+      )
+      .run();
+
+    const again = await home.coreWith(two, asAHome);
+    await running(again, id);
+
+    expect(stateOf(again, id).waiting!.id).not.toBe(shown.id);
+  });
+
   it("is replaced by a newer version, with what that one needs", async () => {
     const home = await versions();
     await running(await home.coreWith(version("1.0.0"), asAHome), id);

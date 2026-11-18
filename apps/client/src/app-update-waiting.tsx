@@ -49,7 +49,11 @@ export function waitingNoticeWords(app: AppInfo, waiting: AppWaitingUpdate) {
   if (isStoppedFor(app, waiting)) {
     return {
       title: `${app.name} can't run on this ${productName}`,
-      line: `Allow ${waiting.version} to start it again. It needs to ${needsList(waiting)}.`,
+      // Allowing it doesn't turn on one someone turned off.
+      line:
+        app.state === "off"
+          ? `Allow ${waiting.version} so it can run. It needs to ${needsList(waiting)}.`
+          : `Allow ${waiting.version} to start it again. It needs to ${needsList(waiting)}.`,
     };
   }
   return {
@@ -117,7 +121,11 @@ export function ReviewUpdate(props: {
           Review
         </Button>
       </DialogTrigger>
-      <DialogContent showCloseButton={false}>
+      {/* A long list scrolls within the screen, Update with it. */}
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {stopped

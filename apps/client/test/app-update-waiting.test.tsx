@@ -40,26 +40,32 @@ const waiting: AppWaitingUpdate = {
       needed: true,
       asked: null,
       startsOn: false,
-    } as AppWaitingUpdate["needs"][number],
+    },
   ],
 };
 
-const app = (version = "0.10.0", state: AppInfo["state"] = "running") =>
-  ({
-    id: "test.moods",
-    name: "Moods",
-    version,
-    build: state === "paused" ? waiting.build : `${version}+running`,
-    icon: null,
-    pages: [],
-    permissions: [],
-    requests: [],
-    state,
-    run: { since: "2026-11-05T14:02:00.000Z" },
-    waiting,
-    settings: null,
-    provides: { entities: [], widgets: [], roomSections: [], devicePages: [] },
-  }) as AppInfo;
+const app = (
+  version = "0.10.0",
+  state: AppInfo["state"] = "running",
+): AppInfo => ({
+  id: "test.moods",
+  name: "Moods",
+  version,
+  // On the build that waits when it's paused for it, or turned off there.
+  build:
+    state === "paused" || state === "off"
+      ? waiting.build
+      : `${version}+running`,
+  icon: null,
+  pages: [],
+  permissions: [],
+  requests: [],
+  state,
+  run: { since: "2026-11-05T14:02:00.000Z" },
+  waiting,
+  settings: null,
+  provides: { entities: [], widgets: [], roomSections: [], devicePages: [] },
+});
 
 let host: HTMLElement;
 let root: Root;
@@ -120,6 +126,12 @@ describe("an update that waits", () => {
       value: "0.11.0 waits",
       problem: false,
     });
+  });
+
+  it("doesn't say allowing starts one someone turned off", () => {
+    expect(waitingNoticeWords(app("0.11.0", "off"), waiting).line).toBe(
+      "Allow 0.11.0 so it can run. It needs to see who lives here.",
+    );
   });
 
   it("shows only what's new on Review, with Not now focused", async () => {
@@ -201,6 +213,12 @@ describe("in Needs attention", () => {
     expect(appAttentionText(stopped)).toBe(
       `Can't run on this ${productName}: allow 0.11.0 to start it again`,
     );
+  });
+
+  it("says first that the version it has stopped, with Restart", async () => {
+    const failed = app("0.10.0", "failed");
+    expect(appAttentionText(failed)).not.toContain("0.11.0");
+    expect(isStopped(failed)).toBe(true);
   });
 
   it.each([
