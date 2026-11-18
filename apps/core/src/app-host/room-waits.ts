@@ -13,9 +13,16 @@ const retryEveryMs = 60_000;
 
 type UpdateRoom =
   | { kind: "held"; release: () => Promise<void> }
-  | { kind: "short"; moreMemoryMb: number };
+  | { kind: "short"; moreMemoryMb: number }
+  // Nothing to hold: a manager that keeps no count, as an older one, whose
+  // start still checks.
+  | { kind: "unchecked" };
 
-/** Asks the manager to hold room, or confirms how much memory is short. */
+/**
+ * Asks the manager to hold room, or confirms how much memory is short.
+ * Undefined when it keeps a count but couldn't answer, so a wait recorded
+ * before goes on.
+ */
 export function updateRoom(options: {
   manager: Pick<ManagerClient, "capabilities"> &
     Partial<
@@ -29,7 +36,9 @@ export function updateRoom(options: {
 }) {
   const { manager } = options;
   return async (pkg: ApartPackage): Promise<UpdateRoom | undefined> => {
-    if (!manager.capabilities().reserves || !manager.reserveForApp) return;
+    if (!manager.capabilities().reserves || !manager.reserveForApp) {
+      return { kind: "unchecked" };
+    }
     const manifest = pkg.apart.manifest;
     const { id, runtime } = manifest;
     const granted = options.grants.of(manifest);
@@ -63,6 +72,7 @@ export function updateRoom(options: {
     const room = counted?.[id];
     if (!room) return;
     const moreMemoryMb = Math.ceil(room.memoryNeedsMb - room.memoryFreeMb);
+    // Refused though its memory fits, as for want of data: not known.
     if (moreMemoryMb > 0) return { kind: "short", moreMemoryMb };
   };
 }

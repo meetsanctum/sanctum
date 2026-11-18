@@ -313,6 +313,26 @@ describe("an update short of memory", () => {
     expect(stateOf(core, id).permissions).not.toContain("services:mosquitto");
   });
 
+  it("goes ahead once the manager keeps no count, as an older one doesn't", async () => {
+    const home = await versions();
+    await running(await home.coreWith(version("1.0.0")), id);
+    const room = counting(home);
+    room.shortMb = 64;
+    const core = await home.coreWith(version("2.0.0"));
+    await running(core, id);
+    expect(stateOf(core, id).waiting?.moreMemoryMb).toBe(64);
+
+    // A manager rolled back to one from before its count.
+    const counts = home.manager.capabilities;
+    home.manager.capabilities = () => ({ ...counts(), reserves: false });
+    await core.apps.retryRoomWaits();
+
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+    expect(stateOf(core, id).waiting).toBeUndefined();
+  });
+
   it("goes ahead with a manager that keeps no count, its start checking", async () => {
     const home = await versions();
     await running(await home.coreWith(version("1.0.0")), id);
