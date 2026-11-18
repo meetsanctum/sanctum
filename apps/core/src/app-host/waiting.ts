@@ -125,7 +125,14 @@ export function createWaitingUpdates(options: {
     /** What the version that waits needs, as clients see it. */
     of(appId: string): AppWaitingUpdate | undefined {
       const row = rowOf(appId);
-      return row && { id: row.id, version: row.version, needs: row.needs };
+      return (
+        row && {
+          id: row.id,
+          version: row.version,
+          build: row.folder,
+          needs: row.needs,
+        }
+      );
     },
 
     get: rowOf,
@@ -138,11 +145,15 @@ export function createWaitingUpdates(options: {
      * this answers its package to install in place of the one that runs.
      * Nothing, and nothing changed, for another id or one that can't be read.
      */
-    async allow(appId: string, id: string): Promise<ApartPackage | undefined> {
+    async allow(
+      appId: string,
+      id: string,
+      canAllow: () => boolean,
+    ): Promise<ApartPackage | undefined> {
       const row = rowOf(appId);
       if (row?.id !== id) return undefined;
       const pkg = await options.loadPackage(appId, row.folder);
-      if (rowOf(appId)?.id !== id) return undefined;
+      if (rowOf(appId)?.id !== id || !canAllow()) return undefined;
       durably(db, () => {
         options.grants.grantAll(
           appId,

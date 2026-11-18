@@ -136,7 +136,6 @@ export function createApartStarts(options: {
 
   return {
     start,
-    replace,
     cancel(appId: string) {
       const replacement = replacements.get(appId);
       if (replacement) replacement.isCancelled = true;

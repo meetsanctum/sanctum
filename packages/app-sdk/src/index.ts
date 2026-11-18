@@ -269,6 +269,8 @@ export type AppWaitingUpdate = {
   /** What allowing it names, so an answer for a version since replaced is refused. */
   id: string;
   version: string;
+  /** The staged build, which can share a version number with the running build. */
+  build: string;
   /** Only what it newly needs, each with its reason. */
   needs: PermissionInfo[];
 };

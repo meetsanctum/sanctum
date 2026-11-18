@@ -32,6 +32,7 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
 const waiting: AppWaitingUpdate = {
   id: "waiting-1",
   version: "0.11.0",
+  build: "0.11.0+waiting",
   needs: [
     {
       id: "people.read",
@@ -48,6 +49,7 @@ const app = (version = "0.10.0", state: AppInfo["state"] = "running") =>
     id: "test.moods",
     name: "Moods",
     version,
+    build: state === "paused" ? waiting.build : `${version}+running`,
     icon: null,
     pages: [],
     permissions: [],
@@ -104,6 +106,19 @@ describe("an update that waits", () => {
     expect(waitingNoticeWords(app("0.11.0", "paused"), waiting)).toEqual({
       title: `Moods can't run on this ${productName}`,
       line: "Allow 0.11.0 to start it again. It needs to see who lives here.",
+    });
+  });
+
+  it("keeps a running build plain when the waiting build has the same version", () => {
+    const running = app("0.11.0");
+
+    expect(waitingNoticeWords(running, waiting).title).toBe(
+      "Moods 0.11.0 is waiting",
+    );
+    expect(isStopped(running)).toBe(false);
+    expect(attentionTile([], [], "celsius", [running])).toMatchObject({
+      value: "0.11.0 waits",
+      problem: false,
     });
   });
 

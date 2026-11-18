@@ -60,6 +60,7 @@ describe("an update that needs a new permission", () => {
       waiting: {
         id: expect.any(String),
         version: "2.0.0",
+        build: "2.0.0+test",
         needs: [
           {
             id: "people.read",
@@ -198,6 +199,111 @@ describe("an update that needs a new permission", () => {
     ]);
   });
 
+  it("refuses an approval overtaken by removal without granting anything", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), asAHome);
+    await running(before, id);
+    const maya = await claimed(before);
+    let release: (() => void) | undefined;
+    let isHeld = false;
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      {
+        ...asAHome,
+        beforeLoad: async () => {
+          if (isHeld) await new Promise<void>((done) => (release = done));
+        },
+      },
+    );
+    await running(core, id);
+    isHeld = true;
+    const answer = post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: stateOf(core, id).waiting!.id },
+      maya,
+    );
+    try {
+      await vi.waitFor(() => expect(release).toBeDefined());
+      await core.apps.remove(id);
+    } finally {
+      release?.();
+    }
+
+    expect((await answer).statusCode).toBe(409);
+    expect(answerOf(core, "people.read")).toBeUndefined();
+    expect(core.apps.list()).toEqual([]);
+  });
+
+  it("finishes an allowed update whose replacement failed before installation", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), asAHome);
+    await running(before, id);
+    const maya = await claimed(before);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      asAHome,
+    );
+    await running(core, id);
+    const reconcile = vi
+      .spyOn(core.entities, "reconcileTypes")
+      .mockImplementationOnce(() => {
+        throw new Error("The installation was interrupted");
+      });
+
+    expect(
+      (
+        await post(
+          core,
+          `/api/apps/${id}/update/allow`,
+          { id: stateOf(core, id).waiting!.id },
+          maya,
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"));
+    await running(core, id);
+    expect(reconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a waiting version after someone goes back", async () => {
+    const home = await versions();
+    const first = await home.coreWith(version("1.0.0"), asAHome);
+    await running(first, id);
+    const maya = await claimed(first);
+    const second = await home.coreWith(version("2.0.0"), asAHome);
+    await running(second, id);
+    await vi.waitFor(() => expect(home.journal.size).toBe(0));
+    const core = await home.coreWith(
+      version("3.0.0", { permissions: [people] }),
+      asAHome,
+    );
+    await running(core, id);
+    const waitingId = stateOf(core, id).waiting!.id;
+    const back = await core.apps.goBackOption(id);
+
+    expect(
+      (await post(core, `/api/apps/${id}/go-back`, { id: back!.id }, maya))
+        .statusCode,
+    ).toBe(200);
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("1.0.0"));
+    await running(core, id);
+
+    expect(stateOf(core, id).waiting).toBeUndefined();
+    expect(
+      (
+        await post(
+          core,
+          `/api/apps/${id}/update/allow`,
+          { id: waitingId },
+          maya,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(answerOf(core, "people.read")).toBeUndefined();
+  });
+
   it("stops the app when what it runs can't run here, until someone allows it", async () => {
     const home = await versions();
     const before = await home.coreWith(version("1.0.0"), asAHome);
@@ -232,6 +338,70 @@ describe("an update that needs a new permission", () => {
     });
     expect(stateOf(core, id).waiting).toBeUndefined();
   });
+
+  it("clears the wait when its installed build receives all its needed permissions", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), asAHome);
+    await running(before, id);
+    const maya = await claimed(before);
+    home.builtForAnOlderProtocol(version("1.0.0"));
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people, places] }),
+      asAHome,
+    );
+    await vi.waitFor(() => expect(stateOf(core, id).state).toBe("paused"));
+
+    await post(
+      core,
+      `/api/apps/${id}/permissions/update`,
+      { permission: people.id, granted: true },
+      maya,
+    );
+    expect(stateOf(core, id).waiting).toBeDefined();
+    await post(
+      core,
+      `/api/apps/${id}/permissions/update`,
+      { permission: places.id, granted: true },
+      maya,
+    );
+    await running(core, id);
+
+    expect(stateOf(core, id).waiting).toBeUndefined();
+  });
+
+  it.each(["3.0.0", "2.0.0"])(
+    "replaces a stopped waiting build with %s without granting its permissions",
+    async (nextVersion) => {
+      const home = await versions();
+      await running(await home.coreWith(version("1.0.0"), asAHome), id);
+      home.builtForAnOlderProtocol(version("1.0.0"));
+      const second = await home.coreWith(
+        version("2.0.0", { permissions: [people] }),
+        asAHome,
+      );
+      await vi.waitFor(() => expect(stateOf(second, id).state).toBe("paused"));
+      const waitingId = stateOf(second, id).waiting!.id;
+
+      const build = `${nextVersion}+rebuilt`;
+      const core = await home.coreWith(
+        version(nextVersion, { permissions: [people, places] }),
+        { ...asAHome, folder: build },
+      );
+
+      expect(stateOf(core, id)).toMatchObject({
+        version: nextVersion,
+        state: "paused",
+        waiting: {
+          version: nextVersion,
+          build,
+          needs: [{ id: people.id }, { id: places.id }],
+        },
+      });
+      expect(stateOf(core, id).waiting!.id).not.toBe(waitingId);
+      expect(answerOf(core, people.id)).toBeUndefined();
+      expect(answerOf(core, places.id)).toBeUndefined();
+    },
+  );
 });
 
 describe("an update with nothing new to allow", () => {

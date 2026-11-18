@@ -31,7 +31,7 @@ import { CoreError, coreJson } from "./core-fetch";
 
 /** Whether it's stopped on the version that waits, rather than running the one before. */
 export const isStoppedFor = (app: AppInfo, waiting: AppWaitingUpdate) =>
-  app.version === waiting.version;
+  app.build === waiting.build;
 
 // "see your lights and control your switches"
 function needsList(waiting: AppWaitingUpdate) {

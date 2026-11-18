@@ -54,6 +54,7 @@ import { createLanPolicies } from "./lan.js";
 import { createAppInstaller } from "./install.js";
 import type { AppVersions } from "./versions.js";
 import type { WaitingUpdates } from "./waiting.js";
+import { createAppUpdateChoices } from "./update-choices.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -300,28 +301,12 @@ export function createAppHost(options: {
       void supervisor.restart(entry);
       return true;
     },
-    onGoBack: (entry, copyId) =>
-      options.updates.startGoingBack(entry, copyId).catch((error: unknown) => {
-        log(`apps: ${entry.app.id} can't go back (${String(error)})`);
-        return false;
-      }),
-    // The version that waits takes the place of the one that runs, as a
-    // failed update's does, and its start is then the update. One paused on
-    // it takes what was granted in place.
-    async onAllowUpdate(entry, id) {
-      const allowed = await options.waiting
-        .allow(entry.app.id, id)
-        .catch((error: unknown) => {
-          log(`apps: ${entry.app.id} can't update (${String(error)})`);
-          return undefined;
-        });
-      if (!allowed) return false;
-      if (allowed.apart.folder === entry.apartIn) return "inPlace";
-      void apartStarts.replace(entry, allowed).catch((error: unknown) => {
-        log(`apps: ${entry.app.id} didn't update (${String(error)})`);
-      });
-      return "replaced";
-    },
+    ...createAppUpdateChoices({
+      installed,
+      updates: options.updates,
+      waiting: options.waiting,
+      log,
+    }),
     gate,
     record,
     settings: options.settings,
@@ -344,6 +329,15 @@ export function createAppHost(options: {
     // What it set going under a permission that is off ends, a service
     // switched back on gets a new login, and it pauses, starts or restarts.
     onPermission(entry, permission, granted) {
+      // Its switches can also grant what an installed waiting build needs.
+      if (
+        granted &&
+        entry.waiting?.build === entry.apartIn &&
+        entry.waiting.needs.every((need) => entry.granted.includes(need.id))
+      ) {
+        options.waiting.forget(entry.app.id);
+        delete entry.waiting;
+      }
       const service = serviceOf(permission);
       if (granted && service && mayRunServices.includes(entry.origin)) {
         entry.services.set(service, appServices.request(entry.app.id, service));
@@ -480,11 +474,10 @@ export function createAppHost(options: {
             // One someone is adding is as its sheet showed, and an update
             // under way goes on as it began; otherwise one that needs what
             // nobody allowed waits.
-            const stage = options.updates.shownFor(appId)?.stage;
             const isAdding = adding.includes(appId);
             if (isAdding) options.waiting.forget(appId);
             const chosen =
-              isAdding || stage === "updating" || stage === "goingBack"
+              isAdding || options.updates.isUnderWay(pkg)
                 ? pkg
                 : await options.waiting.choose(pkg);
             if (isClosing) break;
