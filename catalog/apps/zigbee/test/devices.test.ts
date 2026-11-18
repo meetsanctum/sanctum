@@ -126,8 +126,8 @@ describe("the device list", () => {
           name: "leak",
           manufacturer: "Test Vendor",
           model: "TL-1",
-          // Nothing says what it is, and nothing of it can be read.
-          type: null,
+          // Nothing of it can be read, so it is nothing Sanctum uses.
+          type: "unknown",
           capabilities: [],
           firmware: { updatable: false, sleeps: true },
           probe: false,
@@ -221,7 +221,7 @@ describe("the device list", () => {
     expect(entry?.registration.model).toBeNull();
   });
 
-  it("says a switch is a plug when its name or model does, and nothing of the rest", () => {
+  it("says a switch is a plug when its name or model does, and the rest by their kinds", () => {
     const outlet = (extra: Parameters<typeof zigbeeDevice>[3] = {}) =>
       zigbeeDevice("0x08", "0x08", [switchExpose()], {
         definition: {
@@ -252,8 +252,10 @@ describe("the device list", () => {
       ),
     ).toBe("plug");
     // Only a whole word says so, and only of a switch.
-    expect(typeOf(outlet({ friendly_name: "remote_plug" }))).toBeNull();
-    expect(typeOf(zigbeeDevice("0x09", "0x09", [switchExpose()]))).toBeNull();
+    expect(typeOf(outlet({ friendly_name: "remote_plug" }))).toBe("switch");
+    expect(typeOf(zigbeeDevice("0x09", "0x09", [switchExpose()]))).toBe(
+      "switch",
+    );
     expect(
       typeOf(
         zigbeeDevice("0x0a", "0x0a", [lightExpose()], {
@@ -265,7 +267,7 @@ describe("the device list", () => {
           },
         }),
       ),
-    ).toBeNull();
+    ).toBe("light");
   });
 
   it("knows a battery-powered device", () => {

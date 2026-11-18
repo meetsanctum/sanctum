@@ -273,6 +273,7 @@ describe("what arrives on an app's socket", () => {
     const lamp = {
       key: "lamp",
       name: "Lamp",
+      type: "switch",
       capabilities: [{ id: "light", kind: "switch", features: {} }],
     };
 

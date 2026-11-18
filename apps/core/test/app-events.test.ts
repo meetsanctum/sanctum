@@ -47,7 +47,7 @@ function listener(
     id,
     name: "Listener",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: permissions.map((id) => ({ id, reason: "For the test." })),
     actions: [],
     events: [],
@@ -422,7 +422,7 @@ describe("the core's events", () => {
             id: "test.eager",
             name: "Eager",
             version: "0.1.0",
-            core: "^1.0.0",
+            core: "^2.0.0",
             permissions: [{ id: "places.read", reason: "For the test." }],
             actions: [],
             events: [],
@@ -451,7 +451,7 @@ describe("the core's events", () => {
       id: "test.emits",
       name: "Emits",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [],
       events: [said],
       actions: [
@@ -508,7 +508,7 @@ describe("the core's events", () => {
             id: "test.late",
             name: "Late",
             version: "0.1.0",
-            core: "^1.0.0",
+            core: "^2.0.0",
             permissions: [{ id: "places.read", reason: "For the test." }],
             actions: [
               defineAction({

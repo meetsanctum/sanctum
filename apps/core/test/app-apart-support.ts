@@ -74,7 +74,7 @@ export const running = (core: TestCore, id: string) =>
 export const base = {
   name: "Apart",
   version: "1.0.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   events: [],
 };
 

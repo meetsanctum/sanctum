@@ -139,6 +139,7 @@ describe("a workflow that starts when a contact sensor opens", () => {
     core.devices.register("test.lamps", {
       key: "door-2",
       name: "Door 2",
+      type: "contact",
       capabilities: [{ id: "contact", kind: "contact" }],
     });
     const sensor = await sensorOf(core, token, "Door 2");
@@ -214,6 +215,7 @@ describe("a workflow that starts when a contact sensor opens", () => {
     core.devices.register("test.lamps", {
       key: "new-door",
       name: "New door",
+      type: "contact",
       capabilities: [{ id: "contact", kind: "contact" }],
     });
     const sensor = await sensorOf(core, token, "New door");

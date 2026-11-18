@@ -38,6 +38,7 @@ export async function setupCommands() {
   const registration = {
     key: "lamp",
     name: "Lamp",
+    type: "light",
     capabilities: [
       { id: "light", kind: "light" as const, features: { brightness: true } },
     ],

@@ -66,7 +66,7 @@ export function deviceInfo(
   const capabilities = stored.filter((capability) =>
     isCapabilityKind(capability.kind),
   );
-  const type = deviceType({ ...device, capabilities });
+  const type = deviceType(device);
   return {
     id: device.id,
     name: device.name ?? device.driverName,

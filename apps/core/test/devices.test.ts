@@ -359,6 +359,7 @@ describe("a driver app's devices", () => {
     core.devices.register("test.lamps", {
       key: "lamp-1",
       name: "Kitchen lamp",
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
     await command(core, maya.token, lamp, "light", { on: true });
@@ -381,6 +382,7 @@ describe("a driver app's devices", () => {
     core.devices.register("test.lamps", {
       key: "lamp-1",
       name: "0x00158d0001",
+      type: "light",
       capabilities: [
         { id: "light", kind: "light", features: { brightness: true } },
         { id: "power", kind: "switch" },
@@ -417,7 +419,7 @@ describe("the Drivers contract", () => {
       id: "test.other",
       name: "Other",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.register", reason: "For the test." }],
       actions: [],
       events: [],
@@ -450,6 +452,7 @@ describe("the Drivers contract", () => {
     const { id } = await other().devices.register({
       key: "lamp-1",
       name: "Hallway light",
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
 
@@ -508,6 +511,7 @@ describe("the Drivers contract", () => {
     await other().devices.register({
       key: "fan",
       name: "Fan",
+      type: "switch",
       capabilities: [{ id: "power", kind: "switch" }],
     });
     await other().devices.report({ key: "fan", availability: "online" });
@@ -541,6 +545,7 @@ describe("the Drivers contract", () => {
     await other().devices.register({
       key: "fan",
       name: "Fan",
+      type: "switch",
       capabilities: [{ id: "power", kind: "switch" }],
     });
     expect(await fan()).toMatchObject({ leftAt: null });
@@ -551,6 +556,7 @@ describe("the Drivers contract", () => {
     await other().devices.register({
       key: "fan",
       name: "Fan",
+      type: "switch",
       capabilities: [{ id: "power", kind: "switch" }],
     });
     await other().devices.report({ key: "fan", availability: "online" });
@@ -575,12 +581,14 @@ describe("the Drivers contract", () => {
       other().devices.register({
         key: "fan",
         name: "Fan",
+        type: "switch",
         capabilities: [{ id: "fan", kind: "fan" as "switch" }],
       }),
     ).rejects.toThrow(/cannot take/);
     await other().devices.register({
       key: "fan",
       name: "Fan",
+      type: "switch",
       capabilities: [{ id: "power", kind: "switch" }],
     });
     await expect(
@@ -597,7 +605,7 @@ describe("the Drivers contract", () => {
       id: "test.other",
       name: "Other",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.register", reason: "For the test." }],
       actions: [],
       events: [],
@@ -606,6 +614,7 @@ describe("the Drivers contract", () => {
         await context.devices.register({
           key: "fan",
           name: "Fan",
+          type: "switch",
           capabilities: [{ id: "power", kind: "switch" }],
         });
       },

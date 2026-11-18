@@ -12,11 +12,11 @@ import type {
   DeviceInfo,
   DevicePresence,
   DevicePress,
-  DeviceRegistration,
   DeviceRelease,
   DeviceReport,
 } from "./devices.js";
 import type { DeviceProblemReport } from "./device-problems.js";
+import type { DeviceRegistration } from "./device-registration.js";
 import type { FoundReport } from "./found-devices.js";
 import type { EntityInfo, EntityPublication } from "./entities.js";
 import { entityTypeOf, type AppDefinition } from "./index.js";

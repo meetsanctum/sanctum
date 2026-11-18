@@ -1,7 +1,9 @@
 import {
   ActionError,
   defineApp,
+  deviceTypeOf,
   type Actor,
+  type DeclaredType,
   type AppContext,
   type DeviceJoining,
   type DeviceRegistration,
@@ -58,6 +60,20 @@ const capabilityIds = {
 // What a remote's button can do, and which of that is a hold.
 export const remoteActions = ["single", "double", "hold"];
 export const remoteHolds = ["hold"];
+// What the driver says a gadget is: a switch whose name or model says it is
+// a plug is one, a purifier is nothing Sanctum uses, and the rest are what
+// their kind is.
+const plugWords = /\b(plugs?|outlets?|sockets?)\b/i;
+function typeOf(gadget: Gadget): DeclaredType {
+  if (gadget.kind === "purifier") return "unknown";
+  if (gadget.kind === "switch") {
+    return plugWords.test(`${gadget.name} ${models.switch}`)
+      ? "plug"
+      : "switch";
+  }
+  return deviceTypeOf([gadget.kind]);
+}
+
 const models = {
   light: "Lamp",
   switch: "Plug",
@@ -491,8 +507,9 @@ class Radio {
       name: gadget.name,
       manufacturer: "Test",
       model: models[gadget.kind],
-      // Any id goes over the wire, one a core does not know too.
-      type: gadget.type as DeviceRegistration["type"],
+      // What a test says it is goes over the wire as it is, one a core
+      // refuses too.
+      type: (gadget.type as DeclaredType | undefined) ?? typeOf(gadget),
       capabilities:
         gadget.kind === "purifier"
           ? []
@@ -613,7 +630,7 @@ export default defineApp({
   id: "test.lamps",
   name: "Lamps",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [
     { id: "devices.register", reason: "For the test.", needed: true },
   ],

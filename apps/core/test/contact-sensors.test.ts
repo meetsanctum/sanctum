@@ -76,6 +76,7 @@ describe("a contact sensor", () => {
       key: "magnet-1",
       name: "Door and window sensor",
       model: "MCCGQ11LM",
+      type: "unknown",
       capabilities: [],
     };
     core.devices.register("test.lamps", registration);
@@ -97,6 +98,7 @@ describe("a contact sensor", () => {
 
     core.devices.register("test.lamps", {
       ...registration,
+      type: "contact",
       capabilities: [{ id: "contact", kind: "contact" }],
     });
 

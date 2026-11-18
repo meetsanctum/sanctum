@@ -594,6 +594,7 @@ describe("an app that runs apart, supervised", () => {
       await ctx.devices.register({
         key: "lamp",
         name: "Lamp",
+        type: "switch",
         capabilities: [{ id: "light", kind: "switch", features: {} }],
       } as never);
       await ctx.devices.report({

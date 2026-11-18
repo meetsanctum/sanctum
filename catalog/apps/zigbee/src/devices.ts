@@ -1,4 +1,8 @@
-import type { DeviceRegistration } from "@meetsanctum/app-sdk";
+import {
+  deviceTypeOf,
+  type DeclaredType,
+  type DeviceRegistration,
+} from "@meetsanctum/app-sdk";
 
 import { capabilityMappings, type CapabilityMapping } from "./exposes.js";
 import { versionOf } from "./firmware.js";
@@ -98,23 +102,24 @@ function nameOf(device: ZigbeeDevice, key: string, friendlyName: string) {
   );
 }
 
-// What the driver says a device is, where its capabilities do not: a plug,
-// which switches like any switch. It is one when it switches, is no light,
-// and a whole word in the name or model the driver registers says so, as
-// Zigbee2MQTT's descriptions do: "TRADFRI control outlet", "Smart plug".
+// What the driver says a device is. A plug switches like any switch, so it
+// is one when it switches, is no light, and a whole word in the name or
+// model the driver registers says so, as Zigbee2MQTT's descriptions do:
+// "TRADFRI control outlet", "Smart plug". Any other device is what its kinds
+// make it.
 const plugWords = /\b(plugs?|outlets?|sockets?)\b/i;
 
 function typeOf(
   capabilities: readonly CapabilityMapping[],
   name: string,
   model: string | null,
-) {
-  const kinds = new Set(capabilities.map((each) => each.kind));
-  return kinds.has("switch") &&
-    !kinds.has("light") &&
+): DeclaredType {
+  const kinds = capabilities.map((each) => each.kind);
+  return kinds.includes("switch") &&
+    !kinds.includes("light") &&
     plugWords.test(`${name} ${model ?? ""}`)
-    ? ("plug" as const)
-    : null;
+    ? "plug"
+    : deviceTypeOf(kinds);
 }
 
 // A capability as the core registers it: its kind's features, if it has any.

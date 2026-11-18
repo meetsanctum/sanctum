@@ -15,7 +15,7 @@ async function setup() {
       id: "sanctum.example",
       name: "Example",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [],
       actions: [],
       events: [],

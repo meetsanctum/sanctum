@@ -32,7 +32,7 @@ export function createWeatherApp(options: WeatherOptions = {}) {
     // 0.4.0: the forecast hour by hour, with how the air feels, its
     // humidity, the wind, the UV index and what falls each day.
     version: "0.4.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     summary: "The forecast and sun times for where your home is.",
     icon: { glyph: "cloud-sun", color: "sky" },
     pages: ["main"],

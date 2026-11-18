@@ -1,12 +1,16 @@
-import { defineApp, light as lightKind } from "@meetsanctum/app-sdk";
+import {
+  defineApp,
+  light as lightKind,
+  switchCapability,
+} from "@meetsanctum/app-sdk";
 
 // Pretend lights and contact sensors for a development stack, since a Mac
 // has no Zigbee stick: a driver app like Zigbee, whose lights do what they're
 // told at once and whose contact sensors open and close by themselves. Add
 // devices can try it out: while it lets devices join, a new light joins a few
-// seconds in and another a little later, and it has found a sensor and a plug
-// on the network, the plug asking for its key ("sanctum"). It ships with no
-// host: only a development stack stages it (deploy/dev/stack.Dockerfile).
+// seconds in and another a little later, and it has found a climate sensor
+// and a plug on the network, the plug asking for its key ("sanctum"). Only
+// a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
   [
@@ -71,29 +75,65 @@ function stopBlink(key) {
   blinking.delete(key);
 }
 
-// What it has found and could add, until someone adds it.
-const found = new Map([
-  [
-    "office-air",
-    {
-      key: "office-air",
-      name: "Office Air",
-      description: "Temperature, humidity",
-      type: null,
-      asks: [],
-    },
-  ],
-  [
-    "desk-plug",
-    {
-      key: "desk-plug",
-      name: "Desk Plug",
-      description: "Needs its key",
-      type: null,
-      asks: ["key"],
-    },
-  ],
-]);
+// What it has found and could add, until someone adds it: what each is,
+// what adding it asks, and what it has and first says once added.
+const foundDevices = [
+  {
+    key: "office-air",
+    name: "Office Air",
+    description: "Temperature, humidity",
+    type: "sensor",
+    asks: [],
+    model: "Fake climate sensor",
+    capabilities: [
+      {
+        id: "temperature",
+        kind: "sensor",
+        features: { measures: "temperature" },
+      },
+      { id: "humidity", kind: "sensor", features: { measures: "humidity" } },
+    ],
+    states: { temperature: { value: 22.5 }, humidity: { value: 45 } },
+  },
+  {
+    key: "desk-plug",
+    name: "Desk Plug",
+    description: "Needs its key",
+    type: "plug",
+    asks: ["key"],
+    model: "Fake plug",
+    capabilities: [{ id: "power", kind: "switch" }],
+    states: { power: { on: false } },
+  },
+];
+const added = new Set();
+// What it lists of each found device (ctx.devices.found).
+const listed = () =>
+  foundDevices
+    .filter(({ key }) => !added.has(key))
+    .map(({ key, name, description, type, asks }) => ({
+      key,
+      name,
+      description,
+      type,
+      asks,
+    }));
+
+async function registerFound(
+  ctx,
+  { key, name, model, type, capabilities, states },
+) {
+  await ctx.devices.register({
+    key,
+    name,
+    manufacturer: "Sanctum",
+    model,
+    type,
+    capabilities,
+  });
+  added.add(key);
+  await ctx.devices.report({ key, availability: "online", states });
+}
 
 // Lights that join while it lets devices join: the first a few seconds in,
 // the next a little later, each joining, being set up, then ready. Only a
@@ -165,6 +205,7 @@ const registerLight = (ctx, key) =>
     model: "Fake light",
     // It blinks to show itself (Blink).
     identify: true,
+    type: "light",
     capabilities: [
       {
         id: "light",
@@ -189,12 +230,12 @@ export default defineApp({
   id: "sanctum.fake-lights",
   name: "Fake lights",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [
     {
       id: "devices.register",
       reason:
-        "To bring pretend lights and contact sensors into a development home.",
+        "To bring pretend lights, sensors and a plug into a development home.",
       needed: true,
     },
   ],
@@ -212,12 +253,24 @@ export default defineApp({
         name,
         manufacturer: "Sanctum",
         model: "Fake contact sensor",
+        type: "contact",
         capabilities: [{ id: "contact", kind: "contact" }],
       });
       await reportContact(ctx, key);
     }
-    await ctx.devices.present({ keys: [...lights.keys(), ...contacts.keys()] });
-    await ctx.devices.found([...found.values()]);
+    const previouslyAdded = new Set(
+      (await ctx.devices.list())
+        .filter((device) => device.driver === ctx.appId)
+        .map((device) => device.key),
+    );
+    added.clear();
+    for (const device of foundDevices) {
+      if (previouslyAdded.has(device.key)) await registerFound(ctx, device);
+    }
+    await ctx.devices.present({
+      keys: [...lights.keys(), ...contacts.keys(), ...added],
+    });
+    await ctx.devices.found(listed());
     // The core takes a report that says the same again as no change.
     ticking = setInterval(() => {
       for (const key of contacts.keys()) {
@@ -235,8 +288,16 @@ export default defineApp({
   },
   driver: {
     async command(ctx, command) {
+      if (command.kind === "switch" && added.has(command.key)) {
+        await ctx.devices.report({
+          key: command.key,
+          availability: "online",
+          states: { power: switchCapability.desired(command.command) },
+        });
+        return;
+      }
       const light = lights.get(command.key);
-      // A contact sensor takes no commands, and the core sends it none.
+      // A sensor takes no commands, and the core sends it none.
       if (!light) return;
       stopBlink(command.key);
       light.state = { ...light.state, ...lightKind.desired(command.command) };
@@ -284,25 +345,13 @@ export default defineApp({
       },
     },
     async add(ctx, { key, answers }) {
-      const device = found.get(key);
+      const device = foundDevices.find((each) => each.key === key);
       if (!device) return;
       if (device.asks.includes("key") && answers.key !== "sanctum") {
         return { refused: { question: "key", refusal: "wrongKey" } };
       }
-      await ctx.devices.register({
-        key,
-        name: device.name,
-        manufacturer: "Sanctum",
-        model: "Fake sensor",
-        capabilities: [{ id: "contact", kind: "contact" }],
-      });
-      await ctx.devices.report({
-        key,
-        availability: "online",
-        states: { contact: { open: false } },
-      });
-      found.delete(key);
-      await ctx.devices.found([...found.values()]);
+      await registerFound(ctx, device);
+      await ctx.devices.found(listed());
     },
   },
 });

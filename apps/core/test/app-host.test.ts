@@ -22,7 +22,7 @@ import {
 
 // Loading app packages, each app's own database and running its actions.
 
-const base = { name: "Test", version: "0.1.0", core: "^1.0.0", events: [] };
+const base = { name: "Test", version: "0.1.0", core: "^2.0.0", events: [] };
 
 function activity(core: TestCore, appId: string) {
   return createActivity(core.db)

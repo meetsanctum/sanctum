@@ -11,7 +11,11 @@ const secret = "c2VjcmV0IGtleSBvZiB0aGUgaGFsbCBsYW1w";
 
 afterEach(() => vi.restoreAllMocks());
 
-const hallLamp = { key: "lamp-7", name: "Hall lamp", type: "light" };
+const hallLamp = {
+  key: "lamp-7",
+  name: "Hall lamp",
+  type: "light" as const,
+};
 const porchLamp = {
   key: "lamp-8",
   name: "Porch lamp",

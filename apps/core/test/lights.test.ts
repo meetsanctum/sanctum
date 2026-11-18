@@ -42,7 +42,7 @@ const rules = defineApp({
   id: "test.rules",
   name: "Rules",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [],
   actions: [rule],
   events: [],

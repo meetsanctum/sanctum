@@ -157,6 +157,7 @@ describe("commands whose deliveries overlap", () => {
     });
     devices.register("test.driver", {
       ...registration,
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
     deliveries[1]!.reject(new Error("radio failed"));
@@ -328,6 +329,7 @@ describe("commands whose deliveries overlap", () => {
     const refused = expect(sent).rejects.toMatchObject({ code: "app_failed" });
     devices.register("test.driver", {
       ...registration,
+      type: "switch",
       capabilities: [{ id: "light", kind: "switch" }],
     });
     deliveries[0]!.reject(new Error("radio failed"));

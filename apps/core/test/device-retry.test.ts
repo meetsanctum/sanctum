@@ -163,6 +163,7 @@ describe("a command its device has not confirmed in time", () => {
     const { id } = devices.register("test.driver", {
       key: "bulb",
       name: "Bulb",
+      type: "light",
       capabilities: [
         {
           id: "light",
@@ -220,6 +221,7 @@ describe("a command its device has not confirmed in time", () => {
         await setupCommands();
       devices.register("test.driver", {
         ...registration,
+        type: "light",
         capabilities: [
           {
             id: "light",
@@ -343,6 +345,7 @@ describe("a command its device has not confirmed in time", () => {
     await sending;
     devices.register("test.driver", {
       ...registration,
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
     await vi.advanceTimersByTimeAsync(300);

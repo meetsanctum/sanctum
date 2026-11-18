@@ -49,7 +49,7 @@ export default defineApp({
   id: "test.panel",
   name: "Panel",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [
     { id: "places.read", reason: "For the test." },
     { id: "devices.read:light", reason: "For the test." },

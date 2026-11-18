@@ -11,6 +11,7 @@ beforeEach(async (t) => {
   reports = [];
   context = {
     devices: {
+      list: async () => [],
       register: async ({ key }) => ({ id: key }),
       report: async (report) => reports.push(structuredClone(report)),
       present: async () => {},

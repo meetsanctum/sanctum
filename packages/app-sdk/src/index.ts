@@ -58,6 +58,7 @@ export * from "./device-maintenance.js";
 export * from "./device-pages.js";
 export * from "./device-types.js";
 export * from "./devices.js";
+export * from "./device-registration.js";
 export * from "./entities.js";
 export * from "./firmware.js";
 export * from "./history.js";

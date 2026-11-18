@@ -67,8 +67,8 @@ describe("a contact sensor's exposes", () => {
         name: "front_door",
         manufacturer: "Aqara",
         model: "MCCGQ11LM",
-        // What it is follows from its contact.
-        type: null,
+        // What it is, by its contact.
+        type: "contact",
         capabilities: [{ id: "contact", kind: "contact" }],
         firmware: { sleeps: true },
         // It cannot be asked whether it is open.

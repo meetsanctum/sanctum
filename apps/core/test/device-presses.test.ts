@@ -35,7 +35,7 @@ function pressListener(permissions: string[], needed: string[] = []) {
     id: "test.presses",
     name: "Presses",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: [...permissions, ...needed].map((id) => ({
       id,
       reason: "For the test.",
@@ -154,6 +154,7 @@ describe("the press trigger", () => {
     const { id: device } = core.devices.register("test.lamps", {
       key: "multi-button",
       name: "Remote",
+      type: "button",
       capabilities: [
         { id: "left", kind: "button", features: { actions: ["single"] } },
         { id: "right", kind: "button", features: { actions: ["double"] } },
@@ -446,7 +447,7 @@ describe("an app's page capturing a remote's presses", () => {
       id: "test.presses",
       name: "Presses",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.read:light", reason: "For the test." }],
       actions: [],
       events: [],

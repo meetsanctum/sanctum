@@ -32,7 +32,7 @@ export function testApp(
     id: "test.runner",
     name: "Runner test",
     version: "1.2.3",
-    core: "^1.0.0",
+    core: "^2.0.0",
     summary: "An app for a runner's tests",
     permissions: hooks.driver
       ? [{ id: registerPermission, reason: "To bring its devices" }]

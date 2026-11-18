@@ -40,6 +40,15 @@ describe("found devices", () => {
     ]);
   });
 
+  it("are listed only as a type a driver may say", () => {
+    for (const type of ["curtain", "door", "window"]) {
+      expect(
+        foundDevices.safeParse([{ key: "a", name: "A", type }]).success,
+        type,
+      ).toBe(false);
+    }
+  });
+
   it.each([
     [
       "twice",
@@ -73,7 +82,7 @@ describe("found devices", () => {
       id: "sanctum.example",
       name: "Example",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.register", reason: "For the test." }],
       actions: [],
       events: [],

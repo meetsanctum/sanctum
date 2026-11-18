@@ -3,9 +3,12 @@ import type { CapabilityKind } from "./devices.js";
 // What a device is, to the household: what it is called, "Motion sensor" or
 // "Office motion sensor", and its icon in Settings. A capability kind says what one part
 // of a device does; its type says what the whole device is, whatever driver
-// brings it. A device is the first type in this order whose kinds it has,
-// so a light that also measures is a light, and a motion sensor that
-// measures is a motion sensor.
+// brings it. Its driver says the type, from what its protocol tells of the
+// device, and the core takes it where the device has what the type needs.
+// For a driver whose protocol tells no more than the kinds, deviceTypeOf
+// gives the first type in this order whose kinds a device has, so a light
+// that also measures is a light, and a motion sensor that measures is a
+// motion sensor.
 //
 // The household may show a device as another type where its own type
 // lists it (`showAs`): a contact sensor as a door or a window, which no
@@ -24,16 +27,16 @@ type DeviceTypeDefinition = {
   /** The capability kinds a device of this type has, each of them. */
   needs: readonly CapabilityKind[];
   /**
-   * No capability tells it from the next type with its kinds, so a device
-   * is one only where something else says so: the core reads a plug from
-   * what its driver calls the device.
+   * No capability tells it from the next type with its kinds, so
+   * deviceTypeOf never gives it: a driver says a device is a plug from what
+   * its protocol tells.
    */
   declaredOnly?: true;
   /** The types the household may show a device of this type as instead. */
   showAs?: readonly string[];
   /**
-   * A device is one only where the household shows it as one: neither its
-   * kinds nor its driver make it one.
+   * A device is one only where the household shows it as one: no driver
+   * may say it.
    */
   chosenOnly?: true;
 };
@@ -96,24 +99,47 @@ export const deviceTypes: readonly (DeviceTypeDefinition & {
   id: DeviceType;
 })[] = types;
 
+/** A type a driver may say: any but those only the household chooses. */
+export type DeclaredType = Exclude<
+  DeviceType,
+  Extract<(typeof types)[number], { chosenOnly: true }>["id"]
+>;
+
+/** Every type a driver may say, in the order of the list. */
+export const declaredTypes = deviceTypes
+  .filter((each) => !each.chosenOnly)
+  .map((each) => each.id) as [DeclaredType, ...DeclaredType[]];
+
 /**
- * What a device with these capability kinds is: the first type whose kinds
- * it has. A type its kinds do not tell fits only where `declared` says the
- * device is one.
+ * What a device with these capability kinds is, for a driver whose
+ * protocol tells no more: the first type whose kinds it has. A plug is
+ * never given, since no capability tells it from a switch; its driver says
+ * it.
  */
-export function deviceTypeOf(
-  kinds: Iterable<CapabilityKind>,
-  declared: (type: DeviceType) => boolean = () => false,
-): DeviceType {
+export function deviceTypeOf(kinds: Iterable<CapabilityKind>): DeclaredType {
   const has = new Set(kinds);
   const type = deviceTypes.find(
     (each) =>
       !each.chosenOnly &&
-      each.needs.every((kind) => has.has(kind)) &&
-      (!each.declaredOnly || declared(each.id)),
+      !each.declaredOnly &&
+      each.needs.every((kind) => has.has(kind)),
   );
   // The last type needs nothing, so one always fits.
-  return type?.id ?? "unknown";
+  return (type?.id ?? "unknown") as DeclaredType;
+}
+
+/**
+ * Whether a device with these capability kinds may be of this type, as its
+ * driver says: it has every kind the type needs. An unknown device is one
+ * with no capability Sanctum uses, so only a device with none is unknown.
+ */
+export function fitsType(
+  type: DeviceType,
+  kinds: ReadonlySet<CapabilityKind>,
+): boolean {
+  if (type === "unknown") return kinds.size === 0;
+  const { needs } = deviceTypes.find((each) => each.id === type)!;
+  return needs.every((kind) => kinds.has(kind));
 }
 
 /** The types the household may show a device of this type as, besides its own. */

@@ -28,7 +28,7 @@ describe("ending an app while it pauses", () => {
       id: "test.events",
       name: "Events",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [
         { id: "people.read", reason: "For the test.", needed: true },
         { id: "places.read", reason: "For the test." },
@@ -80,7 +80,7 @@ describe("ending an app while it pauses", () => {
       id: "test.starting",
       name: "Starting",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [
         { id: "places.read", reason: "For the test.", needed: true },
         { id: "net:api.example.com", reason: "For the test." },
@@ -134,7 +134,7 @@ describe("ending an app while it pauses", () => {
       id: "test.resuming",
       name: "Resuming",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [
         { id: "places.read", reason: "For the test.", needed: true },
       ],
@@ -187,7 +187,7 @@ describe("ending an app while it pauses", () => {
         id: "test.lifecycle",
         name: "Lifecycle",
         version: "0.1.0",
-        core: "^1.0.0",
+        core: "^2.0.0",
         permissions: [
           { id: "places.read", reason: "For the test.", needed: true },
         ],

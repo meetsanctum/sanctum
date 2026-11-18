@@ -89,7 +89,7 @@ const lampPackage = {
     id: "test.lamp",
     name: "Lamp",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: [
       { id: "places.read", reason: "To light each room.", needed: true },
       { id: "people.read", reason: "To greet who comes home." },

@@ -60,7 +60,7 @@ function app(
     id: "sanctum.moods",
     name: "Moods",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     icon: { glyph: "sofa", color: "ember" },
     pages: ["main", "room"],
     permissions: [{ id: "devices.control:light", reason: "For the test." }],

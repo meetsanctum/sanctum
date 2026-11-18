@@ -85,7 +85,7 @@ const sky = defineApp({
   id: "test.sky",
   name: "Sky",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [],
   actions: [publish, remove],
   events: [],
@@ -97,7 +97,7 @@ const clock = (permissions: string[]) =>
     id: "test.clock",
     name: "Clock",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: permissions.map((id) => ({ id, reason: "For the test." })),
     actions: [read],
     events: [],
@@ -421,11 +421,11 @@ describe("entities", () => {
 
     const next = await testCore({
       dataDir: core.dataDir,
-      apps: [{ origin: "official", app: { ...sky, core: "^2.0.0" } }],
+      apps: [{ origin: "official", app: { ...sky, core: "^3.0.0" } }],
     });
 
     expect(next.logs).toContain(
-      "apps: test.sky was not installed (it targets app API ^2.0.0, and this core serves 1.0.0)",
+      "apps: test.sky was not installed (it targets app API ^3.0.0, and this core serves 2.0.0)",
     );
     expect(next.entities.list().map((each) => each.key)).toEqual(["home"]);
   });

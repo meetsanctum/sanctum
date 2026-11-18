@@ -137,7 +137,7 @@ export const choresApp = defineApp({
   id: "test.sample",
   name: "Sample",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [
     {
       id: "people.read",
@@ -191,7 +191,7 @@ export const vacuumPackage: AppPackage = {
     id: "test.vacuum",
     name: "Vacuum",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: [],
     actions: [clean],
     events: [],

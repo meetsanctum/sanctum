@@ -35,7 +35,7 @@ function reacher(
     id: app,
     name: "Reacher",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: [
       { id: "devices.register", reason: "For the test.", needed: true },
       {
