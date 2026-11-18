@@ -397,8 +397,9 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return connectOnce({ mac, key, address, timings });
   }
 
-  // A device may be reflashed with a different project on the same ESPHome
-  // version. The announcement tells us when to read its maker again.
+  // Who made a device waiting for a key, over a connection under the zero
+  // key: once for each version and project it announces, since a device
+  // reflashed with another project may run the same ESPHome version.
   function describe(found: Announced): Promise<void> {
     const before = described.get(found.mac);
     if (
