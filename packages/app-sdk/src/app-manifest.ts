@@ -58,7 +58,7 @@ export type AppIcon = z.infer<typeof appIconSchema>;
  * apart from Sanctum's version: a major only when an app built for the one
  * before can no longer run.
  */
-export const appApiVersion = "1.0.0";
+export const appApiVersion = "2.0.0";
 
 /** The page the app overview opens. */
 export const mainPage = "main";

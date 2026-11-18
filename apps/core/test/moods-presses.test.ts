@@ -285,6 +285,7 @@ describe("a remote's presses", () => {
     core.devices.register("test.lamps", {
       key: "remote-1",
       name: "Wireless mini switch",
+      type: "button",
       capabilities: [
         { id: "button", kind: "button", features: { actions: [action] } },
       ],
@@ -323,6 +324,7 @@ describe("a remote's presses", () => {
     const other = core.devices.register("test.lamps", {
       key: "shared-remote",
       name: "Shared remote",
+      type: "button",
       capabilities: [
         { id: "button", kind: "button", features: { actions: ["single"] } },
       ],

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { maxAppSecrets } from "@meetsanctum/app-sdk";
+import { ColorMode, type Entity } from "esphome-client";
 
-import { makerOf, secretOf } from "../src/driver.js";
+import { makerOf, secretOf, typeOf } from "../src/driver.js";
+import { mapEntities } from "../src/entities.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
 import {
   add,
@@ -139,6 +141,65 @@ describe("finding devices", () => {
     await home.core.stop();
 
     await expect.poll(() => device.activeConnections, { timeout: 200 }).toBe(0);
+  });
+});
+
+describe("what a device is", () => {
+  let key = 0;
+  const relay = (deviceClass?: string) =>
+    ({
+      type: "switch",
+      key: ++key,
+      name: `Relay ${key}`,
+      objectId: `relay_${key}`,
+      ...(deviceClass === undefined ? {} : { deviceClass }),
+    }) as unknown as Entity;
+  const bulb = () =>
+    ({
+      type: "light",
+      key: ++key,
+      name: "Bulb",
+      objectId: "bulb",
+      supportedColorModes: [ColorMode.ON_OFF],
+    }) as unknown as Entity;
+  const temperature = () =>
+    ({
+      type: "sensor",
+      key: ++key,
+      name: "Temperature",
+      objectId: "temperature",
+      deviceClass: "temperature",
+      unitOfMeasurement: "°C",
+    }) as unknown as Entity;
+  const typeFor = (entities: Entity[], name = "Device") =>
+    typeOf(mapEntities(entities), name, null);
+
+  it("is a plug when every switch is an outlet, whatever it is called", () => {
+    expect(typeFor([relay("outlet")])).toBe("plug");
+    expect(typeFor([relay("outlet"), relay("outlet")])).toBe("plug");
+    expect(typeFor([relay("outlet"), temperature()])).toBe("plug");
+  });
+
+  it("is what its kinds make it when a switch has another class, whatever it is called", () => {
+    expect(typeFor([relay("switch")], "Outlet controller")).toBe("switch");
+    expect(typeFor([relay("outlet"), relay("switch")])).toBe("switch");
+    expect(typeFor([relay("outlet"), relay()])).toBe("switch");
+  });
+
+  it("is a plug by its name or model only where no switch has a class", () => {
+    expect(typeFor([relay()], "Smart plug")).toBe("plug");
+    expect(typeOf(mapEntities([relay()]), "Kettle", "Socket S1")).toBe("plug");
+    expect(typeFor([relay()], "Unplugged relay")).toBe("switch");
+    expect(typeFor([relay()])).toBe("switch");
+  });
+
+  it("is a light when it has one, whatever its switches are", () => {
+    expect(typeFor([bulb(), relay("outlet")], "Smart plug")).toBe("light");
+  });
+
+  it("is what its kinds make it without switches, and unknown with nothing Sanctum uses", () => {
+    expect(typeFor([temperature()], "Plug sensor")).toBe("sensor");
+    expect(typeFor([])).toBe("unknown");
   });
 });
 

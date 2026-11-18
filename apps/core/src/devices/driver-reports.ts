@@ -3,6 +3,7 @@ import {
   capabilityOf,
   deviceRegistration,
   deviceReport,
+  fitsType,
   historyFields,
   type CapabilityKind,
 } from "@meetsanctum/app-sdk";
@@ -91,6 +92,14 @@ export function createDriverReports(
         );
       }
       const registration = parsed.data;
+      // A driver's word for what a device is goes, once the device has what
+      // that type needs: its socket is not to be trusted with more.
+      const kinds = new Set(registration.capabilities.map((each) => each.kind));
+      if (!fitsType(registration.type, kinds)) {
+        throw new Error(
+          `${driver} registered a device as ${registration.type} without what a device of that type has`,
+        );
+      }
       const existing = db
         .select({ id: devices.id, firmware: devices.firmware })
         .from(devices)

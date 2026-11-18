@@ -21,7 +21,7 @@ describe("a kept version built for another app API", () => {
     const core = await home.coreWith(version("2.0.0"));
     await running(core, id);
     await vi.waitFor(() => expect(home.journal.size).toBe(0));
-    home.builtForAppApi(one, "^2.0.0");
+    home.builtForAppApi(one, "^3.0.0");
     const principal = await claimed(core);
     const kept = await home.manager.keptAppCopy(id);
     home.containers.length = 0;
@@ -53,7 +53,7 @@ describe("a kept version built for another app API", () => {
     );
     await vi.waitFor(() => expect(rowOf(core)?.status).toBe("starting"));
     await home.powerCut(core);
-    home.builtForAppApi(one, "^2.0.0");
+    home.builtForAppApi(one, "^3.0.0");
     home.containers.length = 0;
 
     const next = await home.coreWith(version("2.0.0"));
@@ -68,7 +68,7 @@ describe("a kept version built for another app API", () => {
     const home = await versions();
     const one = version("1.0.0");
     await running(await home.coreWith(one), id);
-    home.builtForAppApi(one, "^2.0.0");
+    home.builtForAppApi(one, "^3.0.0");
     home.containers.length = 0;
     let tries = 0;
 

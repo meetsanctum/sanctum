@@ -23,6 +23,7 @@ describe("a driver that runs apart", () => {
         await ctx.devices.register({
           key: "lamp",
           name: "Lamp",
+          type: "switch",
           capabilities: [{ id: "light", kind: "switch", features: {} }],
         } as never);
         await ctx.devices.report({

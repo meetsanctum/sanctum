@@ -93,6 +93,7 @@ describe("history", () => {
       core.devices.register("test.lamps", {
         key: "lamp-1",
         name: "Kitchen lamp",
+        type: "switch",
         capabilities: [
           { id: change === "removed" ? "power" : "light", kind: "switch" },
         ],
@@ -111,6 +112,7 @@ describe("history", () => {
       core.devices.register("test.lamps", {
         key: "lamp-1",
         name: "Kitchen lamp",
+        type: "light",
         capabilities: [
           { id: "light", kind: "light", features: { brightness: true } },
         ],

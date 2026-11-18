@@ -119,7 +119,7 @@ describe("references declared in a manifest", () => {
       id: "test.visitor",
       name: "Visitor",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [],
       actions: [visit],
       events: [],

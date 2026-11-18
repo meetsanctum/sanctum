@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   capabilityKinds,
+  declaredTypes,
   deviceTypeOf,
   deviceTypes,
+  fitsType,
   ownTypeOf,
   showAsChoices,
   shownAsOf,
   shownType,
 } from "../src/index.js";
 
-// What a device is: the list every driver's devices are matched against.
+// What a device is: the list every driver says its devices' types from.
 
 describe("the device types", () => {
   it("have an id and a title each, neither twice, and a noun where a room's name can lead", () => {
@@ -61,12 +63,43 @@ describe("what a device with some kinds is", () => {
     expect(deviceTypeOf(["sensor", "sensor"])).toBe("sensor");
   });
 
-  it("is a plug only where something says so", () => {
-    expect(deviceTypeOf(["switch"])).toBe("switch");
-    expect(deviceTypeOf(["switch"], (type) => type === "plug")).toBe("plug");
-    // Saying so of a device without its kinds changes nothing.
-    expect(deviceTypeOf(["sensor"], () => true)).toBe("sensor");
-    expect(deviceTypeOf(["light", "switch"], () => true)).toBe("light");
+  it("is never a plug or a type the household chooses, for any kinds", () => {
+    // Every set of the kinds there are.
+    const sets = capabilityKinds.reduce<(typeof capabilityKinds)[number][][]>(
+      (all, kind) => [...all, ...all.map((set) => [...set, kind])],
+      [[]],
+    );
+    expect(sets).toHaveLength(2 ** capabilityKinds.length);
+    for (const kinds of sets) {
+      const type = deviceTypeOf(kinds);
+      expect(["plug", "door", "window"], kinds.join()).not.toContain(type);
+      // And it is a type the device fits.
+      expect(fitsType(type, new Set(kinds)), kinds.join()).toBe(true);
+    }
+  });
+});
+
+describe("what a driver may say a device is", () => {
+  it("is any type but those only the household chooses", () => {
+    expect(declaredTypes).toEqual(
+      deviceTypes.filter((type) => !type.chosenOnly).map((type) => type.id),
+    );
+    expect(declaredTypes).not.toContain("door");
+    expect(declaredTypes).not.toContain("window");
+    expect(declaredTypes).toContain("plug");
+  });
+
+  it("fits a device that has every kind the type needs, whatever else it has", () => {
+    expect(fitsType("plug", new Set(["switch"]))).toBe(true);
+    expect(fitsType("switch", new Set(["light", "switch"]))).toBe(true);
+    expect(fitsType("sensor", new Set(["light", "sensor"]))).toBe(true);
+    expect(fitsType("light", new Set(["contact"]))).toBe(false);
+    expect(fitsType("plug", new Set(["sensor"]))).toBe(false);
+  });
+
+  it("is unknown only for a device with no capability Sanctum uses", () => {
+    expect(fitsType("unknown", new Set())).toBe(true);
+    expect(fitsType("unknown", new Set(["light"]))).toBe(false);
   });
 });
 
@@ -100,7 +133,6 @@ describe("what a device may be shown as", () => {
 
   it("is never what a device is by its kinds, whatever says so", () => {
     expect(deviceTypeOf(["contact"])).toBe("contact");
-    expect(deviceTypeOf(["contact"], () => true)).toBe("contact");
     expect(deviceTypeOf(["contact", "sensor"])).toBe("contact");
   });
 

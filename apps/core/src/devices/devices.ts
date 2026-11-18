@@ -118,14 +118,7 @@ export function createDevices(
     if (!device) {
       throw new ActionCallError("not_found");
     }
-    const capabilities = db
-      .select({ kind: deviceCapabilities.kind })
-      .from(deviceCapabilities)
-      .where(eq(deviceCapabilities.deviceId, id))
-      .all();
-    return shownAsOf(ownDeviceType({ ...device, capabilities })).some(
-      (each) => each === type,
-    );
+    return shownAsOf(ownDeviceType(device)).some((each) => each === type);
   }
 
   const hidden = () => options.hiddenDrivers?.() ?? new Set<string>();

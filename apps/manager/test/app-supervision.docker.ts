@@ -41,7 +41,7 @@ export default defineApp({
   id: "${app}",
   name: "Crasher",
   version: "1.0.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [],
   events: [],
   runtime: { memory: 64, data: 64 },

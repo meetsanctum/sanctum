@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { deviceType } from "./classification.js";
-import { deviceCapabilities, devices } from "./schema.js";
+import { devices } from "./schema.js";
 
 // Automatic device names: a device the household has not named is called
 // after its room and what it is, "Office Light", or "Light" while it is in
@@ -89,13 +89,8 @@ export function createNaming(
     if (!device?.autoNamed) {
       return;
     }
-    const capabilities = db
-      .select({ kind: deviceCapabilities.kind })
-      .from(deviceCapabilities)
-      .where(eq(deviceCapabilities.deviceId, id))
-      .all();
     const base = baseName(
-      deviceType({ ...device, capabilities }),
+      deviceType(device),
       (device.roomId && rooms.get(device.roomId)) || null,
     );
     const taken = db

@@ -47,8 +47,7 @@ export const devices = sqliteTable(
     manufacturer: text("manufacturer"),
     model: text("model"),
     // What its driver says it is, a device type's id as the driver said
-    // it, or nothing: the core works out what the device is from this and
-    // its capabilities whenever it is read (classification.ts).
+    // it when it last registered the device (classification.ts).
     declaredType: text("declared_type"),
     // The type the household shows it as in place of its own, or nothing:
     // kept as chosen and used while the device's own type allows it.

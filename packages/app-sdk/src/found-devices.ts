@@ -6,7 +6,8 @@ import {
   type AddRefusal,
   type DeviceQuestion,
 } from "./device-problems.js";
-import { deviceKey, deviceTypeId, type DeviceInfo } from "./devices.js";
+import { declaredTypes } from "./device-types.js";
+import { deviceKey, type DeviceInfo } from "./devices.js";
 
 // Devices a driver could add, such as those it finds on the home's network
 // (discovery.ts). It lists all of them at once (ctx.devices.found), each
@@ -31,7 +32,7 @@ export const foundDevice = z.strictObject({
    */
   description: z.string().trim().min(1).max(120).nullable().default(null),
   /** What it is, where the driver knows, by device type. */
-  type: deviceTypeId.nullable().default(null),
+  type: z.enum(declaredTypes).nullable().default(null),
   /** The questions adding it asks, by their ids among driver.questions. */
   asks: z
     .array(z.string().regex(problemId))

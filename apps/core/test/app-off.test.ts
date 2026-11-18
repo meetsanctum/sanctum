@@ -313,6 +313,7 @@ describe("turning an app off", () => {
         await ctx.devices.register({
           key: "lamp",
           name: "Lamp",
+          type: "switch",
           capabilities: [{ id: "light", kind: "switch", features: {} }],
         } as never);
         await ctx.devices.report({

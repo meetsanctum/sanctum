@@ -15,7 +15,7 @@ async function setup() {
       id: "test.presence",
       name: "Presence",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.register", reason: "For the test." }],
       actions: [],
       events: [],
@@ -30,6 +30,7 @@ async function setup() {
     context.devices.register({
       key: "lamp",
       name: "Lamp",
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
   await register();

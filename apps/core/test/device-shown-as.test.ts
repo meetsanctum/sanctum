@@ -139,19 +139,21 @@ describe("a contact sensor shown as a door or a window", () => {
 
   it("is not a door on its driver's word", async () => {
     const { core, maya } = await contactCore();
-    core.devices.register("test.lamps", {
-      key: "magnet-1",
-      name: "Door and window sensor",
-      type: "door",
-      capabilities: [{ id: "contact", kind: "contact" }],
-    });
+    expect(() =>
+      core.devices.register("test.lamps", {
+        key: "magnet-1",
+        name: "Door and window sensor",
+        type: "door",
+        capabilities: [{ id: "contact", kind: "contact" }],
+      }),
+    ).toThrow("cannot take");
     const device = (await get(core, "/api/devices", { token: maya.token }))
       .json()
       .find(
         (each: { driverName: string }) =>
           each.driverName === "Door and window sensor",
       );
-    expect(device).toMatchObject({ type: "contact", shownAs: null });
+    expect(device).toBeUndefined();
   });
 
   it("keeps the choice while the device does not fit it, and uses it once it does again", async () => {
@@ -159,6 +161,7 @@ describe("a contact sensor shown as a door or a window", () => {
     const registration = {
       key: "magnet-1",
       name: "Door and window sensor",
+      type: "contact",
       capabilities: [{ id: "contact", kind: "contact" as const }],
     };
     core.devices.register("test.lamps", registration);
@@ -176,8 +179,13 @@ describe("a contact sensor shown as a door or a window", () => {
       name: "Window",
     });
 
-    // Its driver brings it without its contact: nothing fits the choice.
-    core.devices.register("test.lamps", { ...registration, capabilities: [] });
+    // Its driver brings it without its contact, as a device it can't say
+    // more of: nothing fits the choice.
+    core.devices.register("test.lamps", {
+      ...registration,
+      type: "unknown",
+      capabilities: [],
+    });
     expect(await byDriverName()).toMatchObject({
       id,
       type: "unknown",

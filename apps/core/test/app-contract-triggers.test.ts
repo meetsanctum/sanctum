@@ -38,7 +38,7 @@ it.each([false, true])(
       id: "test.contract",
       name: "Contract",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [],
       actions: [note],
       events: [event],

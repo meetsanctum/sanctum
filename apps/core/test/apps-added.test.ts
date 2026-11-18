@@ -197,13 +197,14 @@ describe("what keeps an app from being added", () => {
   });
 
   it("an app API this Sanctum doesn't serve, or a range that says none", () => {
-    expect(appApiVersion).toBe("1.0.0");
-    expect(servesAppApi({ core: "^1.0.0" })).toBe(true);
-    expect(servesAppApi({ core: "^2.0.0" })).toBe(false);
+    expect(appApiVersion).toBe("2.0.0");
+    expect(servesAppApi({ core: "^2.0.0" })).toBe(true);
+    expect(servesAppApi({ core: "^1.0.0" })).toBe(false);
+    expect(servesAppApi({ core: "^3.0.0" })).toBe(false);
     expect(servesAppApi({ core: "any" })).toBe(false);
     expect(
-      shortfallsOf({ ...app, core: "^2.0.0" }, { pagesNeed: null, host }),
-    ).toEqual([{ kind: "sanctum", range: "^2.0.0" }]);
+      shortfallsOf({ ...app, core: "^3.0.0" }, { pagesNeed: null, host }),
+    ).toEqual([{ kind: "sanctum", range: "^3.0.0" }]);
   });
 
   it("pages built for a kit this Sanctum can't serve", () => {
@@ -526,7 +527,7 @@ describe("an app built for another app API", () => {
     const newer = defineApp({
       ...base,
       id: "test.newer",
-      core: "^2.0.0",
+      core: "^3.0.0",
       permissions: [],
       actions: [],
     });
@@ -534,7 +535,7 @@ describe("an app built for another app API", () => {
 
     expect(core.apps.list().map((app) => app.id)).not.toContain("test.newer");
     expect(core.logs).toContain(
-      "apps: test.newer was not installed (it targets app API ^2.0.0, and this core serves 1.0.0)",
+      "apps: test.newer was not installed (it targets app API ^3.0.0, and this core serves 2.0.0)",
     );
   });
 });

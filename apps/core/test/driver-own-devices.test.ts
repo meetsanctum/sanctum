@@ -22,7 +22,7 @@ function ownDriver() {
     id: "test.own",
     name: "Own",
     version: "0.1.0",
-    core: "^1.0.0",
+    core: "^2.0.0",
     permissions: [
       { id: "devices.register", reason: "For the test.", needed: true },
     ],
@@ -38,6 +38,7 @@ function ownDriver() {
         name: "Hall lamp",
         manufacturer: null,
         model: null,
+        type: "light",
         capabilities: [{ id: "light", kind: "light" }],
       });
       // One whose parts Sanctum can't use.
@@ -46,6 +47,7 @@ function ownDriver() {
         name: "Hall display",
         manufacturer: null,
         model: null,
+        type: "unknown",
         capabilities: [],
       });
       await ctx.events.on("device.changed", async (event) => {

@@ -15,7 +15,7 @@ describe("the suite's driver devices", () => {
         id: "test.devices",
         name: "Devices",
         version: "0.1.0",
-        core: "^1.0.0",
+        core: "^2.0.0",
         permissions: [{ id: "devices.register", reason: "For the test." }],
         actions: [],
         events: [],
@@ -29,6 +29,7 @@ describe("the suite's driver devices", () => {
     await context.devices.register({
       key: "remote",
       name: "Remote",
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     });
 
@@ -52,5 +53,38 @@ describe("the suite's driver devices", () => {
         capabilities: [{ id: "light", state: { on: true } }],
       },
     ]);
+  });
+
+  it("are refused for a type that doesn't fit them, as the core refuses them", async () => {
+    let context!: AppContext;
+    const core = createDriverCore(
+      defineApp({
+        id: "test.devices",
+        name: "Devices",
+        version: "0.1.0",
+        core: "^2.0.0",
+        permissions: [{ id: "devices.register", reason: "For the test." }],
+        actions: [],
+        events: [],
+        async start(ctx) {
+          context = ctx;
+        },
+        driver: { command: async () => {} },
+      }),
+    );
+    await core.start();
+
+    for (const type of ["light", "unknown"] as const) {
+      await expect(
+        context.devices.register({
+          key: "relay",
+          name: "Relay",
+          type,
+          capabilities: [{ id: "power", kind: "switch" }],
+        }),
+      ).rejects.toThrow("Registration refused");
+    }
+    expect(core.refused).toHaveLength(2);
+    expect(core.registered.size).toBe(0);
   });
 });

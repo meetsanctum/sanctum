@@ -19,7 +19,7 @@ function setup(options: { refusal?: string; registers?: boolean } = {}) {
       id: "sanctum.example",
       name: "Example",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: [{ id: "devices.register", reason: "For the test." }],
       actions: [],
       events: [],
@@ -46,6 +46,7 @@ function setup(options: { refusal?: string; registers?: boolean } = {}) {
             name: key,
             manufacturer: null,
             model: null,
+            type: "unknown",
             capabilities: [],
           });
         },
@@ -121,6 +122,7 @@ describe("the suite's found devices", () => {
       name: "Sensor",
       manufacturer: null,
       model: null,
+      type: "unknown",
       capabilities: [],
     });
     await context().devices.found([{ key: "sensor", name: "Sensor" }]);

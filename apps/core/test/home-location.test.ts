@@ -353,7 +353,7 @@ describe("apps reading the location", () => {
       id,
       name: "Where",
       version: "0.1.0",
-      core: "^1.0.0",
+      core: "^2.0.0",
       permissions: permissions.map((id) => ({ id, reason: "For the test." })),
       actions: [where],
       events: [],

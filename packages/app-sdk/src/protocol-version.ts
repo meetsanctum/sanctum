@@ -17,6 +17,8 @@
 // 9 calls an app's uninstall hook as someone removes it.
 // 10 lets a driver have a device show itself (driver.identify), and register
 // whether it can.
-export const protocolVersion = 10;
+// 11 has a driver say every device's type as it registers it, and the core
+// takes it, so a driver built before is refused.
+export const protocolVersion = 11;
 /** The oldest version a core still speaks. */
-export const oldestProtocolVersion = 6;
+export const oldestProtocolVersion = 11;

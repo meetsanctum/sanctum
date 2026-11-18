@@ -19,7 +19,7 @@ const memory = defineApp({
   id: "test.memory",
   name: "Memory",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [{ id: "devices.register", reason: "For the test." }],
   actions: [],
   events: [],
@@ -59,6 +59,7 @@ async function add(kind: CapabilityKind) {
     await ctx!.devices.register({
       key,
       name: key,
+      type: "button",
       capabilities: [
         { id: "button", kind, features: { actions: ["single", "double"] } },
       ],
@@ -68,6 +69,7 @@ async function add(kind: CapabilityKind) {
   await ctx!.devices.register({
     key,
     name: key,
+    type: kind === "light" ? "light" : "switch",
     capabilities: [
       kind === "light"
         ? { id: "light", kind, features: { brightness: true, color: true } }

@@ -15,7 +15,7 @@ export default defineApp({
   id: "${app}",
   name: "Updater",
   version: "${version}",
-  core: "^1.0.0",
+  core: "^2.0.0",
   migrations: "migrations",
   permissions: [],
   events: [],

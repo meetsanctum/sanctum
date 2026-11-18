@@ -15,6 +15,7 @@ import {
   isDeclaredAddRefusal,
   isDeclaredRefusal,
   permissionIds,
+  fitsType,
   shownProblem,
   shownQuestions,
   shownRefusals,
@@ -27,7 +28,6 @@ import {
   type CoreEvent,
   type CoreEventHandlers,
   type DeviceInfo,
-  type DeviceType,
   type DriverCommand,
   type DeviceProblem,
   type DriverDiscovery,
@@ -130,7 +130,7 @@ export function createDriverCore(
       model: device.model,
       roomId: null,
       driverName: device.name,
-      type: (device.type ?? "unknown") as DeviceType,
+      type: device.type,
       shownAs: null,
       availability: availability.get(device.key) ?? "unknown",
       lastSeenAt: null,
@@ -241,6 +241,15 @@ export function createDriverCore(
       if (!parsed.success) {
         refuse(
           new Error(`Registration refused: ${z.prettifyError(parsed.error)}`),
+        );
+      }
+      // The core takes a driver's type once the device has what it needs.
+      const kinds = new Set(parsed.data.capabilities.map((each) => each.kind));
+      if (!fitsType(parsed.data.type, kinds)) {
+        refuse(
+          new Error(
+            `Registration refused: ${parsed.data.type} without what a device of that type has`,
+          ),
         );
       }
       if (!registered.has(parsed.data.key)) {

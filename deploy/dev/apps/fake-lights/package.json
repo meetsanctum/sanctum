@@ -17,5 +17,8 @@
   },
   "dependencies": {
     "@meetsanctum/app-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@meetsanctum/app-testkit": "workspace:*"
   }
 }

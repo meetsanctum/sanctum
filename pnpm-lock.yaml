@@ -542,6 +542,10 @@ importers:
       '@meetsanctum/app-sdk':
         specifier: workspace:*
         version: link:../../../../packages/app-sdk
+    devDependencies:
+      '@meetsanctum/app-testkit':
+        specifier: workspace:*
+        version: link:../../../../packages/app-testkit
 
   packages/app-sdk:
     dependencies:

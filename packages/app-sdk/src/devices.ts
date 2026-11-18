@@ -583,8 +583,8 @@ export type DeviceInfo = {
   /** What its driver calls it, such as its model's name. */
   driverName: string;
   /**
-   * What it is, by all its capabilities, whichever of them a view shows,
-   * or what the household shows it as instead (`shownAs`).
+   * What it is, as its driver says, whichever of its capabilities a view
+   * shows, or what the household shows it as instead (`shownAs`).
    */
   type: DeviceType;
   /**
@@ -645,18 +645,25 @@ export function knownParts(device: DeviceInfo): DeviceInfo {
     : { ...device, capabilities: known };
 }
 
-const capabilityId = z
+/** A capability's id on its device, as its driver names it. */
+export const capabilityId = z
   .string()
   .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/, "use a short id such as light or l1");
 // The driver's own id for a device, such as a Zigbee IEEE address.
 export const deviceKey = z.string().min(1).max(128);
-const label = z.string().trim().min(1).max(120);
-/** A device type's id, whether or not this version has the type yet. */
+/**
+ * A device type's id, whether or not this version has the type yet: what
+ * the household may ask to show a device as, door and window included.
+ */
 export const deviceTypeId = z
   .string()
   .regex(/^[a-z][a-z0-9-]{0,31}$/, "use a device type's id such as plug");
 
-const capabilityRegistration = z.discriminatedUnion("kind", [
+/**
+ * One capability as a driver registers it: its id, its kind and its kind's
+ * features (device-registration.ts).
+ */
+export const capabilityRegistration = z.discriminatedUnion("kind", [
   z.strictObject({
     id: capabilityId,
     kind: z.literal("light"),
@@ -688,51 +695,6 @@ const capabilityRegistration = z.discriminatedUnion("kind", [
     features: contactFeatures.default({}),
   }),
 ]);
-
-/** What a driver tells the core about one of its devices (ctx.devices.register). */
-export const deviceRegistration = z.strictObject({
-  key: deviceKey,
-  name: label,
-  manufacturer: label.nullable().default(null),
-  model: label.nullable().default(null),
-  // What the device is, where its driver can tell: a device type's id
-  // (device-types.ts), such as plug, which no capability tells from a
-  // switch. The core takes it when the device has the kinds that type
-  // needs, and works out the type itself when a driver says none or one
-  // it does not know.
-  type: deviceTypeId.nullable().default(null),
-  // What it can do, as capabilities of the kinds Sanctum has. A device
-  // with none is one Sanctum cannot use: it is still the household's, to
-  // name, put in a room and remove.
-  capabilities: z
-    .array(capabilityRegistration)
-    .max(32)
-    .refine(
-      (list) => new Set(list.map((each) => each.id)).size === list.length,
-      "capability ids must be unique",
-    ),
-  // What it runs, as its maker numbers it, whether the driver can update
-  // it (driver.firmware), and whether it sleeps, so an update waits for it
-  // to wake; none when the driver cannot tell.
-  firmware: z
-    .strictObject({
-      version: label.nullable().default(null),
-      updatable: z.boolean(),
-      sleeps: z.boolean().default(false),
-    })
-    .nullable()
-    .default(null),
-  // Whether the driver can ask it how it is now (driver.probe): a device
-  // that sleeps, or has nothing to read, cannot be asked.
-  probe: z.boolean().default(false),
-  // Whether the driver can have it show itself (driver.identify): a light
-  // that blinks, or a device with a light of its own that is awake.
-  identify: z.boolean().default(false),
-});
-export type DeviceRegistration = Omit<
-  z.input<typeof deviceRegistration>,
-  "type"
-> & { type?: DeviceType | null };
 
 /**
  * What a driver reports about one of its devices (ctx.devices.report):

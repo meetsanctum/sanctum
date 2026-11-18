@@ -2,8 +2,8 @@
   "id": "sanctum.fake-lights",
   "name": "Fake lights",
   "version": "0.1.0",
-  "core": "^1.0.0",
-  "protocol": 10,
+  "core": "^2.0.0",
+  "protocol": 11,
   "summary": null,
   "runtime": {
     "memory": 128,
@@ -31,7 +31,7 @@
   "permissions": [
     {
       "id": "devices.register",
-      "reason": "To bring pretend lights and contact sensors into a development home.",
+      "reason": "To bring pretend lights, sensors and a plug into a development home.",
       "needed": true,
       "asked": null,
       "startsOn": false

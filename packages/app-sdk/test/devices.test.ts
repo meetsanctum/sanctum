@@ -229,6 +229,7 @@ describe("registering a device", () => {
       deviceRegistration.parse({
         key: "0x00158d0001a2b3c4",
         name: "Kitchen lamp",
+        type: "light",
         capabilities: [{ id: "light", kind: "light" }],
       }),
     ).toEqual({
@@ -236,8 +237,7 @@ describe("registering a device", () => {
       name: "Kitchen lamp",
       manufacturer: null,
       model: null,
-      // What it is is left to the core.
-      type: null,
+      type: "light",
       capabilities: [
         {
           id: "light",
@@ -252,7 +252,7 @@ describe("registering a device", () => {
     });
   });
 
-  it("may say what the device is, by a type's id", () => {
+  it("says what the device is, as a type a driver may say", () => {
     const plug = {
       key: "plug",
       name: "Relay",
@@ -261,12 +261,19 @@ describe("registering a device", () => {
     expect(deviceRegistration.parse({ ...plug, type: "plug" }).type).toBe(
       "plug",
     );
-    // An id this version has no type for is still an id: whoever reads it
-    // decides what to make of it.
-    expect(deviceRegistration.parse({ ...plug, type: "curtain" }).type).toBe(
+    // A type is required, one this version has, and not one only the
+    // household chooses.
+    expect(deviceRegistration.safeParse(plug).success).toBe(false);
+    for (const type of [
+      null,
       "curtain",
-    );
-    for (const type of ["", "Plug", "smart plug", "a".repeat(33), 7]) {
+      "door",
+      "window",
+      "",
+      "Plug",
+      "smart plug",
+      7,
+    ]) {
       expect(
         deviceRegistration.safeParse({ ...plug, type }).success,
         String(type),
@@ -278,6 +285,7 @@ describe("registering a device", () => {
     const lamp = {
       key: "lamp",
       name: "Kitchen lamp",
+      type: "light",
       capabilities: [{ id: "light", kind: "light" }],
     };
     expect(
@@ -303,7 +311,11 @@ describe("registering a device", () => {
   });
 
   it("takes a button with the actions it declares, and none without", () => {
-    const remote = { key: "remote", name: "Wireless mini switch" };
+    const remote = {
+      key: "remote",
+      name: "Wireless mini switch",
+      type: "button",
+    };
     expect(
       deviceRegistration.parse({
         ...remote,
@@ -331,13 +343,14 @@ describe("registering a device", () => {
       deviceRegistration.parse({
         key: "purifier",
         name: "Air purifier",
+        type: "unknown",
         capabilities: [],
       }).capabilities,
     ).toEqual([]);
   });
 
   it("refuses unknown kinds and repeated ids", () => {
-    const device = { key: "plug", name: "Plug" };
+    const device = { key: "plug", name: "Plug", type: "switch" };
     for (const capabilities of [
       [{ id: "power", kind: "outlet" }],
       [

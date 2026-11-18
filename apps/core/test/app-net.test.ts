@@ -26,7 +26,7 @@ const web = defineApp({
   id: "test.web",
   name: "Web",
   version: "0.1.0",
-  core: "^1.0.0",
+  core: "^2.0.0",
   permissions: [
     { id: "net:api.example.com", reason: "For the test." },
     { id: "places.read", reason: "For the test.", needed: true },

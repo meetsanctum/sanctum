@@ -1,6 +1,8 @@
 import {
   ActionError,
+  deviceTypeOf,
   type AppContext,
+  type DeclaredType,
   type DeviceInfo,
   type DeviceRegistration,
   type DriverAdd,
@@ -92,6 +94,36 @@ export function makerOf(
   };
 }
 
+// The words that say a switch is a plug, where its device's switches have
+// no class to say so: "Smart plug", "Outlet", "Socket".
+const plugWords = /\b(plugs?|outlets?|sockets?)\b/i;
+
+/**
+ * What a device is. A plug switches like any switch, so its switches' class
+ * says so first: a device whose every switch is an outlet is a plug, and one
+ * with any other class is what its kinds make it. Where none of its switches
+ * has a class, a whole word in its name or model says so. A light among its
+ * capabilities makes it a light whatever its switches are.
+ */
+export function typeOf(
+  mapping: Mapping,
+  name: string,
+  model: string | null,
+): DeclaredType {
+  const kinds = mapping.mapped.map((each) => each.capability.kind);
+  // Only a switch entity has a class to read.
+  const classes = mapping.mapped.flatMap((each) =>
+    each.entity.type === "switch" ? [each.entity.deviceClass ?? ""] : [],
+  );
+  const plug =
+    classes.length > 0 &&
+    !kinds.includes("light") &&
+    (classes.every((each) => each === "outlet") ||
+      (classes.every((each) => each === "") &&
+        plugWords.test(`${name} ${model ?? ""}`)));
+  return plug ? "plug" : deviceTypeOf(kinds);
+}
+
 /** What a session says the device is, for the core's record. */
 function registrationOf(
   mac: string,
@@ -99,10 +131,13 @@ function registrationOf(
   mapping: Mapping,
 ): DeviceRegistration {
   const { info } = session;
+  const name = label(info.friendlyName) ?? label(info.name) ?? mac;
+  const maker = makerOf(info);
   return {
     key: mac,
-    name: label(info.friendlyName) ?? label(info.name) ?? mac,
-    ...makerOf(info),
+    name,
+    ...maker,
+    type: typeOf(mapping, name, maker.model),
     capabilities: mapping.mapped.map((each) => each.capability),
     firmware: {
       version: label(info.esphomeVersion),
@@ -446,9 +481,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   async function take(mac: string, session: Session) {
     try {
       const mapping = mapEntities(session.entities);
-      const { id } = await ctx.devices.register(
-        registrationOf(mac, session, mapping),
-      );
+      const { id } = await ctx.devices
+        .register(registrationOf(mac, session, mapping))
+        .catch((error: unknown) => {
+          // Add says only that it failed, so the log says why.
+          ctx.log(`could not register ${mac} (${String(error)})`);
+          throw error;
+        });
       own({ ...(await ctx.devices.state(id)), key: mac }, session);
     } catch (error) {
       session.client.disconnect();
