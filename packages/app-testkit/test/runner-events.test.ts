@@ -142,6 +142,7 @@ describe("a driver's hooks", () => {
         stop: hook("stop"),
       },
       probe: hook("probe"),
+      identify: hook("identify"),
     };
     const running = await fixture.connected(testApp([], { driver }));
     await running.call({ kind: "start", reason: "started" });
@@ -156,6 +157,7 @@ describe("a driver's hooks", () => {
       "firmware.update",
       "firmware.stop",
       "probe",
+      "identify",
     ] as const;
     for (const each of hooks) {
       expect(

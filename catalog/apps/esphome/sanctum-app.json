@@ -1,9 +1,9 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "core": "^1.0.0",
-  "protocol": 8,
+  "protocol": 9,
   "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
   "runtime": {
     "memory": 128,
@@ -14,6 +14,7 @@
     "hooks": [
       "command",
       "remove",
+      "identify",
       "repair",
       "discovered",
       "add"

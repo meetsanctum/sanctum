@@ -107,6 +107,8 @@ class Radio {
   readonly updates = new Set<string>();
   readonly firmwareCalls: { hook: string; key: string; actor: Actor }[] = [];
   readonly probes: { key: string; actor: Actor }[] = [];
+  // Every gadget the core had show itself, with the actor behind it.
+  readonly identifies: { key: string; actor: Actor }[] = [];
   // Whether asking a gadget never comes back, as a radio that hangs.
   probeHangs = false;
   // Each lamp's key, as on its label, once it changed; every repair the core
@@ -337,6 +339,12 @@ class Radio {
     return Promise.resolve();
   }
 
+  // Has a gadget show itself, as a lamp blinks.
+  identify({ key }: DriverDevice, actor: Actor): Promise<void> {
+    this.identifies.push({ key, actor });
+    return Promise.resolve();
+  }
+
   async unplug(key: string) {
     this.gadgets.get(key)!.answers = false;
     await this.ctx?.devices.report({ key, availability: "offline" });
@@ -457,6 +465,7 @@ class Radio {
     this.updates.clear();
     this.firmwareCalls.length = 0;
     this.probes.length = 0;
+    this.identifies.length = 0;
     this.probeHangs = false;
     this.keys.clear();
     this.repairs.length = 0;
@@ -521,6 +530,8 @@ class Radio {
         ? null
         : { version: "1.0.0", updatable: gadget.kind === "light" },
       probe: !sleeps(gadget),
+      // A lamp blinks; nothing else shows itself.
+      identify: gadget.kind === "light",
     });
     await this.ctx!.devices.report({
       key,
@@ -632,6 +643,9 @@ export default defineApp({
     },
     async probe(ctx, device) {
       await radio.probe(device, ctx.actor);
+    },
+    async identify(ctx, device) {
+      await radio.identify(device, ctx.actor);
     },
     async move(ctx, move) {
       await radio.moveLight(move, ctx.actor);

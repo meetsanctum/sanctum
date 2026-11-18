@@ -157,6 +157,7 @@ export function createDriverCore(
         endedAt: null,
       },
       probe: device.probe,
+      identify: device.identify,
       battery: latestReport(device.key, "battery") ?? null,
       batteryLow: latestReport(device.key, "batteryLow") ?? null,
       leftAt: null,
@@ -577,6 +578,15 @@ export function createDriverCore(
         throw new Error(`${app.id} cannot probe devices`);
       }
       return probe(person(), { key, device: `device:${key}` });
+    },
+
+    /** Has the driver have one of its devices show itself, as Blink does. */
+    identify(key: string) {
+      const identify = driver().identify;
+      if (!identify) {
+        throw new Error(`${app.id} cannot have devices show themselves`);
+      }
+      return identify(person(), { key, device: `device:${key}` });
     },
 
     /**

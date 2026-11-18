@@ -39,7 +39,10 @@ export const unknownFirmware: FirmwareInfo = {
 // registers it, and what an update is doing as it learns it; the core keeps
 // that with the device. Every client, a shared one too, checks for an
 // update, starts one or stops it, and Check connection asks a device how it
-// is now and waits for its report. No workflow or app can start an update, a
+// is now and waits for its report. Blink has a device show itself, as a
+// light blinks, so a person can see which one it is; it changes nothing, so
+// only what went wrong goes in the activity log. No workflow or app can start
+// an update, a
 // destructive action: it takes a device away for an hour or more and cannot
 // be undone.
 
@@ -48,6 +51,8 @@ export const firmwareRules = {
   update: { tier: "destructive" },
   stop: { tier: "write" },
   probe: { tier: "read" },
+  // A light blinking is seen in the room.
+  identify: { tier: "write" },
 } as const satisfies Record<string, Rule>;
 
 export const deviceRequest = z.object({ id: z.string().min(1).max(64) });
@@ -63,6 +68,7 @@ export type FirmwareDrivers = {
     actor: Actor,
   ): Promise<void>;
   probe(driver: string, device: DriverDevice, actor: Actor): Promise<void>;
+  identify(driver: string, device: DriverDevice, actor: Actor): Promise<void>;
 };
 
 // An update that has said nothing for this long has stopped, as when the
@@ -422,6 +428,40 @@ export function createFirmware(options: {
         clearTimeout(timer);
         waits.delete(answered);
         if (waits.size === 0) probes.delete(id);
+      }
+    },
+
+    // Blink: has the device show itself, resolving once its driver asked.
+    async identify(actor: Actor, who: Who, input: unknown): Promise<void> {
+      const action = "device.identify";
+      const parsed = deviceRequest.safeParse(input);
+      if (!parsed.success) {
+        throw new ActionCallError("invalid_request");
+      }
+      const { id } = parsed.data;
+      const row = devices.row(id);
+      if (!row) {
+        throw new ActionCallError("not_found");
+      }
+      if (!row.identify) {
+        log(action, id, "refused", who, "conflict");
+        throw new ActionCallError("conflict");
+      }
+      try {
+        await drivers.identify(row.driver, { key: row.key, device: id }, actor);
+      } catch (error) {
+        const failure =
+          error instanceof ActionCallError
+            ? error
+            : new ActionCallError("app_failed");
+        log(
+          action,
+          id,
+          failure.status >= 500 ? "failed" : "refused",
+          who,
+          failure.code,
+        );
+        throw failure;
       }
     },
 

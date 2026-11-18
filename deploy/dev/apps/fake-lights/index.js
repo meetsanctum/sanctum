@@ -152,6 +152,8 @@ const registerLight = (ctx, key) =>
     name: lights.get(key).name,
     manufacturer: "Sanctum",
     model: "Fake light",
+    // It blinks to show itself (Blink).
+    identify: true,
     capabilities: [
       {
         id: "light",
@@ -225,6 +227,18 @@ export default defineApp({
       if (!light) return;
       light.state = { ...light.state, ...lightKind.desired(command.command) };
       await report(ctx, command.key);
+    },
+    // Blinks: off and on again three times, then as it was.
+    async identify(ctx, { key }) {
+      const light = lights.get(key);
+      if (!light) return;
+      const was = light.state;
+      for (let flash = 0; flash < 6; flash += 1) {
+        setTimeout(() => {
+          light.state = flash === 5 ? was : { ...was, on: flash % 2 === 1 };
+          void report(ctx, key).catch(() => undefined);
+        }, flash * 300);
+      }
     },
     pairing: {
       async open(_ctx, { seconds }) {

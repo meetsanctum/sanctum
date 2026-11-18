@@ -71,6 +71,7 @@ function light(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     lastSeenAt: null,
     firmware: firmware(),
     probe: true,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,
@@ -99,6 +100,7 @@ const button = {
   ...light("button", "Office button", {
     firmware: firmware({ version: null, updatable: false, sleeps: true }),
     probe: false,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,

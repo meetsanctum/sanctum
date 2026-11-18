@@ -730,4 +730,56 @@ describe("Add devices, with what drivers found", () => {
     });
     expect(removed).toHaveBeenCalledWith("odd");
   });
+
+  it("has a ready device blink to show which it is, and says when it couldn't", async () => {
+    // Blinking… lasts as long as a device takes to blink.
+    vi.useFakeTimers({
+      toFake: [
+        "Date",
+        "setInterval",
+        "clearInterval",
+        "setTimeout",
+        "clearTimeout",
+      ],
+    });
+    const added = { ...kitchenSensor(), identify: true };
+    answers.kitchen = () => ({ added });
+    devices = [added];
+    await show();
+    await way("Devices found");
+    await act(async () => named("Add Kitchen sensor").click());
+
+    const blink = named("Blink Kitchen sensor");
+    await act(async () => blink.click());
+    expect(requests).toContainEqual({
+      path: "/api/devices/identify",
+      json: { id: "sensor-1" },
+    });
+    expect(blink.textContent).toBe("Blinking…");
+    expect(blink.disabled).toBe(true);
+
+    const answered = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/devices/identify") {
+        throw new CoreError(503, "unavailable");
+      }
+      return answered(path, init);
+    });
+    await act(async () => vi.advanceTimersByTime(2_500));
+    expect(blink.textContent).toBe("Blink");
+    await act(async () => blink.click());
+    expect(page().querySelector("[role=alert]")).not.toBeNull();
+    expect(blink.textContent).toBe("Blink");
+  });
+
+  it("offers no Blink for a device that can't show itself", async () => {
+    const added = kitchenSensor();
+    answers.kitchen = () => ({ added });
+    devices = [added];
+    await show();
+    await way("Devices found");
+    await act(async () => named("Add Kitchen sensor").click());
+
+    expect(named("Blink Kitchen sensor")).toBeNull();
+  });
 });

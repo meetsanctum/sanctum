@@ -22,6 +22,7 @@ const deviceActions = new Set([
   "device.online",
   "device.quiet",
   "device.probe",
+  "device.identify",
   "device.problem",
   "device.repair",
   "device.add",

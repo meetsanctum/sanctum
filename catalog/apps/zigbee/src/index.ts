@@ -55,7 +55,7 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     // 0.5.0: motion sensors, their light level and their settings.
     // 0.6.0: contact sensors.
     // 0.7.0: a battery its device says is low.
-    version: "0.7.0",
+    version: "0.8.0",
     core: "^1.0.0",
     summary:
       "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
@@ -138,6 +138,9 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
       },
       async probe(_ctx, device) {
         await running().probe(device);
+      },
+      async identify(_ctx, device) {
+        await running().identify(device);
       },
     },
   });

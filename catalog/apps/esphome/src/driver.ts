@@ -6,6 +6,7 @@ import {
   type DriverAdd,
   type DriverAddResult,
   type DriverCommand,
+  type DriverDevice,
   type DriverDiscovery,
   type DriverRepair,
   type DriverRepairResult,
@@ -89,8 +90,16 @@ function registrationOf(
       updatable: false,
       sleeps: info.hasDeepSleep === true,
     },
+    // A light flashes to show itself, unless the device sleeps.
+    identify:
+      info.hasDeepSleep !== true &&
+      mapping.mapped.some((each) => each.entity.type === "light"),
   };
 }
+
+// How long a light flashes to show itself (Blink), at full brightness, before
+// it goes back to what it was.
+const flashMs = 1_500;
 
 export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const timings = { ...defaultTimings, ...options.timings };
@@ -649,6 +658,25 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           `${command.capability} takes no commands`,
         );
       }
+    },
+
+    /** Has a device's first light flash, so a person sees which it is. */
+    async identify({ key }: DriverDevice) {
+      const owned = devices.get(key);
+      if (!owned) throw new ActionError("not_found", `No device ${key}`);
+      const session = owned.connection.session;
+      if (!session || !owned.mapping) throw new Error("It isn't reachable");
+      const light = owned.mapping.mapped.find(
+        (each) => each.entity.type === "light",
+      );
+      if (!light) {
+        throw new ActionError("conflict", `${key} has no light to flash`);
+      }
+      session.client.command(entityId("light", light.entity.objectId), {
+        state: true,
+        brightness: 1,
+        flashLength: flashMs,
+      } as never);
     },
 
     /** What a device's page shows, by its id in the core. */

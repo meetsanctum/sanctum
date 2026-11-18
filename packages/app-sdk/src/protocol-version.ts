@@ -14,6 +14,8 @@
 // 7 lets a driver refuse adding a device whatever it asked (driver.refusals).
 // 8 takes a floor wherever a place is taken: a lights place, a workflow's
 // motion and light level, and a field declared with names("floor").
-export const protocolVersion = 8;
+// 9 lets a driver have a device show itself (driver.identify), and register
+// whether it can.
+export const protocolVersion = 9;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 6;

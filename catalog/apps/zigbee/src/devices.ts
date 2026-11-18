@@ -2,7 +2,7 @@ import type { DeviceRegistration } from "@meetsanctum/app-sdk";
 
 import { capabilityMappings, type CapabilityMapping } from "./exposes.js";
 import { versionOf } from "./firmware.js";
-import type { ZigbeeDevice } from "./types.js";
+import type { ZigbeeDevice, ZigbeeExpose } from "./types.js";
 import { stringValue } from "./values.js";
 
 // Zigbee2MQTT's device list (`bridge/devices`) onto the devices the driver
@@ -24,8 +24,31 @@ export type ZigbeeDeviceEntry = {
   /** A battery-powered device sleeps, so it often cannot be heard. */
   battery: boolean;
   capabilities: CapabilityMapping[];
+  /** What to set to have it show itself (Blink), where it can. */
+  identify: Record<string, string> | null;
   registration: DeviceRegistration;
 };
+
+// How a device shows itself, as Zigbee2MQTT exposes it: a light's own
+// blink effect first, else the Identify cluster, which has a sensor flash
+// its light. A device on a battery sleeps and would not hear it.
+function identifyOf(
+  exposes: readonly ZigbeeExpose[],
+  battery: boolean,
+): Record<string, string> | null {
+  if (battery) return null;
+  const settable = (property: string, value: string) =>
+    exposes.some(
+      (expose) =>
+        expose.type === "enum" &&
+        expose.property === property &&
+        ((expose.access ?? 0) & 2) !== 0 &&
+        (expose.values ?? []).includes(value),
+    );
+  if (settable("effect", "blink")) return { effect: "blink" };
+  if (settable("identify", "identify")) return { identify: "identify" };
+  return null;
+}
 
 const labelLength = 120;
 
@@ -130,6 +153,7 @@ function entryOf(
     detectionInterval: detectionIntervals.get(key),
   });
   const battery = /battery/i.test(device.power_source ?? "");
+  const identify = identifyOf(device.definition?.exposes ?? [], battery);
   const name = nameOf(device, key, friendlyName);
   const model = label(device.definition?.model) ?? label(device.model_id);
   return {
@@ -137,6 +161,7 @@ function entryOf(
     friendlyName,
     battery,
     capabilities,
+    identify,
     registration: {
       key,
       name,
@@ -153,6 +178,7 @@ function entryOf(
       // A sleeping device does not answer, and one with nothing to read
       // has nothing to say.
       probe: !battery && capabilities.some((each) => each.readable.length > 0),
+      identify: identify !== null,
     },
   };
 }

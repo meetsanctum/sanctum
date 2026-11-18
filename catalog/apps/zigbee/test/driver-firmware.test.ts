@@ -113,14 +113,17 @@ describe("a device's firmware", () => {
     expect(core.registered.get(bulb.key)).toMatchObject({
       firmware: { version: "1.126.9", updatable: true },
       probe: true,
+      identify: false,
     });
     expect(core.registered.get(remote.key)).toMatchObject({
       firmware: { version: null, updatable: true, sleeps: true },
       probe: false,
+      identify: false,
     });
     expect(core.registered.get(key)).toMatchObject({
       firmware: { version: "20240101", updatable: false },
       probe: true,
+      identify: false,
     });
   });
 
@@ -439,5 +442,87 @@ describe("checking a device's connection", () => {
     const { key } = await added(core, false);
 
     await expect(core.probe(key)).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
+describe("having a device show itself", () => {
+  // Zigbee2MQTT's blink effect beside a light, and its Identify cluster.
+  const effect = {
+    type: "enum",
+    name: "effect",
+    property: "effect",
+    access: 2,
+    values: ["blink", "breathe", "okay"],
+  };
+  const identify = {
+    type: "enum",
+    name: "identify",
+    property: "identify",
+    access: 2,
+    values: ["identify"],
+  };
+
+  async function joined(
+    core: Awaited<ReturnType<typeof running>>,
+    exposes: object[],
+    extra = {},
+  ) {
+    const { key, name } = fresh("shows");
+    await bridge.add(
+      zigbeeDevice(key, name, exposes as never, {
+        definition: {
+          vendor: "Test Vendor",
+          model: "TL-1",
+          description: "Test light",
+          exposes: exposes as never,
+        },
+        ...extra,
+      }),
+      { state: "OFF" },
+    );
+    await core.until(() => core.registered.has(key), "registered");
+    return { key, name };
+  }
+
+  const sets = (name: string) =>
+    bridge.received.filter((each) => each.topic === `${name}/set`);
+
+  it("has a light blink with its own effect", async () => {
+    const core = await running();
+    const { key, name } = await joined(core, [lightExpose(), effect]);
+    expect(core.registered.get(key)).toMatchObject({ identify: true });
+
+    await core.identify(key);
+    await core.until(() => sets(name).length > 0, "blink request");
+
+    expect(sets(name).at(-1)!.payload).toEqual({ effect: "blink" });
+  });
+
+  it("has a device without one flash through Identify", async () => {
+    const core = await running();
+    const { key, name } = await joined(core, [lightExpose(), identify]);
+
+    await core.identify(key);
+    await core.until(() => sets(name).length > 0, "identify request");
+
+    expect(sets(name).at(-1)!.payload).toEqual({ identify: "identify" });
+  });
+
+  it("refuses a device on a battery, which sleeps, and one that can't", async () => {
+    const core = await running();
+    const sleeping = await joined(core, [lightExpose(), identify], {
+      power_source: "Battery",
+    });
+    const plain = await joined(core, [lightExpose()]);
+
+    expect(core.registered.get(sleeping.key)).toMatchObject({
+      identify: false,
+    });
+    await expect(core.identify(sleeping.key)).rejects.toMatchObject({
+      code: "conflict",
+    });
+    await expect(core.identify(plain.key)).rejects.toMatchObject({
+      code: "conflict",
+    });
   });
 });

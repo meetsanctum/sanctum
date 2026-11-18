@@ -314,6 +314,7 @@ export async function createModules(
       firmware: (driver, hook, device, actor) =>
         apps.firmware(driver, hook, device, actor),
       probe: (driver, device, actor) => apps.probe(driver, device, actor),
+      identify: (driver, device, actor) => apps.identify(driver, device, actor),
     },
     record: activity.for("devices"),
     now,

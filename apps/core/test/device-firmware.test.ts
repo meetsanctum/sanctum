@@ -465,3 +465,63 @@ describe("checking a device's connection", () => {
     expect(radio.probes).toEqual([]);
   });
 });
+
+describe("having a device show itself", () => {
+  it("has a lamp blink, and keeps nothing of it in the activity log", async () => {
+    const { core, maya, lamp } = await lampsCore();
+
+    const blinked = await post(
+      core,
+      "/api/devices/identify",
+      { id: lamp },
+      maya,
+    );
+
+    expect(blinked.statusCode).toBe(200);
+    expect(radio.identifies).toEqual([
+      { key: "lamp-1", actor: { kind: "user", id: maya.person.id } },
+    ]);
+    expect(entries(core, "device.identify")).toEqual([]);
+  });
+
+  it("refuses a device that cannot show itself, and says so in the log", async () => {
+    const { core, maya } = await lampsCore();
+    await radio.add("remote-1", "button", "Hall remote");
+    const remote = (await devicesSeenBy(core, maya.token)).find(
+      (device: { driverName: string }) => device.driverName === "Hall remote",
+    );
+    expect(remote.identify).toBe(false);
+
+    const blinked = await post(
+      core,
+      "/api/devices/identify",
+      { id: remote.id },
+      maya,
+    );
+
+    expect(blinked.statusCode).toBe(409);
+    expect(radio.identifies).toEqual([]);
+    expect(entries(core, "device.identify")).toMatchObject([
+      { outcome: "refused", reason: "conflict", subjectId: remote.id },
+    ]);
+  });
+
+  it("says when the driver could not ask", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    const hook = vi.spyOn(radio, "identify").mockRejectedValue(new Error("no"));
+    onTestFinished(() => hook.mockRestore());
+
+    const blinked = await post(
+      core,
+      "/api/devices/identify",
+      { id: lamp },
+      maya,
+    );
+
+    expect(blinked.statusCode).toBe(500);
+    expect(blinked.json()).toEqual({ error: "app_failed" });
+    expect(entries(core, "device.identify")).toMatchObject([
+      { outcome: "failed", reason: "app_failed" },
+    ]);
+  });
+});
