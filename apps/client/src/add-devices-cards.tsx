@@ -341,9 +341,11 @@ function RoomChoice(props: {
     setWorking(true);
     setProblem(undefined);
     try {
-      made.current ??= await work.onAddRoom(wanted);
+      const roomId = made.current ?? (await work.onAddRoom(wanted));
+      // A room made after Escape is left alone, not kept for the next try.
       if (mine !== attempt.current) return;
-      const moved = await work.onSave(device, { roomId: made.current });
+      made.current = roomId;
+      const moved = await work.onSave(device, { roomId });
       if (mine !== attempt.current) return;
       // The overlay says why it couldn't; the form stays to try again.
       if (moved) leave();

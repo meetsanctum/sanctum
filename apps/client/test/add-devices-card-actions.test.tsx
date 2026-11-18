@@ -269,12 +269,13 @@ describe("actions on a device's Add devices card", () => {
 
   it("moves nothing once naming is left while the room is being made", async () => {
     let finish!: (room: Room) => void;
+    const den = { ...office, id: "den", name: "Den" };
     const answer = vi.mocked(coreJson).getMockImplementation()!;
-    vi.mocked(coreJson).mockImplementation((path, init) =>
-      path === "/api/places/rooms/add"
-        ? new Promise((resolve) => (finish = resolve as typeof finish))
-        : answer(path, init),
-    );
+    vi.mocked(coreJson).mockImplementation((path, init) => {
+      if (path !== "/api/places/rooms/add") return answer(path, init);
+      if (calls(path).length > 1) return Promise.resolve(den);
+      return new Promise((resolve) => (finish = resolve as typeof finish));
+    });
     await join();
     const field = await newRoom();
     await typeName(field, hall.name);
@@ -289,8 +290,16 @@ describe("actions on a device's Add devices card", () => {
       ),
     );
     await act(async () => finish(hall));
-
     expect(calls("/api/devices/update")).toHaveLength(0);
+
+    // The room made after Escape isn't the one the next naming uses.
+    await typeName(await newRoom(), den.name);
+    await click("Add room");
+    expect(calls("/api/places/rooms/add")).toHaveLength(2);
+    expect(calls("/api/devices/update").at(-1)![1]).toEqual({
+      method: "POST",
+      json: { id: device.id, roomId: den.id },
+    });
   });
 
   it("drops a created room after the home confirms and removes it", async () => {
