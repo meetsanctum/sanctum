@@ -13,8 +13,9 @@ which asks for no credit; it is given here anyway.
 Each is blurred ahead of time, so the page needs no live blur: scaled to
 960 px wide, blurred with a Gaussian whose sigma is 2% of that width (Core
 Image's `CIGaussianBlur`), darkened until no channel under the sheet (10% to
-90% across, below the top 12%) is brighter than 105, the lightness of the
-mocha dashboard background's lightest corner, and saved as WebP at quality 90.
+90% across, below the top 12%) is brighter than 105, a little above the
+lightness of the mocha dashboard background's lightest part, and saved as
+WebP at quality 90.
 The photo's edges are extended before it is scaled, so no partly transparent
 edge row blurs into a pale band. That is blurred enough that the landscape is
 only vaguely recognisable, and small enough, about 6 KB, to scale up to any

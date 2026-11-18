@@ -25,32 +25,29 @@ body {
 }
 
 /* The signed-in screen. Each dashboard has its own background, a preset the
-   core names (src/dashboards.ts); the first is mocha, from a warm greige at
-   the top left through mocha to espresso at the bottom right, dark enough
-   everywhere for White text on a tile. It runs as it is, unshaded, under the
-   top bar and the page alike. Deepened, it is the frame around a place, and
-   as glass the floating sidebar over one. */
+   core names (src/dashboards.ts); the first is mocha, from bronze lit from
+   the top left through a warm dark to near Carbon at the far corner, dark
+   enough everywhere for White text on a tile. It runs as it is, unshaded,
+   under the top bar and the page alike. Deepened, it is the frame around a
+   place, and as glass the floating sidebar over one. */
 :root {
-  --dashboard-mocha: linear-gradient(
-    to bottom right,
-    #7a6656 0%,
-    #5e4a3c 30%,
-    #47362b 62%,
-    #2c221d 100%
+  --dashboard-mocha: radial-gradient(
+    120% 90% at 15% 0%,
+    #6e5b43 0%,
+    #3d3b33 45%,
+    #1f2326 100%
   );
-  --dashboard-mocha-deep: linear-gradient(
-    to bottom right,
-    #4d4036 0%,
-    #3b2f26 30%,
-    #2e241d 62%,
-    #1e1814 100%
+  --dashboard-mocha-deep: radial-gradient(
+    120% 90% at 15% 0%,
+    #45392a 0%,
+    #262520 45%,
+    #141618 100%
   );
-  --dashboard-mocha-glass: linear-gradient(
-    to bottom right,
-    rgb(77 64 54 / 74%) 0%,
-    rgb(59 47 38 / 74%) 30%,
-    rgb(46 36 29 / 74%) 62%,
-    rgb(30 24 20 / 74%) 100%
+  --dashboard-mocha-glass: radial-gradient(
+    120% 90% at 15% 0%,
+    rgb(69 57 42 / 74%) 0%,
+    rgb(38 37 32 / 74%) 45%,
+    rgb(20 22 24 / 74%) 100%
   );
 }
 
