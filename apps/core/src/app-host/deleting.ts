@@ -56,12 +56,16 @@ export function createAppDeleting(options: {
   // What it brought that the core still holds, as entities a removal that
   // stopped part way left.
   entities: { removeApp(appId: string): void };
+  // Finishes a removal a failed step left part way (removing.ts), within the
+  // turn already taken.
+  finishRemoval: (appId: string) => Promise<void>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
   const { db, log } = options;
   const now = options.now ?? (() => new Date());
   let timer: NodeJS.Timeout | undefined;
+  let stopping = false;
 
   // The services it used, by its answers, that no other app the home has or
   // keeps uses.
@@ -102,10 +106,8 @@ export function createAppDeleting(options: {
   ) {
     const row = options.removed.get(appId);
     if (!row) throw new ActionCallError("not_found");
-    // Its removal ends first, and an app added back has its data in use.
-    if (!row.isDone || options.added.ids().has(appId)) {
-      throw new ActionCallError("conflict");
-    }
+    // An app added back has its data in use.
+    if (options.added.ids().has(appId)) throw new ActionCallError("conflict");
     const { deleteAppData, eraseServiceData } = options.manager;
     if (
       !options.manager.capabilities().deletesData ||
@@ -114,8 +116,10 @@ export function createAppDeleting(options: {
     ) {
       throw new ActionCallError("unavailable");
     }
-    options.removed.beginDeleting(appId);
     try {
+      // Its removal ends first: its container still has its data.
+      if (!row.isDone) await options.finishRemoval(appId);
+      options.removed.beginDeleting(appId);
       await deleteAppData(appId);
       for (const service of servicesOnlyIt(appId)) {
         await eraseServiceData(service);
@@ -162,18 +166,20 @@ export function createAppDeleting(options: {
   }
 
   // Check inside the turn: an earlier add and removal can reset a deadline.
-  // The whole sweep owns one turn, so stopping waits for every deletion.
+  // The whole sweep owns one turn, and stopping waits only for the app it's
+  // on: the rest resume at the next start. A removal that hasn't finished
+  // finishes first, as each hour retries it.
   function expire() {
     return options.turns.take(async () => {
       const due = options.removed
         .list()
         .filter(
           (row) =>
-            row.isDone &&
-            (row.isDeleting ||
-              row.removedAt.getTime() + keptForMs <= now().getTime()),
+            row.isDeleting ||
+            row.removedAt.getTime() + keptForMs <= now().getTime(),
         );
       for (const { appId } of due) {
+        if (stopping) break;
         await deleteData(appId, { actor: "sanctum" }).catch((error: unknown) =>
           log(
             `apps: ${appId}'s data stays for now (${error instanceof Error ? error.message : String(error)})`,
@@ -212,12 +218,22 @@ export function createAppDeleting(options: {
 
     /** Catches up, then checks now and then, as a step of starting (core.ts). */
     start() {
-      void expire();
-      timer = setInterval(() => void expire(), checkEveryMs);
+      stopping = false;
+      // A check that fails as a whole is logged, and the next hour's tries
+      // again.
+      const check = () =>
+        void expire().catch((error: unknown) =>
+          log(
+            `apps: removed apps' deadlines weren't checked (${error instanceof Error ? error.message : String(error)})`,
+          ),
+        );
+      check();
+      timer = setInterval(check, checkEveryMs);
       timer.unref();
     },
 
     close() {
+      stopping = true;
       clearInterval(timer);
       timer = undefined;
     },

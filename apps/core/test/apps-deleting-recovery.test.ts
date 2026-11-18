@@ -38,11 +38,15 @@ async function setup() {
       async (_service: string): Promise<void> => undefined,
     ),
   };
-  const record = (id = appId) => {
+  const record = (id = appId, isDone = true) => {
     removed.record(id, {}, { name: "Example", version: "1.0.0" });
-    removed.done(id);
+    if (isDone) removed.done(id);
   };
-  const start = () =>
+  const finishRemoval = vi.fn(async (id: string) => removed.done(id));
+  const log = vi.fn();
+  const start = (
+    overrides: Partial<Parameters<typeof createAppDeleting>[0]> = {},
+  ) =>
     createAppDeleting({
       db,
       gate: { admit: () => undefined } as unknown as Gate,
@@ -52,8 +56,10 @@ async function setup() {
       activity: { for: () => () => "entry" },
       manager,
       entities: { removeApp: () => undefined },
+      finishRemoval,
       now,
-      log: () => undefined,
+      log,
+      ...overrides,
     });
   record();
   return {
@@ -62,6 +68,8 @@ async function setup() {
     turns,
     manager,
     record,
+    finishRemoval,
+    log,
     start,
     advance: (ms: number) => (at = new Date(at.getTime() + ms)),
   };
@@ -107,6 +115,78 @@ describe("deletion deadlines and recovery", () => {
     await Promise.all([expiring, settled]);
 
     expect(settledBeforeSecond).toBe(false);
+  });
+
+  it("finishes a removal a failed step left part way, then deletes its data", async () => {
+    const home = await setup();
+    home.record(appId, false);
+    home.advance(keptForMs);
+
+    await home.start().expire();
+
+    expect(home.finishRemoval).toHaveBeenCalledWith(appId);
+    expect(home.manager.deleteAppData).toHaveBeenCalledWith(appId);
+    expect(home.removed.get(appId)).toBeUndefined();
+  });
+
+  it("keeps a removal that still can't finish for the next check", async () => {
+    const home = await setup();
+    home.record(appId, false);
+    home.advance(keptForMs);
+    home.finishRemoval.mockRejectedValueOnce(
+      new ManagerUnavailable("No answer"),
+    );
+
+    await home.start().expire();
+
+    expect(home.manager.deleteAppData).not.toHaveBeenCalled();
+    expect(home.removed.get(appId)).toMatchObject({
+      isDone: false,
+      isDeleting: false,
+    });
+  });
+
+  it("stops between apps once the core is stopping", async () => {
+    const home = await setup();
+    home.record("sanctum.other");
+    home.advance(keptForMs);
+    let finishFirst!: () => void;
+    home.manager.deleteAppData.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishFirst = resolve)),
+    );
+    const deleting = home.start();
+
+    const expiring = deleting.expire();
+    await vi.waitFor(() =>
+      expect(home.manager.deleteAppData).toHaveBeenCalledTimes(1),
+    );
+    deleting.close();
+    finishFirst();
+    await expiring;
+
+    expect(home.manager.deleteAppData).toHaveBeenCalledTimes(1);
+    expect(home.removed.list()).toHaveLength(1);
+  });
+
+  it("logs a check that fails as a whole, and keeps checking", async () => {
+    const home = await setup();
+    const deleting = home.start({
+      removed: {
+        ...home.removed,
+        list: () => {
+          throw new Error("disk I/O error");
+        },
+      },
+    });
+
+    deleting.start();
+    onTestFinished(() => deleting.close());
+
+    await vi.waitFor(() =>
+      expect(home.log).toHaveBeenCalledWith(
+        "apps: removed apps' deadlines weren't checked (disk I/O error)",
+      ),
+    );
   });
 
   it("resumes a failed Delete now before its original deadline", async () => {

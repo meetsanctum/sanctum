@@ -127,6 +127,26 @@ describe("deleting a removed app's data", () => {
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
+  it("says some may be gone when a deletion fails part way", async () => {
+    vi.mocked(coreJson).mockRejectedValue(new CoreError(409, "conflict"));
+    await press(container, "Delete Example's data now");
+    await press(dialog()!, "Delete");
+
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
+      "Not all of Example's data could be deleted, and some may already be gone. Try again.",
+    );
+  });
+
+  it("gives focus back to the button once Cancel closes it", async () => {
+    await press(container, "Delete Example's data now");
+    await press(dialog()!, "Cancel");
+
+    expect(dialog()).toBeNull();
+    expect(document.activeElement?.textContent).toBe(
+      "Delete Example's data now",
+    );
+  });
+
   it("is in the activity log, by Sanctum once its days are over", () => {
     expect(
       activityWords(

@@ -484,6 +484,31 @@ describe("services", () => {
     },
   );
 
+  it("removes a copy container a crash left before erasing", async () => {
+    const { docker, dev, services, onChange } = await setup();
+    await dev.plug(zbt2, "ttyACM0");
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    // A container can outlive the manager, holding the volume.
+    docker.run({
+      name: "sanctum-zigbee2mqtt-copy",
+      Image: docker.container("sanctum-zigbee2mqtt")!.options.Image,
+      Labels: {
+        "sanctum.managed": "true",
+        "sanctum.role": "zigbee2mqtt-copy",
+      },
+      HostConfig: { Binds: ["sanctum-zigbee2mqtt-data:/app/data"] },
+    });
+    onChange.mockImplementation(() => services.reconcile());
+    await services.release("zigbee2mqtt", app);
+    await services.reconcile();
+
+    await services.eraseData("zigbee2mqtt");
+
+    expect(docker.container("sanctum-zigbee2mqtt-copy")).toBeUndefined();
+    expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(false);
+  });
+
   it("does not confirm erasure when its backups cannot be read", async () => {
     const { dataDir, services } = await setup();
     await writeFile(join(dataDir, "backups"), "not a directory");

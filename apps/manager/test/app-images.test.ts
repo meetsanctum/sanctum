@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Helper } from "../src/apps/helper.js";
@@ -69,9 +69,12 @@ function fakeHelper(folder: string) {
       return { code: 0, output: `${state.uuidOnDisk ?? ""}\n` };
     }
     if (script.includes("losetup -d")) {
-      const name = /file=\S+\/(\S+)\.img/.exec(script)![1]!;
-      state.attached.delete(`${name}.img`);
-      await rm(join(folder, `${name}.img`), { force: true });
+      const files = /^for file in (.+); do$/m.exec(script)![1]!;
+      for (const [, path] of files.matchAll(/"([^"]+)"/g)) {
+        const name = basename(path!);
+        state.attached.delete(name);
+        await rm(join(folder, name), { force: true });
+      }
       return { code: 0, output: "" };
     }
     throw new Error(`The fake helper doesn't know: ${script}`);
@@ -448,6 +451,35 @@ describe("deleting one", () => {
     expect(await readdir(folder)).toEqual([]);
     expect((await records()).images[app]).toBeUndefined();
     expect(await images.has(app)).toBe(false);
+  });
+
+  it("takes an unfinished image and detaches a damaged copy still attached", async () => {
+    const { folder, images, state } = await setup();
+    await images.ensure(app, 256);
+    const damaged = `${app}.damaged-20261117T120000000Z.img`;
+    await writeFile(join(folder, damaged), "old");
+    await writeFile(join(folder, `${app}.img.partial`), "half made");
+    state.attached.set(damaged, "/dev/loop7");
+
+    await images.remove(app);
+
+    expect(await readdir(folder)).toEqual([]);
+    expect(state.attached.has(damaged)).toBe(false);
+    const script = state.scripts.at(-1)!;
+    expect(script).toContain(
+      'devices=$(losetup -j "$file" -n -O NAME) || exit 21',
+    );
+  });
+
+  it("keeps its record for the next try when a file can't go", async () => {
+    const { images, records, state } = await setup();
+    await images.ensure(app, 256);
+    state.failNext = { code: 21, output: "losetup: failed" };
+
+    await expect(images.remove(app)).rejects.toThrow("Could not delete");
+    expect((await records()).images[app]).toBeDefined();
+    await images.remove(app);
+    expect((await records()).images[app]).toBeUndefined();
   });
 
   it("leaves another app's files whose id begins with this one's", async () => {

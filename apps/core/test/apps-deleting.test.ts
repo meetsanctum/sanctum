@@ -158,6 +158,10 @@ describe("the data of the services it used", () => {
           void asked.push(`service ${service}`),
       },
       entities: { removeApp: () => undefined },
+      // The other's removal hasn't finished, so its data stays this time.
+      finishRemoval: async () => {
+        throw new Error("not yet");
+      },
       now: () => new Date(at.getTime() + keptForMs),
       log: () => undefined,
     });

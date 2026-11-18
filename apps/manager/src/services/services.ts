@@ -330,6 +330,9 @@ export function createServices(options: {
             if (await inspectService(docker, name)) {
               throw new ServiceBusyError(`${name} hasn't stopped yet`);
             }
+            // The operation slot keeps any image change out, so a copy
+            // container here is one a crash left.
+            await imageChanges.removeCopyContainer(name);
             const volumes = new Set([
               ...(definition.dataVolumes ?? []),
               ...(store

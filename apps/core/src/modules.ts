@@ -503,6 +503,7 @@ export async function createModules(
     activity,
     manager: options.manager,
     entities,
+    finishRemoval: (appId) => appRemoving.finish(appId),
     now,
     log,
   });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { access, mkdir, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { assertManaged, managedLabels, type Log } from "../docker-resources.js";
@@ -35,6 +35,14 @@ const mebibyte = 1024 * 1024;
 const keptForUpdates = 1536 * mebibyte;
 
 export const defaultImageMb = 256;
+
+// What a file or folder that isn't there answers, for one that may be gone.
+function unlessMissing<T>(value: T) {
+  return (error: unknown): T => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return value;
+    throw error;
+  };
+}
 export const smallestImageMb = 64;
 export const largestImageMb = 4096;
 
@@ -367,24 +375,36 @@ sync -f "$file"
           );
         }
       }
-      const { code, output } = await helper(`file=${seenByHelper(`${app}.img`)}
-for device in $(losetup -j "$file" -n -O NAME); do
-  losetup -d "$device" || exit 21
+      // Its image, one a failed make left unfinished, and only its own copies
+      // set aside as damaged, named by the time they were: another app's id
+      // may begin with this one's. A damaged copy may still be attached.
+      const damaged = new RegExp(
+        `^${app.replace(/[.]/g, "\\.")}\\.damaged-\\d{8}T\\d{9}Z\\.img$`,
+      );
+      const files = [
+        `${app}.img`,
+        `${app}.img.partial`,
+        ...(await readdir(folder).catch(unlessMissing([] as string[]))).filter(
+          (file) => damaged.test(file),
+        ),
+      ];
+      // A file that's gone was deleted before; any other failure leaves the
+      // rest for the next try.
+      const { code, output } = await helper(`for file in ${files
+        .map((file) => `"${seenByHelper(file)}"`)
+        .join(" ")}; do
+  [ -e "$file" ] || continue
+  devices=$(losetup -j "$file" -n -O NAME) || exit 21
+  for device in $devices; do
+    losetup -d "$device" || exit 21
+  done
+  rm -f "$file" || exit 22
 done
-rm -f "$file"
 `);
       if (code !== 0) {
         throw new Error(`Could not delete ${app}'s image: ${output.trim()}`);
       }
-      // Only its own copies set aside as damaged, named by the time they
-      // were: another app's id may begin with this one's.
-      const damaged = new RegExp(
-        `^${app.replace(/[.]/g, "\\.")}\\.damaged-\\d{8}T\\d{9}Z\\.img$`,
-      );
-      for (const file of await readdir(folder).catch(() => [] as string[])) {
-        if (damaged.test(file)) await rm(join(folder, file), { force: true });
-      }
-      await syncPath(folder).catch(() => undefined);
+      await syncPath(folder).catch(unlessMissing(undefined));
       await changeRecords((state) => {
         delete state.images[app];
       });

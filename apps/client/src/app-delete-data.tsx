@@ -10,12 +10,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 
 // Deleting a removed app's data at once, rather than once its 30 days are
 // over, from its row under Add apps. Nothing brings it back, so it asks first,
-// saying what goes and what adding it back then means; Cancel is focused.
+// saying what goes and what adding it back then means; Cancel is focused, and
+// focus goes back to the button once it closes. A deletion that fails part
+// way may have deleted some already, so its words say so.
 
 /** What deleting it takes, in a sentence or two. */
 export function deletingWords(app: AvailableApp) {
@@ -58,7 +61,7 @@ export function DeleteAppData(props: {
       setProblem(
         code === "unavailable"
           ? `${productName} can't delete ${app.name}'s data right now. Try again or check for an update.`
-          : `${app.name}'s data couldn't be deleted. Try again.`,
+          : `Not all of ${app.name}'s data could be deleted, and some may already be gone. Try again.`,
       );
     } finally {
       setPending(false);
@@ -67,27 +70,22 @@ export function DeleteAppData(props: {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={() => {
-          setProblem(undefined);
-          setIsAsking(true);
-        }}
-      >
-        Delete {app.name}'s data now
-      </Button>
-      {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
-      )}
       <Dialog
         open={isAsking}
         onOpenChange={(open) => {
-          if (!open && !pending) setIsAsking(false);
+          if (open) {
+            setProblem(undefined);
+            setIsAsking(true);
+          } else if (!pending) {
+            setIsAsking(false);
+          }
         }}
       >
+        <DialogTrigger asChild>
+          <Button variant="destructive" size="sm">
+            Delete {app.name}'s data now
+          </Button>
+        </DialogTrigger>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Delete {app.name}'s data?</DialogTitle>
@@ -112,6 +110,11 @@ export function DeleteAppData(props: {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {problem && (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {problem}
+        </p>
+      )}
     </div>
   );
 }
