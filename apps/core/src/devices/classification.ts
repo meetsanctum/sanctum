@@ -1,11 +1,14 @@
-import { deviceTypes, shownType, type DeviceType } from "@meetsanctum/app-sdk";
+import {
+  declaredTypes,
+  shownType,
+  type DeviceType,
+} from "@meetsanctum/app-sdk";
 
 // What a device is: what its driver says (declaredType), taken when the
-// driver registers it once the device has what that type needs
-// (driver-reports.ts). A driver knows its devices best, from what its
-// protocol tells of them, so the core works nothing out itself. Every
-// registration says a type; a stored device without one, or with one this
-// build does not have, reads as unknown.
+// driver registers it once the device has what that type needs. The driver
+// knows its devices from what its protocol tells it. Every registration
+// says a type; a stored device without one, or with one this build does
+// not have, reads as unknown.
 //
 // What a device says about itself, such as its battery and link quality,
 // is no capability and plays no part: a battery is the device's own
@@ -25,9 +28,7 @@ type Classified = {
 /** What a device is of itself, before what the household shows it as. */
 export function ownDeviceType(device: Classified): DeviceType {
   return (
-    deviceTypes.find(
-      (type) => type.id === device.declaredType && !type.chosenOnly,
-    )?.id ?? "unknown"
+    declaredTypes.find((type) => type === device.declaredType) ?? "unknown"
   );
 }
 

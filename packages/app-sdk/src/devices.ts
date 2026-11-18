@@ -646,7 +646,7 @@ export function knownParts(device: DeviceInfo): DeviceInfo {
 }
 
 /** A capability's id on its device, as its driver names it. */
-export const capabilityId = z
+const capabilityId = z
   .string()
   .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/, "use a short id such as light or l1");
 // The driver's own id for a device, such as a Zigbee IEEE address.

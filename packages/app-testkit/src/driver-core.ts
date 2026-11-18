@@ -15,7 +15,6 @@ import {
   isDeclaredAddRefusal,
   isDeclaredRefusal,
   permissionIds,
-  fitsType,
   shownProblem,
   shownQuestions,
   shownRefusals,
@@ -241,15 +240,6 @@ export function createDriverCore(
       if (!parsed.success) {
         refuse(
           new Error(`Registration refused: ${z.prettifyError(parsed.error)}`),
-        );
-      }
-      // The core takes a driver's type once the device has what it needs.
-      const kinds = new Set(parsed.data.capabilities.map((each) => each.kind));
-      if (!fitsType(parsed.data.type, kinds)) {
-        refuse(
-          new Error(
-            `Registration refused: ${parsed.data.type} without what a device of that type has`,
-          ),
         );
       }
       if (!registered.has(parsed.data.key)) {

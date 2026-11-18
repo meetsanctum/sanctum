@@ -60,3 +60,29 @@ test("adds a climate sensor with its readings, and a plug that turns on and off"
   assert.deepEqual(core.found, []);
   assert.deepEqual(core.refused, []);
 });
+
+test("starts with previously added devices even when their stored type is outdated", async () => {
+  await core.add("office-air");
+  await core.add("desk-plug", { key: "sanctum" });
+  await core.stop();
+
+  // The saved registration can predate the plug's switch capability.
+  core.registered.set("desk-plug", {
+    ...core.registered.get("desk-plug"),
+    type: "contact",
+    capabilities: [{ id: "contact", kind: "contact", features: {} }],
+  });
+  await core.start();
+
+  assert.equal(typeOf("desk-plug"), "plug");
+  for (const key of ["office-air", "desk-plug"]) {
+    assert.ok(core.presented.at(-1).includes(key));
+    assert.equal(
+      core.devices().find((device) => device.key === key).availability,
+      "online",
+    );
+  }
+  assert.deepEqual(core.found, []);
+  await core.command("desk-plug", "power", "switch", { on: true });
+  assert.deepEqual(core.latest("desk-plug", "power"), { on: true });
+});

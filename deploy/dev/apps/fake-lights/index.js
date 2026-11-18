@@ -9,8 +9,8 @@ import {
 // told at once and whose contact sensors open and close by themselves. Add
 // devices can try it out: while it lets devices join, a new light joins a few
 // seconds in and another a little later, and it has found a climate sensor
-// and a plug on the network, the plug asking for its key ("sanctum"). It ships with no
-// host: only a development stack stages it (deploy/dev/stack.Dockerfile).
+// and a plug on the network, the plug asking for its key ("sanctum"). Only
+// a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
   [
@@ -77,7 +77,7 @@ function stopBlink(key) {
 
 // What it has found and could add, until someone adds it: what each is,
 // what adding it asks, and what it has and first says once added.
-const findings = [
+const foundDevices = [
   {
     key: "office-air",
     name: "Office Air",
@@ -106,19 +106,34 @@ const findings = [
     states: { power: { on: false } },
   },
 ];
-const found = new Map(findings.map((each) => [each.key, each]));
+const added = new Set();
 // What it lists of each found device (ctx.devices.found).
 const listed = () =>
-  [...found.values()].map(({ key, name, description, type, asks }) => ({
+  foundDevices
+    .filter(({ key }) => !added.has(key))
+    .map(({ key, name, description, type, asks }) => ({
+      key,
+      name,
+      description,
+      type,
+      asks,
+    }));
+
+async function registerFound(
+  ctx,
+  { key, name, model, type, capabilities, states },
+) {
+  await ctx.devices.register({
     key,
     name,
-    description,
+    manufacturer: "Sanctum",
+    model,
     type,
-    asks,
-  }));
-
-// The plugs someone added, each on or off.
-const plugs = new Map();
+    capabilities,
+  });
+  added.add(key);
+  await ctx.devices.report({ key, availability: "online", states });
+}
 
 // Lights that join while it lets devices join: the first a few seconds in,
 // the next a little later, each joining, being set up, then ready. Only a
@@ -243,7 +258,18 @@ export default defineApp({
       });
       await reportContact(ctx, key);
     }
-    await ctx.devices.present({ keys: [...lights.keys(), ...contacts.keys()] });
+    const previouslyAdded = new Set(
+      (await ctx.devices.list())
+        .filter((device) => device.driver === ctx.appId)
+        .map((device) => device.key),
+    );
+    added.clear();
+    for (const device of foundDevices) {
+      if (previouslyAdded.has(device.key)) await registerFound(ctx, device);
+    }
+    await ctx.devices.present({
+      keys: [...lights.keys(), ...contacts.keys(), ...added],
+    });
     await ctx.devices.found(listed());
     // The core takes a report that says the same again as no change.
     ticking = setInterval(() => {
@@ -262,13 +288,11 @@ export default defineApp({
   },
   driver: {
     async command(ctx, command) {
-      const plug = plugs.get(command.key);
-      if (plug) {
-        plug.on = switchCapability.desired(command.command).on ?? plug.on;
+      if (command.kind === "switch" && added.has(command.key)) {
         await ctx.devices.report({
           key: command.key,
           availability: "online",
-          states: { power: { on: plug.on } },
+          states: { power: switchCapability.desired(command.command) },
         });
         return;
       }
@@ -321,26 +345,12 @@ export default defineApp({
       },
     },
     async add(ctx, { key, answers }) {
-      const device = found.get(key);
+      const device = foundDevices.find((each) => each.key === key);
       if (!device) return;
       if (device.asks.includes("key") && answers.key !== "sanctum") {
         return { refused: { question: "key", refusal: "wrongKey" } };
       }
-      await ctx.devices.register({
-        key,
-        name: device.name,
-        manufacturer: "Sanctum",
-        model: device.model,
-        type: device.type,
-        capabilities: device.capabilities,
-      });
-      if (device.type === "plug") plugs.set(key, { on: false });
-      await ctx.devices.report({
-        key,
-        availability: "online",
-        states: device.states,
-      });
-      found.delete(key);
+      await registerFound(ctx, device);
       await ctx.devices.found(listed());
     },
   },

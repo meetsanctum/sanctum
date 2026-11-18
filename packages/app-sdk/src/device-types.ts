@@ -99,16 +99,15 @@ export const deviceTypes: readonly (DeviceTypeDefinition & {
   id: DeviceType;
 })[] = types;
 
+const driverTypes = types.filter((each) => !("chosenOnly" in each));
+
 /** A type a driver may say: any but those only the household chooses. */
-export type DeclaredType = Exclude<
-  DeviceType,
-  Extract<(typeof types)[number], { chosenOnly: true }>["id"]
->;
+export type DeclaredType = (typeof driverTypes)[number]["id"];
 
 /** Every type a driver may say, in the order of the list. */
-export const declaredTypes = deviceTypes
-  .filter((each) => !each.chosenOnly)
-  .map((each) => each.id) as [DeclaredType, ...DeclaredType[]];
+export const declaredTypes: readonly DeclaredType[] = driverTypes.map(
+  (each) => each.id,
+);
 
 /**
  * What a device with these capability kinds is, for a driver whose
@@ -118,14 +117,12 @@ export const declaredTypes = deviceTypes
  */
 export function deviceTypeOf(kinds: Iterable<CapabilityKind>): DeclaredType {
   const has = new Set(kinds);
-  const type = deviceTypes.find(
+  const type = driverTypes.find(
     (each) =>
-      !each.chosenOnly &&
-      !each.declaredOnly &&
-      each.needs.every((kind) => has.has(kind)),
+      !("declaredOnly" in each) && each.needs.every((kind) => has.has(kind)),
   );
   // The last type needs nothing, so one always fits.
-  return (type?.id ?? "unknown") as DeclaredType;
+  return type?.id ?? "unknown";
 }
 
 /**

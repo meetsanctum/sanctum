@@ -46,7 +46,7 @@ describe("a driver that says what its device is", () => {
     return { type: device?.type, name: device?.name };
   };
 
-  it("is taken at its word, until it says nothing again", async () => {
+  it("uses the declared type and renames the device when it changes", async () => {
     const { core, maya } = await lampsCore();
 
     // The radio's switches are plugs by their model's name.
@@ -69,11 +69,11 @@ describe("a driver that says what its device is", () => {
 
     await expect(
       radio.add("relay-1", "switch", "Relay", "light"),
-    ).rejects.toThrow("registered a device as light without what");
+    ).rejects.toThrow("capabilities do not fit the declared type light");
     // Unknown is a device with nothing Sanctum uses.
     await expect(
       radio.add("relay-1", "switch", "Relay", "unknown"),
-    ).rejects.toThrow("registered a device as unknown without what");
+    ).rejects.toThrow("capabilities do not fit the declared type unknown");
     for (const type of ["curtain", "door"]) {
       await expect(
         radio.add("relay-1", "switch", "Relay", type),
