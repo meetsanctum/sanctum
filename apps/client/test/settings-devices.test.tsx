@@ -680,8 +680,13 @@ describe("Settings → Devices", () => {
     ];
     expect(cards()).toHaveLength(1);
     expect(cards()[0]!.textContent).toBe("New deviceSetting up…");
-    // Once one joins, the line under the heading has done its job.
-    expect(dialog.textContent).not.toContain("can join for 4 minutes");
+    // Once one joins, the line under the heading has done its job: only a
+    // copy hidden from assistive technology stays while it fades out.
+    expect(
+      [...dialog.querySelectorAll("p:not([aria-hidden])")].map(
+        (line) => line.textContent,
+      ),
+    ).not.toContainEqual(expect.stringContaining("can join for 4 minutes"));
 
     const added = light("bulb", "Light 2");
     devices = [...devices, added];

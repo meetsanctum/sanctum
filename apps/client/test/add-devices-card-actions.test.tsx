@@ -302,6 +302,18 @@ describe("actions on a device's Add devices card", () => {
     });
   });
 
+  it("leaves room naming with Cancel, making no room", async () => {
+    await join();
+    await typeName(await newRoom(), hall.name);
+    await click("Cancel");
+
+    expect(document.querySelector("form input")).toBeNull();
+    expect(
+      document.querySelector('button[aria-label="Unknown Device: room"]'),
+    ).not.toBeNull();
+    expect(calls("/api/places/rooms/add")).toHaveLength(0);
+  });
+
   it("drops a created room after the home confirms and removes it", async () => {
     await join();
     await newRoom();

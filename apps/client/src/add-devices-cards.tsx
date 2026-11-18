@@ -109,8 +109,12 @@ export function DeviceCard(props: {
   return (
     <li
       aria-label={props.label}
-      // Each card rises in a little after the one before it.
-      style={{ animationDelay: `${(props.index ?? 0) * 80}ms` }}
+      // Each card rises in a little after the one before it, and the first
+      // ones after whatever their list waits for (--cards-after), such as
+      // the heading moving up out of their way.
+      style={{
+        animationDelay: `calc(var(--cards-after, 0ms) + ${(props.index ?? 0) * 80}ms)`,
+      }}
       className={cn(
         "relative flex min-h-55 flex-col items-center rounded-lg bg-linear-to-b px-4 pt-4.5 pb-4 text-center",
         "motion-safe:animate-in motion-safe:fill-mode-both motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-500 motion-reduce:animate-in motion-reduce:fill-mode-both motion-reduce:fade-in-0",
@@ -352,7 +356,7 @@ function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
 
 // Which room a device is in, with New room… at the end of the menu, which
 // makes one right here: its name in a labelled field, and Add room puts the
-// device in it. Escape, or leaving it empty, goes back to the menu.
+// device in it. Cancel or Escape goes back to the menu.
 function RoomChoice(props: {
   device: DeviceInfo;
   work: CardWork;
@@ -423,15 +427,18 @@ function RoomChoice(props: {
         <label htmlFor={id} className="text-xs font-medium text-(--silver)">
           New room
         </label>
-        <div className="flex gap-1.5">
-          <Input
-            id={id}
-            ref={field}
-            value={name}
-            maxLength={60}
-            onChange={(event) => setName(event.target.value)}
-            className="h-8 min-w-0 flex-1 bg-black/14 pointer-coarse:h-11"
-          />
+        <Input
+          id={id}
+          ref={field}
+          value={name}
+          maxLength={60}
+          onChange={(event) => setName(event.target.value)}
+          className="h-8 bg-black/14 pointer-coarse:h-11"
+        />
+        <div className="mt-1 flex justify-end gap-1.5">
+          <Button type="button" variant="ghost" size="sm" onClick={leave}>
+            Cancel
+          </Button>
           <Button
             type="submit"
             variant="outline"

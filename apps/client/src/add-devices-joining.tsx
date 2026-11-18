@@ -1,7 +1,14 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { JoinedCard, type CardWork } from "./add-devices-cards";
 import { foundKey } from "./add-devices-found";
@@ -56,8 +63,28 @@ export function JoiningPage(props: {
   const isLooking = state.kind !== "closed";
   // Calm and centred until a device joins; then at the top over the cards.
   const isWaiting = isLooking && !hasJoined;
-  const at = useMoveUp(isWaiting);
   const kind = props.name ? `${props.name} devices` : "New devices";
+  // The line under the heading while it waits, and once it has stopped
+  // with nothing to show.
+  const line = isWaiting
+    ? `${kind} can join for ${lasting(props.seconds)}. When the time is up, you can start again.`
+    : !isLooking && state.why !== "failed"
+      ? `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`
+      : null;
+  const gone = useGoneLine(line);
+  const at = useMoveUp(isWaiting, line);
+  // The first cards rise in once the move up has nearly ended, so the
+  // button never passes through them; those that come later rise in at
+  // once.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!hasJoined) {
+      setSettled(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSettled(true), moving + 300);
+    return () => window.clearTimeout(timer);
+  }, [hasJoined]);
 
   const heading =
     state.kind === "opening" ? (
@@ -123,11 +150,25 @@ export function JoiningPage(props: {
         >
           {heading}
         </h3>
-        {(isWaiting || (!isLooking && state.why !== "failed")) && (
-          <p className="m-0 mt-2 max-w-105 text-[14.5px] leading-[1.5] text-(--silver)">
-            {isLooking
-              ? `${kind} can join for ${lasting(props.seconds)}. When the time is up, you can start again.`
-              : `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`}
+        {line !== null && (
+          <p
+            key={line}
+            ref={at.line(line)}
+            className="m-0 mt-2 max-w-105 text-[14.5px] leading-[1.5] text-(--silver)"
+          >
+            {line}
+          </p>
+        )}
+        {gone !== null && (
+          // The line that was, out of the flow and seen only while it fades
+          // on its way up, so it doesn't vanish in a frame.
+          <p
+            key={`gone:${gone}`}
+            ref={at.gone(gone)}
+            aria-hidden="true"
+            className="pointer-events-none absolute m-0 mt-2 max-w-105 text-[14.5px] leading-[1.5] text-(--silver) opacity-0"
+          >
+            {gone}
           </p>
         )}
         <span
@@ -152,6 +193,11 @@ export function JoiningPage(props: {
       {hasJoined && (
         <ul
           aria-label="Devices that joined"
+          style={
+            {
+              "--cards-after": settled ? "0ms" : `${moving / 2}ms`,
+            } as CSSProperties
+          }
           className="m-0 grid w-full list-none grid-cols-2 gap-3 p-0 sm:grid-cols-4 sm:gap-4"
         >
           {joined.map((each, index) => (
@@ -184,23 +230,51 @@ function Orb(): ReactNode {
   );
 }
 
+type Place = { middle: number; top: number; width: number; size: number };
+
+/** How long the move up takes, in milliseconds. */
+const moving = 900;
+const easing = "cubic-bezier(.2,.8,.2,1)";
+
 /**
- * When the first device joins, the knot, the heading and the button move
- * from where they were to where they are now, straight up, rather than jump:
- * each starts drawn where it was and slides into place. Positions are read
- * from the layout, which a transform doesn't change, so a move under way is
+ * The line under the heading that has just been replaced or gone, kept
+ * while the move up fades it out.
+ */
+function useGoneLine(line: string | null) {
+  const [shown, setShown] = useState(line);
+  const [gone, setGone] = useState<string | null>(null);
+  if (line !== shown) {
+    setShown(line);
+    setGone(shown);
+  }
+  useEffect(() => {
+    if (gone === null) return;
+    const timer = window.setTimeout(() => setGone(null), moving);
+    return () => window.clearTimeout(timer);
+  }, [gone]);
+  return gone;
+}
+
+/**
+ * When the first device joins, or looking stops, the knot, the heading and
+ * the button move from where they were to where they are now, straight up,
+ * rather than jump: each starts drawn where it was and slides into place,
+ * the heading at the size it was, coming to its new size on the way. The
+ * line under the heading that goes fades out as it rises with them, and one
+ * that comes fades in once they have nearly arrived. Positions are read from
+ * the layout, which a transform doesn't change, so a move under way is
  * measured right. Where motion is reduced, they are simply there.
  */
-function useMoveUp(isWaiting: boolean) {
+function useMoveUp(isWaiting: boolean, line: string | null) {
   const knot = useRef<HTMLSpanElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const button = useRef<HTMLSpanElement>(null);
-  const was = useRef<Map<HTMLElement, number>>(new Map());
+  // The lines under the heading, the one shown and one going, by their
+  // words.
+  const lines = useRef(new Map<string, HTMLElement>());
+  const was = useRef(new Map<string, Place>());
 
   useLayoutEffect(() => {
-    const elements = [knot.current, heading.current, button.current].flatMap(
-      (each) => (each ? [each] : []),
-    );
     const middleOf = (element: HTMLElement) => {
       let top = element.offsetHeight / 2;
       for (
@@ -212,23 +286,85 @@ function useMoveUp(isWaiting: boolean) {
       }
       return top;
     };
+    const sizeOf = (element: HTMLElement) =>
+      parseFloat(getComputedStyle(element).fontSize) || 1;
     const reduced =
       typeof matchMedia === "function" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
-    for (const element of elements) {
-      const now = middleOf(element);
-      const before = was.current.get(element);
-      was.current.set(element, now);
-      if (before === undefined || before === now || reduced) continue;
+
+    const parts: [string, HTMLElement | null][] = [
+      ["knot", knot.current],
+      ["heading", heading.current],
+      ["button", button.current],
+    ];
+    for (const [key, element] of lines.current) {
+      if (key.startsWith("line:")) parts.push([key, element]);
+    }
+    const now = new Map<string, Place>();
+    for (const [key, element] of parts) {
+      if (!element) continue;
+      const here = {
+        middle: middleOf(element),
+        top: middleOf(element) - element.offsetHeight / 2,
+        width: element.offsetWidth,
+        size: sizeOf(element),
+      };
+      now.set(key, here);
+      const before = was.current.get(key);
+      if (reduced) continue;
+      if (before === undefined) {
+        // A line that has just come fades in as the others arrive.
+        if (key.startsWith("line:") && was.current.size > 0)
+          element.animate?.(
+            [{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }],
+            { duration: moving, easing: "ease-out" },
+          );
+        continue;
+      }
+      const scale = before.size / here.size;
+      if (before.middle === here.middle && scale === 1) continue;
       element.animate?.(
         [
-          { transform: `translateY(${before - now}px)` },
-          { transform: "translateY(0)" },
+          {
+            transform: `translateY(${before.middle - here.middle}px) scale(${scale})`,
+          },
+          { transform: "none" },
         ],
-        { duration: 900, easing: "cubic-bezier(.2,.8,.2,1)" },
+        { duration: moving, easing },
       );
     }
-  }, [isWaiting]);
+    // A line that has gone rises from where it was as it fades.
+    for (const [key, element] of lines.current) {
+      if (!key.startsWith("gone:") || reduced) continue;
+      const before = was.current.get(`line:${key.slice("gone:".length)}`);
+      if (!before) continue;
+      // As wide as it was, so its words keep their lines, and under the
+      // heading, so the two rise together.
+      element.style.width = `${before.width}px`;
+      if (heading.current)
+        element.style.top = `${heading.current.offsetTop + heading.current.offsetHeight}px`;
+      const rise = before.top - (middleOf(element) - element.offsetHeight / 2);
+      element.animate?.(
+        [
+          { transform: `translateY(${rise}px)`, opacity: 1 },
+          { opacity: 0, offset: 0.5 },
+          { transform: "none", opacity: 0 },
+        ],
+        { duration: moving, easing },
+      );
+    }
+    was.current = now;
+  }, [isWaiting, line]);
 
-  return { knot, heading, button };
+  const keep = (key: string) => (element: HTMLElement | null) => {
+    if (element) lines.current.set(key, element);
+    else lines.current.delete(key);
+  };
+  return {
+    knot,
+    heading,
+    button,
+    line: (words: string) => keep(`line:${words}`),
+    gone: (words: string) => keep(`gone:${words}`),
+  };
 }
