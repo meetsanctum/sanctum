@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { maxAppSecrets } from "@meetsanctum/app-sdk";
 
-import type { Session } from "../src/connection.js";
 import { makerOf, secretOf } from "../src/driver.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
 import {
@@ -110,6 +109,24 @@ describe("finding devices", () => {
     expect(home.core.found).toEqual([]);
   });
 
+  it("refreshes a waiting device's maker when its project changes", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      psk: null,
+      waiting: true,
+      project: "M5Stack.Atom Lite",
+    });
+    const description = () => home.core.found[0]?.description;
+    await home.core.until(() => description() === "M5Stack", "the first maker");
+
+    await device.unplug();
+    device.options.project = "Example.Lamp";
+    await device.listen();
+    await announce(home.core, device);
+
+    await home.core.until(() => description() === "Example", "the new maker");
+  });
+
   it("closes a pending description connection when the app stops", async () => {
     home = await startHome();
     const device = await home.plugIn();
@@ -126,27 +143,36 @@ describe("finding devices", () => {
 });
 
 describe("who made a device", () => {
-  const info = (fields: Partial<Session["info"]>) =>
-    ({
-      manufacturer: "Espressif",
-      model: "esp32dev",
-      ...fields,
-    }) as Session["info"];
+  const board = { manufacturer: "Espressif", model: "esp32dev" };
 
   it("is its project's maker, and it is its product", () => {
-    expect(makerOf(info({ projectName: "M5Stack.Atom Lite" }))).toEqual({
+    expect(makerOf({ ...board, projectName: "M5Stack.Atom Lite" })).toEqual({
       manufacturer: "M5Stack",
       model: "Atom Lite",
     });
   });
 
-  it("is its chip's maker, and it is its project or its board, otherwise", () => {
-    expect(makerOf(info({}))).toEqual({
-      manufacturer: "Espressif",
-      model: "esp32dev",
+  it("limits each label after separating the maker from the product", () => {
+    const longMaker = "M".repeat(122);
+    expect(makerOf({ ...board, projectName: `${longMaker}.Lamp` })).toEqual({
+      manufacturer: longMaker.slice(0, 120),
+      model: "Lamp",
     });
-    for (const projectName of ["Lamp", ".Lamp", "Maker.", " . "]) {
-      expect(makerOf(info({ projectName }))).toEqual({
+    const longModel = "L".repeat(124);
+    expect(makerOf({ ...board, projectName: `Co.${longModel}` })).toEqual({
+      manufacturer: "Co",
+      model: longModel.slice(0, 120),
+    });
+    const makerBeforeEmoji = "M".repeat(119);
+    expect(
+      makerOf({ ...board, projectName: `${makerBeforeEmoji}😀.X` }),
+    ).toEqual({ manufacturer: makerBeforeEmoji, model: "X" });
+  });
+
+  it("is its chip's maker, and it is its project or its board, otherwise", () => {
+    expect(makerOf(board)).toEqual(board);
+    for (const projectName of ["Lamp", ".Lamp", "Maker.", " . ", "A.B.C"]) {
+      expect(makerOf({ ...board, projectName })).toEqual({
         manufacturer: "Espressif",
         model: projectName.trim() || "esp32dev",
       });

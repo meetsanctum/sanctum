@@ -63,24 +63,32 @@ type Owned = {
   removing: boolean;
 };
 
-const label = (text: string | undefined) => text?.trim().slice(0, 120) || null;
+// Keep the core's length limit without cutting a Unicode character in half.
+const label = (text: string | undefined) =>
+  text
+    ?.trim()
+    .slice(0, 120)
+    .replace(/[\uD800-\uDBFF]$/u, "") || null;
 
 /**
  * Who made a device and what it is. A project named as ESPHome asks, maker
- * and product ("M5Stack.Atom Lite"), says both; without one, the maker is
- * the manufacturer its firmware reports, its chip's, and it is its board.
+ * and product ("M5Stack.Atom Lite"), says both. Otherwise use the firmware's
+ * manufacturer and the whole project name or board.
  */
-export function makerOf(info: Session["info"]) {
-  const project = label(info.projectName);
-  const dot = project?.indexOf(".") ?? -1;
-  if (project && dot > 0) {
-    const model = label(project.slice(dot + 1));
-    const manufacturer = label(project.slice(0, dot));
-    if (manufacturer && model) return { manufacturer, model };
+export function makerOf(
+  info: Pick<Session["info"], "projectName" | "manufacturer" | "model">,
+) {
+  if (info.projectName) {
+    const [maker, product, extra] = info.projectName.split(".", 3);
+    const manufacturer = label(maker);
+    const model = label(product);
+    if (extra === undefined && manufacturer && model) {
+      return { manufacturer, model };
+    }
   }
   return {
     manufacturer: label(info.manufacturer),
-    model: project ?? label(info.model),
+    model: label(info.projectName) ?? label(info.model),
   };
 }
 
@@ -122,11 +130,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   let stopped = false;
   // Found devices go to the core one list at a time, in order.
   let listing = Promise.resolve();
-  // Who made each device waiting for a key, by MAC, for the version it
-  // runs, as a connection under the zero key told it.
+  // Who made each device waiting for a key, as its zero-key connection said.
   const described = new Map<
     string,
-    { version: string | null; maker: string | null }
+    Pick<Announced, "version" | "projectName"> & { maker: string | null }
   >();
   const describing = new Map<AbortController, Promise<void>>();
   // Devices removed with the key Sanctum gave them still on them, as when
@@ -390,15 +397,21 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return connectOnce({ mac, key, address, timings });
   }
 
-  // Who made a device waiting for a key, once for each version it runs,
-  // over a connection under the zero key.
+  // A device may be reflashed with a different project on the same ESPHome
+  // version. The announcement tells us when to read its maker again.
   function describe(found: Announced): Promise<void> {
     const before = described.get(found.mac);
-    if (stopped || (before && before.version === found.version)) {
+    if (
+      stopped ||
+      (before &&
+        before.version === found.version &&
+        before.projectName === found.projectName)
+    ) {
       return Promise.resolve();
     }
     const description = {
       version: found.version,
+      projectName: found.projectName,
       maker: null as string | null,
     };
     described.set(found.mac, description);

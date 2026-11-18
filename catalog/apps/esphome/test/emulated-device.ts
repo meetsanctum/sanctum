@@ -214,6 +214,7 @@ export class EmulatedDevice {
     };
     if (this.options.friendlyName)
       txt.friendly_name = this.options.friendlyName;
+    if (this.options.project) txt.project_name = this.options.project;
     if (this.psk) txt.api_encryption = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
     else if (this.waiting) {
       txt.api_encryption_supported = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
