@@ -1,8 +1,8 @@
 import { defineRailway, github, preserve, project, service } from "railway/iac";
 
 // The website and the docs on Railway: two services that Railway builds and
-// runs from this repository. `railway config plan` shows what applying this file would
-// change there and `railway config apply` changes it; deploys never read it.
+// runs from this repository. `railway config plan` previews the changes and
+// `railway config apply` applies them. Deploys never read this file.
 // A custom domain is added on Railway itself, which this file cannot do.
 
 const website = "@meetsanctum/website";
@@ -54,6 +54,7 @@ export default defineRailway(() => {
         "/apps/client/src/brand.ts",
         "/assets/brand/**",
         "/.dockerignore",
+        "/.npmrc",
         "/package.json",
         "/pnpm-lock.yaml",
         "/pnpm-workspace.yaml",

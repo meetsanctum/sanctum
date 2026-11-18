@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "astro dev --port 5175 --ignore-lock",
     "build": "astro build",
-    "start": "serve dist --no-clipboard --listen tcp://0.0.0.0:${PORT:-5175}",
+    "start": "serve --no-clipboard --listen tcp://0.0.0.0:${PORT:-5175}",
     "lint": "astro check",
     "typecheck": "astro check",
     "clean": "rm -rf dist .astro .turbo"

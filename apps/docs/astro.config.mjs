@@ -18,6 +18,7 @@ export default defineConfig({
       },
       // src/pages/favicon.svg.ts serves the brand's favicon here.
       favicon: "/favicon.svg",
+      disable404Route: true,
       social: [
         {
           icon: "github",

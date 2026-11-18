@@ -1,5 +1,5 @@
-/* Starlight's colours and type, set to the brand's tokens as in the client's
-   styles.css. Dark mode is the default; light mode inverts the grays. */
+/* Starlight's colours and type use the brand's tokens from the client's
+   styles.css. Light mode inverts the grays. */
 :root {
   --sl-font: "Inter", system-ui, sans-serif;
 

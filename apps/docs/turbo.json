@@ -12,7 +12,8 @@
         "$TURBO_ROOT$/assets/brand/readme-home.jpg"
       ],
       "outputs": ["dist/**"],
-      "env": ["DOCS_URL"]
+      "env": ["DOCS_URL"],
+      "passThroughEnv": ["ASTRO_TELEMETRY_DISABLED"]
     },
     "lint": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/client/src/brand.ts"]
