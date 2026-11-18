@@ -33,7 +33,10 @@ const {
   startManager,
   turnBack,
   waitFor,
-} = realStack("test-weather");
+} = realStack("test-weather", [
+  // A home with all four, as one that had them before a home kept its list.
+  `CORE_NEW_HOME_APPS=${apart.join(",")}`,
+]);
 
 let port: number;
 let token: string;

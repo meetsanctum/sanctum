@@ -77,7 +77,7 @@ async function addingWith(
 ) {
   const db = await database();
   const added = createAddedApps(db, { now: () => at });
-  added.recordFirst(["sanctum.weather"]);
+  added.add("sanctum.weather", {});
   const entries: Record<string, unknown>[] = [];
   const installing: string[] = [];
   const logs: string[] = [];

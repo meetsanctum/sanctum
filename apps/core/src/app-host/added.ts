@@ -1,44 +1,45 @@
 import { durably, type CoreDatabase } from "../database.js";
+import { devices } from "../devices/schema.js";
+import { entities } from "../entities/schema.js";
 import { appsAdded, appsListed, appsOff, appVersions } from "./schema.js";
 
-// The home's own list of apps (schema.ts): those the household added, which
-// the core installs, and no others. A home that didn't keep one ran every app
-// its image shipped and the manager staged, so its first start with the list
-// records them all, with every app the core's database knows ran or was
-// turned off, whether or not it runs now. That's one transaction with the row
-// that says the home keeps the list: a start cut short records them again,
-// and a later start never does, even once the household has removed every
-// app. A start that knows of no app at all, as when the manager didn't
-// answer in a development stack, leaves it for the next. A core rolled back
-// to before the list doesn't read it, and installs every app staged, as it
-// did before.
+// The core installs the apps on the home's list. Its first start with the
+// list records a new home's configured starter apps. An existing home keeps
+// what the image ships, what the manager staged and the apps the database
+// already knows. The app rows and the marker for a completed list commit
+// together. A later start uses the same list, even when the household has
+// removed every app. If neither the core nor the manager knows any apps yet,
+// the next start can still record the list.
 
 export function createAddedApps(
   db: CoreDatabase,
   options: { now?: () => Date } = {},
 ) {
   const now = options.now ?? (() => new Date());
-  const listed = () => db.select().from(appsListed).get() !== undefined;
-
   return {
-    /** Whether the home keeps its list, so what it holds is all it has. */
-    listed,
-
     /**
-     * On a home that keeps no list yet, records these apps as added, with
-     * those the database knows, and that it keeps the list from now on.
-     * Whether it did.
+     * Records the home's first app list. A new home records its starter
+     * apps. An existing home records the available apps and every app the
+     * database knows. Returns whether the list was recorded.
      */
-    recordFirst(appIds: Iterable<string>) {
+    recordFirst(appIds: Iterable<string>, newHomeApps: readonly string[]) {
       return durably(db, () => {
-        if (listed()) return false;
+        if (db.select().from(appsListed).get() !== undefined) return false;
         const at = now();
         const known = [
           ...db.select({ appId: appVersions.appId }).from(appVersions).all(),
           ...db.select({ appId: appsOff.appId }).from(appsOff).all(),
+          // A start can publish entities or register devices before it finishes.
+          ...db.selectDistinct({ appId: entities.appId }).from(entities).all(),
+          ...db.selectDistinct({ appId: devices.driver }).from(devices).all(),
         ].map((row) => row.appId);
-        const had = new Set([...appIds, ...known]);
-        if (had.size === 0) return false;
+        const offered = [...appIds];
+        if (offered.length === 0 && known.length === 0) return false;
+        const had = new Set(
+          known.length === 0
+            ? offered.filter((appId) => newHomeApps.includes(appId))
+            : [...offered, ...known],
+        );
         for (const appId of had) {
           db.insert(appsAdded)
             .values({ appId, addedAt: at })

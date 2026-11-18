@@ -21,6 +21,8 @@ cd "$root"
 
 stack_file="$root/.sanctum-stack"
 compose_file="deploy/dev/stack.compose.yml"
+# A new stack starts as a new home does, with its fake lights for the seed.
+new_home_apps="sanctum.moods,sanctum.natural-light,sanctum.weather,sanctum.fake-lights"
 
 # Remembers what was chosen for this worktree: the port stays, so an address
 # in a running desktop app stays good. A stack named by hand, as in a test,
@@ -91,6 +93,7 @@ settings() {
     SANCTUM_STACK_CORE_ENV="CORE_PLAIN_HTTP=true"
   fi
   SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV:+${SANCTUM_STACK_CORE_ENV};}CORE_KIT_DIR=/app/packages/ui-sdk/dist/kit"
+  SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV};CORE_NEW_HOME_APPS=${new_home_apps}"
   if [[ -n "${CORE_ALLOWED_ORIGINS:-}" ]]; then
     SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV};CORE_ALLOWED_ORIGINS=${CORE_ALLOWED_ORIGINS}"
   fi
@@ -165,6 +168,7 @@ remove_core_with_other_settings() {
   [[ "$plain" == "$([[ "$scheme" == "http" ]] && echo true || echo false)" ]] || stale=true
   origins="$(sed -n 's/^CORE_ALLOWED_ORIGINS=//p' <<<"$env" | tail -1)"
   [[ "$origins" == "${CORE_ALLOWED_ORIGINS:-app://sanctum}" ]] || stale=true
+  grep -Fqx "CORE_NEW_HOME_APPS=${new_home_apps}" <<<"$env" || stale=true
   port="$(docker inspect -f '{{range (index .HostConfig.PortBindings "4100/tcp")}}{{.HostPort}}{{end}}' "$name")"
   [[ "$port" == "$SANCTUM_STACK_PORT" ]] || stale=true
   [[ "$(docker inspect -f '{{.Image}}' "$name")" == "$(image_id "sanctum-${stack}-core:dev")" ]] || stale=true

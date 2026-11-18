@@ -134,12 +134,15 @@ export function createCore(
 
   // What the manager has staged for this image, which it may still be doing,
   // so the core doesn't wait for it to serve: of those, the apps the
-  // household added. A home's first start with its own list of apps records
-  // every app it had (added.ts).
+  // household added. The first start records a new home's starter apps or
+  // the apps an existing home already had (added.ts).
   async function stagedPackages(only?: readonly string[]) {
     const staged = await manager!.stagedApps();
     const { addedApps } = modules!;
-    addedApps.recordFirst([...shipped, ...Object.keys(staged)]);
+    addedApps.recordFirst(
+      [...shipped, ...Object.keys(staged)],
+      config.newHomeApps,
+    );
     const added = addedApps.ids();
     const apart = Object.entries(staged).flatMap(([id, { folder }]) =>
       added.has(id) && !started.has(id) && (!only || only.includes(id))
@@ -166,10 +169,6 @@ export function createCore(
   // rolls back.
   async function installStagedApps(cancelled: AbortSignal) {
     const { addedApps } = modules!;
-    // Before the first start with the list, every app the image ships is
-    // about to be recorded as added.
-    const atStart = addedApps.listed() ? addedApps.ids() : new Set(shipped);
-    const coming = shipped.filter((id) => atStart.has(id));
     const first = stagedPackages();
     // One the image ships that the manager hasn't staged, as an old manager or
     // one whose staging failed, is asked for again now and then, one ask at a
@@ -178,7 +177,7 @@ export function createCore(
     async function startStaged(missing: readonly string[]) {
       const packages = await stagedPackages(missing);
       if (packages.length === 0) return;
-      await modules!.apps.start(packages, { onTrial: onTrial(), coming });
+      await modules!.apps.start(packages, { onTrial: onTrial() });
     }
     void first.then(
       () => {
@@ -201,7 +200,11 @@ export function createCore(
       () => undefined,
     );
     try {
-      await modules!.apps.start(first, { onTrial: onTrial(), coming });
+      await modules!.apps.start(first, {
+        onTrial: onTrial(),
+        // Keep the entities of apps the home has, even without a package.
+        coming: () => [...addedApps.ids()],
+      });
     } catch (error) {
       log(`apps: didn't start (${String(error)})`);
       throw error;
@@ -217,7 +220,7 @@ export function createCore(
     started.add(appId);
     await modules!.apps.start([pkg], {
       onTrial: onTrial(),
-      coming: [appId],
+      coming: () => [appId],
       adding: [appId],
     });
   }

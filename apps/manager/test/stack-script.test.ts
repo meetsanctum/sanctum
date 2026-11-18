@@ -39,7 +39,13 @@ if (args[0] === "image" && args[1] === "inspect") console.log("sha256:current");
 if (args[0] === "compose" && process.env.STACK_TEST_FAIL_COMPOSE) process.exit(1);
 if (args[0] === "inspect") {
   const format = args[2];
-  if (format.includes(".Config.Env")) console.log("CORE_PLAIN_HTTP=" + (process.env.STACK_TEST_PLAIN_HTTP ?? "true") + "\\nCORE_ALLOWED_ORIGINS=app://sanctum");
+  if (format.includes(".Config.Env")) {
+    console.log("CORE_PLAIN_HTTP=" + (process.env.STACK_TEST_PLAIN_HTTP ?? "true"));
+    console.log("CORE_ALLOWED_ORIGINS=app://sanctum");
+    if (!process.env.STACK_TEST_NO_NEW_HOME_APPS) {
+      console.log("CORE_NEW_HOME_APPS=sanctum.moods,sanctum.natural-light,sanctum.weather,sanctum.fake-lights");
+    }
+  }
   if (format.includes(".HostConfig.PortBindings")) console.log("45000");
   if (format === "{{.Image}}") console.log("sha256:current");
   if (format.includes('"sanctum.stack.core-binds"')) console.log(
@@ -115,6 +121,16 @@ describe("development stack CLI", () => {
       "-f",
       "sanctum-one-core",
     ]);
+  });
+
+  it("recreates a core that started without its starter app setting", async () => {
+    const tree = await worktree();
+
+    await tree.run("up", { STACK_TEST_NO_NEW_HOME_APPS: "1" });
+
+    const commands = await tree.commands();
+    expect(commands).toContainEqual(["rm", "-f", "sanctum-one-core"]);
+    expect(commands).toContainEqual(["restart", "sanctum-one-manager"]);
   });
 
   it("drops mounts for packages removed from the worktree", async () => {

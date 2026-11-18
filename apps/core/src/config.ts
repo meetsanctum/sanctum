@@ -33,6 +33,11 @@ const envSchema = z.object({
     .string()
     .min(1)
     .default("../manager/data/manager.sock"),
+  // The apps a new home starts with, with commas between: those every home
+  // with lights uses. Every other app the image ships waits to be added.
+  CORE_NEW_HOME_APPS: z
+    .string()
+    .default("sanctum.moods,sanctum.natural-light,sanctum.weather"),
   SANCTUM_VERSION: z.string().default("dev"),
 });
 
@@ -47,6 +52,7 @@ export type CoreConfig = {
   packagesDir: string;
   kitDir: string;
   managerSocket: string;
+  newHomeApps: string[];
   version: string;
 };
 
@@ -67,6 +73,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     packagesDir: parsed.CORE_PACKAGES_DIR,
     kitDir: parsed.CORE_KIT_DIR,
     managerSocket: parsed.CORE_MANAGER_SOCKET,
+    newHomeApps: parsed.CORE_NEW_HOME_APPS.split(",")
+      .map((app) => app.trim())
+      .filter((app) => app.length > 0),
     version: parsed.SANCTUM_VERSION,
   };
 }

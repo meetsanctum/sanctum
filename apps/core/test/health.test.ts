@@ -34,6 +34,12 @@ describe("loadConfig", () => {
       packagesDir: "/packages",
       kitDir: "/app/kit",
       managerSocket: "../manager/data/manager.sock",
+      // A new home starts with these, and adds the rest.
+      newHomeApps: [
+        "sanctum.moods",
+        "sanctum.natural-light",
+        "sanctum.weather",
+      ],
       version: "dev",
     });
     expect(loadConfig({ CORE_PLAIN_HTTP: "true" }).plainHttp).toBe(true);
@@ -57,6 +63,14 @@ describe("loadConfig", () => {
         CORE_ALLOWED_ORIGINS: " http://localhost:5173, app://sanctum,",
       }).allowedOrigins,
     ).toEqual(["http://localhost:5173", "app://sanctum"]);
+  });
+
+  it("reads the starter app ids and accepts an empty list", () => {
+    expect(
+      loadConfig({ CORE_NEW_HOME_APPS: " sanctum.weather, sanctum.moods, " })
+        .newHomeApps,
+    ).toEqual(["sanctum.weather", "sanctum.moods"]);
+    expect(loadConfig({ CORE_NEW_HOME_APPS: "" }).newHomeApps).toEqual([]);
   });
 
   it("rejects an invalid port", () => {
