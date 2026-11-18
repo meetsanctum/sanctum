@@ -9,6 +9,9 @@ const config: NextConfig = {
   outputFileTracingRoot: root,
   turbopack: { root },
   poweredByHeader: false,
+  // `next dev` writes an AGENTS.md here when a coding agent starts it. The
+  // repository's rules for agents are in its root AGENTS.md.
+  agentRules: false,
 };
 
 export default config;
