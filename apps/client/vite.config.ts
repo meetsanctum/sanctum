@@ -35,9 +35,8 @@ export default defineConfig({
     },
   },
   test: {
-    // On CI these tests share the runner's four cores with every other
-    // package's, and a Settings test that takes 0.1 s on a Mac took 5.4 s
-    // there, past Vitest's 5 s default. A test that hangs still fails.
+    // Client tests can exceed Vitest's five-second default when CI runs
+    // package suites in parallel.
     testTimeout: 20_000,
   },
 });
