@@ -7,9 +7,9 @@ import { LightsButton, type LightsSwitch } from "./lights-button";
 // Rooms under their floors, as Home and the category pages show them once
 // the home has floors: each floor in the household's order, then the rooms
 // on none under "Other rooms". A floor's heading is one row, its name and,
-// on Home and Lights' page, the button that turns its lights off, which
-// starts after the name so the eye finds it there and nothing below moves
-// when it goes. The layers mark hangs at the leading edge, out of the
+// on Home and Lights' page, its switch that turns its lights off, the power
+// symbol alone as a room's switch has it, which starts after the name so
+// the eye finds it there and nothing below moves when it goes. The layers mark hangs at the leading edge, out of the
 // reading line, and everything of the floor aligns with its name, as the
 // sidebar indents rooms under their floor; Other rooms keeps that alignment
 // with no mark, since it isn't a floor. A home with no floors shows its
@@ -74,7 +74,7 @@ export function FloorSection(props: {
       ) : (
         <span aria-hidden="true" />
       )}
-      {/* The row keeps the button's height while it's gone. */}
+      {/* The row keeps the switch's height while it's gone. */}
       <div className="flex min-h-9 flex-wrap items-center gap-x-3.5 gap-y-2">
         <h2
           id={props.id}

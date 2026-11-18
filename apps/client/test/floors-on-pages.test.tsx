@@ -209,7 +209,13 @@ describe("Home with floors", () => {
   it("turns a floor's lights off from its heading, while any is on", async () => {
     await show(<HomeHarness />);
     const off = button("Turn off 2 lights on Ground floor");
-    expect(off?.textContent).toBe("Turn off");
+    // The power symbol alone, White, its words its tooltip.
+    expect(off?.textContent).toBe("");
+    expect(off?.title).toBe("Turn off 2 lights on Ground floor");
+    expect(off?.dataset.on).toBe("");
+    expect(off?.closest("h2, div")?.querySelector("h2")?.textContent).toBe(
+      "Ground floor",
+    );
     // All off upstairs: its heading is its name alone.
     expect(button("Turn off 1 light on First floor")).toBeUndefined();
     expect(container.textContent).not.toContain("First floorTurn");
@@ -225,7 +231,7 @@ describe("Home with floors", () => {
 });
 
 describe("Lights' page with floors", () => {
-  it("heads its rooms by floor, each floor with its button and each room with its own", async () => {
+  it("heads its rooms by floor, each floor with its switch and each room with its own", async () => {
     await show(<LightsHarness />);
     expect(outline()).toEqual([
       "h2 First floor",

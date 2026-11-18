@@ -3,16 +3,16 @@ import { Button, icons, type Tile } from "@meetsanctum/ui-sdk";
 
 import type { Devices } from "./use-devices";
 
-// The button for all the lights of a room or a floor, on Home, a room's page
-// and Lights' page. Its words say what it does, "Turn off" while any light
-// is on and "Turn on" while all are off, and its look says how the place is,
-// White while any is on, so it is no pressed switch to a screen reader: the
-// words already say it. Where it sits says whose lights they are, and the
-// tiles which are on, so it shows no count; its accessible name starts with
-// its words and adds the rest, "Turn off 2 lights in Kitchen", so a voice
-// that says what's on screen still finds it. The core leaves offline lights
-// alone, so while all of them are offline the button is disabled, as their
-// tiles are.
+// The switch for all the lights of a room or a floor. Its words say what it
+// does, "Turn off" while any light is on and "Turn on" while all are off,
+// and its look says how the place is, White while any is on, so it is no
+// pressed switch to a screen reader: the words already say it. It shows the
+// power symbol alone, a room's as the first square of its row and of its
+// lights on Lights' page (room-sections.tsx), a floor's in the floor's
+// heading, so its words are its accessible name and its tooltip, with whose
+// lights they are and how many, "Turn off 2 lights in Kitchen". The core
+// leaves offline lights alone, so while all of them are offline the switch
+// is disabled, as their tiles are.
 
 const onCount = (tiles: readonly Tile[]) =>
   tiles.filter((tile) => tile.on).length;
@@ -31,24 +31,25 @@ export type LightsSwitch = {
   onToggle: () => void;
 };
 
+/** A floor's switch, in its heading: a chip's size, the power symbol alone. */
 export function LightsButton(props: { lights: LightsSwitch }) {
   const { lights } = props;
   return (
     <Button
       variant="glass"
-      size="chip"
+      size="icon-chip"
       aria-label={lights.label}
+      title={lights.label}
       data-on={lights.on > 0 ? "" : undefined}
       disabled={lights.disabled}
       onClick={lights.onToggle}
     >
-      <icons.Lightbulb aria-hidden="true" data-icon="inline-start" />
-      {lightsWords(lights.on)}
+      <icons.Power aria-hidden="true" />
     </Button>
   );
 }
 
-// A room's button: off while any light is on, on otherwise. The home has no
+// A room's switch: off while any light is on, on otherwise. The home has no
 // such button: turning every light in it on at once is more than one press
 // should do, so its lights can only be turned off, from Lights' card.
 export function lightsButton(
@@ -76,7 +77,7 @@ export function lightsButton(
   };
 }
 
-// A floor's button only turns its lights off, as the home's does, and is
+// A floor's switch only turns its lights off, as the home's does, and is
 // there only while any of them is on: its rooms come on one by one, each by
 // its own button.
 export function floorLightsButton(

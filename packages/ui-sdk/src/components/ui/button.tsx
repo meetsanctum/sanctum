@@ -97,6 +97,11 @@ const buttonVariants = cva(
         // A small switch in a line of them, such as a room's Lights or a
         // mood's Preview.
         chip: "h-9 gap-1.5 px-3 text-[13px] has-data-[icon=inline-start]:ps-2.5",
+        // A switch in a heading with its icon alone, such as a floor's
+        // lights: a chip's height and corners, square, with an 18 px icon,
+        // pressable in the 44 px around it.
+        "icon-chip":
+          "relative size-9 before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-4.5",
         // A row's ⋮ menu and a dialog's close: 32 px with 10 px corners,
         // pressable in the 44 px around it.
         "icon-sm":
