@@ -124,8 +124,8 @@ What is under which licence, and what neither covers, is in
   from the `--radius` scale, nothing pill-shaped but a count's badge ("3
   found").
 - Widget titles in the app's colour, but room sections' headings neutral like
-  the shell's own; one primary action per widget or card at most, so where
-  cards carry their own, an overlay's Done is plain words.
+  the shell's own; one primary action per widget or card at most, and an
+  overlay's Back and Done are outlined, never in Electric blue.
 - One layout for tablets, desktops and phones: nothing reachable only by
   touch (a tap on empty space, a swipe, a long press), since a mouse never
   finds it.

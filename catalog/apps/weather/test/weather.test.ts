@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { cardKey } from "../src/card.js";
 import app, { createWeatherApp } from "../src/index.js";
+import { forecastLocation } from "../src/schema.js";
 import { createWeather, forecastKey, sunKey } from "../src/weather.js";
 import { answer, fakeCore, openMeteoAnswer } from "./fake-core.js";
 
@@ -280,6 +281,42 @@ describe("its start", () => {
     );
     expect(first.state.entities.get(forecastKey)).toEqual(kept);
     await weatherApp.stop!(first.ctx, { reason: "shutdown" });
+  });
+
+  it("publishes a forecast it kept with the days and the weather now alone", async () => {
+    const { ctx, state } = fakeCore(app);
+    state.location = zurich;
+    state.internet = fetchNeverAnswers;
+    const kept = {
+      timeZone: "Europe/Zurich",
+      updatedAt: "2026-10-29T09:00:00.000Z",
+      current: { temperatureC: 11.4, weatherCode: 2, isDay: true },
+      days: [
+        {
+          date: "2026-10-29",
+          temperatureMaxC: 14.2,
+          temperatureMinC: 6.1,
+          precipitationProbabilityMax: 10,
+          weatherCode: 2,
+        },
+      ],
+    };
+    await ctx.storage.db.insert(forecastLocation).values({
+      id: 1,
+      location: JSON.stringify({
+        latitude: zurich.latitude,
+        longitude: zurich.longitude,
+        timeZone: zurich.timeZone,
+      }),
+      forecast: kept,
+    });
+    const weatherApp = createWeatherApp({ checkMs: 60_000 });
+
+    await weatherApp.start!(ctx, { reason: "started" });
+
+    expect(state.entities.get(forecastKey)?.state).toEqual(kept);
+    expect(card(state)).toEqual(["headline", "line", "facts"]);
+    await weatherApp.stop!(ctx, { reason: "shutdown" });
   });
 
   it("has nothing of its own while the home has no location, and takes it away", async () => {
