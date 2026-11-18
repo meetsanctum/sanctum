@@ -163,6 +163,13 @@ export function createDriverCalls<Entry extends Driving>(options: {
       );
     },
 
+    // The driver apps that take calls and add the devices they find.
+    findingDrivers() {
+      return [...installed.values()].flatMap((entry) =>
+        accepts(entry) && entry.app.driver?.add ? [entry.app.id] : [],
+      );
+    },
+
     openPairing(driverId: string, seconds: number, actor: Actor) {
       return toDriver(driverId, actor, "let devices join", (driver, ctx) =>
         pairingOf(driver).open(ctx, { seconds }),

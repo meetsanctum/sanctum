@@ -72,6 +72,7 @@ describe("Settings → Devices", () => {
       until: null,
       joined: [],
       drivers: ["sanctum.zigbee"],
+      finders: [],
       found: [],
     };
     requests = [];
@@ -549,6 +550,14 @@ describe("Settings → Devices", () => {
     );
   });
 
+  // Chooses a way to add devices on Add devices' first page, by its name.
+  async function way(name: string) {
+    const card = [
+      ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button"),
+    ].find((candidate) => candidate.textContent?.startsWith(name));
+    await act(async () => card!.click());
+  }
+
   it("finishes an earlier pairing open and close before reopening", async () => {
     const render = (open: boolean) =>
       act(async () =>
@@ -559,6 +568,7 @@ describe("Settings → Devices", () => {
             devices={devices}
             rooms={[office]}
             apps={[zigbee]}
+            adding={pairing}
             live={live}
             onChanged={() => undefined}
           />,
@@ -567,8 +577,10 @@ describe("Settings → Devices", () => {
     const answer = pendingReply<PairingInfo & { since: string }>();
     vi.mocked(coreJson).mockImplementationOnce(() => answer.promise);
     await render(true);
+    await way("Zigbee");
     await render(false);
     await render(true);
+    await way("Zigbee");
     await act(async () =>
       answer.resolve({
         ...pairing,
@@ -584,9 +596,29 @@ describe("Settings → Devices", () => {
     expect(pairing.until).not.toBeNull();
   });
 
+  it("opens on what you are adding, and lets devices join no radio until one is chosen", async () => {
+    await show(admin);
+    await act(async () => button("Add devices").click());
+    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
+
+    expect(dialog.querySelector("h3")?.textContent).toBe(
+      "What are you adding?",
+    );
+    expect(
+      requests.filter((each) => each.path.startsWith("/api/devices/pairing/")),
+    ).toEqual([]);
+    // Done closes without stopping what nothing started.
+    await act(async () => button("Done").click());
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+    expect(
+      requests.filter((each) => each.path.startsWith("/api/devices/pairing/")),
+    ).toEqual([]);
+  });
+
   it("says when Done cannot stop pairing, then closes anyway", async () => {
     await show(admin);
     await act(async () => button("Add devices").click());
+    await way("Zigbee");
     vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
     await act(async () => button("Done").click());
     expect(
@@ -602,22 +634,25 @@ describe("Settings → Devices", () => {
     expect(pairing.until).toBeNull();
   });
 
-  it("lets devices join while adding them, and names each as it is ready", async () => {
+  it("lets devices join the chosen radio, and names each as it is ready", async () => {
     await show(admin);
     await act(async () => button("Add devices").click());
+    await way("Zigbee");
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
 
     expect(requests).toContainEqual({
       path: "/api/devices/pairing/open",
-      json: {},
+      json: { seconds: 240, drivers: ["sanctum.zigbee"] },
     });
-    // The radio that lets them join, with the time left.
-    expect(dialog.querySelector("h3")?.textContent).toBe("Zigbee");
-    expect(dialog.textContent).toContain("4:00 left");
-    expect(dialog.textContent).toContain("Looking for new devices…");
-    expect(dialog.textContent).toContain("Put a Zigbee device in pairing mode");
+    // The radio by its app's name, with the time left, calm until one joins.
+    expect(dialog.querySelector("h3")?.textContent).toBe(
+      "4:00• left. Looking for devices…",
+    );
+    expect(dialog.textContent).toContain(
+      "Zigbee devices can join for 4 minutes. When the time is up, you can start again.",
+    );
     await act(async () => vi.advanceTimersByTime(8_000));
-    expect(dialog.textContent).toContain("3:52 left");
+    expect(dialog.querySelector("h3")?.textContent).toContain("3:52");
 
     const joining: JoinedDevice = {
       driver: "sanctum.zigbee",
@@ -628,7 +663,7 @@ describe("Settings → Devices", () => {
       known: false,
       joinedAt: "2026-10-29T12:00:05.000Z",
     };
-    // One that joined before this dialog opened is not this one's.
+    // One that joined before this overlay let devices join is not this one's.
     const earlier = {
       ...joining,
       key: "0x2",
@@ -640,10 +675,13 @@ describe("Settings → Devices", () => {
         pairing: { ...pairing, joined: [earlier, joining] },
       }),
     );
-    expect(dialog.textContent).toContain("New device");
-    expect(dialog.textContent).toContain("Setting up…");
-    // The radio's own row, and the one joining.
-    expect(dialog.querySelectorAll("li")).toHaveLength(2);
+    const cards = () => [
+      ...dialog.querySelectorAll('[aria-label="Devices that joined"] > li'),
+    ];
+    expect(cards()).toHaveLength(1);
+    expect(cards()[0]!.textContent).toBe("New deviceSetting up…");
+    // Once one joins, the line under the heading has done its job.
+    expect(dialog.textContent).not.toContain("can join for 4 minutes");
 
     const added = light("bulb", "Light 2");
     devices = [...devices, added];
@@ -668,7 +706,7 @@ describe("Settings → Devices", () => {
       'input[aria-label="Name for Hue Essential White and Color Ambiance A60"]',
     )!;
     expect(name.value).toBe("Light 2");
-    expect(dialog.textContent).toContain("Ready");
+    expect(cards()[0]!.querySelector('[aria-label="Ready"]')).not.toBeNull();
 
     await type(name, "Desk lamp");
     await act(async () =>
@@ -685,19 +723,40 @@ describe("Settings → Devices", () => {
       json: { id: "bulb", roomId: "office" },
     });
 
-    await act(async () => button("Stop").click());
-    expect(dialog.textContent).toContain("New devices can no longer join");
-    expect(dialog.textContent).not.toContain("left");
-    expect(button("Look again")).toBeDefined();
+    await act(async () => button("Stop looking").click());
+    expect(dialog.querySelector("h3")?.textContent).toBe("Stopped looking");
+    expect(button("Start again")).toBeDefined();
     await act(async () => button("Done").click());
     expect(
       requests.filter((each) => each.path === "/api/devices/pairing/close"),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
+  });
+
+  it("stops devices joining when going back to the choice", async () => {
+    await show(admin);
+    await act(async () => button("Add devices").click());
+    await way("Zigbee");
+
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[role=dialog] button[aria-label="Back to Add devices"]',
+        )!
+        .click(),
+    );
+
+    expect(document.querySelector("[role=dialog] h3")?.textContent).toBe(
+      "What are you adding?",
+    );
+    expect(
+      requests.filter((each) => each.path === "/api/devices/pairing/close"),
+    ).toHaveLength(1);
   });
 
   it("names a device the home has while it is set up again", async () => {
     await show(admin);
     await act(async () => button("Add devices").click());
+    await way("Zigbee");
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
 
     await act(async () =>
@@ -720,29 +779,36 @@ describe("Settings → Devices", () => {
       }),
     );
 
-    expect(dialog.querySelectorAll("li")[1]!.textContent).toBe(
-      "LightHue Essential White and Color Ambiance A60 · Setting up…",
-    );
+    expect(
+      dialog.querySelector('[aria-label="Devices that joined"] > li')!
+        .textContent,
+    ).toBe("LightSetting up…");
   });
 
-  it("says when nothing can let devices join", async () => {
+  it("says when the radio can't let devices join", async () => {
     await show(admin);
+    await act(async () => button("Add devices").click());
     vi.mocked(coreJson).mockImplementationOnce(async () => {
       throw new CoreError(503, "unavailable");
     });
 
-    await act(async () => button("Add devices").click());
+    await way("Zigbee");
 
     expect(
       document.querySelector("[role=dialog] [role=alert]")!.textContent,
-    ).toBe("No app that adds devices is running.");
+    ).toBe("It isn't running, so it can't let devices join now.");
+    expect(document.querySelector("[role=dialog] h3")?.textContent).toBe(
+      "Couldn't start looking",
+    );
+    expect(button("Try again")).toBeDefined();
   });
 
   it("deducts the time spent waiting for the radio from the countdown", async () => {
     await show(admin);
     const answer = pendingReply<PairingInfo & { since: string }>();
-    vi.mocked(coreJson).mockImplementationOnce(() => answer.promise);
     await act(async () => button("Add devices").click());
+    vi.mocked(coreJson).mockImplementationOnce(() => answer.promise);
+    await way("Zigbee");
     await act(async () => vi.advanceTimersByTime(3000));
     await act(async () =>
       answer.resolve({
@@ -751,8 +817,8 @@ describe("Settings → Devices", () => {
         since: "2026-10-29T12:00:00.000Z",
       }),
     );
-    expect(document.querySelector("[role=dialog]")!.textContent).toContain(
-      "3:57 left",
+    expect(document.querySelector("[role=dialog] h3")!.textContent).toContain(
+      "3:57",
     );
   });
 });
