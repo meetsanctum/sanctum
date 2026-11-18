@@ -21,6 +21,9 @@ export function QuestionField(props: {
   onChange: (value: string) => void;
   // Beside the field, such as the button that sends the answers.
   beside?: ReactNode;
+  // The field shares a narrow card with what is beside it, rather than
+  // taking a line of its own.
+  narrow?: boolean;
 }) {
   const { id, question, refused } = props;
   const why =
@@ -31,7 +34,13 @@ export function QuestionField(props: {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-2">
+        <div
+          className={
+            props.narrow
+              ? "flex min-w-0 flex-1 flex-col gap-2"
+              : "flex min-w-0 flex-[1_1_220px] flex-col gap-2"
+          }
+        >
           <label htmlFor={id} className="text-sm font-medium">
             {question.label}
           </label>

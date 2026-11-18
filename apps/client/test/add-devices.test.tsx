@@ -73,6 +73,7 @@ describe("Add devices, with what drivers found", () => {
       until: null,
       joined: [],
       drivers: ["sanctum.zigbee"],
+      finders: [],
       found: [sensor, plug],
     };
     requests = [];
@@ -128,10 +129,53 @@ describe("Add devices, with what drivers found", () => {
     return document.querySelector<HTMLElement>("[role=dialog]")!;
   }
 
+  // The overlay's page, under its title.
+  const page = () =>
+    document.querySelector<HTMLElement>(
+      "[role=dialog] [data-slot=overlay-content]",
+    )!;
+
+  // Chooses a way to add devices on the first page, by its name.
+  async function way(name: string) {
+    const card = [
+      ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button"),
+    ].find((candidate) => candidate.textContent?.startsWith(name));
+    await act(async () => card!.click());
+  }
+
+  it("asks what you are adding, with what was found and each radio", async () => {
+    await show();
+
+    expect(page().querySelector("h3")!.textContent).toBe(
+      "What are you adding?",
+    );
+    expect(
+      [...page().querySelectorAll("li")].map((card) => card.textContent),
+    ).toEqual([
+      "Devices foundAlready on your Wi‑Fi2 foundStart",
+      "ZigbeeLights, sensors and remotesStart",
+    ]);
+    // Nothing joins until a radio is chosen.
+    expect(requests).toEqual([]);
+  });
+
+  it("offers what was found while a driver finds devices, though nothing is found yet", async () => {
+    adding = { ...adding, finders: ["sanctum.example"], found: [] };
+    await show();
+
+    expect(page().querySelector("li")!.textContent).toBe(
+      "Devices foundAlready on your Wi‑FiNone foundStart",
+    );
+    await way("Devices found");
+    expect(page().textContent).toContain(
+      "Nothing found yet. Check your device is switched on and connected to your Wi‑Fi.",
+    );
+  });
+
   it("says what to plug in where the home never had a Zigbee adapter, and otherwise that nothing adds devices", async () => {
     // No app lets devices join: Zigbee waits for its adapter.
-    adding = { until: null, joined: [], drivers: [], found: [] };
-    const dialog = (notSetUp?: Parameters<typeof AddDevices>[0]["notSetUp"]) =>
+    adding = { until: null, joined: [], drivers: [], finders: [], found: [] };
+    const render = (notSetUp?: Parameters<typeof AddDevices>[0]["notSetUp"]) =>
       act(async () =>
         root.render(
           <AddDevices
@@ -158,35 +202,32 @@ describe("Add devices, with what drivers found", () => {
         ),
       );
 
-    await dialog([
+    await render([
       {
         service: "zigbee2mqtt",
         problem: "No Zigbee coordinator is plugged in",
         apps: ["sanctum.zigbee"],
       },
     ]);
-    const shown = () => document.querySelector("[role=dialog]")!;
-    expect(shown().textContent).toContain(
-      "Plug in a Zigbee adapter to add Zigbee devices.",
+    // Its card stays in place, dimmed, saying what to plug in.
+    const card = page().querySelector("button")!;
+    expect(card.textContent).toBe(
+      "ZigbeePlug in a Zigbee adapter to add Zigbee devices.Not set upStart",
     );
-    // A hint, not something that went wrong, and heard as it appears.
-    expect(shown().querySelector("[role=alert]")).toBeNull();
-    expect(shown().querySelector("[role=status]")?.textContent).toBe(
-      "Plug in a Zigbee adapter to add Zigbee devices.",
-    );
+    expect(card.disabled).toBe(true);
+    expect(page().querySelector("[role=alert]")).toBeNull();
 
-    await dialog();
-    expect(shown().querySelector("[role=alert]")?.textContent).toBe(
+    await render();
+    expect(page().querySelector("[role=alert]")?.textContent).toBe(
       "No app that adds devices is running.",
     );
-    expect(shown().textContent).not.toContain("Plug in a Zigbee adapter");
-    expect(shown().querySelector("[role=status]")?.textContent).toBe("");
+    expect(page().textContent).not.toContain("Plug in a Zigbee adapter");
   });
 
   it.each(["off", "paused", "failed", "stopped", "waiting"] as const)(
     "does not suggest an adapter when the app is %s for a reason of the core's",
     async (state) => {
-      adding = { until: null, joined: [], drivers: [], found: [] };
+      adding = { until: null, joined: [], drivers: [], finders: [], found: [] };
       await act(async () =>
         root.render(
           <AddDevices
@@ -218,11 +259,10 @@ describe("Add devices, with what drivers found", () => {
         ),
       );
 
-      const shown = document.querySelector("[role=dialog]")!;
-      expect(shown.querySelector("[role=alert]")?.textContent).toBe(
+      expect(page().querySelector("[role=alert]")?.textContent).toBe(
         "No app that adds devices is running.",
       );
-      expect(shown.textContent).not.toContain("Plug in a Zigbee adapter");
+      expect(page().textContent).not.toContain("Plug in a Zigbee adapter");
     },
   );
 
@@ -242,21 +282,24 @@ describe("Add devices, with what drivers found", () => {
     });
   }
 
-  it("lists them first, each saying what it has or what adding it needs", async () => {
-    const dialog = await show();
+  const cards = () => [
+    ...page().querySelectorAll('[aria-label="Devices found"] > li'),
+  ];
 
-    const [found, joining] = [...dialog.querySelectorAll("section")];
-    expect(found!.querySelector("h3")!.textContent).toBe(
-      "Found on your network",
+  it("shows each found device as a card, saying what it has or what adding it needs", async () => {
+    await show();
+    await way("Devices found");
+
+    expect(document.querySelector("[role=dialog] h2")!.textContent).toBe(
+      "Devices found",
     );
-    expect(found!.textContent).toContain("2 devices");
-    expect(
-      [...found!.querySelectorAll("li")].map((row) => row.textContent),
-    ).toEqual([
-      "Kitchen sensorExample · temperature, humidity, motionAdd",
-      "Living room plugExample · needs its encryption keyAdd",
+    expect(document.querySelector("[role=dialog]")!.textContent).toContain(
+      "2 found",
+    );
+    expect(cards().map((card) => card.textContent)).toEqual([
+      "Kitchen sensortemperature, humidity, motionAdd",
+      "Living room plugneeds its encryption keyEncryption keyAddUnder api: encryption: key in its configuration.",
     ]);
-    expect(joining!.querySelector("h3")!.textContent).toBe("Zigbee");
     expect(named("Add Kitchen sensor")).not.toBeNull();
   });
 
@@ -267,7 +310,8 @@ describe("Add devices, with what drivers found", () => {
     });
     answers.kitchen = () => ({ added });
     const changed = vi.fn();
-    const dialog = await show(changed);
+    await show(changed);
+    await way("Devices found");
 
     await act(async () => named("Add Kitchen sensor").click());
 
@@ -281,19 +325,16 @@ describe("Add devices, with what drivers found", () => {
     devices = [added];
     await act(async () => live.publish({ type: "pairing", pairing: adding }));
     await show(changed);
-    const rows = [
-      ...dialog.querySelectorAll("section")[0]!.querySelectorAll("li"),
-    ];
-    expect(rows).toHaveLength(2);
+    expect(cards()).toHaveLength(2);
     expect(
-      rows[0]!.querySelector<HTMLInputElement>(
+      cards()[0]!.querySelector<HTMLInputElement>(
         'input[aria-label="Name for Kitchen sensor"]',
       )!.value,
     ).toBe("Kitchen sensor");
-    expect(rows[0]!.textContent).toContain("Ready");
+    expect(cards()[0]!.querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
-  it("asks a key in place, says why one is refused and keeps it to correct", async () => {
+  it("asks a key on its card, says why one is refused and keeps it to correct", async () => {
     answers["living-room"] = ({ answers }) =>
       (answers as { key: string }).key === "the right key"
         ? {
@@ -303,21 +344,20 @@ describe("Add devices, with what drivers found", () => {
             }),
           }
         : { refused: { question: "key", refusal: "wrongKey" } };
-    const dialog = await show();
+    await show();
+    await way("Devices found");
 
-    await act(async () => named("Add Living room plug").click());
-    const field = dialog.querySelector<HTMLInputElement>(
+    const field = page().querySelector<HTMLInputElement>(
       "input[type=password]",
     )!;
     expect(field.labels![0]!.textContent).toBe("Encryption key");
-    expect(document.activeElement).toBe(field);
     // Nothing goes until it's answered.
     const send = named("Add Living room plug");
     expect(send.disabled).toBe(true);
 
     await type(field, "a wrong key");
     await act(async () => send.click());
-    expect(dialog.querySelector("[role=alert]")!.textContent).toBe(
+    expect(page().querySelector("[role=alert]")!.textContent).toBe(
       "That key doesn't match. Copy it again.",
     );
     expect(field.value).toBe("a wrong key");
@@ -345,8 +385,8 @@ describe("Add devices, with what drivers found", () => {
         },
       ],
     );
-    expect(dialog.querySelector("input[type=password]")).toBeNull();
-    expect(dialog.textContent).toContain("Ready");
+    expect(page().querySelector("input[type=password]")).toBeNull();
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
   it("keeps an add in progress when registration removes it from discovery", async () => {
@@ -357,7 +397,8 @@ describe("Add devices, with what drivers found", () => {
     let finish!: (result: { added: DeviceInfo }) => void;
     answers.kitchen = () => new Promise((resolve) => (finish = resolve));
     const changed = vi.fn();
-    const dialog = await show(changed);
+    await show(changed);
+    await way("Devices found");
     await act(async () => named("Add Kitchen sensor").click());
 
     // Registration reaches live clients before the add request finishes.
@@ -370,19 +411,19 @@ describe("Add devices, with what drivers found", () => {
 
     expect(changed).toHaveBeenCalledWith(added);
     expect(
-      dialog.querySelector('input[aria-label="Name for Kitchen sensor"]'),
+      page().querySelector('input[aria-label="Name for Kitchen sensor"]'),
     ).not.toBeNull();
-    expect(dialog.textContent).toContain("Ready");
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
   it("sends only answers to the questions the driver currently asks", async () => {
     answers["living-room"] = () => ({
       refused: { question: "label", refusal: "wrongKey" },
     });
-    const dialog = await show();
-    await act(async () => named("Add Living room plug").click());
+    await show();
+    await way("Devices found");
     await type(
-      dialog.querySelector<HTMLInputElement>("input[type=password]")!,
+      page().querySelector<HTMLInputElement>("input[type=password]")!,
       "old key",
     );
 
@@ -392,7 +433,7 @@ describe("Add devices, with what drivers found", () => {
     };
     await show();
     await type(
-      dialog.querySelector<HTMLInputElement>("input[type=text]")!,
+      page().querySelector<HTMLInputElement>("input[type=text]")!,
       "new answer",
     );
     await act(async () => named("Add Living room plug").click());
@@ -411,32 +452,32 @@ describe("Add devices, with what drivers found", () => {
     answers["living-room"] = () => ({
       added: light("plug-1", "Living room plug"),
     });
-    const dialog = await show();
-    await act(async () => named("Add Living room plug").click());
+    await show();
+    await way("Devices found");
     await type(
-      dialog.querySelector<HTMLInputElement>("input[type=password]")!,
+      page().querySelector<HTMLInputElement>("input[type=password]")!,
       "old key",
     );
     adding = { ...adding, found: [{ ...plug, asks: [] }] };
     await show();
 
-    expect(named("Add Living room plug")).not.toBeNull();
     await act(async () => named("Add Living room plug").click());
     expect(requests.at(-1)).toEqual({
       path: "/api/devices/add",
       json: { driver: "sanctum.example", key: "living-room", answers: {} },
     });
-    expect(dialog.textContent).toContain("Ready");
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
   it("follows found devices from its own pairing updates", async () => {
-    const dialog = await show(undefined, false);
+    await show(undefined, false);
     await act(async () =>
       live.publish({ type: "pairing", pairing: { ...adding, found: [plug] } }),
     );
+    await way("Devices found");
 
-    expect(dialog.textContent).not.toContain("Kitchen sensor");
-    expect(dialog.textContent).toContain("Living room plug");
+    expect(page().textContent).not.toContain("Kitchen sensor");
+    expect(page().textContent).toContain("Living room plug");
   });
 
   it("keeps a live update that arrives before an older read of its own", async () => {
@@ -447,23 +488,23 @@ describe("Add devices, with what drivers found", () => {
         ? new Promise((done) => (finish = done as never))
         : answered(path, init),
     );
-    const dialog = await show(undefined, false);
+    await show(undefined, false);
 
     await act(async () => live.refresh());
     await act(async () =>
       live.publish({ type: "pairing", pairing: { ...adding, found: [plug] } }),
     );
     await act(async () => finish({ ...adding, found: [] }));
+    await way("Devices found");
 
-    expect(dialog.textContent).toContain("Living room plug");
+    expect(page().textContent).toContain("Living room plug");
   });
 
-  it("offers Look again when a radio starts after opening without one", async () => {
+  it("offers a radio once its app starts letting devices join", async () => {
     adding = { ...adding, drivers: [] };
-    vi.mocked(coreJson).mockImplementationOnce(async () => {
-      throw new CoreError(503, "unavailable");
-    });
-    const dialog = await show();
+    await show();
+    expect(page().textContent).not.toContain("Zigbee");
+
     await act(async () =>
       live.publish({
         type: "pairing",
@@ -471,22 +512,19 @@ describe("Add devices, with what drivers found", () => {
       }),
     );
 
-    expect(
-      [...dialog.querySelectorAll("button")].find(
-        (button) => button.textContent === "Look again",
-      ),
-    ).toBeDefined();
+    expect(page().textContent).toContain("ZigbeeLights, sensors and remotes");
   });
 
   it("says when adding didn't work", async () => {
     answers.kitchen = () => {
       throw new CoreError(504, "timeout");
     };
-    const dialog = await show();
+    await show();
+    await way("Devices found");
 
     await act(async () => named("Add Kitchen sensor").click());
 
-    expect(dialog.querySelector("[role=alert]")!.textContent).toBe(
+    expect(page().querySelector("[role=alert]")!.textContent).toBe(
       "It didn't answer in time. Check it's switched on, then try again.",
     );
     expect(named("Add Kitchen sensor").disabled).toBe(false);
@@ -494,25 +532,67 @@ describe("Add devices, with what drivers found", () => {
 
   it("says why its driver refused adding one that asks nothing", async () => {
     answers.kitchen = () => ({ refused: { refusal: "notWaiting" } });
-    const dialog = await show();
+    await show();
+    await way("Devices found");
 
     await act(async () => named("Add Kitchen sensor").click());
 
-    expect(dialog.querySelector("[role=alert]")!.textContent).toBe(
+    expect(page().querySelector("[role=alert]")!.textContent).toBe(
       "It stopped waiting for a key. Turn it off and on again, then add it.",
     );
     expect(named("Add Kitchen sensor").disabled).toBe(false);
   });
 
-  it("shows only what was found when no app lets devices join", async () => {
+  it("offers only what was found when no app lets devices join", async () => {
     adding = { ...adding, drivers: [] };
-    vi.mocked(coreJson).mockImplementationOnce(async () => {
-      throw new CoreError(503, "unavailable");
+
+    await show();
+
+    expect(page().querySelectorAll("li")).toHaveLength(1);
+    expect(page().querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("lets a radio's devices join from its card, and stops them when its page is left", async () => {
+    await show();
+    await way("Zigbee");
+
+    expect(requests).toContainEqual({
+      path: "/api/devices/pairing/open",
+      json: { seconds: 240, drivers: ["sanctum.zigbee"] },
     });
+    expect(document.querySelector("[role=dialog] h2")!.textContent).toBe(
+      "Zigbee",
+    );
+    expect(page().querySelector("h3")!.textContent).toBe(
+      "4:00• left. Looking for devices…",
+    );
+    expect(page().querySelector("[role=status]")!.textContent).toBe(
+      "Looking for devices",
+    );
 
-    const dialog = await show();
+    await act(async () => named("Back to Add devices").click());
+    expect(requests.at(-1)?.path).toBe("/api/devices/pairing/close");
+    expect(page().querySelector("h3")!.textContent).toBe(
+      "What are you adding?",
+    );
+  });
 
-    expect(dialog.querySelectorAll("section")).toHaveLength(1);
-    expect(dialog.querySelector("[role=alert]")).toBeNull();
+  it("says when the time is up, and starts again", async () => {
+    await show();
+    await way("Zigbee");
+
+    await act(async () => vi.advanceTimersByTime(240_000));
+    expect(page().querySelector("h3")!.textContent).toBe("Time's up");
+    expect(page().textContent).toContain(
+      "Zigbee devices can't join right now. Start again to give them another 4 minutes.",
+    );
+
+    const again = [...page().querySelectorAll("button")].find(
+      (button) => button.textContent === "Start again",
+    )!;
+    await act(async () => again.click());
+    expect(
+      requests.filter((each) => each.path === "/api/devices/pairing/open"),
+    ).toHaveLength(2);
   });
 });
