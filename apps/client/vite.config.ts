@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -32,5 +33,10 @@ export default defineConfig({
       // address show when CORE_ALLOWED_ORIGINS names it.
       "/pages": { target: coreUrl },
     },
+  },
+  test: {
+    // Client tests can exceed Vitest's five-second default when CI runs
+    // package suites in parallel.
+    testTimeout: 20_000,
   },
 });
