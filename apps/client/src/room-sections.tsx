@@ -15,7 +15,7 @@ import {
 import { useCallback, useState } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
-import { isShown, stateShort } from "./app-state";
+import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
 import { lightsWords, type LightsSwitch } from "./lights-button";
@@ -47,14 +47,14 @@ function sectionEntity(entity: EntityInfo): SectionEntity | null {
 }
 
 /** An installed app's room section. */
-export type AppSection = { app: AppInfo; section: RoomSectionInfo };
+type AppSection = { app: AppInfo; section: RoomSectionInfo };
 
 /**
  * A room's sections of one kind in their order: by the weight each
  * declares, Sanctum's own first (Moods and Natural light at 200), then other
  * apps' from 300, ties by app id.
  */
-export function sectionsInOrder(
+function sectionsInOrder(
   apps: readonly AppInfo[],
   kind: RoomSectionKind,
 ): AppSection[] {
@@ -153,10 +153,10 @@ function failedDevices(output: unknown): string[] {
 }
 
 /** One of a room's buttons or tiles, from an app's room section. */
-export type RowEntry = AppSection & { entity: SectionEntity };
+type RowEntry = AppSection & { entity: SectionEntity };
 
 /** A room's row: its switch, then apps' buttons, then apps' tiles. */
-export type RoomRowParts = {
+type RoomRowParts = {
   lights?: LightsSwitch;
   buttons: RowEntry[];
   tiles: RowEntry[];
@@ -198,9 +198,10 @@ export const isRowEmpty = (row: RoomRowParts) =>
  * Kitchen") and is White while any light is on, then apps' buttons, square
  * with their icon alone, then apps' tiles with their names. The switch says
  * whether the lights are on, the rest which look they have, so at most one
- * of those is lit, the first that says it is active: Natural light before a
- * mood that matches the curve. Each is named with the room, since several
- * rooms' are in reach on Home. While every light is offline the core can
+ * of those is lit: Natural light before a mood that matches the curve.
+ * A running app's current look wins over an app's last known look.
+ * Each is named with the room, since several rooms' are in reach on Home.
+ * While every light is offline the core can
  * reach none, so the whole row dims; while an app isn't running its own
  * buttons and tiles dim and say so. On a phone the squares share the first
  * half of the row's first line, two to a line, so they line up with the
@@ -213,9 +214,10 @@ export function RoomRow(props: {
 }) {
   const { row, roomName, entities } = props;
   const dark = row.lights?.disabled === true;
-  const lit = [...row.buttons, ...row.tiles].find(
+  const active = [...row.buttons, ...row.tiles].filter(
     ({ entity }) => entity.tile.active,
   );
+  const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
   const tileOf = ({ app, section, entity }: RowEntry, iconOnly: boolean) => {
     const notRunning = stateShort(app);
     const label = `${entity.tile.name} in ${roomName}`;

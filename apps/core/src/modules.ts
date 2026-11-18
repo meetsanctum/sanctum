@@ -23,11 +23,7 @@ import { createAppGrants } from "./app-host/grants.js";
 import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
-import {
-  loadApartPackage,
-  originOf,
-  type ApartPackage,
-} from "./app-host/loader.js";
+import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
@@ -371,15 +367,9 @@ export async function createModules(
   const addedApps = createAddedApps(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
   // A version staged in its folder, as the core reads any app that runs apart.
-  const loadPackage =
-    options.appUpdates?.loadPackage ??
-    ((appId: string, folder: string) =>
-      loadApartPackage(
-        options.packagesDir ?? "/packages",
-        appId,
-        folder,
-        originOf(appId),
-      ));
+  const loadStagedPackage = (appId: string, folder: string) =>
+    loadApartPackage(options.packagesDir ?? "/packages", appId, folder);
+  const loadPackage = options.appUpdates?.loadPackage ?? loadStagedPackage;
   const appUpdates = createAppUpdates({
     db,
     dataDir: options.dataDir,
@@ -481,13 +471,7 @@ export async function createModules(
     added: addedApps,
     removed: removedApps,
     staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
-    loadPackage: (appId, folder) =>
-      loadApartPackage(
-        options.packagesDir ?? "/packages",
-        appId,
-        folder,
-        originOf(appId),
-      ),
+    loadPackage: loadStagedPackage,
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
     host: () => options.manager.hostStatus(),
     log,

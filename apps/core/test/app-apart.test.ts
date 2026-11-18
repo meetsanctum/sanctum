@@ -703,18 +703,18 @@ describe("an app that runs apart", () => {
       const text = JSON.stringify({ id: "test.apart", version: "1.0.0" });
       await writeFile(join(staged, "sanctum-app.json"), text);
 
-      expect(
-        await loadApartPackage(folder, "test.apart", "1.0.0+abc", "official"),
-      ).toEqual({
-        apart: {
-          manifest: { id: "test.apart", version: "1.0.0" },
-          digest: manifestDigest(text),
-          folder: "1.0.0+abc",
+      expect(await loadApartPackage(folder, "test.apart", "1.0.0+abc")).toEqual(
+        {
+          apart: {
+            manifest: { id: "test.apart", version: "1.0.0" },
+            digest: manifestDigest(text),
+            folder: "1.0.0+abc",
+          },
+          origin: "official",
         },
-        origin: "official",
-      });
+      );
       await expect(
-        loadApartPackage(folder, "test.other", "1.0.0+abc", "official"),
+        loadApartPackage(folder, "test.other", "1.0.0+abc"),
       ).rejects.toThrow("ENOENT");
     });
 
@@ -754,7 +754,7 @@ describe("an app that runs apart", () => {
       );
 
       await expect(
-        loadApartPackage(folder, "test.apart", "1.0.0+abc", "official"),
+        loadApartPackage(folder, "test.apart", "1.0.0+abc"),
       ).rejects.toThrow("holds test.other");
     });
   });

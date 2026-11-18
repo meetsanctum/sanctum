@@ -21,11 +21,6 @@ export type Origin = (typeof origins)[number];
 // brings.
 const systemApps: readonly string[] = ["sanctum.moods"];
 
-/** The origin of a package the core's image ships, by its app's id. */
-export function originOf(appId: string): Origin {
-  return systemApps.includes(appId) ? "system" : "official";
-}
-
 // An app, in its own container, of which the core knows its running version's
 // manifest as its folder of packages holds it: never the one bundled in the
 // core's image, which can be newer until its update starts.
@@ -53,7 +48,6 @@ export async function loadApartPackage(
   packagesDir: string,
   appId: string,
   folder: string,
-  origin: Origin,
 ): Promise<ApartPackage> {
   const text = await readFile(
     join(packagesDir, appId, folder, manifestFileName),
@@ -62,7 +56,10 @@ export async function loadApartPackage(
   if (manifest.id !== appId) {
     throw new Error(`This package holds ${manifest.id}, not ${appId}`);
   }
-  return { apart: { manifest, digest: manifestDigest(text), folder }, origin };
+  return {
+    apart: { manifest, digest: manifestDigest(text), folder },
+    origin: systemApps.includes(appId) ? "system" : "official",
+  };
 }
 
 // Every app the core is told to run, as `id@folder`. One that doesn't load is
@@ -76,9 +73,7 @@ export async function loadApartPackages(
   for (const each of apart) {
     const [appId = "", folder = ""] = each.split("@");
     try {
-      packages.push(
-        await loadApartPackage(packagesDir, appId, folder, originOf(appId)),
-      );
+      packages.push(await loadApartPackage(packagesDir, appId, folder));
     } catch (error) {
       log(
         `apps: ${each} was not loaded (${error instanceof Error ? error.message : String(error)})`,

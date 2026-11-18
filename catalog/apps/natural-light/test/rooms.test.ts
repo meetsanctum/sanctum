@@ -4,10 +4,9 @@ import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
 import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
-// Natural light's button for each room: White while every light in the room
-// that is on follows the curve, a press then switching the room off, and
-// otherwise a press bringing the room to natural light, with the lights
-// that can't follow it off.
+// Natural light's tile is White while every light that's on follows the
+// curve. A press brings the room to natural light and switches off the
+// other lights.
 
 const stripFeatures = {
   brightness: true,
@@ -233,6 +232,36 @@ describe("a room's button", () => {
     ]);
     expect(button("office")?.active).toBe(true);
   });
+
+  it.each(["unfollowed", "offline"])(
+    "leaves other lights on when all the lights that could follow are %s",
+    async (reason) => {
+      const { core, call, check, button } = home();
+      await check();
+      expect(button("office")).toBeDefined();
+      core.set("strip", { on: true }, byHand);
+      if (reason === "unfollowed") {
+        await call("naturalLight.followRoom", {
+          placeId: "office",
+          follow: false,
+        });
+      } else {
+        for (const device of core.state.devices) {
+          if (device.id === "ceiling" || device.id === "desk") {
+            device.availability = "offline";
+          }
+        }
+      }
+      const sent = core.state.sent.length;
+
+      await expect(
+        call("naturalLight.bringRoom", { placeId: "office" }),
+      ).rejects.toThrow("No reachable light follows in the room");
+
+      expect(core.state.sent).toHaveLength(sent);
+      expect(core.light("strip").state?.on).toBe(true);
+    },
+  );
 
   it("sends a press to every light in the room at once", async () => {
     const { core, call, check } = home();

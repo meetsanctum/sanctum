@@ -420,6 +420,15 @@ export async function bringRoom(
   const now = options.now();
   const sun = await requireRoomSun(ctx, options, now);
   const lights = lightsIn(await ctx.devices.list(), placeId);
+  const rows = await rowsOf(ctx);
+  if (
+    !lights.some(
+      (light) =>
+        takesColorTemperature(light.capability) && rows.has(keyOf(light)),
+    )
+  ) {
+    throw new ActionError("conflict", "No reachable light follows in the room");
+  }
   return eachLight(ctx, runForLight, lights, async (light) => {
     const { device, capability } = light;
     const row = await followedRow(ctx, device.id, capability.id);

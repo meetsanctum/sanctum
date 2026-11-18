@@ -136,6 +136,20 @@ describe("turning an app off", () => {
     expect(stateOf(again, app.id)).toBe("off");
   });
 
+  it("starts a system app that was turned off when it was optional", async () => {
+    const app = lamp([]);
+    const first = await testCore();
+    createAppsOff(first.db).set(app.id, true);
+    await first.stop();
+
+    const again = await testCore({
+      apps: [{ app, origin: "system" }],
+      dataDir: first.dataDir,
+    });
+
+    expect(stateOf(again, app.id)).toBe("running");
+  });
+
   it("says off rather than paused, and a permission coming back doesn't start it", async () => {
     const said: string[] = [];
     const app = lamp(said);

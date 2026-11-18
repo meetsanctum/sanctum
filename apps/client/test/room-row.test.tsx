@@ -240,10 +240,14 @@ describe("a room's row", () => {
     expect(named("Glow in Hall")).toBeDefined();
   });
 
-  it("dims an app's squares while it isn't running, and says so", async () => {
+  it("dims a paused square and gives the highlight to the running app", async () => {
     await show("room", [moods, { ...glow, state: "paused" }]);
-    expect(named("Glow in Office, paused")?.disabled).toBe(true);
-    expect(named("Relax in Office")?.disabled).toBe(false);
+    const paused = named("Glow in Office, paused");
+    const mood = named("Relax in Office");
+    expect(paused?.disabled).toBe(true);
+    expect(paused?.getAttribute("aria-pressed")).toBe("false");
+    expect(mood?.disabled).toBe(false);
+    expect(mood?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("leaves out an app's squares once it is turned off", async () => {

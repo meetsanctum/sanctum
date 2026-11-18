@@ -169,7 +169,7 @@ export function createAppInstaller(options: {
       requests: createRequestsUnderWay(appId),
       lifecycle: Promise.resolve(),
       runId: 0,
-      off: options.off.isOff(appId),
+      off: origin !== "system" && options.off.isOff(appId),
       link,
       apartIn: pkg.apart.folder,
       digest: pkg.apart.digest,
