@@ -81,12 +81,12 @@ describe("a device waiting for a key", () => {
     home = await startHome();
     const device = await waitingDevice();
     const key = keyOf(device.options.mac);
-    // Once what it has is read, its next greeting is Add's.
+    // Once who made it is read, its next greeting is Add's.
     await home.core.until(
       () =>
         home.core.found.find((each) => each.key === key)?.description ===
-        "switch",
-      "what it has",
+        "Espressif",
+      "who made it",
     );
     device.closesWindowAfterHello = true;
 

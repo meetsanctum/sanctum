@@ -26,6 +26,8 @@ export type EmulatedEntity = {
 export type EmulatedOptions = {
   name: string;
   friendlyName?: string;
+  /** Its project's name, as ESPHome writes it: "maker.product". */
+  project?: string;
   mac: string;
   /** Its encryption key, in base64, or null for a device built without one. */
   psk: string | null;
@@ -476,6 +478,7 @@ export class EmulatedDevice {
           text(4, this.options.version ?? "2026.10.2"),
           text(6, "esp32dev"),
           flag(7, this.options.sleeps === true),
+          ...(this.options.project ? [text(8, this.options.project)] : []),
           text(12, "Espressif"),
           ...(this.options.friendlyName
             ? [text(13, this.options.friendlyName)]
