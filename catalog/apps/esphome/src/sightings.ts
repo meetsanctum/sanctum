@@ -26,6 +26,7 @@ export type Announced = {
   port: number;
   encryption: Encryption;
   version: string | null;
+  projectName: string | null;
 };
 
 /** A MAC address in the form a device's key has, or null for anything else. */
@@ -53,5 +54,6 @@ export function announcedOf(sighting: Sighting): Announced | null {
     port: sighting.port,
     encryption,
     version: txt.version?.trim() || null,
+    projectName: txt.project_name?.trim() || null,
   };
 }

@@ -206,13 +206,40 @@ describe("Home with floors", () => {
     ]);
   });
 
+  it("leads a floor's heading with its mark, and indents its rooms only wider than a phone", async () => {
+    await show(<HomeHarness />);
+    const findSection = (id: string) =>
+      container.querySelector(`section[aria-labelledby="${id}"]`)!;
+    const ground = findSection("home-floor-ground");
+    const groundHeading = ground.firstElementChild!;
+    expect(
+      groundHeading.firstElementChild?.matches(
+        'svg.lucide-layers[aria-hidden="true"]',
+      ),
+    ).toBe(true);
+    expect(groundHeading.classList).not.toContain("sm:ps-6.5");
+    const other = findSection("home-floor-other-rooms");
+    const otherHeading = other.firstElementChild!;
+    expect(otherHeading.querySelector("svg.lucide-layers")).toBeNull();
+    expect(otherHeading.classList).toContain("sm:ps-6.5");
+    expect(ground.lastElementChild?.classList).toContain("sm:ps-6.5");
+    expect(other.lastElementChild?.classList).toContain("sm:ps-6.5");
+  });
+
   it("turns a floor's lights off from its heading, while any is on", async () => {
     await show(<HomeHarness />);
     const off = button("Turn off 2 lights on Ground floor");
-    expect(off?.textContent).toBe("Turn off");
+    // The power symbol alone, White, its words its tooltip.
+    expect(off?.textContent).toBe("");
+    expect(off?.querySelector("svg.lucide-power")).not.toBeNull();
+    expect(off?.title).toBe("Turn off 2 lights on Ground floor");
+    expect(off?.dataset.on).toBe("");
+    const heading = container.querySelector("#home-floor-ground");
+    expect(heading?.nextElementSibling).toBe(off);
     // All off upstairs: its heading is its name alone.
-    expect(button("Turn off 1 light on First floor")).toBeUndefined();
-    expect(container.textContent).not.toContain("First floorTurn");
+    expect(
+      container.querySelector("#home-floor-first")?.nextElementSibling,
+    ).toBe(null);
 
     await act(async () => off!.click());
     expect(
@@ -225,7 +252,7 @@ describe("Home with floors", () => {
 });
 
 describe("Lights' page with floors", () => {
-  it("heads its rooms by floor, each floor with its button and each room with its own", async () => {
+  it("heads its rooms by floor, each floor with its switch and each room with its own", async () => {
     await show(<LightsHarness />);
     expect(outline()).toEqual([
       "h2 First floor",

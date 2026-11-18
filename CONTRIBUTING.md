@@ -20,7 +20,7 @@ coding agents alike.
 
 ```sh
 pnpm install
-pnpm dev          # the manager and core in Docker, client on :5173, website on :5174
+pnpm dev          # the manager and core in Docker, client on :5173, website on :5174, docs on :5175
 pnpm dev:seed     # a claimed home with rooms, fake lights and contact sensors
 pnpm dev:status   # the core's address, and any other stacks
 pnpm dev:stop     # stop this worktree's stack
@@ -106,6 +106,7 @@ apps/manager               the privileged process: Docker, updates, backups
 apps/client                the React + Vite shell
 apps/desktop               the Electron desktop app
 apps/website               the landing page and its waitlist
+apps/docs                  the documentation site, built by Starlight
 packages/app-sdk           defineApp, defineAction, defineEvent, schemas
 packages/ui-sdk            what apps' pages import: components, the app client
 packages/auth-protocol     Auth's routes, sign-in binding and rules
@@ -113,7 +114,6 @@ packages/typescript-config shared TypeScript settings
 catalog/apps/*             Sanctum's apps, driver apps included
 assets/brand               the brand's files, under their own licence
 deploy/                    a host's installer and compose file; deploy/dev for development
-docs/                      the install guide
 ```
 
 ## Running a host
@@ -126,8 +126,8 @@ The Images workflow publishes multi-architecture images (`linux/amd64`,
 A host runs the released images. [`deploy/install.sh`](deploy/install.sh)
 sets one up on Raspberry Pi OS (64-bit), Debian or Ubuntu, and with
 `--uninstall` removes it again, the home's data included.
-[The install guide](docs/install.md) has the steps a person takes, from a
-blank card to a first device.
+[The install guide](https://docs.meetsanctum.com/install/) has the steps a
+person takes, from a blank card to a first device.
 
 On a machine that already has Docker, the same by hand is
 [`deploy/compose.yml`](deploy/compose.yml):
