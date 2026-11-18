@@ -1,7 +1,8 @@
 import type { WidgetIcon } from "@meetsanctum/app-sdk";
 
 // What a WMO weather code (Open-Meteo's weather_code) means, in words and as
-// one of the icons a widget may show; a clear night shows the moon.
+// one of the icons a widget may show; a clear night shows the moon. Every
+// code from drizzle on is something falling.
 
 type Condition = { text: string; icon: WidgetIcon };
 
@@ -47,4 +48,9 @@ export function condition(code: number | null, isDay = true): Condition {
     return { text: "Thunderstorm with hail", icon: "cloud-hail" };
   }
   return unknown;
+}
+
+/** Whether something falls under a code: drizzle, rain, snow, showers or a thunderstorm. */
+export function isWet(code: number | null) {
+  return code !== null && code >= 51 && code <= 99;
 }
