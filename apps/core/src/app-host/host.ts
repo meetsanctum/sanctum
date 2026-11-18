@@ -244,7 +244,7 @@ export function createAppHost(options: {
     }
     announce(entry);
   }
-  const { accepts, stopApp, reconcile, gone } = createAppLifecycle({
+  const { accepts, stopApp, reconcile, gone, uninstall } = createAppLifecycle({
     installed,
     eventsForApps,
     contexts,
@@ -521,6 +521,7 @@ export function createAppHost(options: {
           // running: both own its context until they end.
           await entry.lifecycle;
           await ended;
+          await uninstall(entry);
           // It's gone from the list by now, so what it brought and its
           // container go even when stopping it fails: removing its
           // container stops what's left, and only that fails the removal.
