@@ -30,6 +30,7 @@ export {
   NativeSelectOptGroup,
   NativeSelectOption,
 } from "./components/ui/native-select";
+export { ScrollArea } from "./components/ui/scroll-area";
 export { Slider } from "./components/ui/slider";
 export { Switch } from "./components/ui/switch";
 // What an app's page runs on in its frame, and what it says to the shell.
