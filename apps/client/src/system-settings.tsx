@@ -523,7 +523,11 @@ function VersionPicker(props: {
               className="sr-only"
             />
             <span className="truncate text-sm font-medium">{version}</span>
-            <span className="shrink-0 text-[13px] opacity-65">{detail}</span>
+            <span
+              className={cn("shrink-0 text-[13px]", !isRunning && "opacity-65")}
+            >
+              {detail}
+            </span>
           </label>
         );
       })}
