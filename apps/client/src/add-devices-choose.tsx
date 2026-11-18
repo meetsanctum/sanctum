@@ -4,6 +4,8 @@ import { cn } from "cn";
 import { Radio, Wifi } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { offerFoundWords } from "./add-devices-offer";
+
 // Add devices' first page: what are you adding? A card for each way the home
 // can add devices, side by side: the devices drivers found, with how many,
 // and each radio that lets new devices join, by its app's name. The whole
@@ -105,7 +107,7 @@ function WayCard(props: {
           : way.kind === "join"
             ? "Lights, sensors and remotes"
             : way.kind === "offer"
-              ? `${way.offer.found} ${way.offer.name} ${way.offer.found === 1 ? "device" : "devices"} found`
+              ? offerFoundWords(way.offer)
               : way.fix}
       </span>
       <span className="mt-auto flex w-full flex-col items-center gap-3.5 pt-4">

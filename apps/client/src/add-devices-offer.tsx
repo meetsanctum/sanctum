@@ -10,6 +10,10 @@ import { coreJson } from "./core-fetch";
 // then, since it needs the local network and so asks rather than adding
 // itself. Added, it finds them, and they're added from Devices found.
 
+/** "2 ESPHome devices found", on its card. */
+export const offerFoundWords = ({ name, found }: DeviceOffer) =>
+  `${found} ${name} ${found === 1 ? "device" : "devices"} found`;
+
 /** "2 ESPHome devices were found", above the sheet's title. */
 const leadWords = ({ name, found }: DeviceOffer) =>
   found === 1
