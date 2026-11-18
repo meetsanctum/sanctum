@@ -426,12 +426,14 @@ export function AddDevices(props: {
     onGreeted: (id) => greeted.current.add(id),
   };
 
+  // A ready device with no id was removed and leaves the list.
   const joinedHere =
     page.kind === "join" && since
       ? (pairing?.joined ?? []).filter(
           (each) =>
             Date.parse(each.joinedAt) >= Date.parse(since) &&
-            each.driver === page.driver,
+            each.driver === page.driver &&
+            (each.stage !== "ready" || each.deviceId !== null),
         )
       : [];
   const joining: JoiningState =
@@ -443,6 +445,10 @@ export function AddDevices(props: {
             kind: "closed",
             why: failed ? "failed" : stopped ? "stopped" : "time",
           };
+  // Failed joins tell the user to reset the device and start again.
+  const isDonePrimary =
+    joining.kind === "closed" &&
+    joinedHere.some((each) => each.stage !== "failed");
 
   const title =
     page.kind === "found"
@@ -477,6 +483,7 @@ export function AddDevices(props: {
           event.preventDefault();
       }}
       onCovering={host.onCovering}
+      isDonePrimary={isDonePrimary}
       title={title}
       subtitle={
         page.kind === "found"
@@ -539,6 +546,7 @@ export function AddDevices(props: {
               name={appName(page.driver)}
               state={joining}
               joined={joinedHere}
+              isDonePrimary={isDonePrimary}
               devices={props.devices}
               seconds={joinSeconds}
               onStop={() => void stop()}
