@@ -590,6 +590,13 @@ describe("Add devices, with what drivers found", () => {
     const again = [...page().querySelectorAll("button")].find(
       (button) => button.textContent === "Start again",
     )!;
+    // With nothing joined, starting again is what is left, so it leads.
+    expect(again.dataset.variant).toBe("default");
+    expect(
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Done",
+      )!.dataset.variant,
+    ).toBe("outline");
     await act(async () => again.click());
     expect(
       requests.filter((each) => each.path === "/api/devices/pairing/open"),

@@ -12,7 +12,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
 import { FoundPage, foundKey } from "./add-devices-found";
-import { JoiningPage, type JoiningState } from "./add-devices-joining";
+import {
+  JoiningPage,
+  shownJoined,
+  type JoiningState,
+} from "./add-devices-joining";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem, updateDevice } from "./device-parts";
@@ -477,6 +481,13 @@ export function AddDevices(props: {
           event.preventDefault();
       }}
       onCovering={host.onCovering}
+      // Once a radio has stopped with devices joined, closing is what is
+      // left to do.
+      donePrimary={
+        page.kind === "join" &&
+        joining.kind === "closed" &&
+        shownJoined(joinedHere).length > 0
+      }
       title={title}
       subtitle={
         page.kind === "found"
