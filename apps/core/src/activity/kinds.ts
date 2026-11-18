@@ -28,6 +28,9 @@ const deviceActions = new Set([
   "device.add",
 ]);
 
+// What the core records of an app's place in the home, under the app's id.
+const appLifecycle = new Set(["app.add", "app.remove", "app.delete"]);
+
 // An app's id is reverse DNS; the core's modules are single words.
 const isApp = (source: string) => source.includes(".");
 
@@ -54,8 +57,9 @@ export function kindOf(entry: {
     return "devices";
   }
   if (action === "workflow.run") return "automations";
-  // Adding, removing and deleting an app's data, Sanctum's own deadline too.
-  if (action.startsWith("app.")) return "setup";
+  // Adding, removing and deleting an app's data, Sanctum's own deadline too,
+  // by name: an app's own action may also begin with "app.".
+  if (appLifecycle.has(action)) return "setup";
   if (isApp(source) && entry.actor) return "automations";
   return "setup";
 }
