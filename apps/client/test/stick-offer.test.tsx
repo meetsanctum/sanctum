@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
-import { pluggedInWords, StickOffer } from "../src/stick-offer";
+import { StickOffer } from "../src/stick-offer";
 
 // A Zigbee stick plugged in brings up its app's add sheet on this client, and
 // an answer anywhere ends it.
@@ -63,6 +63,7 @@ const hear = (message: LiveMessage) =>
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   listeners = [];
   host = document.createElement("div");
   document.body.append(host);
@@ -79,12 +80,15 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   document.body.innerHTML = "";
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
-const show = () =>
+const show = (isOnline = true) =>
   act(async () =>
-    root.render(<StickOffer live={live} isOnline onAdded={() => undefined} />),
+    root.render(
+      <StickOffer live={live} isOnline={isOnline} onAdded={() => undefined} />,
+    ),
   );
 
 const dialog = () => document.body.querySelector('[role="dialog"]');
@@ -92,19 +96,29 @@ const button = (name: string) =>
   [...document.body.querySelectorAll("button")].find(
     ({ textContent }) => textContent === name,
   );
+const later = (ms: number) =>
+  act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((answer) => {
+    resolve = answer;
+  });
+  return { promise, resolve };
+}
 
 describe("a stick plugged in", () => {
   it("opens its app's add sheet, saying what happened", async () => {
     await show();
 
-    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    expect(dialog()).not.toBeNull();
     expect(dialog()!.textContent).toContain("A Zigbee stick was plugged in");
     expect(dialog()!.textContent).toContain("Add Example?");
   });
 
   it("says no for every client on Cancel", async () => {
     await show();
-    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    expect(dialog()).not.toBeNull();
 
     await act(async () => button("Cancel")!.click());
 
@@ -115,13 +129,37 @@ describe("a stick plugged in", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("keeps the sheet open if Cancel could not be saved", async () => {
+    await show();
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+
+    await act(async () => button("Cancel")!.click());
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+      "That did not work. Try again.",
+    );
+
+    await act(async () => button("Cancel")!.click());
+    expect(dialog()).toBeNull();
+  });
+
+  it("names the offer when adding its app", async () => {
+    await show();
+
+    await act(async () => button("Add Example")!.click());
+
+    expect(coreJson).toHaveBeenCalledWith("/api/apps/add", {
+      method: "POST",
+      json: { id: "sanctum.example", version: "1.0.0", offerId: "offer-1" },
+    });
+  });
+
   it("closes once it ends on another client or is unplugged", async () => {
     await show();
-    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    expect(dialog()).not.toBeNull();
 
     await hear({ type: "offer", offer: null });
 
-    await vi.waitFor(() => expect(dialog()).toBeNull());
+    expect(dialog()).toBeNull();
     expect(coreJson).not.toHaveBeenCalledWith(
       "/api/hardware/offer/dismiss",
       expect.anything(),
@@ -133,23 +171,76 @@ describe("a stick plugged in", () => {
     other.setAttribute("role", "dialog");
     document.body.append(other);
     await show();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await later(1_000);
     expect(document.body.textContent).not.toContain("Add Example?");
 
     other.remove();
 
-    await vi.waitFor(
-      () => expect(document.body.textContent).toContain("Add Example?"),
-      { timeout: 2_000 },
-    );
+    await later(1_000);
+    expect(document.body.textContent).toContain("Add Example?");
   });
 
-  it("names several sticks plugged in together", () => {
-    expect(
-      pluggedInWords({
+  it("does not reopen an offer ended while the first read was in flight", async () => {
+    const first = deferred<{ offer: HardwareOffer }>();
+    vi.mocked(coreJson).mockReturnValueOnce(first.promise);
+    await show();
+
+    await hear({ type: "offer", offer: null });
+    await act(async () => first.resolve({ offer }));
+
+    expect(dialog()).toBeNull();
+    expect(coreJson).not.toHaveBeenCalledWith("/api/apps/available");
+  });
+
+  it("hides the sheet while offline and reads the current offer when back", async () => {
+    await show();
+    expect(dialog()).not.toBeNull();
+
+    await show(false);
+    expect(dialog()).toBeNull();
+
+    vi.mocked(coreJson).mockResolvedValueOnce({ offer: null });
+    await show();
+    expect(dialog()).toBeNull();
+  });
+
+  it("retries the catalog when the first read fails", async () => {
+    vi.mocked(coreJson).mockResolvedValueOnce({ offer });
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+    await show();
+    expect(dialog()).toBeNull();
+
+    await later(1_000);
+    expect(dialog()).not.toBeNull();
+  });
+
+  it("waits if another sheet opens while the catalog is being read", async () => {
+    const list = deferred<AvailableApp[]>();
+    vi.mocked(coreJson).mockResolvedValueOnce({ offer });
+    vi.mocked(coreJson).mockReturnValueOnce(list.promise);
+    await show();
+    const other = document.createElement("div");
+    other.setAttribute("role", "dialog");
+    document.body.append(other);
+
+    await act(async () => list.resolve([zigbee]));
+    expect(document.body.textContent).not.toContain("Add Example?");
+
+    other.remove();
+    await later(1_000);
+    expect(document.body.textContent).toContain("Add Example?");
+  });
+
+  it("names several sticks plugged in together", async () => {
+    await show();
+    await hear({
+      type: "offer",
+      offer: {
         ...offer,
         sticks: [...offer.sticks, { path: "/dev/ttyACM1", label: "ConBee" }],
-      }),
-    ).toBe("Zigbee sticks were plugged in");
+      },
+    });
+
+    expect(dialog()?.textContent).toContain("Zigbee sticks were plugged in");
   });
 });

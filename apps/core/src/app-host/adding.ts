@@ -9,6 +9,7 @@ import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule } from "./grants.js";
+import type { HardwareOffers } from "./hardware-offers.js";
 import type { ListTurns } from "./list-turns.js";
 import type { ApartPackage } from "./loader.js";
 import type { RemovedApps } from "./removed.js";
@@ -39,6 +40,7 @@ export function createAppAdding(options: {
   onDevice?: (change: DeviceChange) => void;
   available: Pick<AvailableApps, "find">;
   added: Pick<AddedApps, "add" | "ids">;
+  offers: Pick<HardwareOffers, "matches" | "recordAdd" | "finishAdd">;
   activity: Pick<Activity, "for">;
   // Whether the home's apps are installed, so the list is complete.
   hasInstalled: () => boolean;
@@ -54,6 +56,7 @@ export function createAppAdding(options: {
     principal: Principal,
     appId: string,
     version: string,
+    offerId?: string,
   ): Promise<AppInfo> {
     const who = {
       personId: principal.person?.id,
@@ -83,6 +86,9 @@ export function createAppAdding(options: {
     // listed yet.
     if (!options.hasInstalled()) throw new ActionCallError("unavailable");
     if (options.added.ids().has(appId)) throw refuse("conflict");
+    if (offerId !== undefined && !options.offers.matches(appId, offerId)) {
+      throw refuse("conflict");
+    }
     const offered = await options.available.find(appId);
     if (!offered) throw new ActionCallError("not_found");
     const { app, pkg } = offered;
@@ -107,9 +113,15 @@ export function createAppAdding(options: {
       removal = options.removed.get(appId);
     }
     if (removal && !removal.isDone) throw refuse("conflict", detail);
+    // While the checks were running, another client may have dismissed the
+    // offer or the core may have seen the sticks unplugged.
+    if (offerId !== undefined && !options.offers.matches(appId, offerId)) {
+      throw refuse("conflict", detail);
+    }
     // Who added it is written with it, so neither is without the other.
     const isAdded = options.added.add(appId, who, () => {
       if (removal) options.removed.forget(appId);
+      options.offers.recordAdd(appId);
       options.activity.for(appId)({
         action: "app.add",
         outcome: "ok",
@@ -119,6 +131,7 @@ export function createAppAdding(options: {
       });
     });
     if (!isAdded) throw refuse("conflict", detail);
+    options.offers.finishAdd(appId);
     if (removal) {
       for (const device of options.devices.ofDriver(appId)) {
         options.onDevice?.({ id: device.id, before: null, after: device });
@@ -143,8 +156,13 @@ export function createAppAdding(options: {
 
   return {
     /** Adds an app the home could add; answers it as the home's apps list it. */
-    add(principal: Principal, appId: string, version: string) {
-      return options.turns.take(() => add(principal, appId, version));
+    add(
+      principal: Principal,
+      appId: string,
+      version: string,
+      offerId?: string,
+    ) {
+      return options.turns.take(() => add(principal, appId, version, offerId));
     },
   };
 }

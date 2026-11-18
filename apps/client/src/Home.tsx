@@ -763,8 +763,11 @@ export function Home(props: {
           {permissionSheet.sheet}
           <StickOffer
             live={live}
-            isOnline={found && core.state === "online"}
-            onAdded={appAdded}
+            isOnline={!isVeiled && core.state === "online"}
+            onAdded={(app) => {
+              appAdded(app);
+              settingsOf(app.id)();
+            }}
           />
         </ShellFrame>
       </OverlayHostProvider>

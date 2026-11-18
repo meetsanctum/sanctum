@@ -28,13 +28,14 @@ import type { AppHost } from "./host.js";
 //                                             Sanctum brings that the home
 //                                             hasn't added, each with what
 //                                             keeps it from being added now
-//   POST /api/apps/add                        { id, version }: adds one of
+//   POST /api/apps/add                        { id, version, offerId? }: adds one of
 //                                             those at the version its sheet
 //                                             showed, and answers its
 //                                             AppInfo once it's installed;
 //                                             refused as a conflict once it's
-//                                             added or another version is
-//                                             there, and as unavailable while
+//                                             added, another version is
+//                                             there or its offer has ended,
+//                                             and as unavailable while
 //                                             something keeps it from being
 //                                             added
 //   GET  /api/apps/:appId/removal             AppRemoval: what removing it
@@ -92,10 +93,12 @@ import type { AppHost } from "./host.js";
 const appParams = z.object({ appId: z.string().min(1).max(128) });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
-const confirmedCopy = z.strictObject({ id: z.string().min(1).max(64) });
+const confirmedId = z.string().min(1).max(64);
+const confirmation = z.strictObject({ id: confirmedId });
 const toAdd = z.strictObject({
   id: z.string().min(1).max(128),
   version: z.string().min(1).max(64),
+  offerId: confirmedId.optional(),
 });
 
 const grant = z.strictObject({
@@ -151,7 +154,8 @@ export function registerAppRoutes(
   app.post("/api/apps/add", async (request): Promise<AppInfo> => {
     const parsed = toAdd.safeParse(request.body);
     if (!parsed.success) throw new ActionCallError("invalid_request");
-    return adding.add(request.principal!, parsed.data.id, parsed.data.version);
+    const { id, version, offerId } = parsed.data;
+    return adding.add(request.principal!, id, version, offerId);
   });
 
   // What removing it takes, which its dialog names first.
@@ -178,7 +182,7 @@ export function registerAppRoutes(
   );
 
   app.post("/api/hardware/offer/dismiss", async (request) => {
-    const named = confirmedCopy.safeParse(request.body);
+    const named = confirmation.safeParse(request.body);
     if (!named.success) throw new ActionCallError("invalid_request");
     await offers.dismiss(request.principal!, named.data.id);
     return {};
@@ -281,7 +285,7 @@ export function registerAppRoutes(
 
   // What it says next arrives as it changes, as any app's does.
   app.post("/api/apps/:appId/go-back", async (request) => {
-    const confirmed = confirmedCopy.safeParse(request.body);
+    const confirmed = confirmation.safeParse(request.body);
     if (!confirmed.success) throw new ActionCallError("invalid_request");
     await host.goBack({
       principal: request.principal!,
@@ -294,7 +298,7 @@ export function registerAppRoutes(
   // A newer version that waits for what it newly needs, as its Review sheet
   // showed it. What it says next arrives as it changes.
   app.post("/api/apps/:appId/update/allow", async (request) => {
-    const named = confirmedCopy.safeParse(request.body);
+    const named = confirmation.safeParse(request.body);
     if (!named.success) throw new ActionCallError("invalid_request");
     await host.allowUpdate({
       principal: request.principal!,

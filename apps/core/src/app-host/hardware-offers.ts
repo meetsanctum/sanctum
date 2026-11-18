@@ -32,19 +32,20 @@ export function createHardwareOffers(options: {
   db: CoreDatabase;
   gate: Pick<Gate, "admit">;
   added: Pick<AddedApps, "ids">;
-  available: Pick<AvailableApps, "list">;
+  available: Pick<AvailableApps, "findWithPermission">;
   manager: { zigbeeSticks?(): Promise<Stick[]> };
+  hasInstalled: () => boolean;
   // Clients hear of the offer as it changes.
   onOffer?: (offer: HardwareOffer | null) => void;
   now?: () => Date;
   log: (message: string) => void;
-  everyMs?: number;
 }) {
   const { db, log } = options;
   const now = options.now ?? (() => new Date());
   let offer: HardwareOffer | null = null;
   let timer: NodeJS.Timeout | undefined;
   let looking: Promise<void> | undefined;
+  let isStopping = false;
 
   const seenPaths = () =>
     new Set(
@@ -55,17 +56,18 @@ export function createHardwareOffers(options: {
         .map((row) => row.path),
     );
 
-  function markSeen(paths: readonly string[]) {
-    if (paths.length === 0) return;
+  function recordSeen(sticks: readonly Stick[]) {
     const at = now();
-    durably(db, () => {
-      for (const path of paths) {
-        db.insert(sticksSeen)
-          .values({ path, seenAt: at })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
+    for (const { path } of sticks) {
+      db.insert(sticksSeen)
+        .values({ path, seenAt: at })
+        .onConflictDoNothing()
+        .run();
+    }
+  }
+
+  function markSeen(sticks: readonly Stick[]) {
+    if (sticks.length > 0) durably(db, () => recordSeen(sticks));
   }
 
   function set(next: HardwareOffer | null) {
@@ -73,28 +75,18 @@ export function createHardwareOffers(options: {
     options.onOffer?.(next);
   }
 
-  // The app the home could add for a Zigbee stick: none once it has one,
-  // since Add apps lists only those it hasn't.
-  async function appForSticks() {
-    const apps = await options.available.list();
-    return (
-      apps.find((app) =>
-        app.requests.some((request) => request.id === zigbeeService),
-      ) ?? null
-    );
-  }
-
   async function look() {
-    const lister = options.manager.zigbeeSticks;
-    if (!lister) return;
+    if (isStopping || !options.hasInstalled() || !options.manager.zigbeeSticks)
+      return;
     let sticks: Stick[];
     try {
-      sticks = await lister();
+      sticks = await options.manager.zigbeeSticks();
     } catch {
       // A manager that can't see the host's devices, or doesn't answer,
       // changes nothing: the next look tries again.
       return;
     }
+    if (isStopping) return;
     const present = new Set(sticks.map((stick) => stick.path));
     const seen = seenPaths();
     // Unplugged, so plugging it in again asks again.
@@ -104,37 +96,32 @@ export function createHardwareOffers(options: {
         db.delete(sticksSeen).where(inArray(sticksSeen.path, gone)).run();
       });
     }
-    // Someone added it, here or on another client: it ends everywhere.
-    if (offer && options.added.ids().has(offer.app)) {
-      markSeen(offer.sticks.map((stick) => stick.path));
-      set(null);
-      return;
-    }
-    const still = offer?.sticks.filter((stick) => present.has(stick.path));
+    const still =
+      offer?.sticks.filter((stick) => present.has(stick.path)) ?? [];
     const fresh = sticks.filter(
       (stick) =>
         !seen.has(stick.path) &&
-        !still?.some((each) => each.path === stick.path),
+        !still.some((each) => each.path === stick.path),
     );
-    if (fresh.length === 0) {
-      // Unplugged before anyone answered.
-      if (offer && still?.length === 0) set(null);
-      else if (offer && still!.length < offer.sticks.length) {
-        set({ ...offer, sticks: still! });
+    if (offer && still.length > 0) {
+      if (fresh.length > 0 || still.length !== offer.sticks.length) {
+        set({ ...offer, sticks: [...still, ...fresh] });
       }
       return;
     }
-    // Only a stick that's new asks what the home could add, which takes the
-    // manager a moment.
-    const app = await appForSticks();
-    if (!app) {
+    // A set of sticks with no overlap is a new offer. End the old one
+    // before asking what the home could add.
+    if (offer) set(null);
+    if (fresh.length === 0) return;
+    const app = await options.available.findWithPermission(zigbeeService);
+    if (isStopping || app === undefined) return;
+    if (!app || options.added.ids().has(app.id)) {
       // The home has an app for them, or none to offer: nothing asks.
-      markSeen(fresh.map((stick) => stick.path));
+      markSeen(fresh);
       return;
     }
-    const next = [...(still ?? []), ...fresh];
-    log(`apps: ${next.map((stick) => stick.label).join(", ")} plugged in`);
-    set({ id: offer?.id ?? randomUUID(), app: app.id, sticks: next });
+    log(`apps: ${fresh.map((stick) => stick.label).join(", ")} plugged in`);
+    set({ id: randomUUID(), app: app.id, sticks: fresh });
   }
 
   // One look at a time: the manager may take a while to answer.
@@ -153,8 +140,22 @@ export function createHardwareOffers(options: {
     /** The offer every client shows, if any. */
     current: () => offer,
 
-    /** Looks for sticks plugged in or unplugged now, as after an add. */
+    /** Looks for sticks plugged in or unplugged now. */
     look: lookNow,
+
+    matches(appId: string, offerId: string) {
+      return offer?.app === appId && offer.id === offerId;
+    },
+
+    /** Records the answer within the same transaction as the app add. */
+    recordAdd(appId: string) {
+      if (offer?.app === appId) recordSeen(offer.sticks);
+    },
+
+    /** Publishes the end once the add has committed. */
+    finishAdd(appId: string) {
+      if (offer?.app === appId) set(null);
+    },
 
     /**
      * Someone said no, on any client: it ends everywhere, and the sticks it
@@ -163,22 +164,24 @@ export function createHardwareOffers(options: {
      */
     async dismiss(principal: Principal, id: string) {
       options.gate.admit(principal, permissionsRule);
-      await looking;
       if (offer?.id !== id) throw new ActionCallError("conflict");
-      markSeen(offer.sticks.map((stick) => stick.path));
+      markSeen(offer.sticks);
       set(null);
     },
 
     /** Looks at once, then every few seconds, as a step of starting. */
     start() {
       void lookNow();
-      timer = setInterval(() => void lookNow(), options.everyMs ?? lookEveryMs);
+      timer = setInterval(() => void lookNow(), lookEveryMs);
       timer.unref();
     },
 
-    async close() {
+    interrupt() {
+      isStopping = true;
       clearInterval(timer);
-      timer = undefined;
+    },
+
+    async close() {
       await looking;
     },
   };

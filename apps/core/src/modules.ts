@@ -480,7 +480,8 @@ export async function createModules(
     shipped: options.shippedApps ?? (() => []),
     added: addedApps,
     removed: removedApps,
-    staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
+    staged: async (check) =>
+      (await options.manager.stagedApps?.(5_000, check)) ?? {},
     loadPackage: (appId, folder) =>
       loadApartPackage(
         options.packagesDir ?? "/packages",
@@ -499,6 +500,7 @@ export async function createModules(
     added: addedApps,
     available: availableApps,
     manager: options.manager,
+    hasInstalled: () => apps.hasInstalled(),
     onOffer: live.offer,
     now,
     log,
@@ -515,6 +517,7 @@ export async function createModules(
     onDevice: live.device,
     available: availableApps,
     added: addedApps,
+    offers: hardwareOffers,
     activity,
     hasInstalled: () => apps.hasInstalled(),
     install: async (pkg) => {
@@ -653,9 +656,10 @@ export async function createModules(
     ],
   ]);
 
-  // No workflow run starts once the core is stopping.
+  // Stop new workflow runs and hardware checks before waiting on shutdown.
   const stopNewWork = [
     ["workflows", () => workflows.interrupt()],
+    ["look for sticks", () => hardwareOffers.interrupt()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
   // firmware's deadlines are the last that change a device, so the bus closes
@@ -664,7 +668,7 @@ export async function createModules(
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
-    ["stop looking for sticks", () => hardwareOffers.close()],
+    ["finish looking for sticks", () => hardwareOffers.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],

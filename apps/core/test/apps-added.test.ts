@@ -371,6 +371,28 @@ describe("the apps a home could add", () => {
     ]);
   });
 
+  it("knows whether an unstaged package might ask for a permission", async () => {
+    const added: string[] = [];
+    const staged = ["sanctum.weather"];
+    const { apps } = available({
+      shipped: ["sanctum.weather", "sanctum.zigbee"],
+      added,
+      staged,
+    });
+
+    expect(
+      await apps.findWithPermission("services:zigbee2mqtt"),
+    ).toBeUndefined();
+    staged.push("sanctum.zigbee");
+    expect(await apps.findWithPermission("services:zigbee2mqtt")).toMatchObject(
+      {
+        id: "sanctum.zigbee",
+      },
+    );
+    added.push("sanctum.zigbee");
+    expect(await apps.findWithPermission("services:zigbee2mqtt")).toBeNull();
+  });
+
   it("in a development stack, whose image ships none, what's staged", async () => {
     const { apps } = available({
       shipped: [],

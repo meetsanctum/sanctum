@@ -331,10 +331,6 @@ export type AppShortfall =
   | { kind: "space"; needs: number; free: number };
 
 /**
- * An app Sanctum brings that the home hasn't added (GET /api/apps/available),
- * with what it asks for and what keeps it from being added now, if anything.
- */
-/**
  * A Zigbee stick someone plugged in while the home has no app for it: the
  * app it could add, offered once per plugging in on every client until
  * someone adds it or says no, or the stick is unplugged.
@@ -348,6 +344,10 @@ export type HardwareOffer = {
   sticks: { path: string; label: string }[];
 };
 
+/**
+ * An app Sanctum brings that the home hasn't added (GET /api/apps/available),
+ * with what it asks for and what keeps it from being added now, if anything.
+ */
 export type AvailableApp = {
   id: string;
   name: string;

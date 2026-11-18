@@ -8,7 +8,7 @@ import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
-import { coreJson } from "./core-fetch";
+import { CoreError, coreJson } from "./core-fetch";
 
 // A Zigbee stick plugged in while the home has no app for it brings up that
 // app's add sheet, opened with what happened, on every client that is open
@@ -22,39 +22,42 @@ import { coreJson } from "./core-fetch";
  * connection comes back: only while the core answers, so a home that
  * doesn't is never asked.
  */
-export function useHardwareOffer(live: LiveFeed, isOnline: boolean) {
+function useHardwareOffer(live: LiveFeed, isOnline: boolean) {
   const [offer, setOffer] = useState<HardwareOffer | null>(null);
   useEffect(() => {
-    if (!isOnline) return;
-    let isCurrent = true;
-    const read = () =>
-      coreJson<{ offer: HardwareOffer | null }>("/api/hardware/offer").then(
-        (answer) => {
-          if (isCurrent) setOffer(answer.offer ?? null);
-        },
-        // A core from before offers has none to give.
-        () => undefined,
-      );
-    void read();
+    if (!isOnline) {
+      setOffer(null);
+      return;
+    }
+    let readId = 0;
+    const read = async () => {
+      const id = ++readId;
+      try {
+        const answer = await coreJson<{ offer: HardwareOffer | null }>(
+          "/api/hardware/offer",
+        );
+        if (id === readId) setOffer(answer.offer);
+      } catch {
+        // The next refresh tries again.
+      }
+    };
     const stop = live.subscribe({
       message(message: LiveMessage) {
-        if (message.type === "offer") setOffer(message.offer);
+        if (message.type !== "offer") return;
+        // A read that began before this update may carry an older offer.
+        readId += 1;
+        setOffer(message.offer);
       },
       refresh: () => void read(),
     });
+    void read();
     return () => {
-      isCurrent = false;
+      readId += 1;
       stop();
     };
   }, [live, isOnline]);
-  return offer;
+  return isOnline ? offer : null;
 }
-
-/** What opens the sheet: "A Zigbee stick was plugged in". */
-export const pluggedInWords = (offer: HardwareOffer) =>
-  offer.sticks.length > 1
-    ? "Zigbee sticks were plugged in"
-    : "A Zigbee stick was plugged in";
 
 // Whether a sheet or dialog is open, which an offer waits behind.
 const isAnotherOpen = () =>
@@ -67,57 +70,70 @@ export function StickOffer(props: {
   onAdded: (app: AppInfo) => void;
 }) {
   const offer = useHardwareOffer(props.live, props.isOnline);
+  if (!offer) return null;
+  return <OfferedApp key={offer.id} offer={offer} onAdded={props.onAdded} />;
+}
+
+function OfferedApp(props: {
+  offer: HardwareOffer;
+  onAdded: (app: AppInfo) => void;
+}) {
+  const { offer } = props;
+  const appId = offer.app;
   const [app, setApp] = useState<AvailableApp>();
-  // The offer this client has shown, so it opens once.
-  const [shownId, setShownId] = useState<string>();
 
   // Waits for nothing else to be open, then reads the app it offers.
   useEffect(() => {
-    if (!offer || offer.id === shownId) return;
     let isCurrent = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const open = async () => {
-      if (isAnotherOpen()) return;
-      clearInterval(timer);
-      const list = await coreJson<AvailableApp[]>("/api/apps/available").catch(
-        () => [],
-      );
-      const found = Array.isArray(list)
-        ? list.find((each) => each.id === offer.app)
-        : undefined;
-      if (!isCurrent || !found) return;
-      setShownId(offer.id);
-      setApp(found);
+      if (!isAnotherOpen()) {
+        try {
+          const list = await coreJson<AvailableApp[]>("/api/apps/available");
+          if (!isCurrent) return;
+          const found = list.find((each) => each.id === appId);
+          if (found && !isAnotherOpen()) {
+            setApp(found);
+            return;
+          }
+        } catch {
+          // Keep waiting while the offer is current.
+        }
+      }
+      if (isCurrent) timer = setTimeout(() => void open(), 1_000);
     };
-    const timer = setInterval(() => void open(), 1_000);
     void open();
     return () => {
       isCurrent = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, [offer, shownId]);
-
-  // Answered on another client, or unplugged.
-  useEffect(() => {
-    if (!offer) setApp(undefined);
-  }, [offer]);
+  }, [appId]);
 
   return (
     <AddAppSheet
-      app={offer ? app : undefined}
-      lead={offer ? pluggedInWords(offer) : undefined}
+      app={app}
+      offerId={offer.id}
+      lead={
+        offer.sticks.length > 1
+          ? "Zigbee sticks were plugged in"
+          : "A Zigbee stick was plugged in"
+      }
       onAdded={(added) => {
         setApp(undefined);
         props.onAdded(added);
       }}
-      onClose={() => {
-        setApp(undefined);
-        if (offer) {
-          // Ended meanwhile, it's no to nothing.
-          coreJson("/api/hardware/offer/dismiss", {
+      onClose={async () => {
+        try {
+          await coreJson("/api/hardware/offer/dismiss", {
             method: "POST",
             json: { id: offer.id },
-          }).catch(() => undefined);
+          });
+        } catch (error) {
+          if (!(error instanceof CoreError) || error.code !== "conflict") {
+            throw error;
+          }
         }
+        setApp(undefined);
       }}
     />
   );

@@ -279,6 +279,16 @@ describe("what's staged for this core", () => {
     expect(await client.stagedApps(5)).toEqual({});
   });
 
+  it("reports a failed lookup when the caller needs a definite answer", async () => {
+    const { client } = await answering([
+      { status: 503, body: { error: "Wait" } },
+    ]);
+
+    await expect(
+      client.stagedApps(5, { requireAnswer: true }),
+    ).rejects.toThrow();
+  });
+
   it("does not ask again after its startup budget expires during a retry pause", async () => {
     const { client } = await answering(
       [{ status: 503 }, { status: 200, body: { apps: weather } }],

@@ -31,7 +31,9 @@ export function createAvailableApps(options: {
   // Those the household removed, whose data is kept a while.
   removed?: Pick<RemovedApps, "get">;
   // What the manager staged, by app, and a staged version's package.
-  staged: () => Promise<Record<string, { folder: string }>>;
+  staged: (options?: {
+    requireAnswer?: boolean;
+  }) => Promise<Record<string, { folder: string }>>;
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
   pagesNeedIn: (
     appId: string,
@@ -58,9 +60,12 @@ export function createAvailableApps(options: {
       : {};
   }
 
-  async function read(only?: string) {
+  async function read(
+    only?: string,
+    stagedOptions?: { requireAnswer: boolean },
+  ) {
     const [staged, host] = await Promise.all([
-      options.staged(),
+      options.staged(stagedOptions),
       options.host().catch(() => null),
     ]);
     // A development stack's image ships no apps: it brings what the
@@ -71,9 +76,13 @@ export function createAvailableApps(options: {
       (id) => !added.has(id) && (only === undefined || id === only),
     );
     const apps: { app: AvailableApp; pkg: ApartPackage }[] = [];
+    let isComplete = true;
     for (const appId of ids) {
       const folder = staged[appId]?.folder;
-      if (!folder) continue;
+      if (!folder) {
+        isComplete = false;
+        continue;
+      }
       try {
         const pkg = await options.loadPackage(appId, folder);
         const { manifest } = pkg.apart;
@@ -95,22 +104,36 @@ export function createAvailableApps(options: {
           },
         });
       } catch (error) {
+        isComplete = false;
         log(
           `apps: ${appId} can't be offered (${error instanceof Error ? error.message : String(error)})`,
         );
       }
     }
-    return apps;
+    return { apps, isComplete };
   }
 
   return {
     async list(): Promise<AvailableApp[]> {
-      return (await read())
+      return (await read()).apps
         .map(({ app }) => app)
         .sort((a, b) => a.name.localeCompare(b.name));
     },
     async find(appId: string) {
-      return (await read(appId))[0];
+      return (await read(appId)).apps[0];
+    },
+    /**
+     * Finds an app that asks for this permission. Null means none. Undefined
+     * means an unstaged or unreadable package could still contain one.
+     */
+    async findWithPermission(permissionId: string) {
+      const { apps, isComplete } = await read(undefined, {
+        requireAnswer: true,
+      });
+      const matches = apps
+        .filter(({ app }) => app.requests.some(({ id }) => id === permissionId))
+        .sort((left, right) => left.app.name.localeCompare(right.app.name));
+      return matches[0]?.app ?? (isComplete ? null : undefined);
     },
   };
 }

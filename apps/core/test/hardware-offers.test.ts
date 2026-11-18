@@ -39,13 +39,21 @@ async function home(options: { dataDir?: string } = {}) {
     available: [zigbeeApp],
     added: new Set<string>(),
     fails: false,
+    hasInstalled: true,
+    isCatalogComplete: true,
     heard: [] as (HardwareOffer | null)[],
   };
   const offers = createHardwareOffers({
     db: open.db,
     gate: { admit: () => undefined } as unknown as Gate,
     added: { ids: () => state.added },
-    available: { list: async () => state.available },
+    available: {
+      findWithPermission: async (permissionId) =>
+        state.available.find((app) =>
+          app.requests.some(({ id }) => id === permissionId),
+        ) ?? (state.isCatalogComplete ? null : undefined),
+    },
+    hasInstalled: () => state.hasInstalled,
     manager: {
       zigbeeSticks: async () => {
         if (state.fails) throw new Error("The manager can't see /dev");
@@ -118,19 +126,6 @@ describe("a Zigbee stick plugged in", () => {
     expect(state.heard).toEqual([expect.anything(), null]);
   });
 
-  it("ends once someone adds the app, on any client", async () => {
-    const { offers, state } = await home();
-    state.sticks = [zbt2];
-    await offers.look();
-
-    state.added.add("sanctum.example");
-    state.available = [];
-    await offers.look();
-    await offers.look();
-
-    expect(offers.current()).toBeNull();
-  });
-
   it("asks nothing when the home has an app for it, or none to offer", async () => {
     const { offers, state } = await home();
     state.available = [];
@@ -159,6 +154,63 @@ describe("a Zigbee stick plugged in", () => {
       app: "sanctum.example",
       sticks: [conbee],
     });
+  });
+
+  it("replaces the offer if all its sticks are gone and others are plugged in", async () => {
+    const { offers, state } = await home();
+    state.sticks = [zbt2];
+    await offers.look();
+    const { id } = offers.current()!;
+
+    state.sticks = [conbee];
+    await offers.look();
+
+    expect(offers.current()?.id).not.toBe(id);
+    expect(offers.current()?.sticks).toEqual([conbee]);
+    await expect(offers.dismiss(someone, id)).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("waits for the home's app list before looking for sticks", async () => {
+    const { offers, state } = await home();
+    state.hasInstalled = false;
+    state.available = [];
+    state.sticks = [zbt2];
+    await offers.look();
+
+    state.hasInstalled = true;
+    state.available = [zigbeeApp];
+    await offers.look();
+
+    expect(offers.current()?.sticks).toEqual([zbt2]);
+  });
+
+  it("tries again if the app catalog is still being staged", async () => {
+    const { offers, state } = await home();
+    state.available = [];
+    state.isCatalogComplete = false;
+    state.sticks = [zbt2];
+    await offers.look();
+    expect(offers.current()).toBeNull();
+
+    state.available = [zigbeeApp];
+    state.isCatalogComplete = true;
+    await offers.look();
+
+    expect(offers.current()?.sticks).toEqual([zbt2]);
+  });
+
+  it("drops an in-progress scan once shutdown starts", async () => {
+    const { offers, state } = await home();
+    state.sticks = [zbt2];
+    const scan = offers.look();
+    offers.interrupt();
+    await offers.close();
+    await scan;
+
+    expect(offers.current()).toBeNull();
+    expect(state.heard).toEqual([]);
   });
 
   it("changes nothing while the manager can't say", async () => {

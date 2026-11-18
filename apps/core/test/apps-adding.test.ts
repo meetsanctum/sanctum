@@ -1,5 +1,6 @@
 import {
   defineApp,
+  permissionInfo,
   toStaticManifest,
   type AppInfo,
   type AvailableApp,
@@ -17,8 +18,9 @@ import { createRemovedApps } from "../src/app-host/removed.js";
 import { installedInfoOf } from "../src/app-host/app-info.js";
 import { ActionCallError } from "../src/app-host/errors.js";
 import type { Gate } from "../src/app-host/gate.js";
+import { createHardwareOffers } from "../src/app-host/hardware-offers.js";
 import type { ApartPackage } from "../src/app-host/loader.js";
-import { appsAdded } from "../src/app-host/schema.js";
+import { appsAdded, sticksSeen } from "../src/app-host/schema.js";
 import { newSupervision } from "../src/app-host/supervisor.js";
 import { openCoreDatabase } from "../src/database.js";
 import { base } from "./app-apart-support.js";
@@ -64,12 +66,33 @@ const someone = {
   scope: "full",
 } as unknown as Principal;
 
+const zigbee = {
+  ...esphome,
+  requests: [
+    permissionInfo({
+      id: "services:zigbee2mqtt",
+      reason: "Connects devices",
+      needed: true,
+    }),
+  ],
+};
+const stick = { path: "/dev/serial/by-id/zigbee-stick", label: "Zigbee stick" };
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((answer) => {
+    resolve = answer;
+  });
+  return { promise, resolve };
+}
+
 async function addingWith(
   options: {
     available?: AvailableApp[];
     installs?: (pkg: ApartPackage) => Promise<void>;
     hasInstalled?: boolean;
     refuses?: boolean;
+    beforeFind?: () => Promise<void>;
     finishRemoval?: (
       removed: ReturnType<typeof createRemovedApps>,
     ) => (appId: string) => Promise<void>;
@@ -83,22 +106,37 @@ async function addingWith(
   const logs: string[] = [];
   const installedNow = new Set<string>();
   const removedApps = createRemovedApps(db, { now: () => at });
+  const gate = {
+    admit: () => {
+      if (options.refuses) throw new ActionCallError("forbidden");
+    },
+  } as unknown as Gate;
+  const available = options.available ?? [esphome];
+  const offers = createHardwareOffers({
+    db,
+    gate,
+    added,
+    available: {
+      findWithPermission: async (permissionId) =>
+        available.find((app) =>
+          app.requests.some(({ id }) => id === permissionId),
+        ) ?? null,
+    },
+    manager: { zigbeeSticks: async () => [stick] },
+    hasInstalled: () => options.hasInstalled ?? true,
+    log: (line) => logs.push(line),
+  });
   const adding = createAppAdding({
     turns: createListTurns(),
     removed: removedApps,
     finishRemoval: options.finishRemoval?.(removedApps),
     workflows: () => ({ added: () => [] }),
     devices: { ofDriver: () => [] },
-    gate: {
-      admit: () => {
-        if (options.refuses) throw new ActionCallError("forbidden");
-      },
-    } as unknown as Gate,
+    gate,
     available: {
       find: async (appId) => {
-        const app = (options.available ?? [esphome]).find(
-          (each) => each.id === appId,
-        );
+        await options.beforeFind?.();
+        const app = available.find((each) => each.id === appId);
         if (!app) return undefined;
         return {
           app,
@@ -122,6 +160,7 @@ async function addingWith(
       },
     },
     added,
+    offers,
     activity: {
       for: (source) => (entry) => {
         entries.push({ source, ...entry });
@@ -142,7 +181,7 @@ async function addingWith(
         : undefined,
     log: (line) => logs.push(line),
   });
-  return { db, added, adding, entries, installing, logs };
+  return { db, added, adding, entries, installing, logs, offers };
 }
 
 describe("adding an app", () => {
@@ -317,6 +356,56 @@ describe("adding an app", () => {
   });
 });
 
+describe("adding an app with a hardware offer", () => {
+  it("refuses the add if another client dismisses the offer during the checks", async () => {
+    const refetch = deferred();
+    const checked = deferred();
+    const { added, adding, offers } = await addingWith({
+      available: [zigbee],
+      beforeFind: () => {
+        checked.resolve();
+        return refetch.promise;
+      },
+    });
+    await offers.look();
+    const { id } = offers.current()!;
+    const result = adding.add(someone, zigbee.id, zigbee.version, id);
+    await checked.promise;
+    await offers.dismiss(someone, id);
+    refetch.resolve();
+
+    await expect(result).rejects.toMatchObject({ code: "conflict" });
+    expect(added.ids().has(zigbee.id)).toBe(false);
+  });
+
+  it.each(["the offer", "Settings"])(
+    "ends and records the offer before an app added from %s starts",
+    async (source) => {
+      const started = deferred();
+      const install = deferred();
+      const { db, added, adding, offers } = await addingWith({
+        available: [zigbee],
+        installs: async () => {
+          started.resolve();
+          await install.promise;
+          throw new Error("couldn't start");
+        },
+      });
+      await offers.look();
+      const offerId = source === "the offer" ? offers.current()?.id : undefined;
+      expect(offers.current()).not.toBeNull();
+      const result = adding.add(someone, zigbee.id, zigbee.version, offerId);
+      await started.promise;
+
+      expect(added.ids().has(zigbee.id)).toBe(true);
+      expect(offers.current()).toBeNull();
+      expect(db.select().from(sticksSeen).get()?.path).toBe(stick.path);
+      install.resolve();
+      await expect(result).rejects.toMatchObject({ code: "app_failed" });
+    },
+  );
+});
+
 describe("an app someone just added", () => {
   const entry = (isAdding: boolean, phase: "starting" | "running") => ({
     manifest: toStaticManifest(
@@ -361,5 +450,13 @@ describe("the add route", () => {
     const response = await post(core, "/api/apps/add", body, signedIn);
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "not_found" });
+    const stale = await post(
+      core,
+      "/api/apps/add",
+      { ...body, offerId: "ended" },
+      signedIn,
+    );
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ error: "conflict" });
   });
 });
