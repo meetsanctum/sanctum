@@ -4,10 +4,9 @@ import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
 import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
-// Natural light's button for each room: White while every light in the room
-// that is on follows the curve, a press then switching the room off, and
-// otherwise a press bringing the room to natural light, with the lights
-// that can't follow it off.
+// Natural light's tile is White while every light that's on follows the
+// curve. A press brings the room to natural light and switches off the
+// other lights.
 
 const stripFeatures = {
   brightness: true,
@@ -125,7 +124,7 @@ describe("a room's button", () => {
   });
 
   it.each(["off", "no location"])(
-    "refuses a stale White button press with %s",
+    "refuses a stale press with %s",
     async (reason) => {
       const { core, call, check, button } = home();
       await check();
@@ -135,7 +134,7 @@ describe("a room's button", () => {
       const sent = core.state.sent.length;
 
       await expect(
-        call("naturalLight.toggleRoom", { placeId: "office" }),
+        call("naturalLight.bringRoom", { placeId: "office" }),
       ).rejects.toThrow(
         reason === "off"
           ? "Natural light is switched off"
@@ -191,36 +190,14 @@ describe("a room's button", () => {
     }
   });
 
-  it("switches every light in the room off when pressed while White", async () => {
-    const { core, call, check, button } = home();
-    core.set("desk", { on: true }, byHand);
-    await check();
-    expect(button("office")?.active).toBe(true);
-    const sent = core.state.sent.length;
-
-    expect(
-      await call("naturalLight.toggleRoom", { placeId: "office" }),
-    ).toEqual({ failed: [] });
-
-    expect(
-      core.state.sent
-        .slice(sent)
-        .map(({ device, command }) => [device, command]),
-    ).toEqual([
-      ["ceiling", { on: false }],
-      ["desk", { on: false }],
-    ]);
-    expect(button("office")?.active).toBe(false);
-  });
-
-  it("brings the room to natural light when pressed while grey, the lights that can't follow off", async () => {
+  it("brings the room to natural light when pressed, the lights that can't follow off", async () => {
     const { core, call, check, now, button } = home();
     await check();
     core.set("ceiling", { colorTemperature: 300, brightness: 40 }, moods);
     core.set("strip", { on: true }, byHand);
     const sent = core.state.sent.length;
 
-    await call("naturalLight.toggleRoom", { placeId: "office" });
+    await call("naturalLight.bringRoom", { placeId: "office" });
 
     expect(
       core.state.sent
@@ -237,9 +214,10 @@ describe("a room's button", () => {
     expect(button("office")?.active).toBe(true);
   });
 
-  it("brings a room to natural light from an automation, even while White", async () => {
-    const { core, call, check, now } = home();
+  it("never switches the room off, pressed again while it is on natural light", async () => {
+    const { core, call, check, now, button } = home();
     await check();
+    expect(button("office")?.active).toBe(true);
     const sent = core.state.sent.length;
 
     await call("naturalLight.bringRoom", { placeId: "office" });
@@ -252,7 +230,38 @@ describe("a room's button", () => {
       ["ceiling", { on: true, ...curveAt(now()) }],
       ["desk", { on: true, ...curveAt(now()) }],
     ]);
+    expect(button("office")?.active).toBe(true);
   });
+
+  it.each(["unfollowed", "offline"])(
+    "leaves other lights on when all the lights that could follow are %s",
+    async (reason) => {
+      const { core, call, check, button } = home();
+      await check();
+      expect(button("office")).toBeDefined();
+      core.set("strip", { on: true }, byHand);
+      if (reason === "unfollowed") {
+        await call("naturalLight.followRoom", {
+          placeId: "office",
+          follow: false,
+        });
+      } else {
+        for (const device of core.state.devices) {
+          if (device.id === "ceiling" || device.id === "desk") {
+            device.availability = "offline";
+          }
+        }
+      }
+      const sent = core.state.sent.length;
+
+      await expect(
+        call("naturalLight.bringRoom", { placeId: "office" }),
+      ).rejects.toThrow("No reachable light follows in the room");
+
+      expect(core.state.sent).toHaveLength(sent);
+      expect(core.light("strip").state?.on).toBe(true);
+    },
+  );
 
   it("sends a press to every light in the room at once", async () => {
     const { core, call, check } = home();
@@ -270,7 +279,7 @@ describe("a room's button", () => {
       await held;
     };
 
-    const press = call("naturalLight.toggleRoom", { placeId: "office" });
+    const press = call("naturalLight.bringRoom", { placeId: "office" });
     try {
       await vi.waitFor(() =>
         expect(waiting).toEqual(["ceiling", "desk", "strip"]),
@@ -508,9 +517,9 @@ describe("a room's button", () => {
       }
     };
 
-    expect(
-      await call("naturalLight.toggleRoom", { placeId: "office" }),
-    ).toEqual({ failed: [{ device: "ceiling", capability: "light" }] });
+    expect(await call("naturalLight.bringRoom", { placeId: "office" })).toEqual(
+      { failed: [{ device: "ceiling", capability: "light" }] },
+    );
     expect(core.light("desk").state).toMatchObject({ on: true });
   });
 

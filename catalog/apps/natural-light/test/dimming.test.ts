@@ -226,7 +226,7 @@ describe("dimming a light that follows", () => {
     });
   });
 
-  it("turns its room's button grey, and a press brings the curve's brightness back", async () => {
+  it("keeps its room's tile from being lit, and a press brings the curve's brightness back", async () => {
     const { core, call, check, now, sentFrom, target } = await dimmed();
     core.state.devices[0]!.roomId = "office";
     await check();
@@ -235,7 +235,7 @@ describe("dimming a light that follows", () => {
     expect(button().active).toBe(false);
     const sent = core.state.sent.length;
 
-    await call("naturalLight.toggleRoom", { placeId: "office" });
+    await call("naturalLight.bringRoom", { placeId: "office" });
 
     expect(sentFrom(sent)).toEqual([{ on: true, ...curveAt(now()) }]);
     expect(target()).toMatchObject({ status: "following" });

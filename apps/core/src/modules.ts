@@ -367,15 +367,9 @@ export async function createModules(
   const addedApps = createAddedApps(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
   // A version staged in its folder, as the core reads any app that runs apart.
-  const loadPackage =
-    options.appUpdates?.loadPackage ??
-    ((appId: string, folder: string) =>
-      loadApartPackage(
-        options.packagesDir ?? "/packages",
-        appId,
-        folder,
-        "official",
-      ));
+  const loadStagedPackage = (appId: string, folder: string) =>
+    loadApartPackage(options.packagesDir ?? "/packages", appId, folder);
+  const loadPackage = options.appUpdates?.loadPackage ?? loadStagedPackage;
   const appUpdates = createAppUpdates({
     db,
     dataDir: options.dataDir,
@@ -477,13 +471,7 @@ export async function createModules(
     added: addedApps,
     removed: removedApps,
     staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
-    loadPackage: (appId, folder) =>
-      loadApartPackage(
-        options.packagesDir ?? "/packages",
-        appId,
-        folder,
-        "official",
-      ),
+    loadPackage: loadStagedPackage,
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
     host: () => options.manager.hostStatus(),
     log,

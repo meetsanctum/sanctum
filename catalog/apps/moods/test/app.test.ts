@@ -54,7 +54,7 @@ describe("Moods", () => {
     ]);
   });
 
-  it("adds its moods to every room's page, run with a tap, edited on its page for the room", () => {
+  it("adds its moods to every room's row as named tiles, run with a tap", () => {
     expect(moodsApp.provides?.roomSections).toEqual([
       {
         id: "moods.room",
@@ -66,8 +66,6 @@ describe("Moods", () => {
           id: "moods.runMood",
           tier: "write",
         }),
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
         // What its settings page previews: a room's moods, one running.
         preview: [
           { icon: "sparkles", name: "Aurora", active: true },

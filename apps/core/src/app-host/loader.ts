@@ -15,6 +15,12 @@ import { join } from "node:path";
 export const origins = ["system", "official", "third-party"] as const;
 export type Origin = (typeof origins)[number];
 
+// The apps of the core's image that are part of Sanctum itself: they can't be
+// turned off or removed. Moods is one, since what a room's lights do is in it:
+// its moods in the room's row, its schedule and what turning the room on
+// brings.
+const systemApps: readonly string[] = ["sanctum.moods"];
+
 // An app, in its own container, of which the core knows its running version's
 // manifest as its folder of packages holds it: never the one bundled in the
 // core's image, which can be newer until its update starts.
@@ -42,7 +48,6 @@ export async function loadApartPackage(
   packagesDir: string,
   appId: string,
   folder: string,
-  origin: Origin,
 ): Promise<ApartPackage> {
   const text = await readFile(
     join(packagesDir, appId, folder, manifestFileName),
@@ -51,7 +56,10 @@ export async function loadApartPackage(
   if (manifest.id !== appId) {
     throw new Error(`This package holds ${manifest.id}, not ${appId}`);
   }
-  return { apart: { manifest, digest: manifestDigest(text), folder }, origin };
+  return {
+    apart: { manifest, digest: manifestDigest(text), folder },
+    origin: systemApps.includes(appId) ? "system" : "official",
+  };
 }
 
 // Every app the core is told to run, as `id@folder`. One that doesn't load is
@@ -65,9 +73,7 @@ export async function loadApartPackages(
   for (const each of apart) {
     const [appId = "", folder = ""] = each.split("@");
     try {
-      packages.push(
-        await loadApartPackage(packagesDir, appId, folder, "official"),
-      );
+      packages.push(await loadApartPackage(packagesDir, appId, folder));
     } catch (error) {
       log(
         `apps: ${each} was not loaded (${error instanceof Error ? error.message : String(error)})`,

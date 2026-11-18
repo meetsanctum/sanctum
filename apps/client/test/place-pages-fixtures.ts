@@ -86,8 +86,6 @@ const moodsSection: RoomSectionInfo = {
   kind: "tiles",
   order: 200,
   press: { action: "moods.runMood" },
-  open: { page: "room", label: "Edit" },
-  whenEmpty: { roomHas: "light" },
 };
 const app = (id: string, name: string, section: RoomSectionInfo): AppInfo => ({
   id,
@@ -107,8 +105,8 @@ const app = (id: string, name: string, section: RoomSectionInfo): AppInfo => ({
   },
 });
 export const moods = app("sanctum.moods", "Moods", moodsSection);
-// More apps' sections, which come after Moods by their weight, ties by
-// app id, and before the devices.
+// More apps' sections, whose tiles come after Moods' in the row by their
+// weight, ties by app id.
 export const spots = app("test.spots", "Spots", {
   ...moodsSection,
   id: "spots.room",
@@ -116,8 +114,6 @@ export const spots = app("test.spots", "Spots", {
   entityType: "spots.spot",
   order: 400,
   press: { action: "spots.use" },
-  open: null,
-  whenEmpty: null,
 });
 export const alarms = app("test.alarms", "Alarms", {
   ...spots.provides.roomSections[0]!,

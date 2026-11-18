@@ -1,37 +1,34 @@
 import {
   roomSectionTile,
   type AppInfo,
-  type CapabilityKind,
   type EntityInfo,
   type RoomSectionInfo,
   type RoomSectionKind,
   type RoomSectionTile,
 } from "@meetsanctum/app-sdk";
 import {
-  Button,
-  SectionButton,
-  SectionHeading,
+  icons,
   SectionTile,
   tileIconOf,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
-import { isShown, stateShort } from "./app-state";
+import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
+import { lightsWords, type LightsSwitch } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
-// section's type in the room, as tiles under a heading that looks like its
-// own sections', or as small buttons after the room's button for all its
-// lights, with no heading. No app code runs to draw one. A tap calls the
-// section's action through the gate; the lights and switches it could not
-// reach fail on their tiles, and a tap that fails as a whole fails on the
-// section's tile or button. While the app isn't running its tiles and
-// buttons dim, and its tiles say so. Edit beside the heading opens the
-// app's page for the room, on every device: what a room has is the
-// household's, a shared tablet's too.
+// section's type in the room, in the room's row (RoomRow) after its switch,
+// buttons as squares with their icon alone and tiles with their names. No
+// app code runs to draw one. A tap calls the section's action through the
+// gate; the lights and switches it could not reach fail on their tiles, and
+// a tap that fails as a whole fails on the section's own tile. While the
+// app isn't running its tiles dim and say so. What a room has is the
+// household's, a shared tablet's too, and an app's own page is where its
+// tiles are made and changed.
 
 /** One of an app's section tiles, as its entity says. */
 export type SectionEntity = {
@@ -50,15 +47,14 @@ function sectionEntity(entity: EntityInfo): SectionEntity | null {
 }
 
 /** An installed app's room section. */
-export type AppSection = { app: AppInfo; section: RoomSectionInfo };
+type AppSection = { app: AppInfo; section: RoomSectionInfo };
 
 /**
  * A room's sections of one kind in their order: by the weight each
- * declares, Sanctum's own first (Moods at 200), then other apps' from 300,
- * ties by app id. The device sections follow the tiles; the buttons follow
- * the room's lights button.
+ * declares, Sanctum's own first (Moods and Natural light at 200), then other
+ * apps' from 300, ties by app id.
  */
-export function sectionsInOrder(
+function sectionsInOrder(
   apps: readonly AppInfo[],
   kind: RoomSectionKind,
 ): AppSection[] {
@@ -156,83 +152,22 @@ function failedDevices(output: unknown): string[] {
   );
 }
 
-/**
- * One app's section in a room, or nothing for a room it has nothing for,
- * unless its empty rule keeps its heading and link. On Home it is only its
- * tiles, under the room's name (home-dashboard.tsx).
- */
-export function RoomSection(props: {
-  app: AppInfo;
-  section: RoomSectionInfo;
-  roomId: string;
-  entities: SectionEntities;
-  /** Whether the room has a device of each kind, for the empty rule. */
-  roomHas: (kind: CapabilityKind) => boolean;
-  /** Opens the app's page for the room, if the shell has it. */
-  onOpen?: () => void;
-  /** Only its tiles, named for the section, and nothing while it has none. */
-  bare?: boolean;
-}) {
-  const { app, section, roomId, entities } = props;
-  const tiles = entities.tilesIn(app.id, section, roomId);
-  // While the app isn't running its tiles keep their last state, dimmed,
-  // and say why, since the core would refuse a tap.
-  const notRunning = stateShort(app);
-  const link = section.open && props.onOpen ? section.open : null;
-  const showsEmpty =
-    !props.bare &&
-    link !== null &&
-    section.whenEmpty !== null &&
-    props.roomHas(section.whenEmpty.roomHas);
-  if (tiles.length === 0 && !showsEmpty) return null;
-  const headingId = `section-${app.id}-${roomId}`;
-  const grid = (
-    <div
-      role={props.bare ? "group" : undefined}
-      aria-label={props.bare ? section.title : undefined}
-      className="tile-grid auto-rows-(--cell)"
-    >
-      {tiles.map((entity) => (
-        <SectionTile
-          key={entity.key}
-          icon={tileIconOf[entity.tile.icon]}
-          name={entity.tile.name}
-          active={entity.tile.active}
-          status={notRunning ?? undefined}
-          disabled={notRunning !== null}
-          failures={entities.failuresOf(entity)}
-          onClick={() => void entities.press(app.id, section, entity)}
-        />
-      ))}
-    </div>
-  );
-  if (props.bare) return grid;
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      {/* The link keeps to the heading's line, so the heading sits as the
-          device sections' do. */}
-      <div className="flex items-center gap-3">
-        <SectionHeading id={headingId}>{section.title}</SectionHeading>
-        {link && (
-          <Button variant="link" size="label" onClick={props.onOpen}>
-            {link.label}
-          </Button>
-        )}
-      </div>
-      {tiles.length > 0 && grid}
-    </section>
-  );
-}
+/** One of a room's buttons or tiles, from an app's room section. */
+type RowEntry = AppSection & { entity: SectionEntity };
 
-/** One of a room's buttons, from an app's section of buttons. */
-export type RoomButton = AppSection & { entity: SectionEntity };
+/** A room's row: its switch, then apps' buttons, then apps' tiles. */
+type RoomRowParts = {
+  lights?: LightsSwitch;
+  buttons: RowEntry[];
+  tiles: RowEntry[];
+};
 
-/** A room's buttons from these sections of buttons, in their order. */
-export function buttonsIn(
+/** What these sections show in a room, in their order. */
+function entriesIn(
   sections: readonly AppSection[],
   entities: SectionEntities,
   roomId: string,
-): RoomButton[] {
+): RowEntry[] {
   return sections.flatMap(({ app, section }) =>
     entities
       .tilesIn(app.id, section, roomId)
@@ -240,32 +175,104 @@ export function buttonsIn(
   );
 }
 
+/** A room's row as its lights and apps' sections stand, maybe empty. */
+export function roomRowOf(
+  apps: readonly AppInfo[],
+  entities: SectionEntities,
+  roomId: string,
+  lights: LightsSwitch | undefined,
+): RoomRowParts {
+  return {
+    lights,
+    buttons: entriesIn(sectionsInOrder(apps, "buttons"), entities, roomId),
+    tiles: entriesIn(sectionsInOrder(apps, "tiles"), entities, roomId),
+  };
+}
+
+export const isRowEmpty = (row: RoomRowParts) =>
+  !row.lights && row.buttons.length === 0 && row.tiles.length === 0;
+
 /**
- * A room's buttons, after its button for all its lights in the room's line,
- * each named with the room, since several rooms' are in reach on Home.
- * White and pressed while active; dimmed while its app isn't running, since
- * the core would refuse a tap.
+ * A room's row, under its name on its page and on Home: its switch, a square
+ * tile with the power symbol that says what it does ("Turn off 3 lights in
+ * Kitchen") and is White while any light is on, then apps' buttons, square
+ * with their icon alone, then apps' tiles with their names. The switch says
+ * whether the lights are on, the rest which look they have, so at most one
+ * of those is lit: Natural light before a mood that matches the curve, and
+ * a running app's look before the last one a paused app said. Each is named
+ * with the room, since several rooms' are in reach on Home. While every
+ * light is offline the core can reach none, so the whole row dims; while an
+ * app isn't running its own buttons and tiles dim and say so.
  */
-export function RoomButtons(props: {
-  buttons: readonly RoomButton[];
+export function RoomRow(props: {
+  row: RoomRowParts;
   roomName: string;
   entities: SectionEntities;
 }) {
-  const { entities } = props;
-  return props.buttons.map(({ app, section, entity }) => {
+  const { row, roomName, entities } = props;
+  const dark = row.lights?.disabled === true;
+  const active = [...row.buttons, ...row.tiles].filter(
+    ({ entity }) => entity.tile.active,
+  );
+  const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
+  const tileOf = ({ app, section, entity }: RowEntry, iconOnly: boolean) => {
     const notRunning = stateShort(app);
-    const label = `${entity.tile.name} in ${props.roomName}`;
+    const label = `${entity.tile.name} in ${roomName}`;
     return (
-      <SectionButton
+      <SectionTile
         key={entityKey(entity.app, entity.key)}
+        iconOnly={iconOnly}
         icon={tileIconOf[entity.tile.icon]}
         name={entity.tile.name}
         label={notRunning ? `${label}, ${notRunning.toLowerCase()}` : label}
-        active={entity.tile.active}
-        disabled={notRunning !== null}
+        status={iconOnly ? undefined : (notRunning ?? undefined)}
+        active={lit?.entity === entity}
+        disabled={notRunning !== null || dark}
         failures={entities.failuresOf(entity)}
         onClick={() => void entities.press(app.id, section, entity)}
       />
     );
-  });
+  };
+  const squares = (row.lights ? 1 : 0) + row.buttons.length;
+  return (
+    <div
+      role="group"
+      aria-label={`Lights in ${roomName}`}
+      className="tile-grid auto-rows-(--cell)"
+    >
+      {squares > 0 && (
+        <RowSquares count={squares}>
+          {row.lights && (
+            <SectionTile
+              iconOnly
+              icon={icons.Power}
+              name={lightsWords(row.lights.on)}
+              label={row.lights.label}
+              lit={row.lights.on > 0}
+              disabled={row.lights.disabled}
+              onClick={row.lights.onToggle}
+            />
+          )}
+          {row.buttons.map((each) => tileOf(each, true))}
+        </RowSquares>
+      )}
+      {row.tiles.map((each) => tileOf(each, false))}
+    </div>
+  );
+}
+
+/**
+ * A row's squares, in a tile grid: a cell each, and on a phone, whose grid
+ * is six columns, the first half of the row's first line between them, two
+ * to a line, so they line up with the tiles below.
+ */
+export function RowSquares(props: { count: number; children: ReactNode }) {
+  return (
+    <div
+      className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap)"
+      style={{ gridRow: `span ${Math.ceil(props.count / 2)}` }}
+    >
+      {props.children}
+    </div>
+  );
 }

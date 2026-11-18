@@ -74,8 +74,6 @@ const nook = (state: z.ZodObject = spotState): AppDefinition => ({
         entityType: spotType.id,
         kind: "tiles",
         press: use,
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
       }),
     ],
   },
@@ -106,8 +104,6 @@ describe("room sections", () => {
           kind: "tiles",
           order: 500,
           press: { action: "nook.use" },
-          open: { page: "room", label: "Edit" },
-          whenEmpty: { roomHas: "light" },
         },
       ]);
     }
@@ -163,13 +159,6 @@ describe("room sections", () => {
       },
       "its manifest is incomplete",
     ],
-    [
-      "buttons with a page to open",
-      (manifest: StaticManifest) => {
-        manifest.provides.roomSections[0]!.kind = "buttons";
-      },
-      "shows buttons, which have no heading to open a page from or show empty",
-    ],
   ])(
     "keep an app whose manifest gives its section %s from being installed",
     (_, change, refusal) => {
@@ -180,13 +169,13 @@ describe("room sections", () => {
     },
   );
 
-  it("may show buttons, with no page to open and nothing shown empty", () => {
+  it("may show buttons", () => {
     const manifest = toStaticManifest(defineApp(nook()));
     const [section] = manifest.provides.roomSections;
-    Object.assign(section!, { kind: "buttons", open: null, whenEmpty: null });
+    Object.assign(section!, { kind: "buttons" });
 
     expect(checkManifest(manifest).provides.roomSections).toEqual([
-      expect.objectContaining({ kind: "buttons", open: null, whenEmpty: null }),
+      expect.objectContaining({ kind: "buttons" }),
     ]);
   });
 

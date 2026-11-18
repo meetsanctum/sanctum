@@ -11,10 +11,12 @@ import {
 import { showFailed } from "./show-failed";
 
 /**
- * A tile in a room section or an app's own page, such as a mood's: frosted
+ * A tile in a room's row or an app's own page, such as a mood's: frosted
  * glass, White while active, its icon in a circle and its name, with a
- * status under it if it has one. A failed tap shows on it as on a device's
- * tile.
+ * status under it if it has one. With `iconOnly` it is one cell square with
+ * its icon alone, such as a room's switch or Natural light's sun, and says
+ * its name to a screen reader and on hover. A failed tap shows on it as on
+ * a device's tile.
  */
 export function SectionTile(props: {
   icon: LucideIcon;
@@ -23,6 +25,13 @@ export function SectionTile(props: {
   disabled?: boolean;
   /** Whether it is active now, for a tile that does something when pressed. */
   active?: boolean;
+  /**
+   * White without being a pressed button, for one whose name says what it
+   * does, such as a room's switch, "Turn off".
+   */
+  lit?: boolean;
+  /** One cell, its icon alone. */
+  iconOnly?: boolean;
   label?: string;
   editing?: boolean;
   dragging?: boolean;
@@ -48,6 +57,8 @@ export function SectionTile(props: {
     showFailed(surface.current, wash.current);
   }, [props.failures]);
   const { tileRef } = props;
+  // A tile with its icon alone still has its name, to be read and hovered.
+  const said = props.iconOnly ? (props.label ?? props.name) : props.label;
   return (
     <button
       ref={(element) => {
@@ -55,10 +66,11 @@ export function SectionTile(props: {
         tileRef?.(element);
       }}
       type="button"
-      aria-label={props.label}
+      aria-label={said}
+      title={props.iconOnly ? said : undefined}
       aria-pressed={props.active}
       disabled={props.disabled}
-      data-look={props.active ? "on" : "off"}
+      data-look={props.active || props.lit ? "on" : "off"}
       data-editing={props.editing ? "" : undefined}
       data-dragging={props.dragging ? "" : undefined}
       onClick={props.onClick}
@@ -67,24 +79,30 @@ export function SectionTile(props: {
       onPointerUp={props.onPointerUp}
       onPointerCancel={props.onPointerCancel}
       onKeyDown={props.onKeyDown}
-      className="group relative col-span-3 flex min-w-0 items-center gap-3 overflow-hidden rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]"
+      className={`${props.iconOnly ? "col-span-1 justify-center" : "col-span-3 gap-3 px-3.5 py-3"} group relative flex min-w-0 items-center overflow-hidden rounded-lg bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`}
     >
       <span
         ref={wash}
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-(--danger) opacity-0"
       />
-      <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) group-data-[look=on]:bg-(--tile-on-ink)/8">
-        <Icon aria-hidden="true" className="size-[18px]" />
-      </span>
-      <span className="relative flex min-w-0 flex-1 flex-col gap-px leading-tight">
-        <span className="truncate text-sm font-medium">{props.name}</span>
-        {props.status && (
-          <span className="truncate text-[13px] font-medium text-(--tile-secondary) group-data-[look=on]:text-(--tile-on-ink)/65">
-            {props.status}
+      {props.iconOnly ? (
+        <Icon aria-hidden="true" className="relative size-[22px]" />
+      ) : (
+        <>
+          <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) group-data-[look=on]:bg-(--tile-on-ink)/8">
+            <Icon aria-hidden="true" className="size-[18px]" />
           </span>
-        )}
-      </span>
+          <span className="relative flex min-w-0 flex-1 flex-col gap-px leading-tight">
+            <span className="truncate text-sm font-medium">{props.name}</span>
+            {props.status && (
+              <span className="truncate text-[13px] font-medium text-(--tile-secondary) group-data-[look=on]:text-(--tile-on-ink)/65">
+                {props.status}
+              </span>
+            )}
+          </span>
+        </>
+      )}
       {props.children}
     </button>
   );

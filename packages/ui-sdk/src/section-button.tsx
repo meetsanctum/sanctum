@@ -5,10 +5,9 @@ import { Button } from "./components/ui/button";
 import { showFailed } from "./show-failed";
 
 /**
- * A small button of a room section that shows buttons, beside the room's
- * button for all its lights: frosted glass, White and pressed while
- * active, with its icon and its name. A failed tap shows on it as on a
- * tile.
+ * A small button with a section tile's icon and name, for a page that wants
+ * one in a line rather than a tile: frosted glass, White and pressed while
+ * active. A failed tap shows on it as on a tile.
  */
 export function SectionButton(props: {
   icon: LucideIcon;

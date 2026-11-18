@@ -1,18 +1,20 @@
 import { z } from "zod";
 
-import { capabilityKinds, type CapabilityKind } from "./devices.js";
 import type { ActionDefinition, AppDefinition } from "./index.js";
-import { permissionIds } from "./permissions.js";
 
-// Room sections: what an app adds to every room's page, which the shell
-// draws from the app's entities of one type in that room, either as its own
-// tiles under a neutral heading or as small buttons beside the room's
-// button for all its lights. No app code runs to draw it, so a section
-// looks native whoever brings it.
+// Room sections: what an app adds to a room's row, the tiles under the
+// room's name on its page and on Home that switch its lights and set their
+// look. The shell draws each from the app's entities of one type in that
+// room, after the room's own switch: first every section's buttons, square
+// tiles with only their icon, such as Natural light's sun, then every
+// section's tiles with their names, such as Moods' moods. The row has no
+// headings. No app code runs to draw it, so a section looks native whoever
+// brings it.
 
 /**
- * How a section shows: tiles under its heading, or buttons in the room's
- * line after its lights button, with no heading, on its page and on Home.
+ * How a section shows in the room's row: as buttons, square tiles with
+ * only their icon, which say their name to a screen reader and on hover,
+ * or as tiles with their icon and name.
  */
 export const roomSectionKinds = ["tiles", "buttons"] as const;
 export type RoomSectionKind = (typeof roomSectionKinds)[number];
@@ -90,11 +92,10 @@ export type SampleTile = z.infer<typeof sampleTile>;
 export const sampleTilesMax = 6;
 
 /**
- * Where a room's sections go: after the room's header, by these weights, and
- * before its devices; buttons go after the lights button by the same
+ * Where a room's sections go in its row, buttons and tiles each by these
  * weights. Sanctum keeps those below `appSectionOrderFrom` for its own, such
- * as 200 for Moods; any app takes one from 300 to 799, 500 unless it says,
- * and ties go by app id.
+ * as 200 for Moods and Natural light; any app takes one from 300 to 799, 500
+ * unless it says, and ties go by app id.
  */
 export const sectionOrderFrom = 100;
 export const appSectionOrderFrom = 300;
@@ -104,14 +105,11 @@ export const defaultSectionOrder = 500;
 export interface RoomSectionDefinition {
   /** Namespaced, such as moods.room: part of the app's contract, like a widget's id. */
   readonly id: string;
-  /** Its heading, such as Moods. */
+  /** What it is, such as Moods: the app's settings and a screen reader say it. */
   readonly title: string;
   /** One of the types the app provides, whose state has the tile shape. */
   readonly entityType: string;
-  /**
-   * Tiles under its heading, or buttons in the room's line after its
-   * lights button, which have no heading.
-   */
+  /** Buttons with only their icon, or tiles with their names. */
   readonly kind: RoomSectionKind;
   /**
    * Its weight among the room's sections, from 300 to 799, 500 when it
@@ -124,19 +122,6 @@ export interface RoomSectionDefinition {
    * and switches it could not reach, which the shell shows on their tiles.
    */
   readonly press: ActionDefinition;
-  /**
-   * A page of the app that a link beside the heading opens, with
-   * `{ placeId }`, such as Moods' page for the room. Tiles only, since
-   * buttons have no heading.
-   */
-  readonly open?: { readonly page: string; readonly label: string };
-  /**
-   * When a room has nothing for the section, it still shows its heading
-   * and `open` if the room has a device of this kind, so someone can add
-   * the first. Otherwise a room with nothing has no
-   * section. Tiles only, since it needs `open`.
-   */
-  readonly whenEmpty?: { readonly roomHas: CapabilityKind };
   /**
    * Sample tiles or buttons for its preview on the app's settings page,
    * such as Moods' Aurora and Evening, one of them active.
@@ -156,12 +141,10 @@ export type RoomSectionInfo = {
   title: string;
   entityType: string;
   kind: RoomSectionKind;
-  /** Its weight among the room's sections, or its buttons among theirs. */
+  /** Its weight among the room's sections of its kind. */
   order: number;
   /** The action a tap calls. */
   press: { action: string };
-  open: { page: string; label: string } | null;
-  whenEmpty: { roomHas: CapabilityKind } | null;
 };
 
 export function roomSectionInfo(
@@ -174,8 +157,6 @@ export function roomSectionInfo(
     kind: section.kind,
     order: section.order ?? defaultSectionOrder,
     press: { action: section.press.id },
-    open: section.open ? { ...section.open } : null,
-    whenEmpty: section.whenEmpty ? { ...section.whenEmpty } : null,
   };
 }
 
@@ -241,8 +222,7 @@ export function tileShapeProblemsOf(schema: unknown): string[] {
 /**
  * An app's room sections: at most one, of tiles or buttons, over a type it
  * provides in the tile shape, pressed with one of its own read or write
- * actions, and, for tiles, opening one of its pages and shown empty only
- * for a kind of device it reads.
+ * actions.
  */
 export function assertRoomSections(app: AppDefinition) {
   const sections = app.provides?.roomSections ?? [];
@@ -253,7 +233,6 @@ export function assertRoomSections(app: AppDefinition) {
     throw new Error("An app has one room section at most");
   }
   const types = app.provides?.entities ?? [];
-  const pages = app.pages ?? [];
   for (const section of sections) {
     const id = String(section?.id);
     if (!memberId.test(id)) {
@@ -301,15 +280,7 @@ export function assertRoomSections(app: AppDefinition) {
         `Room section "${id}" is pressed with ${section.press.id}, which must be read or write`,
       );
     }
-    const { open, whenEmpty, preview } = section;
-    if (
-      section.kind === "buttons" &&
-      (open !== undefined || whenEmpty !== undefined)
-    ) {
-      throw new Error(
-        `Room section "${id}" shows buttons, which have no heading to open a page from or show empty`,
-      );
-    }
+    const { preview } = section;
     if (
       preview !== undefined &&
       (!Array.isArray(preview) ||
@@ -320,38 +291,6 @@ export function assertRoomSections(app: AppDefinition) {
       throw new Error(
         `Room section "${id}" previews 1 to ${sampleTilesMax} sample tiles, each with an icon, a name and whether it is active`,
       );
-    }
-    if (
-      open !== undefined &&
-      (!pages.includes(open?.page) ||
-        typeof open.label !== "string" ||
-        !open.label.trim())
-    ) {
-      throw new Error(
-        `Room section "${id}" opens one of the app's pages, with a label`,
-      );
-    }
-    if (whenEmpty !== undefined) {
-      const kind = whenEmpty?.roomHas;
-      if (!capabilityKinds.includes(kind)) {
-        throw new Error(
-          `Room section "${id}" is shown empty for a kind of device: ${capabilityKinds.join(", ")}`,
-        );
-      }
-      const asked = permissionIds(app.permissions);
-      if (
-        !asked.includes(`devices.read:${kind}`) &&
-        !asked.includes(`devices.control:${kind}`)
-      ) {
-        throw new Error(
-          `Room section "${id}" is shown empty for rooms with a ${kind}, which the app does not read`,
-        );
-      }
-      if (!open) {
-        throw new Error(
-          `Room section "${id}" is shown empty only to offer what it opens`,
-        );
-      }
     }
   }
 }

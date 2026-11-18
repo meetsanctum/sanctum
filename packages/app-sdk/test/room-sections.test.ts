@@ -14,7 +14,7 @@ import {
   type RoomSectionDefinition,
 } from "../src/index.js";
 
-// Room sections: an app's part of every room's page, drawn by the shell from
+// Room sections: an app's part of every room's row, drawn by the shell from
 // its entities of one type in the tile shape, as tiles or as buttons.
 
 const moodState = z.object({
@@ -50,8 +50,6 @@ const section = defineRoomSection({
   kind: "tiles",
   order: 200,
   press: runMood,
-  open: { page: "room", label: "Edit" },
-  whenEmpty: { roomHas: "light" },
 });
 
 function app(
@@ -86,21 +84,15 @@ describe("a room section", () => {
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
         preview: null,
       },
     ]);
   });
 
-  it("may leave out its order, what it opens and when it is shown empty", () => {
-    const plain = app({
-      order: undefined,
-      open: undefined,
-      whenEmpty: undefined,
-    });
+  it("may leave out its order", () => {
+    const plain = app({ order: undefined });
     expect(toStaticManifest(defineApp(plain)).provides.roomSections).toEqual([
-      expect.objectContaining({ order: 500, open: null, whenEmpty: null }),
+      expect.objectContaining({ order: 500 }),
     ]);
     expect(
       toStaticManifest(defineApp({ ...plain, provides: {} })).provides
@@ -115,16 +107,6 @@ describe("a room section", () => {
       "a kind other than tiles or buttons",
       { kind: "rows" as "tiles" },
       /kind tiles or buttons/,
-    ],
-    [
-      "buttons that open a page",
-      { kind: "buttons", whenEmpty: undefined },
-      /buttons, which have no heading/,
-    ],
-    [
-      "buttons shown empty",
-      { kind: "buttons", open: undefined },
-      /buttons, which have no heading/,
     ],
     ["an order before Sanctum's", { order: 50 }, /an order from 300 to 799/],
     ["an order after any app's", { order: 800 }, /an order from 300 to 799/],
@@ -144,49 +126,20 @@ describe("a room section", () => {
       { press: deleteMood },
       /must be read or write/,
     ],
-    [
-      "a page the app does not have",
-      { open: { page: "rooms", label: "Edit" } },
-      /opens one of the app's pages/,
-    ],
-    [
-      "no label for what it opens",
-      { open: { page: "room", label: "" } },
-      /opens one of the app's pages/,
-    ],
-    [
-      "an empty rule for a kind of device that is not one",
-      { whenEmpty: { roomHas: "camera" as "light" } },
-      /kind of device/,
-    ],
-    [
-      "an empty rule for a kind it does not read",
-      { whenEmpty: { roomHas: "switch" } },
-      /does not read/,
-    ],
-    [
-      "an empty rule with nothing to open",
-      { open: undefined },
-      /only to offer what it opens/,
-    ],
   ])("refuses %s", (_name, changes, error) => {
     expect(() => defineApp(app(changes))).toThrow(error);
   });
 
-  it("may show buttons, with no page to open and nothing shown empty", () => {
+  it("may show buttons, with their sample for the app's settings", () => {
     const buttons = app({
       kind: "buttons",
       order: 300,
-      open: undefined,
-      whenEmpty: undefined,
       preview: [{ icon: "sun", name: "Natural light", active: true }],
     });
     expect(toStaticManifest(defineApp(buttons)).provides.roomSections).toEqual([
       expect.objectContaining({
         kind: "buttons",
         order: 300,
-        open: null,
-        whenEmpty: null,
         preview: [{ icon: "sun", name: "Natural light", active: true }],
       }),
     ]);

@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { loadApartPackage } from "../src/app-host/loader.js";
+import { loadApartPackage, loadApartPackages } from "../src/app-host/loader.js";
 import {
   apart,
   base,
@@ -703,19 +703,44 @@ describe("an app that runs apart", () => {
       const text = JSON.stringify({ id: "test.apart", version: "1.0.0" });
       await writeFile(join(staged, "sanctum-app.json"), text);
 
-      expect(
-        await loadApartPackage(folder, "test.apart", "1.0.0+abc", "official"),
-      ).toEqual({
-        apart: {
-          manifest: { id: "test.apart", version: "1.0.0" },
-          digest: manifestDigest(text),
-          folder: "1.0.0+abc",
+      expect(await loadApartPackage(folder, "test.apart", "1.0.0+abc")).toEqual(
+        {
+          apart: {
+            manifest: { id: "test.apart", version: "1.0.0" },
+            digest: manifestDigest(text),
+            folder: "1.0.0+abc",
+          },
+          origin: "official",
         },
-        origin: "official",
-      });
+      );
       await expect(
-        loadApartPackage(folder, "test.other", "1.0.0+abc", "official"),
+        loadApartPackage(folder, "test.other", "1.0.0+abc"),
       ).rejects.toThrow("ENOENT");
+    });
+
+    it("is Sanctum's own for Moods, which can't be turned off or removed, and official otherwise", async () => {
+      const folder = await mkdtemp(join(tmpdir(), "sanctum-packages-"));
+      cleanUps.push(() => rm(folder, { recursive: true, force: true }));
+      for (const id of ["sanctum.moods", "sanctum.weather"]) {
+        await mkdir(join(folder, id, "1.0.0"), { recursive: true });
+        await writeFile(
+          join(folder, id, "1.0.0", "sanctum-app.json"),
+          JSON.stringify({ id, version: "1.0.0" }),
+        );
+      }
+
+      const packages = await loadApartPackages(
+        ["sanctum.moods@1.0.0", "sanctum.weather@1.0.0"],
+        folder,
+        () => undefined,
+      );
+
+      expect(
+        packages.map((pkg) => [pkg.apart.manifest.id, pkg.origin]),
+      ).toEqual([
+        ["sanctum.moods", "system"],
+        ["sanctum.weather", "official"],
+      ]);
     });
 
     it("refuses a folder holding another app", async () => {
@@ -729,7 +754,7 @@ describe("an app that runs apart", () => {
       );
 
       await expect(
-        loadApartPackage(folder, "test.apart", "1.0.0+abc", "official"),
+        loadApartPackage(folder, "test.apart", "1.0.0+abc"),
       ).rejects.toThrow("holds test.other");
     });
   });
