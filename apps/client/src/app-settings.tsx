@@ -16,6 +16,7 @@ import { AppIcon } from "./app-icon";
 import { RemoveApp } from "./app-remove";
 import { PermissionsSection } from "./app-permissions";
 import { AppRunningSection } from "./app-running";
+import { isStoppedFor, UpdateWaiting } from "./app-update-waiting";
 import {
   AppNotice,
   givenUpWords,
@@ -245,12 +246,21 @@ export function AppPage(props: {
           </p>
         )}
       </div>
-      <AppNotice
-        app={app}
-        permissionsAre="below"
-        openStatus={props.openStatus}
-        deviceCount={deviceCount}
-      />
+      {/* Stopped for want of what a new version needs, its notice says so;
+          one turned off still offers Turn on. */}
+      {!(
+        app.waiting &&
+        isStoppedFor(app, app.waiting) &&
+        app.state !== "off"
+      ) && (
+        <AppNotice
+          app={app}
+          permissionsAre="below"
+          openStatus={props.openStatus}
+          deviceCount={deviceCount}
+        />
+      )}
+      <UpdateWaiting app={app} />
       {app.requests.length > 0 && (
         <PermissionsSection app={app} onChanged={props.onChanged} />
       )}

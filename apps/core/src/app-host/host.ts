@@ -52,6 +52,9 @@ import { createApartStarts } from "./apart-starts.js";
 import { createDiscoveryHandOut } from "./discovered.js";
 import { createLanPolicies } from "./lan.js";
 import { createAppInstaller } from "./install.js";
+import type { AppVersions } from "./versions.js";
+import type { WaitingUpdates } from "./waiting.js";
+import { createAppUpdateChoices } from "./update-choices.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -99,6 +102,8 @@ export function createAppHost(options: {
   grants: AppGrants;
   commits: AppCommits;
   updates: AppUpdates;
+  versions: Pick<AppVersions, "last">;
+  waiting: WaitingUpdates;
   off: AppsOff;
   // Someone changed an app's settings.
   onSettings?: (appId: string, settings: AppSettings) => void;
@@ -199,6 +204,8 @@ export function createAppHost(options: {
     entities: options.entities,
     updates: options.updates,
     grants: options.grants,
+    versions: options.versions,
+    waiting: options.waiting,
     off: options.off,
     appServices,
     supervisor: () => supervisor,
@@ -294,11 +301,13 @@ export function createAppHost(options: {
       void supervisor.restart(entry);
       return true;
     },
-    onGoBack: (entry, copyId) =>
-      options.updates.startGoingBack(entry, copyId).catch((error: unknown) => {
-        log(`apps: ${entry.app.id} can't go back (${String(error)})`);
-        return false;
-      }),
+    ...createAppUpdateChoices({
+      installed,
+      updates: options.updates,
+      waiting: options.waiting,
+      announce,
+      log,
+    }),
     gate,
     record,
     settings: options.settings,
@@ -321,6 +330,15 @@ export function createAppHost(options: {
     // What it set going under a permission that is off ends, a service
     // switched back on gets a new login, and it pauses, starts or restarts.
     onPermission(entry, permission, granted) {
+      // Its switches can also grant what an installed waiting build needs.
+      if (
+        granted &&
+        entry.waiting?.build === entry.apartIn &&
+        entry.waiting.needs.every((need) => entry.granted.includes(need.id))
+      ) {
+        options.waiting.forget(entry.app.id);
+        delete entry.waiting;
+      }
       const service = serviceOf(permission);
       if (granted && service && mayRunServices.includes(entry.origin)) {
         entry.services.set(service, appServices.request(entry.app.id, service));
@@ -454,9 +472,25 @@ export function createAppHost(options: {
             // binds the same path.
             await removals.get(appId);
             if (isClosing) break;
-            const current = await options.updates.packageFor(pkg);
+            // One someone is adding is as its sheet showed, and an update
+            // under way goes on as it began, as does staying on the version
+            // before one someone went back from, which waits for nothing;
+            // otherwise one that needs what nobody allowed waits.
+            const isAdding = adding.includes(appId);
+            const isDecided = options.updates.isUnderWay(pkg);
+            if (
+              isAdding ||
+              (isDecided &&
+                options.updates.shownFor(appId)?.stage === "wentBack")
+            ) {
+              options.waiting.forget(appId);
+            }
+            const chosen =
+              isAdding || isDecided ? pkg : await options.waiting.choose(pkg);
             if (isClosing) break;
-            install(current, checked);
+            const current = await options.updates.packageFor(chosen);
+            if (isClosing) break;
+            install(current, checked, { isAdding });
             const entry = installed.get(appId)!;
             if (adding.includes(appId)) entry.supervision.isAdding = true;
             added.push(entry);

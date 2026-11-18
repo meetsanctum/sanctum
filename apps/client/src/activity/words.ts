@@ -788,6 +788,12 @@ function setupEntry(entry: ActivityInfo): Words | null {
           ? "Went back to the app's version before"
           : "Couldn't go back to the app's version before",
       );
+    case "allow-update":
+      return said(
+        entry.outcome === "ok"
+          ? "Allowed the app's new version"
+          : "Couldn't allow the app's new version",
+      );
     case "home.update":
       return said("Changed the home's details");
     case "home.suggestLocation":

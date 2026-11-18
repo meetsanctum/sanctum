@@ -132,6 +132,7 @@ export function createApartStarts(options: {
       supervisor.waits(entry, why, again, updates.turnPauseMs),
     replace,
     isCurrent,
+    announce,
   });
 
   return {

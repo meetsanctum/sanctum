@@ -21,6 +21,8 @@ import {
 } from "./services.js";
 import { newSupervision, type Supervisor } from "./supervisor.js";
 import type { AppUpdates } from "./updates.js";
+import type { AppVersions } from "./versions.js";
+import type { WaitingUpdates } from "./waiting.js";
 
 // Installing one app's package: its manifest checked against what the core
 // lets an app of its origin declare, what it brought before checked against the
@@ -37,6 +39,8 @@ export function createAppInstaller(options: {
   entities: Pick<Entities, "reconcileTypes">;
   updates: Pick<AppUpdates, "holdsBack">;
   grants: Pick<AppGrants, "adopt" | "of">;
+  versions: Pick<AppVersions, "last">;
+  waiting: Pick<WaitingUpdates, "get" | "of">;
   off: Pick<AppsOff, "isOff">;
   appServices: Pick<
     ReturnType<typeof createAppServices>,
@@ -53,8 +57,13 @@ export function createAppInstaller(options: {
   const { installed, appServices, contexts, log } = options;
 
   // `checked` collects the apps whose entities were checked against their
-  // types, which keep them even when the rest of the install fails.
-  return function install(pkg: ApartPackage, checked: Set<string>) {
+  // types, which keep them even when the rest of the install fails. One
+  // someone is adding answers its permissions as its add sheet said.
+  return function install(
+    pkg: ApartPackage,
+    checked: Set<string>,
+    { isAdding = false }: { isAdding?: boolean } = {},
+  ) {
     const { origin } = pkg;
     const appId = pkg.apart.manifest.id;
     if (installed.has(appId)) {
@@ -120,7 +129,21 @@ export function createAppInstaller(options: {
       (ctx) => contexts.timeLeft(ctx) ?? options.timeoutMs,
       () => installed.get(appId)?.updating?.id,
     );
-    options.grants.adopt(manifest);
+    // A new version of an app the home has run answers as an update, and
+    // what it needs that waits for someone stays unanswered.
+    const waiting = options.waiting.get(appId);
+    const isUpdate = !isAdding && options.versions.last(appId) !== undefined;
+    options.grants.adopt(
+      manifest,
+      isUpdate
+        ? {
+            waits:
+              waiting?.folder === pkg.apart.folder
+                ? waiting.needs.map((request) => request.id)
+                : [],
+          }
+        : undefined,
+    );
     const granted = options.grants.of(manifest);
     const held = (name: string) => granted.includes(servicePermission(name));
     for (const name of services.filter((each) => !held(each))) {
@@ -150,6 +173,7 @@ export function createAppInstaller(options: {
       link,
       apartIn: pkg.apart.folder,
       digest: pkg.apart.digest,
+      waiting: options.waiting.of(appId),
       supervision: newSupervision(options.now()),
     });
   };

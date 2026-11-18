@@ -16,6 +16,7 @@ import {
   waitingWords,
   wentBackWords,
 } from "./app-state";
+import { isStoppedFor, waitingAttentionText } from "./app-update-waiting";
 import { productName } from "./brand";
 import { roomName } from "./device-parts";
 import {
@@ -90,6 +91,8 @@ const wentBackFor = (app: AppInfo) => {
  * that has been waiting a while. One on its way back is news to nobody.
  */
 function worthTelling(app: AppInfo, notSetUp: readonly ServiceNotSetUp[]) {
+  // A newer version waits for someone to allow what it needs.
+  if (app.waiting) return true;
   // It runs, but someone may want to know it isn't on the version it should be.
   if (wentBackFor(app)?.triesAgain === false) return true;
   if (looksRunning(app)) return false;
@@ -112,7 +115,7 @@ export function appsNotRunning(
   apps: readonly AppInfo[],
   notSetUp: readonly ServiceNotSetUp[] = [],
 ): AppInfo[] {
-  const rank = (app: AppInfo) => (isGivenUp(app) ? 0 : 1);
+  const rank = (app: AppInfo) => (isStopped(app) ? 0 : 1);
   return apps
     .filter((app) => worthTelling(app, notSetUp))
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
@@ -128,11 +131,22 @@ export const clockTime = (since: string | undefined) =>
     : "";
 
 /**
+ * Whether an app's line is a problem: one that stopped, as one that can't run
+ * the version it had until someone allows a newer one.
+ */
+export const isStopped = (app: AppInfo) =>
+  isGivenUp(app) || (!!app.waiting && isStoppedFor(app, app.waiting));
+
+/**
  * What leads an app's line: what is wrong and what to do. A stopped app is
  * a problem; a paused one is not, since someone switched off what it needs, and
  * nor is one waiting, which starts by itself.
  */
 export function appAttentionText(app: AppInfo) {
+  // The version it has failing says so first.
+  if (app.waiting && !isGivenUp(app)) {
+    return waitingAttentionText(app, app.waiting);
+  }
   const back = wentBackFor(app);
   if (back) return wentBackWords(app, back);
   switch (app.state) {
@@ -149,6 +163,11 @@ export function appAttentionText(app: AppInfo) {
 
 /** What a screen reader hears of an app that isn't running. */
 export function appAttentionSpoken(app: AppInfo) {
+  if (app.waiting && !isGivenUp(app)) {
+    return isStoppedFor(app, app.waiting)
+      ? `${app.name} isn't running`
+      : `${app.name} ${app.waiting.version} is waiting`;
+  }
   if (wentBackFor(app)) return `${app.name} went back to ${app.version}`;
   if (isGivenUp(app)) return `${app.name} isn't running`;
   return app.state === "waiting"
@@ -261,15 +280,20 @@ export function attentionTile(
   ];
   const problem =
     sanctum.length > 0 ||
-    apps.some(isGivenUp) ||
+    apps.some(isStopped) ||
     needing.some(({ reasons }) => reasons.some(isProblem));
   if (apps.length === 1 && needing.length === 0 && sanctum.length === 0) {
     const [app] = apps as [AppInfo];
     return {
       title: app.name,
-      value: wentBackFor(app)
-        ? `Back on ${app.version}`
-        : (stateShort(app) ?? "Not running"),
+      value:
+        app.waiting && !isGivenUp(app)
+          ? isStoppedFor(app, app.waiting)
+            ? "Not running"
+            : `${app.waiting.version} waits`
+          : wentBackFor(app)
+            ? `Back on ${app.version}`
+            : (stateShort(app) ?? "Not running"),
       label: spoken[0]!,
       problem,
       opens: "settings" as const,

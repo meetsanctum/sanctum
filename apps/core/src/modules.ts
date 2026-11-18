@@ -24,6 +24,7 @@ import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets } from "./app-host/secrets.js";
@@ -365,6 +366,16 @@ export async function createModules(
   const appVersions = createAppVersions(db, { now });
   const addedApps = createAddedApps(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
+  // A version staged in its folder, as the core reads any app that runs apart.
+  const loadPackage =
+    options.appUpdates?.loadPackage ??
+    ((appId: string, folder: string) =>
+      loadApartPackage(
+        options.packagesDir ?? "/packages",
+        appId,
+        folder,
+        "official",
+      ));
   const appUpdates = createAppUpdates({
     db,
     dataDir: options.dataDir,
@@ -375,15 +386,18 @@ export async function createModules(
     log,
     now: () => now?.() ?? new Date(),
     ...options.appUpdates,
-    loadPackage:
-      options.appUpdates?.loadPackage ??
-      ((appId, folder) =>
-        loadApartPackage(
-          options.packagesDir ?? "/packages",
-          appId,
-          folder,
-          "official",
-        )),
+    loadPackage,
+    holds: (pkg) => waitingUpdates.holds(pkg),
+  });
+  const grantsStore = createAppGrants(db, { now });
+  // An update that needs what nobody has allowed waits for someone to.
+  const waitingUpdates = createWaitingUpdates({
+    db,
+    versions: appVersions,
+    grants: grantsStore,
+    loadPackage,
+    log,
+    now,
   });
   const apps = createAppHost({
     gate,
@@ -405,7 +419,9 @@ export async function createModules(
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
     sightings: () => sightings?.list() ?? [],
     updates: appUpdates,
-    grants: createAppGrants(db, { now }),
+    versions: appVersions,
+    waiting: waitingUpdates,
+    grants: grantsStore,
     commits: createAppCommits({
       db,
       versions: appVersions,
@@ -670,6 +686,7 @@ export async function createModules(
     found,
     entities,
     apps,
+    waitingUpdates,
     addedApps,
     availableApps,
     appAdding,

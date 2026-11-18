@@ -126,7 +126,8 @@ function problemOf(error: unknown, app: AvailableApp) {
   }
 }
 
-function Asks(props: { requests: readonly PermissionInfo[] }) {
+/** What an app asks for, each with Sanctum's words for it and its reason. */
+export function Asks(props: { requests: readonly PermissionInfo[] }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
       {props.requests.map((request) => {

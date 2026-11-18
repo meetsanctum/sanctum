@@ -4,6 +4,7 @@ import {
   type AppRun,
   type AppRunUpdate,
   type AppState,
+  type AppWaitingUpdate,
   type SettingsSchema,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
@@ -59,6 +60,7 @@ type Installed = {
   granted: readonly string[];
   settings: SettingsSchema | null;
   off?: boolean;
+  waiting?: AppWaitingUpdate;
   supervision: Pick<
     Supervision,
     | "phase"
@@ -126,6 +128,7 @@ export function installedInfoOf(
     }),
     ...(entry.apartIn ? { build: entry.apartIn } : {}),
     run: runOf(entry, update),
+    ...(entry.waiting ? { waiting: entry.waiting } : {}),
     ...(entry.origin === "system" ? { alwaysOn: true as const } : {}),
   };
 }

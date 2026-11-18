@@ -20,6 +20,7 @@ import {
   appSettings,
   appsOff,
   appUpdates,
+  appUpdatesWaiting,
   appVersions,
 } from "./schema.js";
 
@@ -144,6 +145,7 @@ export function createAppDeleting(options: {
         appSecrets,
         appVersions,
         appUpdates,
+        appUpdatesWaiting,
         appsOff,
         pinnedApps,
       ]) {
