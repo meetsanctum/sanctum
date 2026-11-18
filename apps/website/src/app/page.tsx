@@ -19,6 +19,9 @@ export default async function Page() {
           <span>{productName}</span>
         </a>
         <nav className="elsewhere" aria-label={`${productName} elsewhere`}>
+          <a className="chip docs" href={docsUrl}>
+            Docs
+          </a>
           <a
             className="chip github"
             href={repositoryUrl}
@@ -382,6 +385,7 @@ export default async function Page() {
           </svg>
           in Zurich, Switzerland
         </span>
+        <a href={docsUrl}>Docs</a>
         <a href={repositoryUrl}>Source on GitHub</a>
       </footer>
 

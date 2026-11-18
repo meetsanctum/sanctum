@@ -135,6 +135,7 @@ a {
   text-decoration: none;
 }
 
+.chip.docs,
 .chip.github {
   padding: 0 16px;
 }
