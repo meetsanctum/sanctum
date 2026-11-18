@@ -14,7 +14,9 @@ Each is scaled to 960 px wide and blurred ahead of time so the page needs no
 live blur. The Gaussian blur (Core Image's `CIGaussianBlur`) uses a sigma of
 2% of that width. Before WebP encoding at quality 90, the image is darkened
 to target a maximum of 105 per RGB channel under the sheet (10% to 90% across,
-below the top 12%).
+below the top 12%), a little above the lightness of the dashboard
+background's lightest part, so the sheet's glass keeps the contrast it has
+on a dashboard.
 The photo's edges are extended before it is scaled, so no partly transparent
 edge row blurs into a pale band. That is blurred enough that the landscape is
 only vaguely recognisable, and small enough, about 6 KB, to scale up to any
