@@ -691,7 +691,10 @@ describe("Settings → Devices", () => {
     expect(waitingLines[0]!.getAttribute("aria-hidden")).toBe("true");
 
     const added = light("bulb", "Light 2");
+    // Two that come together after the move rise in at once, neither
+    // waiting for the other.
     const later = { ...joining, key: "0x3" };
+    const alsoLater = { ...joining, key: "0x4" };
     devices = [...devices, added];
     await act(async () => {
       live.publish({ type: "device", id: "bulb", device: added });
@@ -707,6 +710,7 @@ describe("Settings → Devices", () => {
               description: "Hue Essential White and Color Ambiance A60",
             },
             later,
+            alsoLater,
           ],
         },
       });
@@ -720,6 +724,9 @@ describe("Settings → Devices", () => {
     const laterCard = cards()[1] as HTMLLIElement;
     expect(laterCard.style.getPropertyValue("--card-wait")).toBe("0ms");
     expect(laterCard.style.getPropertyValue("--card-stagger")).toBe("0ms");
+    const alsoLaterCard = cards()[2] as HTMLLIElement;
+    expect(alsoLaterCard.style.getPropertyValue("--card-wait")).toBe("0ms");
+    expect(alsoLaterCard.style.getPropertyValue("--card-stagger")).toBe("0ms");
 
     await type(name, "Desk lamp");
     await act(async () =>

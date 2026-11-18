@@ -215,7 +215,11 @@ function Orb(): ReactNode {
 const moveMs = 900;
 const easing = "cubic-bezier(.2,.8,.2,1)";
 
-/** Only cards that start the move wait for it. Each arrival keeps its own timing. */
+/**
+ * Only cards that start the move wait for it, each a little after the one
+ * before; cards that come later rise in at once, however many come
+ * together. Each card keeps the timing it came with.
+ */
 function useCardEntrances(keys: ReadonlySet<string>, isWaiting: boolean) {
   const [batch, setBatch] = useState(() => ({
     isWaiting,
@@ -227,11 +231,15 @@ function useCardEntrances(keys: ReadonlySet<string>, isWaiting: boolean) {
     [...keys].some((key) => !batch.cards.has(key))
   ) {
     const waitMs = batch.isWaiting && !isWaiting ? moveMs / 2 : 0;
+    const staggers = waitMs > 0 || batch.cards.size === 0;
     let index = 0;
     const cards = new Map(
       [...keys].map((key) => [
         key,
-        batch.cards.get(key) ?? { index: index++, waitMs },
+        batch.cards.get(key) ?? {
+          index: staggers ? index++ : 0,
+          waitMs,
+        },
       ]),
     );
     setBatch({ isWaiting, cards });
