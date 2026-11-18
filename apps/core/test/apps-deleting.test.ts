@@ -128,7 +128,7 @@ describe("the data of the services it used", () => {
     removed.done("sanctum.example");
     if (other !== "none") {
       grant("sanctum.other");
-      if (other === "added") added.recordFirst(["sanctum.other"]);
+      if (other === "added") added.add("sanctum.other", {});
       else {
         removed.record(
           "sanctum.other",

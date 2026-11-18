@@ -56,11 +56,7 @@ it("installs the package checked at Add even if the manager stages another meanw
       packagesDir,
       kitDir: join(folder, "no-kit"),
       managerSocket: join(folder, "manager.sock"),
-      newHomeApps: [
-        "sanctum.moods",
-        "sanctum.natural-light",
-        "sanctum.weather",
-      ],
+      newHomeApps: [],
       version: "1.0.0",
     },
     {
@@ -77,7 +73,7 @@ it("installs the package checked at Add even if the manager stages another meanw
   onTestFinished(() => core.stop().then(() => undefined));
   await core.start();
   await vi.waitFor(() => expect(core.modules!.apps.hasInstalled()).toBe(true));
-  core.modules!.addedApps.recordFirst(["sanctum.kept"]);
+  core.modules!.addedApps.add("sanctum.kept", {});
   staged
     .mockResolvedValue({ [appId]: { version: "1.1.0", folder: "1.1.0" } })
     .mockResolvedValueOnce({

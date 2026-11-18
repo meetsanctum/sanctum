@@ -172,11 +172,7 @@ export async function testCore(
       packagesDir: join(dataDir, "no-packages"),
       kitDir: options.kitDir ?? join(dataDir, "no-kit"),
       managerSocket: join(dataDir, "no-manager.sock"),
-      newHomeApps: [
-        "sanctum.moods",
-        "sanctum.natural-light",
-        "sanctum.weather",
-      ],
+      newHomeApps: [],
       version: "1.2.3",
     },
     {

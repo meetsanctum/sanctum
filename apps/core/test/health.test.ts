@@ -65,6 +65,14 @@ describe("loadConfig", () => {
     ).toEqual(["http://localhost:5173", "app://sanctum"]);
   });
 
+  it("reads the starter app ids and accepts an empty list", () => {
+    expect(
+      loadConfig({ CORE_NEW_HOME_APPS: " sanctum.weather, sanctum.moods, " })
+        .newHomeApps,
+    ).toEqual(["sanctum.weather", "sanctum.moods"]);
+    expect(loadConfig({ CORE_NEW_HOME_APPS: "" }).newHomeApps).toEqual([]);
+  });
+
   it("rejects an invalid port", () => {
     expect(() => loadConfig({ CORE_PORT: "99999" })).toThrow();
   });

@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CoreConfig } from "../src/config.js";
 import { createCore, type Core } from "../src/core.js";
+import { openCoreDatabase } from "../src/database.js";
+import { devices } from "../src/devices/schema.js";
+import { createEntities } from "../src/entities/entities.js";
 import { updatePendingFile } from "../src/update-pending.js";
 import { managerSocket, type SocketRequest } from "./manager-support.js";
 import { hostId, testCore } from "./support.js";
@@ -82,6 +85,54 @@ async function serving(config: CoreConfig) {
 }
 
 describe("a whole core", () => {
+  it.each(["an entity", "a device"])(
+    "keeps an app that reported %s before its first start finished",
+    async (reported) => {
+      const dataDir = await hostFolder();
+      const { socketPath } = await managerSocket(manager);
+      const optional = "sanctum.example";
+      const database = openCoreDatabase(dataDir);
+      try {
+        if (reported === "an entity") {
+          createEntities(database.db).publish(optional, {
+            type: "example",
+            key: "one",
+            name: "Example",
+            state: {},
+          });
+        } else {
+          const at = new Date("2026-11-17T10:00:00Z");
+          database.db
+            .insert(devices)
+            .values({
+              id: "example-device",
+              driver: optional,
+              key: "one",
+              driverName: "Example",
+              availability: "offline",
+              createdAt: at,
+              updatedAt: at,
+            })
+            .run();
+        }
+      } finally {
+        database.close();
+      }
+
+      const { core } = await serving(configOf(dataDir, socketPath));
+
+      await vi.waitFor(() =>
+        expect(core.modules!.apps.hasInstalled()).toBe(true),
+      );
+      expect([...core.modules!.addedApps.ids()]).toEqual([optional]);
+      if (reported === "an entity") {
+        expect(
+          core.modules!.entities.list().map((entity) => entity.app),
+        ).toEqual([optional]);
+      }
+    },
+  );
+
   it("starts through its named steps, serves, and the next core on its data knows it stopped", async () => {
     const dataDir = await hostFolder();
     const { socketPath, received } = await managerSocket(manager);

@@ -445,18 +445,18 @@ export function createAppHost(options: {
       packages: readonly ApartPackage[] | Promise<readonly ApartPackage[]>,
       {
         onTrial = false,
-        coming = [],
+        coming,
         adding = [],
       }: {
         onTrial?: boolean;
-        coming?: readonly string[];
+        // Read after package selection records the home's list.
+        coming?: () => readonly string[];
         // Those someone just added, which say so until their first start
         // returns.
         adding?: readonly string[];
       } = {},
     ) {
       isOnTrial = onTrial;
-      for (const appId of coming) kept.add(appId);
       let allInstalled!: () => void;
       installing = new Promise<void>((resolve) => {
         allInstalled = resolve;
@@ -464,7 +464,9 @@ export function createAppHost(options: {
       const added: InstalledApp[] = [];
       const checked = new Set<string>();
       try {
-        for (const pkg of await packages) {
+        const resolvedPackages = await packages;
+        for (const appId of coming?.() ?? []) kept.add(appId);
+        for (const pkg of resolvedPackages) {
           if (isClosing) break;
           const appId = pkg.apart.manifest.id;
           try {

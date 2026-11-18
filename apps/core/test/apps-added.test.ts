@@ -64,9 +64,12 @@ describe("a home's first start with its own list", () => {
     db.insert(appsOff).values({ appId: "sanctum.off", turnedOffAt: at }).run();
     const added = createAddedApps(db, { now: () => at });
 
-    expect(added.listed()).toBe(false);
+    expect(db.select().from(appsListed).get()).toBeUndefined();
     expect(
-      added.recordFirst(["sanctum.shipped", "sanctum.staged", "sanctum.ran"]),
+      added.recordFirst(
+        ["sanctum.shipped", "sanctum.staged", "sanctum.ran"],
+        [],
+      ),
     ).toBe(true);
 
     expect([...added.ids()].sort()).toEqual([
@@ -75,7 +78,7 @@ describe("a home's first start with its own list", () => {
       "sanctum.shipped",
       "sanctum.staged",
     ]);
-    expect(added.listed()).toBe(true);
+    expect(db.select().from(appsListed).all()).toEqual([{ id: 1, since: at }]);
     // Nobody added them: the home had them.
     expect(db.select().from(appsAdded).all()).toContainEqual({
       appId: "sanctum.shipped",
@@ -88,22 +91,15 @@ describe("a home's first start with its own list", () => {
   it("never records again, even once the home has no apps", async () => {
     const db = await database();
     const added = createAddedApps(db);
-    added.recordFirst(["sanctum.weather"]);
+    const newHomeApps = ["sanctum.weather", "sanctum.moods"];
+    added.recordFirst(["sanctum.weather"], newHomeApps);
     db.delete(appsAdded).run();
 
-    expect(added.recordFirst(["sanctum.weather", "sanctum.moods"])).toBe(false);
+    expect(
+      added.recordFirst(["sanctum.weather", "sanctum.moods"], newHomeApps),
+    ).toBe(false);
     expect(added.ids().size).toBe(0);
     expect(db.select().from(appsListed).all()).toHaveLength(1);
-  });
-
-  it("leaves it for the next start when it knows of no app at all", async () => {
-    const db = await database();
-    const added = createAddedApps(db);
-
-    expect(added.recordFirst([])).toBe(false);
-    expect(added.listed()).toBe(false);
-    expect(added.recordFirst(["sanctum.weather"])).toBe(true);
-    expect([...added.ids()]).toEqual(["sanctum.weather"]);
   });
 });
 
@@ -124,7 +120,6 @@ describe("a new home's first start", () => {
       "sanctum.moods",
       "sanctum.weather",
     ]);
-    expect(added.listed()).toBe(true);
   });
 
   it("keeps its list though the image ships none of them", async () => {
@@ -139,7 +134,8 @@ describe("a new home's first start", () => {
     const added = createAddedApps(await database());
 
     expect(added.recordFirst([], newHomeApps)).toBe(false);
-    expect(added.listed()).toBe(false);
+    expect(added.recordFirst(["sanctum.weather"], newHomeApps)).toBe(true);
+    expect([...added.ids()]).toEqual(["sanctum.weather"]);
   });
 
   it("isn't a home that ran an app: that keeps every app it had", async () => {
@@ -165,23 +161,26 @@ describe("the first app someone adds", () => {
     const db = await database();
     const at = new Date("2026-11-17T12:00:00Z");
     const added = createAddedApps(db, { now: () => at });
-    expect(added.recordFirst([])).toBe(false);
+    const newHomeApps = ["sanctum.other"];
+    expect(added.recordFirst([], newHomeApps)).toBe(false);
 
     expect(added.add("sanctum.example", { clientId: "client-1" })).toBe(true);
-    expect(added.listed()).toBe(true);
     expect(db.select().from(appsListed).all()).toEqual([{ id: 1, since: at }]);
-    expect(added.recordFirst(["sanctum.example", "sanctum.other"])).toBe(false);
+    expect(
+      added.recordFirst(["sanctum.example", "sanctum.other"], newHomeApps),
+    ).toBe(false);
     expect([...added.ids()]).toEqual(["sanctum.example"]);
   });
 
   it("records neither the app nor the list if its activity entry fails", async () => {
-    const added = createAddedApps(await database());
+    const db = await database();
+    const added = createAddedApps(db);
     expect(() =>
       added.add("sanctum.example", { clientId: "client-1" }, () => {
         throw new Error("the entry could not be written");
       }),
     ).toThrow("the entry could not be written");
-    expect(added.listed()).toBe(false);
+    expect(db.select().from(appsListed).get()).toBeUndefined();
     expect([...added.ids()]).toEqual([]);
   });
 });
