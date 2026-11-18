@@ -38,7 +38,7 @@ import {
   type Reading,
 } from "./device-tiles";
 import { byFloor, FloorSection } from "./floor-groups";
-import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
+import { floorLightsButton, lightsButton } from "./lights-button";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -46,6 +46,8 @@ import {
   isRowEmpty,
   RoomRow,
   roomRowOf,
+  RoomSwitch,
+  RowSquares,
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
@@ -210,8 +212,8 @@ function Sections(props: {
   sections: TileSection[];
   devices: Devices;
   onOpen: (tile: Tile) => void;
-  /** What a section has between its heading and its tiles. */
-  lead?: (section: TileSection) => ReactNode;
+  /** What a section's tiles start with. */
+  first?: (section: TileSection) => ReactNode;
   /** Its headings' level, 3 under a floor's. */
   level?: 2 | 3;
 }) {
@@ -224,7 +226,7 @@ function Sections(props: {
         void devices.dim(tile, brightness).catch(() => undefined)
       }
       onOpen={props.onOpen}
-      lead={props.lead}
+      first={props.first}
       level={props.level}
     />
   );
@@ -600,8 +602,8 @@ export function CategoryPage(props: {
 
 // A category's rooms, under their floors once the home has floors
 // (floor-groups.tsx), so a room is where it is on Home. On Lights' page each
-// room has its button for all its lights, and each floor its button that
-// turns them off.
+// room's lights start with its switch, the square its row starts with, and
+// each floor has its switch that turns them off.
 function CategorySections(props: {
   sections: TileSection[];
   devices: Devices;
@@ -609,17 +611,19 @@ function CategorySections(props: {
   isLights: boolean;
 }) {
   const { devices, isLights } = props;
-  const lead = isLights
+  const first = isLights
     ? (section: TileSection) => {
-        // The lights in no room are not together, so have no button.
-        const room = devices.places?.rooms.find(
-          (each) => each.id === section.id,
+        // The lights in no room are not together, so have no switch.
+        if (section.id === noRoomSection) return null;
+        const lights = lightsButton(
+          section.tiles,
+          { id: section.id, name: section.title },
+          devices,
         );
-        const lights = room && lightsButton(section.tiles, room, devices);
         return lights ? (
-          <div className="flex">
-            <LightsButton lights={lights} />
-          </div>
+          <RowSquares count={1}>
+            <RoomSwitch lights={lights} />
+          </RowSquares>
         ) : null;
       }
     : undefined;
@@ -632,7 +636,7 @@ function CategorySections(props: {
         sections={props.sections}
         devices={devices}
         onOpen={props.onOpen}
-        lead={lead}
+        first={first}
       />
     );
   }
@@ -657,7 +661,7 @@ function CategorySections(props: {
             sections={items}
             devices={devices}
             onOpen={props.onOpen}
-            lead={lead}
+            first={first}
             level={3}
           />
         </FloorSection>

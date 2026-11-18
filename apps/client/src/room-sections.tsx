@@ -18,7 +18,7 @@ import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
-import { lightsWords, type LightsSwitch } from "./lights-button";
+import type { LightsSwitch } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow) after its switch,
@@ -242,22 +242,31 @@ export function RoomRow(props: {
     >
       {squares > 0 && (
         <RowSquares count={squares}>
-          {row.lights && (
-            <SectionTile
-              iconOnly
-              icon={icons.Power}
-              name={lightsWords(row.lights.on)}
-              label={row.lights.label}
-              lit={row.lights.on > 0}
-              disabled={row.lights.disabled}
-              onClick={row.lights.onToggle}
-            />
-          )}
+          {row.lights && <RoomSwitch lights={row.lights} />}
           {row.buttons.map((each) => tileOf(each, true))}
         </RowSquares>
       )}
       {row.tiles.map((each) => tileOf(each, false))}
     </div>
+  );
+}
+
+/**
+ * A room's switch for all its lights, a square with the power symbol that is
+ * White while any light is on: first in its row, and first in its lights on
+ * Lights' page.
+ */
+export function RoomSwitch(props: { lights: LightsSwitch }) {
+  const { lights } = props;
+  return (
+    <SectionTile
+      iconOnly
+      icon={icons.Power}
+      name={lights.label}
+      lit={lights.on > 0}
+      disabled={lights.disabled}
+      onClick={lights.onToggle}
+    />
   );
 }
 
