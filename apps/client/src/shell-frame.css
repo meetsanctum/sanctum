@@ -101,10 +101,9 @@
    but over a White page, such as Settings in Day, it comes out mid grey,
    the page's shapes and blue buttons showing through as smudges and the
    green and red cards on it washed out. Over a page in Day the glass is
-   deeper and more diffuse, so it reads as the same dark glass. */
+   deeper, with the same blur, so it reads as the same dark glass. */
 .home-screen:has(> .frame-neutral[data-mode="day"][data-on]) > .veil-glass {
   background-color: color-mix(in srgb, var(--carbon) 92%, transparent);
-  backdrop-filter: blur(48px);
 }
 
 /* The strip above the page, which moves the window on macOS. */

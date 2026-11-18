@@ -441,7 +441,7 @@ function RoomChoice(props: {
           onChange={(event) => setName(event.target.value)}
           className="h-8 bg-black/14 pointer-coarse:h-11"
         />
-        <div className="mt-1 flex justify-end gap-1.5">
+        <div className="mt-1 flex flex-wrap justify-end gap-1.5">
           <Button type="button" variant="ghost" size="sm" onClick={leave}>
             Cancel
           </Button>
