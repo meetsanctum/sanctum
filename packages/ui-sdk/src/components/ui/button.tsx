@@ -81,6 +81,11 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         // Text in the action colour, Light blue on Carbon.
         link: "text-(--action) underline-offset-4 hover:underline",
+        // A card pressed whole, on glass: White at 12% fading to 6% with a
+        // hairline, a little lighter under the pointer, such as a way to add
+        // devices. What it leads to is said on it in the primary look.
+        choice:
+          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] hover:from-white/15 hover:to-white/8 active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
       },
       size: {
         // Words, with or without an icon, such as Done.
@@ -126,6 +131,9 @@ const buttonVariants = cva(
           "-mx-1 -my-0.5 h-auto min-h-6 gap-0.5 rounded-xs px-1 py-0.5 text-[length:inherit] leading-[inherit]",
         // A person's avatar, round as avatars are.
         avatar: "size-10 rounded-full",
+        // A card of its own, its words centred over what it leads to.
+        choice:
+          "h-auto min-h-77 w-full flex-col justify-start gap-0 rounded-lg px-5.5 pt-8 pb-5.5 text-center font-normal whitespace-normal",
       },
     },
     defaultVariants: {

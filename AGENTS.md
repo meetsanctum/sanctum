@@ -108,7 +108,8 @@ What is under which licence, and what neither covers, is in
   (tiles, widgets, the floating sidebar and veils) and for the sheet of the
   screens before it.
 - Carbon and White are the only background colours apart from a dashboard's
-  own and the blurred backdrop of the screens before it. A dashboard's
+  own, the blurred backdrop of the screens before it, and the green or red
+  of a card that says a device was added or failed to join. A dashboard's
   background shows only behind dashboards and room and category pages;
   apps' pages are full bleed Carbon or White by the device's mode, with
   filled cards.
@@ -120,9 +121,11 @@ What is under which licence, and what neither covers, is in
 - Inter; sentence case everywhere, never all caps (acronyms such as OS keep
   their capitals), except in the names Sanctum gives devices, where each
   word starts with a capital ("Office Light"); no dividing lines; corners
-  from the `--radius` scale, nothing pill-shaped.
+  from the `--radius` scale, nothing pill-shaped but a count's badge ("3
+  found").
 - Widget titles in the app's colour, but room sections' headings neutral like
-  the shell's own; one primary action per widget at most.
+  the shell's own; one primary action per widget or card at most, so where
+  cards carry their own, an overlay's Done is plain words.
 - One layout for tablets, desktops and phones: nothing reachable only by
   touch (a tap on empty space, a swipe, a long press), since a mouse never
   finds it.

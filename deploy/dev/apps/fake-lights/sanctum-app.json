@@ -3,7 +3,7 @@
   "name": "Fake lights",
   "version": "0.1.0",
   "core": "^1.0.0",
-  "protocol": 8,
+  "protocol": 9,
   "summary": null,
   "runtime": {
     "memory": 128,
@@ -12,8 +12,20 @@
   "migrations": null,
   "driver": {
     "hooks": [
-      "command"
-    ]
+      "command",
+      "pairing",
+      "add"
+    ],
+    "questions": {
+      "key": {
+        "label": "Key",
+        "kind": "secret",
+        "help": "Whoever set the plug up has it.",
+        "refusals": {
+          "wrongKey": "That key doesn't match. Check it and try again."
+        }
+      }
+    }
   },
   "permissions": [
     {

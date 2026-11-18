@@ -12,7 +12,7 @@ import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
 import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
-import { stopLimitMs } from "./apart.js";
+import { stopLimitMs, uninstallLimitMs } from "./apart.js";
 import { appStateOf } from "./app-info.js";
 import { newAppUpdate, type AppCommits } from "./commits.js";
 import type { AppContexts } from "./contexts.js";
@@ -62,6 +62,33 @@ export function createAppLifecycle(options: {
   // Whether the app takes calls now: it runs and is not paused.
   function accepts(entry: InstalledApp) {
     return Boolean(entry.running) && appStateOf(entry) === "running";
+  }
+
+  // Once it leaves the installed list, its last tidying gets a call of its
+  // own, whose access ends with it, before its stop hook runs.
+  async function uninstall(entry: InstalledApp) {
+    const appId = entry.app.id;
+    const run = entry.app.uninstall;
+    if (!run || !accepts(entry)) return;
+    const storage = entry.storage.call();
+    const ctx = contexts.contextFor(
+      entry,
+      { kind: "app", id: appId },
+      storage,
+      { withinMs: uninstallLimitMs },
+    );
+    try {
+      await withTimeout(
+        Promise.resolve().then(() => run.call(entry.app, ctx)),
+        uninstallLimitMs,
+      );
+    } catch (error) {
+      log(
+        `apps: ${appId} didn't tidy up as it was removed (${error instanceof TimedOut ? "timed out" : message(error)})`,
+      );
+    } finally {
+      storage.end();
+    }
   }
 
   // Runs a lifecycle hook with a timeout. A hook that fails is logged, and
@@ -270,6 +297,7 @@ export function createAppLifecycle(options: {
     accepts,
     stopApp,
     reconcile,
+    uninstall,
 
     // Its connection went, after what its lifecycle is already doing.
     gone(entry: InstalledApp) {

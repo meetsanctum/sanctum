@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppAdds } from "./app-adds";
 import { GoBack, useGoBackTo } from "./app-go-back";
 import { AppIcon } from "./app-icon";
+import { RemoveApp } from "./app-remove";
 import { PermissionsSection } from "./app-permissions";
 import { AppRunningSection } from "./app-running";
 import {
@@ -78,7 +79,7 @@ function stateWords(app: AppInfo) {
         text: `Paused · ${needsWords(app)}`,
       };
     case "starting":
-      return { spinner: true, text: "Starting" };
+      return { spinner: true, text: app.run?.isAdding ? "Adding" : "Starting" };
     case "waiting":
       return { dot: "bg-muted-foreground", text: waitingWords(app) };
     case "restarting":
@@ -280,6 +281,7 @@ export function AppPage(props: {
         {app.state !== "off" && !app.alwaysOn && (
           <TurnOff app={app} deviceCount={deviceCount} />
         )}
+        {!app.alwaysOn && <RemoveApp app={app} onRemoved={props.onDone} />}
       </div>
     </>
   );

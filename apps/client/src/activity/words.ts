@@ -733,6 +733,22 @@ function setupEntry(entry: ActivityInfo): Words | null {
           ? "Changed app settings"
           : "Couldn't change app settings",
       );
+    case "app.add":
+    case "app.remove": {
+      // By the name the entry kept, for an app that's gone since; the app
+      // is what was added or removed, so only who did it follows.
+      const kept = entry.detail?.name;
+      const app =
+        entry.app?.name ?? (typeof kept === "string" ? kept : null) ?? "an app";
+      const ok = entry.outcome === "ok";
+      const [done, couldNot] =
+        entry.action === "app.add" ? ["Added", "add"] : ["Removed", "remove"];
+      return {
+        title: ok ? `${done} ${app}` : `Couldn't ${couldNot} ${app}`,
+        detail: whoWords(entry.who),
+        problem: !ok,
+      };
+    }
     case "turn-off":
       return said(
         entry.outcome === "ok"

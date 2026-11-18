@@ -23,6 +23,12 @@ import type { AppLink } from "./link.js";
 /** How long an app apart has to stop, which is less than any other call. */
 export const stopLimitMs = (timeoutMs: number) => Math.min(timeoutMs, 10_000);
 
+/** How long an app's uninstall hook has, as someone removes it. */
+export const uninstallLimitMs = 30_000;
+
+// The protocol whose runners take an uninstall call.
+const uninstallFrom = 9;
+
 /** The core's calls behind a context, so a call's id can be tied to them. */
 export type CoreOf = (ctx: AppContext) => CoreCalls;
 
@@ -69,6 +75,14 @@ export function apartApp(
     stop: async (ctx: AppContext, info: StopInfo) => {
       await call(ctx, { kind: "stop", ...info }, stopLimitMs(timeoutOf(ctx)));
     },
+    // A runner built before it can't take the call, and its app has none.
+    ...(manifest.protocol >= uninstallFrom
+      ? {
+          uninstall: async (ctx: AppContext) => {
+            await call(ctx, { kind: "uninstall" }, uninstallLimitMs);
+          },
+        }
+      : {}),
     ...(manifest.driver
       ? {
           driver: {

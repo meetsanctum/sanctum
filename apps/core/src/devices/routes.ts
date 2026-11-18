@@ -41,7 +41,7 @@ import type { Presses } from "./presses.js";
 //   POST /api/devices/update         { id, name?, roomId? } → DeviceInfo
 //   POST /api/devices/remove         { id, force? } → { id }
 //   GET  /api/devices/pairing        PairingInfo
-//   POST /api/devices/pairing/open   { seconds? } → PairingInfo & { since }
+//   POST /api/devices/pairing/open   { seconds?, drivers? } → PairingInfo & { since }
 //   POST /api/devices/pairing/close  PairingInfo
 //   POST /api/devices/capture/start  { device } → PressCapture
 //   POST /api/devices/capture/stop   { id }

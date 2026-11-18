@@ -44,6 +44,7 @@ import { AppFrame } from "./frames/app-frame";
 import { HomeRooms } from "./home-dashboard";
 import { HomeSidebar } from "./home-sidebar";
 import { HomeWidgets, useWidgetCards } from "./home-widgets";
+import { OverlayHostProvider } from "./overlay-host";
 import {
   CategoryPage,
   HomeStatus,
@@ -134,6 +135,7 @@ export function Home(props: {
     read: readApps,
     stop: stopApps,
     appChanged,
+    appAdded,
   } = useInstalledApps(live);
   const refreshId = useRef(0);
   const { dashboards, rename, home } = useDashboards(live);
@@ -410,6 +412,10 @@ export function Home(props: {
   // What floats over the page closes under the veil.
   const isVeiled = veil !== undefined;
   const sidebar = useSidebarLayout(isVeiled);
+  const overlayHost = useMemo(
+    () => ({ container: screen, onCovering: sidebar.setCovered }),
+    [screen, sidebar.setCovered],
+  );
   useEffect(() => {
     if (isVeiled) closeDevice();
   }, [isVeiled, closeDevice]);
@@ -417,341 +423,345 @@ export function Home(props: {
   return (
     // How the household reads things, for the shell's pages and apps' alike.
     <Household home={devices.places?.home}>
-      <ShellFrame
-        screenRef={setScreen}
-        layout={sidebar}
-        isPlace={!appPage}
-        place={dashboard && dashboardFrame[dashboard.background]}
-        deviceMode={deviceMode}
-        panelBackground={
-          appPage
-            ? "var(--background)"
-            : dashboard && dashboardBackground[dashboard.background]
-        }
-        isVeiled={isVeiled}
-        triggerRef={sidebarTrigger}
-        sidebar={(isFloating) => (
-          <HomeSidebar
-            isFloating={isFloating}
-            isVeiled={isVeiled}
-            layout={sidebar}
-            routes={routes}
-            listed={listed}
-            pins={pins}
-            dashboards={dashboards}
-            shown={dashboard}
-            showDashboard={showDashboard}
-            go={go}
-            devices={devices}
-            account={
-              me?.person
-                ? {
-                    person: me.person,
-                    onSettings: openSettings,
-                    onSignOut: signOut,
+      <OverlayHostProvider value={overlayHost}>
+        <ShellFrame
+          screenRef={setScreen}
+          layout={sidebar}
+          isPlace={!appPage}
+          place={dashboard && dashboardFrame[dashboard.background]}
+          deviceMode={deviceMode}
+          panelBackground={
+            appPage
+              ? "var(--background)"
+              : dashboard && dashboardBackground[dashboard.background]
+          }
+          isVeiled={isVeiled}
+          triggerRef={sidebarTrigger}
+          sidebar={(isFloating) => (
+            <HomeSidebar
+              isFloating={isFloating}
+              isVeiled={isVeiled}
+              layout={sidebar}
+              routes={routes}
+              listed={listed}
+              pins={pins}
+              dashboards={dashboards}
+              shown={dashboard}
+              showDashboard={showDashboard}
+              go={go}
+              devices={devices}
+              account={
+                me?.person
+                  ? {
+                      person: me.person,
+                      onSettings: openSettings,
+                      onSignOut: signOut,
+                    }
+                  : undefined
+              }
+            />
+          )}
+          panel={
+            <>
+              {/* Nothing on the page can be used under the veil. */}
+              <div className="contents" inert={isVeiled}>
+                <TopBar
+                  sidebarTrigger={sidebarTrigger}
+                  sidebarShown={sidebar.docked || sidebar.floating !== null}
+                  sidebarDocked={sidebar.docked}
+                  onSidebar={sidebar.toggle}
+                  dashboard={onDashboard ? dashboard : undefined}
+                  isVeiled={isVeiled}
+                  onRename={rename}
+                  onEditHome={{
+                    disabled: !devices.loaded || devices.devices.length === 0,
+                    open: () => setEditingHome(true),
+                  }}
+                  editingHome={
+                    isEditingHome
+                      ? { onDone: () => setEditingHome(false) }
+                      : undefined
                   }
-                : undefined
-            }
-          />
-        )}
-        panel={
-          <>
-            {/* Nothing on the page can be used under the veil. */}
-            <div className="contents" inert={isVeiled}>
-              <TopBar
-                sidebarTrigger={sidebarTrigger}
-                sidebarShown={sidebar.docked || sidebar.floating !== null}
-                sidebarDocked={sidebar.docked}
-                onSidebar={sidebar.toggle}
-                dashboard={onDashboard ? dashboard : undefined}
-                isVeiled={isVeiled}
-                onRename={rename}
-                onEditHome={{
-                  disabled: !devices.loaded || devices.devices.length === 0,
-                  open: () => setEditingHome(true),
-                }}
-                editingHome={
-                  isEditingHome
-                    ? { onDone: () => setEditingHome(false) }
-                    : undefined
-                }
-                pageSlot={setPageSlot}
-                appSettings={
-                  route && routeApp && isAppPage && !openedByItsApp
-                    ? {
-                        name: routeApp.info.name,
-                        open: settingsOf(route.app),
-                      }
-                    : undefined
-                }
-              />
-              <PageBarSlot.Provider value={pageSlot}>
-                <main className={`page${appPage ? " app-page" : ""}`}>
-                  {onDashboard && dashboard && (
-                    <h1 className="sr-only">
-                      {isEditingHome
-                        ? `Edit ${dashboard.name}`
-                        : dashboard.name}
-                    </h1>
-                  )}
-                  {route?.app === appsPage ? (
-                    <AppsPage
-                      apps={listed}
-                      starting={appsWaiting && installed.length === 0}
-                      pins={pins}
-                      onPins={(next) =>
-                        void changePins(next).catch(() => undefined)
-                      }
-                    />
-                  ) : route?.app === automationsApp.id ? (
-                    <AutomationsPage
-                      key={`${routes.length}:${JSON.stringify(route)}`}
-                      page={route.page}
-                      params={route.params}
-                      open={opener(automationsApp.id)}
-                      back={back}
-                      apps={installed}
-                      devices={devices}
-                      live={live}
-                      openAppSettings={(app) => settingsOf(app)()}
-                      openStatus={() =>
-                        opener(settingsApp.id)(statusSettingsPage)
-                      }
-                      ask={ask}
-                    />
-                  ) : route?.app === settingsApp.id ? (
-                    <SettingsPage
-                      onPowerAccepted={(going) =>
-                        live.publish({ type: "system", going })
-                      }
-                      key={`${routes.length}:${JSON.stringify(route)}`}
-                      page={route.page}
-                      params={route.params}
-                      open={opener(settingsApp.id)}
-                      back={back}
-                      apps={installed}
-                      onAppChanged={appChanged}
-                      homeBackground={
-                        dashboardBackground[
-                          dashboards?.find((each) => each.kind === "home")
-                            ?.background ?? "mocha"
-                        ]
-                      }
-                      me={me}
-                      core={core}
-                      live={live}
-                      devices={devices}
-                      home={home}
-                      onUpdating={setUpdateRunning}
-                      status={shownStatus}
-                      statusFailed={statusFailed}
-                      start={route.page === "main" ? setupStep : undefined}
-                      onStarted={setupStarted}
-                    />
-                  ) : route?.app === placePages ? (
-                    route.page === "room" ? (
-                      <RoomPage
+                  pageSlot={setPageSlot}
+                  appSettings={
+                    route && routeApp && isAppPage && !openedByItsApp
+                      ? {
+                          name: routeApp.info.name,
+                          open: settingsOf(route.app),
+                        }
+                      : undefined
+                  }
+                />
+                <PageBarSlot.Provider value={pageSlot}>
+                  <main className={`page${appPage ? " app-page" : ""}`}>
+                    {onDashboard && dashboard && (
+                      <h1 className="sr-only">
+                        {isEditingHome
+                          ? `Edit ${dashboard.name}`
+                          : dashboard.name}
+                      </h1>
+                    )}
+                    {route?.app === appsPage ? (
+                      <AppsPage
+                        apps={listed}
+                        starting={appsWaiting && installed.length === 0}
+                        pins={pins}
+                        onPins={(next) =>
+                          void changePins(next).catch(() => undefined)
+                        }
+                      />
+                    ) : route?.app === automationsApp.id ? (
+                      <AutomationsPage
                         key={`${routes.length}:${JSON.stringify(route)}`}
-                        roomId={route.params.id ?? ""}
-                        devices={devices}
+                        page={route.page}
+                        params={route.params}
+                        open={opener(automationsApp.id)}
+                        back={back}
                         apps={installed}
-                        entities={sectionEntities}
-                        openApp={(app, page, params) =>
-                          opener(app)(page, params)
-                        }
-                        canOpen={(app, page) =>
-                          hasPage(
-                            apps.find((each) => each.info.id === app),
-                            page,
-                          )
-                        }
-                        openDevice={openDevice}
-                        back={back}
-                      />
-                    ) : route.page === noRoomPage ? (
-                      <NoRoomPage
-                        key={`${routes.length}:${JSON.stringify(route)}`}
                         devices={devices}
-                        openDevice={openDevice}
-                        back={back}
-                      />
-                    ) : (
-                      <CategoryPage
-                        key={`${routes.length}:${JSON.stringify(route)}`}
-                        id={route.params.id ?? ""}
-                        devices={devices}
-                        openDevice={openDevice}
-                        openRoom={(id) => opener(placePages)("room", { id })}
-                        back={back}
-                      />
-                    )
-                  ) : route && routeApp && isAppPage ? (
-                    <>
-                      {/* Its top bar keeps the page's way out, and the gear. */}
-                      <AppNotice
-                        app={routeApp.info}
-                        permissionsAre="settings"
-                        deviceCount={
-                          devices.devices.filter(
-                            (device) => device.driver === routeApp.info.id,
-                          ).length
-                        }
-                        openSettings={
-                          openedByItsApp ? undefined : settingsOf(route.app)
-                        }
+                        live={live}
+                        openAppSettings={(app) => settingsOf(app)()}
                         openStatus={() =>
                           opener(settingsApp.id)(statusSettingsPage)
                         }
+                        ask={ask}
                       />
-                      <WhileNotRunning
-                        app={routeApp.info}
-                        // The page's sections, as they stand in it.
-                        className="flex shrink-0 grow flex-col gap-6"
-                      >
-                        <AppFrame
-                          // Afresh when the home moves to another address.
-                          key={`${route.app} ${host.url}`}
-                          app={routeApp}
-                          page={route.page}
-                          params={route.params}
-                          shown={`${routes.length}:${JSON.stringify(route)}`}
-                          open={opener(route.app)}
-                          back={back}
-                          openSettings={settingsOf(route.app)}
-                          mode={deviceMode}
-                          household={devices.places?.home}
-                          isAway={veil !== undefined}
-                        />
-                      </WhileNotRunning>
-                    </>
-                  ) : isEditingHome ? (
-                    <EditHome devices={devices} home={home} />
-                  ) : (
-                    onDashboard &&
-                    // Until the devices have loaded, the dashboard shows what
-                    // it has; the guide only once the home is known to have none.
-                    (devices.loaded && devices.devices.length === 0 ? (
-                      <SetupGuide
-                        devices={devices}
+                    ) : route?.app === settingsApp.id ? (
+                      <SettingsPage
+                        onPowerAccepted={(going) =>
+                          live.publish({ type: "system", going })
+                        }
+                        key={`${routes.length}:${JSON.stringify(route)}`}
+                        page={route.page}
+                        params={route.params}
+                        open={opener(settingsApp.id)}
+                        back={back}
+                        apps={installed}
+                        onAppChanged={appChanged}
+                        onAppAdded={appAdded}
+                        homeBackground={
+                          dashboardBackground[
+                            dashboards?.find((each) => each.kind === "home")
+                              ?.background ?? "mocha"
+                          ]
+                        }
+                        me={me}
+                        core={core}
                         live={live}
-                        person={me?.person?.name ?? null}
-                        open={openSetup}
+                        devices={devices}
+                        home={home}
+                        onUpdating={setUpdateRunning}
+                        status={shownStatus}
+                        statusFailed={statusFailed}
+                        start={route.page === "main" ? setupStep : undefined}
+                        onStarted={setupStarted}
                       />
-                    ) : (
-                      <>
-                        {devices.loaded && (
-                          <SetupLeft
-                            devices={devices}
-                            live={live}
-                            open={openSetup}
-                          />
-                        )}
-                        <HomeStatus
+                    ) : route?.app === placePages ? (
+                      route.page === "room" ? (
+                        <RoomPage
+                          key={`${routes.length}:${JSON.stringify(route)}`}
+                          roomId={route.params.id ?? ""}
                           devices={devices}
-                          problems={shownStatus?.problems ?? []}
-                          notSetUp={shownStatus?.notSetUp}
                           apps={installed}
-                          openAttention={openSettings}
+                          entities={sectionEntities}
+                          openApp={(app, page, params) =>
+                            opener(app)(page, params)
+                          }
+                          canOpen={(app, page) =>
+                            hasPage(
+                              apps.find((each) => each.info.id === app),
+                              page,
+                            )
+                          }
+                          openDevice={openDevice}
+                          back={back}
+                        />
+                      ) : route.page === noRoomPage ? (
+                        <NoRoomPage
+                          key={`${routes.length}:${JSON.stringify(route)}`}
+                          devices={devices}
+                          openDevice={openDevice}
+                          back={back}
+                        />
+                      ) : (
+                        <CategoryPage
+                          key={`${routes.length}:${JSON.stringify(route)}`}
+                          id={route.params.id ?? ""}
+                          devices={devices}
+                          openDevice={openDevice}
+                          openRoom={(id) => opener(placePages)("room", { id })}
+                          back={back}
+                        />
+                      )
+                    ) : route && routeApp && isAppPage ? (
+                      <>
+                        {/* Its top bar keeps the page's way out, and the gear. */}
+                        <AppNotice
+                          app={routeApp.info}
+                          permissionsAre="settings"
+                          deviceCount={
+                            devices.devices.filter(
+                              (device) => device.driver === routeApp.info.id,
+                            ).length
+                          }
+                          openSettings={
+                            openedByItsApp ? undefined : settingsOf(route.app)
+                          }
                           openStatus={() =>
                             opener(settingsApp.id)(statusSettingsPage)
                           }
-                          openMaintenance={() =>
-                            opener(settingsApp.id)(maintenanceSettingsPage)
-                          }
-                          openCategory={(id) =>
-                            setRoutes([
-                              {
-                                app: placePages,
-                                page: "category",
-                                params: { id },
-                              },
-                            ])
-                          }
                         />
-                        <HomeRooms
-                          devices={devices}
-                          onHome={home.devices}
-                          homeName={home.name}
-                          apps={installed}
-                          entities={sectionEntities}
-                          openRoom={(id) =>
-                            setRoutes([
-                              {
-                                app: placePages,
-                                page: "room",
-                                params: { id },
-                              },
-                            ])
-                          }
-                          openNoRoom={() =>
-                            setRoutes([
-                              {
-                                app: placePages,
-                                page: noRoomPage,
-                                params: {},
-                              },
-                            ])
-                          }
-                          openDevice={openDevice}
-                          onEdit={() => {
-                            const homeDashboard = dashboards?.find(
-                              (each) => each.kind === "home",
-                            );
-                            if (homeDashboard) showDashboard(homeDashboard.id);
-                            setEditingHome(true);
-                          }}
-                        />
-                        <HomeWidgets
-                          apps={installed}
-                          cards={widgetCards}
-                          open={(app, page) => opener(app)(page)}
-                        />
+                        <WhileNotRunning
+                          app={routeApp.info}
+                          // The page's sections, as they stand in it.
+                          className="flex shrink-0 grow flex-col gap-6"
+                        >
+                          <AppFrame
+                            // Afresh when the home moves to another address.
+                            key={`${route.app} ${host.url}`}
+                            app={routeApp}
+                            page={route.page}
+                            params={route.params}
+                            shown={`${routes.length}:${JSON.stringify(route)}`}
+                            open={opener(route.app)}
+                            back={back}
+                            openSettings={settingsOf(route.app)}
+                            mode={deviceMode}
+                            household={devices.places?.home}
+                            isAway={veil !== undefined}
+                          />
+                        </WhileNotRunning>
                       </>
-                    ))
-                  )}
-                </main>
-              </PageBarSlot.Provider>
-            </div>
-            {/* Over the page, under the top bar; it takes the page's
+                    ) : isEditingHome ? (
+                      <EditHome devices={devices} home={home} />
+                    ) : (
+                      onDashboard &&
+                      // Until the devices have loaded, the dashboard shows what
+                      // it has; the guide only once the home is known to have none.
+                      (devices.loaded && devices.devices.length === 0 ? (
+                        <SetupGuide
+                          devices={devices}
+                          live={live}
+                          person={me?.person?.name ?? null}
+                          open={openSetup}
+                        />
+                      ) : (
+                        <>
+                          {devices.loaded && (
+                            <SetupLeft
+                              devices={devices}
+                              live={live}
+                              open={openSetup}
+                            />
+                          )}
+                          <HomeStatus
+                            devices={devices}
+                            problems={shownStatus?.problems ?? []}
+                            notSetUp={shownStatus?.notSetUp}
+                            apps={installed}
+                            openAttention={openSettings}
+                            openStatus={() =>
+                              opener(settingsApp.id)(statusSettingsPage)
+                            }
+                            openMaintenance={() =>
+                              opener(settingsApp.id)(maintenanceSettingsPage)
+                            }
+                            openCategory={(id) =>
+                              setRoutes([
+                                {
+                                  app: placePages,
+                                  page: "category",
+                                  params: { id },
+                                },
+                              ])
+                            }
+                          />
+                          <HomeRooms
+                            devices={devices}
+                            onHome={home.devices}
+                            homeName={home.name}
+                            apps={installed}
+                            entities={sectionEntities}
+                            openRoom={(id) =>
+                              setRoutes([
+                                {
+                                  app: placePages,
+                                  page: "room",
+                                  params: { id },
+                                },
+                              ])
+                            }
+                            openNoRoom={() =>
+                              setRoutes([
+                                {
+                                  app: placePages,
+                                  page: noRoomPage,
+                                  params: {},
+                                },
+                              ])
+                            }
+                            openDevice={openDevice}
+                            onEdit={() => {
+                              const homeDashboard = dashboards?.find(
+                                (each) => each.kind === "home",
+                              );
+                              if (homeDashboard)
+                                showDashboard(homeDashboard.id);
+                              setEditingHome(true);
+                            }}
+                          />
+                          <HomeWidgets
+                            apps={installed}
+                            cards={widgetCards}
+                            open={(app, page) => opener(app)(page)}
+                          />
+                        </>
+                      ))
+                    )}
+                  </main>
+                </PageBarSlot.Provider>
+              </div>
+              {/* Over the page, under the top bar; it takes the page's
                   background, so it sits beside the page, not in it. */}
-            <div aria-hidden="true" className="top-fade" />
-          </>
-        }
-      >
-        {veil && (
-          <ConnectionVeil
-            state={veil}
-            host={host}
-            certificateNotValid={certificateNotValid}
-            onForgotten={props.onSignedOut}
+              <div aria-hidden="true" className="top-fade" />
+            </>
+          }
+        >
+          {veil && (
+            <ConnectionVeil
+              state={veil}
+              host={host}
+              certificateNotValid={certificateNotValid}
+              onForgotten={props.onSignedOut}
+            />
+          )}
+          <DeviceDetail
+            container={screen}
+            tileKey={detail.key}
+            open={detail.open}
+            devices={devices}
+            apps={apps}
+            live={live}
+            home={home}
+            onClose={closeDevice}
+            isAway={veil !== undefined}
+            onCovering={sidebar.setCovered}
+            onShowActivity={(device) => {
+              closeDevice();
+              opener(settingsApp.id)(activitySettingsPage, { device });
+            }}
+            onOpenAppSettings={(app) => {
+              closeDevice();
+              settingsOf(app)();
+            }}
+            onOpenStatus={() => {
+              closeDevice();
+              opener(settingsApp.id)(statusSettingsPage);
+            }}
           />
-        )}
-        <DeviceDetail
-          container={screen}
-          tileKey={detail.key}
-          open={detail.open}
-          devices={devices}
-          apps={apps}
-          live={live}
-          home={home}
-          onClose={closeDevice}
-          isAway={veil !== undefined}
-          onCovering={sidebar.setCovered}
-          onShowActivity={(device) => {
-            closeDevice();
-            opener(settingsApp.id)(activitySettingsPage, { device });
-          }}
-          onOpenAppSettings={(app) => {
-            closeDevice();
-            settingsOf(app)();
-          }}
-          onOpenStatus={() => {
-            closeDevice();
-            opener(settingsApp.id)(statusSettingsPage);
-          }}
-        />
-        {permissionSheet.sheet}
-      </ShellFrame>
+          {permissionSheet.sheet}
+        </ShellFrame>
+      </OverlayHostProvider>
     </Household>
   );
 }

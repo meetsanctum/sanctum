@@ -1,4 +1,8 @@
-import { loadApartPackages, shippedApps } from "./app-host/loader.js";
+import {
+  loadApartPackages,
+  shippedApps,
+  type ApartPackage,
+} from "./app-host/loader.js";
 import { createCoreCertificates } from "./certificate.js";
 import type { CoreConfig } from "./config.js";
 import { openCoreDatabase, type CoreDatabase } from "./database.js";
@@ -204,6 +208,20 @@ export function createCore(
     }
   }
 
+  // An app someone just added, from the exact package checked at Add,
+  // installed as the home's apps are at start. A test's core installs its
+  // own apps, and adds none.
+  async function installAdded(pkg: ApartPackage) {
+    if (replaced.installApps) throw new Error("a test's core adds no app");
+    const appId = pkg.apart.manifest.id;
+    started.add(appId);
+    await modules!.apps.start([pkg], {
+      onTrial: onTrial(),
+      coming: [appId],
+      adding: [appId],
+    });
+  }
+
   const steps: CoreSteps = {
     starting: [
       // Migrates the core's database before anything serves. A core that
@@ -256,6 +274,7 @@ export function createCore(
             version: config.version,
             manager: manager!,
             shippedApps: () => shipped,
+            installAdded: (pkg) => installAdded(pkg),
             hostId: manager!.hostId,
             homeId,
             pin: () => certificates?.current()?.pin ?? null,
@@ -306,6 +325,21 @@ export function createCore(
               "start workflows",
               async (cancelled) => {
                 await modules!.apps.committed();
+                if (cancelled.aborted) return;
+                // These stay installed without a successful start to
+                // restore the workflows an interrupted add left off.
+                for (const app of modules!.apps.list()) {
+                  if (app.state === "off" || app.state === "paused") {
+                    modules!.workflows.forApps.added(app.id);
+                  }
+                }
+                // A removal a core that stopped left part way finishes,
+                // past a trial, since a rollback brings back its record.
+                await modules!.appRemoving
+                  .resume()
+                  .catch((error: unknown) =>
+                    log(`apps: removals didn't finish (${String(error)})`),
+                  );
                 if (!cancelled.aborted) modules!.workflows.start({ ticking });
               },
             );

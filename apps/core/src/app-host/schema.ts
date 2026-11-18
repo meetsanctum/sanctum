@@ -119,3 +119,19 @@ export const appsListed = sqliteTable("apps_listed", {
   id: integer("id").primaryKey(),
   since: integer("since", { mode: "timestamp_ms" }).notNull(),
 });
+
+// Apps the household removed, whose own data the home keeps for a while: who
+// removed it and when, its name and version then, and whether every step of
+// its removal is done, so a core that stopped part way finishes it at start.
+// Adding it back deletes the row. While it's here, a driver's devices are
+// hidden rather than gone.
+
+export const appsRemoved = sqliteTable("apps_removed", {
+  appId: text("app_id").primaryKey(),
+  removedAt: integer("removed_at", { mode: "timestamp_ms" }).notNull(),
+  personId: text("person_id"),
+  clientId: text("client_id"),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  isDone: integer("is_done", { mode: "boolean" }).notNull(),
+});

@@ -137,3 +137,19 @@ export const jobs = sqliteTable(
     index("jobs_next_at").on(table.nextAt),
   ],
 );
+
+// The household's workflows that removing an app turned off, since they use
+// its pieces or its devices, each with when it was last changed then: adding
+// the app back turns on those nobody changed since.
+
+export const workflowsOffForApps = sqliteTable(
+  "workflows_off_for_apps",
+  {
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    app: text("app").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workflowId, table.app] })],
+);

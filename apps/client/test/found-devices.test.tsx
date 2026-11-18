@@ -10,7 +10,13 @@ import { foundHint, useAdding } from "../src/found-devices";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-const empty: PairingInfo = { until: null, joined: [], drivers: [], found: [] };
+const empty: PairingInfo = {
+  until: null,
+  joined: [],
+  drivers: [],
+  finders: [],
+  found: [],
+};
 const found: PairingInfo = {
   ...empty,
   found: [

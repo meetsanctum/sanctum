@@ -244,7 +244,7 @@ export function createAppHost(options: {
     }
     announce(entry);
   }
-  const { accepts, stopApp, reconcile, gone } = createAppLifecycle({
+  const { accepts, stopApp, reconcile, gone, uninstall } = createAppLifecycle({
     installed,
     eventsForApps,
     contexts,
@@ -428,7 +428,14 @@ export function createAppHost(options: {
       {
         onTrial = false,
         coming = [],
-      }: { onTrial?: boolean; coming?: readonly string[] } = {},
+        adding = [],
+      }: {
+        onTrial?: boolean;
+        coming?: readonly string[];
+        // Those someone just added, which say so until their first start
+        // returns.
+        adding?: readonly string[];
+      } = {},
     ) {
       isOnTrial = onTrial;
       for (const appId of coming) kept.add(appId);
@@ -450,7 +457,9 @@ export function createAppHost(options: {
             const current = await options.updates.packageFor(pkg);
             if (isClosing) break;
             install(current, checked);
-            added.push(installed.get(appId)!);
+            const entry = installed.get(appId)!;
+            if (adding.includes(appId)) entry.supervision.isAdding = true;
+            added.push(entry);
           } catch (error) {
             log(`apps: ${appId} was not installed (${message(error)})`);
           }
@@ -512,13 +521,21 @@ export function createAppHost(options: {
           // running: both own its context until they end.
           await entry.lifecycle;
           await ended;
-          await stopApp(entry, { reason: "removing" });
-          entry.storage.close();
-          await entry.link.close();
-          await manager.removeAppContainer(appId).catch((error: unknown) => {
-            log(`apps: ${appId}'s container stays (${message(error)})`);
-          });
+          await uninstall(entry);
+          // It's gone from the list by now, so what it brought and its
+          // container go even when stopping it fails: removing its
+          // container stops what's left, and only that fails the removal.
+          await stopApp(entry, { reason: "removing" }).catch((error: unknown) =>
+            log(`apps: ${appId} didn't stop cleanly (${message(error)})`),
+          );
+          try {
+            entry.storage.close();
+            await entry.link.close();
+          } catch (error) {
+            log(`apps: ${appId}'s link didn't close (${message(error)})`);
+          }
           options.entities.removeApp(appId);
+          await manager.removeAppContainer(appId);
         } finally {
           await release();
         }
@@ -540,6 +557,14 @@ export function createAppHost(options: {
 
     /** Whether the apps it started with are installed, so `list` is the home's apps. */
     hasInstalled: () => hasInstalled,
+
+    /** One installed app as clients list it. */
+    info(appId: string): AppInfo | undefined {
+      const entry = installed.get(appId);
+      return entry
+        ? installedInfoOf(entry, options.updates.shownFor(appId))
+        : undefined;
+    },
 
     list() {
       return [...installed.values()].map((entry) => ({

@@ -167,6 +167,8 @@ export type AppRun = {
   since: string;
   /** Its first start has not returned or been interrupted. */
   isFirstStart?: true;
+  /** Someone added it, and its first start since has not returned. */
+  isAdding?: true;
   /** What it waits for. */
   waitingFor?: string;
   /**

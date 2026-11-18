@@ -50,6 +50,41 @@ export function createAddedApps(
       });
     },
 
+    /**
+     * Records that someone added an app, from now on installed as the home's,
+     * with the home's list and what `alongside` writes in the same transaction.
+     * Whether it wasn't added already.
+     */
+    add(
+      appId: string,
+      who: { personId?: string; clientId?: string },
+      alongside: () => void = () => undefined,
+    ) {
+      return durably(db, () => {
+        const at = now();
+        const inserted = db
+          .insert(appsAdded)
+          .values({
+            appId,
+            addedAt: at,
+            personId: who.personId ?? null,
+            clientId: who.clientId ?? null,
+          })
+          .onConflictDoNothing()
+          .run();
+        if (inserted.changes === 0) return false;
+        // Someone chose an app, so the home keeps its list from now on, even
+        // when its start knew of none: an app staged later isn't recorded as
+        // one it had.
+        db.insert(appsListed)
+          .values({ id: 1, since: at })
+          .onConflictDoNothing()
+          .run();
+        alongside();
+        return true;
+      });
+    },
+
     /** The apps the household added. */
     ids(): Set<string> {
       return new Set(

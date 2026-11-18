@@ -5,6 +5,7 @@ import type {
   DashboardInfo,
   LiveActivity,
   LiveApp,
+  LiveAppRemoved,
   LiveDashboards,
   LiveDevice,
   LiveEntity,
@@ -109,6 +110,13 @@ export function createLiveUpdates(
     app(app: AppInfo) {
       connections.publish((principal): LiveApp | undefined =>
         reads(principal) ? { type: "app", app } : undefined,
+      );
+    },
+
+    // Someone removed an app, which every shell drops at once.
+    appRemoved(app: string) {
+      connections.publish((principal): LiveAppRemoved | undefined =>
+        reads(principal) ? { type: "app.removed", app } : undefined,
       );
     },
 

@@ -398,6 +398,19 @@ export function createCallHost(options: {
     );
   }
 
+  // Someone removes the app: its last tidying, in a call's own scope, as
+  // a driver's hooks run. One without the hook has nothing to tidy.
+  function uninstall(
+    { id, actor }: CallMessage,
+    deadlineMs: number,
+  ): Promise<Outcome> {
+    const run = app.uninstall;
+    if (!run) return Promise.resolve<Outcome>({ ok: true });
+    return inCall(id, deadlineMs, (scope) =>
+      outcomeOf(() => run.call(app, contextOf(scope, actor))),
+    );
+  }
+
   // Each of the app's handlers in turn, the first failure answering for them
   // all: one that fails holds up nothing else.
   async function deliver(
@@ -462,6 +475,8 @@ export function createCallHost(options: {
         return action(message, left, body.action, body.input);
       case "driver":
         return driverCall(message, left, body.hook, body.params);
+      case "uninstall":
+        return uninstall(message, left);
       case "event":
         return deliver(id, left, body.event, on);
     }
