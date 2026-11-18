@@ -5,6 +5,7 @@ import type {
   AppSettings,
   AppRemoval,
   AvailableApp,
+  HardwareOffer,
   StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
@@ -12,6 +13,7 @@ import { z } from "zod";
 
 import type { AppAdding } from "./adding.js";
 import type { AppDeleting } from "./deleting.js";
+import type { HardwareOffers } from "./hardware-offers.js";
 import type { AppRemoving } from "./removing.js";
 import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
@@ -41,6 +43,10 @@ import type { AppHost } from "./host.js";
 //   POST /api/apps/:appId/remove              removes it, but a system app
 //                                             (forbidden), and not while it
 //                                             updates or goes back (conflict)
+//   GET  /api/hardware/offer                  { offer }: the app a Zigbee
+//                                             stick plugged in offers, or null
+//   POST /api/hardware/offer/dismiss          { id }: no to it, on every
+//                                             client; conflict once it ended
 //   POST /api/apps/:appId/data/delete         deletes a removed app's data
 //                                             now; refused (conflict) while
 //                                             its removal is under way or
@@ -113,10 +119,11 @@ export function registerAppRoutes(
     adding: AppAdding;
     removing: AppRemoving;
     deleting: AppDeleting;
+    offers: HardwareOffers;
     gate: Gate;
   },
 ) {
-  const { host, available, adding, removing, deleting, gate } = options;
+  const { host, available, adding, removing, deleting, offers, gate } = options;
 
   // The installed apps as clients see them. The origin stays the core's.
   const infos = (): AppInfo[] =>
@@ -157,6 +164,23 @@ export function registerAppRoutes(
   // hears it's gone as it is.
   app.post("/api/apps/:appId/remove", async (request) => {
     await removing.remove(request.principal!, appIdOf(request.params));
+    return {};
+  });
+
+  // A Zigbee stick plugged in offers its app on every client, and an answer
+  // on any of them ends it: Add through POST /api/apps/add, no here.
+  app.get(
+    "/api/hardware/offer",
+    async (request): Promise<{ offer: HardwareOffer | null }> => {
+      gate.admit(request.principal!, { tier: "read" });
+      return { offer: offers.current() };
+    },
+  );
+
+  app.post("/api/hardware/offer/dismiss", async (request) => {
+    const named = confirmedCopy.safeParse(request.body);
+    if (!named.success) throw new ActionCallError("invalid_request");
+    await offers.dismiss(request.principal!, named.data.id);
     return {};
   });
 

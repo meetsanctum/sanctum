@@ -25,6 +25,7 @@ import {
   updateStatus,
   versionList,
   type LanVersion,
+  zigbeeSticks,
 } from "./manager-answers.js";
 
 // The core reaches the manager over a Unix socket that only the two of them
@@ -493,6 +494,18 @@ export function createManagerClient(options: {
         }
       }
       return {};
+    },
+
+    // The Zigbee sticks plugged in that the manager recognises, by the host's
+    // path; a serial adapter it doesn't know isn't one.
+    async zigbeeSticks() {
+      const { candidates } = parseBody(
+        zigbeeSticks,
+        await once("GET", "/api/services/zigbee2mqtt/coordinator"),
+      );
+      return candidates
+        .filter((candidate) => candidate.profileId !== null)
+        .map(({ path, label }) => ({ path, label }));
     },
 
     // What Go back would return to, while its copy and package are still there.

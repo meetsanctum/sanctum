@@ -24,6 +24,7 @@ import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import { createHardwareOffers } from "./app-host/hardware-offers.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
@@ -100,6 +101,9 @@ export async function createModules(
         // may leave them out.
         deleteAppData?: ManagerClient["deleteAppData"];
         eraseServiceData?: ManagerClient["eraseServiceData"];
+        // The Zigbee sticks plugged in (hardware-offers.ts); tests may leave
+        // it out.
+        zigbeeSticks?: ManagerClient["zigbeeSticks"];
         // What it staged for this image; tests may leave it out.
         stagedApps?: ManagerClient["stagedApps"];
       };
@@ -488,6 +492,17 @@ export async function createModules(
     host: () => options.manager.hostStatus(),
     log,
   });
+  // A Zigbee stick plugged in brings up its app's add sheet.
+  const hardwareOffers = createHardwareOffers({
+    db,
+    gate,
+    added: addedApps,
+    available: availableApps,
+    manager: options.manager,
+    onOffer: live.offer,
+    now,
+    log,
+  });
   // Adding and removing apps take turns.
   const listTurns = createListTurns();
   const appAdding = createAppAdding({
@@ -649,6 +664,7 @@ export async function createModules(
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
+    ["stop looking for sticks", () => hardwareOffers.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
@@ -692,6 +708,7 @@ export async function createModules(
     appAdding,
     appRemoving,
     appDeleting,
+    hardwareOffers,
     removedApps,
     pages,
     workflows,

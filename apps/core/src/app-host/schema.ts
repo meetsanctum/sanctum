@@ -143,6 +143,15 @@ export const appUpdatesWaiting = sqliteTable("app_updates_waiting", {
   since: integer("since", { mode: "timestamp_ms" }).notNull(),
 });
 
+// The Zigbee sticks plugged in when the home last looked, by the host's
+// path, once the offer of their app has been answered or wasn't needed: a
+// stick still there after a restart or a power cut asks nothing, and one
+// plugged in while the home was off asks once it's back.
+export const sticksSeen = sqliteTable("sticks_seen", {
+  path: text("path").primaryKey(),
+  seenAt: integer("seen_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const appsRemoved = sqliteTable("apps_removed", {
   appId: text("app_id").primaryKey(),
   removedAt: integer("removed_at", { mode: "timestamp_ms" }).notNull(),

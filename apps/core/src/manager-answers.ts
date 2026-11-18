@@ -283,6 +283,16 @@ export const stagedApps = z.object({
   ),
 });
 
+export const zigbeeSticks = z.object({
+  candidates: z.array(
+    z.object({
+      path: z.string(),
+      label: z.string(),
+      profileId: z.string().nullable(),
+    }),
+  ),
+});
+
 export const heldServices = z.object({
   services: z.array(z.object({ name: z.string(), apps: z.array(z.string()) })),
 });

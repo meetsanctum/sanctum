@@ -160,6 +160,8 @@ export function Asks(props: { requests: readonly PermissionInfo[] }) {
 export function AddAppSheet(props: {
   /** The app to add; none while the sheet is closed. */
   app: AvailableApp | undefined;
+  /** What brought it up, above its title, as a stick plugged in. */
+  lead?: string;
   onAdded: (app: AppInfo) => void;
   onClose: () => void;
 }) {
@@ -208,6 +210,11 @@ export function AddAppSheet(props: {
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />
+            {props.lead && (
+              <p className="m-0 text-sm font-medium text-muted-foreground">
+                {props.lead}
+              </p>
+            )}
             <DialogTitle>Add {app.name}?</DialogTitle>
             {blocked ? (
               <DialogDescription className="rounded-md bg-muted px-3 py-2.5 text-foreground">
