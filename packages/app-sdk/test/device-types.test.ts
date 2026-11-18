@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   capabilityKinds,
   declaredTypes,
+  type DeclaredType,
   deviceTypeOf,
   deviceTypes,
   fitsType,
@@ -80,7 +81,13 @@ describe("what a device with some kinds is", () => {
 });
 
 describe("what a driver may say a device is", () => {
-  it("is any type but those only the household chooses", () => {
+  it("is any type but those only the household chooses, from the build on", () => {
+    // @ts-expect-error A door is the household's to choose.
+    const door: DeclaredType = "door";
+    // @ts-expect-error So is a window.
+    const window: DeclaredType = "window";
+    const plug: DeclaredType = "plug";
+    expect([door, window, plug]).toHaveLength(3);
     expect(declaredTypes).toEqual(
       deviceTypes.filter((type) => !type.chosenOnly).map((type) => type.id),
     );

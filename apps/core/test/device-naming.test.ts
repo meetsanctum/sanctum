@@ -46,7 +46,7 @@ describe("a driver that says what its device is", () => {
     return { type: device?.type, name: device?.name };
   };
 
-  it("uses the declared type and renames the device when it changes", async () => {
+  it("is taken at its word, and the device named again when its word changes", async () => {
     const { core, maya } = await lampsCore();
 
     // The radio's switches are plugs by their model's name.
