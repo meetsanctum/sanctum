@@ -5,9 +5,16 @@ import type {
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, ScrollArea, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
 import { ChevronLeft } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
@@ -54,6 +61,13 @@ const closePairing = () =>
     json: {},
   });
 
+// The scroll area's content fills it, so a page can sit in its middle.
+const pageScroll = cn(
+  "min-h-0 flex-1",
+  "[&>[data-slot=scroll-area-viewport]>div]:flex! [&>[data-slot=scroll-area-viewport]>div]:min-h-full",
+  "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-32px),transparent)]",
+);
+
 export function AddDevices(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,6 +86,7 @@ export function AddDevices(props: {
 }) {
   const host = useOverlayHost();
   const [page, setPage] = useState<Page>({ kind: "choose" });
+  const scrollArea = useRef<HTMLDivElement>(null);
   const [pairing, setPairing] = useState<PairingInfo>();
   // A command or live update overtakes any read already under way.
   const pairingRevision = useRef(0);
@@ -280,6 +295,15 @@ export function AddDevices(props: {
       if (needsClose.current) void close().catch(() => undefined);
     };
   }, [props.open, close]);
+
+  // Start the new page at its top without remounting pending device cards.
+  useLayoutEffect(() => {
+    if (!props.open) return;
+    const viewport = scrollArea.current?.querySelector<HTMLElement>(
+      "[data-slot=scroll-area-viewport]",
+    );
+    if (viewport) viewport.scrollTop = 0;
+  }, [page.kind, props.open]);
 
   // A save can finish after the overlay closes, so keep following live
   // devices.
@@ -492,6 +516,14 @@ export function AddDevices(props: {
             : "None found"
           : undefined
       }
+      footer={
+        page.kind === "found" &&
+        shown.length > 0 && (
+          <p className="m-0 text-center text-sm text-(--silver)">
+            Don't see yours? Check it's switched on and connected to your Wi‑Fi.
+          </p>
+        )
+      }
       leading={
         page.kind !== "choose" && (
           <Button
@@ -505,10 +537,12 @@ export function AddDevices(props: {
         )
       }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* The page scrolls between the header and the footer, fading out
+          under each as far as its own padding reaches. */}
+      <ScrollArea ref={scrollArea} type="scroll" className={pageScroll}>
         <div
           data-slot="overlay-content"
-          className="mx-auto flex min-h-full w-full max-w-245 flex-col gap-6 ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] pt-4 pb-[calc(32px+env(safe-area-inset-bottom))]"
+          className="mx-auto flex w-full max-w-245 min-w-0 flex-1 flex-col gap-6 ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] pt-4 pb-[calc(32px+env(safe-area-inset-bottom))]"
         >
           {page.kind === "choose" && (
             <ChoosePage ways={ways} onChoose={choose} />
@@ -576,7 +610,7 @@ export function AddDevices(props: {
             </div>
           )}
         </div>
-      </div>
+      </ScrollArea>
       <EditDevice
         editing={removing}
         appName={removing ? appName(removing.device.driver) : null}

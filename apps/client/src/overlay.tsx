@@ -6,7 +6,8 @@ import { VeilGlass } from "./veil";
 
 // An overlay: the veil's frosted Carbon glass over the whole screen, the top bar too,
 // with a header along its top and its pages (SwipePages) filling the rest,
-// each in the middle of the room above their tabs. The header holds what it
+// each in the middle of the room above their tabs, and a footer under them
+// that stays put while they scroll. The header holds what it
 // leads with, such as a device's Add to Home, the title, the line under it
 // and Done, centred on the top bar's row, and in the desktop app on macOS
 // moves the window between them (styles.css). The traffic lights hide until
@@ -19,7 +20,7 @@ import { VeilGlass } from "./veil";
 // A press on these keeps the overlay open; the pages around them span the
 // glass.
 const content =
-  "[data-slot=swipe-page-content], [data-slot=swipe-pages-tabs], [data-slot=scroll-area-scrollbar], [data-slot=overlay-content]";
+  "[data-slot=swipe-page-content], [data-slot=swipe-pages-tabs], [data-slot=scroll-area-scrollbar], [data-slot=overlay-content], [data-slot=overlay-footer]";
 
 // Inside the overlay's content, which stays until its fade out has ended, so
 // this says when it is really gone rather than when it starts to go.
@@ -47,6 +48,8 @@ export function Overlay(props: {
   isDonePrimary?: boolean;
   /** What the header starts with, opposite Done. */
   leading?: ReactNode;
+  /** Under the pages, along the bottom, however far they scroll. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const { onClose } = props;
@@ -135,6 +138,14 @@ export function Overlay(props: {
               className="flex min-h-0 flex-1 flex-col"
             >
               {props.children}
+              {props.footer && (
+                <div
+                  data-slot="overlay-footer"
+                  className="shrink-0 ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] pt-2 pb-[calc(24px+env(safe-area-inset-bottom))]"
+                >
+                  {props.footer}
+                </div>
+              )}
             </div>
           </VeilGlass>
         </DialogPrimitive.Content>
