@@ -35,7 +35,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     name: "ESPHome",
     // 0.2.0: a device waiting for a key gets one of its own, and removing
     // it takes the key off.
-    version: "0.2.0",
+    version: "0.3.0",
     core: "^1.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
@@ -87,6 +87,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     driver: {
       async command(_ctx, command) {
         await running().command(command);
+      },
+      async identify(_ctx, device) {
+        await running().identify(device);
       },
       async discovered(_ctx, discovery) {
         await running().discovered(discovery);

@@ -42,6 +42,7 @@ function lightDevice(id: string, name: string, state: LightState): DeviceInfo {
     lastSeenAt: null,
     firmware: null,
     probe: false,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,

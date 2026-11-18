@@ -55,6 +55,7 @@ function device(
     lastSeenAt: null,
     firmware: null,
     probe: false,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,

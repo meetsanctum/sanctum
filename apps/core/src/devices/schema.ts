@@ -63,6 +63,8 @@ export const devices = sqliteTable(
     // (firmware.ts), and whether Check connection can ask it how it is.
     firmware: text("firmware", { mode: "json" }).$type<FirmwareInfo>(),
     probe: integer("probe", { mode: "boolean" }).notNull().default(false),
+    // Whether it can show itself, as a light blinks (driver.identify).
+    identify: integer("identify", { mode: "boolean" }).notNull().default(false),
     // Its battery's charge in percent, as its driver last reported it.
     battery: integer("battery"),
     // Whether the device itself says its battery is low, as its driver

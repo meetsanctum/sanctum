@@ -135,6 +135,12 @@ export interface AppDefinition extends AppManifestFields {
      */
     probe?(ctx: AppContext, device: DriverDevice): Promise<void>;
     /**
+     * Has one of its devices show itself, resolving once asked: a light
+     * blinks, or a sensor flashes its own light, so a person can see which
+     * one it is (Blink). Only a device registered with `identify` is asked.
+     */
+    identify?(ctx: AppContext, device: DriverDevice): Promise<void>;
+    /**
      * What can be wrong with its devices, by id, in its own words, which it
      * names for a device with ctx.devices.problem (device-problems.ts).
      */

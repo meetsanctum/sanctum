@@ -248,6 +248,7 @@ describe("registering a device", () => {
       // Nothing known of its firmware, and it cannot be asked how it is.
       firmware: null,
       probe: false,
+      identify: false,
     });
   });
 
@@ -284,10 +285,12 @@ describe("registering a device", () => {
         ...lamp,
         firmware: { version: "1.126.9", updatable: true },
         probe: true,
+        identify: false,
       }),
     ).toMatchObject({
       firmware: { version: "1.126.9", updatable: true, sleeps: false },
       probe: true,
+      identify: false,
     });
     expect(
       deviceRegistration.parse({ ...lamp, firmware: { updatable: false } })
@@ -377,6 +380,7 @@ describe("what needs attention", () => {
     capabilities: [],
     firmware: null,
     probe: true,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,
@@ -628,6 +632,7 @@ describe("a device from a core newer than this build", () => {
     capabilities,
     firmware: null,
     probe: false,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,

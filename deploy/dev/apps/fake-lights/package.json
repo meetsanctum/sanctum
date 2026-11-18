@@ -12,7 +12,7 @@
     "sanctum-app.json"
   ],
   "scripts": {
-    "test": "sanctum-app manifest --check",
+    "test": "node --test && sanctum-app manifest --check",
     "manifest": "sanctum-app manifest"
   },
   "dependencies": {

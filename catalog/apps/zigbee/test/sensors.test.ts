@@ -93,6 +93,7 @@ describe("a climate sensor's exposes", () => {
       ],
       firmware: { updatable: false, sleeps: true },
       probe: false,
+      identify: false,
     });
   });
 });

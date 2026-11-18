@@ -55,6 +55,7 @@ const device = (id: string, capabilities: CapabilityInfo[]): DeviceInfo => ({
   lastSeenAt: null,
   firmware: null,
   probe: false,
+  identify: false,
   battery: null,
   batteryLow: null,
   shownAs: null,

@@ -180,6 +180,7 @@ describe("a device with no capabilities", () => {
       capabilities: [],
       roomId: null,
       probe: false,
+      identify: false,
     });
     expect(live.messages).toContainEqual(
       expect.objectContaining({
