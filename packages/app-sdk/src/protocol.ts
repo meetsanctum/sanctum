@@ -156,6 +156,8 @@ export const callBodySchema = z.discriminatedUnion("kind", [
       },
     ),
   z.object({ kind: z.literal("stop"), reason: z.enum(stopReasons) }),
+  // Someone removes it: its uninstall hook (protocol 9).
+  z.object({ kind: z.literal("uninstall") }),
   z.object({
     kind: z.literal("action"),
     action: z.string().min(1),

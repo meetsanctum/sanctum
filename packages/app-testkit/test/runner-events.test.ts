@@ -180,3 +180,54 @@ describe("a driver's hooks", () => {
     ).toMatchObject({ ok: false, code: "unavailable" });
   });
 });
+
+describe("its uninstall hook", () => {
+  it("runs as someone removes it, as a call of its own", async () => {
+    const seen: string[] = [];
+    const running = await fixture.connected(
+      testApp([], {
+        uninstall: async (ctx) => {
+          await ctx.people.list();
+          seen.push(ctx.actor.kind);
+        },
+      }),
+      { people: async () => [] },
+    );
+    await running.call({ kind: "start", reason: "started" });
+
+    const removing = running.issue({ kind: "uninstall" });
+
+    expect(await removing.answer).toMatchObject({ ok: true });
+    expect(seen).toEqual(["app"]);
+    expect(running.requests).toContainEqual({
+      call: removing.id,
+      method: "people",
+      params: [],
+    });
+  });
+
+  it("has nothing to do for an app without it", async () => {
+    const running = await fixture.connected(testApp());
+    await running.call({ kind: "start", reason: "started" });
+
+    expect(await running.call({ kind: "uninstall" })).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("says when it fails", async () => {
+    const running = await fixture.connected(
+      testApp([], {
+        uninstall: async () => {
+          throw new Error("the cloud didn't answer");
+        },
+      }),
+    );
+    await running.call({ kind: "start", reason: "started" });
+
+    expect(await running.call({ kind: "uninstall" })).toMatchObject({
+      ok: false,
+      message: "the cloud didn't answer",
+    });
+  });
+});
