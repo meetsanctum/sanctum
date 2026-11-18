@@ -23,6 +23,7 @@ import type { ApartPackage } from "../src/app-host/loader.js";
 import { appsAdded, sticksSeen } from "../src/app-host/schema.js";
 import { newSupervision } from "../src/app-host/supervisor.js";
 import { openCoreDatabase } from "../src/database.js";
+import { ManagerRefusal, ManagerUnavailable } from "../src/manager.js";
 import { base } from "./app-apart-support.js";
 import { claimed, post, testCore } from "./support.js";
 
@@ -93,6 +94,7 @@ async function addingWith(
     hasInstalled?: boolean;
     refuses?: boolean;
     beforeFind?: () => Promise<void>;
+    reserve?: Parameters<typeof createAppAdding>[0]["reserve"];
     finishRemoval?: (
       removed: ReturnType<typeof createRemovedApps>,
     ) => (appId: string) => Promise<void>;
@@ -168,6 +170,7 @@ async function addingWith(
       },
     },
     hasInstalled: () => options.hasInstalled ?? true,
+    reserve: options.reserve,
     install:
       options.installs ??
       (async (pkg) => {
@@ -309,6 +312,58 @@ describe("adding an app", () => {
     ).rejects.toMatchObject({ code: "unavailable" });
     expect(added.ids().has("sanctum.example")).toBe(false);
     expect(installing).toEqual([]);
+  });
+
+  it("holds what it needs in the manager before it's added, its services too", async () => {
+    const reserved: unknown[] = [];
+    const { adding } = await addingWith({
+      available: [zigbee],
+      reserve: async (appId, need) => void reserved.push([appId, need]),
+    });
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(reserved).toEqual([
+      [
+        "sanctum.example",
+        { memoryMb: 128, dataMb: 256, services: ["zigbee2mqtt"] },
+      ],
+    ]);
+  });
+
+  it("refuses it when the manager has no room left for it since the sheet", async () => {
+    const { added, adding, installing, entries } = await addingWith({
+      reserve: async () => {
+        throw new ManagerRefusal(
+          "sanctum.example needs 128 MB, and only 60 MB are left beside the others",
+          409,
+        );
+      },
+    });
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(added.ids().has("sanctum.example")).toBe(false);
+    expect(installing).toEqual([]);
+    expect(entries).toMatchObject([
+      { outcome: "refused", reason: "unavailable" },
+    ]);
+  });
+
+  it("adds it anyway while the manager can't answer, which still checks its start", async () => {
+    const { added, adding, logs } = await addingWith({
+      reserve: async () => {
+        throw new ManagerUnavailable("The manager did not answer");
+      },
+    });
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(added.ids().has("sanctum.example")).toBe(true);
+    expect(logs).toEqual([
+      "apps: sanctum.example's room wasn't reserved (The manager did not answer)",
+    ]);
   });
 
   it("knows no app the home couldn't add", async () => {

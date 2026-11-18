@@ -106,6 +106,10 @@ export async function createModules(
         zigbeeSticks?: ManagerClient["zigbeeSticks"];
         // What it staged for this image; tests may leave it out.
         stagedApps?: ManagerClient["stagedApps"];
+        // What's left for another app, and holding what an add needs
+        // (adding.ts); tests may leave them out.
+        appCapacity?: ManagerClient["appCapacity"];
+        reserveForApp?: ManagerClient["reserveForApp"];
       };
     // The apps this core's image ships, once the core has read them.
     shippedApps?: () => readonly string[];
@@ -478,7 +482,17 @@ export async function createModules(
       (await options.manager.stagedApps?.(5_000, check)) ?? {},
     loadPackage: loadStagedPackage,
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
-    host: () => options.manager.hostStatus(),
+    host: async () => {
+      const { appCapacity } = options.manager;
+      const [status, capacity] = await Promise.all([
+        options.manager.hostStatus(),
+        // A manager that keeps one count says what's left by it.
+        options.manager.capabilities().reserves && appCapacity
+          ? appCapacity().catch(() => null)
+          : null,
+      ]);
+      return { ...status, capacity };
+    },
     log,
   });
   // A Zigbee stick plugged in brings up its app's add sheet.
@@ -508,6 +522,10 @@ export async function createModules(
     offers: hardwareOffers,
     activity,
     hasInstalled: () => apps.hasInstalled(),
+    reserve: (appId, need) =>
+      options.manager.capabilities().reserves && options.manager.reserveForApp
+        ? options.manager.reserveForApp(appId, need)
+        : Promise.resolve(),
     install: async (pkg) => {
       if (!options.installAdded) throw new Error("this core installs no app");
       await options.installAdded(pkg);

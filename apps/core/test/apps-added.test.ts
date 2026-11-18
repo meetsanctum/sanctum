@@ -248,6 +248,27 @@ describe("what keeps an app from being added", () => {
     ]);
   });
 
+  it("what's left by the manager's count, when it keeps one, whatever is free now", () => {
+    const counted = {
+      ...host,
+      capacity: { memoryFreeMb: 100, dataFreeBytes: 200 * mebibyte },
+    };
+    expect(shortfallsOf(app, { pagesNeed: null, host: counted })).toEqual([
+      { kind: "memory", needs: 128 * mebibyte, free: 100 * mebibyte },
+      { kind: "space", needs: 256 * mebibyte, free: 200 * mebibyte },
+    ]);
+    // A disk it can't say about holds nothing back.
+    expect(
+      shortfallsOf(app, {
+        pagesNeed: null,
+        host: {
+          ...host,
+          capacity: { memoryFreeMb: 1024, dataFreeBytes: null },
+        },
+      }),
+    ).toEqual([]);
+  });
+
   it("nothing it can't know, as on a host that doesn't say", () => {
     expect(shortfallsOf(app, { pagesNeed: null, host: null })).toEqual([]);
     expect(

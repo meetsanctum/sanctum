@@ -160,6 +160,7 @@ export function fakeManager() {
       discovery: true,
       lan: lan.can,
       deletesData: true,
+      reserves: false,
     }),
     async discovery(after, services) {
       network.asked.push([...services]);

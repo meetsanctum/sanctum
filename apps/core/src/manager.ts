@@ -2,7 +2,9 @@ import { request } from "node:http";
 import { z } from "zod";
 
 import {
+  appCapacity,
   appContainer,
+  appReservation,
   appUpdatesHeld,
   appUsage,
   capabilities,
@@ -392,8 +394,34 @@ export function createManagerClient(options: {
     },
 
     // Stops it, which takes up to 10 s for one that doesn't answer.
-    async stopAppContainer(app: string) {
-      await once("POST", `${appContainerPath(app)}/stop`, undefined, 30_000);
+    // Turned off, it gives its room back until it starts again.
+    async stopAppContainer(app: string, how: { off?: boolean } = {}) {
+      await once("POST", `${appContainerPath(app)}/stop`, how, 30_000);
+    },
+
+    // What's left for another app, as its add sheet says.
+    async appCapacity() {
+      return parseBody(
+        appCapacity,
+        await once("GET", "/api/apps/capacity", undefined, 5_000),
+      );
+    },
+
+    // Holds what an add needs until its container starts; a 409 says
+    // there isn't room (ManagerRefusal).
+    async reserveForApp(
+      app: string,
+      need: { memoryMb: number; dataMb: number; services: string[] },
+    ) {
+      return parseBody(
+        appReservation,
+        await once(
+          "POST",
+          `/api/apps/${encodeURIComponent(app)}/reservations`,
+          need,
+          15_000,
+        ),
+      );
     },
 
     async removeAppContainer(app: string) {

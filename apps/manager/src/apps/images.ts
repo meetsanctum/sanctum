@@ -75,6 +75,8 @@ export function createAppImages(options: {
   helper: Helper;
   // What's free for files on the disk they're on, if known.
   free: () => Promise<number | null>;
+  // What's reserved for apps' data other than this one's (capacity.ts).
+  reserved?: (except?: string) => number;
   log: Log;
 }) {
   const { docker, dataDir, hostDevDir, helper, free, log } = options;
@@ -134,10 +136,21 @@ export function createAppImages(options: {
     return bytes;
   }
 
-  async function assertRoom(app: string, more: number) {
+  // What's left of the disk for this app's data, or another's, if known.
+  async function room(app?: string) {
     const available = await free();
-    if (available === null) return;
-    const left = available - (await promised()) - keptForUpdates;
+    if (available === null) return null;
+    return (
+      available -
+      (await promised()) -
+      keptForUpdates -
+      (options.reserved?.(app) ?? 0)
+    );
+  }
+
+  async function assertRoom(app: string, more: number) {
+    const left = await room(app);
+    if (left === null) return;
     if (more > left) {
       throw new AppRefusal(
         `${app} needs ${Math.ceil(more / mebibyte)} MB for its data, and only ${Math.max(0, Math.floor(left / mebibyte))} MB can be spared`,
@@ -409,6 +422,13 @@ done
         delete state.images[app];
       });
       log(`Deleted ${app}'s image`);
+    },
+
+    room,
+
+    /** The size its image has, in MB, or 0 for an app without one. */
+    async sizeMb(app: string) {
+      return (await read()).images[app]?.sizeMb ?? 0;
     },
 
     async has(app: string) {

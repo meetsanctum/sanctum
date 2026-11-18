@@ -47,6 +47,7 @@ export function setUp(
         discovery: false,
         lan: false,
         deletesData: false,
+        reserves: false,
       }),
       startAppContainer: async (app) => {
         started.push(app);

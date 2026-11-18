@@ -62,6 +62,7 @@ async function finding(
       discovery: false,
       lan: false,
       deletesData: false,
+      reserves: false,
     });
   }
   const core = await testCore({

@@ -264,6 +264,9 @@ export function createServices(options: {
     status,
     list: () => serviceDefinitions.map((definition) => status(definition.name)),
 
+    /** The services it runs now, with what they need, by name. */
+    wanted: () => [...wantedServices(store.current())],
+
     // Run once at start: accounts follow the clients this manager's
     // services have, which an update may have changed.
     async start() {

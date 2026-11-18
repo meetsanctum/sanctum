@@ -527,7 +527,7 @@ describe("whether it fits beside the rest", () => {
     ).rejects.toThrow("needs 512 MB, and only 224 MB are left");
   });
 
-  it("doesn't count one that has stopped", async () => {
+  it("counts one that has stopped, as for its update, which needs its room back", async () => {
     const { apps, dataDir } = await setup(2 * gibibyte);
     await staged(dataDir, "sanctum.moods");
     await apps.start({ ...start, memoryMb: 800 });
@@ -535,7 +535,22 @@ describe("whether it fits beside the rest", () => {
 
     await expect(
       apps.start({ app: "sanctum.moods", folder, memoryMb: 512 }),
+    ).rejects.toThrow("needs 512 MB, and only 224 MB are left");
+  });
+
+  it("doesn't count one turned off, until it starts again", async () => {
+    const { apps, dataDir } = await setup(2 * gibibyte);
+    await staged(dataDir, "sanctum.moods");
+    await apps.start({ ...start, memoryMb: 800 });
+    await apps.stop(app, { off: true });
+
+    await expect(
+      apps.start({ app: "sanctum.moods", folder, memoryMb: 512 }),
     ).resolves.toMatchObject({ state: "running" });
+    // Back on, it needs the room it gave.
+    await expect(apps.start({ ...start, memoryMb: 800 })).rejects.toThrow(
+      "needs 800 MB, and only 512 MB are left",
+    );
   });
 
   it("doesn't count the one it replaces", async () => {

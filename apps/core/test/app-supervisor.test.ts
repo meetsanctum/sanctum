@@ -289,6 +289,7 @@ describe("an app's supervisor", () => {
           discovery: false,
           lan: false,
           deletesData: false,
+          reserves: false,
         }),
       });
 
@@ -510,6 +511,7 @@ describe("an app's supervisor", () => {
             discovery: true,
             lan: true,
             deletesData: false,
+            reserves: false,
           }),
           startAppContainer: start,
         },
@@ -704,5 +706,31 @@ describe("an app's supervisor", () => {
       expect(reconciled).not.toHaveBeenCalled();
       expect(entry.supervision!.timer).toBeUndefined();
     });
+  });
+});
+
+describe("an app turned off", () => {
+  it("says so as its container stops, so its room goes back to the others", async () => {
+    const stopAppContainer = vi.fn(async () => undefined);
+    const { entry, supervisor } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+
+    entry.off = true;
+    await supervisor.turnedOff(entry);
+
+    expect(stopAppContainer).toHaveBeenCalledWith(entry.app.id, { off: true });
+  });
+
+  it("says nothing of it for a stop that isn't Turn off", async () => {
+    const stopAppContainer = vi.fn(async () => undefined);
+    const { entry, supervisor, fail } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+
+    // Given up on after failures, it still needs its room back.
+    entry.supervision!.failures = Array(4).fill(Date.now());
+    fail();
+    await passes(0);
+
+    expect(stopAppContainer).toHaveBeenCalledWith(entry.app.id, {});
   });
 });

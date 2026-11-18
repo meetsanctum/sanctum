@@ -43,6 +43,9 @@ export type ServiceDefinition = {
   // The volumes its own data lives in, which erasing it deletes, as
   // Zigbee2MQTT's holds the Zigbee network and its key.
   dataVolumes?: string[];
+  // The memory it counts for beside apps while it runs, in MB. It isn't a
+  // limit: one that ran out would take its network down with it.
+  memoryMb: number;
 };
 
 // In the order they start.
@@ -51,12 +54,14 @@ export const serviceDefinitions: ServiceDefinition[] = [
     name: "mosquitto",
     needs: [],
     forApps: false,
+    memoryMb: 32,
     spec: ({ mqttClients }) => mosquittoSpec(mqttClients),
   },
   {
     name: "zigbee2mqtt",
     needs: ["mosquitto"],
     forApps: true,
+    memoryMb: 256,
     mqttTopics: [`${zigbee2mqttBaseTopic}/#`],
     dataVolumes: [zigbee2mqttData],
     connection: () => ({ baseTopic: zigbee2mqttBaseTopic }),

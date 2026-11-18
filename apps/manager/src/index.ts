@@ -11,6 +11,7 @@ import {
 import { createAppExits, type AppExits } from "./apps/exits.js";
 import { createImageHelper } from "./apps/helper.js";
 import { createLanHolders } from "./apps/lan.js";
+import { createCapacity } from "./apps/capacity.js";
 import { createAppImages } from "./apps/images.js";
 import { createMaintenance } from "./apps/maintenance.js";
 import { createAppUpdates } from "./apps/updates.js";
@@ -44,6 +45,7 @@ import { createOperations } from "./operations.js";
 import { createReconciler } from "./reconcile.js";
 import { initialCoreImage } from "./release.js";
 import { createServer, type ServerOptions } from "./server.js";
+import { findService } from "./services/registry.js";
 import { createServices } from "./services/services.js";
 import { createServicesStateStore } from "./services/state.js";
 import { listenOnSocket } from "./socket.js";
@@ -164,12 +166,19 @@ if (config.supervise) {
   });
   await services.start();
   serviceReconciler = createReconciler({ log, run: services.reconcile });
+  // What it has promised of memory and disk, to adds and starts alike.
+  const capacity = createCapacity({
+    dataDir: config.dataDir,
+    services: () => services.wanted(),
+    serviceMemoryMb: (name) => findService(name)?.memoryMb ?? 0,
+  });
   const appImages = createAppImages({
     docker,
     dataDir: config.dataDir,
     hostDevDir: config.hostDevDir,
     helper: createImageHelper({ docker, dataDir: config.dataDir }),
     free: async () => (await readings.disk(config.dataDir))?.free ?? null,
+    reserved: (except) => capacity.reservedData(except),
     log,
   });
   const maintenance = createMaintenance({
@@ -239,6 +248,7 @@ if (config.supervise) {
     prepareImage: maintenance.prepare,
     lan,
     exits: appExits,
+    capacity,
   });
   // An app whose network's holder stopped stops too, soon after.
   if (lan) {
@@ -272,6 +282,7 @@ if (config.supervise) {
     services,
     apps: appContainers,
     images: appImages,
+    capacity,
     maintenance,
     appUpdates,
     // For the core's own image, so it can't hear of those from before its update.

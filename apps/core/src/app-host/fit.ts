@@ -10,9 +10,11 @@ import { lowMemoryShare } from "../system/status.js";
 // Whether an app fits this home before it's added: the app API its manifest
 // targets, the kit its pages were built for, the memory its container gets
 // and the image its data lives on. Each shortfall says what's short, so the
-// sheet can say what would help before anything changes. What isn't known,
-// as on a host that doesn't say its memory, holds nothing back: the manager
-// still refuses an image it has no room for.
+// sheet can say what would help before anything changes. A manager that keeps
+// one count of what it has promised says what's left by it, the count an add
+// reserves from and a start is checked against, so the sheet and the manager
+// agree. What isn't known, as on a host that doesn't say its memory, holds
+// nothing back: the manager still refuses an image it has no room for.
 
 const mebibyte = 1024 * 1024;
 // What an update needs free, which the manager keeps whatever an app's image
@@ -29,6 +31,8 @@ export function servesAppApi(manifest: Pick<StaticManifest, "core">) {
 
 /** What the host has, as the manager says. */
 export type HostRoom = {
+  // What's left for another app by the manager's count, when it keeps one.
+  capacity?: { memoryFreeMb: number; dataFreeBytes: number | null } | null;
   memory: { total: number; available: number } | null;
   storage: {
     free: number;
@@ -51,6 +55,24 @@ export function shortfallsOf(
   }
   if (options.pagesNeed) {
     shortfalls.push({ kind: "pages", needs: options.pagesNeed });
+  }
+  const capacity = options.host?.capacity;
+  if (capacity) {
+    const memoryNeeds = manifest.runtime.memory * mebibyte;
+    const memoryFree = capacity.memoryFreeMb * mebibyte;
+    if (memoryNeeds > memoryFree) {
+      shortfalls.push({ kind: "memory", needs: memoryNeeds, free: memoryFree });
+    }
+    const dataNeeds = manifest.runtime.data * mebibyte;
+    const dataFree = capacity.dataFreeBytes;
+    if (dataFree !== null && dataNeeds > dataFree) {
+      shortfalls.push({
+        kind: "space",
+        needs: dataNeeds,
+        free: Math.max(0, dataFree),
+      });
+    }
+    return shortfalls;
   }
   const memory = options.host?.memory;
   if (memory) {

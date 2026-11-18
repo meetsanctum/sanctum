@@ -232,13 +232,15 @@ export function createSupervisor(options: {
     announce(entry);
   }
 
-  // Nothing may be left of the last run before the next.
+  // Nothing may be left of the last run before the next. One turned off
+  // gives its room back to the others until it starts again.
   async function stopContainer(entry: InstalledApp) {
-    await manage(entry, () => manager.stopAppContainer(entry.app.id)).catch(
-      (error: unknown) => {
-        log(`apps: ${entry.app.id}'s container didn't stop (${String(error)})`);
-      },
-    );
+    const how = entry.off ? { off: true } : {};
+    await manage(entry, () =>
+      manager.stopAppContainer(entry.app.id, how),
+    ).catch((error: unknown) => {
+      log(`apps: ${entry.app.id}'s container didn't stop (${String(error)})`);
+    });
   }
 
   function failed(entry: InstalledApp, failure: AppFailure) {
