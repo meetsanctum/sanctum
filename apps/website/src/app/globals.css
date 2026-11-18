@@ -186,20 +186,21 @@ a {
 }
 
 .sheet::backdrop {
-  background: rgb(0 0 0 / 0%);
+  background: rgb(0 0 0 / 50%);
+  opacity: 0;
   transition:
-    background 0.25s ease,
+    opacity 0.25s ease,
     overlay 0.25s allow-discrete,
     display 0.25s allow-discrete;
 }
 
 .sheet:popover-open::backdrop {
-  background: rgb(0 0 0 / 50%);
+  opacity: 1;
 }
 
 @starting-style {
   .sheet:popover-open::backdrop {
-    background: rgb(0 0 0 / 0%);
+    opacity: 0;
   }
 }
 
