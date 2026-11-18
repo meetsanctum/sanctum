@@ -34,9 +34,9 @@ import {
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-// Room and category pages, the shell's: a button for all the lights, the
-// devices by category or room, and apps' room sections drawn from their
-// entities.
+// Room and category pages, the shell's: a room's row of its switch and apps'
+// tiles drawn from their entities, a button for all the lights on a
+// category's page, and the devices by category or room.
 
 let root: Root;
 let container: HTMLDivElement;
@@ -44,7 +44,6 @@ let live: ReturnType<typeof createLiveFeed>;
 let devices: DeviceInfo[];
 let entities: EntityInfo[];
 let answers: Record<string, () => Promise<unknown>>;
-const openApp = vi.fn();
 const openDevice = vi.fn();
 const openPlace = vi.fn();
 const back = vi.fn();
@@ -62,8 +61,6 @@ function Harness(props: {
       devices={shown}
       apps={props.apps}
       entities={sectionEntities}
-      openApp={openApp}
-      canOpen={() => true}
       openDevice={openDevice}
       back={back}
     />
@@ -118,6 +115,13 @@ const button = (text: string) =>
     (each) =>
       each.textContent === text || each.getAttribute("aria-label") === text,
   ) as HTMLButtonElement | undefined;
+// The tiles of a room's row, by what they say.
+const row = () =>
+  [
+    ...(container
+      .querySelector("[role=group][aria-label^='Lights in']")
+      ?.querySelectorAll("button") ?? []),
+  ].map((each) => each.getAttribute("aria-label") ?? each.textContent);
 // A tile, by the name it starts with.
 const tile = (name: string) =>
   [...container.querySelectorAll("button")].find((each) =>
@@ -146,7 +150,6 @@ beforeEach(() => {
   devices = [lamp, plug, hallLight, loose];
   entities = [relax, work];
   answers = {};
-  openApp.mockReset();
   openDevice.mockReset();
   openPlace.mockReset();
   back.mockReset();
@@ -217,13 +220,15 @@ describe("all the lights of a room", () => {
     expect(container.querySelector("header")?.textContent).toBe("Buttons");
   });
 
-  it("of a room, from its page, through the core", async () => {
+  it("of a room, from its row, through the core", async () => {
     await show("room", "office");
     const all = button("Turn off 1 light in Office")!;
-    expect(all.textContent).toBe("Turn off");
+    // A square with the power symbol, which says what it does on hover.
+    expect(all.textContent).toBe("");
+    expect(all.title).toBe("Turn off 1 light in Office");
     // Its words say what it does, so it is no pressed switch.
     expect(all.hasAttribute("aria-pressed")).toBe(false);
-    expect(all.dataset.on).toBe("");
+    expect(all.dataset.look).toBe("on");
     await click(all);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "room", id: "office" }, to: "off" },
@@ -234,9 +239,10 @@ describe("all the lights of a room", () => {
     devices = [{ ...lamp, availability: "offline" }];
     await show("room", "office");
     const all = button("Turn on lights in Office")!;
-    expect(all.textContent).toBe("Turn on");
-    expect(all.dataset.on).toBeUndefined();
+    expect(all.dataset.look).toBe("off");
     expect(all.disabled).toBe(true);
+    // Nothing a mood sets could answer either.
+    expect(tile("Relax")?.disabled).toBe(true);
   });
 });
 
@@ -434,7 +440,7 @@ describe("a room's page", () => {
     );
   });
 
-  it("has Moods first, then other apps' sections by weight and app id, then its devices by category", async () => {
+  it("has its switch, then apps' tiles by weight and app id, and no headings but its devices'", async () => {
     entities = [
       relax,
       entity("test.spots", "spots.spot", "desk", {
@@ -451,39 +457,24 @@ describe("a room's page", () => {
       }),
     ];
     await show("room", "office", [awnings, spots, moods, alarms]);
-    expect(headings()).toEqual([
-      "Moods",
-      "Spots",
-      "Alarms",
-      "Awnings",
-      "Lights",
-      "Switches",
+    expect(row()).toEqual([
+      "Turn off 1 light in Office",
+      "Relax in Office",
+      "Desk in Office",
+      "Door in Office",
+      "South in Office",
     ]);
-  });
-
-  it("heads apps' sections like its own, with no app colour or icon", async () => {
-    await show("room", "office");
-    const heading = (text: string) =>
-      [...container.querySelectorAll("h2")].find(
-        (each) => each.textContent === text,
-      )!;
-    // The same element but for its id and words: no colour, no icon.
-    const looks = (element: Element) =>
-      element.outerHTML
-        .replace(/ id="[^"]*"/, "")
-        .replace(element.textContent!, "");
-    expect(looks(heading("Moods"))).toBe(looks(heading("Lights")));
-    expect(heading("Moods").children).toHaveLength(0);
+    expect(headings()).toEqual(["Lights", "Switches"]);
+    // Nothing on the page opens an app to edit its tiles.
+    expect(button("Edit")).toBeUndefined();
   });
 
   it("shows a room's moods in their order, the active one pressed, and runs one on a tap", async () => {
     await show("room", "office");
-    const names = [...container.querySelectorAll("section")]
-      .find((each) => each.querySelector("h2")?.textContent === "Moods")!
-      .querySelectorAll("button[aria-pressed]");
-    expect([...names].map((each) => each.textContent)).toEqual([
-      "Relax",
-      "Work",
+    expect(row()).toEqual([
+      "Turn off 1 light in Office",
+      "Relax in Office",
+      "Work in Office",
     ]);
     expect(tile("Relax")?.getAttribute("aria-pressed")).toBe("true");
     expect(tile("Work")?.getAttribute("aria-pressed")).toBe("false");
@@ -530,24 +521,16 @@ describe("a room's page", () => {
     expect(tile("Work")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("opens the app's page for the room from Edit", async () => {
-    await show("room", "office");
-    await click(button("Edit"));
-    expect(openApp).toHaveBeenCalledWith("sanctum.moods", "room", {
-      placeId: "office",
-    });
-    expect(tile("Relax")?.disabled).toBe(false);
-  });
-
-  it("keeps Moods' heading and Edit in a room with lights but no moods", async () => {
+  it("has its switch alone in a room with lights but no moods", async () => {
     entities = [];
     await show("room", "hall");
-    expect(headings()).toEqual(["Moods", "Lights"]);
-    expect(button("Edit")).toBeDefined();
+    expect(row()).toEqual(["Turn on lights in Hall"]);
+    expect(headings()).toEqual(["Lights"]);
   });
 
-  it("has no Moods in a room without lights or moods", async () => {
+  it("has no row in a room without lights or moods", async () => {
     await show("room", "attic");
+    expect(row()).toEqual([]);
     expect(headings()).toEqual([]);
   });
 
@@ -649,7 +632,7 @@ describe("contact sensors", () => {
     await show("room", "office");
 
     expect(readingsLine()?.textContent).toBe("Contact sensors 1 open");
-    expect(headings()).toEqual(["Moods", "Lights", "Security"]);
+    expect(headings()).toEqual(["Lights", "Security"]);
     expect(tile("Front door")?.textContent).toBe("Front doorOpen");
     // Its tile switches nothing: one button, which opens its detail.
     await click(tile("Letterbox"));
@@ -699,7 +682,7 @@ describe("the climate", () => {
     expect(readingsLine()?.textContent).toBe(
       "Temperature 19.5–20.2°Humidity 55–58%",
     );
-    expect(headings()).toEqual(["Moods", "Lights", "Environment"]);
+    expect(headings()).toEqual(["Lights", "Environment"]);
   });
 
   it("is not on the page of a room without sensors", async () => {

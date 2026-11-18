@@ -38,21 +38,14 @@ import {
   type Reading,
 } from "./device-tiles";
 import { byFloor, FloorSection } from "./floor-groups";
-import {
-  floorLightsButton,
-  LightsButton,
-  lightsButton,
-  type LightsSwitch,
-} from "./lights-button";
+import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
 import {
-  buttonsIn,
-  RoomButtons,
-  RoomSection,
-  sectionsInOrder,
-  type AppSection,
+  isRowEmpty,
+  RoomRow,
+  roomRowOf,
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
@@ -63,10 +56,10 @@ import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, its motion, whether
-// its contact sensors are open and what its sensors read under it, and a
-// button for all its lights, then apps' sections by their weight, Moods
-// first, then its devices in a section for each category, and last the
-// devices Sanctum cannot use. A category's page shows its tiles in a section
+// its contact sensors are open and what its sensors read under it, then its
+// row: its switch, Natural light and its moods (room-sections.tsx), then its
+// devices in a section for each category, and last the devices Sanctum
+// cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards
 // (summary-cards.tsx): Lights' with how many are on and a button that turns
 // them all off, Environment's with the range of each reading across the
@@ -74,8 +67,8 @@ import type { Devices } from "./use-devices";
 // with its overview, each room's last 24 hours (presence-overview.tsx).
 // On Lights' page each room also has its button for all its lights, as on
 // Home. The devices in no room have a page too, last among the rooms while
-// there are any. The sidebar lists them, and Home shows each room's header
-// and sections with what is on Home (home-dashboard.tsx). They look the
+// there are any. The sidebar lists them, and Home shows each room's line and
+// row with what is on Home (home-dashboard.tsx). They look the
 // same on every device, shared ones too: lights, switches and sensors are
 // household things.
 
@@ -111,9 +104,7 @@ export const unitOf = (devices: Devices) =>
 // A room's or a category's page has its name in the top bar, as a
 // dashboard and an app's page do, and on a phone opening the page
 // (PageBar). A room's opens with its motion and what its sensors read,
-// offline ones left out, and a button for all its lights, white while any
-// is on, followed by apps' buttons for the room; a category's with its
-// status.
+// offline ones left out; a category's with its status.
 function PlaceHeader(props: {
   title: string;
   subtitle?: string;
@@ -122,17 +113,13 @@ function PlaceHeader(props: {
   /** Its contact sensors in words, after its motion. */
   contact?: PlaceContact | null;
   readings?: Reading[];
-  lights?: LightsSwitch;
-  /** Apps' buttons for the room, after its lights button. */
-  buttons?: ReactNode;
 }) {
-  const { lights, buttons } = props;
   const hasLine =
     !!props.subtitle ||
     !!props.motion ||
     !!props.contact ||
     !!props.readings?.length;
-  if (!hasLine && !lights && !buttons) return <PageBar title={props.title} />;
+  if (!hasLine) return <PageBar title={props.title} />;
   return (
     <header className="flex shrink-0 flex-col gap-2.5">
       <PageBar title={props.title} />
@@ -149,12 +136,6 @@ function PlaceHeader(props: {
           className="text-[15px] leading-[22px] [&_svg]:size-4"
         />
       </div>
-      {(lights || buttons) && (
-        <div className="flex flex-wrap gap-2">
-          {lights && <LightsButton lights={lights} />}
-          {buttons}
-        </div>
-      )}
     </header>
   );
 }
@@ -172,8 +153,8 @@ export type PlaceContact = {
 
 /**
  * A place's motion, whether its contact sensors are open and what its
- * sensors read, in a line: under a room page's name, and beside a room's
- * lights on Home. Nothing without any.
+ * sensors read, in a line: under a room page's name, and under a room's
+ * name on Home. Nothing without any.
  */
 export function PlaceReadings(props: {
   motion?: string | null;
@@ -369,7 +350,7 @@ export function HomeStatus(props: {
   return (
     <section
       aria-label="Home status"
-      className="grid shrink-0 auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+      className="tile-grid shrink-0 auto-rows-(--cell)"
     >
       {shown.map((each) => {
         return (
@@ -378,7 +359,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "col-span-3" : "col-span-2"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${each.wide ? "col-span-3" : "col-span-2 max-sm:col-span-3"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
@@ -405,9 +386,6 @@ export function RoomPage(props: {
   devices: Devices;
   apps: readonly AppInfo[];
   entities: SectionEntities;
-  /** Opens an app's page over this one, if the shell has it. */
-  openApp: (app: string, page: string, params: PageParams) => void;
-  canOpen: (app: string, page: string) => boolean;
   /** Opens a device's detail from its tile. */
   openDevice: (tile: Tile) => void;
   back: () => void;
@@ -421,32 +399,15 @@ export function RoomPage(props: {
   }, [gone, back]);
   if (!room) return null;
   const own = devices.tiles.filter((tile) => tile.roomId === room.id);
-  const kinds = new Set(
-    devices.devices
-      .filter((device) => device.roomId === room.id)
-      .flatMap((device) => device.capabilities.map((each) => each.kind)),
-  );
-  const sections = sectionsInOrder(props.apps, "tiles");
-  const buttons = buttonsIn(
-    sectionsInOrder(props.apps, "buttons"),
+  const row = roomRowOf(
+    props.apps,
     entities,
     room.id,
-  );
-  const appSection = ({ app, section }: AppSection) => (
-    <RoomSection
-      key={app.id}
-      app={app}
-      section={section}
-      roomId={room.id}
-      entities={entities}
-      roomHas={(kind) => kinds.has(kind)}
-      onOpen={
-        section.open && props.canOpen(app.id, section.open.page)
-          ? () =>
-              props.openApp(app.id, section.open!.page, { placeId: room.id })
-          : undefined
-      }
-    />
+    lightsButton(
+      own.filter((tile) => tile.kind === "light"),
+      room,
+      devices,
+    ),
   );
   return (
     <>
@@ -455,22 +416,10 @@ export function RoomPage(props: {
         motion={placeMotionText(own, Date.now())}
         contact={placeContacts(own)}
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
-        lights={lightsButton(
-          own.filter((tile) => tile.kind === "light"),
-          room,
-          devices,
-        )}
-        buttons={
-          buttons.length > 0 ? (
-            <RoomButtons
-              buttons={buttons}
-              roomName={room.name}
-              entities={entities}
-            />
-          ) : undefined
-        }
       />
-      {sections.map(appSection)}
+      {!isRowEmpty(row) && (
+        <RoomRow row={row} roomName={room.name} entities={entities} />
+      )}
       <Sections
         sections={sectionsOfRoom(own)}
         devices={devices}

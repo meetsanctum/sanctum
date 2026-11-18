@@ -128,8 +128,6 @@ const moods: AppInfo = {
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
-        open: { page: "room", label: "Edit" },
-        whenEmpty: { roomHas: "light" },
       },
     ],
     devicePages: [],
@@ -196,11 +194,19 @@ const sections = () =>
     heading: section.querySelector("h2")?.textContent,
     groups: [...section.querySelectorAll("[role=group]")].map((group) => [
       group.getAttribute("aria-label"),
-      ...[...group.querySelectorAll(":scope > *")].map(
-        (each) =>
-          each.querySelector(".truncate.text-sm")?.textContent ??
-          each.textContent,
-      ),
+      // A row's squares are together in one part of it, and say only their
+      // names to a screen reader.
+      ...[...group.children]
+        .flatMap((each) =>
+          each.matches("button") || each.querySelector(".truncate.text-sm")
+            ? [each]
+            : [...each.children],
+        )
+        .map(
+          (each) =>
+            each.querySelector(".truncate.text-sm")?.textContent ??
+            (each.textContent || each.getAttribute("aria-label")),
+        ),
     ]),
   }));
 const button = (label: string) => {
@@ -275,24 +281,25 @@ afterEach(async () => {
 });
 
 describe("Home", () => {
-  it("shows each room with something to show, its lights, readings, moods and what is on Home in order", async () => {
+  it("shows each room with something to show, its readings, its row and what is on Home in order", async () => {
     await show();
 
     // The attic has nothing, and devices with no room come last.
     expect(sections()).toEqual([
-      { heading: "Hall", groups: [] },
+      // The hall's light is off Home, but its room's switch is there.
+      {
+        heading: "Hall",
+        groups: [["Lights in Hall", "Turn on lights in Hall"]],
+      },
       {
         heading: "Office",
         groups: [
-          ["Moods", "Relax"],
+          ["Lights in Office", "Turn off 1 light in Office", "Relax"],
           ["On Home", "Desk strip", "Lamp"],
         ],
       },
       { heading: "No room", groups: [["On Home", "Loose lamp"]] },
     ]);
-    // The hall's light is off Home, but its room's button is there.
-    expect(button("Turn on lights in Hall").textContent).toBe("Turn on");
-    expect(button("Turn off 1 light in Office").textContent).toBe("Turn off");
     expect(
       container.querySelector("[data-slot=readings]")?.textContent,
     ).toContain("21.5°");

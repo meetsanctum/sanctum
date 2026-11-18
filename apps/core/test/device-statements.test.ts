@@ -15,7 +15,7 @@ import {
 import type { AppPackage } from "./runner-apps.js";
 import { get, post, sharedClient, type TestCore } from "./support.js";
 
-// What the core asks of SQLite for one press of a room's lights button. A
+// What the core asks of SQLite for one press of a room's switch. A
 // statement SQLite has to compile costs far more than running it, so what
 // runs for every command and every report, and for every call of an app
 // that follows the lights, is compiled once and kept.

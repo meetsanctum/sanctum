@@ -19,13 +19,12 @@ import { MotionSection } from "./motion-section";
 import { ScheduleSection, TurnOnSection, useNow } from "./schedule-sections";
 import { useMoodsApp } from "./state";
 
-// Moods' page for a room, which Edit beside a room page's Moods heading
-// opens, and Moods' main page, with { placeId }: the room's moods as tiles
-// to drag into order (or move with the arrow keys) and to open in the mood
-// editor, and New mood, which opens the editor on the lights as they are;
-// then its schedule, how its lights turn on, and what motion does to them.
-// Running a mood is the room page's, whose section the shell draws from
-// Moods' mood entities. Moods are the household's, so the page is the same
+// Moods' page for a room, which Moods' main page opens with { placeId }:
+// the room's moods as tiles to drag into order (or move with the arrow keys)
+// and to open in the mood editor, and New mood, which opens the editor on
+// the lights as they are; then its schedule, how its lights turn on, and
+// what motion does to them. Running a mood is the room's row's, which the
+// shell draws from Moods' mood entities. Moods are the household's, so the page is the same
 // on every device.
 // Everything is saved as it changes, so Done beside the title is the way
 // out.

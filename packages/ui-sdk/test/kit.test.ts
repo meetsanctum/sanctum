@@ -114,6 +114,16 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(fonts.every((name) => name.endsWith(".woff2"))).toBe(true);
   });
 
+  it("spans widgets across the phone tile grid and keeps their own span in other grids", () => {
+    const css = read("kit.css");
+    expect(css).toMatch(
+      /@media[^{}]*40rem[^{}]*\{\.tile-grid\{grid-template-columns:repeat\(6,minmax\(0,1fr\)\)\}\.tile-grid>\[data-slot=widget-card\]\{grid-column:1\/-1\}\}/,
+    );
+    expect(css).toContain(
+      "grid-column:span var(--widget-columns) / span var(--widget-columns)",
+    );
+  });
+
   it("comes out the same from the same sources", async () => {
     const again = await mkdtemp(join(tmpdir(), "sanctum-kit-"));
     try {

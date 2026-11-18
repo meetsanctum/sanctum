@@ -1,7 +1,7 @@
 {
   "id": "sanctum.natural-light",
   "name": "Natural light",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "core": "^1.0.0",
   "protocol": 10,
   "summary": "Lights that follow the colour of daylight through the day.",
@@ -245,55 +245,6 @@
         "required": [
           "placeId",
           "follow"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "failed": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "device": {
-                  "type": "string"
-                },
-                "capability": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "device",
-                "capability"
-              ],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": [
-          "failed"
-        ],
-        "additionalProperties": false
-      },
-      "assistant": null
-    },
-    {
-      "id": "naturalLight.toggleRoom",
-      "title": "Switch a room's natural light",
-      "tier": "write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "placeId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
-          }
-        },
-        "required": [
-          "placeId"
         ]
       },
       "output": {
@@ -991,10 +942,8 @@
         "kind": "buttons",
         "order": 200,
         "press": {
-          "action": "naturalLight.toggleRoom"
+          "action": "naturalLight.bringRoom"
         },
-        "open": null,
-        "whenEmpty": null,
         "preview": [
           {
             "icon": "sun",
@@ -1064,5 +1013,6 @@
         "needs": []
       }
     ]
-  }
+  },
+  "oldestPage": "0.2.0"
 }

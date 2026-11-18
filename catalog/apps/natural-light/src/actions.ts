@@ -24,19 +24,15 @@ import {
   type Timing,
 } from "./lights.js";
 import { preview, previewOf } from "./preview.js";
-import {
-  bringRoom as bringToNaturalLight,
-  publishRooms,
-  toggleRoom as pressRoomButton,
-} from "./rooms.js";
+import { bringRoom as bringToNaturalLight, publishRooms } from "./rooms.js";
 import { followedLights } from "./schema.js";
 import { targetState, type TargetState } from "./target.js";
 
 // Natural light's actions: leaving a light or a room's lights out of the
-// curve or having them follow again, pausing and resuming one, a press of a
-// room's button and bringing a room to natural light, and today's curve.
-// Whatever changes which lights follow, or whether one is paused, publishes
-// the room buttons again (rooms.ts). Lights are
+// curve or having them follow again, pausing and resuming one, bringing a
+// room to natural light, which its tile does, and today's curve. Whatever
+// changes which lights follow, or whether one is paused, publishes the
+// rooms' tiles again (rooms.ts). Lights are
 // household things, so every client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
@@ -147,29 +143,9 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     },
   });
 
-  // A press of a room's Natural light button (index.ts' room section): off
-  // while the room is on natural light, and to natural light otherwise.
-  const toggleRoom = defineAction({
-    id: "naturalLight.toggleRoom",
-    title: "Switch a room's natural light",
-    tier: "write",
-    input: z.object({ placeId: z.string().min(1).max(64) }),
-    output: failedLights,
-    async run(ctx, input) {
-      const options = await followOptionsFor(ctx, timing);
-      const failed = await pressRoomButton(
-        ctx,
-        options,
-        runForLight,
-        input.placeId,
-      );
-      await roomsChanged(ctx, options, [input.placeId]);
-      return { failed };
-    },
-  });
-
-  // Every light in a room that follows on at the curve and the others off,
-  // as a grey press of its button does, for automations.
+  // Every light in a room that follows on at the curve and the others off:
+  // a press of the room's Natural light tile (index.ts' room section), and
+  // a step for automations.
   const bringRoom = defineAction({
     id: "naturalLight.bringRoom",
     title: "Bring a room to natural light",
@@ -311,7 +287,6 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
   return {
     follow,
     followRoom,
-    toggleRoom,
     bringRoom,
     resume,
     pause,

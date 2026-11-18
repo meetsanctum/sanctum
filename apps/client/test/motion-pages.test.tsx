@@ -175,8 +175,6 @@ function Harness(props: { page: "room" | "category" | "status"; id: string }) {
       devices={shown}
       apps={[]}
       entities={entities}
-      openApp={() => {}}
-      canOpen={() => false}
       openDevice={() => {}}
       back={() => {}}
     />

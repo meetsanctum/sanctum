@@ -21,9 +21,9 @@ import {
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-// Room sections of buttons: an app's small buttons for a room, after the
-// room's button for all its lights, on its page and on Home, with no
-// heading.
+// A room's row: its switch, then apps' buttons, squares with their icon
+// alone, then apps' tiles with their names, on its page and on Home, with
+// no heading.
 
 const glow: AppInfo = {
   ...moods,
@@ -39,8 +39,6 @@ const glow: AppInfo = {
         kind: "buttons",
         order: 300,
         press: { action: "example.toggle" },
-        open: null,
-        whenEmpty: null,
       },
     ],
   },
@@ -75,8 +73,6 @@ function Harness(props: { page: "room" | "home"; apps: AppInfo[] }) {
       devices={shown}
       apps={props.apps}
       entities={sectionEntities}
-      openApp={() => {}}
-      canOpen={() => true}
       openDevice={() => {}}
       back={() => {}}
     />
@@ -108,6 +104,13 @@ const buttons = () =>
   [...container.querySelectorAll("button")] as HTMLButtonElement[];
 const named = (label: string) =>
   buttons().find((each) => each.getAttribute("aria-label") === label);
+// A room's row, by what each of its tiles says.
+const rowOf = (room: string) =>
+  [
+    ...(container
+      .querySelector(`[role=group][aria-label='Lights in ${room}']`)
+      ?.querySelectorAll("button") ?? []),
+  ].map((each) => each.getAttribute("aria-label") ?? each.textContent);
 const posted = (path: string) =>
   vi
     .mocked(coreJson)
@@ -144,23 +147,51 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe("a room's buttons", () => {
-  it("follow the room's lights button on its page, pressed while active, with no heading", async () => {
+describe("a room's row", () => {
+  it("has the switch, then apps' buttons as squares, then their tiles, with no heading", async () => {
     await show("room");
-    const header = container.querySelector("header")!;
-    expect(
-      [...header.querySelectorAll("button")].map(
-        (each) => each.getAttribute("aria-label") ?? each.textContent,
-      ),
-    ).toEqual(["Turn off 1 light in Office", "Glow in Office"]);
-    expect(named("Glow in Office")?.textContent).toBe("Glow");
+    expect(rowOf("Office")).toEqual([
+      "Turn off 1 light in Office",
+      "Glow in Office",
+      "Relax in Office",
+    ]);
+    // A square says its name on hover and to a screen reader alone.
+    expect(named("Glow in Office")?.textContent).toBe("");
+    expect(named("Glow in Office")?.title).toBe("Glow in Office");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(
       [...container.querySelectorAll("h2")].map((each) => each.textContent),
-    ).toEqual(["Moods", "Lights"]);
+    ).toEqual(["Lights"]);
   });
 
-  it("call the section's action with the button's input on a tap", async () => {
+  it("lights one look at most, a button before a tile that says it is active too", async () => {
+    // Relax says it is active as well: its lights happen to show Glow's look.
+    await show("room");
+    expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
+    expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    entities = [
+      relax,
+      {
+        ...officeGlow,
+        state: { ...(officeGlow.state as object), active: false },
+      },
+    ];
+    await show("room");
+    expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("puts its squares in the first half of a phone's line, two to a line", async () => {
+    await show("room");
+    const squares = named("Glow in Office")!.parentElement!;
+    expect(squares.className).toContain("contents");
+    expect(squares.className).toContain("max-sm:col-span-3");
+    expect(squares.className).toContain("max-sm:grid-cols-2");
+    expect(squares.style.gridRow).toBe("span 1");
+  });
+
+  it("calls the section's action with the square's input on a tap", async () => {
     await show("room");
     await act(async () => {
       named("Glow in Office")!.click();
@@ -170,7 +201,7 @@ describe("a room's buttons", () => {
     ]);
   });
 
-  it("show a tap that failed on the button", async () => {
+  it("shows a tap that failed on the square", async () => {
     const animate = vi.fn();
     Element.prototype.animate = animate;
     try {
@@ -187,19 +218,19 @@ describe("a room's buttons", () => {
     }
   });
 
-  it("are on each room's line on Home, after its lights button", async () => {
+  it("is under each room's name on Home, as on its page", async () => {
     await show("home");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(named("Glow in Hall")?.getAttribute("aria-pressed")).toBe("false");
-    const office = named("Glow in Office")!.parentElement!;
-    expect(
-      [...office.querySelectorAll("button")].map((each) =>
-        each.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Turn off 1 light in Office", "Glow in Office"]);
+    expect(rowOf("Office")).toEqual([
+      "Turn off 1 light in Office",
+      "Glow in Office",
+      "Relax in Office",
+    ]);
+    expect(rowOf("Hall")).toEqual(["Turn on lights in Hall", "Glow in Hall"]);
   });
 
-  it("show a room on Home that has nothing else to show", async () => {
+  it("shows a room on Home that has nothing else to show", async () => {
     devices = [];
     entities = [hallGlow];
     await show("home");
@@ -209,13 +240,21 @@ describe("a room's buttons", () => {
     expect(named("Glow in Hall")).toBeDefined();
   });
 
-  it("dim while their app isn't running, and say so", async () => {
+  it("dims a paused square and gives the highlight to the running app", async () => {
     await show("room", [moods, { ...glow, state: "paused" }]);
-    expect(named("Glow in Office, paused")?.disabled).toBe(true);
+    const paused = named("Glow in Office, paused");
+    const mood = named("Relax in Office");
+    expect(paused?.disabled).toBe(true);
+    expect(paused?.getAttribute("aria-pressed")).toBe("false");
+    expect(mood?.disabled).toBe(false);
+    expect(mood?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("leave when their app is turned off", async () => {
+  it("leaves out an app's squares once it is turned off", async () => {
     await show("room", [moods, { ...glow, state: "off" }]);
-    expect(buttons().some((each) => each.textContent === "Glow")).toBe(false);
+    expect(rowOf("Office")).toEqual([
+      "Turn off 1 light in Office",
+      "Relax in Office",
+    ]);
   });
 });

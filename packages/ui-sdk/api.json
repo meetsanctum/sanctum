@@ -1,5 +1,5 @@
 {
-  "version": "0.1.8",
+  "version": "0.1.10",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2711,6 +2711,8 @@
       "    status?: ReactNode;",
       "    disabled?: boolean;",
       "    active?: boolean;",
+      "    lit?: boolean;",
+      "    iconOnly?: boolean;",
       "    label?: string;",
       "    editing?: boolean;",
       "    dragging?: boolean;",

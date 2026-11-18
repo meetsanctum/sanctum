@@ -37,7 +37,7 @@ import { lightsInRoom } from "./targets.js";
 // devices, places and the pages that show them are the core's and the
 // shell's. It publishes each mood as a moods.mood entity, with whether the
 // room's lights show it, following the lights to keep that current, and the
-// shell draws them on each room's page as Moods' room section, where a tap
+// shell draws them in each room's row as Moods' room section, where a tap
 // runs the mood. A room's moods go with it: when the core deletes it while
 // Moods runs, and when Moods starts for one deleted while it did not.
 // Workflows may run its moods; the core's own lights pieces switch a place's
@@ -59,14 +59,14 @@ let running:
 export default defineApp({
   id: "sanctum.moods",
   name: "Moods",
-  version: "0.11.0",
+  version: "0.12.0",
   core: "^1.0.0",
   summary:
     "Moods for each room, and what remotes and motion do with its lights.",
   icon: { glyph: "swatch-book", color: "ember" },
-  // The app overview opens main, every room; Edit beside a room page's
-  // Moods opens room, the room's moods, schedule and turning on, which
-  // opens the mood editor and the editor of a scheduled mood.
+  // The app overview opens main, every room, which opens room, the room's
+  // moods, schedule and turning on, which opens the mood editor and the
+  // editor of a scheduled mood.
   pages: ["main", "room", "mood", "scheduled"],
   // Controlling a kind includes reading it. Rooms and their lights are what
   // moods are; the rest serve presses and motion. Presses start on, so a
@@ -123,13 +123,10 @@ export default defineApp({
         title: "Moods",
         entityType: moodType.id,
         kind: "tiles",
-        // Moods' place, among the sections Sanctum keeps for its own.
+        // The room's moods, named, in its row after its buttons; Moods'
+        // place among the sections Sanctum keeps for its own.
         order: 200,
         press: runMood,
-        open: { page: "room", label: "Edit" },
-        // A room with lights but no moods yet keeps the heading and Edit,
-        // so someone can add the first.
-        whenEmpty: { roomHas: "light" },
         preview: [
           { icon: "sparkles", name: "Aurora", active: true },
           { icon: "book-open", name: "Reading", active: false },

@@ -698,22 +698,21 @@ describe("Settings → Devices", () => {
     devices = [...devices, added];
     await act(async () => {
       live.publish({ type: "device", id: "bulb", device: added });
-      live.publish({
-        type: "pairing",
-        pairing: {
-          ...pairing,
-          joined: [
-            {
-              ...joining,
-              stage: "ready",
-              deviceId: "bulb",
-              description: "Hue Essential White and Color Ambiance A60",
-            },
-            later,
-            alsoLater,
-          ],
-        },
-      });
+      // The core keeps what joined, so its later answers say so too.
+      pairing = {
+        ...pairing,
+        joined: [
+          {
+            ...joining,
+            stage: "ready",
+            deviceId: "bulb",
+            description: "Hue Essential White and Color Ambiance A60",
+          },
+          later,
+          alsoLater,
+        ],
+      };
+      live.publish({ type: "pairing", pairing });
     });
     const name = dialog.querySelector<HTMLInputElement>(
       'input[aria-label="Name for Hue Essential White and Color Ambiance A60"]',
@@ -743,9 +742,14 @@ describe("Settings → Devices", () => {
       json: { id: "bulb", roomId: "office" },
     });
 
+    // While it looks, Done is outlined beside Stop looking.
+    expect(button("Done").dataset.variant).toBe("outline");
     await act(async () => button("Stop looking").click());
     expect(dialog.querySelector("h3")?.textContent).toBe("Stopped looking");
-    expect(button("Start again")).toBeDefined();
+    // With devices joined, closing is what is left: Done leads, and starting
+    // again is outlined.
+    expect(button("Done").dataset.variant).toBe("default");
+    expect(button("Start again").dataset.variant).toBe("outline");
     await act(async () => button("Done").click());
     expect(
       requests.filter((each) => each.path === "/api/devices/pairing/close"),
