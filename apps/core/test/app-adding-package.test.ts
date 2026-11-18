@@ -56,6 +56,11 @@ it("installs the package checked at Add even if the manager stages another meanw
       packagesDir,
       kitDir: join(folder, "no-kit"),
       managerSocket: join(folder, "manager.sock"),
+      newHomeApps: [
+        "sanctum.moods",
+        "sanctum.natural-light",
+        "sanctum.weather",
+      ],
       version: "1.0.0",
     },
     {

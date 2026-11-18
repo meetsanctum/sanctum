@@ -139,7 +139,10 @@ export function createCore(
   async function stagedPackages(only?: readonly string[]) {
     const staged = await manager!.stagedApps();
     const { addedApps } = modules!;
-    addedApps.recordFirst([...shipped, ...Object.keys(staged)]);
+    addedApps.recordFirst(
+      [...shipped, ...Object.keys(staged)],
+      config.newHomeApps,
+    );
     const added = addedApps.ids();
     const apart = Object.entries(staged).flatMap(([id, { folder }]) =>
       added.has(id) && !started.has(id) && (!only || only.includes(id))

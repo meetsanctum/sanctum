@@ -34,6 +34,12 @@ describe("loadConfig", () => {
       packagesDir: "/packages",
       kitDir: "/app/kit",
       managerSocket: "../manager/data/manager.sock",
+      // A new home starts with these, and adds the rest.
+      newHomeApps: [
+        "sanctum.moods",
+        "sanctum.natural-light",
+        "sanctum.weather",
+      ],
       version: "dev",
     });
     expect(loadConfig({ CORE_PLAIN_HTTP: "true" }).plainHttp).toBe(true);

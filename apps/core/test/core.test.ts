@@ -59,6 +59,7 @@ function configOf(
     packagesDir: join(dataDir, "no-packages"),
     kitDir: join(dataDir, "no-kit"),
     managerSocket,
+    newHomeApps: ["sanctum.moods", "sanctum.natural-light", "sanctum.weather"],
     version: "1.2.3",
     ...overrides,
   };

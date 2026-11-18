@@ -9,7 +9,10 @@ import { appsAdded, appsListed, appsOff, appVersions } from "./schema.js";
 // that says the home keeps the list: a start cut short records them again,
 // and a later start never does, even once the household has removed every
 // app. A start that knows of no app at all, as when the manager didn't
-// answer in a development stack, leaves it for the next. A core rolled back
+// answer in a development stack, leaves it for the next. A new home, whose
+// database knows no app it ran or turned off, starts with only the apps
+// every home with lights uses; the others stay to be added, a driver when
+// its hardware turns up. A core rolled back
 // to before the list doesn't read it, and installs every app staged, as it
 // did before.
 
@@ -26,10 +29,10 @@ export function createAddedApps(
 
     /**
      * On a home that keeps no list yet, records these apps as added, with
-     * those the database knows, and that it keeps the list from now on.
-     * Whether it did.
+     * those the database knows, and that it keeps the list from now on; on a
+     * new home, only those of them it starts with. Whether it did.
      */
-    recordFirst(appIds: Iterable<string>) {
+    recordFirst(appIds: Iterable<string>, newHomeApps?: readonly string[]) {
       return durably(db, () => {
         if (listed()) return false;
         const at = now();
@@ -37,8 +40,14 @@ export function createAddedApps(
           ...db.select({ appId: appVersions.appId }).from(appVersions).all(),
           ...db.select({ appId: appsOff.appId }).from(appsOff).all(),
         ].map((row) => row.appId);
-        const had = new Set([...appIds, ...known]);
-        if (had.size === 0) return false;
+        const offered = [...appIds];
+        if (offered.length === 0 && known.length === 0) return false;
+        const isNew = known.length === 0 && newHomeApps !== undefined;
+        const had = new Set(
+          isNew
+            ? offered.filter((appId) => newHomeApps.includes(appId))
+            : [...offered, ...known],
+        );
         for (const appId of had) {
           db.insert(appsAdded)
             .values({ appId, addedAt: at })

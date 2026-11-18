@@ -107,6 +107,59 @@ describe("a home's first start with its own list", () => {
   });
 });
 
+describe("a new home's first start", () => {
+  const newHomeApps = ["sanctum.moods", "sanctum.weather"];
+
+  it("records only the apps a new home starts with", async () => {
+    const added = createAddedApps(await database());
+
+    expect(
+      added.recordFirst(
+        ["sanctum.moods", "sanctum.weather", "sanctum.zigbee"],
+        newHomeApps,
+      ),
+    ).toBe(true);
+
+    expect([...added.ids()].sort()).toEqual([
+      "sanctum.moods",
+      "sanctum.weather",
+    ]);
+    expect(added.listed()).toBe(true);
+  });
+
+  it("keeps its list though the image ships none of them", async () => {
+    const added = createAddedApps(await database());
+
+    expect(added.recordFirst(["sanctum.zigbee"], newHomeApps)).toBe(true);
+    expect(added.ids().size).toBe(0);
+    expect(added.recordFirst(["sanctum.moods"], newHomeApps)).toBe(false);
+  });
+
+  it("waits for a start that knows of an app", async () => {
+    const added = createAddedApps(await database());
+
+    expect(added.recordFirst([], newHomeApps)).toBe(false);
+    expect(added.listed()).toBe(false);
+  });
+
+  it("isn't a home that ran an app: that keeps every app it had", async () => {
+    const db = await database();
+    const at = new Date("2026-11-17T10:00:00Z");
+    db.insert(appVersions)
+      .values({ appId: "sanctum.zigbee", version: "0.7.0", startedAt: at })
+      .run();
+    const added = createAddedApps(db, { now: () => at });
+
+    added.recordFirst(["sanctum.moods", "sanctum.esphome"], newHomeApps);
+
+    expect([...added.ids()].sort()).toEqual([
+      "sanctum.esphome",
+      "sanctum.moods",
+      "sanctum.zigbee",
+    ]);
+  });
+});
+
 describe("the first app someone adds", () => {
   it("establishes the home's list before any more packages arrive", async () => {
     const db = await database();

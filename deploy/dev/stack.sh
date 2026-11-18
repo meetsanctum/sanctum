@@ -91,6 +91,8 @@ settings() {
     SANCTUM_STACK_CORE_ENV="CORE_PLAIN_HTTP=true"
   fi
   SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV:+${SANCTUM_STACK_CORE_ENV};}CORE_KIT_DIR=/app/packages/ui-sdk/dist/kit"
+  # A new stack starts as a new home does, with its fake lights for the seed.
+  SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV};CORE_NEW_HOME_APPS=sanctum.moods,sanctum.natural-light,sanctum.weather,sanctum.fake-lights"
   if [[ -n "${CORE_ALLOWED_ORIGINS:-}" ]]; then
     SANCTUM_STACK_CORE_ENV="${SANCTUM_STACK_CORE_ENV};CORE_ALLOWED_ORIGINS=${CORE_ALLOWED_ORIGINS}"
   fi
