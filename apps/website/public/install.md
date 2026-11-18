@@ -5,8 +5,8 @@ open source home automation that runs on a small computer in their home and
 is used from a Mac app. This page tells you each step, what to check before
 it, and what only the person can do.
 
-[The install guide](https://github.com/meetsanctum/sanctum/blob/main/docs/install.md)
-has every step in full. Where this page and the guide differ, follow the
+[The install guide](https://docs.meetsanctum.com/install/) and the pages after
+it have every step in full. Where this page and the guide differ, follow the
 guide and say so.
 
 ## How to work

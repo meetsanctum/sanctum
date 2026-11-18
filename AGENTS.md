@@ -16,6 +16,9 @@ setup, the commands and the layout; these notes are the rules.
 - `apps/website` — the public landing page and its waitlist: a Next.js site
   that keeps the waitlist in Resend and runs on Railway, as `.railway`
   describes.
+- `apps/docs` — the documentation site at docs.meetsanctum.com: Markdown
+  pages with their images, built by Starlight (Astro) into static files and
+  run on Railway beside the website.
 - `packages/app-sdk` — `defineApp`, `defineAction`, `defineEvent`, schemas.
 - `packages/ui-sdk` — what apps' pages import: `defineAppUi`, the typed app
   client, the design components they share with the shell.

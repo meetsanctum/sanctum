@@ -2,12 +2,12 @@ import appWindow from "@meetsanctum/brand/app-home-window.webp";
 import heroPhoto from "@meetsanctum/brand/photos/living-room-plant.jpg";
 
 import { productName } from "../../../client/src/brand";
-import { repositoryUrl, siteUrl, xUrl } from "../site";
+import { docsUrl, repositoryUrl, siteUrl, xUrl } from "../site";
 import { CopyPrompt } from "./copy-prompt";
 import { Knot } from "./knot";
 import { WaitlistForm } from "./waitlist-form";
 
-const installGuide = `${repositoryUrl}/blob/main/docs/install.md`;
+const installGuide = `${docsUrl}/install/`;
 
 export default async function Page() {
   const stars = await starCount();

@@ -1,0 +1,87 @@
+/* Starlight's colours and type, set to the brand's tokens as in the client's
+   styles.css. Dark mode is the default; light mode inverts the grays. */
+:root {
+  --sl-font: "Inter", system-ui, sans-serif;
+
+  /* Electric blue, only for what you can press: links and the current page
+     in the sidebar and on this page's contents. */
+  --sl-color-accent-low: #1c2a52;
+  --sl-color-accent: #3e6ae1;
+  --sl-color-accent-high: #a3b8f4;
+
+  /* From White to Carbon, through Silver, Steel and the card fill. */
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #e8e9eb;
+  --sl-color-gray-2: #c5c7ca;
+  --sl-color-gray-3: #909297;
+  --sl-color-gray-4: #5c5e62;
+  --sl-color-gray-5: #3c3d40;
+  --sl-color-gray-6: #2c2d31;
+  --sl-color-black: #222326;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #dfe6fb;
+  --sl-color-accent: #3e6ae1;
+  --sl-color-accent-high: #2847a3;
+
+  --sl-color-white: #222326;
+  --sl-color-gray-1: #2c2d31;
+  --sl-color-gray-2: #3c3d40;
+  --sl-color-gray-3: #5c5e62;
+  --sl-color-gray-4: #909297;
+  --sl-color-gray-5: #c5c7ca;
+  --sl-color-gray-6: #eeeff0;
+  --sl-color-gray-7: #f6f6f7;
+  --sl-color-black: #ffffff;
+}
+
+/* One background, Carbon or White, behind the page, the top bar and the
+   sidebar, with no lines between them. */
+:root,
+:root[data-theme="light"] {
+  --sl-color-bg-nav: var(--sl-color-bg);
+  --sl-color-bg-sidebar: var(--sl-color-bg);
+  --sl-color-hairline-shade: transparent;
+}
+
+.content-panel + .content-panel,
+.right-sidebar,
+.sidebar-content ul ul li {
+  border: 0;
+}
+
+/* The current page in the sidebar: White on electric blue in either mode,
+   like a pressed button. */
+.sidebar-content a[aria-current="page"] {
+  background-color: var(--sl-color-accent);
+  color: #ffffff;
+}
+
+/* Buttons take corners from the radius scale, never a pill, and the primary
+   one is White on electric blue. */
+.sl-link-button {
+  border-radius: 9px;
+}
+
+.sl-link-button.primary,
+.sl-link-button.primary:hover {
+  background: var(--sl-color-accent);
+  border-color: var(--sl-color-accent);
+  color: #ffffff;
+}
+
+/* The sidebar's button on a phone: flat, in the card fill. */
+.sl-menu-button {
+  border-radius: 9px;
+  background-color: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  box-shadow: none;
+}
+
+/* The lockup with its knot at 14 px, one pixel to each unit of the knot's
+   grid: the knot spans 79.2 of the lockup's 92.4 units of height. */
+.site-title img {
+  height: calc(14px * 92.4 / 79.2);
+  width: auto;
+}

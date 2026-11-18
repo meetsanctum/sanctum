@@ -12,3 +12,4 @@ pnpm-lock.yaml
 # ui-sdk's report of what the kit offers pages, written by `pnpm --filter
 # @meetsanctum/ui-sdk api`.
 packages/ui-sdk/api.json
+.astro
