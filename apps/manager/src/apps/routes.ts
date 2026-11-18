@@ -25,7 +25,8 @@ import type { AppUsage } from "./usage.js";
 //
 //   GET    /api/capabilities         what this manager can do: run apps, limit
 //                                    their memory, look for devices, give an app
-//                                    that reaches them its own network; one too
+//                                    that reaches them its own network, delete
+//                                    a removed app's data; one too
 //                                    old for this route answers 404, which means
 //                                    nothing
 //   GET    /api/apps/containers      every app's container and its state
@@ -55,6 +56,10 @@ import type { AppUsage } from "./usage.js";
 //                                        back, or on its first move take in its file
 //   POST   /api/apps/:app/update/:id/commit  it committed, so the slot frees
 //   POST   /api/apps/:app/update/:id/undo    put the copy back, then free the slot
+//   DELETE /api/apps/:app/data       delete a removed app's image, copies and
+//                                    what Go back kept; refused (409) while
+//                                    an update of it or another operation runs,
+//                                    or a container still has its image
 
 const params = z.object({ app: z.string().regex(appIdPattern) });
 const startBody = z.object({
@@ -120,6 +125,7 @@ export function registerAppRoutes(
         memoryLimits: false,
         discovery,
         lan: false,
+        deletesData: false,
       };
     }
     const [appContainers, memoryLimits] = await Promise.all([
@@ -131,6 +137,8 @@ export function registerAppRoutes(
       memoryLimits,
       discovery,
       lan: appContainers && apps.reachesDevices(),
+      // It deletes a removed app's data, and a service's.
+      deletesData: Boolean(images && maintenance && updates),
     };
   });
 
@@ -297,4 +305,12 @@ export function registerAppRoutes(
     };
   app.post("/api/apps/:app/update/:id/commit", ending(updates.commit));
   app.post("/api/apps/:app/update/:id/undo", ending(updates.undo));
+
+  app.delete(
+    "/api/apps/:app/data",
+    withApp(async (id, _body, reply) => {
+      await updates.deleteData(id);
+      return reply.code(204).send();
+    }),
+  );
 }

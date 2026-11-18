@@ -47,6 +47,7 @@ function device(id: string, name: string, extra: Partial<DeviceInfo> = {}) {
     lastSeenAt: null,
     firmware: null,
     probe: true,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,
@@ -71,17 +72,20 @@ const lamp = device("lamp", "Office lamp", {
 const sensor = device("sensor", "Hall sensor", {
   roomId: "hall",
   probe: false,
+  identify: false,
   battery: 8,
 });
 // One that can't be asked how it is.
 const heater = device("heater", "Hall heater", {
   roomId: "hall",
   probe: false,
+  identify: false,
   availability: "offline",
 });
 const button = device("button", "Button", {
   roomId: null,
   probe: false,
+  identify: false,
   driverName: "Aqara wireless mini switch",
 });
 const desk = device("desk", "Desk light");

@@ -6,8 +6,10 @@ import { changedBy, parseRequest } from "../auth/callers.js";
 import type { Devices } from "../devices/devices.js";
 import type { Entities } from "../entities/entities.js";
 import type { Workflows } from "../workflows/workflows.js";
+import { floorRemoval } from "./floor-removal.js";
 import {
   floorChanges,
+  floorOrder,
   homeChanges,
   newFloor,
   newRoom,
@@ -35,8 +37,14 @@ import { roomRemoval } from "./room-removal.js";
 //                                         { latitude, longitude, elevation,
 //                                         timeZone, place } from the public
 //                                         IP address
-//   POST /api/places/floors/add           { name, level? }
+//   POST /api/places/floors/add           { name, level? }; last unless
+//                                         it says where
 //   POST /api/places/floors/update        { id, name?, level? }
+//   POST /api/places/floors/order         { ids }: every floor, in the
+//                                         household's new order
+//   GET  /api/places/floors/removal?id=<id>
+//                                         FloorRemoval: what removing it
+//                                         takes with it
 //   POST /api/places/floors/remove        { id }
 //   POST /api/places/rooms/add            { name, floorId? }
 //   POST /api/places/rooms/update         { id, name?, floorId? }
@@ -52,7 +60,8 @@ export function registerPlacesRoutes(
   app: FastifyInstance,
   options: {
     places: PlacesModule;
-    // What removing a room takes with it (room-removal.ts).
+    // What removing a room or a floor takes with it (room-removal.ts,
+    // floor-removal.ts).
     devices: Devices;
     entities: Entities;
     apps: AppHost;
@@ -81,6 +90,12 @@ export function registerPlacesRoutes(
   );
   app.post("/api/places/floors/update", async (request) =>
     places.updateFloor(by(request), parseRequest(floorChanges, request.body)),
+  );
+  app.post("/api/places/floors/order", async (request) =>
+    places.orderFloors(by(request), parseRequest(floorOrder, request.body)),
+  );
+  app.get("/api/places/floors/removal", async (request) =>
+    floorRemoval(options, parseRequest(removal, request.query).id),
   );
   app.post("/api/places/floors/remove", async (request, reply) => {
     places.removeFloor(by(request), parseRequest(removal, request.body));

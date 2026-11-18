@@ -21,7 +21,7 @@ import {
 
 export const digest = "a".repeat(64);
 type Hooks = Partial<
-  Pick<AppDefinition, "start" | "resume" | "stop" | "driver">
+  Pick<AppDefinition, "start" | "resume" | "stop" | "uninstall" | "driver">
 >;
 
 export function testApp(

@@ -561,3 +561,150 @@ body {
 .empty p {
   margin: 0 0 8px;
 }
+
+/* Add devices' wait (src/add-devices-joining.tsx): a soft warm glow the
+   knot rests on, breathing, and rings that drift out from it one after
+   another in step with the knot loader's 4.8 s turn. Only transform and
+   opacity move; where motion is reduced, the glow holds still and the rings
+   are not drawn. */
+.add-devices-orb {
+  position: absolute;
+  top: 42px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.add-devices-halo {
+  position: absolute;
+  inset: -120px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(255 236 210 / 20%),
+    rgb(255 236 210 / 6%) 45%,
+    rgb(255 236 210 / 0%) 70%
+  );
+}
+
+.add-devices-ring {
+  position: absolute;
+  inset: -42px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 40%);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .add-devices-halo {
+    animation: add-devices-breathe 4.8s ease-in-out infinite;
+  }
+
+  .add-devices-ring {
+    animation: add-devices-ring 4.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  }
+
+  .add-devices-ring:nth-child(3) {
+    animation-delay: 1.6s;
+  }
+
+  .add-devices-ring:nth-child(4) {
+    animation-delay: 3.2s;
+  }
+}
+
+@keyframes add-devices-breathe {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes add-devices-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(3.4);
+    opacity: 0;
+  }
+}
+
+/* Add devices greets a device new to the home once, as its card appears
+   (src/add-devices-cards.tsx): a warm light sweeps across the card, and a
+   light's round glows as a bulb switching on, then both are gone. Only
+   transform and opacity move; where motion is reduced, the round's glow
+   only fades in and out. */
+.add-devices-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.add-devices-sweep::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -70%;
+  width: 70%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 204 120 / 22%),
+    rgb(255 159 10 / 30%),
+    rgb(255 230 180 / 20%),
+    transparent
+  );
+  opacity: 0;
+}
+
+.add-devices-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #ffe2a8, #ff9f0a 78%);
+  opacity: 0;
+  animation: add-devices-glow 2.6s ease 0.5s both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .add-devices-sweep::before {
+    animation: add-devices-sweep 1.5s cubic-bezier(0.3, 0.1, 0.2, 1) 0.5s both;
+  }
+}
+
+@keyframes add-devices-sweep {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(245%);
+    opacity: 0;
+  }
+}
+
+@keyframes add-devices-glow {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}

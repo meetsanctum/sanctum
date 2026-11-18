@@ -4,14 +4,14 @@ import { z } from "zod";
 
 import type { CoreDatabase } from "../database.js";
 import type { EventBusFollower } from "../event-bus.js";
-import type { PlacesModule } from "../places/places.js";
+import { roomsOfPlace, type PlacesModule } from "../places/places.js";
 import type { Devices } from "./devices.js";
 import { placeSensing } from "./schema.js";
 import type { View } from "./views.js";
 
-// Motion and the light level in a room, a zone or the whole home, as the
-// core's motion triggers and conditions and its light-level condition read
-// them. A place has motion while any of its motion sensors that answer sees
+// Motion and the light level in a room, a floor, a zone or the whole home,
+// as the core's motion triggers and conditions and its light-level
+// condition read them. A place has motion while any of its motion sensors that answer sees
 // motion, and is quiet once every one that answers has said no motion,
 // since the last of them did. A sensor that is offline or has yet to report
 // does not count, so a place with none answering is neither. Its light level
@@ -20,20 +20,22 @@ import type { View } from "./views.js";
 //
 // Each place's motion is kept (place_sensing), and changes only as the place
 // itself does, whatever made it: a sensor's report, a sensor moved, or a room
-// that joined or left a zone. A place that goes quiet is quiet from that
+// that joined or left a floor or a zone. A place that goes quiet is quiet from that
 // moment, even when the sensors left in it have been quiet for longer, and
 // one that stays quiet keeps its time. So the triggers, their timers and the
 // conditions that read it agree, also across a restart and while workflows
-// are held, and a zone that loses its room with motion starts counting.
+// are held, and a floor or a zone that loses its room with motion starts
+// counting.
 
 /**
- * Where motion and the light level are read: a room, a zone or the whole
- * home, as a lights place but never chosen lights. Its schema says
+ * Where motion and the light level are read: a room, a floor, a zone or
+ * the whole home, as a lights place but never chosen lights. Its schema says
  * `place`, so Automations offers the same picker.
  */
 export const motionPlace = z
   .discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("room"), id: names("room") }),
+    z.strictObject({ kind: z.literal("floor"), id: names("floor") }),
     z.strictObject({ kind: z.literal("zone"), id: names("zone") }),
     z.strictObject({ kind: z.literal("home") }),
   ])
@@ -78,7 +80,10 @@ export type MotionChange = {
   sensedBy: string | null;
 };
 
-/** A place as its kept motion names it: "home", "room:<id>" or "zone:<id>". */
+/**
+ * A place as its kept motion names it: "home", "room:<id>", "floor:<id>" or
+ * "zone:<id>".
+ */
 export const placeKey = (place: MotionPlace) =>
   place.kind === "home" ? "home" : `${place.kind}:${place.id}`;
 
@@ -87,7 +92,9 @@ function placeOf(key: string): MotionPlace | null {
   const colon = key.indexOf(":");
   const kind = key.slice(0, colon);
   const id = key.slice(colon + 1);
-  return kind === "room" || kind === "zone" ? { kind, id } : null;
+  return kind === "room" || kind === "floor" || kind === "zone"
+    ? { kind, id }
+    : null;
 }
 
 const keptMotion = (row: typeof placeSensing.$inferSelect): PlaceMotion => ({
@@ -96,29 +103,27 @@ const keptMotion = (row: typeof placeSensing.$inferSelect): PlaceMotion => ({
   quietSince: row.inactiveSince,
 });
 
-// Every place motion is read in: the home, each room and each zone.
+// Every place motion is read in: the home, each room, each floor and each
+// zone.
 function everyPlace(home: Places): MotionPlace[] {
   return [
     { kind: "home" },
     ...home.rooms.map((room) => ({ kind: "room" as const, id: room.id })),
+    ...home.floors.map((floor) => ({ kind: "floor" as const, id: floor.id })),
     ...home.zones.map((zone) => ({ kind: "zone" as const, id: zone.id })),
   ];
 }
 
 // The rooms a place covers in these places, or null for the whole home.
 function roomsIn(home: Places, place: MotionPlace): ReadonlySet<string> | null {
-  if (place.kind === "home") return null;
-  if (place.kind === "room") {
-    return new Set(
-      home.rooms.some((room) => room.id === place.id) ? [place.id] : [],
-    );
-  }
-  return new Set(home.zones.find((zone) => zone.id === place.id)?.roomIds);
+  return place.kind === "home"
+    ? null
+    : new Set(roomsOfPlace(home, place) ?? []);
 }
 
 /**
- * The rooms a place covers, or null for the whole home. A room or zone the
- * home no longer has covers none.
+ * The rooms a place covers, or null for the whole home. A room, floor or
+ * zone the home no longer has covers none.
  */
 export function placeRooms(
   places: Pick<PlacesModule, "list">,
@@ -247,8 +252,8 @@ export function createMotion(options: {
 
   // Works every place's motion out again from its sensors and what it was,
   // keeps what changed, then says so. A place first seen, as the core first
-  // keeps its motion or a room or zone is added, is kept as its sensors say,
-  // and a place gone is forgotten, its motion now nobody's.
+  // keeps its motion or a room, floor or zone is added, is kept as its
+  // sensors say, and a place gone is forgotten, its motion now nobody's.
   function refresh(sensedBy: string | null, says = true) {
     const home = places.list();
     const sensors = devices.list();
@@ -293,14 +298,19 @@ export function createMotion(options: {
   return {
     /**
      * A place's name as a run's entry keeps it, "motion in Office": the
-     * room's or zone's, or "the home"; none for one the home no longer has.
+     * room's, floor's or zone's, or "the home"; none for one the home no
+     * longer has.
      */
     name(place: MotionPlace): string | undefined {
       if (place.kind === "home") return "the home";
       const home = places.list();
-      return (place.kind === "room" ? home.rooms : home.zones).find(
-        (each) => each.id === place.id,
-      )?.name;
+      const list =
+        place.kind === "room"
+          ? home.rooms
+          : place.kind === "floor"
+            ? home.floors
+            : home.zones;
+      return list.find((each) => each.id === place.id)?.name;
     },
 
     /**
@@ -322,7 +332,7 @@ export function createMotion(options: {
           ),
         )
         .get();
-      // A room or zone just added is kept once the bus has said so.
+      // A room, floor or zone just added is kept once the bus has said so.
       return row
         ? keptMotion(row)
         : motionOf(devices.list(), placeRooms(places, place));
@@ -330,7 +340,7 @@ export function createMotion(options: {
 
     // What the event bus says (event-bus.ts): a motion sensor that reported,
     // went offline or came back, moved, came or went, and a change of the
-    // places. Only a sensor's own report, in the room it was in, sensed it.
+    // places, such as a room moved to another floor. Only a sensor's own report, in the room it was in, sensed it.
     follower: {
       "device.changed"({ id, before, after }) {
         if (!sensesMotion(before) && !sensesMotion(after)) return;

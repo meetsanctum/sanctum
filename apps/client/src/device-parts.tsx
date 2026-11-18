@@ -22,6 +22,7 @@ import { productName } from "./brand";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -56,6 +57,8 @@ const typeIcons: Record<DeviceType, LucideIcon> = {
 export function DeviceIcon(props: {
   device?: DeviceInfo;
   type?: string | null;
+  // Only the icon, for a round of its own, as on Add devices' cards.
+  bare?: boolean;
 }) {
   // A found device has only its driver's word, which cannot choose a type
   // reserved for the household.
@@ -66,6 +69,7 @@ export function DeviceIcon(props: {
     type && Object.hasOwn(typeIcons, type)
       ? typeIcons[type as DeviceType]
       : Radio;
+  if (props.bare) return <Icon aria-hidden="true" />;
   return (
     <span
       aria-hidden="true"
@@ -179,6 +183,8 @@ export function RoomPicker(props: {
   disabled?: boolean;
   // What it says while the device is in no room.
   unset?: string;
+  // Ends the menu with New room…, as where a device is first placed.
+  onNewRoom?: () => void;
 }) {
   const current = roomName(props.rooms, props.device.roomId);
   return (
@@ -211,6 +217,11 @@ export function RoomPicker(props: {
           ))}
           <DropdownMenuRadioItem value={noRoom}>No room</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        {props.onNewRoom && (
+          <DropdownMenuItem onSelect={props.onNewRoom}>
+            New room…
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

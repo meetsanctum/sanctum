@@ -2,7 +2,11 @@ import type { ServiceSpec } from "./containers.js";
 import { mosquittoSpec, type MqttClient } from "./mosquitto.js";
 import type { ServicesState } from "./state.js";
 import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
-import { zigbee2mqttBaseTopic, zigbee2mqttSpec } from "./zigbee2mqtt.js";
+import {
+  zigbee2mqttBaseTopic,
+  zigbee2mqttData,
+  zigbee2mqttSpec,
+} from "./zigbee2mqtt.js";
 
 // The services the manager can run: programs in containers of their own that
 // an app asks for with a `services:<name>` permission. The manager declares
@@ -36,6 +40,9 @@ export type ServiceDefinition = {
   connection?: () => Record<string, unknown>;
   // The container to run, or why it cannot run yet.
   spec: (context: SpecContext) => Promise<ServiceSpec | NotYet> | ServiceSpec;
+  // The volumes its own data lives in, which erasing it deletes, as
+  // Zigbee2MQTT's holds the Zigbee network and its key.
+  dataVolumes?: string[];
 };
 
 // In the order they start.
@@ -51,6 +58,7 @@ export const serviceDefinitions: ServiceDefinition[] = [
     needs: ["mosquitto"],
     forApps: true,
     mqttTopics: [`${zigbee2mqttBaseTopic}/#`],
+    dataVolumes: [zigbee2mqttData],
     connection: () => ({ baseTopic: zigbee2mqttBaseTopic }),
     async spec({ state, zigbeeCoordinator }) {
       const chosen = await zigbeeCoordinator();

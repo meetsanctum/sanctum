@@ -3,13 +3,10 @@ import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
+import { byFloor, FloorSection, roomsOn } from "./floor-groups";
+import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
 import { placeMotionText } from "./motion";
-import {
-  LightsButton,
-  lightsButton,
-  PlaceReadings,
-  unitOf,
-} from "./place-pages";
+import { PlaceReadings, unitOf } from "./place-pages";
 import {
   buttonsIn,
   RoomButtons,
@@ -28,7 +25,11 @@ import type { Devices } from "./use-devices";
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put
 // on it, so a sensor needs no tile here for its readings. A room with
-// nothing to show is in the sidebar only.
+// nothing to show is in the sidebar only. Once the home has floors, its
+// rooms are under them (floor-groups.tsx), each floor's heading with the
+// button that turns its lights off while any is on. Space groups them: a
+// room's parts sit 12 px apart, rooms 32 px and floors 56 px, so each is
+// closer to its own than to the next.
 
 /** The rooms on Home, and while nothing is on it, how to put something there. */
 export function HomeRooms(props: {
@@ -94,88 +95,129 @@ export function HomeRooms(props: {
   });
   const isEmpty =
     props.onHome !== undefined && places.every((place) => !place.onHome.length);
+  const groups = byFloor(
+    devices.places,
+    shown,
+    (place) => place.room?.id ?? null,
+  );
+  const homeLights = devices.tiles.filter((tile) => tile.kind === "light");
+
+  // A room's section; its heading is a level down under a floor's.
+  const roomSection = (place: (typeof shown)[number], level: 2 | 3) => {
+    const headingId = `home-${place.id}`;
+    const { room, lights } = place;
+    const Heading = level === 3 ? "h3" : "h2";
+    return (
+      <section
+        key={place.id}
+        aria-labelledby={headingId}
+        className="flex shrink-0 flex-col gap-3"
+      >
+        <Heading
+          id={headingId}
+          className="m-0 text-[15px] leading-5 font-medium"
+        >
+          <Button
+            variant="ghost"
+            size="inline"
+            type="button"
+            onClick={() =>
+              room ? props.openRoom(room.id) : props.openNoRoom()
+            }
+          >
+            {place.name}
+            <icons.ChevronRight
+              aria-hidden="true"
+              className="size-4 text-white/65"
+            />
+          </Button>
+        </Heading>
+        {place.hasLine && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {lights && <LightsButton lights={lights} />}
+            <RoomButtons
+              buttons={place.buttons}
+              roomName={place.name}
+              entities={entities}
+            />
+            <PlaceReadings
+              motion={place.motion}
+              contact={place.contact}
+              readings={place.readings}
+              className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
+            />
+          </div>
+        )}
+        {room &&
+          place.sections.map(({ app, section }) => (
+            <RoomSection
+              key={app.id}
+              app={app}
+              section={section}
+              roomId={room.id}
+              entities={entities}
+              roomHas={() => false}
+              bare
+            />
+          ))}
+        {place.onHome.length > 0 && (
+          <div
+            role="group"
+            aria-label="On Home"
+            className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
+          >
+            {place.onHome.map((tile) => (
+              <DeviceTile
+                key={tile.key}
+                tile={tile}
+                onToggle={(each) =>
+                  void devices.toggle(each).catch(() => undefined)
+                }
+                onDim={(each, brightness) =>
+                  void devices.dim(each, brightness).catch(() => undefined)
+                }
+                onOpen={props.openDevice}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <>
-      {shown.map((place) => {
-        const headingId = `home-${place.id}`;
-        const { room, lights } = place;
-        return (
-          <section
-            key={place.id}
-            aria-labelledby={headingId}
-            className="flex shrink-0 flex-col gap-3"
-          >
-            <h2
-              id={headingId}
-              className="m-0 text-[15px] leading-5 font-medium"
-            >
-              <Button
-                variant="ghost"
-                size="inline"
-                type="button"
-                onClick={() =>
-                  room ? props.openRoom(room.id) : props.openNoRoom()
+      {shown.length > 0 &&
+        (groups ? (
+          <div className="flex shrink-0 flex-col gap-14 pt-2">
+            {groups.map(({ floor, items }) => (
+              <FloorSection
+                key={floor?.id ?? "other-rooms"}
+                floor={floor}
+                id={`home-floor-${floor?.id ?? "other-rooms"}`}
+                lights={
+                  floor
+                    ? floorLightsButton(
+                        homeLights.filter(
+                          (tile) =>
+                            tile.roomId !== null &&
+                            roomsOn(devices.places, floor).has(tile.roomId),
+                        ),
+                        floor,
+                        devices,
+                      )
+                    : undefined
                 }
               >
-                {place.name}
-                <icons.ChevronRight
-                  aria-hidden="true"
-                  className="size-4 text-white/65"
-                />
-              </Button>
-            </h2>
-            {place.hasLine && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                {lights && <LightsButton lights={lights} />}
-                <RoomButtons
-                  buttons={place.buttons}
-                  roomName={place.name}
-                  entities={entities}
-                />
-                <PlaceReadings
-                  motion={place.motion}
-                  contact={place.contact}
-                  readings={place.readings}
-                  className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
-                />
-              </div>
-            )}
-            {room &&
-              place.sections.map(({ app, section }) => (
-                <RoomSection
-                  key={app.id}
-                  app={app}
-                  section={section}
-                  roomId={room.id}
-                  entities={entities}
-                  roomHas={() => false}
-                  bare
-                />
-              ))}
-            {place.onHome.length > 0 && (
-              <div
-                role="group"
-                aria-label="On Home"
-                className="grid auto-rows-(--cell) grid-cols-[repeat(auto-fill,var(--cell))] gap-(--cell-gap)"
-              >
-                {place.onHome.map((tile) => (
-                  <DeviceTile
-                    key={tile.key}
-                    tile={tile}
-                    onToggle={(each) =>
-                      void devices.toggle(each).catch(() => undefined)
-                    }
-                    onDim={(each, brightness) =>
-                      void devices.dim(each, brightness).catch(() => undefined)
-                    }
-                    onOpen={props.openDevice}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
+                {items.map((place) => roomSection(place, 3))}
+              </FloorSection>
+            ))}
+          </div>
+        ) : (
+          <div className="flex shrink-0 flex-col gap-8 pt-2">
+            {shown.map((place) => roomSection(place, 2))}
+          </div>
+        ))}
       {isEmpty && devices.devices.length > 0 && (
         <NothingOnHome name={props.homeName} onEdit={props.onEdit} />
       )}

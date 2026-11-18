@@ -46,7 +46,12 @@ export function placeName(
   id: string,
   fallback = "Its",
 ) {
-  const list = kind === "room" ? places?.rooms : places?.zones;
+  const list =
+    kind === "room"
+      ? places?.rooms
+      : kind === "floor"
+        ? places?.floors
+        : places?.zones;
   return list?.find((each) => each.id === id)?.name ?? fallback;
 }
 

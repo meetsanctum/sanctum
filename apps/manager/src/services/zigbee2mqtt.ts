@@ -11,7 +11,7 @@ import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
 
 export const zigbee2mqttImage = "ghcr.io/koenkk/zigbee2mqtt:2.14.2";
 export const zigbee2mqttBaseTopic = "zigbee2mqtt";
-const dataVolume = stacked("sanctum-zigbee2mqtt-data");
+export const zigbee2mqttData = stacked("sanctum-zigbee2mqtt-data");
 // Where the coordinator appears inside the container, whatever its host path.
 const devicePath = "/dev/zigbee";
 
@@ -54,7 +54,7 @@ export function zigbee2mqttSpec(options: {
         ([key, value]) => `ZIGBEE2MQTT_CONFIG_${key}=${value}`,
       ),
     ],
-    volumes: [{ name: dataVolume, target: "/app/data" }],
+    volumes: [{ name: zigbee2mqttData, target: "/app/data" }],
     // Docker resolves a /dev/serial/by-id link each time the container
     // starts, so a coordinator that comes back as another tty still works.
     devices: [{ host: options.coordinator.path, container: devicePath }],

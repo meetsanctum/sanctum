@@ -32,6 +32,7 @@ describe("adding devices", () => {
       until: "2026-10-26T12:04:00.000Z",
       since: "2026-10-26T12:00:00.000Z",
       drivers: ["test.lamps"],
+      finders: ["test.lamps"],
       found: [],
       joined: [],
     });
@@ -57,6 +58,7 @@ describe("adding devices", () => {
         },
       ],
       drivers: ["test.lamps"],
+      finders: ["test.lamps"],
       found: [],
     });
     // Named after what it is, next to the light the home has already.
@@ -148,6 +150,7 @@ describe("adding devices", () => {
       until: null,
       joined: [],
       drivers: ["test.lamps"],
+      finders: ["test.lamps"],
       found: [],
     });
     expect(radio.pairing.at(-1)).toEqual({
@@ -168,6 +171,7 @@ describe("adding devices", () => {
           until: "2026-10-26T12:00:00.020Z",
           joined: [],
           drivers: ["test.lamps"],
+          finders: ["test.lamps"],
           found: [],
         },
       },
@@ -177,10 +181,35 @@ describe("adding devices", () => {
           until: null,
           joined: [],
           drivers: ["test.lamps"],
+          finders: ["test.lamps"],
           found: [],
         },
       },
     ]);
+  });
+
+  it("lets devices join only the drivers it names, and none it doesn't know", async () => {
+    const { core, maya } = await lampsCore();
+
+    const named = await post(
+      core,
+      "/api/devices/pairing/open",
+      { drivers: ["test.lamps"] },
+      maya,
+    );
+    expect(named.statusCode).toBe(200);
+    expect(radio.pairing).toHaveLength(1);
+
+    const other = await post(
+      core,
+      "/api/devices/pairing/open",
+      { drivers: ["sanctum.example"] },
+      maya,
+    );
+    expect(other.statusCode).toBe(503);
+    expect(other.json()).toEqual({ error: "unavailable" });
+    // The radio it didn't name was not asked again.
+    expect(radio.pairing).toHaveLength(1);
   });
 
   it("fails when no driver lets devices join", async () => {

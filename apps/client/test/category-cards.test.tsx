@@ -200,12 +200,12 @@ describe("a room's lights on Lights' page", () => {
   it("have the room's button under its name, which says what it does", async () => {
     await show("lights");
 
-    const office = button("Turn 1 light off in Office")!;
-    expect(office.textContent).toBe("Turn 1 light off");
+    const office = button("Turn off 1 light in Office")!;
+    expect(office.textContent).toBe("Turn off");
     expect(office.dataset.on).toBe("");
     expect(office.hasAttribute("aria-pressed")).toBe(false);
-    const hall = button("Turn lights on in Hall")!;
-    expect(hall.textContent).toBe("Turn lights on");
+    const hall = button("Turn on lights in Hall")!;
+    expect(hall.textContent).toBe("Turn on");
     expect(hall.dataset.on).toBeUndefined();
 
     await click(office);
@@ -222,12 +222,12 @@ describe("a room's lights on Lights' page", () => {
       [...container.querySelectorAll("button")]
         .map((each) => each.getAttribute("aria-label"))
         .filter((label) => label?.startsWith("Turn")),
-    ).toEqual(["Turn 1 light off in Office", "Turn lights on in Hall"]);
+    ).toEqual(["Turn off 1 light in Office", "Turn on lights in Hall"]);
   });
 
   it("are on no other category's page", async () => {
     await show("switches");
-    expect(button("Turn 1 light off in Office")).toBeUndefined();
+    expect(button("Turn off 1 light in Office")).toBeUndefined();
   });
 });
 

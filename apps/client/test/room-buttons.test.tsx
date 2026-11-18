@@ -152,7 +152,7 @@ describe("a room's buttons", () => {
       [...header.querySelectorAll("button")].map(
         (each) => each.getAttribute("aria-label") ?? each.textContent,
       ),
-    ).toEqual(["Turn 1 light off in Office", "Glow in Office"]);
+    ).toEqual(["Turn off 1 light in Office", "Glow in Office"]);
     expect(named("Glow in Office")?.textContent).toBe("Glow");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(
@@ -196,7 +196,7 @@ describe("a room's buttons", () => {
       [...office.querySelectorAll("button")].map((each) =>
         each.getAttribute("aria-label"),
       ),
-    ).toEqual(["Turn 1 light off in Office", "Glow in Office"]);
+    ).toEqual(["Turn off 1 light in Office", "Glow in Office"]);
   });
 
   it("show a room on Home that has nothing else to show", async () => {

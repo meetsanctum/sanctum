@@ -55,6 +55,7 @@ const device = (id: string, capabilities: CapabilityInfo[]): DeviceInfo => ({
   lastSeenAt: null,
   firmware: null,
   probe: false,
+  identify: false,
   battery: null,
   batteryLow: null,
   shownAs: null,
@@ -290,7 +291,7 @@ describe("an app's client", () => {
     // Adding devices and the home's dashboards are the shell's.
     live.publish({
       type: "pairing",
-      pairing: { until: null, joined: [], drivers: [], found: [] },
+      pairing: { until: null, joined: [], drivers: [], finders: [], found: [] },
     });
     live.publish({
       type: "dashboards",

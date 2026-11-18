@@ -6,6 +6,13 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
+import { createAppAdding } from "./app-host/adding.js";
+import { createAppDeleting } from "./app-host/deleting.js";
+import { createListTurns } from "./app-host/list-turns.js";
+import { createRemovedApps } from "./app-host/removed.js";
+import { createAppRemoving } from "./app-host/removing.js";
+import { createAddedApps } from "./app-host/added.js";
+import { createAvailableApps } from "./app-host/available.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
 import { createAppHost } from "./app-host/host.js";
@@ -16,7 +23,8 @@ import { createAppGrants } from "./app-host/grants.js";
 import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
-import { loadApartPackage } from "./app-host/loader.js";
+import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
+import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets } from "./app-host/secrets.js";
@@ -43,6 +51,7 @@ import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
 import { createLiveUpdates } from "./live-updates.js";
+import type { ManagerClient } from "./manager.js";
 import { createPages } from "./pages/pages.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
@@ -87,7 +96,18 @@ export async function createModules(
         // What it found on the home's network (discovery/sightings.ts); tests
         // may leave it out.
         discovery?: SightingsManager["discovery"];
+        // Deleting a removed app's data, and a service's (deleting.ts); tests
+        // may leave them out.
+        deleteAppData?: ManagerClient["deleteAppData"];
+        eraseServiceData?: ManagerClient["eraseServiceData"];
+        // What it staged for this image; tests may leave it out.
+        stagedApps?: ManagerClient["stagedApps"];
       };
+    // The apps this core's image ships, once the core has read them.
+    shippedApps?: () => readonly string[];
+    // Installs and starts an app the household just added, from the package
+    // the manager staged for it (core.ts).
+    installAdded?: (pkg: ApartPackage) => Promise<void>;
     // The host's id, which the manager keeps.
     hostId: () => string | undefined;
     // The home's id, which this database keeps (loadHomeId).
@@ -218,10 +238,13 @@ export async function createModules(
       eventBus.publish({ name: "entity.changed", ...change }),
     now,
   });
+  // The apps the household removed, whose devices are hidden meanwhile.
+  const removedApps = createRemovedApps(db, { now });
   const devices = createDevices(db, {
     gate,
     places,
     activity,
+    hiddenDrivers: () => removedApps.ids(),
     deliver: (driver, command, actor) => apps.deliver(driver, command, actor),
     driverRun: (driver) => apps.driverRun(driver),
     removeFromDriver: (driver, removal, actor, hold) =>
@@ -297,6 +320,7 @@ export async function createModules(
       firmware: (driver, hook, device, actor) =>
         apps.firmware(driver, hook, device, actor),
       probe: (driver, device, actor) => apps.probe(driver, device, actor),
+      identify: (driver, device, actor) => apps.identify(driver, device, actor),
     },
     record: activity.for("devices"),
     now,
@@ -316,6 +340,7 @@ export async function createModules(
   const pairing = createPairing({
     drivers: {
       list: () => apps.pairingDrivers(),
+      finders: () => apps.findingDrivers(),
       open: (driver, seconds, actor) =>
         apps.openPairing(driver, seconds, actor),
       close: (driver, actor) => apps.closePairing(driver, actor),
@@ -339,25 +364,40 @@ export async function createModules(
     list: (app) => workflows.kept.list(app),
   };
   const appVersions = createAppVersions(db, { now });
+  const addedApps = createAddedApps(db, { now });
   const appSettingsStore = createAppSettings(db, { now });
+  // A version staged in its folder, as the core reads any app that runs apart.
+  const loadPackage =
+    options.appUpdates?.loadPackage ??
+    ((appId: string, folder: string) =>
+      loadApartPackage(
+        options.packagesDir ?? "/packages",
+        appId,
+        folder,
+        "official",
+      ));
   const appUpdates = createAppUpdates({
     db,
     dataDir: options.dataDir,
     versions: appVersions,
     settings: appSettingsStore,
     manager: options.manager,
+    activity,
     log,
     now: () => now?.() ?? new Date(),
     ...options.appUpdates,
-    loadPackage:
-      options.appUpdates?.loadPackage ??
-      ((appId, folder) =>
-        loadApartPackage(
-          options.packagesDir ?? "/packages",
-          appId,
-          folder,
-          "official",
-        )),
+    loadPackage,
+    holds: (pkg) => waitingUpdates.holds(pkg),
+  });
+  const grantsStore = createAppGrants(db, { now });
+  // An update that needs what nobody has allowed waits for someone to.
+  const waitingUpdates = createWaitingUpdates({
+    db,
+    versions: appVersions,
+    grants: grantsStore,
+    loadPackage,
+    log,
+    now,
   });
   const apps = createAppHost({
     gate,
@@ -379,7 +419,9 @@ export async function createModules(
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
     sightings: () => sightings?.list() ?? [],
     updates: appUpdates,
-    grants: createAppGrants(db, { now }),
+    versions: appVersions,
+    waiting: waitingUpdates,
+    grants: grantsStore,
     commits: createAppCommits({
       db,
       versions: appVersions,
@@ -392,6 +434,9 @@ export async function createModules(
     onSettings: live.settings,
     onApp(app) {
       live.app(app);
+      // Its first successful start also restores workflows after a restart
+      // interrupted adding it back.
+      if (app.state === "running") workflows.forApps.added(app.id);
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -425,6 +470,74 @@ export async function createModules(
     now: now ?? (() => new Date()),
     log,
   });
+  // What the image ships that the household hasn't added, asked of the
+  // manager briefly, since a client waits for the answer.
+  const availableApps = createAvailableApps({
+    shipped: options.shippedApps ?? (() => []),
+    added: addedApps,
+    removed: removedApps,
+    staged: async () => (await options.manager.stagedApps?.(5_000)) ?? {},
+    loadPackage: (appId, folder) =>
+      loadApartPackage(
+        options.packagesDir ?? "/packages",
+        appId,
+        folder,
+        "official",
+      ),
+    pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
+    host: () => options.manager.hostStatus(),
+    log,
+  });
+  // Adding and removing apps take turns.
+  const listTurns = createListTurns();
+  const appAdding = createAppAdding({
+    gate,
+    turns: listTurns,
+    removed: removedApps,
+    workflows: () => workflows.forApps,
+    devices,
+    finishRemoval: (appId) => appRemoving.finish(appId),
+    onDevice: live.device,
+    available: availableApps,
+    added: addedApps,
+    activity,
+    hasInstalled: () => apps.hasInstalled(),
+    install: async (pkg) => {
+      if (!options.installAdded) throw new Error("this core installs no app");
+      await options.installAdded(pkg);
+    },
+    info: (appId) => apps.info(appId),
+    log,
+  });
+  // Deleting a removed app's data, by Delete now or after its 30 days.
+  const appDeleting = createAppDeleting({
+    db,
+    gate,
+    turns: listTurns,
+    removed: removedApps,
+    added: addedApps,
+    activity,
+    manager: options.manager,
+    entities,
+    finishRemoval: (appId) => appRemoving.finish(appId),
+    now,
+    log,
+  });
+  const appRemoving = createAppRemoving({
+    gate,
+    turns: listTurns,
+    host: apps,
+    removed: removedApps,
+    updates: appUpdates,
+    workflows: () => workflows.forApps,
+    devices,
+    entities,
+    activity,
+    manager: options.manager,
+    onRemoved: live.appRemoved,
+    onDevice: live.device,
+    log,
+  });
   const workflows = createWorkflows(db, {
     host: apps,
     devices,
@@ -448,7 +561,9 @@ export async function createModules(
   const activityViews = createActivityViews(activity, {
     person: (id) => people.list().find((person) => person.id === id) ?? null,
     client: (id) => auth.clients.name(id),
-    app: (id) => apps.list().find((app) => app.id === id)?.name ?? null,
+    // An app that's gone by the name its entries kept.
+    app: (id) =>
+      apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),
     action: (app, id) => apps.actionTitle(app, id),
     workflow: (id) => workflows.brief(id),
     device: (id) => devices.get(id)?.name ?? null,
@@ -533,9 +648,11 @@ export async function createModules(
   const stoppingSteps = [
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
+    ["stop removed apps' deadlines", () => appDeleting.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
+    ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
@@ -569,6 +686,13 @@ export async function createModules(
     found,
     entities,
     apps,
+    waitingUpdates,
+    addedApps,
+    availableApps,
+    appAdding,
+    appRemoving,
+    appDeleting,
+    removedApps,
     pages,
     workflows,
     history,

@@ -4,6 +4,7 @@ import {
   type AppRun,
   type AppRunUpdate,
   type AppState,
+  type AppWaitingUpdate,
   type SettingsSchema,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
@@ -59,11 +60,13 @@ type Installed = {
   granted: readonly string[];
   settings: SettingsSchema | null;
   off?: boolean;
+  waiting?: AppWaitingUpdate;
   supervision: Pick<
     Supervision,
     | "phase"
     | "since"
     | "isFirstStart"
+    | "isAdding"
     | "waitingFor"
     | "isOwnWait"
     | "failures"
@@ -94,6 +97,9 @@ function runOf({ supervision }: Installed, update?: AppRunUpdate): AppRun {
     ...(update ? { update } : {}),
     since: supervision.since.toISOString(),
     ...(supervision.isFirstStart ? { isFirstStart: true as const } : {}),
+    ...(supervision.isFirstStart && supervision.isAdding
+      ? { isAdding: true as const }
+      : {}),
     ...(supervision.waitingFor ? { waitingFor: supervision.waitingFor } : {}),
     ...(supervision.phase === "waiting" && supervision.isOwnWait
       ? { ownWait: true as const }
@@ -122,6 +128,7 @@ export function installedInfoOf(
     }),
     ...(entry.apartIn ? { build: entry.apartIn } : {}),
     run: runOf(entry, update),
+    ...(entry.waiting ? { waiting: entry.waiting } : {}),
     ...(entry.origin === "system" ? { alwaysOn: true as const } : {}),
   };
 }

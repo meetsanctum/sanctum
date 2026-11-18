@@ -267,6 +267,41 @@
       "when": 1794776130476,
       "tag": "0037_place-sensing",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794938946876,
+      "tag": "0038_apps-added",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1794952617015,
+      "tag": "0039_apps-removed",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1794961446586,
+      "tag": "0040_device_identify",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1795000556856,
+      "tag": "0041_app_data_deletion",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1795004047400,
+      "tag": "0042_app_updates_waiting",
+      "breakpoints": true
     }
   ]
 }

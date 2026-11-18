@@ -131,6 +131,7 @@ describe("the device list", () => {
           capabilities: [],
           firmware: { updatable: false, sleeps: true },
           probe: false,
+          identify: false,
         },
       },
       {

@@ -33,6 +33,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
   // Folders of versions built for a protocol before this core's, as a core's
   // update leaves them: their manifests don't say which they speak.
   const olderProtocol = new Set<string>();
+  const appApiRanges = new Map<string, string>();
   const packageOf = (
     definition: AppDefinition,
     folder = folderOf(definition),
@@ -40,6 +41,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
     staged.set(folder, definition);
     const manifest: Partial<StaticManifest> = toStaticManifest(definition);
     if (olderProtocol.has(folder)) delete manifest.protocol;
+    if (appApiRanges.has(folder)) manifest.core = appApiRanges.get(folder)!;
     const text = JSON.stringify(manifest);
     return {
       apart: {
@@ -139,6 +141,9 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
       quietMs?: number;
       // No app at all, as a core whose image brings none.
       none?: boolean;
+      // Whether every permission it asks for is granted first, as most
+      // tests want; otherwise the core answers them as a home's does.
+      allowed?: boolean;
     } = {},
   ) {
     await latest?.apps.close();
@@ -168,6 +173,7 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
         },
       },
       manager,
+      allowed: options.allowed,
       apart: options.none ? [] : [packageOf(definition, options.folder)],
       ...(options.onTrial ? { onTrial: true } : {}),
     });
@@ -205,6 +211,8 @@ export async function versions(options: { migrationsFolder?: string } = {}) {
     stage: (definition: AppDefinition) => void packageOf(definition),
     builtForAnOlderProtocol: (definition: AppDefinition) =>
       void olderProtocol.add(folderOf(definition)),
+    builtForAppApi: (definition: AppDefinition, range: string) =>
+      void appApiRanges.set(folderOf(definition), range),
     packagesUnreadableFor: (times: number) => {
       unreadable = times;
     },
@@ -230,3 +238,19 @@ export const rowOf = (core: TestCore) =>
 
 export const committedOf = (core: TestCore) =>
   core.db.select().from(appVersions).get();
+
+// What the activity log says of its changes of version, oldest first.
+export const versionEntries = (core: TestCore) =>
+  core.activity
+    .recent()
+    .filter((entry) => entry.action.startsWith("version."))
+    .reverse()
+    .map(({ action, outcome, reason, kind, actor, subjectId, detail }) => ({
+      action,
+      outcome,
+      reason,
+      kind,
+      actor,
+      subjectId,
+      detail,
+    }));

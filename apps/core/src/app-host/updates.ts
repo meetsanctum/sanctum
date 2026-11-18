@@ -10,14 +10,17 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Activity } from "../activity/activity.js";
+import type { Outcome } from "../activity/schema.js";
 import { durably, type CoreDatabase } from "../database.js";
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import { appStateOf } from "./app-info.js";
-import { speaksThisCore, type ApartPackage } from "./loader.js";
+import type { ApartPackage } from "./loader.js";
 import type { InstalledApp } from "./installed.js";
 import { appUpdates } from "./schema.js";
 import type { AppSettingsStore } from "./settings.js";
 import type { AppVersions } from "./versions.js";
+import { canRunPackage, createUpdatePackages } from "./update-packages.js";
 
 // An app's update. The core starts them, one at a time as the manager's slot
 // allows, and this row says how far each got, forced to disk at each step,
@@ -48,9 +51,8 @@ import type { AppVersions } from "./versions.js";
 // failure: it goes on from the copy it took in, tried again with growing pauses and
 // stopped in the end with Restart. The original goes once its next update commits.
 //
-// A version kept from before the core's protocol, as a core's update that changes the
-// protocol leaves each app's last one, can't run on this core, so the core never goes
-// back to it: nobody is offered it, an update cut short starts the version the core
+// A kept version whose protocol or app API this core doesn't serve can't run on
+// this core, so nobody is offered it, an update cut short starts the version the core
 // brings, and a new version that fails is tried again, as on a first move.
 //
 // An app's own database is the truth for what it owns in the core, so undoing puts
@@ -76,9 +78,8 @@ const goingBackGivesUpAfterMs = 10 * 60_000;
 // The row's from folder on an app's first move.
 const inTheCore = "";
 const isMove = (row: AppUpdateRow) => row.fromFolder === inTheCore;
-// Said of a version kept from before this core's protocol, which it can't run.
-const speaksOlder = (appId: string, version: string) =>
-  `apps: ${appId} ${version} speaks a protocol this core doesn't`;
+const cannotRun = (appId: string, version: string) =>
+  `apps: ${appId} ${version} can't run on this core`;
 
 export function createAppUpdates(options: {
   db: CoreDatabase;
@@ -87,6 +88,8 @@ export function createAppUpdates(options: {
   versions: AppVersions;
   settings: Pick<AppSettingsStore, "chosen" | "restore" | "settleAfterUndo">;
   manager: AppUpdateManager;
+  // Where a change of version that ends goes, by Sanctum; tests may leave it out.
+  activity?: Pick<Activity, "for">;
   log: (message: string) => void;
   now: () => Date;
   turnPauseMs?: number;
@@ -95,6 +98,9 @@ export function createAppUpdates(options: {
   retryAfterMs?: number;
   // A version staged in its folder, as the core reads any app that runs apart.
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
+  // Whether a version tried again now waits for someone to allow what it
+  // needs (waiting.ts), and how clients see that.
+  holds?: (pkg: ApartPackage) => InstalledApp["waiting"];
 }) {
   const { db, versions, settings, manager, log, now } = options;
   const turnPauseMs = options.turnPauseMs ?? defaultTurnPauseMs;
@@ -106,6 +112,7 @@ export function createAppUpdates(options: {
     waits: (entry: InstalledApp, why: string, again?: () => void) => void;
     replace: (entry: InstalledApp, pkg: ApartPackage) => Promise<void>;
     isCurrent: (entry: InstalledApp) => boolean;
+    announce: (entry: InstalledApp) => void;
   };
   let isClosed = false;
   let catchingUp: NodeJS.Timeout | undefined;
@@ -122,7 +129,7 @@ export function createAppUpdates(options: {
   // Whether this core can run the version in that folder. One whose manifest
   // can't be read throws, so the caller tries again before it decides.
   async function canRun(appId: string, folder: string) {
-    return speaksThisCore(await options.loadPackage(appId, folder));
+    return canRunPackage(await options.loadPackage(appId, folder));
   }
 
   // Whether an app is in an update is asked whenever the apps are listed,
@@ -133,6 +140,28 @@ export function createAppUpdates(options: {
     .where(eq(appUpdates.appId, sql.placeholder("appId")))
     .prepare();
   const rowOf = (appId: string) => updateOf.get({ appId });
+
+  // A change of version that ended, in its commit's transaction, so it's
+  // written once whatever stops the core. It keeps the app's name, for once
+  // the app is gone, and goes by Sanctum: who asked to go back has an entry
+  // of their own. An app's first move changes no version, and a version that
+  // wasn't ready yet is tried again, so neither says anything.
+  function recordEnd(
+    { id: appId, name }: StaticManifest,
+    action: "version.update" | "version.back",
+    outcome: Outcome,
+    { from, to }: { from: string; to: string },
+    reason?: string | null,
+  ) {
+    options.activity?.for(appId)({
+      action,
+      outcome,
+      reason: reason ?? null,
+      actor: "sanctum",
+      subjectId: appId,
+      detail: { name, from, to },
+    });
+  }
 
   function mark(appId: string, change: Partial<AppUpdateRow>) {
     durably(db, () => {
@@ -194,17 +223,21 @@ export function createAppUpdates(options: {
 
   // Installs that version in its place, asking again until it can, since nothing
   // else will: the supervisor left it to this.
-  function swapTo(entry: InstalledApp, folder: string) {
+  function swapTo(entry: InstalledApp, target: string | ApartPackage) {
     if (isClosed) return;
     const appId = entry.manifest.id;
-    options
-      .loadPackage(appId, folder)
-      .then((pkg) => host.replace(entry, pkg))
-      .catch((error: unknown) => {
-        log(`apps: ${appId} couldn't go back yet (${String(error)})`);
-        if (isClosed) return;
-        setTimeout(() => swapTo(entry, folder), turnPauseMs).unref();
-      });
+    const folder = typeof target === "string" ? target : target.apart.folder;
+    const replacement =
+      typeof target === "string"
+        ? options
+            .loadPackage(appId, folder)
+            .then((pkg) => host.replace(entry, pkg))
+        : host.replace(entry, target);
+    replacement.catch((error: unknown) => {
+      log(`apps: ${appId} couldn't change version yet (${String(error)})`);
+      if (isClosed) return;
+      setTimeout(() => swapTo(entry, folder), turnPauseMs).unref();
+    });
   }
 
   // The old version comes back, its data as it was.
@@ -245,6 +278,15 @@ export function createAppUpdates(options: {
         .loadPackage(appId, row.toFolder)
         .then((pkg) => {
           if (!isWaiting() || !host.isCurrent(entry) || entry.off) return;
+          // What it needs may have been switched off meanwhile: then it
+          // waits for someone, and the version that runs stays.
+          const held = options.holds?.(pkg);
+          if (held) {
+            forget(appId);
+            entry.waiting = held;
+            host.announce(entry);
+            return;
+          }
           // Keep the row until the new entry arrives: a failed or cancelled swap
           // must leave enough on disk to try again, including after a restart.
           const replace = () => {
@@ -398,76 +440,14 @@ export function createAppUpdates(options: {
       return recovered;
     },
 
-    /**
-     * Which version to install as the core starts: the one its image brings, unless
-     * an update of it failed or never reached its commit, which brings the old one
-     * back. This writes only to the core's own data, so a core on trial may run it.
-     */
-    async packageFor(pkg: ApartPackage): Promise<ApartPackage> {
-      const appId = pkg.apart.manifest.id;
-      const row = rowOf(appId);
-      if (!row) return pkg;
-      const folder = pkg.apart.folder;
-      if (isMove(row)) {
-        const isTheSame = row.toFolder === folder;
-        // It hadn't started, so it carries on.
-        if (row.status === "waiting" && isTheSame) return pkg;
-        // Another version, its time to try again, or one a core that ran it in its
-        // own process went back from: a move from the start.
-        const isTimeToRetry = row.retryAt !== null && row.retryAt <= now();
-        if (!isTheSame || isTimeToRetry || row.status === "undone") {
-          forget(appId);
-        }
-        // With nowhere else to carry on, it goes on from the copy it took in.
-        return pkg;
-      }
-      // A version from before this core's protocol can't run, so the one the
-      // core brings starts instead. The manager puts back the copy of an
-      // update no row speaks for, and the update begins again from there.
-      const unlessOlder = async (other: string, then?: () => void) => {
-        const kept = await options.loadPackage(appId, other);
-        if (speaksThisCore(kept)) {
-          then?.();
-          return kept;
-        }
-        log(
-          `${speaksOlder(appId, kept.apart.manifest.version)}, so it starts on ${pkg.apart.manifest.version}`,
-        );
-        forget(appId);
-        return pkg;
-      };
-      if (row.status === "waiting") {
-        // Someone asked to go back, and the core still brings what they left.
-        if (row.restores && row.fromFolder === folder) {
-          return unlessOlder(row.toFolder);
-        }
-        // Another version arrived while it waited. What it stopped is still there.
-        if (row.toFolder !== folder) forget(appId);
-        return pkg;
-      }
-      if (
-        row.status === "undone" &&
-        (row.toFolder !== folder || (row.retryAt && row.retryAt <= now()))
-      ) {
-        forget(appId);
-        return pkg;
-      }
-      // Its data is back, so another version needn't wait for the old one's start,
-      // which may never finish, and which would hold back the version that fixes it.
-      // The old package itself must still finish rebuilding what it owns.
-      if (
-        row.status === "restored" &&
-        row.toFolder !== folder &&
-        row.fromFolder !== folder
-      ) {
-        forget(appId);
-        return pkg;
-      }
-      // The power went after it started and before its commit.
-      return unlessOlder(row.fromFolder, () => {
-        if (row.status === "starting") mark(appId, { status: "undoing" });
-      });
-    },
+    ...createUpdatePackages({
+      rowOf,
+      forget,
+      undo: (appId) => mark(appId, { status: "undoing" }),
+      loadPackage: options.loadPackage,
+      now,
+      log,
+    }),
 
     /** How its update stands now, for what clients say. */
     shownFor(appId: string): AppRunUpdate | undefined {
@@ -510,16 +490,21 @@ export function createAppUpdates(options: {
 
     /**
      * Someone asked to go back from its last update. Whether it can: if so, it's on
-     * its way once this returns.
+     * its way once this returns, with what `alongside` writes in the same
+     * transaction.
      */
-    async startGoingBack(entry: InstalledApp, copyId: string) {
+    async startGoingBack(
+      entry: InstalledApp,
+      copyId: string,
+      alongside?: () => void,
+    ) {
       const appId = entry.manifest.id;
       const kept = canGoBack(entry) ? await manager.keptAppCopy(appId) : null;
       if (!kept || kept.id !== copyId) return false;
       // Refused here, before anything stops, if it can't be read or run.
       const back = await options.loadPackage(appId, kept.from.folder);
-      if (!speaksThisCore(back)) {
-        log(`${speaksOlder(appId, kept.from.version)}, so it can't go back`);
+      if (!canRunPackage(back)) {
+        log(`${cannotRun(appId, kept.from.version)}, so it can't go back`);
         return false;
       }
       const last = versions.last(appId);
@@ -544,11 +529,14 @@ export function createAppUpdates(options: {
           .values(row)
           .onConflictDoUpdate({ target: appUpdates.appId, set: row })
           .run();
+        alongside?.();
       });
       log(`apps: ${appId} goes back to ${kept.from.version}, as someone asked`);
       swapTo(entry, row.toFolder);
       return true;
     },
+
+    swapTo,
 
     /**
      * Why an app that says hello is not the one the core waits for: its
@@ -648,9 +636,12 @@ export function createAppUpdates(options: {
     },
 
     /** In the commit's transaction: the update is over, either way. */
-    committing({ id: appId }: StaticManifest) {
+    committing(manifest: StaticManifest) {
+      const appId = manifest.id;
       const row = rowOf(appId);
+      const span = row && { from: row.fromVersion, to: row.toVersion };
       if (row?.status === "starting" && row.restores) {
+        recordEnd(manifest, "version.back", "ok", span!);
         // On the old version now, staying there until another version arrives.
         db.update(appUpdates)
           .set({
@@ -664,9 +655,19 @@ export function createAppUpdates(options: {
           .where(eq(appUpdates.appId, appId))
           .run();
       } else if (row?.status === "starting") {
-        if (!isMove(row)) versions.settingsBefore(appId, row.settings);
+        if (!isMove(row)) {
+          versions.settingsBefore(appId, row.settings);
+          recordEnd(manifest, "version.update", "ok", span!);
+        }
         db.delete(appUpdates).where(eq(appUpdates.appId, appId)).run();
       } else if (row?.status === "restored") {
+        // Back on the version it was leaving, where going back failed or
+        // the new version did.
+        if (row.restores) {
+          recordEnd(manifest, "version.back", "failed", span!, row.failure);
+        } else if (!row.retryAt && !isMove(row)) {
+          recordEnd(manifest, "version.update", "failed", span!, row.failure);
+        }
         db.update(appUpdates)
           .set({ status: "undone" })
           .where(eq(appUpdates.appId, appId))

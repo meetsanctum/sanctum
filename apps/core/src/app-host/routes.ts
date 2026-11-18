@@ -3,11 +3,17 @@ import type {
   AppRunning,
   AppInfo,
   AppSettings,
+  AppRemoval,
+  AvailableApp,
   StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import type { AppAdding } from "./adding.js";
+import type { AppDeleting } from "./deleting.js";
+import type { AppRemoving } from "./removing.js";
+import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { AppHost } from "./host.js";
@@ -16,6 +22,31 @@ import type { AppHost } from "./host.js";
 //
 //   GET  /api/apps                            AppInfo[]: the installed apps,
 //                                             for the app overview
+//   GET  /api/apps/available                  AvailableApp[]: the apps
+//                                             Sanctum brings that the home
+//                                             hasn't added, each with what
+//                                             keeps it from being added now
+//   POST /api/apps/add                        { id, version }: adds one of
+//                                             those at the version its sheet
+//                                             showed, and answers its
+//                                             AppInfo once it's installed;
+//                                             refused as a conflict once it's
+//                                             added or another version is
+//                                             there, and as unavailable while
+//                                             something keeps it from being
+//                                             added
+//   GET  /api/apps/:appId/removal             AppRemoval: what removing it
+//                                             takes from the home, for its
+//                                             dialog
+//   POST /api/apps/:appId/remove              removes it, but a system app
+//                                             (forbidden), and not while it
+//                                             updates or goes back (conflict)
+//   POST /api/apps/:appId/data/delete         deletes a removed app's data
+//                                             now; refused (conflict) while
+//                                             its removal is under way or
+//                                             it's added again, and
+//                                             unavailable with a manager
+//                                             that can't
 //   GET  /api/apps/:appId/manifest            StaticManifest: its
 //                                             sanctum-app.json, for its
 //                                             settings page
@@ -33,6 +64,10 @@ import type { AppHost } from "./host.js";
 //   GET  /api/apps/:appId/go-back             { to }: what going back from its
 //                                             last update would return to, or null
 //   POST /api/apps/:appId/go-back             { id }: goes back to the confirmed copy
+//   POST /api/apps/:appId/update/allow        { id }: allows the version that
+//                                             waits (AppInfo.waiting), granting
+//                                             what it newly needs and starting
+//                                             its update; conflict for another id
 //   GET  /api/apps/:appId/running             { running }: how one in its own
 //                                             container is running now, or null
 //   POST /api/apps/:appId/permissions/update  { permission, granted }:
@@ -52,6 +87,10 @@ const appParams = z.object({ appId: z.string().min(1).max(128) });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedCopy = z.strictObject({ id: z.string().min(1).max(64) });
+const toAdd = z.strictObject({
+  id: z.string().min(1).max(128),
+  version: z.string().min(1).max(64),
+});
 
 const grant = z.strictObject({
   permission: z.string().min(1).max(256),
@@ -68,9 +107,16 @@ function appIdOf(requestParams: unknown) {
 
 export function registerAppRoutes(
   app: FastifyInstance,
-  options: { host: AppHost; gate: Gate },
+  options: {
+    host: AppHost;
+    available: AvailableApps;
+    adding: AppAdding;
+    removing: AppRemoving;
+    deleting: AppDeleting;
+    gate: Gate;
+  },
 ) {
-  const { host, gate } = options;
+  const { host, available, adding, removing, deleting, gate } = options;
 
   // The installed apps as clients see them. The origin stays the core's.
   const infos = (): AppInfo[] =>
@@ -84,6 +130,41 @@ export function registerAppRoutes(
     gate.admit(request.principal!, { tier: "read" });
     if (!host.hasInstalled()) throw new ActionCallError("unavailable");
     return infos().sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  // Which apps the home could add is household information too.
+  app.get("/api/apps/available", async (request): Promise<AvailableApp[]> => {
+    gate.admit(request.principal!, { tier: "read" });
+    return available.list();
+  });
+
+  // Adding one is the household's to choose, like its grants, on every
+  // client. Its sheet closes onto its settings, which say how its first
+  // start goes as it does.
+  app.post("/api/apps/add", async (request): Promise<AppInfo> => {
+    const parsed = toAdd.safeParse(request.body);
+    if (!parsed.success) throw new ActionCallError("invalid_request");
+    return adding.add(request.principal!, parsed.data.id, parsed.data.version);
+  });
+
+  // What removing it takes, which its dialog names first.
+  app.get("/api/apps/:appId/removal", async (request): Promise<AppRemoval> => {
+    gate.admit(request.principal!, { tier: "read" });
+    return removing.removal(appIdOf(request.params));
+  });
+
+  // Removing it is the household's to choose, like adding it. Every client
+  // hears it's gone as it is.
+  app.post("/api/apps/:appId/remove", async (request) => {
+    await removing.remove(request.principal!, appIdOf(request.params));
+    return {};
+  });
+
+  // Deleting a removed app's data at once, rather than after its 30 days:
+  // the household's to choose, like removing it.
+  app.post("/api/apps/:appId/data/delete", async (request) => {
+    await deleting.deleteNow(request.principal!, appIdOf(request.params));
+    return {};
   });
 
   // What it is, asks for and brings, with its samples: as public as the
@@ -182,6 +263,19 @@ export function registerAppRoutes(
       principal: request.principal!,
       appId: appIdOf(request.params),
       copyId: confirmed.data.id,
+    });
+    return {};
+  });
+
+  // A newer version that waits for what it newly needs, as its Review sheet
+  // showed it. What it says next arrives as it changes.
+  app.post("/api/apps/:appId/update/allow", async (request) => {
+    const named = confirmedCopy.safeParse(request.body);
+    if (!named.success) throw new ActionCallError("invalid_request");
+    await host.allowUpdate({
+      principal: request.principal!,
+      appId: appIdOf(request.params),
+      id: named.data.id,
     });
     return {};
   });

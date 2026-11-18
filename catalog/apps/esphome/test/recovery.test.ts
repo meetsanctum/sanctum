@@ -544,3 +544,32 @@ it("clears a problem until the core takes it, though the problem's answer was lo
   await core.until(() => !core.problems.has(key), "the problem cleared");
   expect(clearings).toBe(2);
 });
+
+it("flashes a light to show itself, and refuses a device without one", async () => {
+  device.options.entities = entitiesOf("light").entities;
+  device.states[101] = { state: false };
+  const key = await add(core, device);
+  await expect
+    .poll(() => core.latest(key, "light-bulb"))
+    .toEqual({ on: false });
+  expect(core.registered.get(key)).toMatchObject({ identify: true });
+
+  await core.identify(key);
+  await core.until(() => device.commands.length === 1, "the flash");
+
+  expect(device.commands[0]?.fields).toMatchObject({
+    state: true,
+    brightness: 1,
+    flashLength: 1500,
+  });
+});
+
+it("doesn't offer a device without a light to show itself", async () => {
+  const key = await add(core, device);
+  await expect
+    .poll(() => core.latest(key, "switch-relay"))
+    .toEqual({ on: false });
+
+  expect(core.registered.get(key)).toMatchObject({ identify: false });
+  await expect(core.identify(key)).rejects.toMatchObject({ code: "conflict" });
+});

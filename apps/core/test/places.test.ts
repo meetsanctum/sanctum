@@ -51,7 +51,8 @@ describe("places", () => {
       maya,
     );
     const upstairs = await add("floors", { name: "Upstairs", level: 1 });
-    const ground = await add("floors", { name: "Ground floor" });
+    // A floor that says where goes there; Floors' order has the rest.
+    const ground = await add("floors", { name: "Ground floor", level: 0 });
     const bedroom = await add("rooms", {
       name: "Bedroom",
       floorId: upstairs.id,

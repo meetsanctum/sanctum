@@ -97,7 +97,7 @@ export type ServiceNotSetUp = {
 export const storageFloor = 1.5e9;
 // Where a Raspberry Pi starts slowing itself down.
 export const hotCelsius = 80;
-const lowMemoryShare = 0.05;
+export const lowMemoryShare = 0.05;
 const powerForMs = 24 * 60 * 60_000;
 
 const bitsOf = (architecture: string | null) =>

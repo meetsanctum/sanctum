@@ -693,6 +693,7 @@ describe("the home's dashboards", () => {
           lastSeenAt: null,
           firmware: null,
           probe: false,
+          identify: false,
           battery: null,
           batteryLow: null,
           shownAs: null,

@@ -58,6 +58,10 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "apps"
+    | "availableApps"
+    | "appAdding"
+    | "appRemoving"
+    | "appDeleting"
     | "pages"
     | "workflows"
   > & {
@@ -104,6 +108,7 @@ export function createServer(
         not_found: 404,
         location_unavailable: 502,
         time_zone_needed: 400,
+        invalid_order: 400,
       } as const;
       return reply.code(status[error.code]).send({ error: error.code });
     }
@@ -192,7 +197,14 @@ export function createServer(
         views: options.activityViews,
         gate,
       });
-      registerAppRoutes(core, { host: options.apps, gate });
+      registerAppRoutes(core, {
+        host: options.apps,
+        available: options.availableApps,
+        adding: options.appAdding,
+        removing: options.appRemoving,
+        deleting: options.appDeleting,
+        gate,
+      });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
       // Only the desktop app's shell, and those a development stack allows,
       // may show an app's page in a frame.

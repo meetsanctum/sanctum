@@ -73,6 +73,7 @@ describe("a contact sensor's exposes", () => {
         firmware: { sleeps: true },
         // It cannot be asked whether it is open.
         probe: false,
+        identify: false,
       },
     });
   });

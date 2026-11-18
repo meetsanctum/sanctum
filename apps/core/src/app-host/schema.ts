@@ -1,3 +1,4 @@
+import type { PermissionInfo } from "@meetsanctum/app-sdk";
 import {
   integer,
   primaryKey,
@@ -99,3 +100,59 @@ export const appSecrets = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.appId, table.name] })],
 );
+
+// The home's own list of apps: those the household added, when and by whom,
+// which are the apps the core installs. Every other app the image ships is
+// available to add. Who is none for those a home recorded on its first start
+// with this list, as it ran every app its image shipped.
+
+export const appsAdded = sqliteTable("apps_added", {
+  appId: text("app_id").primaryKey(),
+  addedAt: integer("added_at", { mode: "timestamp_ms" }).notNull(),
+  personId: text("person_id"),
+  clientId: text("client_id"),
+});
+
+// Its one row says the home keeps that list, so a home that has no apps is
+// told apart from one that never recorded what it had.
+
+export const appsListed = sqliteTable("apps_listed", {
+  id: integer("id").primaryKey(),
+  since: integer("since", { mode: "timestamp_ms" }).notNull(),
+});
+
+// Apps the household removed, whose own data the home keeps for a while: who
+// removed it and when, its name and version then, and whether every step of
+// its removal is done, so a core that stopped part way finishes it at start.
+// Adding it back deletes the row. While it's here, a driver's devices are
+// hidden rather than gone.
+
+// An update that waits for someone to allow what it newly needs: the app
+// keeps running the version it has. One row per app, for the newest version
+// the image brings, replaced when a newer one arrives. Its id is what an
+// answer names, so one given for a version since replaced is refused.
+export const appUpdatesWaiting = sqliteTable("app_updates_waiting", {
+  appId: text("app_id").primaryKey(),
+  id: text("id").notNull(),
+  version: text("version").notNull(),
+  // The staged build that waits.
+  folder: text("folder").notNull(),
+  // The permissions it needs that the household hasn't granted, each with
+  // its reason as that version gives it.
+  needs: text("needs", { mode: "json" }).$type<PermissionInfo[]>().notNull(),
+  since: integer("since", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const appsRemoved = sqliteTable("apps_removed", {
+  appId: text("app_id").primaryKey(),
+  removedAt: integer("removed_at", { mode: "timestamp_ms" }).notNull(),
+  personId: text("person_id"),
+  clientId: text("client_id"),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  isDone: integer("is_done", { mode: "boolean" }).notNull(),
+  // Deletion has begun, so adding must wait until every part has gone.
+  isDeleting: integer("is_deleting", { mode: "boolean" })
+    .notNull()
+    .default(false),
+});

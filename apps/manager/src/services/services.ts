@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { isBroker, joinAppNetworks } from "../apps/broker.js";
@@ -9,10 +10,13 @@ import {
   type DockerClientLike,
 } from "../docker.js";
 import {
+  inspectService,
   reconcileServiceContainer,
   removeServiceContainer,
   stopServiceContainer,
 } from "./containers.js";
+import { assertManaged } from "../docker-resources.js";
+import { isNotFound } from "../docker.js";
 import type { Operations } from "../operations.js";
 import { createImageChanges } from "./image-change.js";
 import { mosquittoPasswordHash, mosquittoUrl } from "./mosquitto.js";
@@ -53,6 +57,8 @@ type Observed = Omit<ServiceStatus, "name" | "apps">;
 
 // A request the manager cannot act on, such as an unknown coordinator.
 export class ServiceRequestError extends Error {}
+/** What's asked of a service can't happen now, as erasing one an app holds. */
+export class ServiceBusyError extends Error {}
 export class UnknownServiceError extends Error {}
 
 // Reverse-DNS app ids, as packages/app-sdk requires them.
@@ -129,6 +135,17 @@ export function createServices(options: {
       options.onObserved?.(name, before, next);
     },
   };
+  // What an app's need and erasing a service's data do to one service, in
+  // turns.
+  const serviceTurns = new Map<string, Promise<unknown>>();
+  function inServiceTurn<T>(name: string, work: () => Promise<T>) {
+    const next = (serviceTurns.get(name) ?? Promise.resolve()).then(work);
+    serviceTurns.set(
+      name,
+      next.catch(() => undefined),
+    );
+    return next;
+  }
   const imageChanges = createImageChanges({
     docker,
     store,
@@ -258,12 +275,15 @@ export function createServices(options: {
     async need(name: string, app: string) {
       const definition = forApps(name);
       checkApp(app);
-      await store.update((draft) => {
-        draft.apps[name] = [
-          ...new Set([...(draft.apps[name] ?? []), app]),
-        ].sort();
-        syncAccounts(draft);
-      });
+      // After an erase under way, which then finds this app needs it.
+      await inServiceTurn(name, () =>
+        store.update((draft) => {
+          draft.apps[name] = [
+            ...new Set([...(draft.apps[name] ?? []), app]),
+          ].sort();
+          syncAccounts(draft);
+        }),
+      );
       void options.onChange?.();
       return { service: status(name), connection: connection(definition, app) };
     },
@@ -289,6 +309,70 @@ export function createServices(options: {
       if (!brokerState || (brokerState.apps[name] ?? []).includes(app)) {
         throw new Error("The broker has not confirmed the service revocation");
       }
+    },
+
+    // Deletes a service's own data, once no app needs it and it has stopped,
+    // as when the household deletes the data of the app that used it: its
+    // volumes and the copies its image changes kept. Erasing Zigbee2MQTT's
+    // erases the Zigbee network, so every device must be paired again.
+    // Asked again once it's done, it does nothing.
+    async eraseData(name: string) {
+      const definition = forApps(name);
+      // An app's need waits for this, so none can arrive between the check
+      // that no app needs it and its volumes going.
+      await inServiceTurn(name, () =>
+        options.operations.claim(
+          { kind: "data-delete", of: name },
+          async () => {
+            if ((store.current().apps[name] ?? []).length > 0) {
+              throw new ServiceBusyError(`An app still needs ${name}`);
+            }
+            if (await inspectService(docker, name)) {
+              throw new ServiceBusyError(`${name} hasn't stopped yet`);
+            }
+            // The operation slot keeps any image change out, so a copy
+            // container here is one a crash left.
+            await imageChanges.removeCopyContainer(name);
+            const volumes = new Set([
+              ...(definition.dataVolumes ?? []),
+              ...(store
+                .current()
+                .imageChanges?.[name]?.volumes.map((volume) => volume.name) ??
+                []),
+            ]);
+            for (const volumeName of volumes) {
+              const volume = docker.getVolume(volumeName);
+              const found = await volume.inspect().catch((error: unknown) => {
+                if (isNotFound(error)) return null;
+                throw error;
+              });
+              if (!found) continue;
+              assertManaged({
+                labels: found.Labels,
+                name: `${volumeName} volume`,
+              });
+              await volume.remove();
+            }
+            const backups = join(options.dataDir, "backups");
+            // Erasure must fail if the copies cannot be inspected. Only a
+            // missing backups folder means there are none to delete.
+            const copies = await readdir(backups).catch((error: unknown) => {
+              if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+              throw error;
+            });
+            for (const copy of copies.filter((entry) =>
+              entry.startsWith(`${name}-`),
+            )) {
+              await rm(join(backups, copy), { recursive: true, force: true });
+            }
+            await store.update((draft) => {
+              delete draft.images?.[name];
+              delete draft.imageChanges?.[name];
+            });
+            log(`Erased ${name}'s data`);
+          },
+        ),
+      );
     },
 
     async zigbeeCoordinators() {

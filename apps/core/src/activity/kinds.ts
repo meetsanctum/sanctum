@@ -10,8 +10,9 @@ import type { Kind } from "./schema.js";
 //   called on its own;
 // - setup: what people set up and asked apps to do: people, sign-ins and
 //   clients, rooms, devices joining, moving and leaving, dashboards,
-//   workflows, apps' actions;
-// - system: updates, restores, Sanctum starting and the manager's audit.
+//   workflows, apps' actions, and adding, removing and deleting apps;
+// - system: updates, Sanctum's and each app's, restores, Sanctum starting and
+//   the manager's audit.
 
 const deviceActions = new Set([
   "device.command",
@@ -21,10 +22,14 @@ const deviceActions = new Set([
   "device.online",
   "device.quiet",
   "device.probe",
+  "device.identify",
   "device.problem",
   "device.repair",
   "device.add",
 ]);
+
+// What the core records of an app's place in the home, under the app's id.
+const appLifecycle = new Set(["app.add", "app.remove", "app.delete"]);
 
 // An app's id is reverse DNS; the core's modules are single words.
 const isApp = (source: string) => source.includes(".");
@@ -39,6 +44,7 @@ export function kindOf(entry: {
     source === "manager" ||
     action.startsWith("sanctum.") ||
     action.startsWith("update.") ||
+    action.startsWith("version.") ||
     action.startsWith("restore")
   ) {
     return "system";
@@ -51,6 +57,9 @@ export function kindOf(entry: {
     return "devices";
   }
   if (action === "workflow.run") return "automations";
+  // Adding, removing and deleting an app's data, Sanctum's own deadline too,
+  // by name: an app's own action may also begin with "app.".
+  if (appLifecycle.has(action)) return "setup";
   if (isApp(source) && entry.actor) return "automations";
   return "setup";
 }

@@ -1,4 +1,4 @@
-import { access, readdir, unlink } from "node:fs/promises";
+import { access, readdir, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Log } from "../docker-resources.js";
@@ -78,7 +78,7 @@ export function createAppUpdates(options: {
   dataDir: string;
   operations: Operations;
   apps: Pick<AppContainers, "stop" | "onItsImage">;
-  images: Pick<AppImages, "has" | "ensure">;
+  images: Pick<AppImages, "has" | "ensure" | "remove">;
   maintenance: Pick<Maintenance, "run">;
   hasPackage: (app: string, folder: string) => Promise<boolean>;
   log: Log;
@@ -255,6 +255,36 @@ export function createAppUpdates(options: {
 
     /** What's under way, for the core to catch up. */
     list: () => state.updates,
+
+    /**
+     * Deletes the data of an app the household removed: its image, the copies
+     * its updates kept and what Go back would return to, holding the slot so
+     * nothing else touches them meanwhile. Refused while an update of it is
+     * under way, or while a container still has its image. Asked again once
+     * it's done, it does nothing.
+     */
+    deleteData(app: string) {
+      return operations.claim({ kind: "data-delete", of: app }, () =>
+        inTurn(async () => {
+          if (state.updates[app]) {
+            throw new AppRefusal(`${app} is moving to another version`, 409);
+          }
+          await images.remove(app);
+          if (state.running[app] || state.kept[app]) {
+            await save((draft) => {
+              delete draft.running[app];
+              delete draft.kept[app];
+            });
+          }
+          await rm(join(dataDir, copiesFolder, app), {
+            recursive: true,
+            force: true,
+          });
+          await syncPath(join(dataDir, copiesFolder)).catch(() => undefined);
+          log(`Deleted ${app}'s data`);
+        }),
+      );
+    },
 
     /** The folders nothing may prune, whichever versions have been staged since. */
     foldersInUse() {

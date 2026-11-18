@@ -410,6 +410,26 @@ describe("entities", () => {
     expect(next.entities.list().map((each) => each.key)).toEqual(["home"]);
   });
 
+  it("stay when their app comes back built for an app API this core doesn't serve", async () => {
+    const { core, maya } = await home();
+    await action(core, maya.token, "test.sky", "sky.publish", {
+      type: "sun",
+      key: "home",
+      name: "Home",
+      state: sun,
+    });
+
+    const next = await testCore({
+      dataDir: core.dataDir,
+      apps: [{ origin: "official", app: { ...sky, core: "^2.0.0" } }],
+    });
+
+    expect(next.logs).toContain(
+      "apps: test.sky was not installed (it targets app API ^2.0.0, and this core serves 1.0.0)",
+    );
+    expect(next.entities.list().map((each) => each.key)).toEqual(["home"]);
+  });
+
   it("of an app the core no longer has go when it starts", async () => {
     const { core, maya } = await home();
     await action(core, maya.token, "test.sky", "sky.publish", {

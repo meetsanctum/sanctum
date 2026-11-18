@@ -52,7 +52,11 @@ body {
   background: transparent;
 }
 
+/* Its frame reaches 4 px past the detail's column on every side, and the
+   page sits 4 px in, so a ring drawn outside a control's edge, such as a
+   focus ring or a heard press's, isn't cut off by the frame. */
 .frame-device {
   display: flex;
   flex-direction: column;
+  padding: 4px;
 }

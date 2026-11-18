@@ -21,6 +21,7 @@ export type FieldSchema = Record<string, unknown>;
 /** What the home calls the things a config names, by their ids. */
 export type Names = {
   room(id: string): string | undefined;
+  floor(id: string): string | undefined;
   zone(id: string): string | undefined;
   device(id: string): { name: string; kinds: string[] } | undefined;
   entity(type: string, key: string): string | undefined;
@@ -32,7 +33,7 @@ export type Token = { field: string; text: string; missing: boolean };
 export type Part = string | Token;
 
 export type FieldKind =
-  | { kind: "names"; names: "room" | "zone" | "device" }
+  | { kind: "names"; names: "room" | "floor" | "zone" | "device" }
   | { kind: "partOf"; of: string }
   | { kind: "entityOf"; type: string }
   | { kind: "place" }
@@ -82,6 +83,7 @@ const isOperators = (values: unknown[]) =>
 export function fieldKind(field: FieldSchema): FieldKind {
   if (
     field.names === "room" ||
+    field.names === "floor" ||
     field.names === "zone" ||
     field.names === "device"
   ) {
@@ -253,6 +255,9 @@ export function formatValue(
       if (value.kind === "room" && typeof value.id === "string") {
         return names.room(value.id);
       }
+      if (value.kind === "floor" && typeof value.id === "string") {
+        return names.floor(value.id);
+      }
       if (value.kind === "zone" && typeof value.id === "string") {
         return names.zone(value.id);
       }
@@ -311,6 +316,8 @@ export function formatValue(
   return undefined;
 }
 
+const isFloor = (value: unknown) => isRecord(value) && value.kind === "floor";
+
 /** A sentence's text and tokens, from its {field} template. */
 export function sentenceParts(
   template: string,
@@ -329,10 +336,26 @@ export function sentenceParts(
     if (at > 0) parts.push(rest.slice(0, at));
     rest = rest.slice(at + whole.length);
     const field = fields[name!] ?? {};
-    const text = formatValue(field, config[name!], names, style, {
+    const value = config[name!] === undefined ? field.default : config[name!];
+    const text = formatValue(field, value, names, style, {
       piece,
       name,
     });
+    // A floor is a level of the home, so a sentence says what is on it
+    // where it says what is in a room or a zone: "Turn off the lights on
+    // Ground floor", "On Ground floor, any light is on".
+    const before = parts.at(-1);
+    if (
+      text !== undefined &&
+      isFloor(value) &&
+      typeof before === "string" &&
+      /(^|\s)[Ii]n $/.test(before)
+    ) {
+      parts[parts.length - 1] = before.replace(
+        /([Ii])n $/,
+        (_, letter: string) => `${letter === "I" ? "O" : "o"}n `,
+      );
+    }
     // An optional field left out means any; one that is set but names
     // what is gone, or a required one not set yet, is missing.
     parts.push(

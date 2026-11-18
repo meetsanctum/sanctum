@@ -55,6 +55,7 @@ function device(
     lastSeenAt: null,
     firmware: null,
     probe: false,
+    identify: false,
     battery: null,
     batteryLow: null,
     shownAs: null,
@@ -290,10 +291,8 @@ describe("Home", () => {
       { heading: "No room", groups: [["On Home", "Loose lamp"]] },
     ]);
     // The hall's light is off Home, but its room's button is there.
-    expect(button("Turn lights on in Hall").textContent).toBe("Turn lights on");
-    expect(button("Turn 1 light off in Office").textContent).toBe(
-      "Turn 1 light off",
-    );
+    expect(button("Turn on lights in Hall").textContent).toBe("Turn on");
+    expect(button("Turn off 1 light in Office").textContent).toBe("Turn off");
     expect(
       container.querySelector("[data-slot=readings]")?.textContent,
     ).toContain("21.5°");

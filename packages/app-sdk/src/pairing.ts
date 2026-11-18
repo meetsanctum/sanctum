@@ -57,6 +57,8 @@ export type PairingInfo = {
   joined: JoinedDevice[];
   /** The running driver apps that let new devices join, by id. */
   drivers: string[];
+  /** The running driver apps that add devices they find, as on the home's network, by id. */
+  finders: string[];
   /** The devices running drivers found and could add, which the home doesn't have. */
   found: FoundDevice[];
 };

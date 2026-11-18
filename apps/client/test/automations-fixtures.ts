@@ -365,7 +365,7 @@ export const motionSensor = {
 
 export const places: Places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
-  floors: [],
+  floors: [{ id: "ground", name: "Ground floor", level: 0 }],
   rooms: [
     { id: "office", name: "Office" },
     { id: "living", name: "Living room" },
@@ -396,6 +396,7 @@ export const devices = [
 
 export const names: Names = {
   room: (id) => places.rooms.find((room) => room.id === id)?.name,
+  floor: (id) => places.floors.find((floor) => floor.id === id)?.name,
   zone: () => undefined,
   device: (id) => {
     const device = [...devices, motionSensor].find((each) => each.id === id);

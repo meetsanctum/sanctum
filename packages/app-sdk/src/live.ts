@@ -61,6 +61,12 @@ export type LiveSettings = {
  */
 export type LiveApp = { type: "app"; app: AppInfo };
 
+/**
+ * Someone removed an app: every client drops it, and what it brings, at
+ * once. Only the shell gets it.
+ */
+export type LiveAppRemoved = { type: "app.removed"; app: string };
+
 /** The home's dashboards changed: all of them, in their order. Only the shell gets it. */
 export type LiveDashboards = {
   type: "dashboards";
@@ -92,6 +98,7 @@ export type LiveMessage =
   | LivePairing
   | LiveSettings
   | LiveApp
+  | LiveAppRemoved
   | LiveDashboards
   | LivePins
   | LiveActivity

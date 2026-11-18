@@ -26,13 +26,14 @@ export function version(
     notes?: string[];
     start?: (ctx: AppContext) => Promise<void>;
     settings?: z.ZodObject;
+    permissions?: AppDefinition["permissions"];
   } = {},
 ): AppDefinition {
   return defineApp({
     ...base,
     id,
     version: number,
-    permissions: [],
+    permissions: options.permissions ?? [],
     actions: [],
     provides: { entities: [noteType] },
     ...(options.settings ? { settings: options.settings as never } : {}),

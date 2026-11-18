@@ -34,8 +34,8 @@ import { namedIn, namedInSchema, type Named } from "./named.js";
 // The pieces a workflow is built from: the core's own (core-pieces.ts) and
 // those each installed app provides. A graph is checked against them when it
 // is saved and again before each run, since an app can go or change in
-// between, and so can the rooms, zones, devices and entities its configs
-// name.
+// between, and so can the rooms, floors, zones, devices and entities its
+// configs name.
 
 /** A node's piece, found. */
 export type Piece =
@@ -139,7 +139,7 @@ export function problemsReason(problems: readonly WorkflowProblem[]) {
 export function createPieces(options: {
   host: Pick<AppHost, "has" | "pieces" | "list">;
   devices: Pick<Devices, "get">;
-  places: Pick<PlacesModule, "hasRoom" | "hasZone">;
+  places: Pick<PlacesModule, "hasRoom" | "hasFloor" | "hasZone">;
   entities: Pick<Entities, "get" | "list">;
   // Whether an app provides sun times now.
   hasSun: () => boolean;
@@ -193,13 +193,16 @@ export function createPieces(options: {
       : undefined;
   }
 
-  // Whether the room, zone, device or entity a config names is still there.
+  // Whether the room, floor, zone, device or entity a config names is still
+  // there.
   function exists(named: Named) {
     switch (named.kind) {
       case "device":
         return options.devices.get(named.id) !== null;
       case "room":
         return options.places.hasRoom(named.id);
+      case "floor":
+        return options.places.hasFloor(named.id);
       case "zone":
         return options.places.hasZone(named.id);
       case "entity":
@@ -413,8 +416,8 @@ export function createPieces(options: {
 
     /**
      * What keeps a graph from being saved or from running, and what it may not
-     * do on its own: a room, zone, device or entity it names that is gone among
-     * them. Saving also checks the commands its device steps send.
+     * do on its own: a room, floor, zone, device or entity it names that is
+     * gone among them. Saving also checks the commands its device steps send.
      */
     check(graph: WorkflowGraph, options_: { saving?: boolean } = {}): Check {
       const saving = options_.saving ?? false;

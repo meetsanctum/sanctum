@@ -1,4 +1,8 @@
-import { loadApartPackages, shippedApps } from "./app-host/loader.js";
+import {
+  loadApartPackages,
+  shippedApps,
+  type ApartPackage,
+} from "./app-host/loader.js";
 import { createCoreCertificates } from "./certificate.js";
 import type { CoreConfig } from "./config.js";
 import { openCoreDatabase, type CoreDatabase } from "./database.js";
@@ -129,11 +133,16 @@ export function createCore(
   }
 
   // What the manager has staged for this image, which it may still be doing,
-  // so the core doesn't wait for it to serve.
+  // so the core doesn't wait for it to serve: of those, the apps the
+  // household added. A home's first start with its own list of apps records
+  // every app it had (added.ts).
   async function stagedPackages(only?: readonly string[]) {
     const staged = await manager!.stagedApps();
+    const { addedApps } = modules!;
+    addedApps.recordFirst([...shipped, ...Object.keys(staged)]);
+    const added = addedApps.ids();
     const apart = Object.entries(staged).flatMap(([id, { folder }]) =>
-      !started.has(id) && (!only || only.includes(id))
+      added.has(id) && !started.has(id) && (!only || only.includes(id))
         ? [`${id}@${folder}`]
         : [],
     );
@@ -156,6 +165,11 @@ export function createCore(
   // then, but it stops all the same, so Docker tries it again and one on trial
   // rolls back.
   async function installStagedApps(cancelled: AbortSignal) {
+    const { addedApps } = modules!;
+    // Before the first start with the list, every app the image ships is
+    // about to be recorded as added.
+    const atStart = addedApps.listed() ? addedApps.ids() : new Set(shipped);
+    const coming = shipped.filter((id) => atStart.has(id));
     const first = stagedPackages();
     // One the image ships that the manager hasn't staged, as an old manager or
     // one whose staging failed, is asked for again now and then, one ask at a
@@ -164,16 +178,16 @@ export function createCore(
     async function startStaged(missing: readonly string[]) {
       const packages = await stagedPackages(missing);
       if (packages.length === 0) return;
-      await modules!.apps.start(packages, {
-        onTrial: onTrial(),
-        coming: shipped,
-      });
+      await modules!.apps.start(packages, { onTrial: onTrial(), coming });
     }
     void first.then(
       () => {
         if (cancelled.aborted) return;
         askAgain = setInterval(() => {
-          const missing = shipped.filter((id) => !started.has(id));
+          const added = addedApps.ids();
+          const missing = shipped.filter(
+            (id) => added.has(id) && !started.has(id),
+          );
           if (missing.length === 0) return clearInterval(askAgain);
           if (isAsking || cancelled.aborted) return;
           isAsking = true;
@@ -187,11 +201,25 @@ export function createCore(
       () => undefined,
     );
     try {
-      await modules!.apps.start(first, { onTrial: onTrial(), coming: shipped });
+      await modules!.apps.start(first, { onTrial: onTrial(), coming });
     } catch (error) {
       log(`apps: didn't start (${String(error)})`);
       throw error;
     }
+  }
+
+  // An app someone just added, from the exact package checked at Add,
+  // installed as the home's apps are at start. A test's core installs its
+  // own apps, and adds none.
+  async function installAdded(pkg: ApartPackage) {
+    if (replaced.installApps) throw new Error("a test's core adds no app");
+    const appId = pkg.apart.manifest.id;
+    started.add(appId);
+    await modules!.apps.start([pkg], {
+      onTrial: onTrial(),
+      coming: [appId],
+      adding: [appId],
+    });
   }
 
   const steps: CoreSteps = {
@@ -245,6 +273,8 @@ export function createCore(
             kitDir: config.kitDir,
             version: config.version,
             manager: manager!,
+            shippedApps: () => shipped,
+            installAdded: (pkg) => installAdded(pkg),
             hostId: manager!.hostId,
             homeId,
             pin: () => certificates?.current()?.pin ?? null,
@@ -295,6 +325,21 @@ export function createCore(
               "start workflows",
               async (cancelled) => {
                 await modules!.apps.committed();
+                if (cancelled.aborted) return;
+                // These stay installed without a successful start to
+                // restore the workflows an interrupted add left off.
+                for (const app of modules!.apps.list()) {
+                  if (app.state === "off" || app.state === "paused") {
+                    modules!.workflows.forApps.added(app.id);
+                  }
+                }
+                // A removal a core that stopped left part way finishes,
+                // past a trial, since a rollback brings back its record.
+                await modules!.appRemoving
+                  .resume()
+                  .catch((error: unknown) =>
+                    log(`apps: removals didn't finish (${String(error)})`),
+                  );
                 if (!cancelled.aborted) modules!.workflows.start({ ticking });
               },
             );
@@ -313,6 +358,16 @@ export function createCore(
       ["start the manager's audit", () => modules!.managerAudit?.start()],
       ["start discovery", () => modules!.discovery?.start()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
+      // A removed app's data goes once its 30 days are over, those that ran
+      // out while the home was off first.
+      [
+        "start removed apps' deadlines",
+        (cancelled) => {
+          updatePending!.whenCommitted(() => {
+            if (!cancelled.aborted) modules!.appDeleting.start();
+          });
+        },
+      ],
       // A reset leaves the host unclaimed, and the manager then makes a new
       // CA, so the core reports first and asks for its certificate after.
       // Until the manager answers, the core waits and serves nothing.

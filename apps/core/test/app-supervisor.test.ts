@@ -288,6 +288,7 @@ describe("an app's supervisor", () => {
           memoryLimits: true,
           discovery: false,
           lan: false,
+          deletesData: false,
         }),
       });
 
@@ -508,6 +509,7 @@ describe("an app's supervisor", () => {
             memoryLimits: true,
             discovery: true,
             lan: true,
+            deletesData: false,
           }),
           startAppContainer: start,
         },

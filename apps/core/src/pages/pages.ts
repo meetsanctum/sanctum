@@ -144,6 +144,23 @@ export function createPages(
     return kit;
   }
 
+  // The pages in one of an app's staged folders, indexed once.
+  function pagesIn(appId: string, folder: string) {
+    const key = `${appId}/${folder}`;
+    let found = indexed.get(key);
+    if (!found) {
+      found = indexPages(join(packagesDir, appId, folder, "pages"), log).catch(
+        (error: unknown) => {
+          log(`pages: ${appId}'s pages couldn't be read (${String(error)})`);
+          indexed.delete(key);
+          return null;
+        },
+      );
+      indexed.set(key, found);
+    }
+    return found;
+  }
+
   // An installed app's pages at the version it runs, or none; for pages
   // built for a kit this core's can't stand in for, what they need.
   async function fitOf(
@@ -155,24 +172,12 @@ export function createPages(
   > {
     const running = runningPackage(appId);
     if (!running) return null;
-    const key = `${appId}/${running.folder}`;
-    let found = indexed.get(key);
-    if (!found) {
-      found = indexPages(
-        join(packagesDir, appId, running.folder, "pages"),
-        log,
-      ).catch((error: unknown) => {
-        log(`pages: ${appId}'s pages couldn't be read (${String(error)})`);
-        indexed.delete(key);
-        return null;
-      });
-      indexed.set(key, found);
-    }
-    const pages = await found;
+    const pages = await pagesIn(appId, running.folder);
     const served = await kitIndex();
     if (!pages || !served) return null;
     const needs = kitNeeds(pages.kit, served.version);
     if (needs) {
+      const key = `${appId}/${running.folder}`;
       if (!misfits.has(key)) {
         misfits.add(key);
         log(
@@ -191,6 +196,17 @@ export function createPages(
     kit: kitIndex,
 
     fitOf,
+
+    /**
+     * What the pages in an app's staged folder need of this core's kit, if
+     * they don't fit it: none for an app without pages, or where the kit
+     * isn't known.
+     */
+    async pagesNeedIn(appId: string, folder: string) {
+      const pages = await pagesIn(appId, folder);
+      const served = await kitIndex();
+      return pages && served ? kitNeeds(pages.kit, served.version) : null;
+    },
 
     /**
      * An installed app's pages at the version it runs, or none: none too

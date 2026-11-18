@@ -463,6 +463,9 @@ export function tilesOf(
 const byName = (a: Tile, b: Tile) => a.name.localeCompare(b.name);
 
 /** Tiles in a section for each room, in the order of the home's rooms; those without a room come last. */
+/** The id of the section of tiles in no room, among rooms' sections. */
+export const noRoomSection = "no-room";
+
 export function sectionsByRoom(
   tiles: Tile[],
   places: Places | undefined,
@@ -474,7 +477,7 @@ export function sectionsByRoom(
       tiles: tiles.filter((tile) => tile.roomId === room.id),
     })),
     {
-      id: "no-room",
+      id: noRoomSection,
       title: noRoomName,
       tiles: tiles.filter((tile) => tile.roomId === null),
     },

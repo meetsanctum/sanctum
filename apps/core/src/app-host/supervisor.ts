@@ -29,6 +29,8 @@ export type Supervision = {
   phase: "starting" | "waiting" | "running" | "restarting" | "failed";
   since: Date;
   isFirstStart: boolean;
+  // Someone added it, and its first start since hasn't returned.
+  isAdding?: boolean;
   waitingFor?: string;
   // Its own start said what it waits for, not the core.
   isOwnWait: boolean;
@@ -169,7 +171,10 @@ export function createSupervisor(options: {
   // what comes of waiting. A restart that fixes itself never shows.
   function follow(entry: InstalledApp, phase: Supervision["phase"]) {
     const supervision = of(entry);
-    if (phase !== "starting") supervision.isFirstStart = false;
+    if (phase !== "starting") {
+      supervision.isFirstStart = false;
+      supervision.isAdding = false;
+    }
     const settle = () => {
       clearTimeout(supervision.quietTimer);
       supervision.quietTimer = undefined;
@@ -578,6 +583,7 @@ export function createSupervisor(options: {
         phase: "starting",
         since: now(),
         isFirstStart: true,
+        isAdding: false,
         waitingFor: undefined,
         failures: [],
         lastFailure: undefined,

@@ -744,6 +744,21 @@ export function createBridge(ctx: AppContext, options: BridgeOptions = {}) {
       }
     },
 
+    /** Has a device show itself, as a light blinks (Blink). */
+    async identify({ key }: DriverDevice) {
+      const device = devices.get(key);
+      if (!device) {
+        throw new ActionError("not_found", `No Zigbee device ${key}`);
+      }
+      if (!device.identify) {
+        throw new ActionError(
+          "conflict",
+          `${device.friendlyName} cannot show itself`,
+        );
+      }
+      await publish(topic(device.friendlyName, "set"), device.identify);
+    },
+
     status(): BridgeStatus {
       const { joinUntil } = status;
       return {

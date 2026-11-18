@@ -2,6 +2,7 @@ import type {
   ActionDefinition,
   AppContext,
   AppDefinition,
+  AppWaitingUpdate,
   SettingsSchema,
   StaticManifest,
 } from "@meetsanctum/app-sdk";
@@ -54,6 +55,9 @@ export type InstalledApp = {
   apartIn: string;
   // What that version holds, as its folder is named for.
   digest: string;
+  // A newer version waiting for someone to allow what it newly needs
+  // (waiting.ts), or this one, paused until they do.
+  waiting?: AppWaitingUpdate;
   supervision: Supervision;
   // The start on a new version under way, and what it has claimed (commits.ts).
   updating?: AppUpdate;

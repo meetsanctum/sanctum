@@ -163,6 +163,13 @@ export function createDriverCalls<Entry extends Driving>(options: {
       );
     },
 
+    // The driver apps that take calls and add the devices they find.
+    findingDrivers() {
+      return [...installed.values()].flatMap((entry) =>
+        accepts(entry) && entry.app.driver?.add ? [entry.app.id] : [],
+      );
+    },
+
     openPairing(driverId: string, seconds: number, actor: Actor) {
       return toDriver(driverId, actor, "let devices join", (driver, ctx) =>
         pairingOf(driver).open(ctx, { seconds }),
@@ -224,6 +231,21 @@ export function createDriverCalls<Entry extends Driving>(options: {
         }
         return driver.probe(ctx, device);
       });
+    },
+
+    // Has a driver have one of its devices show itself, as a light blinks.
+    identify(driverId: string, device: DriverDevice, actor: Actor) {
+      return toDriver(
+        driverId,
+        actor,
+        "have a device show itself",
+        (driver, ctx) => {
+          if (!driver.identify) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.identify(ctx, device);
+        },
+      );
     },
 
     // Hands a driver what changed on the home's network of what it looks

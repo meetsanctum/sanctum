@@ -4,11 +4,12 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   truncate,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Helper } from "../src/apps/helper.js";
@@ -66,6 +67,15 @@ function fakeHelper(folder: string) {
     }
     if (script.includes("Filesystem UUID")) {
       return { code: 0, output: `${state.uuidOnDisk ?? ""}\n` };
+    }
+    if (script.includes("losetup -d")) {
+      const files = /^for file in (.+); do$/m.exec(script)![1]!;
+      for (const [, path] of files.matchAll(/"([^"]+)"/g)) {
+        const name = basename(path!);
+        state.attached.delete(name);
+        await rm(join(folder, name), { force: true });
+      }
+      return { code: 0, output: "" };
     }
     throw new Error(`The fake helper doesn't know: ${script}`);
   };
@@ -423,5 +433,82 @@ describe("growing one", () => {
     await images.grow(app, 512);
 
     expect((await records()).images[app]?.sizeMb).toBe(512);
+  });
+});
+
+describe("deleting one", () => {
+  it("takes its volume, its file, any set aside as damaged, and its record", async () => {
+    const { docker, folder, images, records } = await setup();
+    await images.ensure(app, 256);
+    await writeFile(
+      join(folder, `${app}.damaged-20261117T120000000Z.img`),
+      "old",
+    );
+
+    await images.remove(app);
+
+    expect(docker.volumes.has(volume)).toBe(false);
+    expect(await readdir(folder)).toEqual([]);
+    expect((await records()).images[app]).toBeUndefined();
+    expect(await images.has(app)).toBe(false);
+  });
+
+  it("takes an unfinished image and detaches a damaged copy still attached", async () => {
+    const { folder, images, state } = await setup();
+    await images.ensure(app, 256);
+    const damaged = `${app}.damaged-20261117T120000000Z.img`;
+    await writeFile(join(folder, damaged), "old");
+    await writeFile(join(folder, `${app}.img.partial`), "half made");
+    state.attached.set(damaged, "/dev/loop7");
+
+    await images.remove(app);
+
+    expect(await readdir(folder)).toEqual([]);
+    expect(state.attached.has(damaged)).toBe(false);
+    const script = state.scripts.at(-1)!;
+    expect(script).toContain(
+      'devices=$(losetup -j "$file" -n -O NAME) || exit 21',
+    );
+  });
+
+  it("keeps its record for the next try when a file can't go", async () => {
+    const { images, records, state } = await setup();
+    await images.ensure(app, 256);
+    state.failNext = { code: 21, output: "losetup: failed" };
+
+    await expect(images.remove(app)).rejects.toThrow("Could not delete");
+    expect((await records()).images[app]).toBeDefined();
+    await images.remove(app);
+    expect((await records()).images[app]).toBeUndefined();
+  });
+
+  it("leaves another app's files whose id begins with this one's", async () => {
+    const { folder, images } = await setup();
+    await images.ensure(app, 256);
+    const other = `${app}.damaged-2x.img`;
+    await writeFile(join(folder, other), "another app's data");
+
+    await images.remove(app);
+
+    expect(await readdir(folder)).toEqual([other]);
+  });
+
+  it("does nothing more for one that's gone", async () => {
+    const { images } = await setup();
+    await images.ensure(app, 256);
+    await images.remove(app);
+
+    await expect(images.remove(app)).resolves.toBeUndefined();
+  });
+
+  it("is refused while a container still has its volume", async () => {
+    const { docker, folder, images } = await setup();
+    await images.ensure(app, 256);
+    docker.containers.set("app", {
+      options: { HostConfig: { Binds: [`${volume}:/data`] } },
+    } as never);
+
+    await expect(images.remove(app)).rejects.toMatchObject({ status: 409 });
+    expect(await readdir(folder)).toEqual([`${app}.img`]);
   });
 });

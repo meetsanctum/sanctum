@@ -1,8 +1,8 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { countdown } from "../src/add-devices";
-import { stageText } from "../src/add-devices-rows";
+import { stageText } from "../src/add-devices-cards";
+import { countdown } from "../src/add-devices-joining";
 import { deviceDetail, deviceStatus } from "../src/settings-devices";
 import { light, now, office, remote } from "./settings-devices-fixtures";
 
@@ -128,14 +128,18 @@ describe("adding devices' words", () => {
     expect(stageText(joined("interviewing"))).toBe("Setting up…");
     expect(stageText(joined("ready"))).toBe("Ready");
     expect(stageText(joined("ready", true))).toBe("Joined again");
-    expect(stageText(joined("unsupported"))).toBe("Sanctum cannot use it");
+    expect(stageText(joined("unsupported"))).toBe(
+      "Sanctum can't use this device",
+    );
   });
 
   it("say that a device which joined has nothing Sanctum can use", () => {
     const purifier = { ...remote, type: "unknown" as const, capabilities: [] };
-    expect(stageText(joined("ready"), purifier)).toBe("Sanctum cannot use it");
+    expect(stageText(joined("ready"), purifier)).toBe(
+      "Sanctum can't use this device",
+    );
     expect(stageText(joined("ready", true), purifier)).toBe(
-      "Sanctum cannot use it",
+      "Sanctum can't use this device",
     );
     // One it can use is ready as before.
     expect(stageText(joined("ready"), remote)).toBe("Ready");
