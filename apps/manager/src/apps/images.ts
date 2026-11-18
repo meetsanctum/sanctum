@@ -123,21 +123,32 @@ export function createAppImages(options: {
   }
 
   // What the images may still grow to, which the card has to keep for them.
+  // Their blocks are read before and after what's free, and the fewer
+  // counted: growth meanwhile is then still counted as promised, and blocks
+  // a discard gave back meanwhile are counted as promised again, so the
+  // room is never more than there is.
   async function available() {
     const { images } = await read();
+    const kept = Object.entries(images).filter(([, record]) => !record.damaged);
+    const files = () =>
+      Promise.all(kept.map(([app]) => stat(fileOf(app)).catch(() => null)));
+    const before = await files();
+    const availableBytes = await free();
+    const after = await files();
     const sizes = new Map<string, number>();
     let promised = 0;
-    for (const [app, record] of Object.entries(images)) {
-      if (record.damaged) continue;
-      const file = await stat(fileOf(app)).catch(() => null);
+    kept.forEach(([app, record], index) => {
+      const [first, last] = [before[index], after[index]];
       // Growth may have reached the disk just before saving its record failed.
-      const capacity = Math.max(record.sizeMb * mebibyte, file?.size ?? 0);
+      const capacity = Math.max(
+        record.sizeMb * mebibyte,
+        first?.size ?? 0,
+        last?.size ?? 0,
+      );
+      const allocated = Math.min(first?.blocks ?? 0, last?.blocks ?? 0) * 512;
       sizes.set(app, Math.floor(capacity / mebibyte));
-      promised += Math.max(0, capacity - (file?.blocks ?? 0) * 512);
-    }
-    // Read after the images' blocks: growth meanwhile is then still
-    // counted as promised, never also as taken.
-    const availableBytes = await free();
+      promised += Math.max(0, capacity - allocated);
+    });
     const sizeMb = (app: string) => sizes.get(app) ?? 0;
     return {
       sizeMb,
