@@ -54,6 +54,8 @@ const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
     permissions: { id: string }[];
   }),
 }));
+// A home with every one, as one that had them before a home kept its list.
+running.push(`CORE_NEW_HOME_APPS=${shipped.map(({ id }) => id).join(",")}`);
 
 // Runs in the plainest place an app's package can be: nothing mounted but it,
 // an unprivileged user, no network, nothing writable.
