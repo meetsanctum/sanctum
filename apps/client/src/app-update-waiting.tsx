@@ -27,7 +27,13 @@ import { CoreError, coreJson } from "./core-fetch";
 // nothing is broken. Review shows only what's new: Update grants it and starts
 // the update, and Not now changes nothing and isn't remembered. When the
 // version the app ran can't run on this Sanctum, the app is on the new one,
-// stopped until someone allows it, which is a problem, in red.
+// stopped until someone allows it, which is a problem, in red. One that needs
+// more memory than is left waits for room instead, with nothing to allow: it
+// says how much, and starts by itself once there's room.
+
+/** Whether it waits for room, rather than for someone to allow it. */
+export const waitsForRoom = (waiting: AppWaitingUpdate) =>
+  waiting.needs.length === 0 && waiting.moreMemoryMb !== undefined;
 
 /** Whether it's stopped on the version that waits, rather than running the one before. */
 export const isStoppedFor = (app: AppInfo, waiting: AppWaitingUpdate) =>
@@ -46,6 +52,12 @@ function needsList(waiting: AppWaitingUpdate) {
 
 /** What its notice says, and Needs attention's line. */
 export function waitingNoticeWords(app: AppInfo, waiting: AppWaitingUpdate) {
+  if (waitsForRoom(waiting)) {
+    return {
+      title: `${app.name} ${waiting.version} is waiting`,
+      line: `It needs ${waiting.moreMemoryMb} MB more memory. Turning off an app you don't use makes room.`,
+    };
+  }
   if (isStoppedFor(app, waiting)) {
     return {
       title: `${app.name} can't run on this ${productName}`,
@@ -64,6 +76,9 @@ export function waitingNoticeWords(app: AppInfo, waiting: AppWaitingUpdate) {
 
 /** Needs attention's line for one that waits. */
 export function waitingAttentionText(app: AppInfo, waiting: AppWaitingUpdate) {
+  if (waitsForRoom(waiting)) {
+    return `${waiting.version} is waiting: it needs ${waiting.moreMemoryMb} MB more memory`;
+  }
   return isStoppedFor(app, waiting)
     ? `Can't run on this ${productName}: allow ${waiting.version} to start it again`
     : `${waiting.version} is waiting: it needs to ${needsList(waiting)}`;
@@ -178,7 +193,11 @@ export function UpdateWaiting(props: { app: AppInfo }) {
       isWrong={isStoppedFor(app, waiting)}
       title={title}
       line={line}
-      action={<ReviewUpdate app={app} waiting={waiting} />}
+      action={
+        waitsForRoom(waiting) ? undefined : (
+          <ReviewUpdate app={app} waiting={waiting} />
+        )
+      }
     />
   );
 }
