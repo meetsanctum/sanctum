@@ -71,8 +71,8 @@ export function StickOffer(props: {
 }) {
   const offer = useHardwareOffer(props.live, props.isOnline);
   // The offer ends everywhere as its add commits, before the app has
-  // installed: this client's sheet stays until its own Add has answered,
-  // so it shows what came of it.
+  // installed: this client's sheet stays once its Add was pressed, until
+  // it's added or someone closes it, so it shows what came of it.
   const [adding, setAdding] = useState<HardwareOffer>();
   const shown = adding ?? offer;
   if (!shown) return null;
@@ -80,7 +80,8 @@ export function StickOffer(props: {
     <OfferedApp
       key={shown.id}
       offer={shown}
-      onAdding={(isAdding) => setAdding(isAdding ? shown : undefined)}
+      onAdding={() => setAdding(shown)}
+      onDone={() => setAdding(undefined)}
       onAdded={props.onAdded}
     />
   );
@@ -88,7 +89,9 @@ export function StickOffer(props: {
 
 function OfferedApp(props: {
   offer: HardwareOffer;
-  onAdding: (isAdding: boolean) => void;
+  onAdding: () => void;
+  // Added, or closed, which lets an ended offer go.
+  onDone: () => void;
   onAdded: (app: AppInfo) => void;
 }) {
   const { offer } = props;
@@ -134,6 +137,7 @@ function OfferedApp(props: {
       }
       onAdded={(added) => {
         setApp(undefined);
+        props.onDone();
         props.onAdded(added);
       }}
       onClose={async () => {
@@ -148,6 +152,7 @@ function OfferedApp(props: {
           }
         }
         setApp(undefined);
+        props.onDone();
       }}
     />
   );

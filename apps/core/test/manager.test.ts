@@ -280,12 +280,15 @@ describe("what's staged for this core", () => {
   });
 
   it("reports a failed lookup when the caller needs a definite answer", async () => {
-    const { client } = await answering([
-      { status: 503, body: { error: "Staging is under way" } },
-    ]);
+    // A pause before asking again that outlasts the time left makes the
+    // first 503 the answer.
+    const { client } = await answering(
+      [{ status: 503, body: { error: "Staging is under way" } }],
+      10_000,
+    );
 
     await expect(
-      client.stagedApps(10_000, { requireAnswer: true }),
+      client.stagedApps(2_000, { requireAnswer: true }),
     ).rejects.toThrow("Staging is under way");
   });
 

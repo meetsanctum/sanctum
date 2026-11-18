@@ -185,6 +185,12 @@ describe("a stick plugged in", () => {
 
     await act(async () => adding.reject(new CoreError(500, "app_failed")));
     expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
+    // It stays, with what went wrong, until someone closes it.
+    await later(1_000);
+    expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
+
+    await act(async () => button("Cancel")!.click());
+    expect(dialog()).toBeNull();
   });
 
   it("closes once it ends on another client or is unplugged", async () => {
