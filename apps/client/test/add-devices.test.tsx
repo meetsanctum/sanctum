@@ -643,11 +643,16 @@ describe("Add devices, with what drivers found", () => {
     devices = [added];
     const hall = { ...office, id: "hall", name: "Hall" };
     const answered = vi.mocked(coreJson).getMockImplementation()!;
-    vi.mocked(coreJson).mockImplementation(async (path, init = {}) =>
-      path === "/api/places/rooms/add"
-        ? (requests.push({ path, json: init.json }), hall)
-        : answered(path, init),
-    );
+    vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
+      if (path === "/api/places/rooms/add") {
+        requests.push({ path, json: init.json });
+        return hall;
+      }
+      const answer = await answered(path, init);
+      return path === "/api/devices/update"
+        ? { ...added, roomId: hall.id }
+        : answer;
+    });
     await show();
     await way("Devices found");
     await act(async () => named("Add Kitchen sensor").click());

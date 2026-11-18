@@ -229,6 +229,70 @@ describe("actions on a device's Add devices card", () => {
     ).not.toBeNull();
   });
 
+  async function typeName(field: HTMLInputElement, name: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(field, name);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  const calls = (path: string) =>
+    vi.mocked(coreJson).mock.calls.filter(([called]) => called === path);
+
+  it("keeps naming open when the move fails, and moves into the made room on retry", async () => {
+    const answer = vi.mocked(coreJson).getMockImplementation()!;
+    let failing = true;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/devices/update" && failing) {
+        failing = false;
+        throw new CoreError(504, "timeout");
+      }
+      return answer(path, init);
+    });
+    await join();
+    await typeName(await newRoom(), hall.name);
+    await click("Add room");
+    expect(document.querySelector("form input")).not.toBeNull();
+
+    await click("Add room");
+
+    expect(document.querySelector("form input")).toBeNull();
+    expect(calls("/api/places/rooms/add")).toHaveLength(1);
+    expect(calls("/api/devices/update").at(-1)![1]).toEqual({
+      method: "POST",
+      json: { id: device.id, roomId: hall.id },
+    });
+  });
+
+  it("moves nothing once naming is left while the room is being made", async () => {
+    let finish!: (room: Room) => void;
+    const answer = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/places/rooms/add"
+        ? new Promise((resolve) => (finish = resolve as typeof finish))
+        : answer(path, init),
+    );
+    await join();
+    const field = await newRoom();
+    await typeName(field, hall.name);
+    await click("Add room");
+    await act(async () =>
+      field.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    await act(async () => finish(hall));
+
+    expect(calls("/api/devices/update")).toHaveLength(0);
+  });
+
   it("drops a created room after the home confirms and removes it", async () => {
     await join();
     await newRoom();

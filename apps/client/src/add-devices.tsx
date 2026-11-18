@@ -378,7 +378,10 @@ export function AddDevices(props: {
     ways.push({ kind: "notSetUp", name: waiting.name, fix });
   }
 
-  const save = async (device: DeviceInfo, changes: DeviceChanges) => {
+  const save = async (
+    device: DeviceInfo,
+    changes: DeviceChanges,
+  ): Promise<boolean> => {
     const attempt = Symbol();
     const current = session.current;
     saveAttempts.current.set(device.id, attempt);
@@ -387,12 +390,14 @@ export function AddDevices(props: {
       const response = await updateDevice(device.id, changes);
       if (saveAttempts.current.get(device.id) === attempt)
         props.onChanged(response);
+      return true;
     } catch (error) {
       if (
         current === session.current &&
         saveAttempts.current.get(device.id) === attempt
       )
         setProblem(deviceProblem(error));
+      return false;
     } finally {
       if (saveAttempts.current.get(device.id) === attempt)
         saveAttempts.current.delete(device.id);
@@ -569,6 +574,8 @@ export function AddDevices(props: {
         onChanged={props.onChanged}
         onRemoved={(id) => {
           saveAttempts.current.delete(id);
+          // A read begun before the removal would bring the device back.
+          pairingRevision.current += 1;
           setPairing((before) =>
             before
               ? {
