@@ -22,12 +22,13 @@ export function deletingWords(app: AvailableApp) {
   const words = app.adds.devices
     ? "Its devices, their history and its settings are deleted, so adding it back means adding every device again."
     : "Its settings and what it saved are deleted, so adding it back starts it afresh.";
-  // A service of its own holds a driver's network, as Zigbee2MQTT does.
+  // A service holds a driver's network, as Zigbee2MQTT does, and goes only
+  // when no other app uses it, which this sheet can't tell.
   const hasNetwork = app.requests.some((request) =>
     request.id.startsWith("services:"),
   );
   return hasNetwork
-    ? `${words} Its network is erased too, so every ${app.name} device has to be paired again.`
+    ? `${words} Unless another app uses its network, that's erased too, so every ${app.name} device has to be paired again.`
     : words;
 }
 

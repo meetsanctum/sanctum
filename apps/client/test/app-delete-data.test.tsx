@@ -89,7 +89,7 @@ describe("deleting a removed app's data", () => {
         ],
       }),
     ).toContain(
-      "Its network is erased too, so every Example device has to be paired again.",
+      "Unless another app uses its network, that's erased too, so every Example device has to be paired again.",
     );
     expect(
       deletingWords({ ...example, adds: { ...example.adds, devices: false } }),
@@ -102,9 +102,12 @@ describe("deleting a removed app's data", () => {
     await press(container, "Delete Example's data now");
     expect(dialog()!.textContent).toContain("Delete Example's data?");
     expect(document.activeElement?.textContent).toBe("Cancel");
+    // Asking deletes nothing.
+    expect(coreJson).not.toHaveBeenCalled();
 
     await press(dialog()!, "Delete");
 
+    expect(coreJson).toHaveBeenCalledTimes(1);
     expect(coreJson).toHaveBeenCalledWith(
       "/api/apps/sanctum.example/data/delete",
       { method: "POST", json: {} },

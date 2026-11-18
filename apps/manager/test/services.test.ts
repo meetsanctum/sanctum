@@ -493,6 +493,23 @@ describe("services", () => {
     });
   });
 
+  it("doesn't erase a service an app asked for just before", async () => {
+    const { docker, dev, services, onChange } = await setup();
+    await dev.plug(zbt2, "ttyACM0");
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    onChange.mockImplementation(() => services.reconcile());
+    await services.release("zigbee2mqtt", app);
+    await services.reconcile();
+
+    const needing = services.need("zigbee2mqtt", app);
+    const erasing = services.eraseData("zigbee2mqtt");
+
+    await needing;
+    await expect(erasing).rejects.toThrow(ServiceBusyError);
+    expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(true);
+  });
+
   it("removes services no app needs, and keeps their data", async () => {
     const { dataDir, docker, dev, services, onChange } = await setup();
     await dev.plug(zbt2, "ttyACM0");

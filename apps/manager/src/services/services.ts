@@ -135,6 +135,17 @@ export function createServices(options: {
       options.onObserved?.(name, before, next);
     },
   };
+  // What an app's need and erasing a service's data do to one service, in
+  // turns.
+  const serviceTurns = new Map<string, Promise<unknown>>();
+  function inServiceTurn<T>(name: string, work: () => Promise<T>) {
+    const next = (serviceTurns.get(name) ?? Promise.resolve()).then(work);
+    serviceTurns.set(
+      name,
+      next.catch(() => undefined),
+    );
+    return next;
+  }
   const imageChanges = createImageChanges({
     docker,
     store,
@@ -264,12 +275,15 @@ export function createServices(options: {
     async need(name: string, app: string) {
       const definition = forApps(name);
       checkApp(app);
-      await store.update((draft) => {
-        draft.apps[name] = [
-          ...new Set([...(draft.apps[name] ?? []), app]),
-        ].sort();
-        syncAccounts(draft);
-      });
+      // After an erase under way, which then finds this app needs it.
+      await inServiceTurn(name, () =>
+        store.update((draft) => {
+          draft.apps[name] = [
+            ...new Set([...(draft.apps[name] ?? []), app]),
+          ].sort();
+          syncAccounts(draft);
+        }),
+      );
       void options.onChange?.();
       return { service: status(name), connection: connection(definition, app) };
     },
@@ -304,53 +318,57 @@ export function createServices(options: {
     // Asked again once it's done, it does nothing.
     async eraseData(name: string) {
       const definition = forApps(name);
-      await options.operations.claim(
-        { kind: "data-delete", of: name },
-        async () => {
-          if ((store.current().apps[name] ?? []).length > 0) {
-            throw new ServiceBusyError(`An app still needs ${name}`);
-          }
-          if (await inspectService(docker, name)) {
-            throw new ServiceBusyError(`${name} hasn't stopped yet`);
-          }
-          const volumes = new Set([
-            ...(definition.dataVolumes ?? []),
-            ...(store
-              .current()
-              .imageChanges?.[name]?.volumes.map((volume) => volume.name) ??
-              []),
-          ]);
-          for (const volumeName of volumes) {
-            const volume = docker.getVolume(volumeName);
-            const found = await volume.inspect().catch((error: unknown) => {
-              if (isNotFound(error)) return null;
+      // An app's need waits for this, so none can arrive between the check
+      // that no app needs it and its volumes going.
+      await inServiceTurn(name, () =>
+        options.operations.claim(
+          { kind: "data-delete", of: name },
+          async () => {
+            if ((store.current().apps[name] ?? []).length > 0) {
+              throw new ServiceBusyError(`An app still needs ${name}`);
+            }
+            if (await inspectService(docker, name)) {
+              throw new ServiceBusyError(`${name} hasn't stopped yet`);
+            }
+            const volumes = new Set([
+              ...(definition.dataVolumes ?? []),
+              ...(store
+                .current()
+                .imageChanges?.[name]?.volumes.map((volume) => volume.name) ??
+                []),
+            ]);
+            for (const volumeName of volumes) {
+              const volume = docker.getVolume(volumeName);
+              const found = await volume.inspect().catch((error: unknown) => {
+                if (isNotFound(error)) return null;
+                throw error;
+              });
+              if (!found) continue;
+              assertManaged({
+                labels: found.Labels,
+                name: `${volumeName} volume`,
+              });
+              await volume.remove();
+            }
+            const backups = join(options.dataDir, "backups");
+            // Erasure must fail if the copies cannot be inspected. Only a
+            // missing backups folder means there are none to delete.
+            const copies = await readdir(backups).catch((error: unknown) => {
+              if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
               throw error;
             });
-            if (!found) continue;
-            assertManaged({
-              labels: found.Labels,
-              name: `${volumeName} volume`,
+            for (const copy of copies.filter((entry) =>
+              entry.startsWith(`${name}-`),
+            )) {
+              await rm(join(backups, copy), { recursive: true, force: true });
+            }
+            await store.update((draft) => {
+              delete draft.images?.[name];
+              delete draft.imageChanges?.[name];
             });
-            await volume.remove();
-          }
-          const backups = join(options.dataDir, "backups");
-          // Erasure must fail if the copies cannot be inspected. Only a
-          // missing backups folder means there are none to delete.
-          const copies = await readdir(backups).catch((error: unknown) => {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-            throw error;
-          });
-          for (const copy of copies.filter((entry) =>
-            entry.startsWith(`${name}-`),
-          )) {
-            await rm(join(backups, copy), { recursive: true, force: true });
-          }
-          await store.update((draft) => {
-            delete draft.images?.[name];
-            delete draft.imageChanges?.[name];
-          });
-          log(`Erased ${name}'s data`);
-        },
+            log(`Erased ${name}'s data`);
+          },
+        ),
       );
     },
 

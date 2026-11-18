@@ -71,11 +71,7 @@ function fakeHelper(folder: string) {
     if (script.includes("losetup -d")) {
       const name = /file=\S+\/(\S+)\.img/.exec(script)![1]!;
       state.attached.delete(`${name}.img`);
-      for (const file of await readdir(folder)) {
-        if (file === `${name}.img` || file.startsWith(`${name}.damaged-`)) {
-          await rm(join(folder, file));
-        }
-      }
+      await rm(join(folder, `${name}.img`), { force: true });
       return { code: 0, output: "" };
     }
     throw new Error(`The fake helper doesn't know: ${script}`);
@@ -441,7 +437,10 @@ describe("deleting one", () => {
   it("takes its volume, its file, any set aside as damaged, and its record", async () => {
     const { docker, folder, images, records } = await setup();
     await images.ensure(app, 256);
-    await writeFile(join(folder, `${app}.damaged-20261117.img`), "old");
+    await writeFile(
+      join(folder, `${app}.damaged-20261117T120000000Z.img`),
+      "old",
+    );
 
     await images.remove(app);
 
@@ -449,6 +448,17 @@ describe("deleting one", () => {
     expect(await readdir(folder)).toEqual([]);
     expect((await records()).images[app]).toBeUndefined();
     expect(await images.has(app)).toBe(false);
+  });
+
+  it("leaves another app's files whose id begins with this one's", async () => {
+    const { folder, images } = await setup();
+    await images.ensure(app, 256);
+    const other = `${app}.damaged-2x.img`;
+    await writeFile(join(folder, other), "another app's data");
+
+    await images.remove(app);
+
+    expect(await readdir(folder)).toEqual([other]);
   });
 
   it("does nothing more for one that's gone", async () => {

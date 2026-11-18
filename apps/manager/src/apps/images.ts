@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, rename, stat } from "node:fs/promises";
+import { access, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { assertManaged, managedLabels, type Log } from "../docker-resources.js";
@@ -79,10 +79,23 @@ export function createAppImages(options: {
   const read = async () =>
     (await readJson<ImagesState>(statePath)) ?? { images: {} };
 
-  async function note(app: string, record: ImageRecord) {
-    const state = await read();
-    state.images[app] = record;
-    await writeJson(statePath, state);
+  // Changes to the records take turns, so a deletion and an image made for
+  // another app can't each write over the other's.
+  let recording: Promise<unknown> = Promise.resolve();
+  function changeRecords(change: (state: ImagesState) => void) {
+    const next = recording.then(async () => {
+      const state = await read();
+      change(state);
+      await writeJson(statePath, state);
+    });
+    recording = next.catch(() => undefined);
+    return next;
+  }
+
+  function note(app: string, record: ImageRecord) {
+    return changeRecords((state) => {
+      state.images[app] = record;
+    });
   }
 
   async function exists(path: string) {
@@ -358,17 +371,23 @@ sync -f "$file"
 for device in $(losetup -j "$file" -n -O NAME); do
   losetup -d "$device" || exit 21
 done
-rm -f "$file" ${seenByHelper("")}${app}.damaged-*.img
+rm -f "$file"
 `);
       if (code !== 0) {
         throw new Error(`Could not delete ${app}'s image: ${output.trim()}`);
       }
-      await syncPath(folder).catch(() => undefined);
-      const state = await read();
-      if (app in state.images) {
-        delete state.images[app];
-        await writeJson(statePath, state);
+      // Only its own copies set aside as damaged, named by the time they
+      // were: another app's id may begin with this one's.
+      const damaged = new RegExp(
+        `^${app.replace(/[.]/g, "\\.")}\\.damaged-\\d{8}T\\d{9}Z\\.img$`,
+      );
+      for (const file of await readdir(folder).catch(() => [] as string[])) {
+        if (damaged.test(file)) await rm(join(folder, file), { force: true });
       }
+      await syncPath(folder).catch(() => undefined);
+      await changeRecords((state) => {
+        delete state.images[app];
+      });
       log(`Deleted ${app}'s image`);
     },
 
