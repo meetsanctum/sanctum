@@ -95,6 +95,8 @@ async function addingWith(
     refuses?: boolean;
     beforeFind?: () => Promise<void>;
     reserve?: Parameters<typeof createAppAdding>[0]["reserve"];
+    // How it's listed once installed.
+    state?: AppInfo["state"];
     finishRemoval?: (
       removed: ReturnType<typeof createRemovedApps>,
     ) => (appId: string) => Promise<void>;
@@ -180,7 +182,7 @@ async function addingWith(
       }),
     info: (appId) =>
       installedNow.has(appId)
-        ? ({ id: appId, state: "starting" } as AppInfo)
+        ? ({ id: appId, state: options.state ?? "starting" } as AppInfo)
         : undefined,
     log: (line) => logs.push(line),
   });
@@ -351,19 +353,62 @@ describe("adding an app", () => {
     ]);
   });
 
-  it("adds it anyway while the manager can't answer, which still checks its start", async () => {
+  it("waits while the manager can't answer, so its services can't go uncounted", async () => {
     const { added, adding, logs } = await addingWith({
       reserve: async () => {
         throw new ManagerUnavailable("The manager did not answer");
       },
     });
 
-    await adding.add(someone, "sanctum.example", "1.0.0");
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "unavailable" });
 
-    expect(added.ids().has("sanctum.example")).toBe(true);
+    expect(added.ids().has("sanctum.example")).toBe(false);
     expect(logs).toEqual([
       "apps: sanctum.example's room wasn't reserved (The manager did not answer)",
     ]);
+  });
+
+  it.each(["off", "paused"] as const)(
+    "lets its reservation go when it's added back %s, with no start to take it over",
+    async (state) => {
+      const released: string[] = [];
+      const { adding } = await addingWith({
+        state,
+        reserve: async (appId) => async () => void released.push(appId),
+      });
+
+      await adding.add(someone, "sanctum.example", "1.0.0");
+
+      expect(released).toEqual(["sanctum.example"]);
+    },
+  );
+
+  it("keeps its reservation for the start that takes it over", async () => {
+    const released: string[] = [];
+    const { adding } = await addingWith({
+      reserve: async (appId) => async () => void released.push(appId),
+    });
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(released).toEqual([]);
+  });
+
+  it("lets its reservation go when it doesn't install", async () => {
+    const released: string[] = [];
+    const { adding } = await addingWith({
+      installs: async () => {
+        throw new Error("its package isn't staged");
+      },
+      reserve: async (appId) => async () => void released.push(appId),
+    });
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "app_failed" });
+    expect(released).toEqual(["sanctum.example"]);
   });
 
   it("knows no app the home couldn't add", async () => {

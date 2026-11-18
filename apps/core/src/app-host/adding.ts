@@ -128,18 +128,21 @@ export function createAppAdding(options: {
     try {
       release = await options.reserve?.(appId, (options.need ?? needOf)(app));
     } catch (error) {
-      if (
-        error instanceof ManagerRefusal &&
-        (error.status === 409 || error.status === 400)
-      ) {
-        throw refuse("unavailable", detail);
+      // No room since the sheet was read, or a manager that can't say: added
+      // without a reservation, its services would count for nothing at its
+      // start, so it waits for the manager to answer.
+      if (!(error instanceof ManagerRefusal) || error.status !== 409) {
+        log(
+          `apps: ${appId}'s room wasn't reserved (${error instanceof Error ? error.message : String(error)})`,
+        );
       }
-      // A manager that can't answer now still refuses a start it has no
-      // room for.
-      log(
-        `apps: ${appId}'s room wasn't reserved (${error instanceof Error ? error.message : String(error)})`,
-      );
+      throw refuse("unavailable", detail);
     }
+    const letGo = async () => {
+      await release?.().catch((error: unknown) => {
+        log(`apps: ${appId}'s reservation wasn't released (${String(error)})`);
+      });
+    };
     let isAdded = false;
     try {
       // While the checks were running, another client may have dismissed the
@@ -161,13 +164,7 @@ export function createAppAdding(options: {
       });
       if (!isAdded) throw refuse("conflict", detail);
     } finally {
-      if (!isAdded && release) {
-        await release().catch((error: unknown) => {
-          log(
-            `apps: ${appId}'s reservation wasn't released (${String(error)})`,
-          );
-        });
-      }
+      if (!isAdded) await letGo();
     }
     options.offers.finishAdd(appId);
     if (removal) {
@@ -184,6 +181,11 @@ export function createAppAdding(options: {
       );
     }
     const info = options.info(appId);
+    // Its container's start takes over what it reserved; one that won't
+    // start now, not installed, off or paused, holds nothing meanwhile.
+    if (!info || info.state === "off" || info.state === "paused") {
+      await letGo();
+    }
     if (!info) throw new ActionCallError("app_failed");
     // An app kept off or paused has no start to wait for.
     if (removal && (info.state === "off" || info.state === "paused")) {

@@ -124,7 +124,6 @@ export function createAppImages(options: {
 
   // What the images may still grow to, which the card has to keep for them.
   async function available() {
-    const availableBytes = await free();
     const { images } = await read();
     const sizes = new Map<string, number>();
     let promised = 0;
@@ -136,6 +135,9 @@ export function createAppImages(options: {
       sizes.set(app, Math.floor(capacity / mebibyte));
       promised += Math.max(0, capacity - (file?.blocks ?? 0) * 512);
     }
+    // Read after the images' blocks: growth meanwhile is then still
+    // counted as promised, never also as taken.
+    const availableBytes = await free();
     const sizeMb = (app: string) => sizes.get(app) ?? 0;
     return {
       sizeMb,

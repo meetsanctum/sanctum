@@ -78,6 +78,8 @@ const defaultConnectWithinMs = 60_000;
 // Meanwhile, how often the manager is asked whether its container still runs: one
 // that has stopped before hello failed its start, and needn't wait out the rest.
 const defaultConnectCheckMs = 1_000;
+// How soon a Turn off the manager didn't hear of is said again.
+const offAgainMs = 30_000;
 // How long Home and an app's pages stay as they were once it goes down.
 const defaultQuietMs = 30_000;
 // How long it waits for something before Needs attention says what.
@@ -233,13 +235,22 @@ export function createSupervisor(options: {
   }
 
   // Nothing may be left of the last run before the next. One turned off
-  // gives its room back to the others until it starts again.
+  // gives its room back to the others until it starts again, so a Turn off
+  // the manager didn't hear of is said again a while later, while it's off.
   async function stopContainer(entry: InstalledApp) {
     const how = entry.off ? { off: true } : {};
+    const { generation } = of(entry);
     await manage(entry, () =>
       manager.stopAppContainer(entry.app.id, how),
     ).catch((error: unknown) => {
       log(`apps: ${entry.app.id}'s container didn't stop (${String(error)})`);
+      if (!how.off || !isCurrent(entry, generation)) return;
+      clearTimeout(of(entry).timer);
+      of(entry).timer = setTimeout(() => {
+        if (isCurrent(entry, generation) && entry.off) {
+          void stopContainer(entry);
+        }
+      }, offAgainMs);
     });
   }
 

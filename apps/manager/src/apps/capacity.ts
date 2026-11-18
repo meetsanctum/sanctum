@@ -140,8 +140,10 @@ export function createCapacity(options: {
     return (await memory(held)).memoryFreeMb;
   }
 
+  // An image it has already, as one kept from its removal, is used as it
+  // is: its start makes none and grows none.
   function dataNeededMb(requestedMb: number, sizeMb: number) {
-    return Math.max(0, requestedMb - sizeMb);
+    return sizeMb > 0 ? 0 : requestedMb;
   }
 
   async function check(

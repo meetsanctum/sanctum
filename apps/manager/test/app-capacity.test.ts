@@ -125,6 +125,18 @@ describe("reserving what an add needs", () => {
     );
   });
 
+  it("asks no data of an image it kept, which its start uses as it is", async () => {
+    const { capacity } = await ledger();
+    const kept = { room: () => 0, sizeMb: () => 256 };
+
+    await expect(
+      capacity.check("sanctum.weather", { ...add, dataMb: 512 }, [], kept),
+    ).resolves.toMatchObject({ dataNeedsMb: 0 });
+    await expect(
+      capacity.reserve("sanctum.weather", { ...add, dataMb: 512 }, [], kept),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+  });
+
   it("holds the room from another add until its app starts", async () => {
     const { capacity } = await ledger();
     await capacity.reserve(
