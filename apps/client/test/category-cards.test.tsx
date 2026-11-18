@@ -202,6 +202,7 @@ describe("a room's lights on Lights' page", () => {
 
     const office = button("Turn off 1 light in Office")!;
     expect(office.textContent).toBe("");
+    expect(office.querySelector("svg.lucide-power")).not.toBeNull();
     expect(office.title).toBe("Turn off 1 light in Office");
     expect(office.dataset.look).toBe("on");
     expect(office.hasAttribute("aria-pressed")).toBe(false);

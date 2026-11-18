@@ -614,10 +614,12 @@ function CategorySections(props: {
   const first = isLights
     ? (section: TileSection) => {
         // The lights in no room are not together, so have no switch.
-        const room = devices.places?.rooms.find(
-          (each) => each.id === section.id,
+        if (section.id === noRoomSection) return null;
+        const lights = lightsButton(
+          section.tiles,
+          { id: section.id, name: section.title },
+          devices,
         );
-        const lights = room && lightsButton(section.tiles, room, devices);
         return lights ? (
           <RowSquares count={1}>
             <RoomSwitch lights={lights} />

@@ -211,14 +211,15 @@ describe("Home with floors", () => {
     const off = button("Turn off 2 lights on Ground floor");
     // The power symbol alone, White, its words its tooltip.
     expect(off?.textContent).toBe("");
+    expect(off?.querySelector("svg.lucide-power")).not.toBeNull();
     expect(off?.title).toBe("Turn off 2 lights on Ground floor");
     expect(off?.dataset.on).toBe("");
-    expect(off?.closest("h2, div")?.querySelector("h2")?.textContent).toBe(
-      "Ground floor",
-    );
+    const heading = container.querySelector("#home-floor-ground");
+    expect(heading?.nextElementSibling).toBe(off);
     // All off upstairs: its heading is its name alone.
-    expect(button("Turn off 1 light on First floor")).toBeUndefined();
-    expect(container.textContent).not.toContain("First floorTurn");
+    expect(
+      container.querySelector("#home-floor-first")?.nextElementSibling,
+    ).toBe(null);
 
     await act(async () => off!.click());
     expect(

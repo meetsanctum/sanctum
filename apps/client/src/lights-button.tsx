@@ -17,9 +17,6 @@ import type { Devices } from "./use-devices";
 const onCount = (tiles: readonly Tile[]) =>
   tiles.filter((tile) => tile.on).length;
 
-/** What the button says: what it does. */
-export const lightsWords = (on: number) => (on === 0 ? "Turn on" : "Turn off");
-
 const lightsCounted = (on: number) => (on === 1 ? "1 light" : `${on} lights`);
 
 /** A place's button for all its lights, as lightsButton makes it. */

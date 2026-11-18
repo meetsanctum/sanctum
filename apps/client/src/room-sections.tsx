@@ -18,7 +18,7 @@ import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
-import { lightsWords, type LightsSwitch } from "./lights-button";
+import type { LightsSwitch } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow) after its switch,
@@ -262,8 +262,7 @@ export function RoomSwitch(props: { lights: LightsSwitch }) {
     <SectionTile
       iconOnly
       icon={icons.Power}
-      name={lightsWords(lights.on)}
-      label={lights.label}
+      name={lights.label}
       lit={lights.on > 0}
       disabled={lights.disabled}
       onClick={lights.onToggle}
