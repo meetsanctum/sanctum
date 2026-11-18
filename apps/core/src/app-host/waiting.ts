@@ -51,12 +51,15 @@ export function createWaitingUpdates(options: {
       .where(eq(appUpdatesWaiting.appId, appId))
       .get();
 
+  // In the caller's transaction.
+  function drop(appId: string) {
+    db.delete(appUpdatesWaiting)
+      .where(eq(appUpdatesWaiting.appId, appId))
+      .run();
+  }
+
   function forget(appId: string) {
-    durably(db, () => {
-      db.delete(appUpdatesWaiting)
-        .where(eq(appUpdatesWaiting.appId, appId))
-        .run();
-    });
+    durably(db, () => drop(appId));
   }
 
   // What this version needs that the household hasn't granted.
@@ -182,6 +185,9 @@ export function createWaitingUpdates(options: {
     get: rowOf,
 
     forget,
+
+    /** Forgets it in the caller's transaction, as a Go back's own does. */
+    drop,
 
     /**
      * Someone allows the version that waits, named by its id: what it newly

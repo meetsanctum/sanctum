@@ -686,6 +686,7 @@ export async function createModules(
     found,
     entities,
     apps,
+    waitingUpdates,
     addedApps,
     availableApps,
     appAdding,

@@ -7,6 +7,7 @@ import { useCleanUps } from "./app-apart-support.js";
 import { id, version } from "./app-update-fixtures.js";
 import {
   committedOf,
+  rowOf,
   running,
   stateOf,
   versions,
@@ -405,6 +406,40 @@ describe("an update that needs a new permission", () => {
       ).statusCode,
     ).toBe(409);
     expect(answerOf(core, "people.read")).toBeUndefined();
+  });
+
+  it("goes back only with its wait forgotten, both or neither", async () => {
+    const home = await versions();
+    const first = await home.coreWith(version("1.0.0"), asAHome);
+    await running(first, id);
+    const maya = await claimed(first);
+    const second = await home.coreWith(version("2.0.0"), asAHome);
+    await running(second, id);
+    await vi.waitFor(() => expect(home.journal.size).toBe(0));
+    const core = await home.coreWith(
+      version("3.0.0", { permissions: [people] }),
+      asAHome,
+    );
+    await running(core, id);
+    const waitingId = stateOf(core, id).waiting!.id;
+    const back = await core.apps.goBackOption(id);
+    vi.spyOn(core.waitingUpdates, "drop").mockImplementationOnce(() => {
+      throw new Error("disk I/O error");
+    });
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/go-back`,
+      { id: back!.id },
+      maya,
+    );
+
+    expect(answer.statusCode).toBe(409);
+    expect(rowOf(core)).toBeUndefined();
+    expect(stateOf(core, id)).toMatchObject({
+      version: "2.0.0",
+      waiting: { id: waitingId },
+    });
   });
 
   it("lets only one of Go back and Allow sent together change the version", async () => {

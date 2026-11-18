@@ -490,9 +490,14 @@ export function createAppUpdates(options: {
 
     /**
      * Someone asked to go back from its last update. Whether it can: if so, it's on
-     * its way once this returns.
+     * its way once this returns, with what `alongside` writes in the same
+     * transaction.
      */
-    async startGoingBack(entry: InstalledApp, copyId: string) {
+    async startGoingBack(
+      entry: InstalledApp,
+      copyId: string,
+      alongside?: () => void,
+    ) {
       const appId = entry.manifest.id;
       const kept = canGoBack(entry) ? await manager.keptAppCopy(appId) : null;
       if (!kept || kept.id !== copyId) return false;
@@ -524,6 +529,7 @@ export function createAppUpdates(options: {
           .values(row)
           .onConflictDoUpdate({ target: appUpdates.appId, set: row })
           .run();
+        alongside?.();
       });
       log(`apps: ${appId} goes back to ${kept.from.version}, as someone asked`);
       swapTo(entry, row.toFolder);
