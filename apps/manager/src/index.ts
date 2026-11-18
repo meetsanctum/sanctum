@@ -45,7 +45,6 @@ import { createOperations } from "./operations.js";
 import { createReconciler } from "./reconcile.js";
 import { initialCoreImage } from "./release.js";
 import { createServer, type ServerOptions } from "./server.js";
-import { findService } from "./services/registry.js";
 import { createServices } from "./services/services.js";
 import { createServicesStateStore } from "./services/state.js";
 import { listenOnSocket } from "./socket.js";
@@ -169,8 +168,9 @@ if (config.supervise) {
   // What it has promised of memory and disk, to adds and starts alike.
   const capacity = createCapacity({
     dataDir: config.dataDir,
-    services: () => services.wanted(),
-    serviceMemoryMb: (name) => findService(name)?.memoryMb ?? 0,
+    services: services.wanted,
+    servicesWantedBy: services.wantedBy,
+    heldServices: services.held,
   });
   const appImages = createAppImages({
     docker,
@@ -178,7 +178,7 @@ if (config.supervise) {
     hostDevDir: config.hostDevDir,
     helper: createImageHelper({ docker, dataDir: config.dataDir }),
     free: async () => (await readings.disk(config.dataDir))?.free ?? null,
-    reserved: (except) => capacity.reservedData(except),
+    reserved: capacity.reservedData,
     log,
   });
   const maintenance = createMaintenance({

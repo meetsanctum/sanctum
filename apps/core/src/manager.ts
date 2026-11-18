@@ -2,7 +2,7 @@ import { request } from "node:http";
 import { z } from "zod";
 
 import {
-  appCapacity,
+  appCapacities,
   appContainer,
   appReservation,
   appUpdatesHeld,
@@ -141,6 +141,8 @@ export type LanPolicy = {
 
 const appContainerPath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/container`;
+const appReservationPath = (app: string) =>
+  `/api/apps/${encodeURIComponent(app)}/reservations`;
 const askForCapabilitiesEveryMs = 30_000;
 const appUpdatePath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/update`;
@@ -148,6 +150,8 @@ const appUpdatePath = (app: string) =>
 function servicePath(service: string, app: string) {
   return `/api/services/${encodeURIComponent(service)}/apps/${encodeURIComponent(app)}`;
 }
+
+export type AppNeed = { memoryMb: number; dataMb: number; services: string[] };
 
 export function createManagerClient(options: {
   socketPath: string;
@@ -399,29 +403,25 @@ export function createManagerClient(options: {
       await once("POST", `${appContainerPath(app)}/stop`, how, 30_000);
     },
 
-    // What's left for another app, as its add sheet says.
-    async appCapacity() {
+    // What each app needs and what's left for it, as its add sheet says.
+    async appCapacity(apps: (AppNeed & { app: string })[]) {
       return parseBody(
-        appCapacity,
-        await once("GET", "/api/apps/capacity", undefined, 5_000),
+        appCapacities,
+        await once("POST", "/api/apps/capacity", apps, 5_000),
       );
     },
 
     // Holds what an add needs until its container starts; a 409 says
     // there isn't room (ManagerRefusal).
-    async reserveForApp(
-      app: string,
-      need: { memoryMb: number; dataMb: number; services: string[] },
-    ) {
+    async reserveForApp(app: string, need: AppNeed) {
       return parseBody(
         appReservation,
-        await once(
-          "POST",
-          `/api/apps/${encodeURIComponent(app)}/reservations`,
-          need,
-          15_000,
-        ),
+        await once("POST", appReservationPath(app), need, 15_000),
       );
+    },
+
+    async releaseAppReservation(app: string, id: string) {
+      await once("DELETE", appReservationPath(app), { id }, 5_000);
     },
 
     async removeAppContainer(app: string) {

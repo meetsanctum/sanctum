@@ -45,9 +45,11 @@ import type { AppUsage } from "./usage.js";
 //   GET    /api/apps/capacity        what's left for another app, by the same
 //                                    count a start uses: { memoryFreeMb,
 //                                    dataFreeBytes }
+//   POST   /api/apps/capacity        check each proposed add against that count
 //   POST   /api/apps/:app/reservations  hold what an add needs: { memoryMb,
 //                                    dataMb, services }, refused (409) with
 //                                    what's short; held until it starts
+//   DELETE /api/apps/:app/reservations  release the reservation with that id
 //   DELETE /api/apps/:app/container  remove it, keeping its data
 //   GET    /api/apps/:app/usage      what it holds and uses now, for its settings
 //   GET    /api/apps/images          every app's image and its state
@@ -96,6 +98,10 @@ const reservationBody = z.object({
     )
     .max(16),
 });
+const capacityBody = z.array(
+  reservationBody.extend({ app: z.string().regex(appIdPattern) }),
+);
+const cancelReservationBody = z.object({ id: z.uuid() });
 const growBody = z.object({
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb),
 });
@@ -250,10 +256,34 @@ export function registerAppRoutes(
   );
 
   if (capacity && images) {
-    app.get("/api/apps/capacity", async () => ({
-      memoryFreeMb: await capacity.freeMb(await apps.held()),
-      dataFreeBytes: await images.room(),
-    }));
+    const readings = () => Promise.all([apps.held(), images.available()]);
+    app.get("/api/apps/capacity", () =>
+      capacity.inTurn(async () => {
+        const [held, disk] = await readings();
+        return {
+          memoryFreeMb: await capacity.freeMb(held),
+          dataFreeBytes: disk.room(),
+        };
+      }),
+    );
+
+    app.post("/api/apps/capacity", async ({ body }, reply) => {
+      const parsed = capacityBody.safeParse(body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid capacity request" });
+      }
+      return capacity.inTurn(async () => {
+        const [held, disk] = await readings();
+        return Object.fromEntries(
+          await Promise.all(
+            parsed.data.map(async (request) => [
+              request.app,
+              await capacity.check(request.app, request, held, disk),
+            ]),
+          ),
+        );
+      });
+    });
 
     app.post(
       "/api/apps/:app/reservations",
@@ -262,17 +292,31 @@ export function registerAppRoutes(
         if (!parsed.success) {
           return reply.code(400).send({ error: "Invalid reservation" });
         }
-        // An image kept from its removal already holds what it has.
-        const dataMb = Math.max(
-          0,
-          parsed.data.dataMb - (await images.sizeMb(id)),
-        );
-        return capacity.reserve(
-          id,
-          { ...parsed.data, dataMb },
-          await apps.held(),
-          (app) => images.room(app),
-        );
+        return capacity.inTurn(async () => {
+          if (reply.raw.destroyed) return;
+          const [held, disk] = await readings();
+          if (reply.raw.destroyed) return;
+          const reservation = await capacity.reserve(
+            id,
+            parsed.data,
+            held,
+            disk,
+          );
+          if (reply.raw.destroyed) capacity.cancel(id, reservation.id);
+          return reservation;
+        });
+      }),
+    );
+
+    app.delete(
+      "/api/apps/:app/reservations",
+      withApp(async (id, body, reply) => {
+        const parsed = cancelReservationBody.safeParse(body);
+        if (!parsed.success) {
+          return reply.code(400).send({ error: "Invalid reservation id" });
+        }
+        await capacity.inTurn(async () => capacity.cancel(id, parsed.data.id));
+        return reply.code(204).send();
       }),
     );
   }

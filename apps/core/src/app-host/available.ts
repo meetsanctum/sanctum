@@ -1,7 +1,9 @@
 import type { AvailableApp, StaticManifest } from "@meetsanctum/app-sdk";
 
+import type { AppCapacity } from "../manager-answers.js";
+import type { AppNeed } from "../manager.js";
 import type { AddedApps } from "./added.js";
-import { shortfallsOf, type HostRoom } from "./fit.js";
+import { needOf, shortfallsOf, type HostRoom } from "./fit.js";
 import type { ApartPackage } from "./loader.js";
 import { keptForMs, type RemovedApps } from "./removed.js";
 
@@ -41,6 +43,10 @@ export function createAvailableApps(options: {
   ) => Promise<"sanctum" | "pages" | null>;
   // What the host has; null when the manager can't say.
   host: () => Promise<HostRoom | null>;
+  capacity?: (
+    apps: (AppNeed & { app: string })[],
+  ) => Promise<Record<string, AppCapacity> | null>;
+  need?: (app: AvailableApp) => AppNeed;
   log: (message: string) => void;
 }) {
   const { log } = options;
@@ -64,10 +70,7 @@ export function createAvailableApps(options: {
     only?: string,
     stagedOptions?: { requireAnswer: boolean },
   ) {
-    const [staged, host] = await Promise.all([
-      options.staged(stagedOptions),
-      options.host().catch(() => null),
-    ]);
+    const staged = await options.staged(stagedOptions);
     // A development stack's image ships no apps: it brings what the
     // manager staged from the worktree.
     const shipped = options.shipped();
@@ -75,7 +78,11 @@ export function createAvailableApps(options: {
     const ids = (shipped.length > 0 ? shipped : Object.keys(staged)).filter(
       (id) => !added.has(id) && (only === undefined || id === only),
     );
-    const apps: { app: AvailableApp; pkg: ApartPackage }[] = [];
+    const apps: {
+      app: AvailableApp;
+      pkg: ApartPackage;
+      pagesNeed: Awaited<ReturnType<typeof options.pagesNeedIn>>;
+    }[] = [];
     let isComplete = true;
     for (const appId of ids) {
       const folder = staged[appId]?.folder;
@@ -89,6 +96,7 @@ export function createAvailableApps(options: {
         const pagesNeed = await options.pagesNeedIn(appId, folder);
         apps.push({
           pkg,
+          pagesNeed,
           app: {
             id: appId,
             name: manifest.name,
@@ -99,7 +107,7 @@ export function createAvailableApps(options: {
             memory: manifest.runtime.memory,
             data: manifest.runtime.data,
             adds: addsOf(manifest),
-            shortfalls: shortfallsOf(manifest, { pagesNeed, host }),
+            shortfalls: [],
             ...removedOf(appId),
           },
         });
@@ -108,6 +116,22 @@ export function createAvailableApps(options: {
         log(
           `apps: ${appId} can't be offered (${error instanceof Error ? error.message : String(error)})`,
         );
+      }
+    }
+    if (apps.length > 0) {
+      const need = options.need ?? needOf;
+      const capacity = await options
+        .capacity?.(apps.map(({ app }) => ({ app: app.id, ...need(app) })))
+        .catch(() => null);
+      const host = apps.some(({ app }) => !capacity?.[app.id])
+        ? await options.host().catch(() => null)
+        : null;
+      for (const { app, pkg, pagesNeed } of apps) {
+        app.shortfalls = shortfallsOf(pkg.apart.manifest, {
+          pagesNeed,
+          host,
+          capacity: capacity?.[app.id],
+        });
       }
     }
     return {
@@ -141,7 +165,8 @@ export function createAvailableApps(options: {
       };
     },
     async find(appId: string) {
-      return (await read(appId)).apps[0];
+      const found = (await read(appId)).apps[0];
+      return found && { app: found.app, pkg: found.pkg };
     },
     /**
      * Finds an app that asks for this permission. Null means none. Undefined

@@ -1,4 +1,8 @@
-import { sunTimesSchema, sunType } from "@meetsanctum/app-sdk";
+import {
+  sunTimesSchema,
+  sunType,
+  type AvailableApp,
+} from "@meetsanctum/app-sdk";
 
 import { createActivity } from "./activity/activity.js";
 import {
@@ -13,6 +17,7 @@ import { createRemovedApps } from "./app-host/removed.js";
 import { createAppRemoving } from "./app-host/removing.js";
 import { createAddedApps } from "./app-host/added.js";
 import { createAvailableApps } from "./app-host/available.js";
+import { needOf } from "./app-host/fit.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
 import { createAppHost } from "./app-host/host.js";
@@ -111,6 +116,7 @@ export async function createModules(
         // (adding.ts); tests may leave them out.
         appCapacity?: ManagerClient["appCapacity"];
         reserveForApp?: ManagerClient["reserveForApp"];
+        releaseAppReservation?: ManagerClient["releaseAppReservation"];
       };
     // The apps this core's image ships, once the core has read them.
     shippedApps?: () => readonly string[];
@@ -482,6 +488,8 @@ export async function createModules(
   });
   // What the image ships that the household hasn't added, asked of the
   // manager briefly, since a client waits for the answer.
+  const appNeed = (app: AvailableApp) =>
+    needOf(app, grantsStore.answers(app.id));
   const availableApps = createAvailableApps({
     shipped: options.shippedApps ?? (() => []),
     added: addedApps,
@@ -490,17 +498,12 @@ export async function createModules(
       (await options.manager.stagedApps?.(5_000, check)) ?? {},
     loadPackage: loadStagedPackage,
     pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
-    host: async () => {
-      const { appCapacity } = options.manager;
-      const [status, capacity] = await Promise.all([
-        options.manager.hostStatus(),
-        // A manager that keeps one count says what's left by it.
-        options.manager.capabilities().reserves && appCapacity
-          ? appCapacity().catch(() => null)
-          : null,
-      ]);
-      return { ...status, capacity };
-    },
+    host: () => options.manager.hostStatus(),
+    need: appNeed,
+    capacity: async (apps) =>
+      options.manager.capabilities().reserves
+        ? ((await options.manager.appCapacity?.(apps)) ?? null)
+        : null,
     log,
   });
   // A Zigbee stick plugged in brings up its app's add sheet.
@@ -540,10 +543,15 @@ export async function createModules(
     offers: hardwareOffers,
     activity,
     hasInstalled: () => apps.hasInstalled(),
-    reserve: (appId, need) =>
-      options.manager.capabilities().reserves && options.manager.reserveForApp
-        ? options.manager.reserveForApp(appId, need)
-        : Promise.resolve(),
+    need: appNeed,
+    reserve: async (appId, need) => {
+      if (!options.manager.capabilities().reserves) return;
+      const reservation = await options.manager.reserveForApp?.(appId, need);
+      const release = options.manager.releaseAppReservation;
+      if (reservation && release) {
+        return () => release(appId, reservation.id);
+      }
+    },
     install: async (pkg) => {
       // The app has been recorded and its offer ends even if it can't start.
       pairing.refresh();

@@ -104,6 +104,7 @@ function checkPassword(passwords: string, username: string, password: string) {
 describe("services", () => {
   it("runs nothing until an app needs a service", async () => {
     const { docker, services } = await setup();
+    expect([...services.held()]).toEqual([]);
     await services.reconcile();
 
     expect(docker.containers.size).toBe(0);
@@ -536,16 +537,27 @@ describe("services", () => {
   });
 
   it("removes services no app needs, and keeps their data", async () => {
-    const { dataDir, docker, dev, services, onChange } = await setup();
+    const { dataDir, docker, dev, services, onChange, start } = await setup();
     await dev.plug(zbt2, "ttyACM0");
     await services.need("zigbee2mqtt", app);
     await services.reconcile();
     docker.events = [];
 
-    onChange.mockImplementation(() => services.reconcile());
+    onChange.mockImplementation(async () => {
+      expect([...services.wanted()]).toEqual([]);
+      expect(new Set(services.held())).toEqual(
+        new Set(["mosquitto", "zigbee2mqtt"]),
+      );
+      const restarted = await start();
+      expect(new Set(restarted.held())).toEqual(
+        new Set(["mosquitto", "zigbee2mqtt"]),
+      );
+      return services.reconcile();
+    });
     await services.release("zigbee2mqtt", app);
     await services.reconcile();
 
+    expect([...services.held()]).toEqual([]);
     expect(docker.events).toEqual([
       "stop sanctum-zigbee2mqtt",
       "remove sanctum-zigbee2mqtt",

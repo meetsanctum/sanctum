@@ -412,6 +412,32 @@ describe("adding an app", () => {
 });
 
 describe("adding an app with a hardware offer", () => {
+  it("releases what it reserved if the offer ends while reserving", async () => {
+    const reserving = deferred();
+    const reserved = deferred();
+    let isReleased = false;
+    const { added, adding, offers } = await addingWith({
+      available: [zigbee],
+      reserve: async () => {
+        reserving.resolve();
+        await reserved.promise;
+        return async () => {
+          isReleased = true;
+        };
+      },
+    });
+    await offers.look();
+    const { id } = offers.current()!;
+    const result = adding.add(someone, zigbee.id, zigbee.version, id);
+    await reserving.promise;
+    await offers.dismiss(someone, id);
+    reserved.resolve();
+
+    await expect(result).rejects.toMatchObject({ code: "conflict" });
+    expect(isReleased).toBe(true);
+    expect(added.ids().has(zigbee.id)).toBe(false);
+  });
+
   it("refuses the add if another client dismisses the offer during the checks", async () => {
     const refetch = deferred();
     const checked = deferred();

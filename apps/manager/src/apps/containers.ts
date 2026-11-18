@@ -58,7 +58,6 @@ const temporarySpace = "size=16m";
 const processes = 64;
 const halfACore = 500_000_000;
 const mebibyte = 1024 * 1024;
-// What the host keeps for itself, the core and its services.
 export const appIdPattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 export const dataTarget = "/data";
 export const packageFolderPattern = /^(?!.*\.\.)[0-9A-Za-z][0-9A-Za-z.+-]*$/;
@@ -290,7 +289,7 @@ export function createAppContainers(options: {
   // Tells one the kernel killed for its memory where Docker's flag misses it.
   exits?: Pick<AppExits, "outOfMemory" | "stopping">;
   // What the manager has promised of memory and disk (capacity.ts).
-  capacity?: Pick<Capacity, "assertFits" | "started" | "turnedOff" | "gone">;
+  capacity?: Capacity;
 }) {
   const { docker, dataDir, log, images, prepareImage, lan, exits } = options;
   const capacity =
@@ -298,21 +297,12 @@ export function createAppContainers(options: {
     createCapacity({
       dataDir,
       totalMemory: options.totalMemory,
-      services: () => [],
-      serviceMemoryMb: () => 0,
     });
+  const { inTurn } = capacity;
   const ownFolder =
     options.ownFolder ??
     ((path: string) => chown(path, appUser.uid, appUser.gid));
   let knownLimits: boolean | undefined;
-  let queue: Promise<unknown> = Promise.resolve();
-
-  // One at a time, so two starts can't both fit in the space for one.
-  function inTurn<T>(work: () => Promise<T>): Promise<T> {
-    const result = queue.then(work, work);
-    queue = result.catch(() => undefined);
-    return result;
-  }
 
   async function memoryLimits() {
     if (knownLimits === undefined) {
@@ -383,7 +373,8 @@ export function createAppContainers(options: {
   async function held(): Promise<HeldApp[]> {
     return (await all()).map((each) => ({
       app: each.Config.Labels![appLabel]!,
-      memoryMb: Number(each.Config.Labels?.[memoryLabel] ?? 0),
+      memoryMb: Number(each.Config.Labels![memoryLabel] ?? 0),
+      isRunning: each.State.Running,
     }));
   }
 
@@ -459,7 +450,8 @@ export function createAppContainers(options: {
         : undefined;
     if (version === null) return undefined;
     log(`Keeping ${desired.name} on ${spec.folder}`);
-    await capacity.started(spec.app);
+    await capacity.turningOn(spec.app);
+    capacity.started(spec.app);
     return {
       ...(await statusOf(spec.app, existing)),
       kept: true,
@@ -578,8 +570,9 @@ export function createAppContainers(options: {
         else await lan?.remove(spec.app);
         await container.rename({ name: desired.name });
         log(`Starting ${desired.name} from ${spec.folder}`);
+        await capacity.turningOn(spec.app);
         await container.start();
-        await capacity.started(spec.app);
+        capacity.started(spec.app);
         return {
           ...(await statusOf(spec.app, await container.inspect())),
           ...(holder ? { lan: holder.version } : {}),

@@ -257,11 +257,14 @@ export const noCapabilities: ManagerCapabilities = {
 };
 
 // What's left for another app, by the count a start uses.
-export const appCapacity = z.object({
-  memoryFreeMb: z.number(),
-  dataFreeBytes: z.number().nullable(),
+const appCapacity = z.object({
+  memoryNeedsMb: z.number().nonnegative(),
+  memoryFreeMb: z.number().nonnegative(),
+  dataNeedsMb: z.number().nonnegative(),
+  dataFreeBytes: z.number().nonnegative().nullable(),
 });
 export type AppCapacity = z.infer<typeof appCapacity>;
+export const appCapacities = z.record(z.string(), appCapacity);
 
 export const appReservation = z.object({
   id: z.string(),

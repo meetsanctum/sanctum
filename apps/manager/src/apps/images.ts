@@ -76,7 +76,7 @@ export function createAppImages(options: {
   // What's free for files on the disk they're on, if known.
   free: () => Promise<number | null>;
   // What's reserved for apps' data other than this one's (capacity.ts).
-  reserved?: (except?: string) => number;
+  reserved?: (sizeMb: (app: string) => number, except?: string) => number;
   log: Log;
 }) {
   const { docker, dataDir, hostDevDir, helper, free, log } = options;
@@ -123,33 +123,37 @@ export function createAppImages(options: {
   }
 
   // What the images may still grow to, which the card has to keep for them.
-  async function promised() {
+  async function available() {
+    const availableBytes = await free();
     const { images } = await read();
-    let bytes = 0;
+    const sizes = new Map<string, number>();
+    let promised = 0;
     for (const [app, record] of Object.entries(images)) {
       if (record.damaged) continue;
       const file = await stat(fileOf(app)).catch(() => null);
       // Growth may have reached the disk just before saving its record failed.
       const capacity = Math.max(record.sizeMb * mebibyte, file?.size ?? 0);
-      bytes += Math.max(0, capacity - (file?.blocks ?? 0) * 512);
+      sizes.set(app, Math.floor(capacity / mebibyte));
+      promised += Math.max(0, capacity - (file?.blocks ?? 0) * 512);
     }
-    return bytes;
-  }
-
-  // What's left of the disk for this app's data, or another's, if known.
-  async function room(app?: string) {
-    const available = await free();
-    if (available === null) return null;
-    return (
-      available -
-      (await promised()) -
-      keptForUpdates -
-      (options.reserved?.(app) ?? 0)
-    );
+    const sizeMb = (app: string) => sizes.get(app) ?? 0;
+    return {
+      sizeMb,
+      room: (app?: string) =>
+        availableBytes === null
+          ? null
+          : Math.max(
+              0,
+              availableBytes -
+                promised -
+                keptForUpdates -
+                (options.reserved?.(sizeMb, app) ?? 0),
+            ),
+    };
   }
 
   async function assertRoom(app: string, more: number) {
-    const left = await room(app);
+    const left = (await available()).room(app);
     if (left === null) return;
     if (more > left) {
       throw new AppRefusal(
@@ -424,12 +428,7 @@ done
       log(`Deleted ${app}'s image`);
     },
 
-    room,
-
-    /** The size its image has, in MB, or 0 for an app without one. */
-    async sizeMb(app: string) {
-      return (await read()).images[app]?.sizeMb ?? 0;
-    },
+    available,
 
     async has(app: string) {
       const record = (await read()).images[app];

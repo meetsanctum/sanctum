@@ -1,11 +1,16 @@
 import {
   appApiVersion,
+  grantedAtFirst,
+  type AvailableApp,
   type AppShortfall,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import semver from "semver";
 
+import type { AppCapacity } from "../manager-answers.js";
+import type { AppNeed } from "../manager.js";
 import { lowMemoryShare } from "../system/status.js";
+import { serviceOf } from "./services.js";
 
 // Whether an app fits this home before it's added: the app API its manifest
 // targets, the kit its pages were built for, the memory its container gets
@@ -21,6 +26,23 @@ const mebibyte = 1024 * 1024;
 // asks for, and Settings → Status warns under.
 const keptForUpdates = 1536 * mebibyte;
 
+/** What adding this app asks the manager to hold, including saved grants. */
+export function needOf(
+  app: Pick<AvailableApp, "memory" | "data" | "requests">,
+  grants?: ReadonlyMap<string, boolean>,
+): AppNeed {
+  return {
+    memoryMb: app.memory,
+    dataMb: app.data,
+    services: app.requests.flatMap((request) => {
+      const service = serviceOf(request.id);
+      return service && (grants?.get(request.id) ?? grantedAtFirst(request))
+        ? [service]
+        : [];
+    }),
+  };
+}
+
 /** Whether this core serves the app API the manifest targets. */
 export function servesAppApi(manifest: Pick<StaticManifest, "core">) {
   return (
@@ -31,8 +53,6 @@ export function servesAppApi(manifest: Pick<StaticManifest, "core">) {
 
 /** What the host has, as the manager says. */
 export type HostRoom = {
-  // What's left for another app by the manager's count, when it keeps one.
-  capacity?: { memoryFreeMb: number; dataFreeBytes: number | null } | null;
   memory: { total: number; available: number } | null;
   storage: {
     free: number;
@@ -47,6 +67,7 @@ export function shortfallsOf(
     // What its pages need of the kit, if they don't fit it.
     pagesNeed: "sanctum" | "pages" | null;
     host: HostRoom | null;
+    capacity?: AppCapacity;
   },
 ): AppShortfall[] {
   const shortfalls: AppShortfall[] = [];
@@ -56,20 +77,20 @@ export function shortfallsOf(
   if (options.pagesNeed) {
     shortfalls.push({ kind: "pages", needs: options.pagesNeed });
   }
-  const capacity = options.host?.capacity;
+  const { capacity } = options;
   if (capacity) {
-    const memoryNeeds = manifest.runtime.memory * mebibyte;
+    const memoryNeeds = capacity.memoryNeedsMb * mebibyte;
     const memoryFree = capacity.memoryFreeMb * mebibyte;
     if (memoryNeeds > memoryFree) {
       shortfalls.push({ kind: "memory", needs: memoryNeeds, free: memoryFree });
     }
-    const dataNeeds = manifest.runtime.data * mebibyte;
+    const dataNeeds = capacity.dataNeedsMb * mebibyte;
     const dataFree = capacity.dataFreeBytes;
     if (dataFree !== null && dataNeeds > dataFree) {
       shortfalls.push({
         kind: "space",
         needs: dataNeeds,
-        free: Math.max(0, dataFree),
+        free: dataFree,
       });
     }
     return shortfalls;

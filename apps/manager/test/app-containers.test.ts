@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
+import { createCapacity } from "../src/apps/capacity.js";
 import {
   appContainerName,
   appContainerOptions,
@@ -35,6 +36,7 @@ async function setup(total = 8 * gibibyte) {
   const dataDir = await mkdtemp(join(tmpdir(), "sanctum-apps-"));
   await staged(dataDir, app);
   const owned: string[] = [];
+  const capacity = createCapacity({ dataDir, totalMemory: () => total });
   const ensure = vi.fn(
     async (
       _app: string,
@@ -46,11 +48,11 @@ async function setup(total = 8 * gibibyte) {
     docker,
     dataDir,
     log: vi.fn(),
-    totalMemory: () => total,
+    capacity,
     ownFolder: async (path) => void owned.push(path),
     images: { ensure },
   });
-  return { apps, dataDir, docker, ensure, owned };
+  return { apps, capacity, dataDir, docker, ensure, owned };
 }
 
 const start = { app, folder, memoryMb: 128 };
@@ -506,6 +508,37 @@ describe("what Docker really gave it", () => {
 });
 
 describe("whether it fits beside the rest", () => {
+  it("checks the reservation after the container already starting has its room", async () => {
+    const { apps, capacity, ensure } = await setup(2 * gibibyte);
+    let markEnsuring!: () => void;
+    let finishImage!: (volume: string) => void;
+    const ensuring = new Promise<void>((resolve) => (markEnsuring = resolve));
+    const imageReady = new Promise<string>(
+      (resolve) => (finishImage = resolve),
+    );
+    ensure.mockImplementationOnce(() => {
+      markEnsuring();
+      return imageReady;
+    });
+    const starting = apps.start({ ...start, memoryMb: 800 });
+    await ensuring;
+
+    const reserving = capacity.inTurn(async () =>
+      capacity.reserve(
+        "sanctum.example",
+        { memoryMb: 512, dataMb: 256, services: [] },
+        await apps.held(),
+        { room: () => null, sizeMb: () => 0 },
+      ),
+    );
+    finishImage(dataVolume);
+
+    await starting;
+    await expect(reserving).rejects.toThrow(
+      "needs 512 MB, and only 224 MB are left",
+    );
+  });
+
   it("keeps a quarter of the machine for the host, or at least 1 GB", async () => {
     const { apps } = await setup(2 * gibibyte);
 

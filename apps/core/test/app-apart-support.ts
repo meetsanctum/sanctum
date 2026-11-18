@@ -85,7 +85,7 @@ export async function supervised(
     version?: string;
     appTimeoutMs?: number;
     dataDir?: string;
-    beforeStop?: () => Promise<void>;
+    beforeStop?: (how?: { off?: boolean }) => Promise<void>;
     fetch?: typeof fetch;
     supervision?: { quietMs?: number };
     onTrial?: boolean;
@@ -130,8 +130,8 @@ export async function supervised(
         cleanUps.push(() => session.shutdown(50));
         return { kept: false };
       },
-      async stopAppContainer() {
-        await options.beforeStop?.();
+      async stopAppContainer(_app, how) {
+        await options.beforeStop?.(how);
         await container?.shutdown(50);
         container = undefined;
       },

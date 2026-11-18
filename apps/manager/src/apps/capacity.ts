@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { totalmem } from "node:os";
 import { join } from "node:path";
 
+import { findService, withServiceDependencies } from "../services/registry.js";
 import { readJson, writeJson } from "../state.js";
+import type { AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
 
 // What the manager has promised of the host's memory and disk, which every
@@ -12,23 +14,22 @@ import { AppRefusal } from "./refusal.js";
 // limit, unless the core turned the app off; each service it runs, at a fixed
 // size; and what's reserved. Disk: what each data image may still grow to, the
 // room kept for updates (images.ts), and what's reserved. A reservation holds
-// an add's memory, its services and its data image until its container
-// starts, or for 10 minutes, so a core that stopped part way can't hold it
-// for ever. Reservations live in memory only: a manager that restarts has
-// nothing half done to hold room for.
+// an add's memory and data image until its container starts, and its services
+// until the manager is asked to run them. Any claim expires after 10 minutes.
+// Reservations live in memory only and are lost on a manager restart.
 
 const mebibyte = 1024 * 1024;
 const reservedForMs = 10 * 60_000;
 
 /** What the host keeps for itself, the core and Docker, beside the apps. */
-export const keptForTheHost = (total: number) =>
+const keptForTheHost = (total: number) =>
   Math.max(1024 * mebibyte, Math.floor(total / 4));
 
 /** An app container the manager holds, by its app and memory limit. */
-export type HeldApp = { app: string; memoryMb: number };
+export type HeldApp = { app: string; memoryMb: number; isRunning: boolean };
 
 /** What an add needs, as the core asks for it. */
-export type ReservationRequest = {
+type ReservationRequest = {
   memoryMb: number;
   dataMb: number;
   // The services it needs, by name.
@@ -39,14 +40,17 @@ type Reservation = ReservationRequest & {
   id: string;
   app: string;
   until: number;
+  isWaitingForServices?: true;
 };
 
 export function createCapacity(options: {
   dataDir: string;
   totalMemory?: () => number;
-  // The services it runs now, by name, and what each counts for.
-  services: () => readonly string[];
-  serviceMemoryMb: (name: string) => number;
+  // The services it keeps running, with their dependencies.
+  services?: () => Iterable<string>;
+  servicesWantedBy?: (app: string) => ReadonlySet<string>;
+  // Containers that can still be running while their services are released.
+  heldServices?: () => Iterable<string>;
   now?: () => number;
 }) {
   const totalMemory = options.totalMemory ?? totalmem;
@@ -55,152 +59,206 @@ export function createCapacity(options: {
   let reservations: Reservation[] = [];
   let off = new Set<string>();
   let loaded: Promise<void> | undefined;
-  let saving: Promise<unknown> = Promise.resolve();
+  let queue: Promise<unknown> = Promise.resolve();
+
+  // Reservations, container changes and image growth share this turn.
+  function inTurn<T>(work: () => Promise<T>): Promise<T> {
+    const result = queue.then(work);
+    queue = result.catch(() => undefined);
+    return result;
+  }
 
   const load = () =>
-    (loaded ??= readJson<{ apps: string[] }>(offPath).then((state) => {
-      off = new Set(state?.apps ?? []);
-    }));
+    (loaded ??= readJson<{ apps: string[] }>(offPath)
+      .then((state) => {
+        off = new Set(state?.apps ?? []);
+      })
+      .catch((error: unknown) => {
+        loaded = undefined;
+        throw error;
+      }));
 
   async function setOff(app: string, isOff: boolean) {
     await load();
     if (off.has(app) === isOff) return;
-    if (isOff) off.add(app);
-    else off.delete(app);
-    const apps = [...off].sort();
-    const next = saving.then(() => writeJson(offPath, { apps }));
-    saving = next.catch(() => undefined);
-    await next;
+    const next = new Set(off);
+    if (isOff) next.add(app);
+    else next.delete(app);
+    await writeJson(offPath, { apps: [...next].sort() });
+    off = next;
   }
 
   // Those still open, of other apps than this one.
   function othersOpen(except?: string) {
     const at = now();
-    reservations = reservations.filter((each) => each.until > at);
+    reservations = reservations.filter(
+      (each) =>
+        each.until > at &&
+        (!each.isWaitingForServices || stillWaitingForServices(each)),
+    );
     return reservations.filter((each) => each.app !== except);
   }
 
-  /** The memory apps may take beside the host's, in MB. */
-  const roomMb = () => {
-    const total = totalMemory();
-    return (total - keptForTheHost(total)) / mebibyte;
-  };
-
-  // The services that count: those running, and those reserved for an add.
-  function servicesCounted(except?: string) {
-    return new Set([
-      ...options.services(),
-      ...othersOpen(except).flatMap((each) => each.services),
-    ]);
+  function stillWaitingForServices(reservation: Reservation) {
+    const wanted = options.servicesWantedBy?.(reservation.app);
+    return reservation.services.some((name) => !wanted?.has(name));
   }
 
-  /** What's taken of the apps' room by all but this app, in MB. */
-  async function takenMb(held: readonly HeldApp[], except?: string) {
+  async function memory(
+    held: readonly HeldApp[],
+    app?: string,
+    services: readonly string[] = [],
+  ) {
     await load();
-    const apps = held
-      .filter((each) => each.app !== except && !off.has(each.app))
-      .reduce((sum, each) => sum + (each.memoryMb || 0), 0);
-    const services = [...servicesCounted(except)].reduce(
-      (sum, name) => sum + options.serviceMemoryMb(name),
-      0,
-    );
-    const reserved = othersOpen(except).reduce(
-      (sum, each) => sum + each.memoryMb,
-      0,
-    );
-    return apps + services + reserved;
+    const open = othersOpen(app);
+    const byApp = new Map(open.map((each) => [each.app, each.memoryMb]));
+    for (const each of held) {
+      if (each.app === app || (!each.isRunning && off.has(each.app))) continue;
+      byApp.set(
+        each.app,
+        Math.max(byApp.get(each.app) ?? 0, each.memoryMb || 0),
+      );
+    }
+    const counted = new Set([
+      ...(options.services?.() ?? []),
+      ...(options.heldServices?.() ?? []),
+      ...open.flatMap((each) => each.services),
+    ]);
+    const total = totalMemory();
+    let free = (total - keptForTheHost(total)) / mebibyte;
+    for (const mb of byApp.values()) free -= mb;
+    for (const name of counted) free -= findService(name)?.memoryMb ?? 0;
+    let servicesMb = 0;
+    for (const name of withServiceDependencies(services)) {
+      if (!counted.has(name)) servicesMb += findService(name)?.memoryMb ?? 0;
+    }
+    return { memoryFreeMb: Math.max(0, Math.floor(free)), servicesMb };
   }
 
-  /** The memory left for this app, in MB. */
-  async function freeMb(held: readonly HeldApp[], except?: string) {
-    return Math.max(0, Math.floor(roomMb() - (await takenMb(held, except))));
+  /** The memory left overall, in MB. */
+  async function freeMb(held: readonly HeldApp[]) {
+    return (await memory(held)).memoryFreeMb;
   }
 
-  // What its services add that nothing counts yet, in MB.
-  function servicesNeedMb(app: string, services: readonly string[]) {
-    const counted = servicesCounted(app);
-    return services
-      .filter((name) => !counted.has(name))
-      .reduce((sum, name) => sum + options.serviceMemoryMb(name), 0);
+  function dataNeededMb(requestedMb: number, sizeMb: number) {
+    return Math.max(0, requestedMb - sizeMb);
+  }
+
+  async function check(
+    app: string,
+    request: ReservationRequest,
+    held: readonly HeldApp[],
+    disk: Awaited<ReturnType<AppImages["available"]>>,
+  ) {
+    const { memoryFreeMb, servicesMb } = await memory(
+      held,
+      app,
+      request.services,
+    );
+    return {
+      memoryNeedsMb: request.memoryMb + servicesMb,
+      memoryFreeMb,
+      dataNeedsMb: dataNeededMb(request.dataMb, disk.sizeMb(app)),
+      dataFreeBytes: disk.room(app),
+    };
+  }
+
+  function assertMemory(app: string, needs: number, free: number) {
+    if (needs > free) {
+      throw new AppRefusal(
+        `${app} needs ${needs} MB, and only ${free} MB are left beside the others`,
+        409,
+      );
+    }
+  }
+
+  function cancel(app: string, id?: string) {
+    reservations = reservations.filter(
+      (each) => each.app !== app || (id !== undefined && each.id !== id),
+    );
+  }
+
+  // The app no longer needs its own claim. A service request can arrive later.
+  function releaseAppClaim(app: string) {
+    const reservation = othersOpen().find((each) => each.app === app);
+    if (!reservation) return;
+    reservation.memoryMb = 0;
+    reservation.dataMb = 0;
+    reservation.isWaitingForServices = true;
+    othersOpen();
   }
 
   return {
+    inTurn,
     freeMb,
+    check,
+    cancel,
 
     /** The data reserved by apps other than this one, in bytes. */
-    reservedData(except?: string) {
+    reservedData(sizeMb: (app: string) => number, except?: string) {
       return othersOpen(except).reduce(
-        (sum, each) => sum + each.dataMb * mebibyte,
+        (sum, each) =>
+          sum + dataNeededMb(each.dataMb, sizeMb(each.app)) * mebibyte,
         0,
       );
     },
 
     /** Refuses a start the room left can't hold beside the others. */
     async assertFits(app: string, memoryMb: number, held: readonly HeldApp[]) {
-      const free = await freeMb(held, app);
-      if (memoryMb > free) {
-        throw new AppRefusal(
-          `${app} needs ${memoryMb} MB, and only ${free} MB are left beside the others`,
-          409,
-        );
-      }
+      const services = othersOpen().find((each) => each.app === app)?.services;
+      const { memoryFreeMb, servicesMb } = await memory(held, app, services);
+      assertMemory(app, memoryMb + servicesMb, memoryFreeMb);
     },
 
     /**
-     * Holds what an add needs, or refuses it with what's short. Data is
-     * checked by `dataFree`, what's left of the disk for this app, with
-     * what its image already has (one kept from its removal) left out.
+     * Holds what an add needs, or refuses it with what's short. The caller
+     * reads the containers and disk and reserves in the same turn.
      */
     async reserve(
       app: string,
       request: ReservationRequest,
       held: readonly HeldApp[],
-      dataFree: (app: string) => Promise<number | null>,
+      disk: Awaited<ReturnType<AppImages["available"]>>,
     ) {
-      const memoryMb = request.memoryMb + servicesNeedMb(app, request.services);
-      const free = await freeMb(held, app);
-      if (memoryMb > free) {
+      const need = await check(app, request, held, disk);
+      assertMemory(app, need.memoryNeedsMb, need.memoryFreeMb);
+      const data = need.dataFreeBytes;
+      if (data !== null && need.dataNeedsMb * mebibyte > data) {
         throw new AppRefusal(
-          `${app} needs ${memoryMb} MB, and only ${free} MB are left beside the others`,
-          409,
-        );
-      }
-      const data = await dataFree(app);
-      if (data !== null && request.dataMb * mebibyte > data) {
-        throw new AppRefusal(
-          `${app} needs ${request.dataMb} MB for its data, and only ${Math.max(0, Math.floor(data / mebibyte))} MB can be spared`,
+          `${app} needs ${need.dataNeedsMb} MB for its data, and only ${Math.floor(data / mebibyte)} MB can be spared`,
           409,
         );
       }
       // One reservation per app: asking again replaces it.
-      reservations = [
-        ...othersOpen(app),
-        {
-          ...request,
-          id: randomUUID(),
-          app,
-          until: now() + reservedForMs,
-        },
-      ];
-      const [reservation] = reservations.slice(-1);
+      const reservation = {
+        ...request,
+        services: [...withServiceDependencies(request.services)],
+        id: randomUUID(),
+        app,
+        until: now() + reservedForMs,
+      };
+      reservations = [...othersOpen(app), reservation];
       return {
-        id: reservation!.id,
-        until: new Date(reservation!.until).toISOString(),
+        id: reservation.id,
+        until: new Date(reservation.until).toISOString(),
       };
     },
 
-    /** Its container started: what it reserved is its container's now. */
-    async started(app: string) {
-      reservations = reservations.filter((each) => each.app !== app);
-      await setOff(app, false);
-    },
+    /** Its container took over the app's claim. */
+    started: releaseAppClaim,
+
+    /** Clears the off marker before Docker can start the container. */
+    turningOn: (app: string) => setOff(app, false),
 
     /** The core turned it off: it gives its room back until it starts. */
-    turnedOff: (app: string) => setOff(app, true),
+    async turnedOff(app: string) {
+      await setOff(app, true);
+      releaseAppClaim(app);
+    },
 
     /** Its container went, as on removal. */
     async gone(app: string) {
-      reservations = reservations.filter((each) => each.app !== app);
+      cancel(app);
       await setOff(app, false);
     },
   };
