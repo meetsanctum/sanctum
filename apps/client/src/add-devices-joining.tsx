@@ -22,10 +22,6 @@ import { knotPath } from "./knot";
 // 42 px, and the devices' cards rise in under them. Once the time is up or
 // someone stops, the knot holds still over Start again.
 
-/** The devices that joined, less those removed here since. */
-export const shownJoined = (joined: readonly JoinedDevice[]) =>
-  joined.filter((each) => !(each.stage === "ready" && each.deviceId === null));
-
 /** Minutes and seconds, as a countdown shows them: 3:52. */
 export function countdown(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -50,6 +46,7 @@ export function JoiningPage(props: {
   name: string | null;
   state: JoiningState;
   joined: readonly JoinedDevice[];
+  isDonePrimary: boolean;
   devices: readonly DeviceInfo[];
   // How long it lets devices join each time.
   seconds: number;
@@ -57,9 +54,7 @@ export function JoiningPage(props: {
   onStartAgain: () => void;
   work: CardWork;
 }) {
-  const { state } = props;
-  // A device removed here is gone from the list it joined.
-  const joined = shownJoined(props.joined);
+  const { state, joined } = props;
   const hasJoined = joined.length > 0;
   const isLooking = state.kind !== "closed";
   // Calm and centred until a device joins; then at the top over the cards.
@@ -170,10 +165,8 @@ export function JoiningPage(props: {
               Stop looking
             </Button>
           ) : (
-            // With devices joined, what is left is to close, so Done is the
-            // primary action and starting again is outlined.
             <Button
-              variant={hasJoined ? "outline" : "default"}
+              variant={props.isDonePrimary ? "outline" : "default"}
               onClick={props.onStartAgain}
             >
               {state.why === "failed" ? "Try again" : "Start again"}

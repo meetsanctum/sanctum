@@ -43,11 +43,8 @@ export function Overlay(props: {
   title: string;
   /** The line under the title, in Silver. */
   subtitle?: ReactNode;
-  /**
-   * Done in Electric blue, as the page's one primary action, where closing
-   * is what is left to do.
-   */
-  donePrimary?: boolean;
+  /** Uses the primary button style when closing is the main action. */
+  isDonePrimary?: boolean;
   /** What the header starts with, opposite Done. */
   leading?: ReactNode;
   children: ReactNode;
@@ -108,7 +105,7 @@ export function Overlay(props: {
               </div>
               <div className="flex justify-end">
                 <DialogPrimitive.Close asChild>
-                  <Button variant={props.donePrimary ? "default" : "outline"}>
+                  <Button variant={props.isDonePrimary ? "default" : "outline"}>
                     Done
                   </Button>
                 </DialogPrimitive.Close>
