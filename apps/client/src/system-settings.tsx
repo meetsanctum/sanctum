@@ -238,7 +238,7 @@ function Updates(props: {
       <>
         <Row title="Version" detail={coreVersion ?? "Not known right now"} />
         {isWaiting && (
-          <p className="m-0 text-[13px] text-white/65">
+          <p className="m-0 text-[13px] text-muted-foreground">
             Waiting for {productName} to answer…
           </p>
         )}
@@ -384,7 +384,7 @@ function StepLine(props: {
     <li
       className={cn(
         "flex items-center gap-2 text-sm",
-        props.state === "later" && "text-white/65",
+        props.state === "later" && "text-muted-foreground",
       )}
       aria-current={props.state === "current" ? "step" : undefined}
     >
@@ -450,7 +450,7 @@ function Outcome(props: { update: UpdateInfo }) {
       <p className="m-0 text-sm font-medium">{title}</p>
       {detail && <p className="m-0 text-sm">{detail}</p>}
       {failed && update.error && (
-        <p className="m-0 text-[13px] break-words text-white/65">
+        <p className="m-0 text-[13px] break-words text-muted-foreground">
           Reason: {update.error}
         </p>
       )}
@@ -468,11 +468,11 @@ function LastUpdate(props: { update: UpdateInfo }) {
   return (
     <div className="flex flex-col gap-px leading-tight">
       <span className="text-sm font-medium">Last update</span>
-      <span className="text-[13px] font-medium text-white/65">
+      <span className="text-[13px] font-medium text-muted-foreground">
         {title} · {dayAndTime.format(new Date(when))}
       </span>
       {failed && update.error && (
-        <span className="text-[13px] break-words text-white/65">
+        <span className="text-[13px] break-words text-muted-foreground">
           Reason: {update.error}
         </span>
       )}
@@ -509,8 +509,8 @@ function VersionPicker(props: {
           <label
             key={version}
             className={cn(
-              "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-white has-checked:text-(--carbon)",
-              isRunning && "cursor-default text-white/65",
+              "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background",
+              isRunning && "cursor-default text-muted-foreground",
             )}
           >
             <input
