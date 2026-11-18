@@ -22,6 +22,7 @@ import { productName } from "./brand";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -182,6 +183,8 @@ export function RoomPicker(props: {
   disabled?: boolean;
   // What it says while the device is in no room.
   unset?: string;
+  // Ends the menu with New room…, as where a device is first placed.
+  onNewRoom?: () => void;
 }) {
   const current = roomName(props.rooms, props.device.roomId);
   return (
@@ -214,6 +217,11 @@ export function RoomPicker(props: {
           ))}
           <DropdownMenuRadioItem value={noRoom}>No room</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        {props.onNewRoom && (
+          <DropdownMenuItem onSelect={props.onNewRoom}>
+            New room…
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

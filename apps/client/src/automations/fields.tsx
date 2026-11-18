@@ -102,6 +102,9 @@ export function Segments(props: {
   options: { value: string; label: string }[];
   selected: string | undefined;
   onSelect(value: string): void;
+  // Long labels wrap onto a second line rather than run out of the control,
+  // as in a narrow card.
+  wraps?: boolean;
 }) {
   return (
     <ToggleGroup
@@ -119,6 +122,8 @@ export function Segments(props: {
           value={option.value}
           className={cn(
             "h-7.5 flex-1 rounded-sm px-2.5 text-[13px] hover:bg-foreground/5",
+            props.wraps &&
+              "h-auto min-h-7.5 px-1.5 py-1 leading-tight whitespace-normal pointer-coarse:min-h-10",
             onLook,
           )}
         >

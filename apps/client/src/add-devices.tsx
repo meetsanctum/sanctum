@@ -9,13 +9,14 @@ import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { DeviceChanges } from "./add-devices-cards";
+import type { CardWork, DeviceChanges } from "./add-devices-cards";
 import { ChoosePage, type Way } from "./add-devices-choose";
 import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
 import { deviceProblem, updateDevice } from "./device-parts";
+import { EditDevice, type Editing } from "./edit-device";
 import { Overlay } from "./overlay";
 import { useOverlayHost } from "./overlay-host";
 import {
@@ -66,6 +67,8 @@ export function AddDevices(props: {
   notSetUp?: readonly ServiceNotSetUp[];
   live: LiveFeed;
   onChanged: (device: DeviceInfo) => void;
+  // A device removed here, from a card Sanctum can't use.
+  onRemoved?: (id: string) => void;
 }) {
   const host = useOverlayHost();
   const [page, setPage] = useState<Page>({ kind: "choose" });
@@ -104,6 +107,19 @@ export function AddDevices(props: {
     new Set(),
   );
   const saveAttempts = useRef(new Map<string, symbol>());
+  // Rooms made here, until the home's rooms say so too.
+  const [madeRooms, setMadeRooms] = useState<Room[]>([]);
+  // The device whose removal is being asked about.
+  const [removing, setRemoving] = useState<Editing>();
+  // The devices already greeted as new, so that each is greeted once.
+  const greeted = useRef(new Set<string>());
+
+  useEffect(() => {
+    const waiting = madeRooms.filter(
+      (made) => !props.rooms.some((room) => room.id === made.id),
+    );
+    if (waiting.length !== madeRooms.length) setMadeRooms(waiting);
+  }, [madeRooms, props.rooms]);
 
   // A request must finish before a later one reaches the radios, including
   // when an open is still waiting on a radio as the overlay closes.
@@ -362,7 +378,10 @@ export function AddDevices(props: {
     ways.push({ kind: "notSetUp", name: waiting.name, fix });
   }
 
-  const save = async (device: DeviceInfo, changes: DeviceChanges) => {
+  const save = async (
+    device: DeviceInfo,
+    changes: DeviceChanges,
+  ): Promise<boolean> => {
     const attempt = Symbol();
     const current = session.current;
     saveAttempts.current.set(device.id, attempt);
@@ -371,16 +390,40 @@ export function AddDevices(props: {
       const response = await updateDevice(device.id, changes);
       if (saveAttempts.current.get(device.id) === attempt)
         props.onChanged(response);
+      return true;
     } catch (error) {
       if (
         current === session.current &&
         saveAttempts.current.get(device.id) === attempt
       )
         setProblem(deviceProblem(error));
+      return false;
     } finally {
       if (saveAttempts.current.get(device.id) === attempt)
         saveAttempts.current.delete(device.id);
     }
+  };
+
+  const rooms = [
+    ...props.rooms,
+    ...madeRooms.filter(
+      (made) => !props.rooms.some((room) => room.id === made.id),
+    ),
+  ];
+  const work: CardWork = {
+    rooms,
+    onSave: save,
+    onAddRoom: async (name) => {
+      const room = await coreJson<Room>("/api/places/rooms/add", {
+        method: "POST",
+        json: { name },
+      });
+      setMadeRooms((before) => [...before, room]);
+      return room.id;
+    },
+    onRemove: (device) => setRemoving({ action: "remove", device }),
+    isFresh: (id) => !greeted.current.has(id),
+    onGreeted: (id) => greeted.current.add(id),
   };
 
   const joinedHere =
@@ -426,6 +469,13 @@ export function AddDevices(props: {
       container={host.container}
       open={props.open}
       onClose={() => void dismiss()}
+      onEscapeKeyDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-slot="add-devices-new-room"]')
+        )
+          event.preventDefault();
+      }}
       onCovering={host.onCovering}
       title={title}
       subtitle={
@@ -465,7 +515,6 @@ export function AddDevices(props: {
                 shown={shown}
                 added={added}
                 devices={props.devices}
-                rooms={props.rooms}
                 appName={appName}
                 onWorkingChange={(key, isWorking) =>
                   setPendingAdds((before) => {
@@ -479,7 +528,7 @@ export function AddDevices(props: {
                   setAdded((before) => ({ ...before, [key]: device }));
                   props.onChanged(device);
                 }}
-                onSave={save}
+                work={work}
               />
             </div>
           )}
@@ -489,11 +538,10 @@ export function AddDevices(props: {
               state={joining}
               joined={joinedHere}
               devices={props.devices}
-              rooms={props.rooms}
               seconds={joinSeconds}
               onStop={() => void stop()}
               onStartAgain={() => void open(page.driver)}
-              onSave={save}
+              work={work}
             />
           )}
           <p role="status" className="sr-only">
@@ -519,6 +567,31 @@ export function AddDevices(props: {
           )}
         </div>
       </div>
+      <EditDevice
+        editing={removing}
+        appName={removing ? appName(removing.device.driver) : null}
+        onClose={() => setRemoving(undefined)}
+        onChanged={props.onChanged}
+        onRemoved={(id) => {
+          saveAttempts.current.delete(id);
+          // A read begun before the removal would bring the device back.
+          pairingRevision.current += 1;
+          setPairing((before) =>
+            before
+              ? {
+                  ...before,
+                  joined: before.joined.map((each) =>
+                    each.deviceId === id
+                      ? { ...each, deviceId: null, known: false }
+                      : each,
+                  ),
+                }
+              : before,
+          );
+          props.onRemoved?.(id);
+        }}
+        onForgotten={() => undefined}
+      />
     </Overlay>
   );
 }
