@@ -407,6 +407,39 @@ describe("an update that needs a new permission", () => {
     expect(answerOf(core, "people.read")).toBeUndefined();
   });
 
+  it("lets only one of Go back and Allow sent together change the version", async () => {
+    const home = await versions();
+    const first = await home.coreWith(version("1.0.0"), asAHome);
+    await running(first, id);
+    const maya = await claimed(first);
+    const second = await home.coreWith(version("2.0.0"), asAHome);
+    await running(second, id);
+    await vi.waitFor(() => expect(home.journal.size).toBe(0));
+    let release!: () => void;
+    let isHeld = false;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const core = await home.coreWith(
+      version("3.0.0", { permissions: [people] }),
+      { ...asAHome, beforeLoad: () => (isHeld ? held : Promise.resolve()) },
+    );
+    await running(core, id);
+    const waitingId = stateOf(core, id).waiting!.id;
+    const back = await core.apps.goBackOption(id);
+    isHeld = true;
+
+    const answers = Promise.all([
+      post(core, `/api/apps/${id}/go-back`, { id: back!.id }, maya),
+      post(core, `/api/apps/${id}/update/allow`, { id: waitingId }, maya),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    const [goingBack, allowing] = await answers;
+
+    expect([goingBack.statusCode, allowing.statusCode]).toEqual([200, 409]);
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("1.0.0"));
+    expect(answerOf(core, "people.read")).toBeUndefined();
+  });
+
   it("keeps someone's Go back across a restart, whatever it needs", async () => {
     const home = await versions();
     const optional = { ...people, needed: false, startsOn: true };
