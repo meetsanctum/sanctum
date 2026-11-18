@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { isBroker, joinAppNetworks } from "../apps/broker.js";
@@ -16,7 +17,6 @@ import {
 } from "./containers.js";
 import { assertManaged } from "../docker-resources.js";
 import { isNotFound } from "../docker.js";
-import { pruneSnapshots } from "../update/backup.js";
 import type { Operations } from "../operations.js";
 import { createImageChanges } from "./image-change.js";
 import { mosquittoPasswordHash, mosquittoUrl } from "./mosquitto.js";
@@ -313,7 +313,14 @@ export function createServices(options: {
           if (await inspectService(docker, name)) {
             throw new ServiceBusyError(`${name} hasn't stopped yet`);
           }
-          for (const volumeName of definition.dataVolumes ?? []) {
+          const volumes = new Set([
+            ...(definition.dataVolumes ?? []),
+            ...(store
+              .current()
+              .imageChanges?.[name]?.volumes.map((volume) => volume.name) ??
+              []),
+          ]);
+          for (const volumeName of volumes) {
             const volume = docker.getVolume(volumeName);
             const found = await volume.inspect().catch((error: unknown) => {
               if (isNotFound(error)) return null;
@@ -326,7 +333,22 @@ export function createServices(options: {
             });
             await volume.remove();
           }
-          await pruneSnapshots(join(options.dataDir, "backups"), `${name}-`, 0);
+          const backups = join(options.dataDir, "backups");
+          // Erasure must fail if the copies cannot be inspected. Only a
+          // missing backups folder means there are none to delete.
+          const copies = await readdir(backups).catch((error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+            throw error;
+          });
+          for (const copy of copies.filter((entry) =>
+            entry.startsWith(`${name}-`),
+          )) {
+            await rm(join(backups, copy), { recursive: true, force: true });
+          }
+          await store.update((draft) => {
+            delete draft.images?.[name];
+            delete draft.imageChanges?.[name];
+          });
           log(`Erased ${name}'s data`);
         },
       );

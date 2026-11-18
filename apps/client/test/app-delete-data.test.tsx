@@ -119,7 +119,7 @@ describe("deleting a removed app's data", () => {
     await press(dialog()!, "Delete");
 
     expect(container.querySelector('[role="alert"]')!.textContent).toBe(
-      `${productName} needs an update before it can delete Example's data.`,
+      `${productName} can't delete Example's data right now. Try again or check for an update.`,
     );
     expect(onDeleted).not.toHaveBeenCalled();
   });

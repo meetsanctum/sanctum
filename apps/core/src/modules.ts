@@ -630,6 +630,7 @@ export async function createModules(
   const stoppingSteps = [
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
+    ["stop removed apps' deadlines", () => appDeleting.close()],
     ["stop commands to devices", () => devices.closing()],
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
@@ -637,7 +638,6 @@ export async function createModules(
     ["stop the app host", () => apps.close()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
-    ["stop removed apps' deadlines", () => appDeleting.close()],
     ["close the bus", () => eventBus.close()],
     ["stop history", () => history.close()],
     ["stop pairing", () => pairing.stop()],

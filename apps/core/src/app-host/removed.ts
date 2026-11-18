@@ -39,6 +39,7 @@ export function createRemovedApps(
           clientId: who.clientId ?? null,
           ...app,
           isDone: false,
+          isDeleting: false,
         };
         db.insert(appsRemoved)
           .values({ appId, ...row })
@@ -54,6 +55,16 @@ export function createRemovedApps(
         .set({ isDone: true })
         .where(eq(appsRemoved.appId, appId))
         .run();
+    },
+
+    /** Records deletion before the manager can erase any part of its data. */
+    beginDeleting(appId: string) {
+      durably(db, () => {
+        db.update(appsRemoved)
+          .set({ isDeleting: true })
+          .where(eq(appsRemoved.appId, appId))
+          .run();
+      });
     },
 
     /** Forgets its removal, as when it's added back; in the caller's transaction. */

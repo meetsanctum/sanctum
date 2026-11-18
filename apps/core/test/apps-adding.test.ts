@@ -207,6 +207,25 @@ describe("adding an app", () => {
     expect(removed.get("sanctum.example")).toBeUndefined();
   });
 
+  it("refuses to add back an app whose data deletion has not finished", async () => {
+    const { db, adding, installing } = await addingWith();
+    const removed = createRemovedApps(db, { now: () => at });
+    removed.record(
+      "sanctum.example",
+      {},
+      { name: "Example", version: "1.0.0" },
+    );
+    removed.done("sanctum.example");
+    removed.beginDeleting("sanctum.example");
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    expect(installing).toEqual([]);
+    expect(removed.get("sanctum.example")?.isDeleting).toBe(true);
+  });
+
   it("refuses one already added, or added on another client meanwhile", async () => {
     const { adding, entries, installing } = await addingWith();
 

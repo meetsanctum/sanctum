@@ -1,10 +1,18 @@
 import { pbkdf2Sync } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { sanctumNetworkName } from "../src/core-container.js";
+import { ensureVolume } from "../src/docker-resources.js";
 import { createOperations } from "../src/operations.js";
 import { mosquittoImage } from "../src/services/mosquitto.js";
 import {
@@ -433,6 +441,56 @@ describe("services", () => {
     await expect(services.eraseData("mosquitto")).rejects.toThrow(
       UnknownServiceError,
     );
+  });
+
+  it.each(["checking", "kept-back"] as const)(
+    "forgets a %s image change and its volumes when erasing data",
+    async (status) => {
+      const { docker, dataDir, dev, services, store, start } = await setup();
+      await dev.plug(zbt2, "ttyACM0");
+      const backup = join(dataDir, "backups", "zigbee2mqtt-old");
+      await mkdir(backup, { recursive: true });
+      const oldVolume = "sanctum-zigbee2mqtt-kept-data";
+      await ensureVolume(docker, oldVolume);
+      await ensureVolume(docker, "sanctum-zigbee2mqtt-data");
+      await store.update((draft) => {
+        draft.images = { zigbee2mqtt: "zigbee2mqtt:old" };
+        draft.imageChanges = {
+          zigbee2mqtt: {
+            from: status === "checking" ? zigbee2mqttImage : "zigbee2mqtt:old",
+            to: status === "checking" ? "zigbee2mqtt:new" : zigbee2mqttImage,
+            status,
+            startedAt: "2026-01-01T00:00:00Z",
+            backup,
+            volumes: [{ name: oldVolume, target: "/app/data" }],
+          },
+        };
+      });
+
+      await services.eraseData("zigbee2mqtt");
+
+      expect(docker.volumes.has(oldVolume)).toBe(false);
+      expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(false);
+      expect(store.current().images?.zigbee2mqtt).toBeUndefined();
+      expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
+      expect(await readdir(join(dataDir, "backups"))).toEqual([]);
+      const restarted = await start();
+      await restarted.need("zigbee2mqtt", app);
+      await restarted.reconcile();
+      expect(restarted.status("zigbee2mqtt")).toMatchObject({
+        state: "running",
+        image: zigbee2mqttImage,
+      });
+    },
+  );
+
+  it("does not confirm erasure when its backups cannot be read", async () => {
+    const { dataDir, services } = await setup();
+    await writeFile(join(dataDir, "backups"), "not a directory");
+
+    await expect(services.eraseData("zigbee2mqtt")).rejects.toMatchObject({
+      code: "ENOTDIR",
+    });
   });
 
   it("removes services no app needs, and keeps their data", async () => {

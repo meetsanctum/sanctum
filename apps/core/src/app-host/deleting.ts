@@ -5,6 +5,7 @@ import type { Principal } from "../auth/clients.js";
 import { durably, type CoreDatabase } from "../database.js";
 import { devices } from "../devices/schema.js";
 import type { ManagerCapabilities } from "../manager-answers.js";
+import { ManagerRefusal, ManagerUnavailable } from "../manager.js";
 import { pinnedApps } from "../pins/schema.js";
 import { workflowsOffForApps } from "../workflows/schema.js";
 import type { AddedApps } from "./added.js";
@@ -30,8 +31,9 @@ import {
 // answers, secrets and versions, a driver's devices with their history and
 // places, its pin, the workflows its removal turned off still waiting for it,
 // and its removal itself, and the activity log says so. A step that fails
-// leaves everything for the next try, as the next deadline check. It takes
-// turns with adding and removing. Backups of core.db may hold its secrets
+// leaves its deletion recorded for the next try, as the next deadline check,
+// and adding waits until every part has gone. It takes turns with adding and
+// removing. Backups of core.db may hold its secrets
 // until they're pruned.
 
 const servicePrefix = "services:";
@@ -112,9 +114,23 @@ export function createAppDeleting(options: {
     ) {
       throw new ActionCallError("unavailable");
     }
-    await deleteAppData(appId);
-    for (const service of servicesOnlyIt(appId)) {
-      await eraseServiceData(service);
+    options.removed.beginDeleting(appId);
+    try {
+      await deleteAppData(appId);
+      for (const service of servicesOnlyIt(appId)) {
+        await eraseServiceData(service);
+      }
+    } catch (error) {
+      if (error instanceof ManagerRefusal && error.status === 409) {
+        throw new ActionCallError("conflict");
+      }
+      if (
+        error instanceof ManagerRefusal ||
+        error instanceof ManagerUnavailable
+      ) {
+        throw new ActionCallError("unavailable");
+      }
+      throw error;
     }
     options.entities.removeApp(appId);
     durably(db, () => {
@@ -145,23 +161,26 @@ export function createAppDeleting(options: {
     log(`apps: deleted ${appId}'s data`);
   }
 
-  // Every removed app whose data has been kept its 30 days.
-  async function expire() {
-    const due = options.removed
-      .list()
-      .filter(
-        (row) =>
-          row.isDone && row.removedAt.getTime() + keptForMs <= now().getTime(),
-      );
-    for (const { appId } of due) {
-      await options.turns
-        .take(() => deleteData(appId, { actor: "sanctum" }))
-        .catch((error: unknown) =>
+  // Check inside the turn: an earlier add and removal can reset a deadline.
+  // The whole sweep owns one turn, so stopping waits for every deletion.
+  function expire() {
+    return options.turns.take(async () => {
+      const due = options.removed
+        .list()
+        .filter(
+          (row) =>
+            row.isDone &&
+            (row.isDeleting ||
+              row.removedAt.getTime() + keptForMs <= now().getTime()),
+        );
+      for (const { appId } of due) {
+        await deleteData(appId, { actor: "sanctum" }).catch((error: unknown) =>
           log(
             `apps: ${appId}'s data stays for now (${error instanceof Error ? error.message : String(error)})`,
           ),
         );
-    }
+      }
+    });
   }
 
   return {
@@ -188,7 +207,7 @@ export function createAppDeleting(options: {
       return options.turns.take(() => deleteData(appId, who));
     },
 
-    /** Deletes what's past its 30 days now, as at start after the home was off. */
+    /** Deletes what's past its 30 days and resumes interrupted deletions. */
     expire,
 
     /** Catches up, then checks now and then, as a step of starting (core.ts). */

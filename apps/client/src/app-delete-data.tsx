@@ -56,7 +56,7 @@ export function DeleteAppData(props: {
       const code = error instanceof CoreError ? error.code : null;
       setProblem(
         code === "unavailable"
-          ? `${productName} needs an update before it can delete ${app.name}'s data.`
+          ? `${productName} can't delete ${app.name}'s data right now. Try again or check for an update.`
           : `${app.name}'s data couldn't be deleted. Try again.`,
       );
     } finally {
