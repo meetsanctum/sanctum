@@ -24,12 +24,10 @@ body {
   min-height: 100vh;
 }
 
-/* The signed-in screen. Each dashboard has its own background, a preset the
-   core names (src/dashboards.ts); the first is mocha, from bronze lit from
-   the top left through a warm dark to near Carbon at the far corner, dark
-   enough everywhere for White text on a tile. It runs as it is, unshaded,
-   under the top bar and the page alike. Deepened, it is the frame around a
-   place, and as glass the floating sidebar over one. */
+/* The core sends each dashboard's background preset. Mocha is bronze lit
+   from the top left, dark enough everywhere for White text on a tile. It
+   runs unshaded under the top bar and the page. Its deeper shades colour the
+   frame around a place and the floating sidebar's glass. */
 :root {
   --dashboard-mocha: radial-gradient(
     120% 90% at 15% 0%,
