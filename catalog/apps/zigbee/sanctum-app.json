@@ -3,7 +3,7 @@
   "name": "Zigbee",
   "version": "0.8.0",
   "core": "^1.0.0",
-  "protocol": 9,
+  "protocol": 10,
   "summary": "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
   "runtime": {
     "memory": 128,
