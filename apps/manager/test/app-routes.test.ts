@@ -80,6 +80,7 @@ describe("what a manager can do", () => {
       discovery: false,
       lan: false,
       deletesData: false,
+      reserves: false,
     });
 
     docker.load("sanctum-core:1", { title: "sanctum-core", version: "1" });
@@ -91,6 +92,7 @@ describe("what a manager can do", () => {
       discovery: false,
       lan: false,
       deletesData: false,
+      reserves: false,
     });
   });
 
@@ -120,6 +122,7 @@ describe("what a manager can do", () => {
       discovery: false,
       lan: false,
       deletesData: false,
+      reserves: false,
     });
     expect(start.statusCode).toBe(503);
   });

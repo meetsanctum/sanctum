@@ -136,6 +136,20 @@ describe("turning an app off", () => {
     expect(stateOf(again, app.id)).toBe("off");
   });
 
+  it("reports a saved Turn off to the manager before the app can start", async () => {
+    const app = lamp([]);
+    const first = await testCore();
+    createAppsOff(first.db).set(app.id, true);
+    await first.stop();
+    const beforeStop = vi.fn(async () => undefined);
+
+    const again = await supervised(app, { dataDir: first.dataDir, beforeStop });
+
+    expect(again.stateOf().state).toBe("off");
+    expect(again.containers()).toBe(0);
+    expect(beforeStop).toHaveBeenCalledWith({ off: true });
+  });
+
   it("starts a system app that was turned off when it was optional", async () => {
     const app = lamp([]);
     const first = await testCore();

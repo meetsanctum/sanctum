@@ -242,6 +242,9 @@ export const capabilities = z.object({
   lan: z.boolean().default(false),
   // Whether it deletes a removed app's data, and a service's.
   deletesData: z.boolean().default(false),
+  // Whether it keeps one count of the memory and disk it has promised, which
+  // an add reserves from and the add sheet reads.
+  reserves: z.boolean().default(false),
 });
 export type ManagerCapabilities = z.infer<typeof capabilities>;
 export const noCapabilities: ManagerCapabilities = {
@@ -250,7 +253,23 @@ export const noCapabilities: ManagerCapabilities = {
   discovery: false,
   lan: false,
   deletesData: false,
+  reserves: false,
 };
+
+// What's left for another app, by the count a start uses.
+const appCapacity = z.object({
+  memoryNeedsMb: z.number().nonnegative(),
+  memoryFreeMb: z.number().nonnegative(),
+  dataNeedsMb: z.number().nonnegative(),
+  dataFreeBytes: z.number().nonnegative().nullable(),
+});
+export type AppCapacity = z.infer<typeof appCapacity>;
+export const appCapacities = z.record(z.string(), appCapacity);
+
+export const appReservation = z.object({
+  id: z.string(),
+  until: z.string(),
+});
 
 // What the manager found on the home's network: what changed after the
 // core's last answer, or every sighting, and where the next question starts.

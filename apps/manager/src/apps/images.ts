@@ -75,6 +75,8 @@ export function createAppImages(options: {
   helper: Helper;
   // What's free for files on the disk they're on, if known.
   free: () => Promise<number | null>;
+  // What's reserved for apps' data other than this one's (capacity.ts).
+  reserved?: (sizeMb: (app: string) => number, except?: string) => number;
   log: Log;
 }) {
   const { docker, dataDir, hostDevDir, helper, free, log } = options;
@@ -121,23 +123,51 @@ export function createAppImages(options: {
   }
 
   // What the images may still grow to, which the card has to keep for them.
-  async function promised() {
+  // Their blocks are read before and after what's free, and the fewer
+  // counted: growth meanwhile is then still counted as promised, and blocks
+  // a discard gave back meanwhile are counted as promised again, so the
+  // room is never more than there is.
+  async function available() {
     const { images } = await read();
-    let bytes = 0;
-    for (const [app, record] of Object.entries(images)) {
-      if (record.damaged) continue;
-      const file = await stat(fileOf(app)).catch(() => null);
+    const kept = Object.entries(images).filter(([, record]) => !record.damaged);
+    const files = () =>
+      Promise.all(kept.map(([app]) => stat(fileOf(app)).catch(() => null)));
+    const before = await files();
+    const availableBytes = await free();
+    const after = await files();
+    const sizes = new Map<string, number>();
+    let promised = 0;
+    kept.forEach(([app, record], index) => {
+      const [first, last] = [before[index], after[index]];
       // Growth may have reached the disk just before saving its record failed.
-      const capacity = Math.max(record.sizeMb * mebibyte, file?.size ?? 0);
-      bytes += Math.max(0, capacity - (file?.blocks ?? 0) * 512);
-    }
-    return bytes;
+      const capacity = Math.max(
+        record.sizeMb * mebibyte,
+        first?.size ?? 0,
+        last?.size ?? 0,
+      );
+      const allocated = Math.min(first?.blocks ?? 0, last?.blocks ?? 0) * 512;
+      sizes.set(app, Math.floor(capacity / mebibyte));
+      promised += Math.max(0, capacity - allocated);
+    });
+    const sizeMb = (app: string) => sizes.get(app) ?? 0;
+    return {
+      sizeMb,
+      room: (app?: string) =>
+        availableBytes === null
+          ? null
+          : Math.max(
+              0,
+              availableBytes -
+                promised -
+                keptForUpdates -
+                (options.reserved?.(sizeMb, app) ?? 0),
+            ),
+    };
   }
 
   async function assertRoom(app: string, more: number) {
-    const available = await free();
-    if (available === null) return;
-    const left = available - (await promised()) - keptForUpdates;
+    const left = (await available()).room(app);
+    if (left === null) return;
     if (more > left) {
       throw new AppRefusal(
         `${app} needs ${Math.ceil(more / mebibyte)} MB for its data, and only ${Math.max(0, Math.floor(left / mebibyte))} MB can be spared`,
@@ -410,6 +440,8 @@ done
       });
       log(`Deleted ${app}'s image`);
     },
+
+    available,
 
     async has(app: string) {
       const record = (await read()).images[app];

@@ -1,23 +1,47 @@
 import {
   appApiVersion,
+  grantedAtFirst,
+  type AvailableApp,
   type AppShortfall,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import semver from "semver";
 
+import type { AppCapacity } from "../manager-answers.js";
+import type { AppNeed } from "../manager.js";
 import { lowMemoryShare } from "../system/status.js";
+import { serviceOf } from "./services.js";
 
 // Whether an app fits this home before it's added: the app API its manifest
 // targets, the kit its pages were built for, the memory its container gets
 // and the image its data lives on. Each shortfall says what's short, so the
-// sheet can say what would help before anything changes. What isn't known,
-// as on a host that doesn't say its memory, holds nothing back: the manager
-// still refuses an image it has no room for.
+// sheet can say what would help before anything changes. A manager that keeps
+// one count of what it has promised says what's left by it, the count an add
+// reserves from and a start is checked against, so the sheet and the manager
+// agree. What isn't known, as on a host that doesn't say its memory, holds
+// nothing back: the manager still refuses an image it has no room for.
 
 const mebibyte = 1024 * 1024;
 // What an update needs free, which the manager keeps whatever an app's image
 // asks for, and Settings → Status warns under.
 const keptForUpdates = 1536 * mebibyte;
+
+/** What adding this app asks the manager to hold, including saved grants. */
+export function needOf(
+  app: Pick<AvailableApp, "memory" | "data" | "requests">,
+  grants?: ReadonlyMap<string, boolean>,
+): AppNeed {
+  return {
+    memoryMb: app.memory,
+    dataMb: app.data,
+    services: app.requests.flatMap((request) => {
+      const service = serviceOf(request.id);
+      return service && (grants?.get(request.id) ?? grantedAtFirst(request))
+        ? [service]
+        : [];
+    }),
+  };
+}
 
 /** Whether this core serves the app API the manifest targets. */
 export function servesAppApi(manifest: Pick<StaticManifest, "core">) {
@@ -43,6 +67,7 @@ export function shortfallsOf(
     // What its pages need of the kit, if they don't fit it.
     pagesNeed: "sanctum" | "pages" | null;
     host: HostRoom | null;
+    capacity?: AppCapacity;
   },
 ): AppShortfall[] {
   const shortfalls: AppShortfall[] = [];
@@ -51,6 +76,24 @@ export function shortfallsOf(
   }
   if (options.pagesNeed) {
     shortfalls.push({ kind: "pages", needs: options.pagesNeed });
+  }
+  const { capacity } = options;
+  if (capacity) {
+    const memoryNeeds = capacity.memoryNeedsMb * mebibyte;
+    const memoryFree = capacity.memoryFreeMb * mebibyte;
+    if (memoryNeeds > memoryFree) {
+      shortfalls.push({ kind: "memory", needs: memoryNeeds, free: memoryFree });
+    }
+    const dataNeeds = capacity.dataNeedsMb * mebibyte;
+    const dataFree = capacity.dataFreeBytes;
+    if (dataFree !== null && dataNeeds > dataFree) {
+      shortfalls.push({
+        kind: "space",
+        needs: dataNeeds,
+        free: dataFree,
+      });
+    }
+    return shortfalls;
   }
   const memory = options.host?.memory;
   if (memory) {

@@ -152,6 +152,7 @@ describe("the data of the services it used", () => {
           discovery: false,
           lan: false,
           deletesData: true,
+          reserves: false,
         }),
         deleteAppData: async (app) => void asked.push(`data ${app}`),
         eraseServiceData: async (service) =>

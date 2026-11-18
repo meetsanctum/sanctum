@@ -11,7 +11,7 @@ import { describe, expect, it, onTestFinished } from "vitest";
 
 import { createAddedApps } from "../src/app-host/added.js";
 import { createAvailableApps } from "../src/app-host/available.js";
-import { servesAppApi, shortfallsOf } from "../src/app-host/fit.js";
+import { needOf, servesAppApi, shortfallsOf } from "../src/app-host/fit.js";
 import type { ApartPackage } from "../src/app-host/loader.js";
 import {
   appsAdded,
@@ -248,6 +248,29 @@ describe("what keeps an app from being added", () => {
     ]);
   });
 
+  it("what's left by the manager's count, when it keeps one, whatever is free now", () => {
+    const counted = {
+      memoryNeedsMb: 416,
+      memoryFreeMb: 100,
+      dataNeedsMb: 64,
+      dataFreeBytes: 32 * mebibyte,
+    };
+    expect(
+      shortfallsOf(app, { pagesNeed: null, host, capacity: counted }),
+    ).toEqual([
+      { kind: "memory", needs: 416 * mebibyte, free: 100 * mebibyte },
+      { kind: "space", needs: 64 * mebibyte, free: 32 * mebibyte },
+    ]);
+    // A disk it can't say about holds nothing back.
+    expect(
+      shortfallsOf(app, {
+        pagesNeed: null,
+        host,
+        capacity: { ...counted, memoryFreeMb: 1024, dataFreeBytes: null },
+      }),
+    ).toEqual([]);
+  });
+
   it("nothing it can't know, as on a host that doesn't say", () => {
     expect(shortfallsOf(app, { pagesNeed: null, host: null })).toEqual([]);
     expect(
@@ -285,6 +308,7 @@ describe("the apps a home could add", () => {
     broken?: string[];
     // Zigbee's pages fit this home's kit, so nothing keeps it back.
     fits?: boolean;
+    capacity?: Parameters<typeof createAvailableApps>[0]["capacity"];
   }) {
     const logs: string[] = [];
     const apps = createAvailableApps({
@@ -301,10 +325,73 @@ describe("the apps a home could add", () => {
       pagesNeedIn: async (appId) =>
         appId === "sanctum.zigbee" && !options.fits ? "pages" : null,
       host: async () => null,
+      capacity: options.capacity,
       log: (line) => logs.push(line),
     });
     return { apps, logs };
   }
+
+  it("checks all offers with the manager, including the services each needs", async () => {
+    const weather = "sanctum.weather";
+    const zigbee = "sanctum.zigbee";
+    const { apps } = available({
+      shipped: [weather, zigbee],
+      added: [],
+      staged: [weather, zigbee],
+      fits: true,
+      capacity: async (requests) => {
+        expect(requests).toEqual([
+          { app: weather, memoryMb: 128, dataMb: 256, services: [] },
+          {
+            app: zigbee,
+            memoryMb: 256,
+            dataMb: 512,
+            services: ["zigbee2mqtt"],
+          },
+        ]);
+        return {
+          [weather]: {
+            memoryNeedsMb: 128,
+            memoryFreeMb: 512,
+            dataNeedsMb: 0,
+            dataFreeBytes: 0,
+          },
+          [zigbee]: {
+            memoryNeedsMb: 544,
+            memoryFreeMb: 512,
+            dataNeedsMb: 512,
+            dataFreeBytes: null,
+          },
+        };
+      },
+    });
+
+    expect(await apps.list()).toMatchObject([
+      { id: weather, shortfalls: [] },
+      {
+        id: zigbee,
+        shortfalls: [
+          { kind: "memory", needs: 544 * mebibyte, free: 512 * mebibyte },
+        ],
+      },
+    ]);
+  });
+
+  it("counts the services granted before the app was removed", () => {
+    const requests = [
+      {
+        id: "services:zigbee2mqtt",
+        needed: false,
+        startsOn: false,
+        asked: null,
+        reason: "To run it.",
+      },
+    ];
+    const grants = new Map([["services:zigbee2mqtt", true]]);
+    expect(
+      needOf({ memory: 128, data: 256, requests }, grants).services,
+    ).toEqual(["zigbee2mqtt"]);
+  });
 
   it("those the image ships that the home hasn't added, staged, by name", async () => {
     const { apps } = available({

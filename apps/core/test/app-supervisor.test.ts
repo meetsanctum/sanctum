@@ -289,6 +289,7 @@ describe("an app's supervisor", () => {
           discovery: false,
           lan: false,
           deletesData: false,
+          reserves: false,
         }),
       });
 
@@ -510,6 +511,7 @@ describe("an app's supervisor", () => {
             discovery: true,
             lan: true,
             deletesData: false,
+            reserves: false,
           }),
           startAppContainer: start,
         },
@@ -704,5 +706,68 @@ describe("an app's supervisor", () => {
       expect(reconciled).not.toHaveBeenCalled();
       expect(entry.supervision!.timer).toBeUndefined();
     });
+  });
+});
+
+describe("an app turned off", () => {
+  it("says so as its container stops, so its room goes back to the others", async () => {
+    const stopAppContainer = vi.fn(async () => undefined);
+    const { entry, supervisor } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+
+    entry.off = true;
+    await supervisor.turnedOff(entry);
+
+    expect(stopAppContainer).toHaveBeenCalledWith(entry.app.id, { off: true });
+  });
+
+  it("says it again while the manager didn't hear it, until it does", async () => {
+    let fails = 2;
+    const stopAppContainer = vi.fn(async () => {
+      if (fails-- > 0)
+        throw new ManagerUnavailable("The manager did not answer");
+    });
+    const { entry, supervisor } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+
+    entry.off = true;
+    await supervisor.turnedOff(entry);
+    expect(stopAppContainer).toHaveBeenCalledTimes(1);
+
+    await passes(30_000);
+    expect(stopAppContainer).toHaveBeenCalledTimes(2);
+    await passes(30_000);
+    expect(stopAppContainer).toHaveBeenCalledTimes(3);
+    await passes(120_000);
+    // Heard, it isn't said again.
+    expect(stopAppContainer).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops saying it once it's turned on again", async () => {
+    const stopAppContainer = vi.fn(async () => {
+      throw new ManagerUnavailable("The manager did not answer");
+    });
+    const { entry, supervisor } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+    entry.off = true;
+    await supervisor.turnedOff(entry);
+
+    entry.off = false;
+    await passes(120_000);
+
+    expect(stopAppContainer).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing of it for a stop that isn't Turn off", async () => {
+    const stopAppContainer = vi.fn(async () => undefined);
+    const { entry, supervisor, fail } = setUp({ stopAppContainer });
+    supervisor.started(entry);
+
+    // Given up on after failures, it still needs its room back.
+    entry.supervision!.failures = Array(4).fill(Date.now());
+    fail();
+    await passes(0);
+
+    expect(stopAppContainer).toHaveBeenCalledWith(entry.app.id, {});
   });
 });

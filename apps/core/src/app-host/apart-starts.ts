@@ -58,6 +58,10 @@ export function createApartStarts(options: {
       return;
     }
     if (!isCurrent(entry)) return;
+    // A saved Turn off may predate the manager's capacity count, or the
+    // core may have stopped before it could tell the manager.
+    if (entry.off) await supervisor.turnedOff(entry);
+    if (!isCurrent(entry)) return;
     try {
       let opened = listening.get(entry);
       if (!opened) {

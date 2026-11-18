@@ -43,6 +43,9 @@ export type ServiceDefinition = {
   // The volumes its own data lives in, which erasing it deletes, as
   // Zigbee2MQTT's holds the Zigbee network and its key.
   dataVolumes?: string[];
+  // The memory it counts for beside apps while it runs, in MB. It isn't a
+  // limit: one that ran out would take its network down with it.
+  memoryMb: number;
 };
 
 // In the order they start.
@@ -51,12 +54,14 @@ export const serviceDefinitions: ServiceDefinition[] = [
     name: "mosquitto",
     needs: [],
     forApps: false,
+    memoryMb: 32,
     spec: ({ mqttClients }) => mosquittoSpec(mqttClients),
   },
   {
     name: "zigbee2mqtt",
     needs: ["mosquitto"],
     forApps: true,
+    memoryMb: 256,
     mqttTopics: [`${zigbee2mqttBaseTopic}/#`],
     dataVolumes: [zigbee2mqttData],
     connection: () => ({ baseTopic: zigbee2mqttBaseTopic }),
@@ -80,18 +85,23 @@ export function findService(name: string) {
   return serviceDefinitions.find((definition) => definition.name === name);
 }
 
-// The services that should run: those an app asked for, and what they need.
-export function wantedServices(state: ServicesState) {
+export function withServiceDependencies(names: Iterable<string>) {
   const wanted = new Set<string>();
   const add = (name: string) => {
-    if (wanted.has(name)) return;
+    const definition = findService(name);
+    if (!definition || wanted.has(name)) return;
     wanted.add(name);
-    for (const need of findService(name)?.needs ?? []) add(need);
+    for (const need of definition.needs) add(need);
   };
-  for (const [name, apps] of Object.entries(state.apps)) {
-    if (apps.length > 0 && findService(name)) add(name);
-  }
+  for (const name of names) add(name);
   return wanted;
+}
+
+// The services that should run: those an app asked for, and what they need.
+export function wantedServices(state: ServicesState) {
+  return withServiceDependencies(
+    Object.keys(state.apps).filter((name) => state.apps[name]!.length > 0),
+  );
 }
 
 // Everything that needs a broker account, and its topics: each wanted

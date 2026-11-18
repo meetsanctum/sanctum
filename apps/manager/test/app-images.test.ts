@@ -82,7 +82,14 @@ function fakeHelper(folder: string) {
   return { helper, state };
 }
 
-async function setup(options: { free?: number | null; byId?: boolean } = {}) {
+async function setup(
+  options: {
+    free?: number | null;
+    byId?: boolean;
+    // What happens on the disk while what's free is read.
+    whileFree?: () => Promise<void>;
+  } = {},
+) {
   const docker = new FakeDocker();
   const dataDir = await mkdtemp(join(tmpdir(), "sanctum-images-"));
   const folder = join(dataDir, "images");
@@ -100,7 +107,10 @@ async function setup(options: { free?: number | null; byId?: boolean } = {}) {
     dataDir,
     hostDevDir,
     helper,
-    free: async () => free,
+    free: async () => {
+      await options.whileFree?.();
+      return free;
+    },
     log,
   });
   const records = async () =>
@@ -357,6 +367,28 @@ describe("what the card keeps for images", () => {
     await expect(images.ensure("sanctum.moods", 256)).rejects.toThrow(
       "can be spared",
     );
+  });
+
+  it("never counts room that a discard gave back while what's free was read", async () => {
+    let discard = async () => {};
+    const { folder, images } = await setup({
+      free: 4096 * mebibyte,
+      whileFree: () => discard(),
+    });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await writeFile(file, Buffer.alloc(16 * mebibyte, 1));
+    await truncate(file, 256 * mebibyte);
+    // Its blocks go back to the disk between the two readings of them.
+    discard = async () => {
+      discard = async () => {};
+      await truncate(file, 0);
+      await truncate(file, 256 * mebibyte);
+    };
+
+    const { room } = await images.available();
+
+    expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
   });
 
   it("goes ahead when it can't tell what's free", async () => {

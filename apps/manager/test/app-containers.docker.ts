@@ -219,6 +219,7 @@ describe("apps' containers on real Docker", () => {
       discovery: false,
       lan: true,
       deletesData: true,
+      reserves: true,
     });
   });
 

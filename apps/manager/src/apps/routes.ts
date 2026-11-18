@@ -19,6 +19,7 @@ import { maintenanceFilePattern, type Maintenance } from "./maintenance.js";
 import { OperationConflictError } from "../operations.js";
 import { AppRefusal } from "./refusal.js";
 import type { AppUpdates } from "./updates.js";
+import type { Capacity } from "./capacity.js";
 import type { AppUsage } from "./usage.js";
 
 // Apps' containers, on the manager's socket, which only the core reaches:
@@ -26,7 +27,8 @@ import type { AppUsage } from "./usage.js";
 //   GET    /api/capabilities         what this manager can do: run apps, limit
 //                                    their memory, look for devices, give an app
 //                                    that reaches them its own network, delete
-//                                    a removed app's data; one too
+//                                    a removed app's data, reserve what an
+//                                    add needs; one too
 //                                    old for this route answers 404, which means
 //                                    nothing
 //   GET    /api/apps/containers      every app's container and its state
@@ -38,7 +40,16 @@ import type { AppUsage } from "./usage.js";
 //                                    { core, count, addresses, ports, manager,
 //                                    holder }, refused (409) for another holder
 //                                    or one no newer
-//   POST   /api/apps/:app/container/stop  stop it, keeping why it stopped
+//   POST   /api/apps/:app/container/stop  stop it, keeping why it stopped:
+//                                    { off? }, turned off, gives its room back
+//   GET    /api/apps/capacity        what's left for another app, by the same
+//                                    count a start uses: { memoryFreeMb,
+//                                    dataFreeBytes }
+//   POST   /api/apps/capacity        check each proposed add against that count
+//   POST   /api/apps/:app/reservations  hold what an add needs: { memoryMb,
+//                                    dataMb, services }, refused (409) with
+//                                    what's short; held until it starts
+//   DELETE /api/apps/:app/reservations  release the reservation with that id
 //   DELETE /api/apps/:app/container  remove it, keeping its data
 //   GET    /api/apps/:app/usage      what it holds and uses now, for its settings
 //   GET    /api/apps/images          every app's image and its state
@@ -71,6 +82,26 @@ const startBody = z.object({
   // What an app that reaches devices may reach first (lan.ts).
   lan: lanPolicy.optional(),
 });
+const stopBody = z
+  .object({ off: z.boolean().optional() })
+  .optional()
+  .default({});
+const reservationBody = z.object({
+  memoryMb: z.number().int().min(smallestMemoryMb).max(largestMemoryMb),
+  dataMb: z.number().int().min(smallestImageMb).max(largestImageMb),
+  services: z
+    .array(
+      z
+        .string()
+        .regex(/^[a-z0-9-]+$/)
+        .max(64),
+    )
+    .max(16),
+});
+const capacityBody = z.array(
+  reservationBody.extend({ app: z.string().regex(appIdPattern) }),
+);
+const cancelReservationBody = z.object({ id: z.uuid() });
 const growBody = z.object({
   dataMb: z.number().int().min(smallestImageMb).max(largestImageMb),
 });
@@ -117,6 +148,8 @@ export function registerAppRoutes(
   usage?: (app: string) => Promise<AppUsage>,
   // Whether it looks for devices on the home's network (discovery.ts).
   discovery = false,
+  // What it has promised of memory and disk (capacity.ts).
+  capacity?: Capacity,
 ) {
   app.get("/api/capabilities", async () => {
     if (!apps) {
@@ -126,6 +159,7 @@ export function registerAppRoutes(
         discovery,
         lan: false,
         deletesData: false,
+        reserves: false,
       };
     }
     const [appContainers, memoryLimits] = await Promise.all([
@@ -139,6 +173,7 @@ export function registerAppRoutes(
       lan: appContainers && apps.reachesDevices(),
       // It deletes a removed app's data, and a service's.
       deletesData: Boolean(images && maintenance && updates),
+      reserves: Boolean(capacity && images),
     };
   });
 
@@ -211,8 +246,80 @@ export function registerAppRoutes(
 
   app.post(
     "/api/apps/:app/container/stop",
-    withApp((id) => apps.stop(id)),
+    withApp(async (id, body, reply) => {
+      const parsed = stopBody.safeParse(body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid stop request" });
+      }
+      return apps.stop(id, parsed.data);
+    }),
   );
+
+  if (capacity && images) {
+    const readings = () => Promise.all([apps.held(), images.available()]);
+    app.get("/api/apps/capacity", () =>
+      capacity.inTurn(async () => {
+        const [held, disk] = await readings();
+        return {
+          memoryFreeMb: await capacity.freeMb(held),
+          dataFreeBytes: disk.room(),
+        };
+      }),
+    );
+
+    app.post("/api/apps/capacity", async ({ body }, reply) => {
+      const parsed = capacityBody.safeParse(body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid capacity request" });
+      }
+      return capacity.inTurn(async () => {
+        const [held, disk] = await readings();
+        return Object.fromEntries(
+          await Promise.all(
+            parsed.data.map(async (request) => [
+              request.app,
+              await capacity.check(request.app, request, held, disk),
+            ]),
+          ),
+        );
+      });
+    });
+
+    app.post(
+      "/api/apps/:app/reservations",
+      withApp(async (id, body, reply) => {
+        const parsed = reservationBody.safeParse(body);
+        if (!parsed.success) {
+          return reply.code(400).send({ error: "Invalid reservation" });
+        }
+        return capacity.inTurn(async () => {
+          if (reply.raw.destroyed) return;
+          const [held, disk] = await readings();
+          if (reply.raw.destroyed) return;
+          const reservation = await capacity.reserve(
+            id,
+            parsed.data,
+            held,
+            disk,
+          );
+          if (reply.raw.destroyed) capacity.cancel(id, reservation.id);
+          return reservation;
+        });
+      }),
+    );
+
+    app.delete(
+      "/api/apps/:app/reservations",
+      withApp(async (id, body, reply) => {
+        const parsed = cancelReservationBody.safeParse(body);
+        if (!parsed.success) {
+          return reply.code(400).send({ error: "Invalid reservation id" });
+        }
+        await capacity.inTurn(async () => capacity.cancel(id, parsed.data.id));
+        return reply.code(204).send();
+      }),
+    );
+  }
 
   app.delete(
     "/api/apps/:app/container",

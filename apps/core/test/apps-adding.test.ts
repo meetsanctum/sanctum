@@ -23,6 +23,7 @@ import type { ApartPackage } from "../src/app-host/loader.js";
 import { appsAdded, sticksSeen } from "../src/app-host/schema.js";
 import { newSupervision } from "../src/app-host/supervisor.js";
 import { openCoreDatabase } from "../src/database.js";
+import { ManagerRefusal, ManagerUnavailable } from "../src/manager.js";
 import { base } from "./app-apart-support.js";
 import { claimed, post, testCore } from "./support.js";
 
@@ -93,6 +94,9 @@ async function addingWith(
     hasInstalled?: boolean;
     refuses?: boolean;
     beforeFind?: () => Promise<void>;
+    reserve?: Parameters<typeof createAppAdding>[0]["reserve"];
+    // How it's listed once installed.
+    state?: AppInfo["state"];
     finishRemoval?: (
       removed: ReturnType<typeof createRemovedApps>,
     ) => (appId: string) => Promise<void>;
@@ -168,6 +172,7 @@ async function addingWith(
       },
     },
     hasInstalled: () => options.hasInstalled ?? true,
+    reserve: options.reserve,
     install:
       options.installs ??
       (async (pkg) => {
@@ -177,7 +182,7 @@ async function addingWith(
       }),
     info: (appId) =>
       installedNow.has(appId)
-        ? ({ id: appId, state: "starting" } as AppInfo)
+        ? ({ id: appId, state: options.state ?? "starting" } as AppInfo)
         : undefined,
     log: (line) => logs.push(line),
   });
@@ -311,6 +316,101 @@ describe("adding an app", () => {
     expect(installing).toEqual([]);
   });
 
+  it("holds what it needs in the manager before it's added, its services too", async () => {
+    const reserved: unknown[] = [];
+    const { adding } = await addingWith({
+      available: [zigbee],
+      reserve: async (appId, need) => void reserved.push([appId, need]),
+    });
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(reserved).toEqual([
+      [
+        "sanctum.example",
+        { memoryMb: 128, dataMb: 256, services: ["zigbee2mqtt"] },
+      ],
+    ]);
+  });
+
+  it("refuses it when the manager has no room left for it since the sheet", async () => {
+    const { added, adding, installing, entries } = await addingWith({
+      reserve: async () => {
+        throw new ManagerRefusal(
+          "sanctum.example needs 128 MB, and only 60 MB are left beside the others",
+          409,
+        );
+      },
+    });
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    expect(added.ids().has("sanctum.example")).toBe(false);
+    expect(installing).toEqual([]);
+    expect(entries).toMatchObject([
+      { outcome: "refused", reason: "unavailable" },
+    ]);
+  });
+
+  it("waits while the manager can't answer, so its services can't go uncounted", async () => {
+    const { added, adding, logs } = await addingWith({
+      reserve: async () => {
+        throw new ManagerUnavailable("The manager did not answer");
+      },
+    });
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "unavailable" });
+
+    expect(added.ids().has("sanctum.example")).toBe(false);
+    expect(logs).toEqual([
+      "apps: sanctum.example's room wasn't reserved (The manager did not answer)",
+    ]);
+  });
+
+  it.each(["off", "paused"] as const)(
+    "lets its reservation go when it's added back %s, with no start to take it over",
+    async (state) => {
+      const released: string[] = [];
+      const { adding } = await addingWith({
+        state,
+        reserve: async (appId) => async () => void released.push(appId),
+      });
+
+      await adding.add(someone, "sanctum.example", "1.0.0");
+
+      expect(released).toEqual(["sanctum.example"]);
+    },
+  );
+
+  it("keeps its reservation for the start that takes it over", async () => {
+    const released: string[] = [];
+    const { adding } = await addingWith({
+      reserve: async (appId) => async () => void released.push(appId),
+    });
+
+    await adding.add(someone, "sanctum.example", "1.0.0");
+
+    expect(released).toEqual([]);
+  });
+
+  it("lets its reservation go when it doesn't install", async () => {
+    const released: string[] = [];
+    const { adding } = await addingWith({
+      installs: async () => {
+        throw new Error("its package isn't staged");
+      },
+      reserve: async (appId) => async () => void released.push(appId),
+    });
+
+    await expect(
+      adding.add(someone, "sanctum.example", "1.0.0"),
+    ).rejects.toMatchObject({ code: "app_failed" });
+    expect(released).toEqual(["sanctum.example"]);
+  });
+
   it("knows no app the home couldn't add", async () => {
     const { adding, entries } = await addingWith({ available: [] });
 
@@ -357,6 +457,32 @@ describe("adding an app", () => {
 });
 
 describe("adding an app with a hardware offer", () => {
+  it("releases what it reserved if the offer ends while reserving", async () => {
+    const reserving = deferred();
+    const reserved = deferred();
+    let isReleased = false;
+    const { added, adding, offers } = await addingWith({
+      available: [zigbee],
+      reserve: async () => {
+        reserving.resolve();
+        await reserved.promise;
+        return async () => {
+          isReleased = true;
+        };
+      },
+    });
+    await offers.look();
+    const { id } = offers.current()!;
+    const result = adding.add(someone, zigbee.id, zigbee.version, id);
+    await reserving.promise;
+    await offers.dismiss(someone, id);
+    reserved.resolve();
+
+    await expect(result).rejects.toMatchObject({ code: "conflict" });
+    expect(isReleased).toBe(true);
+    expect(added.ids().has(zigbee.id)).toBe(false);
+  });
+
   it("refuses the add if another client dismisses the offer during the checks", async () => {
     const refetch = deferred();
     const checked = deferred();

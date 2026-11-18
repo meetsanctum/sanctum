@@ -4,6 +4,7 @@ import { z } from "zod";
 import { registerAppRoutes } from "./apps/routes.js";
 import type { AppUsage } from "./apps/usage.js";
 import type { AppContainers } from "./apps/containers.js";
+import type { Capacity } from "./apps/capacity.js";
 import type { AppImages } from "./apps/images.js";
 import type { Maintenance } from "./apps/maintenance.js";
 import type { AppUpdates } from "./apps/updates.js";
@@ -58,6 +59,8 @@ export type ServerOptions = {
     // (apps/images.ts) and what works on them (apps/maintenance.ts).
     apps?: AppContainers;
     images?: AppImages;
+    // What it has promised of memory and disk (apps/capacity.ts).
+    capacity?: Capacity;
     maintenance?: Maintenance;
     appUpdates?: AppUpdates;
     // The apps' packages staged for the core's image.
@@ -219,6 +222,7 @@ export function createServer(
     host?.stagedApps,
     host?.appUsage,
     options.discovery !== undefined,
+    host?.capacity,
   );
   registerCertificateRoutes(app, authority, clock);
 

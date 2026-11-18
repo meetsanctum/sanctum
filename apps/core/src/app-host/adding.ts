@@ -1,12 +1,14 @@
-import type { AppInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo, AvailableApp } from "@meetsanctum/app-sdk";
 
 import type { Activity } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
 import type { DeviceChange, Devices } from "../devices/devices.js";
+import { ManagerRefusal, type AppNeed } from "../manager.js";
 import type { WorkflowsForApps } from "../workflows/for-apps.js";
 import type { AddedApps } from "./added.js";
 import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
+import { needOf } from "./fit.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule } from "./grants.js";
 import type { HardwareOffers } from "./hardware-offers.js";
@@ -20,7 +22,9 @@ import type { RemovedApps } from "./removed.js";
 // been open a while. The home's list then holds it, the activity log says who
 // added it, and it installs as the home's apps do when the core starts, which
 // grants what it needs and what it starts with and starts it. One add at a
-// time, so two sheets can't both take the memory or space that's left.
+// time, so two sheets can't both take the memory or space that's left, and
+// the manager holds what it needs, its services' memory too, until its
+// container starts, so an update or a start meanwhile can't take it either.
 //
 // Adding back an app the household removed, while its own data is kept,
 // forgets its removal in the same transaction: a driver's devices show again
@@ -44,6 +48,13 @@ export function createAppAdding(options: {
   activity: Pick<Activity, "for">;
   // Whether the home's apps are installed, so the list is complete.
   hasInstalled: () => boolean;
+  need?: (app: AvailableApp) => AppNeed;
+  // Holds in the manager what it needs: memory, its data image and the
+  // services it asks for. A manager that keeps no count leaves it out.
+  reserve?: (
+    appId: string,
+    need: AppNeed,
+  ) => Promise<(() => Promise<void>) | void>;
   // Installs and starts an app the household just added.
   install: (pkg: ApartPackage) => Promise<void>;
   // How the home's apps are listed now, for the answer.
@@ -113,24 +124,48 @@ export function createAppAdding(options: {
       removal = options.removed.get(appId);
     }
     if (removal && !removal.isDone) throw refuse("conflict", detail);
-    // While the checks were running, another client may have dismissed the
-    // offer or the core may have seen the sticks unplugged.
-    if (offerId !== undefined && !options.offers.matches(appId, offerId)) {
-      throw refuse("conflict", detail);
+    let release: (() => Promise<void>) | void = undefined;
+    try {
+      release = await options.reserve?.(appId, (options.need ?? needOf)(app));
+    } catch (error) {
+      // No room since the sheet was read, or a manager that can't say: added
+      // without a reservation, its services would count for nothing at its
+      // start, so it waits for the manager to answer.
+      if (!(error instanceof ManagerRefusal) || error.status !== 409) {
+        log(
+          `apps: ${appId}'s room wasn't reserved (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+      throw refuse("unavailable", detail);
     }
-    // Who added it is written with it, so neither is without the other.
-    const isAdded = options.added.add(appId, who, () => {
-      if (removal) options.removed.forget(appId);
-      options.offers.recordAdd(appId);
-      options.activity.for(appId)({
-        action: "app.add",
-        outcome: "ok",
-        subjectId: appId,
-        ...who,
-        detail,
+    const letGo = async () => {
+      await release?.().catch((error: unknown) => {
+        log(`apps: ${appId}'s reservation wasn't released (${String(error)})`);
       });
-    });
-    if (!isAdded) throw refuse("conflict", detail);
+    };
+    let isAdded = false;
+    try {
+      // While the checks were running, another client may have dismissed the
+      // offer or the core may have seen the sticks unplugged.
+      if (offerId !== undefined && !options.offers.matches(appId, offerId)) {
+        throw refuse("conflict", detail);
+      }
+      // Who added it is written with it, so neither is without the other.
+      isAdded = options.added.add(appId, who, () => {
+        if (removal) options.removed.forget(appId);
+        options.offers.recordAdd(appId);
+        options.activity.for(appId)({
+          action: "app.add",
+          outcome: "ok",
+          subjectId: appId,
+          ...who,
+          detail,
+        });
+      });
+      if (!isAdded) throw refuse("conflict", detail);
+    } finally {
+      if (!isAdded) await letGo();
+    }
     options.offers.finishAdd(appId);
     if (removal) {
       for (const device of options.devices.ofDriver(appId)) {
@@ -146,6 +181,11 @@ export function createAppAdding(options: {
       );
     }
     const info = options.info(appId);
+    // Its container's start takes over what it reserved; one that won't
+    // start now, not installed, off or paused, holds nothing meanwhile.
+    if (!info || info.state === "off" || info.state === "paused") {
+      await letGo();
+    }
     if (!info) throw new ActionCallError("app_failed");
     // An app kept off or paused has no start to wait for.
     if (removal && (info.state === "off" || info.state === "paused")) {

@@ -1,5 +1,4 @@
 import { access, chown, mkdir } from "node:fs/promises";
-import { totalmem } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -23,6 +22,7 @@ import {
   removeBrokerNetwork,
   usesBroker,
 } from "./broker.js";
+import { createCapacity, type Capacity, type HeldApp } from "./capacity.js";
 import type { AppExits } from "./exits.js";
 import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
 import type { LanHolders, LanPolicy, LanVersion } from "./lan.js";
@@ -58,10 +58,6 @@ const temporarySpace = "size=16m";
 const processes = 64;
 const halfACore = 500_000_000;
 const mebibyte = 1024 * 1024;
-// What the host keeps for itself, the core and its services.
-const keptForTheHost = (total: number) =>
-  Math.max(1024 * mebibyte, Math.floor(total / 4));
-
 export const appIdPattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 export const dataTarget = "/data";
 export const packageFolderPattern = /^(?!.*\.\.)[0-9A-Za-z][0-9A-Za-z.+-]*$/;
@@ -292,21 +288,21 @@ export function createAppContainers(options: {
   lan?: LanHolders;
   // Tells one the kernel killed for its memory where Docker's flag misses it.
   exits?: Pick<AppExits, "outOfMemory" | "stopping">;
+  // What the manager has promised of memory and disk (capacity.ts).
+  capacity?: Capacity;
 }) {
   const { docker, dataDir, log, images, prepareImage, lan, exits } = options;
-  const totalMemory = options.totalMemory ?? totalmem;
+  const capacity =
+    options.capacity ??
+    createCapacity({
+      dataDir,
+      totalMemory: options.totalMemory,
+    });
+  const { inTurn } = capacity;
   const ownFolder =
     options.ownFolder ??
     ((path: string) => chown(path, appUser.uid, appUser.gid));
   let knownLimits: boolean | undefined;
-  let queue: Promise<unknown> = Promise.resolve();
-
-  // One at a time, so two starts can't both fit in the space for one.
-  function inTurn<T>(work: () => Promise<T>): Promise<T> {
-    const result = queue.then(work, work);
-    queue = result.catch(() => undefined);
-    return result;
-  }
 
   async function memoryLimits() {
     if (knownLimits === undefined) {
@@ -373,23 +369,17 @@ export function createAppContainers(options: {
     return containers;
   }
 
+  // Every app container it holds, running or stopped, by its memory limit.
+  async function held(): Promise<HeldApp[]> {
+    return (await all()).map((each) => ({
+      app: each.Config.Labels![appLabel]!,
+      memoryMb: Number(each.Config.Labels![memoryLabel] ?? 0),
+      isRunning: each.State.Running,
+    }));
+  }
+
   async function assertFits(spec: AppContainerSpec) {
-    const others = (await all()).filter(
-      (each) =>
-        each.State.Running && each.Config.Labels?.[appLabel] !== spec.app,
-    );
-    const taken = others.reduce(
-      (sum, each) => sum + Number(each.Config.Labels?.[memoryLabel] ?? 0),
-      0,
-    );
-    const total = totalMemory();
-    const room = (total - keptForTheHost(total)) / mebibyte;
-    if (taken + spec.memoryMb > room) {
-      throw new AppRefusal(
-        `${spec.app} needs ${spec.memoryMb} MB, and only ${Math.max(0, Math.floor(room - taken))} MB are left beside the others`,
-        409,
-      );
-    }
+    await capacity.assertFits(spec.app, spec.memoryMb, await held());
   }
 
   async function remove(app: string) {
@@ -460,6 +450,8 @@ export function createAppContainers(options: {
         : undefined;
     if (version === null) return undefined;
     log(`Keeping ${desired.name} on ${spec.folder}`);
+    await capacity.turningOn(spec.app);
+    capacity.started(spec.app);
     return {
       ...(await statusOf(spec.app, existing)),
       kept: true,
@@ -578,7 +570,9 @@ export function createAppContainers(options: {
         else await lan?.remove(spec.app);
         await container.rename({ name: desired.name });
         log(`Starting ${desired.name} from ${spec.folder}`);
+        await capacity.turningOn(spec.app);
         await container.start();
+        capacity.started(spec.app);
         return {
           ...(await statusOf(spec.app, await container.inspect())),
           ...(holder ? { lan: holder.version } : {}),
@@ -639,8 +633,11 @@ export function createAppContainers(options: {
       });
     },
 
-    // Stops it and keeps the container, whose exit says why it stopped.
-    stop(app: string) {
+    held,
+
+    // Stops it and keeps the container, whose exit says why it stopped. One
+    // the core turned off gives its room back until it starts again.
+    stop(app: string, { off = false }: { off?: boolean } = {}) {
       return inTurn(async () => {
         const existing = await inspectApp(app);
         if (existing?.State.Running) {
@@ -654,6 +651,7 @@ export function createAppContainers(options: {
           }
         }
         await lan?.stop(app);
+        if (off) await capacity.turnedOff(app);
         return statusOf(app, await inspectApp(app));
       });
     },
@@ -665,6 +663,7 @@ export function createAppContainers(options: {
         await remove(app);
         await removeBrokerNetwork(docker, app, log);
         await lan?.remove(app);
+        await capacity.gone(app);
       });
     },
 

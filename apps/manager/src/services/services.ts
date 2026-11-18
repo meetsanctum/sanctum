@@ -25,6 +25,7 @@ import {
   mqttClientTopics,
   serviceDefinitions,
   wantedServices,
+  withServiceDependencies,
   type ServiceDefinition,
   type SpecContext,
 } from "./registry.js";
@@ -123,6 +124,9 @@ export function createServices(options: {
 }) {
   const { docker, store, hostDevDir, log } = options;
   const seen = new Map<string, Observed>();
+  // Count old containers until Docker confirms their removal, even if the
+  // last app that needed the service has released it.
+  const mayBeRunning = new Set<string>();
   // The last state actually applied to the broker, not just saved on disk.
   // A failed attempt cannot confirm a revocation.
   let brokerState: ServicesState | undefined;
@@ -264,10 +268,32 @@ export function createServices(options: {
     status,
     list: () => serviceDefinitions.map((definition) => status(definition.name)),
 
+    /** The services it keeps running, with their dependencies. */
+    wanted: () => wantedServices(store.current()),
+    wantedBy: (app: string) =>
+      withServiceDependencies(
+        Object.entries(store.current().apps)
+          .filter(([, apps]) => apps.includes(app))
+          .map(([name]) => name),
+      ),
+    held: () => mayBeRunning.values(),
+
     // Run once at start: accounts follow the clients this manager's
     // services have, which an update may have changed.
     async start() {
       await store.update(syncAccounts);
+      for (const { name } of serviceDefinitions) {
+        try {
+          const container = await inspectService(docker, name);
+          if (container?.State.Running || container?.State.Restarting) {
+            mayBeRunning.add(name);
+          }
+        } catch (error) {
+          // A read failure can't establish that the memory is free.
+          mayBeRunning.add(name);
+          log(`Could not read ${name}'s container: ${errorMessage(error)}`);
+        }
+      }
     },
 
     // An app needs a service: it runs from now on, with what it needs, and
@@ -412,6 +438,7 @@ export function createServices(options: {
     async reconcile() {
       const state = store.current();
       const wanted = wantedServices(state);
+      for (const name of wanted) mayBeRunning.add(name);
       brokerState = undefined;
       for (const definition of [...serviceDefinitions].reverse()) {
         if (wanted.has(definition.name)) continue;
@@ -422,6 +449,7 @@ export function createServices(options: {
             service: definition.name,
             log,
           });
+          mayBeRunning.delete(definition.name);
           observed.set(definition.name, { state: "off" });
           if (definition.name === "mosquitto") brokerState = state;
         } catch (error) {
