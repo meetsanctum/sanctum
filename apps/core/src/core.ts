@@ -387,6 +387,15 @@ export function createCore(
           });
         },
       ],
+      // An update that waits for room starts once there's some.
+      [
+        "start trying updates that wait for room",
+        (cancelled) => {
+          updatePending!.whenCommitted(() => {
+            if (!cancelled.aborted) modules!.roomWaits.start();
+          });
+        },
+      ],
       // A removed app's data goes once its 30 days are over, those that ran
       // out while the home was off first.
       [

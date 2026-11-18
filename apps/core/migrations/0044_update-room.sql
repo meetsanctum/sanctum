@@ -1,0 +1,1 @@
+ALTER TABLE `app_updates_waiting` ADD `more_memory_mb` integer;

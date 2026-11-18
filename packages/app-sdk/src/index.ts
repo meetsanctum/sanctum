@@ -273,6 +273,12 @@ export type AppWaitingUpdate = {
   build: string;
   /** Only what it newly needs, each with its reason. */
   needs: PermissionInfo[];
+  /**
+   * How much more memory it needs than is left beside the other apps, in
+   * MB, when that's what it waits for: it then starts by itself once there's
+   * room, with nothing to allow.
+   */
+  moreMemoryMb?: number;
 };
 
 export type AppInfo = {

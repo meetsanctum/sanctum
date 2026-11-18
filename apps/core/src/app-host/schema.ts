@@ -140,6 +140,9 @@ export const appUpdatesWaiting = sqliteTable("app_updates_waiting", {
   // The permissions it needs that the household hasn't granted, each with
   // its reason as that version gives it.
   needs: text("needs", { mode: "json" }).$type<PermissionInfo[]>().notNull(),
+  // How much more memory it needs than is left, in MB, when it waits for
+  // room rather than for an answer.
+  moreMemoryMb: integer("more_memory_mb"),
   since: integer("since", { mode: "timestamp_ms" }).notNull(),
 });
 

@@ -22,6 +22,11 @@ import type { AppVersions } from "./versions.js";
 // an update of Sanctum it no longer speaks, is installed after all, paused
 // for want of what it needs, so the app stops until someone allows it
 // instead of holding back Sanctum's update.
+//
+// An update that needs more memory than is left beside the other apps waits
+// too, the manager holding its room once there is some (adding.ts holds an
+// add's the same way): the app stays on its version, and the update starts by
+// itself once there's room, as when someone turns off an app they don't use.
 
 export type WaitingRow = typeof appUpdatesWaiting.$inferSelect;
 
@@ -34,6 +39,10 @@ export function createWaitingUpdates(options: {
   grants: Pick<AppGrants, "answers" | "grantAll">;
   // A version staged in its folder, as the core reads any app that runs apart.
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
+  // How much more memory this version needs than is left, in MB, having held
+  // it in the manager when there's room: undefined when it fits, or when the
+  // manager can't say, as its start still checks.
+  room?: (pkg: ApartPackage) => Promise<number | undefined>;
   log: (message: string) => void;
   now?: () => Date;
   // How long before reading the version the app runs again, after a read
@@ -96,7 +105,11 @@ export function createWaitingUpdates(options: {
   // Records that this version waits for what it needs. The same build
   // needing the same keeps its id, so an answer given before a restart still
   // counts, and never grants what it didn't show.
-  function record(pkg: ApartPackage, needs: WaitingRow["needs"]) {
+  function record(
+    pkg: ApartPackage,
+    needs: WaitingRow["needs"],
+    moreMemoryMb: number | null = null,
+  ) {
     const { id: appId, version } = pkg.apart.manifest;
     const { folder } = pkg.apart;
     const before = rowOf(appId);
@@ -108,6 +121,7 @@ export function createWaitingUpdates(options: {
       version,
       folder,
       needs,
+      moreMemoryMb,
       since: before?.folder === folder ? before.since : now(),
     };
     durably(db, () => {
@@ -126,6 +140,9 @@ export function createWaitingUpdates(options: {
         version: row.version,
         build: row.folder,
         needs: row.needs,
+        ...(row.moreMemoryMb === null
+          ? {}
+          : { moreMemoryMb: row.moreMemoryMb }),
       }
     );
   }
@@ -143,10 +160,23 @@ export function createWaitingUpdates(options: {
       const last = options.versions.last(appId);
       // A version the home has run, from a staged folder or, before its
       // first move, from the core's own process.
-      const needs = last && last.folder !== folder ? newlyNeeded(pkg) : [];
+      const isNew = last !== undefined && last.folder !== folder;
+      const needs = isNew ? newlyNeeded(pkg) : [];
       if (needs.length === 0) {
-        if (rowOf(appId)) forget(appId);
-        return pkg;
+        const more = isNew ? await options.room?.(pkg) : undefined;
+        const running =
+          more !== undefined && last!.folder
+            ? await runningNow(appId, last!.folder)
+            : undefined;
+        // One that fits goes ahead, and so does one whose version before
+        // can't run here, as its start then says there isn't room.
+        if (more === undefined || !running) {
+          if (rowOf(appId)) forget(appId);
+          return pkg;
+        }
+        record(pkg, [], more);
+        log(`apps: ${appId} ${version} waits for ${more} MB more memory`);
+        return running;
       }
       record(pkg, needs);
       // One the core ran in its own process can only run apart now.
@@ -177,6 +207,35 @@ export function createWaitingUpdates(options: {
         `apps: ${pkg.apart.manifest.id} ${pkg.apart.manifest.version} waits for ${ids(needs)}`,
       );
       return of(pkg.apart.manifest.id);
+    },
+
+    /**
+     * Tries again a version that waits for room: its package to update to,
+     * no longer waiting, once there's room (the manager then holds it), or
+     * nothing while there isn't, with how much more it needs now.
+     */
+    async retry(appId: string): Promise<ApartPackage | undefined> {
+      const row = rowOf(appId);
+      if (!row || row.needs.length > 0 || row.moreMemoryMb === null) {
+        return undefined;
+      }
+      const pkg = await options.loadPackage(appId, row.folder);
+      const more = await options.room?.(pkg);
+      if (rowOf(appId)?.id !== row.id) return undefined;
+      if (more !== undefined) {
+        if (more !== row.moreMemoryMb) {
+          durably(db, () => {
+            db.update(appUpdatesWaiting)
+              .set({ moreMemoryMb: more })
+              .where(eq(appUpdatesWaiting.appId, appId))
+              .run();
+          });
+        }
+        return undefined;
+      }
+      forget(appId);
+      log(`apps: ${appId} ${row.version} has room now`);
+      return pkg;
     },
 
     /** What the version that waits needs, as clients see it. */

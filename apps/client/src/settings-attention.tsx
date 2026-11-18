@@ -12,7 +12,7 @@ import { useState } from "react";
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
 import { RestartButton } from "./app-state";
-import { ReviewUpdate } from "./app-update-waiting";
+import { ReviewUpdate, waitsForRoom } from "./app-update-waiting";
 import {
   appAttentionText,
   appsNotRunning,
@@ -360,7 +360,7 @@ export function NeedsAttentionSection(props: {
                   Open Status
                 </RowButton>
               )
-            ) : app.waiting ? (
+            ) : app.waiting && !waitsForRoom(app.waiting) ? (
               <span className={fixPlace}>
                 <ReviewUpdate
                   app={app}

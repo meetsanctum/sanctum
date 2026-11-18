@@ -40,7 +40,36 @@ export function createAppUpdateChoices(options: {
       alongside: () => void,
     ): Promise<false | "unavailable" | "replaced" | "inPlace"> =>
       inTurn(entry.app.id, () => allowUpdate(entry, id, alongside)),
+
+    onRetryRoom: (entry: InstalledApp) =>
+      inTurn(entry.app.id, () => retryRoom(entry)),
   };
+
+  // An update that waited for room starts once there is some: the manager
+  // holds that room until its container starts.
+  async function retryRoom(entry: InstalledApp) {
+    const appId = entry.app.id;
+    if (installed.get(appId) !== entry || entry.supervision.isEnded) return;
+    let pkg;
+    try {
+      pkg = await waiting.retry(appId);
+    } catch (error) {
+      log(`apps: ${appId}'s update wasn't tried again (${String(error)})`);
+      return;
+    }
+    if (installed.get(appId) !== entry || entry.supervision.isEnded) return;
+    if (!pkg) {
+      // It may need more or less than it did.
+      const now = waiting.of(appId);
+      if (now?.moreMemoryMb !== entry.waiting?.moreMemoryMb) {
+        entry.waiting = now;
+        options.announce(entry);
+      }
+      return;
+    }
+    delete entry.waiting;
+    updates.swapTo(entry, pkg);
+  }
 
   async function goBack(entry: InstalledApp, copyId: string) {
     // A newer version that waits goes with the choice to go back, in its

@@ -191,6 +191,31 @@ describe("an update that waits", () => {
   });
 });
 
+describe("an update that waits for room", () => {
+  const forRoom: AppWaitingUpdate = {
+    ...waiting,
+    needs: [],
+    moreMemoryMb: 64,
+  };
+
+  it("says how much more memory it needs and what makes room", () => {
+    expect(waitingNoticeWords(app(), forRoom)).toEqual({
+      title: "Moods 0.11.0 is waiting",
+      line: "It needs 64 MB more memory. Turning off an app you don't use makes room.",
+    });
+    expect(waitingAttentionText(app(), forRoom)).toBe(
+      "0.11.0 is waiting: it needs 64 MB more memory",
+    );
+  });
+
+  it("offers nothing to review, since nothing waits for an answer", async () => {
+    await show({ ...app(), waiting: forRoom });
+
+    expect(host.textContent).toContain("It needs 64 MB more memory.");
+    expect(button("Review")).toBeUndefined();
+  });
+});
+
 describe("in Needs attention", () => {
   it("lists one that waits plainly, though it runs", () => {
     const waits = app();
