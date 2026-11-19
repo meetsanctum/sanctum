@@ -11,11 +11,6 @@ import {
   way,
 } from "./add-devices-support";
 
-vi.mock("../src/core-fetch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/core-fetch")>()),
-  coreJson: vi.fn(),
-}));
-
 describe("Add devices, letting a radio's devices join", () => {
   it("lets a radio's devices join from its card, and stops them when its page is left", async () => {
     await show();

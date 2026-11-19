@@ -3,7 +3,6 @@ import { lanPort } from "@meetsanctum/app-sdk";
 import type { Presses } from "../devices/presses.js";
 import { appStateOf } from "./app-info.js";
 import { deviceKinds } from "./calls.js";
-import type { createDiscoveryHandOut } from "./discovered.js";
 import type { InstalledApp } from "./installed.js";
 import type { LanPolicies } from "./lan.js";
 import type { AppsOff } from "./off.js";
@@ -27,9 +26,7 @@ export function createAppRunChoices(options: {
   presses: () => Pick<Presses, "endCaptures">;
   appServices: Pick<ReturnType<typeof createAppServices>, "revoke" | "request">;
   lan: Pick<LanPolicies, "switchingOff" | "sync" | "hasNetwork">;
-  // What drivers hear of the home's network, once the host has it.
-  handOut: () =>
-    Pick<ReturnType<typeof createDiscoveryHandOut>, "sync"> | undefined;
+  syncDiscovery: () => void;
   supervisor: Pick<Supervisor, "turnedOff" | "restart" | "renew">;
   reconcile: (
     entry: InstalledApp,
@@ -134,7 +131,7 @@ export function createAppRunChoices(options: {
       // it's gone, within what it may reach. One given a network of its own
       // needs a container that has one.
       lan.sync();
-      options.handOut()?.sync();
+      options.syncDiscovery();
       if (granted && lanPort(permission) !== null && !lan.hasNetwork(entry)) {
         void supervisor.renew(entry);
       }

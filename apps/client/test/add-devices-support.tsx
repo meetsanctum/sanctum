@@ -11,13 +11,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 
 import { AddDevices } from "../src/add-devices";
-import { coreJson } from "../src/core-fetch";
+import * as coreFetch from "../src/core-fetch";
 import { light, office, zigbee } from "./settings-devices-fixtures";
 
 // Add devices with what drivers found: an example driver's sensor that asks
 // nothing and its plug that asks for its key, beside Zigbee letting devices
-// join. Each test file mocks `coreJson` from ../src/core-fetch, which answers
-// here as the core would.
+// join. The shared setup answers requests as the core would.
 
 export const example: AppInfo = {
   ...zigbee,
@@ -32,7 +31,7 @@ export const key = {
   placeholder: null,
   refusals: { wrongKey: "That key doesn't match. Copy it again." },
 };
-export const sensor: FoundDevice = {
+const sensor: FoundDevice = {
   driver: "sanctum.example",
   key: "kitchen",
   name: "Kitchen sensor",
@@ -96,24 +95,25 @@ beforeEach(() => {
   core.adding = pairingAtStart();
   core.requests = [];
   core.answers = {};
-  vi.mocked(coreJson).mockReset();
-  vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
-    core.requests.push({ path, json: init.json });
-    switch (path) {
-      case "/api/devices/pairing/open":
-        core.adding = { ...core.adding, until: "2026-10-29T12:04:00.000Z" };
-        return { ...core.adding, since: "2026-10-29T12:00:00.000Z" };
-      case "/api/devices/pairing/close":
-        core.adding = { ...core.adding, until: null };
-        return core.adding;
-      case "/api/devices/add": {
-        const body = init.json as { key: string; answers: object };
-        return core.answers[body.key]!(body);
+  vi.spyOn(coreFetch, "coreJson").mockImplementation(
+    async (path, init = {}) => {
+      core.requests.push({ path, json: init.json });
+      switch (path) {
+        case "/api/devices/pairing/open":
+          core.adding = { ...core.adding, until: "2026-10-29T12:04:00.000Z" };
+          return { ...core.adding, since: "2026-10-29T12:00:00.000Z" };
+        case "/api/devices/pairing/close":
+          core.adding = { ...core.adding, until: null };
+          return core.adding;
+        case "/api/devices/add": {
+          const body = init.json as { key: string; answers: object };
+          return core.answers[body.key]!(body);
+        }
+        default:
+          return {};
       }
-      default:
-        return {};
-    }
-  });
+    },
+  );
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -124,6 +124,7 @@ afterEach(async () => {
   container.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 export async function show(
@@ -181,7 +182,7 @@ export const cards = () => [
   ...page().querySelectorAll('[aria-label="Devices found"] > li'),
 ];
 
-export const kitchenSensor = () =>
+export const makeKitchenSensor = () =>
   light("sensor-1", "Kitchen sensor", {
     driver: "sanctum.example",
     driverName: "Kitchen sensor",

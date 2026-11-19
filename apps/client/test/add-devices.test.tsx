@@ -17,11 +17,6 @@ import {
 } from "./add-devices-support";
 import { office, zigbee } from "./settings-devices-fixtures";
 
-vi.mock("../src/core-fetch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/core-fetch")>()),
-  coreJson: vi.fn(),
-}));
-
 describe("Add devices, choosing what to add", () => {
   it("asks what you are adding, with what was found and each radio", async () => {
     await show();

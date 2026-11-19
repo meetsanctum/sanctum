@@ -128,7 +128,6 @@ export function createAppHost(options: {
   const eventsForApps = createEventsForApps({ timeoutMs, log });
   const appServices = createAppServices({ manager, timeoutMs, log });
 
-  const stateOf = appStateOf;
   // Only while it is still installed: a removal or a new install may have
   // overtaken the change.
   const announceNow = announcerOf(options.onApp, log, ({ manifest }) =>
@@ -262,7 +261,7 @@ export function createAppHost(options: {
     presses: options.presses,
     appServices,
     lan,
-    handOut: () => handOut,
+    syncDiscovery: () => handOut?.sync(),
     supervisor,
     reconcile,
     startApart,
@@ -305,7 +304,7 @@ export function createAppHost(options: {
     installed,
     accepts,
     arrives: (entry) =>
-      stateOf(entry) === "paused"
+      appStateOf(entry) === "paused"
         ? Promise.resolve(false)
         : supervisor.arrives(entry, timeoutMs),
     contextFor,

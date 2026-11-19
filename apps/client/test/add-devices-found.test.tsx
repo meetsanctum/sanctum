@@ -9,6 +9,7 @@ import {
   core,
   key,
   live,
+  makeKitchenSensor,
   named,
   page,
   plug,
@@ -17,11 +18,6 @@ import {
   way,
 } from "./add-devices-support";
 import { light } from "./settings-devices-fixtures";
-
-vi.mock("../src/core-fetch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/core-fetch")>()),
-  coreJson: vi.fn(),
-}));
 
 describe("Add devices, adding what drivers found", () => {
   it("shows each found device as a card, saying what it has or what adding it needs", async () => {
@@ -51,10 +47,7 @@ describe("Add devices, adding what drivers found", () => {
   });
 
   it("adds one that asks nothing at once, and has it named and placed", async () => {
-    const added = light("sensor-1", "Kitchen sensor", {
-      driver: "sanctum.example",
-      driverName: "Kitchen sensor",
-    });
+    const added = makeKitchenSensor();
     core.answers.kitchen = () => ({ added });
     const changed = vi.fn();
     await show(changed);
@@ -139,10 +132,7 @@ describe("Add devices, adding what drivers found", () => {
   });
 
   it("keeps an add in progress when registration removes it from discovery", async () => {
-    const added = light("sensor-1", "Kitchen sensor", {
-      driver: "sanctum.example",
-      driverName: "Kitchen sensor",
-    });
+    const added = makeKitchenSensor();
     let finish!: (result: { added: DeviceInfo }) => void;
     core.answers.kitchen = () => new Promise((resolve) => (finish = resolve));
     const changed = vi.fn();
