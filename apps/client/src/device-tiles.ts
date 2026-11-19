@@ -1,9 +1,13 @@
 import {
   deviceCategories,
+  deviceCategoryOf,
+  deviceTypes,
   maintenanceOf,
   sensorMeasures,
   type CapabilityInfo,
+  type DeviceCategory,
   type DeviceInfo,
+  type DeviceType,
   type Places,
   type SensorMeasure,
   type TemperatureUnit,
@@ -23,9 +27,10 @@ import { motionText } from "./motion";
 // The home's lights, switches, remotes and sensors as tiles: one tile for
 // each light, switch, button, motion sensor or contact sensor a device has,
 // and one for each device with sensors, grouped in sections by room or by
-// category. Each tile shows what the core shows: a command waiting for the
-// device as it will be, a colour held for a light that is off, a device that
-// did not answer, and one that is offline or not paired any more. A remote's
+// category; a room's page joins a device's into one (roomTilesOf). Each
+// tile shows what the core shows: a command waiting for the device as it
+// will be, a colour held for a light that is off, a device that did not
+// answer, and one that is offline or not paired any more. A remote's
 // shows its latest press for a few seconds; a sensor's its readings, in the
 // unit the home shows temperatures in; a motion sensor's whether it sees
 // motion, or for how long it has not; a contact sensor's whether it is open,
@@ -486,25 +491,93 @@ export function sectionsByRoom(
     .map((section) => ({ ...section, tiles: section.tiles.sort(byName) }));
 }
 
-/** Tiles in a section for each category, as a room's page shows them. */
-export function sectionsByCategory(tiles: Tile[]): TileSection[] {
-  return deviceCategories
-    .map((category) => ({
-      id: category.id,
-      title: category.title,
-      tiles: tilesIn(category, tiles).sort(byName),
-    }))
-    .filter((section) => section.tiles.length > 0);
+// The kind of the capability that says what a device of a type is: a
+// light's light, a plug's switch, a motion sensor's motion.
+const mainKindOf = (type: DeviceType) =>
+  deviceTypes.find((each) => each.id === type)?.needs[0];
+
+const switches = (tile: Tile) =>
+  tile.kind === "light" || tile.kind === "switch";
+
+/** A tile of a room's page, and the category whose section it is in: none for a device Sanctum cannot use. */
+export type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
+
+/**
+ * The devices among some tiles as a room's page shows them: one tile for
+ * all a device does, built from its tiles. It says the device's main state,
+ * from its type, and sits in its type's category: a motion sensor that
+ * measures says whether it sees motion, under Presence. Its first light or
+ * switch is what it switches and dims, with that tile's key, so a command
+ * waiting or failed shows on it, and pressing it opens the detail on its
+ * first page. A further light or switch keeps a tile of its own. A press
+ * flashes only a remote's: a light with a button goes on showing whether it
+ * is on.
+ */
+export function roomTilesOf(
+  tiles: readonly Tile[],
+  devices: readonly DeviceInfo[],
+): RoomTile[] {
+  const byDevice = new Map<string, Tile[]>();
+  for (const tile of tiles) {
+    byDevice.set(tile.deviceId, [...(byDevice.get(tile.deviceId) ?? []), tile]);
+  }
+  return [...byDevice].flatMap(([id, own]) => {
+    const device = devices.find((each) => each.id === id);
+    const kind = device && mainKindOf(device.type);
+    const ofKind = own.filter((tile) => tile.kind === kind);
+    const first = ofKind[0] ?? own[0]!;
+    // Of several motions, contacts or buttons, one seeing motion, open or
+    // just pressed says so, on the first's tile.
+    const active = switches(first)
+      ? first
+      : (ofKind.find((tile) => tile.on) ?? first);
+    const main = {
+      ...active,
+      key: first.key,
+      capabilityId: first.capabilityId,
+    };
+    const controls = own.filter(switches);
+    const control = switches(main) ? main : controls[0];
+    const one: Tile = control
+      ? { ...control, status: main.status }
+      : // A device with several motions or contacts goes by its own name.
+        { ...main, name: device?.name ?? main.name };
+    return [
+      { tile: one, category: deviceCategoryOf(main.kind)?.id },
+      ...controls
+        .filter((tile) => tile.key !== control?.key)
+        .map((tile) => ({
+          tile,
+          category: deviceCategoryOf(tile.kind)?.id,
+        })),
+    ];
+  });
 }
 
 /**
- * A room's devices as its page shows them: a section for each category,
- * then the devices Sanctum cannot use, which no category holds.
+ * A room's devices as its page shows them, a tile for each (roomTilesOf):
+ * a section for each category, then the devices Sanctum cannot use, which
+ * no category holds.
  */
-export function sectionsOfRoom(tiles: Tile[]): TileSection[] {
-  const unknown = tiles.filter((tile) => tile.kind === "unknown").sort(byName);
+export function sectionsOfRoom(
+  tiles: readonly Tile[],
+  devices: readonly DeviceInfo[],
+): TileSection[] {
+  const placed = roomTilesOf(tiles, devices);
+  const of = (category: DeviceCategory | undefined) =>
+    placed
+      .filter((each) => each.category === category)
+      .map((each) => each.tile)
+      .sort(byName);
+  const unknown = of(undefined);
   return [
-    ...sectionsByCategory(tiles),
+    ...deviceCategories
+      .map((category) => ({
+        id: category.id,
+        title: category.title,
+        tiles: of(category.id),
+      }))
+      .filter((section) => section.tiles.length > 0),
     ...(unknown.length > 0
       ? [{ id: "unknown", title: "Unknown devices", tiles: unknown }]
       : []),

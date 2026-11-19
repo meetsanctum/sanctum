@@ -1,4 +1,4 @@
-import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import { Button, type LiveFeed, type SwipePage } from "@meetsanctum/ui-sdk";
 import { List } from "lucide-react";
 import { useId } from "react";
@@ -26,10 +26,9 @@ export type DeviceActivityContext = ListContext & {
   onShowAll: (device: string) => void;
 };
 
-/** The Activity page for a device's detail, opened from one of its capabilities' tiles or, for a device with none, from its own. */
+/** The Activity page for a device's detail. */
 export function activityPage(
   device: DeviceInfo,
-  capability: CapabilityInfo | undefined,
   context: DeviceActivityContext,
 ): SwipePage {
   return {
@@ -40,7 +39,8 @@ export function activityPage(
       <DeviceActivity
         key={device.id}
         device={device}
-        isRemote={capability?.kind === "button"}
+        // A remote's last press; a light with a button changes as a light.
+        isRemote={device.type === "button"}
         context={context}
       />
     ),
