@@ -182,7 +182,7 @@ export const cards = () => [
   ...page().querySelectorAll('[aria-label="Devices found"] > li'),
 ];
 
-export const makeKitchenSensor = () =>
+export const kitchenSensor = () =>
   light("sensor-1", "Kitchen sensor", {
     driver: "sanctum.example",
     driverName: "Kitchen sensor",

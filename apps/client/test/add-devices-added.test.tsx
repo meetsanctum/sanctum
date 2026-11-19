@@ -9,7 +9,7 @@ import {
   example,
   joiningDevice,
   live,
-  makeKitchenSensor,
+  kitchenSensor,
   named,
   page,
   root,
@@ -38,7 +38,7 @@ describe("Add devices, with a device it added", () => {
   }
 
   it("greets a device new to the home once, as its card turns green", async () => {
-    const added = makeKitchenSensor();
+    const added = kitchenSensor();
     core.answers.kitchen = () => ({ added });
     core.devices = [added];
     await show();
@@ -56,7 +56,7 @@ describe("Add devices, with a device it added", () => {
   });
 
   it("makes a new room in place and puts the device in it", async () => {
-    const added = makeKitchenSensor();
+    const added = kitchenSensor();
     core.answers.kitchen = () => ({ added });
     core.devices = [added];
     const hall = { ...office, id: "hall", name: "Hall" };
@@ -154,7 +154,7 @@ describe("Add devices, with a device it added", () => {
         "clearTimeout",
       ],
     });
-    const added = { ...makeKitchenSensor(), identify: true };
+    const added = { ...kitchenSensor(), identify: true };
     core.answers.kitchen = () => ({ added });
     core.devices = [added];
     await show();
@@ -185,7 +185,7 @@ describe("Add devices, with a device it added", () => {
   });
 
   it("offers no Blink for a device that can't show itself", async () => {
-    const added = makeKitchenSensor();
+    const added = kitchenSensor();
     core.answers.kitchen = () => ({ added });
     core.devices = [added];
     await show();

@@ -9,7 +9,7 @@ import {
   core,
   key,
   live,
-  makeKitchenSensor,
+  kitchenSensor,
   named,
   page,
   plug,
@@ -47,7 +47,7 @@ describe("Add devices, adding what drivers found", () => {
   });
 
   it("adds one that asks nothing at once, and has it named and placed", async () => {
-    const added = makeKitchenSensor();
+    const added = kitchenSensor();
     core.answers.kitchen = () => ({ added });
     const changed = vi.fn();
     await show(changed);
@@ -132,7 +132,7 @@ describe("Add devices, adding what drivers found", () => {
   });
 
   it("keeps an add in progress when registration removes it from discovery", async () => {
-    const added = makeKitchenSensor();
+    const added = kitchenSensor();
     let finish!: (result: { added: DeviceInfo }) => void;
     core.answers.kitchen = () => new Promise((resolve) => (finish = resolve));
     const changed = vi.fn();
