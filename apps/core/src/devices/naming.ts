@@ -4,7 +4,7 @@ import {
   type DeviceWords,
   type SensorMeasure,
 } from "@meetsanctum/app-sdk";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
@@ -92,17 +92,18 @@ export function createNaming(
   // build that don't parse say nothing.
   function measuresOf(id: string): SensorMeasure[] {
     return db
-      .select({
-        kind: deviceCapabilities.kind,
-        features: deviceCapabilities.features,
-      })
+      .select({ features: deviceCapabilities.features })
       .from(deviceCapabilities)
-      .where(eq(deviceCapabilities.deviceId, id))
+      .where(
+        and(
+          eq(deviceCapabilities.deviceId, id),
+          eq(deviceCapabilities.kind, "sensor"),
+        ),
+      )
       .all()
-      .flatMap((each) => {
-        if (each.kind !== "sensor") return [];
-        const features = sensor.features.safeParse(each.features);
-        return features.success ? [features.data.measures] : [];
+      .flatMap(({ features }) => {
+        const parsed = sensor.features.safeParse(features);
+        return parsed.success ? [parsed.data.measures] : [];
       });
   }
 
@@ -114,8 +115,9 @@ export function createNaming(
     if (!device?.autoNamed) {
       return;
     }
+    const type = deviceType(device);
     const base = baseName(
-      deviceWords(deviceType(device), measuresOf(id)),
+      deviceWords(type, type === "sensor" ? measuresOf(id) : []),
       (device.roomId && rooms.get(device.roomId)) || null,
     );
     const taken = db

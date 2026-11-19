@@ -7,10 +7,9 @@ import {
   deviceTypeOf,
   deviceTypes,
   deviceWords,
-  sensorMeasures,
-  sensorWords,
   fitsType,
   ownTypeOf,
+  sensorMeasures,
   showAsChoices,
   shownAsOf,
   shownType,
@@ -158,10 +157,19 @@ describe("what a device is called", () => {
   });
 
   it("has words for every measure, a title and its noun", () => {
-    expect(Object.keys(sensorWords).sort()).toEqual([...sensorMeasures].sort());
-    for (const { title, noun } of Object.values(sensorWords)) {
+    for (const measure of sensorMeasures) {
+      const { title, noun } = deviceWords("sensor", [measure]);
       expect(noun).toBe(title.toLowerCase());
     }
+  });
+
+  it.each([
+    { measures: ["temperature"], title: "Temperature sensor" },
+    { measures: ["temperature", "humidity"], title: "Environment sensor" },
+  ] as const)("returns independent words for $title", ({ measures, title }) => {
+    const words = deviceWords("sensor", measures);
+    words.title = "Other sensor";
+    expect(deviceWords("sensor", measures).title).toBe(title);
   });
 });
 

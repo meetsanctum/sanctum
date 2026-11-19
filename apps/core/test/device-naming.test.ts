@@ -2,6 +2,7 @@ import {
   capabilityKinds,
   deviceWords,
   type DeviceType,
+  type SensorMeasure,
 } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -400,14 +401,14 @@ describe("devices the household has not named", () => {
 });
 
 describe("a sensor's automatic name", () => {
-  const sensorOf = (key: string, measures: string[]) => ({
+  const sensorOf = (key: string, measures: readonly SensorMeasure[]) => ({
     key,
     name: key,
     type: "sensor",
-    capabilities: measures.map((measures) => ({
-      id: measures,
+    capabilities: measures.map((measure) => ({
+      id: measure,
       kind: "sensor",
-      features: { measures },
+      features: { measures: measure },
     })),
   });
   const nameOf = async (core: TestCore, token: string, key: string) =>
@@ -452,20 +453,30 @@ describe("a sensor's automatic name", () => {
     );
   });
 
-  it("keeps apart a room whose name starts like a sensor's", async () => {
+  it("numbers a sensor when a device in another room already has its name", async () => {
     const { core, maya } = await lampsCore();
     const [office, officeTemperature] = await Promise.all(
       ["Office", "Office Temperature"].map(async (name) =>
         (await post(core, "/api/places/rooms/add", { name }, maya)).json(),
       ),
     );
+    const other = core.devices.register(
+      "test.lamps",
+      sensorOf("o", ["humidity"]),
+    ).id;
+    await post(
+      core,
+      "/api/devices/update",
+      {
+        id: other,
+        roomId: officeTemperature.id,
+        name: "Office Temperature Sensor",
+      },
+      maya,
+    );
     const sensor = core.devices.register(
       "test.lamps",
       sensorOf("t", ["temperature"]),
-    ).id;
-    const other = core.devices.register(
-      "test.lamps",
-      sensorOf("o", ["temperature", "humidity"]),
     ).id;
     await post(
       core,
@@ -473,18 +484,12 @@ describe("a sensor's automatic name", () => {
       { id: sensor, roomId: office.id },
       maya,
     );
-    await post(
-      core,
-      "/api/devices/update",
-      { id: other, roomId: officeTemperature.id },
-      maya,
-    );
 
     expect(await nameOf(core, maya.token, "t")).toBe(
-      "Office Temperature Sensor",
+      "Office Temperature Sensor 2",
     );
     expect(await nameOf(core, maya.token, "o")).toBe(
-      "Office Temperature Environment Sensor",
+      "Office Temperature Sensor",
     );
   });
 
@@ -502,16 +507,26 @@ describe("a sensor's automatic name", () => {
     expect(await nameOf(core, maya.token, "m")).toBe("Motion Sensor");
   });
 
-  it("is never one someone typed", async () => {
+  it("follows changes in what a sensor measures unless the household names it", async () => {
     const { core, maya } = await lampsCore();
     const { id } = core.devices.register(
       "test.lamps",
       sensorOf("t", ["temperature"]),
     );
-    await post(core, "/api/devices/update", { id, name: "Desk" }, maya);
-    core.devices.register("test.lamps", sensorOf("t", ["humidity"]));
+    expect(
+      core.devices.register("test.lamps", sensorOf("t", ["humidity"])).id,
+    ).toBe(id);
+    expect(await nameOf(core, maya.token, "t")).toBe("Humidity Sensor");
 
+    await post(core, "/api/devices/update", { id, name: "Desk" }, maya);
+    core.devices.register(
+      "test.lamps",
+      sensorOf("t", ["humidity", "temperature"]),
+    );
     expect(await nameOf(core, maya.token, "t")).toBe("Desk");
+
+    await post(core, "/api/devices/update", { id, name: null }, maya);
+    expect(await nameOf(core, maya.token, "t")).toBe("Environment Sensor");
   });
 
   it("is a sensor's when what is stored of its measures doesn't parse", async () => {

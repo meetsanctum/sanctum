@@ -146,18 +146,11 @@ export function fitsType(
 export type DeviceWords = { title: string; noun: string | null };
 
 /** What a sensor that measures one thing is called, by what it measures. */
-export const sensorWords = {
+const sensorWords = {
   temperature: { title: "Temperature sensor", noun: "temperature sensor" },
   humidity: { title: "Humidity sensor", noun: "humidity sensor" },
   illuminance: { title: "Light sensor", noun: "light sensor" },
 } as const satisfies Record<SensorMeasure, DeviceWords>;
-
-// A sensor that measures several things: the Environment category holds
-// every measure there is.
-const environmentWords: DeviceWords = {
-  title: "Environment sensor",
-  noun: "environment sensor",
-};
 
 /**
  * What a device of this type is called: its type's title and noun, and for
@@ -169,11 +162,16 @@ export function deviceWords(
   type: DeviceType,
   measures: readonly SensorMeasure[],
 ): DeviceWords {
+  if (type === "sensor") {
+    const uniqueMeasures = [...new Set(measures)];
+    if (uniqueMeasures.length > 1) {
+      return { title: "Environment sensor", noun: "environment sensor" };
+    }
+    const measure = uniqueMeasures[0];
+    if (measure !== undefined) return { ...sensorWords[measure] };
+  }
   const { title, noun } = deviceTypes.find((each) => each.id === type)!;
-  if (type !== "sensor") return { title, noun };
-  const measured = [...new Set(measures)];
-  if (measured.length === 1) return sensorWords[measured[0]!];
-  return measured.length > 1 ? environmentWords : { title, noun };
+  return { title, noun };
 }
 
 /** The types the household may show a device of this type as, besides its own. */
