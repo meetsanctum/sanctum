@@ -508,10 +508,12 @@ type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
  * The devices among some tiles as a room's page shows them: one tile for
  * all a device does, built from its tiles. It says the device's main state,
  * from its type, and sits in its type's category: a motion sensor that
- * measures says whether it sees motion, under Presence. Its first light or
- * switch is what it switches and dims, with that tile's key, so a command
- * waiting or failed shows on it, and pressing it opens the detail on its
- * first page. A further light or switch keeps a tile of its own. A press
+ * measures says whether it sees motion, under Presence. It switches and
+ * dims the device's light or switch of its type's kind, a light's first
+ * light even where a switch comes before it, and otherwise its first light
+ * or switch, with that tile's key, so a command waiting or failed shows on
+ * it, and pressing it opens the detail on its first page. A further light
+ * or switch keeps a tile of its own. A press
  * flashes only a remote's: a light with a button goes on showing whether it
  * is on.
  */
