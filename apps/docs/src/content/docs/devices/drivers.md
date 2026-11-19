@@ -12,37 +12,43 @@ changes a driver.
 
 ## What a driver says about a device
 
-A driver registers each device with `ctx.devices.register`, and registers
-it again whenever something about it changes. It says:
+A driver registers each device with `ctx.devices.register` and registers it
+again when its registration details change. Use `ctx.devices.report`
+for changes in availability, part state or battery level.
 
-- **a key**, the driver's own id for the device, which stays the same for
-  as long as the device exists;
-- **a name**, the device's own or its model's, which Sanctum uses until it
-  [names the device after its room](/devices/types/#names);
-- **its maker and model**, where known;
-- **its type**, one of the [device types](/devices/types/);
-- **its parts**, each with an id, its [kind](/devices/parts/), and what it
-  can do, such as whether a light dims.
+- **`key`** is the driver's stable id for the device.
+- **`name`** is the device's own name or a description such as its model.
+  Sanctum keeps it alongside the [household's device name](/devices/types/#names).
+- **`type`** is one of the [device types a driver can declare](/devices/types/#how-a-device-gets-its-type).
+- **`capabilities`** lists the device's parts. Each has a unique `id`, a
+  [`kind`](/devices/parts/) and any `features` it needs, such as whether a
+  light dims.
 
-Registering again with the same key updates the device. The household's
-name for it, its room and what it is shown as stay as they are.
+The driver can also include `manufacturer`, `model` and `firmware`, and say
+whether it can check the device's state (`probe`) or make it identify itself
+(`identify`).
+
+Registering again with the same driver and key updates the device. It keeps
+its room and any name the household gave it. Its automatic name can change
+with its type or what it measures. Sanctum keeps the household's
+**Show as** choice and uses it whenever the registered type supports it.
 
 ## Picking the type
 
 The driver picks the type, since it knows what the device says of itself.
-Most protocols tell no more than the device's parts, and for those the SDK
-gives the type from them: `deviceTypeOf` takes the parts' kinds and returns
-the first type in the [list of types](/devices/types/#every-type) that fits.
-That is how a light with a button comes out as a light.
+When the protocol only tells you what parts the device has, pass their kinds
+to `deviceTypeOf`. It uses the
+[matching order](/devices/types/#how-a-device-gets-its-type) to pick a type.
 
-Two types need more than the parts:
+A driver can declare `plug` for a device with a switch. The Zigbee driver
+does this for a device with a switch and no light when its registered name
+or model contains a word such as plug, outlet or socket. ESPHome also
+requires a switch and no light. It uses `plug` if all its switches are
+classed as outlets, or if none has a class and the name or model matches
+the same words.
 
-- **Plug.** A plug's part is a switch, so `deviceTypeOf` never gives it. A
-  driver says plug when the device tells it so: Zigbee does when the
-  device's name or model has the word plug, outlet or socket in it, and
-  ESPHome when its switches are marked as outlets.
-- **Door and window.** A driver never says them. Only the household
-  [chooses them](/devices/types/#door-and-window), for a contact sensor.
+For a contact sensor, declare `contact`. The household can
+[choose to show it as a door or window](/devices/types/#door-and-window).
 
 ## What Sanctum checks
 
@@ -59,11 +65,14 @@ Sanctum can't take.
 
 - **One thing per part.** A sensor that measures temperature and humidity
   is two sensor parts. A module with two relays is two switch parts.
-- **Ids that read well after the device's name.** A device with two parts
-  of the same kind shows a tile for each, named with the part's id: "Relay
-  1" and "Relay 2", or "Hallway Switch left".
-- **Standard units.** Readings arrive in degrees Celsius, percent and lux,
-  whatever the device sends.
+- **IDs that read well after the device's name.** When a device has
+  multiple light or switch parts, their tiles show the part ID after the
+  name, for example "Hallway Switch left" and "Hallway Switch right".
+  IDs use up to 32 lowercase letters, digits, hyphens or underscores and
+  start with a letter or digit.
+- **Standard units.** Report temperature in degrees Celsius, relative
+  humidity in percent and light levels in lux. Convert the device's
+  readings before reporting them if it uses other units.
 - **Presses as they happen.** A button's presses go to `ctx.devices.press`,
   one call for each press, never as state. A hold ends with
   `ctx.devices.release` when the button is let go.

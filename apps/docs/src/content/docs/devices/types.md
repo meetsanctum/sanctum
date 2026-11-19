@@ -10,7 +10,7 @@ and no others. A device that fits none of them is an unknown device.
 
 ## Every type
 
-| Type           | Id        | What it is                                   | Needs   | In the Office it is called | On a room's page |
+| Type           | Id        | What it is                                   | Needs   | Example name in the Office | On a room's page |
 | -------------- | --------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
 | Light          | `light`   | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
 | Plug           | `plug`    | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
@@ -23,20 +23,21 @@ and no others. A device that fits none of them is an unknown device.
 | Sensor         | `sensor`  | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
 | Unknown device | `unknown` | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
 
-**Needs** is the part a device must have to be of that type. It may have
-other parts too: a light with a button and a temperature sensor is still a
-light.
+**Needs** is the part a device must have to be of that type. A driver can
+declare a device with a light part as a light even if it also has a button
+or a temperature sensor.
 
 ## How a device gets its type
 
-The driver that brings the device in says what it is. Where the driver can
-tell no more than the device's parts, the type comes from the first row
-above whose part the device has. That order is why:
+The driver that brings the device in says what it is. When the driver only
+knows the device's parts, it can use `deviceTypeOf`. The helper tries light,
+switch, button, motion sensor, contact sensor and sensor in that order. It
+returns the first type whose required part is present, or `unknown` if
+there are no parts. A device with a light and a button comes out as a
+light. A device with a switch and a button comes out as a switch.
 
-- a light that also has a button or a sensor is a **light**;
-- a remote that also switches a relay is a **button**;
-- a motion sensor that also measures is a **motion sensor**;
-- a contact sensor that also measures is a **contact sensor**.
+A driver can also declare a plug directly. Door and window are choices the
+household makes for a contact sensor.
 
 ## Plug or switch
 
@@ -46,10 +47,10 @@ model called "Smart plug". When it can't tell, the device is a switch.
 
 ## Door and window
 
-A contact sensor can't tell whether it is on a door or a window, so the
-household says so: in the device's menu, **Show as** offers Contact sensor,
-Door and Window. A door is named "Office Door" and shows as open or closed
-like any contact sensor.
+A contact sensor can be shown as a door or window. In **Settings → Devices**,
+open the device's menu and choose **Show as**. The options are **Contact
+sensor**, **Door** and **Window**. A door in the Office is automatically
+named "Office Door" and shows as open or closed like any contact sensor.
 
 Only the household chooses Door or Window; a driver never says them. The
 choice can be changed back at any time, and the device stays a contact
@@ -57,7 +58,7 @@ sensor underneath.
 
 ## Sensors are named by what they measure
 
-A sensor's name says what it measures:
+A sensor's automatic name says what it measures.
 
 | It measures            | It is called       |
 | ---------------------- | ------------------ |
@@ -69,17 +70,18 @@ A sensor's name says what it measures:
 So a sensor in the Office that measures temperature and humidity is the
 "Office Environment Sensor".
 
-A motion sensor or contact sensor that also measures keeps its own name:
-it is still the "Office Motion Sensor".
+A motion sensor or contact sensor that also measures still takes its name
+from its type. For example, a motion sensor that measures the light level
+is still "Office Motion Sensor".
 
 ## Unknown devices
 
 A device with none of the parts Sanctum knows is an unknown device. It
 still belongs to the household: it can be named, put in a room and removed.
-It is called "Unknown Device" in any room, since a room's name in front of
-it would promise more than is known about it. On a room's page it sits
-under Unknown devices, after every category, with the name its driver gives
-it underneath.
+Its automatic name starts from "Unknown Device" in any room and uses the
+same numbering as other devices. On a room's page it sits under **Unknown
+devices**, after the category sections, with the name its driver gives it
+underneath.
 
 ## Names
 

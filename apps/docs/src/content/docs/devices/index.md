@@ -31,10 +31,10 @@ that measures temperature and humidity is two sensors, one for each.
 
 ## Types
 
-A device's type is what the whole device is: a light, a motion sensor, a
-door. It comes from the device's main part, so a light that also measures
-temperature is a light, and a motion sensor that also measures the light
-level is a motion sensor.
+A device's type is what the whole device is, such as a light or a motion
+sensor. The driver chooses it based on what it knows about the device. A
+light can still be a light if it also measures temperature. The household
+can choose to show a contact sensor as a door or window.
 
 [Device types](/devices/types/) lists every type, what it needs and what
 it is called.
