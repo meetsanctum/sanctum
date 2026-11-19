@@ -17,3 +17,6 @@ machine, from nothing to a home with its first light in it. The pages after
 it cover [updating](/install/updating/),
 [what to do when something isn't right](/install/troubleshooting/) and
 [removing Sanctum](/install/removing/).
+
+[How Sanctum sees a device](/devices/) explains devices' parts and types,
+the categories they show in, and what driver apps tell Sanctum about them.
