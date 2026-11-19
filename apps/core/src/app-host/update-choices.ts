@@ -1,9 +1,7 @@
+import type { AllowUpdateEffects } from "./choices.js";
 import type { InstalledApp } from "./installed.js";
 import type { AppUpdates } from "./updates.js";
 import type { WaitingUpdates } from "./waiting.js";
-
-type AllowOutcome =
-  false | "unavailable" | "replaced" | "inPlace" | "waitsForRoom";
 
 // Applying someone's choice of version while the app can be removed,
 // replaced or sent back during the package read. Going back, allowing an
@@ -12,6 +10,8 @@ export function createAppUpdateChoices(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   updates: Pick<AppUpdates, "startGoingBack" | "swapTo" | "shownFor">;
   waiting: WaitingUpdates;
+  // The latest Turn on or Turn off work, even after it has finished.
+  offChangeOf: (entry: InstalledApp) => Promise<void> | undefined;
   // Clients hear of a wait that changed.
   announce: (entry: InstalledApp) => void;
   log: (message: string) => void;
@@ -39,9 +39,8 @@ export function createAppUpdateChoices(options: {
     onAllowUpdate: (
       entry: InstalledApp,
       id: string,
-      alongside: () => void,
-    ): Promise<AllowOutcome> =>
-      inTurn(entry.app.id, () => allowUpdate(entry, id, alongside)),
+      effects: AllowUpdateEffects,
+    ) => inTurn(entry.app.id, () => allowUpdate(entry, id, effects)),
 
     onRetryRoom: (entry: InstalledApp, signal?: AbortSignal) =>
       inTurn(entry.app.id, () => retryRoom(entry, signal)),
@@ -104,17 +103,22 @@ export function createAppUpdateChoices(options: {
   async function allowUpdate(
     entry: InstalledApp,
     id: string,
-    alongside: () => void,
-  ): Promise<AllowOutcome> {
+    effects: AllowUpdateEffects,
+  ): Promise<boolean | "unavailable"> {
     const appId = entry.app.id;
+    const isCurrent = () =>
+      installed.get(appId) === entry && !entry.supervision.isEnded;
+    const offChange = options.offChangeOf(entry);
+    const grantsRevision = entry.grantsRevision;
     let allowed;
     try {
       allowed = await waiting.allow(appId, id, {
         canAllow: () =>
-          installed.get(appId) === entry &&
-          !entry.supervision.isEnded &&
-          updates.shownFor(appId)?.stage !== "goingBack",
-        alongside,
+          isCurrent() && updates.shownFor(appId)?.stage !== "goingBack",
+        isRoomCurrent: () =>
+          options.offChangeOf(entry) === offChange &&
+          entry.grantsRevision === grantsRevision,
+        alongside: effects.alongside,
         isInPlace: (pkg) => pkg.apart.folder === entry.apartIn,
       });
     } catch (error) {
@@ -131,13 +135,13 @@ export function createAppUpdateChoices(options: {
       }
       return false;
     }
-    if (allowed === "waitsForRoom") {
+    if (allowed !== "waitsForRoom" && allowed.apart.folder !== entry.apartIn) {
+      updates.swapTo(entry, allowed);
+    } else if (isCurrent()) {
       entry.waiting = waiting.of(appId);
+      effects.applyGrants();
       options.announce(entry);
-      return "waitsForRoom";
     }
-    if (allowed.apart.folder === entry.apartIn) return "inPlace";
-    updates.swapTo(entry, allowed);
-    return "replaced";
+    return true;
   }
 }

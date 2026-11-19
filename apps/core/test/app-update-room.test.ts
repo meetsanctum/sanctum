@@ -1,3 +1,4 @@
+import type { AppInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
 import { ManagerRefusal, ManagerUnavailable } from "../src/manager.js";
@@ -9,6 +10,7 @@ import {
   stateOf,
   versions,
 } from "./app-update-support.js";
+import { openLive } from "./devices-support.js";
 import { claimed, post, type TestCore } from "./support.js";
 
 // An update that needs more memory than is left beside the other apps waits
@@ -346,7 +348,7 @@ describe("an update short of memory", () => {
   });
 });
 
-describe("an update allowed while short of memory", () => {
+describe("allowing an update", () => {
   const people = {
     id: "people.read",
     reason: "To know who's home.",
@@ -429,6 +431,7 @@ describe("an update allowed while short of memory", () => {
     await running(core, id);
     const waiting = stateOf(core, id).waiting!;
     room.shortMb = 64;
+    const live = await openLive(core, owner.token);
 
     const answer = await post(
       core,
@@ -443,6 +446,14 @@ describe("an update allowed while short of memory", () => {
       permissions: ["people.read"],
       waiting: { needs: [], moreMemoryMb: 64 },
     });
+    await vi.waitFor(() =>
+      expect(
+        live.messages
+          .filter((message) => message.type === "app")
+          .map(({ app }) => app as AppInfo)
+          .find((app) => app.waiting?.moreMemoryMb === 64),
+      ).toMatchObject({ permissions: ["people.read"] }),
+    );
   });
 
   it("starts with room held for it and the services it grants", async () => {
@@ -475,6 +486,110 @@ describe("an update allowed while short of memory", () => {
     expect(room.released).toEqual([]);
     expect(stateOf(core, id).waiting).toBeUndefined();
   });
+
+  it("rechecks room if a service permission changes during the reservation", async () => {
+    const home = await versions();
+    const optional = { ...broker, needed: false };
+    const before = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      { allowed: false },
+    );
+    await running(before, id);
+    const owner = await claimed(before);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [optional, people] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+    room.beforeReserve = async () => {
+      room.beforeReserve = async () => {};
+      const grant = await post(
+        core,
+        `/api/apps/${id}/permissions/update`,
+        { permission: broker.id, granted: true },
+        owner,
+      );
+      expect(grant.statusCode).toBe(200);
+    };
+
+    const allow = () =>
+      post(core, `/api/apps/${id}/update/allow`, { id: waiting.id }, owner);
+
+    expect((await allow()).statusCode).toBe(409);
+    expect(room.released).toEqual(["reservation-1"]);
+    expect(stateOf(core, id)).toMatchObject({
+      version: "1.0.0",
+      permissions: [broker.id],
+      waiting,
+    });
+    expect((await allow()).statusCode).toBe(200);
+    expect(room.reserved.map(({ services }) => services)).toEqual([
+      [],
+      ["mosquitto"],
+    ]);
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+  });
+
+  it.each([
+    { change: "turns off", turnsBackOn: false },
+    { change: "turns off and back on", turnsBackOn: true },
+  ])(
+    "releases the reservation if the app $change during the check",
+    async ({ turnsBackOn }) => {
+      const home = await versions();
+      const before = await home.coreWith(version("1.0.0"), { allowed: false });
+      await running(before, id);
+      const owner = await claimed(before);
+      const room = counting(home);
+      const core = await home.coreWith(
+        version("2.0.0", { permissions: [people] }),
+        { allowed: false },
+      );
+      await running(core, id);
+      const waiting = stateOf(core, id).waiting!;
+      room.beforeReserve = async () => {
+        room.beforeReserve = async () => {};
+        const off = await post(
+          core,
+          `/api/apps/${id}/off`,
+          { off: true },
+          owner,
+        );
+        expect(off.statusCode).toBe(200);
+        if (turnsBackOn) {
+          const on = await post(
+            core,
+            `/api/apps/${id}/off`,
+            { off: false },
+            owner,
+          );
+          expect(on.statusCode).toBe(200);
+        }
+      };
+
+      const allow = () =>
+        post(core, `/api/apps/${id}/update/allow`, { id: waiting.id }, owner);
+
+      expect((await allow()).statusCode).toBe(409);
+      expect(room.released).toEqual(["reservation-1"]);
+      expect(stateOf(core, id)).toMatchObject({
+        version: "1.0.0",
+        waiting,
+      });
+      expect((await allow()).statusCode).toBe(200);
+      expect(room.reserved).toHaveLength(turnsBackOn ? 2 : 1);
+      await vi.waitFor(() =>
+        expect(stateOf(core, id)).toMatchObject({
+          state: turnsBackOn ? "running" : "off",
+          version: "2.0.0",
+        }),
+      );
+    },
+  );
 
   it("starts as before when the manager can't answer", async () => {
     const home = await versions();

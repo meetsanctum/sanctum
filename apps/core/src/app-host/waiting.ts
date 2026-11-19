@@ -284,11 +284,10 @@ export function createWaitingUpdates(options: {
 
     /**
      * Someone allows the version that waits, named by its id: what it newly
-     * needs is granted and it's no longer waiting, with what `alongside`
-     * writes, in one transaction, and this answers its package to install in
-     * place of the one that runs. Nothing, and nothing changed, for another
-     * id, or one that now needs more than it showed, which waits anew under
-     * another id. A package that can't be read throws, changing nothing.
+     * needs is granted, with what `alongside` writes, in one transaction.
+     * Answers a package to install (and clears the wait), or "waitsForRoom".
+     * Another id changes nothing. One that now needs more than it showed
+     * waits anew under another id. A package that can't be read throws.
      *
      * Like any other version change, one that would replace the version the
      * app runs first asks the manager to hold its room, with the services
@@ -301,6 +300,7 @@ export function createWaitingUpdates(options: {
       id: string,
       when: {
         canAllow: () => boolean;
+        isRoomCurrent: () => boolean;
         alongside: () => void;
         // Whether it's the one installed, paused for want of what it needs,
         // whose start checks for room itself.
@@ -315,51 +315,49 @@ export function createWaitingUpdates(options: {
         throw new Error(`${row.version} can't run on this core`);
       }
       const granting = row.needs.map((request) => request.id);
+      const shown = new Set(granting);
+      const canGrant = () => {
+        if (rowOf(appId)?.id !== id || !when.canAllow()) return false;
+        // A permission switched off since it showed can leave it paused.
+        const needs = newlyNeeded(pkg);
+        if (needs.every((request) => shown.has(request.id))) return true;
+        record(pkg, needs);
+        return false;
+      };
+      if (!canGrant()) return undefined;
+
       const isOff = pkg.origin !== "system" && options.off.isOff(appId);
-      const room =
-        when.isInPlace(pkg) || isOff
-          ? undefined
-          : await options.room(pkg, granting);
+      const canReserveRoom = !when.isInPlace(pkg) && !isOff;
+      const room = canReserveRoom
+        ? await options.room(pkg, granting)
+        : undefined;
       let isTakingRoom = false;
       try {
-        if (rowOf(appId)?.id !== id || !when.canAllow()) return undefined;
-        // A permission switched off since it showed would leave it paused.
-        const needs = newlyNeeded(pkg);
-        const shown = new Set(granting);
-        if (needs.some((request) => !shown.has(request.id))) {
-          durably(db, () => {
-            db.update(appUpdatesWaiting)
-              .set({ id: randomUUID(), needs })
-              .where(eq(appUpdatesWaiting.appId, appId))
-              .run();
-          });
+        // A grant or power change can invalidate the manager's calculation
+        // or take the reservation for the currently installed version.
+        if (canReserveRoom && (!canGrant() || !when.isRoomCurrent())) {
           return undefined;
         }
-        if (room?.kind === "short") {
-          durably(db, () => {
-            options.grants.grantAll(appId, granting);
+        const moreMemoryMb =
+          room?.kind === "short" ? room.moreMemoryMb : undefined;
+        durably(db, () => {
+          options.grants.grantAll(appId, granting);
+          if (moreMemoryMb === undefined) {
+            drop(appId);
+          } else {
             db.update(appUpdatesWaiting)
-              .set({
-                id: randomUUID(),
-                needs: [],
-                moreMemoryMb: room.moreMemoryMb,
-              })
+              .set({ id: randomUUID(), needs: [], moreMemoryMb })
               .where(eq(appUpdatesWaiting.appId, appId))
               .run();
-            when.alongside();
-          });
+          }
+          when.alongside();
+        });
+        if (moreMemoryMb !== undefined) {
           log(
-            `apps: ${appId} ${row.version} is allowed, and waits for ${room.moreMemoryMb} MB more memory`,
+            `apps: ${appId} ${row.version} is allowed, and waits for ${moreMemoryMb} MB more memory`,
           );
           return "waitsForRoom";
         }
-        durably(db, () => {
-          options.grants.grantAll(appId, granting);
-          db.delete(appUpdatesWaiting)
-            .where(eq(appUpdatesWaiting.appId, appId))
-            .run();
-          when.alongside();
-        });
         isTakingRoom = true;
         log(`apps: ${appId} ${row.version} is allowed`);
         return pkg;

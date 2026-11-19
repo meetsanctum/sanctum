@@ -305,6 +305,7 @@ export function createAppHost(options: {
       installed,
       updates: options.updates,
       waiting: options.waiting,
+      offChangeOf: (entry) => followingOff.get(entry),
       announce,
       log,
     }),
