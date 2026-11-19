@@ -183,6 +183,71 @@ describe("a service's new image, taking its turn", () => {
     expect(docker.volumeData.get(volume)).toBe("the network key");
   });
 
+  describe("once nothing needs it, while it's on trial", () => {
+    const unneeded = (store: Awaited<ReturnType<typeof setup>>["store"]) =>
+      store.update((draft) => {
+        delete draft.apps.zigbee2mqtt;
+      });
+
+    it("puts a version that failed back before its container goes", async () => {
+      const { crashLoop, docker, operations, services, store } = await setup();
+      await services.reconcile();
+      crashLoop();
+      await unneeded(store);
+
+      await services.reconcile();
+
+      expect(store.current().imageChanges?.zigbee2mqtt?.status).toBe(
+        "kept-back",
+      );
+      expect(docker.volumeData.get(volume)).toBe("the network key");
+      expect(docker.container(bridge)).toBeUndefined();
+      expect(await operations.current()).toBeNull();
+
+      // Needed again, it runs the version before on its data.
+      await services.need("zigbee2mqtt", app);
+      await services.reconcile();
+      expect(docker.imageOf(bridge)?.tags.has(oldImage)).toBe(true);
+      expect(docker.volumeData.get(volume)).toBe("the network key");
+    });
+
+    it("commits a version that stayed up before its container goes", async () => {
+      const { docker, operations, services, settle, store } = await setup();
+      await services.reconcile();
+      settle();
+      await unneeded(store);
+
+      await services.reconcile();
+
+      expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
+      expect(docker.container(bridge)).toBeUndefined();
+      expect(await operations.current()).toBeNull();
+    });
+
+    it("keeps a version not judged yet on trial, watched again when it runs", async () => {
+      const { crashLoop, docker, services, store } = await setup();
+      await services.reconcile();
+      await unneeded(store);
+
+      await services.reconcile();
+
+      expect(store.current().imageChanges?.zigbee2mqtt?.status).toBe(
+        "checking",
+      );
+      expect(docker.container(bridge)).toBeUndefined();
+
+      await services.need("zigbee2mqtt", app);
+      await services.reconcile();
+      expect(docker.imageOf(bridge)?.tags.has(zigbee2mqttImage)).toBe(true);
+      crashLoop();
+      await services.reconcile();
+      expect(store.current().imageChanges?.zigbee2mqtt?.status).toBe(
+        "kept-back",
+      );
+      expect(docker.volumeData.get(volume)).toBe("the network key");
+    });
+  });
+
   it("finishes restoring with its coordinator unplugged, without starting the service", async () => {
     const { crashLoop, dev, docker, services, start, store } = await setup();
     await services.reconcile();
