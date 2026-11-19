@@ -1,4 +1,4 @@
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import { deviceCategories, type DeviceInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,7 +10,7 @@ import {
   contactText,
   placeContacts,
 } from "../src/contact";
-import { sectionsByCategory, tilesOf } from "../src/device-tiles";
+import { sectionsOfRoom, tilesIn, tilesOf } from "../src/device-tiles";
 import { contactSensor, places, sensor } from "./place-pages-fixtures";
 
 // What contact sensors say: words on a tile, in a room's line and in the
@@ -114,9 +114,9 @@ describe("a contact sensor's tile", () => {
     ]);
   });
 
-  it("is under Security, after Presence, and beside its readings' under Environment", () => {
+  it("is under Security, beside its readings' under Environment, and one tile under Security on its room's page", () => {
     const measuring = contactSensor("window", "Window", "office", false);
-    const shown = tiles([
+    const devices = [
       {
         ...measuring,
         capabilities: [
@@ -124,17 +124,28 @@ describe("a contact sensor's tile", () => {
           ...sensor("window", "office", 21, 48).capabilities,
         ],
       },
-    ]);
+    ];
+    const shown = tiles(devices);
 
     expect(
-      sectionsByCategory(shown).map((section) => [
+      deviceCategories.map((category) => [
+        category.title,
+        tilesIn(category, shown).map((tile) => tile.status),
+      ]),
+    ).toEqual([
+      ["Lights", []],
+      ["Switches", []],
+      ["Environment", ["21° · 48%"]],
+      ["Presence", []],
+      ["Security", ["Closed"]],
+      ["Buttons", []],
+    ]);
+    expect(
+      sectionsOfRoom(shown, devices).map((section) => [
         section.title,
         section.tiles.map((tile) => tile.status),
       ]),
-    ).toEqual([
-      ["Environment", ["21° · 48%"]],
-      ["Security", ["Closed"]],
-    ]);
+    ).toEqual([["Security", ["Closed"]]]);
   });
 });
 

@@ -5,94 +5,30 @@ import type {
   Places,
   SyncStatus,
 } from "@meetsanctum/app-sdk";
-import { deviceTypeOf } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
   climateMeasures,
   readingsOf,
   readingsText,
-  sectionsByCategory,
   sectionsByRoom,
   sectionsOfRoom,
   sensorReadings,
   tilesOf,
 } from "../src/device-tiles";
+import {
+  climate,
+  device,
+  light,
+  motionCapability,
+  places,
+  plug,
+  reading,
+  remote,
+} from "./device-tiles-fixtures";
 
 const roomSections = (devices: DeviceInfo[], home: Places) =>
   sectionsByRoom(tilesOf(devices, home), home);
-
-const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
-  floors: [],
-  rooms: [
-    { id: "living", name: "Living room", floorId: null },
-    { id: "kitchen", name: "Kitchen", floorId: null },
-  ],
-  zones: [],
-};
-
-function light(
-  state: LightState | null,
-  sync: SyncStatus = "synced",
-): CapabilityInfo {
-  return {
-    id: "light",
-    kind: "light",
-    features: { brightness: true, colorTemperature: null, color: false },
-    state,
-    observed: state,
-    desired: null,
-    sync,
-    setBy: null,
-    changedAt: null,
-  };
-}
-
-function plug(id: string, on: boolean): CapabilityInfo {
-  const state = { on };
-  return {
-    id,
-    kind: "switch",
-    features: {},
-    state,
-    observed: state,
-    desired: null,
-    sync: "synced",
-    setBy: null,
-    changedAt: null,
-  };
-}
-
-function device(
-  id: string,
-  name: string,
-  roomId: string | null,
-  capabilities: CapabilityInfo[],
-  availability: DeviceInfo["availability"] = "online",
-): DeviceInfo {
-  return {
-    id,
-    name,
-    driverName: name,
-    type: deviceTypeOf(capabilities.map((each) => each.kind)),
-    driver: "sanctum.zigbee",
-    manufacturer: null,
-    model: null,
-    roomId,
-    availability,
-    lastSeenAt: null,
-    firmware: null,
-    probe: false,
-    identify: false,
-    battery: null,
-    batteryLow: null,
-    shownAs: null,
-    leftAt: null,
-    problem: null,
-    capabilities,
-  };
-}
 
 describe("sectionsByRoom", () => {
   it("puts tiles in their rooms' order, sorted by name, with devices without a room last", () => {
@@ -243,23 +179,6 @@ describe("sectionsByRoom", () => {
   });
 });
 
-// A remote with a button and nothing to switch.
-function remote(id: string, name: string, roomId: string | null) {
-  return device(id, name, roomId, [
-    {
-      id: "button",
-      kind: "button",
-      features: { actions: ["single", "double", "hold"], holds: [] },
-      state: null,
-      observed: null,
-      desired: null,
-      sync: "synced",
-      setBy: null,
-      changedAt: null,
-    },
-  ]);
-}
-
 describe("a remote's tile", () => {
   it("is idle, and shows a press while it lasts, White like a switch that is on", () => {
     const devices = [remote("button", "Office button", "living")];
@@ -333,19 +252,19 @@ describe("a device with several buttons", () => {
   });
 });
 
-describe("sectionsByCategory", () => {
+describe("sectionsOfRoom", () => {
   it("groups a room's tiles by category, lights first", () => {
-    const tiles = tilesOf(
-      [
-        device("a", "TV plug", "living", [plug("switch", true)]),
-        device("b", "Floor lamp", "living", [light({ on: false })]),
-        device("c", "Kettle", "kitchen", [plug("switch", false)]),
-        remote("d", "Living room button", "living"),
-      ],
-      places,
-    ).filter((tile) => tile.roomId === "living");
+    const devices = [
+      device("a", "TV plug", "living", [plug("switch", true)]),
+      device("b", "Floor lamp", "living", [light({ on: false })]),
+      device("c", "Kettle", "kitchen", [plug("switch", false)]),
+      remote("d", "Living room button", "living"),
+    ];
+    const tiles = tilesOf(devices, places).filter(
+      (tile) => tile.roomId === "living",
+    );
     expect(
-      sectionsByCategory(tiles).map((section) => [
+      sectionsOfRoom(tiles, devices).map((section) => [
         section.title,
         section.tiles.map((tile) => tile.name),
       ]),
@@ -356,39 +275,6 @@ describe("sectionsByCategory", () => {
     ]);
   });
 });
-
-function reading(
-  measure: "temperature" | "humidity" | "illuminance",
-  value: number | null,
-): CapabilityInfo {
-  const state = value === null ? null : { value };
-  return {
-    id: measure,
-    kind: "sensor",
-    features: { measures: measure },
-    state,
-    observed: state,
-    desired: null,
-    sync: "synced",
-    setBy: null,
-    changedAt: null,
-  };
-}
-
-const climate = (
-  id: string,
-  roomId: string | null,
-  temperature: number | null,
-  humidity: number | null,
-  availability: DeviceInfo["availability"] = "online",
-) =>
-  device(
-    id,
-    `${id} sensor`,
-    roomId,
-    [reading("temperature", temperature), reading("humidity", humidity)],
-    availability,
-  );
 
 describe("a device with nothing Sanctum can use", () => {
   const purifier = (
@@ -428,31 +314,28 @@ describe("a device with nothing Sanctum can use", () => {
   });
 
   it("is last on its room's page, under no category", () => {
-    const tiles = tilesOf(
-      [
-        purifier("living"),
-        device("b", "Floor lamp", "living", [light({ on: false })]),
-        remote("d", "Living room button", "living"),
-      ],
-      places,
-    );
+    const devices = [
+      purifier("living"),
+      device("b", "Floor lamp", "living", [light({ on: false })]),
+      remote("d", "Living room button", "living"),
+    ];
+    const tiles = tilesOf(devices, places);
     const titles = (sections: { title: string; tiles: { name: string }[] }[]) =>
       sections.map((section) => [
         section.title,
         section.tiles.map((tile) => tile.name),
       ]);
-    expect(titles(sectionsOfRoom(tiles))).toEqual([
+    expect(titles(sectionsOfRoom(tiles, devices))).toEqual([
       ["Lights", ["Floor lamp"]],
       ["Buttons", ["Living room button"]],
       ["Unknown devices", ["Unknown device"]],
     ]);
-    expect(titles(sectionsByCategory(tiles))).toEqual([
-      ["Lights", ["Floor lamp"]],
-      ["Buttons", ["Living room button"]],
-    ]);
     // A room with none has no such section.
     expect(
-      sectionsOfRoom(tiles.filter((tile) => tile.kind !== "unknown")),
+      sectionsOfRoom(
+        tiles.filter((tile) => tile.kind !== "unknown"),
+        devices,
+      ),
     ).toHaveLength(2);
   });
 });
@@ -523,15 +406,11 @@ describe("a sensor's tile", () => {
   });
 
   it("is in Environment, after switches and before buttons, on a room's page", () => {
-    const sections = sectionsByCategory(
-      tilesOf(
-        [
-          climate("office", "living", 21.5, 48),
-          device("lamp", "Lamp", "living", [light({ on: false })]),
-        ],
-        places,
-      ),
-    );
+    const devices = [
+      climate("office", "living", 21.5, 48),
+      device("lamp", "Lamp", "living", [light({ on: false })]),
+    ];
+    const sections = sectionsOfRoom(tilesOf(devices, places), devices);
 
     expect(sections.map((section) => section.title)).toEqual([
       "Lights",
@@ -613,28 +492,6 @@ describe("light level", () => {
   });
 });
 
-function motionCapability(
-  motion: boolean | null,
-  changedAt: string | null = null,
-): CapabilityInfo {
-  const state = motion === null ? null : { motion };
-  return {
-    id: "occupancy",
-    kind: "motion",
-    features: {
-      sensitivity: null,
-      clearAfter: null,
-      indicator: false,
-    },
-    state,
-    observed: state,
-    desired: null,
-    sync: "synced",
-    setBy: null,
-    changedAt,
-  };
-}
-
 describe("a motion sensor's tile", () => {
   const now = Date.parse("2026-10-31T12:00:00.000Z");
   const ago = (minutes: number) =>
@@ -708,33 +565,31 @@ describe("a motion sensor's tile", () => {
     expect([tile?.status, tile?.motion]).toEqual(["Not heard from", undefined]);
   });
 
-  it("comes before its readings' tile, which keeps it under Environment too, and Presence follows Environment", () => {
-    const tiles = tilesOf(
-      [
-        device("office", "Office motion sensor", "living", [
-          motionCapability(false, ago(3)),
-          reading("temperature", 21),
-          reading("illuminance", 320),
-        ]),
-        remote("button", "Living room button", "living"),
-      ],
-      places,
-      new Map(),
-      now,
-    );
+  it("comes before its readings' tile, and on a room's page joins them under Presence, which follows Environment", () => {
+    const devices = [
+      device("office", "Office motion sensor", "living", [
+        motionCapability(false, ago(3)),
+        reading("temperature", 21),
+        reading("illuminance", 320),
+      ]),
+      remote("button", "Living room button", "living"),
+      climate("air", "living", 21.5, 48),
+    ];
+    const tiles = tilesOf(devices, places, new Map(), now);
 
     expect(tiles.map((tile) => tile.key)).toEqual([
       "office/occupancy",
       "office/temperature",
       "button/button",
+      "air/temperature",
     ]);
     expect(
-      sectionsByCategory(tiles).map((section) => [
+      sectionsOfRoom(tiles, devices).map((section) => [
         section.title,
         section.tiles.map((tile) => tile.status),
       ]),
     ).toEqual([
-      ["Environment", ["21° · 320 lx"]],
+      ["Environment", ["21.5° · 48%"]],
       ["Presence", ["Quiet for 3 min"]],
       ["Buttons", ["Idle"]],
     ]);
