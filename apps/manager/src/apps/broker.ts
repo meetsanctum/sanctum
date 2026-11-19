@@ -8,6 +8,7 @@ import {
   type Log,
 } from "../docker-resources.js";
 import {
+  errorMessage,
   isNotFound,
   managedLabel,
   type ContainerInfo,
@@ -24,9 +25,20 @@ import { isOurs, stacked } from "../stack.js";
 
 const brokerLabel = "sanctum.app.broker";
 const broker = "mosquitto";
+const maxRemoveAttempts = 3;
 
 export function brokerNetworkName(app: string) {
   return stacked(`sanctum-app-${app}-broker`);
+}
+
+function inspectNetwork(docker: DockerClientLike, name: string) {
+  return docker
+    .getNetwork(name)
+    .inspect()
+    .catch((error: unknown) => {
+      if (isNotFound(error)) return null;
+      throw error;
+    });
 }
 
 // Whether the package staged in this folder asks for a service it reaches
@@ -77,14 +89,7 @@ export async function joinAppNetworks(
   });
   for (const network of networks) {
     if (!isOurs(network.Labels)) continue;
-    const inspected = await docker
-      .getNetwork(network.Name)
-      .inspect()
-      .catch((error: unknown) => {
-        if (isNotFound(error)) return null;
-        throw error;
-      });
-    // Removing an app can release its network while this reconcile runs.
+    const inspected = await inspectNetwork(docker, network.Name);
     if (!inspected) continue;
     assertManaged({
       labels: inspected.Labels,
@@ -95,7 +100,17 @@ export async function joinAppNetworks(
         `The ${network.Name} network reaches beyond its containers`,
       );
     }
-    await ensureContainerNetwork(docker, container, network.Name, log);
+    await ensureContainerNetwork(docker, container, network.Name, log).catch(
+      async (error: unknown) => {
+        // Docker also reports 404 when the broker container is gone.
+        if (
+          !isNotFound(error) ||
+          (await inspectNetwork(docker, network.Name))
+        ) {
+          throw error;
+        }
+      },
+    );
   }
 }
 
@@ -106,11 +121,7 @@ export async function removeBrokerNetwork(
   log: Log,
 ) {
   const name = brokerNetworkName(app);
-  const network = docker.getNetwork(name);
-  const inspected = await network.inspect().catch((error: unknown) => {
-    if (isNotFound(error)) return null;
-    throw error;
-  });
+  const inspected = await inspectNetwork(docker, name);
   if (!inspected) return;
   assertManaged({ labels: inspected.Labels, name: `${name} network` });
   if (inspected.Labels?.[brokerLabel] !== app) {
@@ -118,12 +129,33 @@ export async function removeBrokerNetwork(
       `Refusing to remove ${name} network with unexpected labels`,
     );
   }
-  const container = await inspectService(docker, broker);
-  if (container?.NetworkSettings?.Networks?.[name]) {
-    await network.disconnect({ Container: container.Id, Force: true });
+  const network = docker.getNetwork(name);
+  for (let attempt = 1; ; attempt++) {
+    const container = await inspectService(docker, broker);
+    if (container?.NetworkSettings?.Networks?.[name]) {
+      // The broker can be replaced after inspection. Removal still checks
+      // whether the network has any endpoints.
+      await network
+        .disconnect({ Container: container.Id, Force: true })
+        .catch((error: unknown) => {
+          if (!isNotFound(error)) throw error;
+        });
+    }
+    log(`Removing ${name}`);
+    try {
+      await network.remove();
+      return;
+    } catch (error) {
+      if (isNotFound(error)) return;
+      // A replacement broker can join before Docker removes the network.
+      if (
+        attempt >= maxRemoveAttempts ||
+        !errorMessage(error).includes("has active endpoints")
+      ) {
+        throw error;
+      }
+    }
   }
-  log(`Removing ${name}`);
-  await network.remove();
 }
 
 /** Whether a service is the broker, which joins apps' networks. */

@@ -443,7 +443,7 @@ export function createServices(options: {
       for (const definition of [...serviceDefinitions].reverse()) {
         if (wanted.has(definition.name)) continue;
         try {
-          await imageChanges.resume(definition.name);
+          await imageChanges.resume(definition.name, { isUnneeded: true });
           await removeServiceContainer({
             docker,
             service: definition.name,
