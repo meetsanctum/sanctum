@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import {
+  useEffect,
   useId,
   useRef,
   useState,
@@ -16,12 +17,16 @@ import { ScrollArea } from "./components/ui/scroll-area";
 // which a click or the arrow keys change too. One page has no tabs. They
 // fill their parent's height, an overlay's glass edge to edge, each page in
 // the middle of the room above the tabs, and only a page taller than that
-// room scrolls, on its own.
+// room scrolls, on its own. Tabs too many for the width scroll sideways,
+// fading out at the sides, and the current one is always in view.
 
 // How far a press moves before it is a swipe, and how far a swipe goes to
 // turn the page, in px.
 const swipeAfter = 10;
 const turnAfter = 60;
+// How far the tabs fade out at the sides, and the room kept for it either
+// side of them, in px.
+const tabsFade = 24;
 
 export type SwipePage = {
   id: string;
@@ -53,18 +58,40 @@ export function SwipePages(props: {
   initial?: string;
 }) {
   const { pages } = props;
-  const [chosen, setPage] = useState(() =>
-    Math.max(
+  const [chosen, setChosen] = useState(() => {
+    const index = Math.max(
       0,
       pages.findIndex((each) => each.id === props.initial),
-    ),
-  );
-  const page = Math.min(chosen, pages.length - 1);
+    );
+    return { id: pages[index]?.id, index };
+  });
+  // A capability or an app can add or remove pages while the detail is open.
+  const selectedIndex = pages.findIndex((each) => each.id === chosen.id);
+  const page =
+    selectedIndex >= 0
+      ? selectedIndex
+      : Math.min(chosen.index, pages.length - 1);
+  const setPage = (index: number) => setChosen({ id: pages[index]?.id, index });
   const [dx, setDx] = useState<number | null>(null);
   const swipe = useRef<Swipe | null>(null);
   const swiped = useRef(false);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const tabRow = useRef<HTMLDivElement>(null);
   const id = useId();
+
+  // The current tab scrolls into view, clear of the fade, however the page
+  // was chosen: a swipe, a click or a key.
+  useEffect(() => {
+    const row = tabRow.current;
+    const tab = tabs.current[page];
+    if (!row || !tab) return;
+    const start = tab.offsetLeft - tabsFade;
+    const end = tab.offsetLeft + tab.offsetWidth + tabsFade;
+    if (start < row.scrollLeft) row.scrollLeft = start;
+    else if (end > row.scrollLeft + row.clientWidth) {
+      row.scrollLeft = end - row.clientWidth;
+    }
+  }, [page]);
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary === false) return;
@@ -216,13 +243,17 @@ export function SwipePages(props: {
         </div>
       </div>
       {pages.length > 1 && (
-        <div className="flex shrink-0 justify-center pt-2 pb-[calc(24px+env(safe-area-inset-bottom))]">
+        <div
+          ref={tabRow}
+          className="relative shrink-0 overflow-x-auto pt-2 pb-[calc(24px+env(safe-area-inset-bottom))] [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           <div
             role="tablist"
             data-slot="swipe-pages-tabs"
             aria-label={props.label}
             onKeyDown={onKeyDown}
-            className="flex gap-5"
+            // Centred while they fit; from the start once they don't.
+            className="mx-auto flex w-max gap-5 px-6"
           >
             {pages.map((each, index) => {
               const Icon = each.icon;

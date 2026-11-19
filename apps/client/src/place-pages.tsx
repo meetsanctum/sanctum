@@ -423,7 +423,7 @@ export function RoomPage(props: {
         <RoomRow row={row} roomName={room.name} entities={entities} />
       )}
       <Sections
-        sections={sectionsOfRoom(own)}
+        sections={sectionsOfRoom(own, devices.devices)}
         devices={devices}
         onOpen={props.openDevice}
       />
@@ -455,7 +455,7 @@ export function NoRoomPage(props: {
     <>
       <PlaceHeader title={noRoomName} />
       <Sections
-        sections={sectionsOfRoom(own)}
+        sections={sectionsOfRoom(own, devices.devices)}
         devices={devices}
         onOpen={props.openDevice}
       />

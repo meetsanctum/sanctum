@@ -32,6 +32,7 @@ import { coreJson } from "./core-fetch";
 import { startCoreStatusPolling, type CoreStatus } from "./core-status";
 import { activitySettingsPage } from "./activity/page";
 import { DeviceDetail } from "./device-detail";
+import { tileKey } from "./device-tiles";
 import {
   dashboardBackground,
   dashboardFrame,
@@ -158,12 +159,27 @@ export function Home(props: {
   // check, and nothing leads Needs attention or the tile on a stale one.
   const shownStatus = statusFailed ? undefined : systemStatus;
   // The device whose detail is open, kept while it closes.
-  const [detail, setDetail] = useState<{ key: string | null; open: boolean }>({
+  const [detail, setDetail] = useState<{
+    key: string | null;
+    open: boolean;
+    openFirstPage: boolean;
+  }>({
     key: null,
     open: false,
+    openFirstPage: false,
   });
   const openDevice = useCallback(
-    (tile: Tile) => setDetail({ key: tile.key, open: true }),
+    (tile: Tile) =>
+      setDetail({ key: tile.key, open: true, openFirstPage: false }),
+    [],
+  );
+  const openRoomDevice = useCallback(
+    (tile: Tile) =>
+      setDetail({
+        key: tileKey(tile.deviceId, tile.capabilityId),
+        open: true,
+        openFirstPage: true,
+      }),
     [],
   );
   const closeDevice = useCallback(
@@ -565,14 +581,14 @@ export function Home(props: {
                           devices={devices}
                           apps={installed}
                           entities={sectionEntities}
-                          openDevice={openDevice}
+                          openDevice={openRoomDevice}
                           back={back}
                         />
                       ) : route.page === noRoomPage ? (
                         <NoRoomPage
                           key={`${routes.length}:${JSON.stringify(route)}`}
                           devices={devices}
-                          openDevice={openDevice}
+                          openDevice={openRoomDevice}
                           back={back}
                         />
                       ) : (
@@ -730,6 +746,7 @@ export function Home(props: {
           <DeviceDetail
             container={screen}
             tileKey={detail.key}
+            openFirstPage={detail.openFirstPage}
             open={detail.open}
             devices={devices}
             apps={apps}

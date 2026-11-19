@@ -14,7 +14,7 @@ import {
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
 import { Blocks, Footprints, House, Sun, Thermometer } from "lucide-react";
-import { useEffect, useId, type ComponentProps } from "react";
+import { useEffect, useId, useRef, type ComponentProps } from "react";
 
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
@@ -25,39 +25,49 @@ import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
 import { historyPage } from "./device-history";
-import { noRoomName } from "./device-tiles";
+import {
+  isSwitchable,
+  noRoomName,
+  primaryKindOf,
+  tileKey,
+} from "./device-tiles";
 import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
 import { seenText } from "./settings-clients";
 import type { Devices } from "./use-devices";
 
-// A device's detail, opened from its tile: an overlay, with the controls
-// straight on its glass and no card. Its name, room and status sit in the
-// header with Done, and opposite Done, Add to Home, which says On Home while
-// it is; its pages follow, its History last (device-history.tsx). Commands
-// go through core Devices as the tiles' do, so a failure shows here and on
-// its tile. Done, Escape and a click around the controls close it, and so
-// does the connection's veil, as it closes the sidebar. It is the same on
-// every device: lights and switches are household things. A sensor's first
-// page is its readings and their history, and its header says when it last
-// said something, since sensors on a battery say little (sensor-detail.tsx).
-// A motion sensor's first is its motion (motion-detail.tsx), a contact
-// sensor's what it says now (contact-detail.tsx), then its readings; it
-// opens on the page of the tile it was opened from. A device
-// with nothing of the shell's to set, such as a remote, shows the pages apps
-// add for its kind instead, each drawn by its app in the app's scope, such
-// as Moods' Presses. Every device's last page is its Activity: who did what
-// to it (activity/device-page.tsx). For a device Sanctum cannot use it is
-// the only page unless its driver adds one.
+// A device's detail, opened from any of its tiles: an overlay, with the
+// controls straight on its glass and no card. Its name, room and status sit
+// in the header with Done, and opposite Done, Add to Home, which says On
+// Home while it is. Its pages are the device's, in one order whichever
+// tile opened it: its light's or switch's controls, its Motion
+// (motion-detail.tsx), its Contact (contact-detail.tsx), its Readings and
+// their history (sensor-detail.tsx), the pages apps add for its kinds, each
+// drawn by its app in the app's scope, such as Moods' Presses, its light's
+// History (device-history.tsx), and last its Activity: who did what to it
+// (activity/device-page.tsx). It opens on the page of the tile it was
+// opened from, so a room's tile for the whole device opens it on the first,
+// and its readings' tile under Environment on Readings. A device's further
+// light or switch has a tile of its own, whose detail has that one's
+// controls and History in place of the first's. Commands go through core
+// Devices as the tiles' do, so a failure shows here and on its tile. Done,
+// Escape and a click around the controls close it, and so does the
+// connection's veil, as it closes the sidebar. It is the same on every
+// device: lights and switches are household things. A device with nothing
+// to switch says in its header when it last said something, since sensors
+// on a battery say little. For a device Sanctum cannot use, Activity is the
+// only page unless its driver adds one.
 
 type Motion = Extract<DeviceInfo["capabilities"][number], { kind: "motion" }>;
 type Contact = Extract<DeviceInfo["capabilities"][number], { kind: "contact" }>;
 
-// The kinds whose detail is pages of what a sensor says, with nothing to
-// switch.
-const sensing = (kind: CapabilityKind) =>
-  kind === "sensor" || kind === "motion" || kind === "contact";
+// The page a tile of each kind opens the detail on: its own.
+const pageOf: Partial<Record<CapabilityKind, string>> = {
+  motion: "motion",
+  contact: "contact",
+  sensor: "readings",
+};
 
 // What a switch has: on and off, which its controls show as one button.
 const switchFeatures: LightFeatures = {
@@ -69,16 +79,14 @@ const switchFeatures: LightFeatures = {
 // The pages apps add to the detail of a device of these kinds, in the
 // order of the apps, each with the device as its app may see it, and a
 // driver's pages on its own devices, with all of each.
-export function devicePages(
-  apps: readonly HostedApp[],
-  device: DeviceInfo,
-  kinds: readonly CapabilityKind[],
-) {
+export function devicePages(apps: readonly HostedApp[], device: DeviceInfo) {
+  const kinds = new Set(device.capabilities.map((each) => each.kind));
   return apps.flatMap((app) => {
+    if (!isShown(app.info)) return [];
+    const isDriver = device.driver === app.info.id;
     const reads = deviceKindsOf(app.info.permissions).reads;
     const seen =
-      device.driver === app.info.id &&
-      app.info.permissions.includes(registerPermission)
+      isDriver && app.info.permissions.includes(registerPermission)
         ? device
         : {
             ...device,
@@ -86,17 +94,13 @@ export function devicePages(
               reads.has(each.kind),
             ),
           };
-    if (!isShown(app.info)) return [];
-    return app.info.provides.devicePages.flatMap((page) => {
-      if (page.devices === "own") {
-        return device.driver === app.info.id
-          ? [{ app, id: page.id, title: page.title, device: seen }]
-          : [];
-      }
-      return page.kinds.some((kind) => kinds.includes(kind))
-        ? [{ app, id: page.id, title: page.title, device: seen }]
-        : [];
-    });
+    return app.info.provides.devicePages
+      .filter((page) =>
+        page.devices === "own"
+          ? isDriver
+          : page.kinds.some((kind) => kinds.has(kind)),
+      )
+      .map((page) => ({ ...page, app, device: seen }));
   });
 }
 
@@ -104,6 +108,8 @@ export function DeviceDetail(props: {
   container: HTMLElement | null;
   /** The tile it shows, kept while it closes. */
   tileKey: string | null;
+  /** A room's tile opens on the device's first page. */
+  openFirstPage?: boolean;
   open: boolean;
   devices: Devices;
   /** The apps whose pages a device's detail may show. */
@@ -132,15 +138,24 @@ export function DeviceDetail(props: {
   // A device Sanctum cannot use, whose tile stands for the device itself.
   const unknown = tile?.kind === "unknown" ? device : undefined;
   const hasDetail = capability !== undefined || unknown !== undefined;
-  // A motion sensor's detail is the same from its motion's tile and from
-  // its readings', and shows the motion whose tile opened it.
+  // The light or switch whose tile opened it, or the one on the room's tile.
+  const controls = device?.capabilities.filter(isSwitchable) ?? [];
+  const primaryKind = device && primaryKindOf(device.type);
+  const control =
+    capability && isSwitchable(capability)
+      ? capability
+      : (controls.find((each) => each.kind === primaryKind) ?? controls[0]);
+  const controlTile =
+    device &&
+    control &&
+    devices.tiles.find((each) => each.key === tileKey(device.id, control.id));
+  // The motion or contact whose tile opened it, or the device's first.
   const motion =
     capability?.kind === "motion"
       ? capability
       : device?.capabilities.find(
           (each): each is Motion => each.kind === "motion",
         );
-  // A contact sensor's likewise, from its contact's tile and its readings'.
   const contact =
     capability?.kind === "contact"
       ? capability
@@ -151,27 +166,19 @@ export function DeviceDetail(props: {
     device?.shownAs === "door" || device?.shownAs === "window"
       ? device.shownAs
       : undefined;
-  const sensorLike = capability !== undefined && sensing(capability.kind);
-  const pages =
-    device && hasDetail
-      ? devicePages(
-          props.apps,
-          device,
-          sensorLike && (motion || contact)
-            ? [
-                ...new Set(
-                  device.capabilities.map((each) => each.kind).filter(sensing),
-                ),
-              ]
-            : capability
-              ? [capability.kind]
-              : [],
-        )
-      : [];
-  const history = device && capability ? historyPage(device, capability) : null;
+  const hasReadings = device?.capabilities.some(
+    (each) => each.kind === "sensor",
+  );
+  const pages = device && hasDetail ? devicePages(props.apps, device) : [];
+  const buttonPage =
+    !props.openFirstPage && capability?.kind === "button"
+      ? (pages.find((page) => page.kinds.includes("button")) ??
+        pages.find((page) => page.devices === "own"))
+      : undefined;
+  const history = device && control ? historyPage(device, control) : null;
   const activity =
     device && hasDetail
-      ? activityPage(device, capability, {
+      ? activityPage(device, {
           where: "device",
           apps: props.apps.map((app) => app.info),
           rooms: (id) =>
@@ -186,15 +193,16 @@ export function DeviceDetail(props: {
     if (gone) onClose();
   }, [gone, onClose]);
 
+  const name = controlTile?.name ?? device?.name ?? "";
   const room = devices.places?.rooms.find((each) => each.id === tile?.roomId);
   const status =
     device?.availability === "offline"
       ? `Offline · ${seenText(device.lastSeenAt, now)}`
-      : sensorLike
-        ? device?.lastSeenAt
+      : controlTile
+        ? controlTile.status
+        : (motion || contact || hasReadings) && device?.lastSeenAt
           ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
-          : tile?.status
-        : tile?.status;
+          : tile?.status;
   // The pages apps add, as one page of the detail.
   const fromApps =
     pages.length > 0
@@ -209,6 +217,7 @@ export function DeviceDetail(props: {
             content: (
               <AppPages
                 pages={pages}
+                initialPage={buttonPage === pages[0] ? undefined : buttonPage}
                 openSettings={props.onOpenAppSettings}
                 openStatus={props.onOpenStatus}
                 household={devices.places?.home}
@@ -219,6 +228,80 @@ export function DeviceDetail(props: {
           },
         ]
       : [];
+  // Every page after its controls'.
+  const after = device
+    ? [
+        ...(motion
+          ? [
+              {
+                id: "motion",
+                label: "Motion",
+                icon: Footprints,
+                content: (
+                  <MotionPage
+                    key={`${device.id}/${motion.id}`}
+                    device={device}
+                    capability={motion}
+                  />
+                ),
+              },
+            ]
+          : []),
+        ...(contact
+          ? [
+              {
+                id: "contact",
+                // Named for what the household shows it as.
+                label: contactPageName(contactShownAs),
+                icon: contactIcon(contactShownAs, false),
+                content: (
+                  <ContactPage
+                    key={`${device.id}/${contact.id}`}
+                    device={device}
+                    capability={contact}
+                  />
+                ),
+              },
+            ]
+          : []),
+        ...(hasReadings
+          ? [
+              {
+                id: "readings",
+                label: "Readings",
+                // The light level's sun for a sensor that reads only it, as
+                // its tile has.
+                icon: device.capabilities.every(
+                  (each) =>
+                    each.kind !== "sensor" ||
+                    each.features.measures === "illuminance",
+                )
+                  ? Sun
+                  : Thermometer,
+                content: (
+                  <SensorDetail
+                    device={device}
+                    unit={devices.places?.home.temperatureUnit ?? "celsius"}
+                    // The Motion or Contact page has its battery.
+                    battery={!motion && !contact}
+                  />
+                ),
+              },
+            ]
+          : []),
+        ...fromApps,
+        ...[history, activity].flatMap((page) => page ?? []),
+      ]
+    : [];
+  const initial =
+    props.openFirstPage || !capability
+      ? undefined
+      : capability.kind === "button"
+        ? buttonPage
+          ? "apps"
+          : "activity"
+        : pageOf[capability.kind];
+  const detailKey = `${props.openFirstPage ? "room" : "part"}/${tile?.key}`;
 
   return (
     <Overlay
@@ -226,7 +309,7 @@ export function DeviceDetail(props: {
       open={props.open && hasDetail}
       onClose={onClose}
       onCovering={props.onCovering}
-      title={tile?.name ?? ""}
+      title={name}
       subtitle={tile && `${room?.name ?? noRoomName} · ${status}`}
       leading={
         device &&
@@ -239,119 +322,31 @@ export function DeviceDetail(props: {
         )
       }
     >
-      {tile && unknown && (
-        <SwipePages
-          key={tile.key}
-          label={tile.name}
-          pages={[...fromApps, ...(activity ? [activity] : [])]}
-        />
-      )}
       {tile &&
-        device &&
-        capability &&
-        (capability.kind === "sensor" ||
-        capability.kind === "motion" ||
-        capability.kind === "contact" ? (
-          <SwipePages
+        hasDetail &&
+        (control && controlTile ? (
+          <LightControls
             // Each tile's detail opens afresh, on its own page.
-            key={tile.key}
-            label={tile.name}
-            initial={
-              capability.kind === "sensor"
-                ? "readings"
-                : capability.kind === "contact"
-                  ? "contact"
-                  : undefined
+            key={detailKey}
+            name={name}
+            features={
+              control.kind === "light" ? control.features : switchFeatures
             }
-            pages={[
-              ...(motion
-                ? [
-                    {
-                      id: "motion",
-                      label: "Motion",
-                      icon: Footprints,
-                      content: (
-                        <MotionPage
-                          key={`${device.id}/${motion.id}`}
-                          device={device}
-                          capability={motion}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-              ...(contact
-                ? [
-                    {
-                      id: "contact",
-                      // Named for what the household shows it as.
-                      label: contactPageName(contactShownAs),
-                      icon: contactIcon(contactShownAs, false),
-                      content: (
-                        <ContactPage
-                          key={`${device.id}/${contact.id}`}
-                          device={device}
-                          capability={contact}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-              ...(device.capabilities.some((each) => each.kind === "sensor")
-                ? [
-                    {
-                      id: "readings",
-                      label: "Readings",
-                      // The light level's sun for a sensor that reads only
-                      // it, as its tile has.
-                      icon: device.capabilities.every(
-                        (each) =>
-                          each.kind !== "sensor" ||
-                          each.features.measures === "illuminance",
-                      )
-                        ? Sun
-                        : Thermometer,
-                      content: (
-                        <SensorDetail
-                          device={device}
-                          unit={
-                            devices.places?.home.temperatureUnit ?? "celsius"
-                          }
-                          // The Motion or Contact page has its battery.
-                          battery={!motion && !contact}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-              ...fromApps,
-              ...(activity ? [activity] : []),
-            ]}
-          />
-        ) : capability.kind === "button" ? (
-          <SwipePages
-            label={tile.name}
-            // The pages apps add, when any does; Activity otherwise.
-            pages={[...fromApps, ...(activity ? [activity] : [])]}
+            state={control.state ?? { on: false }}
+            disabled={controlTile.disabled}
+            failures={controlTile.failures}
+            onCommand={(command) =>
+              void devices.command(controlTile, command).catch(() => undefined)
+            }
+            pages={after}
+            initial={initial}
           />
         ) : (
-          <LightControls
-            key={tile.key}
-            name={tile.name}
-            features={
-              capability.kind === "light" ? capability.features : switchFeatures
-            }
-            state={capability.state ?? { on: false }}
-            disabled={tile.disabled}
-            failures={tile.failures}
-            onCommand={(command) =>
-              void devices.command(tile, command).catch(() => undefined)
-            }
-            // The pages apps add, then History and Activity.
-            pages={[
-              ...fromApps,
-              ...[history, activity].flatMap((page) => page ?? []),
-            ]}
+          <SwipePages
+            key={detailKey}
+            label={name}
+            pages={after}
+            initial={initial}
           />
         ))}
     </Overlay>
@@ -362,17 +357,50 @@ export function DeviceDetail(props: {
 // at most, each under the shell's notice while its app isn't running.
 function AppPages(props: {
   pages: ReturnType<typeof devicePages>;
+  initialPage?: ReturnType<typeof devicePages>[number];
   openSettings: (app: string) => void;
   openStatus: () => void;
   household: ComponentProps<typeof DeviceFrame>["household"];
   isAway: boolean;
   onEscape: () => void;
 }) {
+  const initial = useRef<HTMLDivElement>(null);
+  const initialId = props.initialPage?.id;
+  const initialApp = props.initialPage?.app.info.id;
+  useEffect(() => {
+    const target = initial.current;
+    const column = target?.parentElement;
+    const scrollArea = target?.closest("[data-slot=scroll-area]");
+    if (!target || !column || !scrollArea) return;
+
+    // Earlier frames can grow as they load. Keep the opening page in view
+    // until someone starts navigating the app pages themselves.
+    const show = () => {
+      if (!target.closest("[inert]")) {
+        target.scrollIntoView({ block: "start", inline: "nearest" });
+      }
+    };
+    const observer = new ResizeObserver(show);
+    observer.observe(column);
+    show();
+    const stop = () => observer.disconnect();
+    const events = ["pointerdown", "wheel", "keydown"];
+    for (const event of events) scrollArea.addEventListener(event, stop, true);
+    return () => {
+      stop();
+      for (const event of events)
+        scrollArea.removeEventListener(event, stop, true);
+    };
+  }, [initialApp, initialId]);
+
   return (
     <div className="flex w-[520px] max-w-full flex-col gap-8">
       {props.pages.map(({ app, id, title, device }) => (
         <div
           key={`${app.info.id}/${id}/${device.id}`}
+          ref={
+            id === initialId && app.info.id === initialApp ? initial : undefined
+          }
           className="flex flex-col gap-3"
         >
           <AppNotice
