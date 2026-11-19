@@ -1,4 +1,4 @@
-import type { CapabilityKind } from "./devices.js";
+import type { CapabilityKind, SensorMeasure } from "./devices.js";
 
 // What a device is, to the household: what it is called, "Motion sensor" or
 // "Office motion sensor", and its icon in Settings. A capability kind says what one part
@@ -140,6 +140,40 @@ export function fitsType(
   if (type === "unknown") return kinds.size === 0;
   const { needs } = deviceTypes.find((each) => each.id === type)!;
   return needs.every((kind) => kinds.has(kind));
+}
+
+/** What a device is called: in no room, and after a room's name. */
+export type DeviceWords = { title: string; noun: string | null };
+
+/** What a sensor that measures one thing is called, by what it measures. */
+export const sensorWords = {
+  temperature: { title: "Temperature sensor", noun: "temperature sensor" },
+  humidity: { title: "Humidity sensor", noun: "humidity sensor" },
+  illuminance: { title: "Light sensor", noun: "light sensor" },
+} as const satisfies Record<SensorMeasure, DeviceWords>;
+
+// A sensor that measures several things: the Environment category holds
+// every measure there is.
+const environmentWords: DeviceWords = {
+  title: "Environment sensor",
+  noun: "environment sensor",
+};
+
+/**
+ * What a device of this type is called: its type's title and noun, and for
+ * a sensor those of what it measures, one measure by its own words and
+ * several as an environment sensor. A sensor that says no measure is a
+ * sensor.
+ */
+export function deviceWords(
+  type: DeviceType,
+  measures: readonly SensorMeasure[],
+): DeviceWords {
+  const { title, noun } = deviceTypes.find((each) => each.id === type)!;
+  if (type !== "sensor") return { title, noun };
+  const measured = [...new Set(measures)];
+  if (measured.length === 1) return sensorWords[measured[0]!];
+  return measured.length > 1 ? environmentWords : { title, noun };
 }
 
 /** The types the household may show a device of this type as, besides its own. */

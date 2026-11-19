@@ -1,8 +1,14 @@
-import { capabilityKinds } from "@meetsanctum/app-sdk";
+import {
+  capabilityKinds,
+  deviceWords,
+  type DeviceType,
+} from "@meetsanctum/app-sdk";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { deviceType } from "../src/devices/classification.js";
 import { automaticName, baseName } from "../src/devices/naming.js";
+import { deviceCapabilities } from "../src/devices/schema.js";
 import {
   devicesSeenBy,
   lampsCore,
@@ -203,35 +209,44 @@ describe("a device with no capabilities", () => {
   });
 });
 
+// A type's words, as for a device that measures nothing.
+const words = (type: DeviceType) => deviceWords(type, []);
+
 describe("an automatic name", () => {
   it("is the room and what the device is, or just what it is", () => {
-    expect(baseName("light", "Office")).toBe("Office Light");
-    expect(baseName("plug", null)).toBe("Plug");
+    expect(baseName(words("light"), "Office")).toBe("Office Light");
+    expect(baseName(words("plug"), null)).toBe("Plug");
     // What Sanctum cannot use is an unknown device wherever it is.
-    expect(baseName("unknown", "Hall")).toBe("Unknown Device");
-    expect(baseName("unknown", null)).toBe("Unknown Device");
-    expect(baseName("motion", null)).toBe("Motion Sensor");
+    expect(baseName(words("unknown"), "Hall")).toBe("Unknown Device");
+    expect(baseName(words("unknown"), null)).toBe("Unknown Device");
+    expect(baseName(words("motion"), null)).toBe("Motion Sensor");
   });
 
   it("starts each word with a capital, but keeps a word's own capitals", () => {
-    expect(baseName("contact", "living room")).toBe(
+    expect(baseName(words("contact"), "living room")).toBe(
       "Living Room Contact Sensor",
     );
-    expect(baseName("light", "über den Wolken")).toBe("Über Den Wolken Light");
-    expect(baseName("plug", "TV room")).toBe("TV Room Plug");
-    expect(baseName("switch", "iPad corner")).toBe("iPad Corner Switch");
-    expect(baseName("sensor", "2nd floor")).toBe("2nd Floor Sensor");
+    expect(baseName(words("light"), "über den Wolken")).toBe(
+      "Über Den Wolken Light",
+    );
+    expect(baseName(words("plug"), "TV room")).toBe("TV Room Plug");
+    expect(baseName(words("switch"), "iPad corner")).toBe("iPad Corner Switch");
+    expect(baseName(words("sensor"), "2nd floor")).toBe("2nd Floor Sensor");
   });
 
   it("finds words beside punctuation and keeps apostrophes within them", () => {
-    expect(baseName("light", "(office)")).toBe("(Office) Light");
-    expect(baseName("contact", "living-room")).toBe(
+    expect(baseName(words("light"), "(office)")).toBe("(Office) Light");
+    expect(baseName(words("contact"), "living-room")).toBe(
       "Living-Room Contact Sensor",
     );
-    expect(baseName("plug", "TV-room")).toBe("TV-Room Plug");
-    expect(baseName("light", "children’s room")).toBe("Children’s Room Light");
-    expect(baseName("switch", "iPad's corner")).toBe("iPad's Corner Switch");
-    expect(baseName("light", "🛋living room")).toBe("🛋Living Room Light");
+    expect(baseName(words("plug"), "TV-room")).toBe("TV-Room Plug");
+    expect(baseName(words("light"), "children’s room")).toBe(
+      "Children’s Room Light",
+    );
+    expect(baseName(words("switch"), "iPad's corner")).toBe(
+      "iPad's Corner Switch",
+    );
+    expect(baseName(words("light"), "🛋living room")).toBe("🛋Living Room Light");
   });
 
   it("follows the capitals of a name a device was given before", () => {
@@ -381,5 +396,140 @@ describe("devices the household has not named", () => {
       "Light 2",
       "Light",
     ]);
+  });
+});
+
+describe("a sensor's automatic name", () => {
+  const sensorOf = (key: string, measures: string[]) => ({
+    key,
+    name: key,
+    type: "sensor",
+    capabilities: measures.map((measures) => ({
+      id: measures,
+      kind: "sensor",
+      features: { measures },
+    })),
+  });
+  const nameOf = async (core: TestCore, token: string, key: string) =>
+    (await devicesSeenBy(core, token)).find(
+      (device: { driverName: string }) => device.driverName === key,
+    )?.name;
+
+  it("says what it measures, one thing by its own words and several as an environment sensor", async () => {
+    const { core, maya } = await lampsCore();
+    core.devices.register("test.lamps", sensorOf("t", ["temperature"]));
+    core.devices.register("test.lamps", sensorOf("h", ["humidity"]));
+    core.devices.register("test.lamps", sensorOf("l", ["illuminance"]));
+    core.devices.register(
+      "test.lamps",
+      sensorOf("th", ["temperature", "humidity"]),
+    );
+
+    expect(await nameOf(core, maya.token, "t")).toBe("Temperature Sensor");
+    expect(await nameOf(core, maya.token, "h")).toBe("Humidity Sensor");
+    expect(await nameOf(core, maya.token, "l")).toBe("Light Sensor");
+    expect(await nameOf(core, maya.token, "th")).toBe("Environment Sensor");
+  });
+
+  it("follows its room, and is numbered beside one of the same name", async () => {
+    const { core, maya } = await lampsCore();
+    const office = (
+      await post(core, "/api/places/rooms/add", { name: "Office" }, maya)
+    ).json();
+    const ids = ["a", "b"].map(
+      (key) =>
+        core.devices.register("test.lamps", sensorOf(key, ["temperature"])).id,
+    );
+    for (const id of ids) {
+      await post(core, "/api/devices/update", { id, roomId: office.id }, maya);
+    }
+
+    expect(await nameOf(core, maya.token, "a")).toBe(
+      "Office Temperature Sensor",
+    );
+    expect(await nameOf(core, maya.token, "b")).toBe(
+      "Office Temperature Sensor 2",
+    );
+  });
+
+  it("keeps apart a room whose name starts like a sensor's", async () => {
+    const { core, maya } = await lampsCore();
+    const [office, officeTemperature] = await Promise.all(
+      ["Office", "Office Temperature"].map(async (name) =>
+        (await post(core, "/api/places/rooms/add", { name }, maya)).json(),
+      ),
+    );
+    const sensor = core.devices.register(
+      "test.lamps",
+      sensorOf("t", ["temperature"]),
+    ).id;
+    const other = core.devices.register(
+      "test.lamps",
+      sensorOf("o", ["temperature", "humidity"]),
+    ).id;
+    await post(
+      core,
+      "/api/devices/update",
+      { id: sensor, roomId: office.id },
+      maya,
+    );
+    await post(
+      core,
+      "/api/devices/update",
+      { id: other, roomId: officeTemperature.id },
+      maya,
+    );
+
+    expect(await nameOf(core, maya.token, "t")).toBe(
+      "Office Temperature Sensor",
+    );
+    expect(await nameOf(core, maya.token, "o")).toBe(
+      "Office Temperature Environment Sensor",
+    );
+  });
+
+  it("is a motion sensor's whatever else it measures", async () => {
+    const { core, maya } = await lampsCore();
+    core.devices.register("test.lamps", {
+      key: "m",
+      name: "m",
+      type: "motion",
+      capabilities: [
+        { id: "motion", kind: "motion", features: {} },
+        { id: "lux", kind: "sensor", features: { measures: "illuminance" } },
+      ],
+    });
+    expect(await nameOf(core, maya.token, "m")).toBe("Motion Sensor");
+  });
+
+  it("is never one someone typed", async () => {
+    const { core, maya } = await lampsCore();
+    const { id } = core.devices.register(
+      "test.lamps",
+      sensorOf("t", ["temperature"]),
+    );
+    await post(core, "/api/devices/update", { id, name: "Desk" }, maya);
+    core.devices.register("test.lamps", sensorOf("t", ["humidity"]));
+
+    expect(await nameOf(core, maya.token, "t")).toBe("Desk");
+  });
+
+  it("is a sensor's when what is stored of its measures doesn't parse", async () => {
+    const { core, maya } = await lampsCore();
+    const { id } = core.devices.register(
+      "test.lamps",
+      sensorOf("t", ["temperature"]),
+    );
+    core.db
+      .update(deviceCapabilities)
+      .set({ features: { measures: "radiance" } })
+      .where(eq(deviceCapabilities.deviceId, id))
+      .run();
+    const hall = (
+      await post(core, "/api/places/rooms/add", { name: "Hall" }, maya)
+    ).json();
+    await post(core, "/api/devices/update", { id, roomId: hall.id }, maya);
+
+    expect(await nameOf(core, maya.token, "t")).toBe("Hall Sensor");
   });
 });
