@@ -5,7 +5,7 @@ import type { Principal } from "../auth/clients.js";
 import type { DeviceChange, Devices } from "../devices/devices.js";
 import type { Entities } from "../entities/entities.js";
 import type { WorkflowsForApps } from "../workflows/for-apps.js";
-import { ActionCallError } from "./errors.js";
+import { ActionCallError, withTimeout } from "./errors.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule } from "./grants.js";
 import type { AppHost } from "./host.js";
@@ -24,6 +24,11 @@ import type { AppUpdates } from "./updates.js";
 // those steps at its next start. Not while it's updating or going back,
 // whose journals hold the app's data; removing waits its turn with adding.
 
+// How long one try at those steps may take. A manager that keeps failing
+// leaves them for the next try, the hourly check's or an add's, and doesn't
+// hold up adding, removing and deleting meanwhile.
+const finishWithinMs = 2 * 60_000;
+
 export function createAppRemoving(options: {
   gate: Gate;
   turns: ListTurns;
@@ -36,9 +41,17 @@ export function createAppRemoving(options: {
   activity: Pick<Activity, "for">;
   manager: {
     removeAppContainer(app: string): Promise<void>;
-    servicesHeldBy?(app: string): Promise<string[]>;
-    releaseService(service: string, app: string): Promise<void>;
+    servicesHeldBy?(
+      app: string,
+      options?: { signal?: AbortSignal },
+    ): Promise<string[]>;
+    releaseService(
+      service: string,
+      app: string,
+      options?: { signal?: AbortSignal },
+    ): Promise<void>;
   };
+  finishWithinMs?: number;
   // What clients hear: the app gone, and each of its devices hidden.
   onRemoved?: (appId: string) => void;
   onDevice?: (change: DeviceChange) => void;
@@ -70,22 +83,32 @@ export function createAppRemoving(options: {
 
   // The steps after the first transaction, each again until it's done: a
   // container or a service that can't go now is logged, and goes with the
-  // next start's finishing.
+  // next try.
   async function finish(appId: string) {
-    // An installed app stops and its container goes; one a core that
-    // stopped part way left isn't installed, and only its container goes.
-    if (options.host.list().some((app) => app.id === appId)) {
-      await options.host.remove(appId);
-    } else {
-      // What it brought, if a removal that failed part way left it.
-      options.entities.removeApp(appId);
-      await options.manager.removeAppContainer(appId);
+    const withinMs = options.finishWithinMs ?? finishWithinMs;
+    const giveUp = new AbortController();
+    const timer = setTimeout(() => giveUp.abort(), withinMs);
+    const { signal } = giveUp;
+    try {
+      // An installed app stops and its container goes; one a core that
+      // stopped part way left isn't installed, and only its container goes.
+      if (options.host.list().some((app) => app.id === appId)) {
+        // Past the limit its own release goes on, and a request for its
+        // services waits for it (services.ts), as when it's added again.
+        await withTimeout(options.host.remove(appId), withinMs);
+      } else {
+        // What it brought, if a removal that failed part way left it.
+        options.entities.removeApp(appId);
+        await options.manager.removeAppContainer(appId);
+      }
+      const held = await options.manager.servicesHeldBy?.(appId, { signal });
+      for (const service of held ?? []) {
+        await options.manager.releaseService(service, appId, { signal });
+      }
+      options.removed.done(appId);
+    } finally {
+      clearTimeout(timer);
     }
-    const held = await options.manager.servicesHeldBy?.(appId);
-    for (const service of held ?? []) {
-      await options.manager.releaseService(service, appId);
-    }
-    options.removed.done(appId);
   }
 
   async function remove(principal: Principal, appId: string) {

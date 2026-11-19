@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createManagerClient,
   ManagerRefusal,
+  ManagerUnavailable,
   type ManagerClient,
 } from "../src/manager.js";
 
@@ -415,6 +416,24 @@ describe("the manager client", () => {
     client.reportClaimed(true);
 
     await vi.waitFor(() => expect(received.length).toBeGreaterThan(2));
+  });
+
+  it("stops asking a manager that keeps failing once the caller gives up", async () => {
+    const { client, socketPath } = await setUp();
+    const { server, received } = await listen(socketPath, 503);
+    open.push({ server });
+    const giveUp = new AbortController();
+
+    const releasing = client.releaseService("mosquitto", "sanctum.example", {
+      signal: giveUp.signal,
+    });
+    await vi.waitFor(() => expect(received.length).toBeGreaterThan(1));
+    giveUp.abort();
+
+    await expect(releasing).rejects.toBeInstanceOf(ManagerUnavailable);
+    const asked = received.length;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(received.length).toBe(asked);
   });
 
   it("learns the host's id once the manager answers", async () => {

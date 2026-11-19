@@ -76,6 +76,34 @@ async function setup() {
 }
 
 describe("deletion deadlines and recovery", () => {
+  it("tries an unfinished removal again each hour, its data kept", async () => {
+    const home = await setup();
+    home.record("sanctum.other", false);
+
+    await home.start().expire();
+
+    expect(home.finishRemoval).toHaveBeenCalledWith("sanctum.other");
+    expect(home.finishRemoval).not.toHaveBeenCalledWith(appId);
+    expect(home.removed.get("sanctum.other")?.isDone).toBe(true);
+    expect(home.manager.deleteAppData).not.toHaveBeenCalled();
+  });
+
+  it("keeps checking the others when one removal doesn't finish", async () => {
+    const home = await setup();
+    home.record("sanctum.other", false);
+    home.record("sanctum.third", false);
+    home.finishRemoval.mockImplementationOnce(async () => {
+      throw new Error("The manager did not answer in time");
+    });
+
+    await home.start().expire();
+
+    expect(home.removed.get("sanctum.third")?.isDone).toBe(true);
+    expect(home.log).toHaveBeenCalledWith(
+      expect.stringContaining("removal didn't finish"),
+    );
+  });
+
   it("checks the removal date after earlier changes to the home's list finish", async () => {
     const home = await setup();
     home.advance(keptForMs);

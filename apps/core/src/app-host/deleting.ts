@@ -170,23 +170,30 @@ export function createAppDeleting(options: {
   // Check inside the turn: an earlier add and removal can reset a deadline.
   // The whole sweep owns one turn, and stopping waits only for the app it's
   // on: the rest resume at the next start. A removal that hasn't finished
-  // finishes first, as each hour retries it.
+  // finishes first, and one whose data is kept is tried again each hour, so
+  // what a manager that failed left goes once it answers.
   function expire() {
     return options.turns.take(async () => {
-      const due = options.removed
-        .list()
-        .filter(
-          (row) =>
-            row.isDeleting ||
-            row.removedAt.getTime() + keptForMs <= now().getTime(),
-        );
-      for (const { appId } of due) {
+      for (const row of options.removed.list()) {
         if (stopping) break;
-        await deleteData(appId, { actor: "sanctum" }).catch((error: unknown) =>
-          log(
-            `apps: ${appId}'s data stays for now (${error instanceof Error ? error.message : String(error)})`,
-          ),
-        );
+        const { appId } = row;
+        const isDue =
+          row.isDeleting ||
+          row.removedAt.getTime() + keptForMs <= now().getTime();
+        const why = (error: unknown) =>
+          error instanceof Error ? error.message : String(error);
+        if (isDue) {
+          await deleteData(appId, { actor: "sanctum" }).catch(
+            (error: unknown) =>
+              log(`apps: ${appId}'s data stays for now (${why(error)})`),
+          );
+        } else if (!row.isDone) {
+          await options
+            .finishRemoval(appId)
+            .catch((error: unknown) =>
+              log(`apps: ${appId}'s removal didn't finish (${why(error)})`),
+            );
+        }
       }
     });
   }
@@ -215,7 +222,7 @@ export function createAppDeleting(options: {
       return options.turns.take(() => deleteData(appId, who));
     },
 
-    /** Deletes what's past its 30 days and resumes interrupted deletions. */
+    /** Deletes what's past its 30 days, resumes interrupted deletions and tries unfinished removals again. */
     expire,
 
     /** Catches up, then checks now and then, as a step of starting (core.ts). */

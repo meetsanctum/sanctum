@@ -174,17 +174,19 @@ export function createManagerClient(options: {
   let learning = false;
   let known = noCapabilities;
 
-  function pause(ms: number) {
+  function pause(ms: number, signal?: AbortSignal) {
     return new Promise<void>((resolve) => {
       const wake = () => {
         clearTimeout(timer);
         wakes.delete(wake);
+        signal?.removeEventListener("abort", wake);
         resolve();
       };
       const timer = setTimeout(wake, ms);
       // HTTPS startup waits for these calls before opening its server, so
       // this retry may be the only handle keeping the core alive.
       wakes.add(wake);
+      signal?.addEventListener("abort", wake);
     });
   }
 
@@ -212,11 +214,15 @@ export function createManagerClient(options: {
   }
 
   // Runs `attempt` until it reports that it is done, backing off while the
-  // socket does not answer, or the manager does not know the call yet.
-  async function untilDone(attempt: () => Promise<boolean>) {
+  // socket does not answer, or the manager does not know the call yet. One
+  // that's given up on stops trying.
+  async function untilDone(
+    attempt: () => Promise<boolean>,
+    signal?: AbortSignal,
+  ) {
     let delay = retry.firstMs;
     let waiting = false;
-    while (!closed) {
+    while (!closed && !signal?.aborted) {
       try {
         const done = await attempt();
         if (waiting) {
@@ -235,14 +241,18 @@ export function createManagerClient(options: {
           waiting = true;
         }
       }
-      await pause(delay);
+      await pause(delay, signal);
       delay = Math.min(delay * 2, retry.maxMs);
     }
   }
 
   // Asks until the manager answers, then resolves with the answer, or
-  // rejects with a ManagerRefusal or when the client closes.
-  async function ask<T>(attempt: () => Promise<T>): Promise<T> {
+  // rejects with a ManagerRefusal, when the client closes or once given up
+  // on (ManagerUnavailable).
+  async function ask<T>(
+    attempt: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     let answer: { value: T } | { refusal: unknown } | undefined;
     await untilDone(async () => {
       try {
@@ -254,8 +264,11 @@ export function createManagerClient(options: {
         answer = { refusal: error };
       }
       return true;
-    });
+    }, signal);
     if (!answer) {
+      if (signal?.aborted && !closed) {
+        throw new ManagerUnavailable("The manager did not answer in time");
+      }
       throw new Error("The manager client was closed");
     }
     if ("refusal" in answer) {
@@ -577,14 +590,14 @@ export function createManagerClient(options: {
     },
 
     // The services the manager keeps for the app, whatever this core asked for.
-    async servicesHeldBy(app: string) {
+    async servicesHeldBy(app: string, options?: { signal?: AbortSignal }) {
       return ask(async () => {
         const response = await call(socketPath, "GET", "/api/services");
         expectGranted(response);
         return parseBody(heldServices, response.body)
           .services.filter(({ apps }) => apps.includes(app))
           .map(({ name }) => name);
-      });
+      }, options?.signal);
     },
 
     // The app's permission for the service was switched off: one call,
@@ -599,7 +612,11 @@ export function createManagerClient(options: {
     // stops it; its data stays. The manager answers once its reconcile has
     // run, which may wait for a service's container to stop, so this waits
     // as long as revokeService does.
-    async releaseService(service: string, app: string) {
+    async releaseService(
+      service: string,
+      app: string,
+      options?: { signal?: AbortSignal },
+    ) {
       await ask(async () => {
         const response = await call(
           socketPath,
@@ -609,7 +626,7 @@ export function createManagerClient(options: {
           30_000,
         );
         expectGranted(response);
-      });
+      }, options?.signal);
     },
 
     // Updates, asked once each: whoever asked waits for the answer and asks
