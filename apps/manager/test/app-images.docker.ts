@@ -560,8 +560,10 @@ describe("apps' images on real Docker", () => {
     );
   });
 
-  // Discard directly on the loop device so filesystem metadata writes can't
-  // change the backing file's timestamp on the discard's behalf.
+  // What the room left for images rests on: the kernel sets an image's change
+  // time when a discard gives its blocks back, and when a write takes some.
+  // The discard goes straight to the loop device, so no journal write sets the
+  // time on its behalf.
   it("changes an image's change time as a discard gives blocks back and a write takes them", async () => {
     const own = await docker("inspect", "-f", "{{.Image}}", manager);
     const file = "/sanctum-data/images/test.discard.img";

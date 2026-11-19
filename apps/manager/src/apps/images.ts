@@ -34,7 +34,9 @@ const appUser = "1000:1000";
 const mebibyte = 1024 * 1024;
 // What an update needs free, which Settings → Status warns under too.
 const keptForUpdates = 1536 * mebibyte;
-// Leave time for the kernel's coarse clock to tick between samples.
+// A file's change time comes from a coarse clock that ticks at least every
+// 10 ms: a change to a file whose time is older than this gives it a new one,
+// and waiting this long between samples lets a recent one settle.
 const changeTimeLagMs = 50;
 const nanosecondsPerMs = 1_000_000n;
 const nanosecondsPerSecond = 1000n * nanosecondsPerMs;
