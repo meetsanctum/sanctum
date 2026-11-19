@@ -29,15 +29,18 @@ or a temperature sensor.
 
 ## How a device gets its type
 
-The driver that brings the device in says what it is. When the driver only
-knows the device's parts, it can use `deviceTypeOf`. The helper tries light,
-switch, button, motion sensor, contact sensor and sensor in that order. It
-returns the first type whose required part is present, or `unknown` if
-there are no parts. A device with a light and a button comes out as a
-light. A device with a switch and a button comes out as a switch.
+The driver that brings the device in says what it is. When the driver
+knows no more than the device's parts, the type is the first of these that
+the device has a part for: light, switch, button, motion sensor, contact
+sensor, sensor. A device with no parts is unknown. That order is why:
 
-A driver can also declare a plug directly. Door and window are choices the
-household makes for a contact sensor.
+- a light that also has a button or a sensor is a **light**;
+- a relay that also has a button is a **switch**;
+- a motion sensor that also measures is a **motion sensor**;
+- a contact sensor that also measures is a **contact sensor**.
+
+A plug comes only from a driver that can tell it apart from a switch, and
+a door or window only from the household's choice.
 
 ## Plug or switch
 

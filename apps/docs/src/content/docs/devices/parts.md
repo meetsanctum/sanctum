@@ -30,14 +30,13 @@ A light turns on and off. Depending on the light, it can also:
 - **change its white**, from warm to cool, within the range the light has;
 - **show a colour**.
 
-A light can fade to a new state if it supports transitions. When a remote
-is set up to dim a light by holding a button, the light's driver must
-support that kind of dimming.
+A light can fade to a new state over a few seconds instead of jumping,
+where its driver supports it.
 
-The tile can show a requested change while Sanctum waits for the light to
-confirm it. If the light fails to confirm it, the tile says "Not responding".
-A command can also leave a light off and set the brightness or colour it
-will use when it turns on. Its tile then says, for example, "Off · 40% when on".
+Sanctum waits for the light to confirm each change. If the light never
+does, its tile says "Not responding". A light that is off can be given the
+brightness or colour it comes back on at: its tile then says, for example,
+"Off · 40% when on".
 
 ## Switch
 
@@ -61,9 +60,10 @@ the household chooses.
 
 ## Motion
 
-A motion part says whether its sensor detects motion. When it reports no
-motion, the tile says "Quiet" or how long it has been quiet. A motion
-sensor can report "Quiet" while someone is sitting still.
+A motion part says whether it sees movement now. When it doesn't, its
+tile says "Quiet", or for how long: "Quiet for 5 min". Quiet means nothing
+moved for a while, not that nobody is there: someone sitting still at a
+desk makes no motion.
 
 Some motion sensors have settings, each only where the sensor has it:
 
@@ -84,9 +84,8 @@ which presses it makes, by the names its driver uses, such as single,
 double or hold, and on a remote with several buttons, which button:
 "up_hold" is the up button held.
 
-Letting go of a held button ends the hold and stops any dimming it started.
-Dimming can also end sooner, for example if another command changes the
-light.
+A hold lasts until the button is let go, so holding a remote's button can
+brighten or dim lights until it is released.
 
 ## What isn't a part
 
