@@ -24,6 +24,8 @@ import { isOurs, stacked } from "../stack.js";
 
 const brokerLabel = "sanctum.app.broker";
 const broker = "mosquitto";
+// How often removing an app's network tries, while the broker keeps joining it.
+const removeTries = 3;
 
 export function brokerNetworkName(app: string) {
   return stacked(`sanctum-app-${app}-broker`);
@@ -84,7 +86,8 @@ export async function joinAppNetworks(
         if (isNotFound(error)) return null;
         throw error;
       });
-    // Removing an app can release its network while this reconcile runs.
+    // Removing an app can release its network while this reconcile runs,
+    // before it's looked at or before the broker joins it.
     if (!inspected) continue;
     assertManaged({
       labels: inspected.Labels,
@@ -95,7 +98,11 @@ export async function joinAppNetworks(
         `The ${network.Name} network reaches beyond its containers`,
       );
     }
-    await ensureContainerNetwork(docker, container, network.Name, log);
+    await ensureContainerNetwork(docker, container, network.Name, log).catch(
+      (error: unknown) => {
+        if (!isNotFound(error)) throw error;
+      },
+    );
   }
 }
 
@@ -118,12 +125,22 @@ export async function removeBrokerNetwork(
       `Refusing to remove ${name} network with unexpected labels`,
     );
   }
-  const container = await inspectService(docker, broker);
-  if (container?.NetworkSettings?.Networks?.[name]) {
-    await network.disconnect({ Container: container.Id, Force: true });
+  // The broker, being made again, can join it between the look and the
+  // removal, which Docker then refuses: it's taken off and removed again.
+  for (let tries = 1; ; tries++) {
+    const container = await inspectService(docker, broker);
+    if (container?.NetworkSettings?.Networks?.[name]) {
+      await network.disconnect({ Container: container.Id, Force: true });
+    }
+    log(`Removing ${name}`);
+    try {
+      await network.remove();
+      return;
+    } catch (error) {
+      if (isNotFound(error)) return;
+      if (tries >= removeTries) throw error;
+    }
   }
-  log(`Removing ${name}`);
-  await network.remove();
 }
 
 /** Whether a service is the broker, which joins apps' networks. */

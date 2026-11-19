@@ -11,7 +11,7 @@ import { mosquittoImage } from "../src/services/mosquitto.js";
 import { createServices } from "../src/services/services.js";
 import { createServicesStateStore } from "../src/services/state.js";
 import { zigbee2mqttImage } from "../src/services/zigbee2mqtt.js";
-import { FakeDocker } from "./fake-docker.js";
+import { FakeDocker, notFound } from "./fake-docker.js";
 import { hostDev } from "./host-dev.js";
 
 // An app that uses a service through the broker reaches the broker on a network
@@ -225,6 +225,66 @@ describe("the broker's network", () => {
     await expect(apps.remove(app)).rejects.toThrow(/unlabelled/);
 
     expect(docker.networks.has(network)).toBe(true);
+  });
+
+  it("removes the network though the broker joins it again meanwhile", async () => {
+    const { docker, apps, services, start, networksOf } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+    // The broker, made again, joins it between the look and the removal.
+    const getNetwork = docker.getNetwork.bind(docker);
+    let joined = false;
+    vi.spyOn(docker, "getNetwork").mockImplementation((name) => {
+      const each = getNetwork(name);
+      if (name !== network) return each;
+      return {
+        ...each,
+        remove: async () => {
+          if (!joined) {
+            joined = true;
+            await each.connect({ Container: "sanctum-mosquitto" });
+          }
+          await each.remove();
+        },
+      };
+    });
+
+    await apps.remove(app);
+
+    expect(joined).toBe(true);
+    expect(docker.networks.has(network)).toBe(false);
+    expect(networksOf("sanctum-mosquitto")).not.toContain(network);
+  });
+
+  it("doesn't fail the broker for a network removed just before it joins", async () => {
+    const { docker, apps, services, start } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+    const container = docker.container("sanctum-mosquitto")!;
+    delete container.networks[network];
+    const getNetwork = docker.getNetwork.bind(docker);
+    vi.spyOn(docker, "getNetwork").mockImplementation((name) => {
+      const each = getNetwork(name);
+      if (name !== network) return each;
+      return {
+        ...each,
+        connect: async () => {
+          await apps.remove(app);
+          throw notFound(`network ${network} not found`);
+        },
+      };
+    });
+
+    await services.reconcile();
+
+    expect(docker.networks.has(network)).toBe(false);
+    expect(services.status("mosquitto").state).toBe("running");
   });
 
   it("does not recreate a network removed while the broker reconciles", async () => {
