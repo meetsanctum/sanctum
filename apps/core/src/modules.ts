@@ -582,6 +582,7 @@ export async function createModules(
     manager: options.manager,
     entities,
     finishRemoval: (appId) => appRemoving.finish(appId),
+    releaseLeftover: (appId) => appRemoving.releaseLeftover(appId),
     now,
     log,
   });
@@ -593,7 +594,6 @@ export async function createModules(
     updates: appUpdates,
     workflows: () => workflows.forApps,
     devices,
-    entities,
     activity,
     manager: options.manager,
     onRemoved(appId) {

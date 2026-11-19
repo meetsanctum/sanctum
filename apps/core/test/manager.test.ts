@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createManagerClient,
   ManagerRefusal,
+  ManagerUnavailable,
   type ManagerClient,
 } from "../src/manager.js";
 
@@ -416,6 +417,59 @@ describe("the manager client", () => {
 
     await vi.waitFor(() => expect(received.length).toBeGreaterThan(2));
   });
+
+  it("stops asking a manager that keeps failing once the caller gives up", async () => {
+    const { client, socketPath } = await setUp();
+    const { server, received } = await listen(socketPath, 503);
+    open.push({ server });
+    const giveUp = new AbortController();
+
+    const releasing = client.releaseService("mosquitto", "sanctum.example", {
+      signal: giveUp.signal,
+    });
+    await vi.waitFor(() => expect(received.length).toBeGreaterThan(1));
+    giveUp.abort();
+
+    await expect(releasing).rejects.toBeInstanceOf(ManagerUnavailable);
+    const asked = received.length;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(received.length).toBe(asked);
+  });
+
+  it.each(["lookup", "release"])(
+    "closes an in-flight service %s when the caller gives up",
+    async (operation) => {
+      const { client, socketPath } = await setUp();
+      const received = vi.fn();
+      const disconnected = vi.fn();
+      const server = createServer((request, response) => {
+        request.resume();
+        response.on("close", disconnected);
+        received();
+      });
+      open.push({ server });
+      await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+      const giveUp = new AbortController();
+      const options = { signal: giveUp.signal };
+      const app = "sanctum.example";
+      const pending =
+        operation === "lookup"
+          ? client.servicesHeldBy(app, options)
+          : client.releaseService("mosquitto", app, options);
+      const result = expect(pending).rejects.toBeInstanceOf(ManagerUnavailable);
+
+      try {
+        await vi.waitFor(() => expect(received).toHaveBeenCalled());
+        giveUp.abort();
+        await vi.waitFor(() => expect(disconnected).toHaveBeenCalled(), {
+          timeout: 500,
+        });
+      } finally {
+        server.closeAllConnections();
+        await result;
+      }
+    },
+  );
 
   it("learns the host's id once the manager answers", async () => {
     const { client, socketPath } = await setUp();

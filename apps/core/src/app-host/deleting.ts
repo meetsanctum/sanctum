@@ -60,11 +60,16 @@ export function createAppDeleting(options: {
   // Finishes a removal a failed step left part way (removing.ts), within the
   // turn already taken.
   finishRemoval: (appId: string) => Promise<void>;
+  // Releases what the manager still keeps for a removed app (removing.ts),
+  // within the turn already taken.
+  releaseLeftover: (appId: string) => Promise<void>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
   const { db, log } = options;
   const now = options.now ?? (() => new Date());
+  const message = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
   let timer: NodeJS.Timeout | undefined;
   let stopping = false;
 
@@ -120,7 +125,9 @@ export function createAppDeleting(options: {
     try {
       // Its removal ends first: its container still has its data.
       if (!row.isDone) await options.finishRemoval(appId);
-      options.removed.beginDeleting(appId);
+      if (!row.isDeleting) options.removed.beginDeleting(appId);
+      // Retry an accepted deletion if a leftover hold couldn't be released.
+      if (row.isDone) await options.releaseLeftover(appId);
       await deleteAppData(appId);
       for (const service of servicesOnlyIt(appId)) {
         await eraseServiceData(service);
@@ -170,23 +177,36 @@ export function createAppDeleting(options: {
   // Check inside the turn: an earlier add and removal can reset a deadline.
   // The whole sweep owns one turn, and stopping waits only for the app it's
   // on: the rest resume at the next start. A removal that hasn't finished
-  // finishes first, as each hour retries it.
-  function expire() {
+  // finishes first, and one whose data is kept is tried again each hour, so
+  // what a manager that failed left goes once it answers.
+  function expire({ retryKeptRemovals = true } = {}) {
     return options.turns.take(async () => {
-      const due = options.removed
-        .list()
-        .filter(
-          (row) =>
-            row.isDeleting ||
-            row.removedAt.getTime() + keptForMs <= now().getTime(),
-        );
-      for (const { appId } of due) {
+      for (const row of options.removed.list()) {
         if (stopping) break;
-        await deleteData(appId, { actor: "sanctum" }).catch((error: unknown) =>
-          log(
-            `apps: ${appId}'s data stays for now (${error instanceof Error ? error.message : String(error)})`,
-          ),
-        );
+        const { appId } = row;
+        const isDue =
+          row.isDeleting ||
+          row.removedAt.getTime() + keptForMs <= now().getTime();
+        if (isDue) {
+          await deleteData(appId, { actor: "sanctum" }).catch(
+            (error: unknown) =>
+              log(`apps: ${appId}'s data stays for now (${message(error)})`),
+          );
+        } else if (row.isDone) {
+          await options
+            .releaseLeftover(appId)
+            .catch((error: unknown) =>
+              log(
+                `apps: what ${appId} still holds stays for now (${message(error)})`,
+              ),
+            );
+        } else if (retryKeptRemovals) {
+          await options
+            .finishRemoval(appId)
+            .catch((error: unknown) =>
+              log(`apps: ${appId}'s removal didn't finish (${message(error)})`),
+            );
+        }
       }
     });
   }
@@ -215,7 +235,7 @@ export function createAppDeleting(options: {
       return options.turns.take(() => deleteData(appId, who));
     },
 
-    /** Deletes what's past its 30 days and resumes interrupted deletions. */
+    /** Deletes what's past its 30 days, resumes interrupted deletions and tries unfinished removals again. */
     expire,
 
     /** Catches up, then checks now and then, as a step of starting (core.ts). */
@@ -223,14 +243,15 @@ export function createAppDeleting(options: {
       stopping = false;
       // A check that fails as a whole is logged, and the next hour's tries
       // again.
-      const check = () =>
-        void expire().catch((error: unknown) =>
+      const check = (retryKeptRemovals: boolean) =>
+        void expire({ retryKeptRemovals }).catch((error: unknown) =>
           log(
-            `apps: removed apps' deadlines weren't checked (${error instanceof Error ? error.message : String(error)})`,
+            `apps: removed apps' deadlines weren't checked (${message(error)})`,
           ),
         );
-      check();
-      timer = setInterval(check, checkEveryMs);
+      // Startup already resumes unfinished removals in the workflow step.
+      check(false);
+      timer = setInterval(check, checkEveryMs, true);
       timer.unref();
     },
 

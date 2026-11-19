@@ -534,46 +534,44 @@ export function createAppHost(options: {
       options.updates.retryCatchUp();
     },
 
-    // Removes an installed app: its actions go, its storage closes and the
-    // manager gives up the services it declared, keeping their data. The
-    // app's own database file stays. System apps cannot be removed.
+    // Stops a removed app and releases its services, keeping its data.
+    // An interrupted removal can leave only its entities and container.
     async remove(appId: string) {
       apartStarts.cancel(appId);
       const entry = installed.get(appId);
-      if (!entry) {
-        return removals.get(appId);
-      }
-      if (entry.origin === "system") {
+      const pending = !entry && removals.get(appId);
+      if (pending) return pending;
+      if (entry?.origin === "system") {
         throw new ActionCallError("forbidden");
       }
       installed.delete(appId);
       kept.delete(appId);
-      const ended = supervisor.end(entry);
+      const ended = entry && supervisor.end(entry);
       // Before it yields, so an app installed again waits for its release.
-      const release = appServices.removing(appId, entry.services);
+      const release = entry && appServices.removing(appId, entry.services);
       const removing = (async () => {
         try {
-          // A pause may already be stopping it, or a resumed start still be
-          // running: both own its context until they end.
-          await entry.lifecycle;
-          await ended;
-          await uninstall(entry);
-          // It's gone from the list by now, so what it brought and its
-          // container go even when stopping it fails: removing its
-          // container stops what's left, and only that fails the removal.
-          await stopApp(entry, { reason: "removing" }).catch((error: unknown) =>
-            log(`apps: ${appId} didn't stop cleanly (${message(error)})`),
-          );
-          try {
-            entry.storage.close();
-            await entry.link.close();
-          } catch (error) {
-            log(`apps: ${appId}'s link didn't close (${message(error)})`);
+          if (entry) {
+            // A start or stop already under way still owns its context.
+            await entry.lifecycle;
+            await ended;
+            await uninstall(entry);
+            // Removing the container stops whatever the hook couldn't.
+            await stopApp(entry, { reason: "removing" }).catch(
+              (error: unknown) =>
+                log(`apps: ${appId} didn't stop cleanly (${message(error)})`),
+            );
+            try {
+              entry.storage.close();
+              await entry.link.close();
+            } catch (error) {
+              log(`apps: ${appId}'s link didn't close (${message(error)})`);
+            }
           }
           options.entities.removeApp(appId);
           await manager.removeAppContainer(appId);
         } finally {
-          await release();
+          await release?.();
         }
       })();
       removals.set(appId, removing);
@@ -781,6 +779,8 @@ export function createAppHost(options: {
         }),
       );
       const replaced = await Promise.allSettled([replacementsEnded]);
+      // A removal may still be touching app state after its caller timed out.
+      await Promise.allSettled(removals.values());
       const closed = await Promise.allSettled(
         entries.map(async ({ storage, link }) => {
           try {

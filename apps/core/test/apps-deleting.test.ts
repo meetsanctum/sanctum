@@ -163,6 +163,7 @@ describe("the data of the services it used", () => {
       finishRemoval: async () => {
         throw new Error("not yet");
       },
+      releaseLeftover: async () => undefined,
       now: () => new Date(at.getTime() + keptForMs),
       log: () => undefined,
     });
