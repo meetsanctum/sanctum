@@ -302,9 +302,8 @@ export function createAppHost(options: {
       return true;
     },
     ...createAppUpdateChoices({
+      ...options,
       installed,
-      updates: options.updates,
-      waiting: options.waiting,
       offChangeOf: (entry) => followingOff.get(entry),
       announce,
       log,
