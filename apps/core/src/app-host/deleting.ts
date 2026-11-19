@@ -60,6 +60,9 @@ export function createAppDeleting(options: {
   // Finishes a removal a failed step left part way (removing.ts), within the
   // turn already taken.
   finishRemoval: (appId: string) => Promise<void>;
+  // Releases what the manager still keeps for a removed app (removing.ts),
+  // within the turn already taken.
+  releaseLeftover?: (appId: string) => Promise<void>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
@@ -118,8 +121,10 @@ export function createAppDeleting(options: {
       throw new ActionCallError("unavailable");
     }
     try {
-      // Its removal ends first: its container still has its data.
+      // Its removal ends first: its container still has its data. A service
+      // it still holds keeps its data from being erased.
       if (!row.isDone) await options.finishRemoval(appId);
+      else await options.releaseLeftover?.(appId);
       options.removed.beginDeleting(appId);
       await deleteAppData(appId);
       for (const service of servicesOnlyIt(appId)) {
@@ -192,6 +197,14 @@ export function createAppDeleting(options: {
             .finishRemoval(appId)
             .catch((error: unknown) =>
               log(`apps: ${appId}'s removal didn't finish (${why(error)})`),
+            );
+        } else {
+          await options
+            .releaseLeftover?.(appId)
+            .catch((error: unknown) =>
+              log(
+                `apps: what ${appId} still holds stays for now (${why(error)})`,
+              ),
             );
         }
       }

@@ -582,6 +582,7 @@ export async function createModules(
     manager: options.manager,
     entities,
     finishRemoval: (appId) => appRemoving.finish(appId),
+    releaseLeftover: (appId) => appRemoving.releaseLeftover(appId),
     now,
     log,
   });

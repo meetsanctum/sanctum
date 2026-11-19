@@ -81,34 +81,50 @@ export function createAppRemoving(options: {
     };
   }
 
+  // A try at a removal's steps, given up on past its limit.
+  async function within<T>(work: (signal: AbortSignal) => Promise<T>) {
+    const giveUp = new AbortController();
+    const timer = setTimeout(
+      () => giveUp.abort(),
+      options.finishWithinMs ?? finishWithinMs,
+    );
+    try {
+      return await work(giveUp.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Every service the manager keeps for it goes, whatever asked for it.
+  async function releaseHeld(appId: string, signal: AbortSignal) {
+    const held = await options.manager.servicesHeldBy?.(appId, { signal });
+    for (const service of held ?? []) {
+      await options.manager.releaseService(service, appId, { signal });
+    }
+  }
+
   // The steps after the first transaction, each again until it's done: a
   // container or a service that can't go now is logged, and goes with the
   // next try.
-  async function finish(appId: string) {
-    const withinMs = options.finishWithinMs ?? finishWithinMs;
-    const giveUp = new AbortController();
-    const timer = setTimeout(() => giveUp.abort(), withinMs);
-    const { signal } = giveUp;
-    try {
+  function finish(appId: string) {
+    return within(async (signal) => {
       // An installed app stops and its container goes; one a core that
       // stopped part way left isn't installed, and only its container goes.
       if (options.host.list().some((app) => app.id === appId)) {
         // Past the limit its own release goes on, and a request for its
         // services waits for it (services.ts), as when it's added again.
-        await withTimeout(options.host.remove(appId), withinMs);
+        await withTimeout(
+          options.host.remove(appId),
+          options.finishWithinMs ?? finishWithinMs,
+        );
       } else {
         // What it brought, if a removal that failed part way left it.
         options.entities.removeApp(appId);
         await options.manager.removeAppContainer(appId);
       }
-      const held = await options.manager.servicesHeldBy?.(appId, { signal });
-      for (const service of held ?? []) {
-        await options.manager.releaseService(service, appId, { signal });
-      }
+      await releaseHeld(appId, signal);
       options.removed.done(appId);
-    } finally {
-      clearTimeout(timer);
-    }
+    });
   }
 
   async function remove(principal: Principal, appId: string) {
@@ -187,6 +203,15 @@ export function createAppRemoving(options: {
 
     /** Finishes one app's removal now, within a turn already taken. */
     finish,
+
+    /**
+     * Releases what the manager still keeps for a removed app, within a turn
+     * already taken: a service a core that stopped asked for can reach the
+     * manager after the next core finished its removal.
+     */
+    releaseLeftover(appId: string) {
+      return within((signal) => releaseHeld(appId, signal));
+    },
 
     /** Finishes the removals a core that stopped left part way. */
     resume() {

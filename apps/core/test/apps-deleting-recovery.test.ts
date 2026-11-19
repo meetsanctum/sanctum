@@ -88,6 +88,33 @@ describe("deletion deadlines and recovery", () => {
     expect(home.manager.deleteAppData).not.toHaveBeenCalled();
   });
 
+  it("lets go each hour of what the manager still keeps for a removed app", async () => {
+    const home = await setup();
+    const releaseLeftover = vi.fn(async (_id: string) => undefined);
+
+    await home.start({ releaseLeftover }).expire();
+
+    expect(releaseLeftover).toHaveBeenCalledWith(appId);
+    expect(home.finishRemoval).not.toHaveBeenCalled();
+    expect(home.manager.deleteAppData).not.toHaveBeenCalled();
+  });
+
+  it("lets go of what a removed app still holds before deleting its data", async () => {
+    const home = await setup();
+    const order: string[] = [];
+    const releaseLeftover = vi.fn(async (id: string) => {
+      order.push(`release ${id}`);
+    });
+    home.manager.deleteAppData.mockImplementation(async (id: string) => {
+      order.push(`delete ${id}`);
+    });
+    home.advance(keptForMs);
+
+    await home.start({ releaseLeftover }).expire();
+
+    expect(order).toEqual([`release ${appId}`, `delete ${appId}`]);
+  });
+
   it("keeps checking the others when one removal doesn't finish", async () => {
     const home = await setup();
     home.record("sanctum.other", false);

@@ -113,6 +113,45 @@ describe("finishing an app's removal", () => {
     },
   );
 
+  it("lets go of a service the manager still keeps for a removed app", async () => {
+    const core = await testCore();
+    const releaseService = vi.fn(async () => undefined);
+    const removing = createAppRemoving({
+      gate: core.gate,
+      turns: createListTurns(),
+      host: core.apps,
+      removed: core.removedApps,
+      updates: { shownFor: () => undefined },
+      workflows: () => core.workflows.forApps,
+      devices: core.devices,
+      entities: core.entities,
+      activity: core.activity,
+      manager: {
+        removeAppContainer: async () => undefined,
+        // A request from a core that stopped, which landed after the
+        // removal finished.
+        servicesHeldBy: async () => ["mosquitto"],
+        releaseService,
+      },
+      log: () => undefined,
+    });
+    core.removedApps.record(
+      "sanctum.example",
+      {},
+      { name: "Example", version: "1.0.0" },
+    );
+    core.removedApps.done("sanctum.example");
+
+    await removing.releaseLeftover("sanctum.example");
+
+    expect(releaseService).toHaveBeenCalledWith(
+      "mosquitto",
+      "sanctum.example",
+      expect.anything(),
+    );
+    expect(core.removedApps.get("sanctum.example")?.isDone).toBe(true);
+  });
+
   it("gives up on a manager that doesn't answer, so adding and removing go on", async () => {
     const core = await testCore();
     const turns = createListTurns();
