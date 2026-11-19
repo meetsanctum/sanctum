@@ -62,7 +62,8 @@ room's readings sits under the room name.
 
 A tile says "Offline" when the device is marked offline, or "Not paired"
 if the device has left its network. Some battery-powered devices that have
-gone quiet say "Not heard from".
+gone quiet say "Not heard from". A light or switch that doesn't confirm a
+change says "Not responding".
 
 On a tile that can switch something on or off, press the round icon to
 toggle it. Press the rest of the tile to open the device. Each extra light
