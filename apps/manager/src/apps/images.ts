@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { BigIntStats } from "node:fs";
 import { access, mkdir, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -33,6 +34,12 @@ const appUser = "1000:1000";
 const mebibyte = 1024 * 1024;
 // What an update needs free, which Settings → Status warns under too.
 const keptForUpdates = 1536 * mebibyte;
+// A file's change time comes from a clock that may lag by a tick, 10 ms at
+// most: a change to a file whose time is older than this gives it a new one.
+const changeTimeLagMs = 50;
+const nanosecondsPerMs = 1_000_000n;
+// Samples of the images' room before one that moves counts as holding nothing.
+const samplingTries = 3;
 
 export const defaultImageMb = 256;
 
@@ -122,33 +129,81 @@ export function createAppImages(options: {
     );
   }
 
-  // What the images may still grow to, which the card has to keep for them.
-  // Their blocks are read before and after what's free, and the fewer
-  // counted: growth meanwhile is then still counted as promised, and blocks
-  // a discard gave back meanwhile are counted as promised again, so the
-  // room is never more than there is.
+  // What the images may still grow to, which the card has to keep for them,
+  // read with what's free. Nothing reads a running image's blocks and what's
+  // free at one instant, and its blocks go down with a discard as well as up
+  // with a write, so a discard and growth after it can hide between two
+  // readings that agree. Its change time says whether they moved: a write, a
+  // discard and a truncate each set it while holding the file's lock, a discard
+  // after the blocks it gives back, so no growth follows a discard before
+  // it's set. An image whose change time holds across a sample, and was set
+  // longer before it began than the clock's coarsest tick, can only have grown
+  // until its last blocks were read, and the fewest blocks read are then no
+  // more than it had when what's free was read. Its change time is read once
+  // more after those blocks, since one reading takes the time before them.
+  // An image that moved is sampled again, and counted as holding nothing when
+  // it never holds still, so the room is never more than there is.
   async function available() {
     const { images } = await read();
     const kept = Object.entries(images).filter(([, record]) => !record.damaged);
     const files = () =>
-      Promise.all(kept.map(([app]) => stat(fileOf(app)).catch(() => null)));
-    const before = await files();
-    const availableBytes = await free();
-    const after = await files();
+      Promise.all(
+        kept.map(([app]) =>
+          stat(fileOf(app), { bigint: true }).catch(() => null),
+        ),
+      );
+    for (let tries = 1; ; tries++) {
+      const settledBefore =
+        BigInt(Date.now() - changeTimeLagMs) * nanosecondsPerMs;
+      const before = await files();
+      const availableBytes = await free();
+      const after = await files();
+      const confirmed = await files();
+      const samples = kept.map(([app, record], index) => {
+        const read = [before, after, confirmed].map(
+          (files) => files[index] ?? null,
+        );
+        const still =
+          read.every((file) => file === null) ||
+          read.every(
+            (file) =>
+              file !== null &&
+              file.ctimeNs === read[0]?.ctimeNs &&
+              file.ctimeNs < settledBefore,
+          );
+        return { app, record, read, still };
+      });
+      if (tries < samplingTries && samples.some(({ still }) => !still)) {
+        await new Promise((done) => setTimeout(done, changeTimeLagMs));
+        continue;
+      }
+      return roomFrom(samples, availableBytes);
+    }
+  }
+
+  function roomFrom(
+    samples: {
+      app: string;
+      record: ImageRecord;
+      read: (BigIntStats | null)[];
+      still: boolean;
+    }[],
+    availableBytes: number | null,
+  ) {
     const sizes = new Map<string, number>();
     let promised = 0;
-    kept.forEach(([app, record], index) => {
-      const [first, last] = [before[index], after[index]];
+    for (const { app, record, read, still } of samples) {
       // Growth may have reached the disk just before saving its record failed.
       const capacity = Math.max(
         record.sizeMb * mebibyte,
-        first?.size ?? 0,
-        last?.size ?? 0,
+        ...read.map((file) => Number(file?.size ?? 0)),
       );
-      const allocated = Math.min(first?.blocks ?? 0, last?.blocks ?? 0) * 512;
+      const allocated = still
+        ? Math.min(...read.map((file) => Number(file?.blocks ?? 0))) * 512
+        : 0;
       sizes.set(app, Math.floor(capacity / mebibyte));
       promised += Math.max(0, capacity - allocated);
-    });
+    }
     const sizeMb = (app: string) => sizes.get(app) ?? 0;
     return {
       sizeMb,

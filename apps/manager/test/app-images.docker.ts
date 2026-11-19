@@ -560,6 +560,59 @@ describe("apps' images on real Docker", () => {
     );
   });
 
+  // What the room left for images rests on: the kernel sets an image's change
+  // time when a discard gives its blocks back, and when a write takes some.
+  it("changes an image's change time as a discard gives blocks back and a write takes them", async () => {
+    const own = await docker("inspect", "-f", "{{.Image}}", manager);
+    const file = "/sanctum-data/images/test.discard.img";
+    const reading = `node -e 'const s = require("node:fs").statSync("${file}", { bigint: true }); console.log(JSON.stringify({ blocks: String(s.blocks), changed: String(s.ctimeNs) }))'`;
+    const out = await docker(
+      "run",
+      "--rm",
+      "--privileged",
+      "-v",
+      `${dataVolume}:/sanctum-data`,
+      own,
+      "sh",
+      "-c",
+      `set -e
+truncate -s 64M ${file}
+mkfs.ext4 -F -q -b 4096 ${file}
+free=$(losetup -f | cut -d' ' -f1)
+[ -e "$free" ] || mknod "$free" b 7 "\${free#/dev/loop}"
+device=$(losetup -f --show ${file})
+mkdir -p /m
+mount -o discard,sync "$device" /m
+dd if=/dev/urandom of=/m/data bs=1M count=16 conv=fsync 2>/dev/null
+sync -f /m
+sleep 0.1
+${reading}
+rm /m/data
+sync -f /m
+sleep 0.1
+${reading}
+dd if=/dev/urandom of=/m/data bs=1M count=16 conv=fsync 2>/dev/null
+sync -f /m
+${reading}
+umount /m
+losetup -d "$device"
+rm ${file}`,
+    );
+    const [written, discarded, again] = out
+      .split("\n")
+      .map((line) => JSON.parse(line) as { blocks: string; changed: string });
+    const sixteen = (16 * 1024 * 1024) / 512;
+
+    expect(Number(discarded!.blocks)).toBeLessThan(
+      Number(written!.blocks) - sixteen * 0.9,
+    );
+    expect(Number(again!.blocks)).toBeGreaterThan(
+      Number(discarded!.blocks) + sixteen * 0.9,
+    );
+    expect(discarded!.changed).not.toBe(written!.changed);
+    expect(again!.changed).not.toBe(discarded!.changed);
+  }, 120_000);
+
   it("leaves no helper behind", async () => {
     expect(
       await docker(
