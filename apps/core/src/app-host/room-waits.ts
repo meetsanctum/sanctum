@@ -21,7 +21,8 @@ type UpdateRoom =
 /**
  * Asks the manager to hold room, or confirms how much memory is short.
  * Undefined when it keeps a count but couldn't answer, so a wait recorded
- * before goes on.
+ * before goes on. Permissions about to be granted, as by Allow, count with
+ * those granted, for the services they run.
  */
 export function updateRoom(options: {
   manager: Pick<ManagerClient, "capabilities"> &
@@ -35,13 +36,16 @@ export function updateRoom(options: {
   log: (message: string) => void;
 }) {
   const { manager } = options;
-  return async (pkg: ApartPackage): Promise<UpdateRoom | undefined> => {
+  return async (
+    pkg: ApartPackage,
+    granting: readonly string[] = [],
+  ): Promise<UpdateRoom | undefined> => {
     if (!manager.capabilities().reserves || !manager.reserveForApp) {
       return { kind: "unchecked" };
     }
     const manifest = pkg.apart.manifest;
     const { id, runtime } = manifest;
-    const granted = options.grants.of(manifest);
+    const granted = [...options.grants.of(manifest), ...granting];
     const need = {
       memoryMb: runtime.memory,
       dataMb: runtime.data,

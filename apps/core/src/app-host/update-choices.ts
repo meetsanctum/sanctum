@@ -2,6 +2,9 @@ import type { InstalledApp } from "./installed.js";
 import type { AppUpdates } from "./updates.js";
 import type { WaitingUpdates } from "./waiting.js";
 
+type AllowOutcome =
+  false | "unavailable" | "replaced" | "inPlace" | "waitsForRoom";
+
 // Applying someone's choice of version while the app can be removed,
 // replaced or sent back during the package read. Going back, allowing an
 // update and retrying a wait for room take turns for an app.
@@ -37,7 +40,7 @@ export function createAppUpdateChoices(options: {
       entry: InstalledApp,
       id: string,
       alongside: () => void,
-    ): Promise<false | "unavailable" | "replaced" | "inPlace"> =>
+    ): Promise<AllowOutcome> =>
       inTurn(entry.app.id, () => allowUpdate(entry, id, alongside)),
 
     onRetryRoom: (entry: InstalledApp, signal?: AbortSignal) =>
@@ -102,7 +105,7 @@ export function createAppUpdateChoices(options: {
     entry: InstalledApp,
     id: string,
     alongside: () => void,
-  ): Promise<false | "unavailable" | "replaced" | "inPlace"> {
+  ): Promise<AllowOutcome> {
     const appId = entry.app.id;
     let allowed;
     try {
@@ -112,6 +115,7 @@ export function createAppUpdateChoices(options: {
           !entry.supervision.isEnded &&
           updates.shownFor(appId)?.stage !== "goingBack",
         alongside,
+        isInPlace: (pkg) => pkg.apart.folder === entry.apartIn,
       });
     } catch (error) {
       // Its package couldn't be read, and asking again may work.
@@ -126,6 +130,11 @@ export function createAppUpdateChoices(options: {
         options.announce(entry);
       }
       return false;
+    }
+    if (allowed === "waitsForRoom") {
+      entry.waiting = waiting.of(appId);
+      options.announce(entry);
+      return "waitsForRoom";
     }
     if (allowed.apart.folder === entry.apartIn) return "inPlace";
     updates.swapTo(entry, allowed);

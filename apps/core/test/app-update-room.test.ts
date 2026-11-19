@@ -9,7 +9,7 @@ import {
   stateOf,
   versions,
 } from "./app-update-support.js";
-import { claimed, post } from "./support.js";
+import { claimed, post, type TestCore } from "./support.js";
 
 // An update that needs more memory than is left beside the other apps waits
 // for room, the app on the version it has, and starts by itself once there's
@@ -343,5 +343,164 @@ describe("an update short of memory", () => {
       timeout: 4_000,
     });
     expect(stateOf(core, id).waiting).toBeUndefined();
+  });
+});
+
+describe("an update allowed while short of memory", () => {
+  const people = {
+    id: "people.read",
+    reason: "To know who's home.",
+    needed: true,
+  };
+  const broker = {
+    id: "services:mosquitto",
+    reason: "To talk to the broker.",
+    needed: true,
+  };
+
+  const allowing = (core: TestCore) =>
+    core.activity.recent().filter((entry) => entry.action === "allow-update");
+
+  it("is granted and waits for room, the app on the version it has", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), { allowed: false });
+    await running(before, id);
+    const owner = await claimed(before);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [broker] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+    expect(waiting.needs).toMatchObject([broker]);
+    room.shortMb = 64;
+    home.calls.length = 0;
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waiting.id },
+      owner,
+    );
+
+    expect(answer.statusCode).toBe(200);
+    const current = stateOf(core, id);
+    expect(current.version).toBe("1.0.0");
+    expect(current.waiting).toMatchObject({
+      version: "2.0.0",
+      needs: [],
+      moreMemoryMb: 64,
+    });
+    expect(current.waiting?.id).not.toBe(waiting.id);
+    expect(home.calls.some((call) => call.startsWith("BEGIN"))).toBe(false);
+    expect(committedOf(core)?.version).toBe("1.0.0");
+    expect(allowing(core)).toMatchObject([{ outcome: "ok" }]);
+
+    room.shortMb = 0;
+    await core.apps.retryRoomWaits();
+
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+    expect(room.reserved).toContainEqual({
+      app: id,
+      memoryMb: 128,
+      services: ["mosquitto"],
+    });
+    expect(stateOf(core, id).waiting).toBeUndefined();
+  });
+
+  it("grants the version that runs what it also asks for", async () => {
+    const home = await versions();
+    const optional = { ...people, needed: false, startsOn: false };
+    const before = await home.coreWith(
+      version("1.0.0", { permissions: [optional] }),
+      { allowed: false },
+    );
+    await running(before, id);
+    const owner = await claimed(before);
+    expect(stateOf(before, id).permissions).toEqual([]);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+    room.shortMb = 64;
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waiting.id },
+      owner,
+    );
+
+    expect(answer.statusCode).toBe(200);
+    expect(stateOf(core, id)).toMatchObject({
+      version: "1.0.0",
+      permissions: ["people.read"],
+      waiting: { needs: [], moreMemoryMb: 64 },
+    });
+  });
+
+  it("starts with room held for it and the services it grants", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), { allowed: false });
+    await running(before, id);
+    const owner = await claimed(before);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [broker] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waiting.id },
+      owner,
+    );
+
+    expect(answer.statusCode).toBe(200);
+    expect(room.reserved).toEqual([
+      { app: id, memoryMb: 128, services: ["mosquitto"] },
+    ]);
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+    expect(room.released).toEqual([]);
+    expect(stateOf(core, id).waiting).toBeUndefined();
+  });
+
+  it("starts as before when the manager can't answer", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), { allowed: false });
+    await running(before, id);
+    const owner = await claimed(before);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [broker] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+    room.isUnavailable = true;
+
+    const answer = await post(
+      core,
+      `/api/apps/${id}/update/allow`,
+      { id: waiting.id },
+      owner,
+    );
+
+    expect(answer.statusCode).toBe(200);
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+    expect(room.reserved).toEqual([]);
   });
 });

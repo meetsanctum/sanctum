@@ -65,13 +65,14 @@ export function createAppChoices<Entry extends Chosen>(options: {
   onGoBack?: (entry: Entry, copyId: string) => Promise<boolean>;
   // Someone allowed the version that waits, named by its id: false when it
   // wasn't still the one waiting; otherwise whether it replaces the one that
-  // runs, or is the one installed, paused for want of what was granted.
+  // runs, is the one installed, paused for want of what was granted, or now
+  // waits for room, granted, the app staying on its version.
   onAllowUpdate?: (
     entry: Entry,
     id: string,
     // Its entry, written in the transaction that grants what it needs.
     alongside: () => void,
-  ) => Promise<false | "unavailable" | "replaced" | "inPlace">;
+  ) => Promise<false | "unavailable" | "replaced" | "inPlace" | "waitsForRoom">;
   // Someone turned an app off or on.
   onOff?: (entry: Entry, off: boolean) => void;
   // Tries again an update that waits for room.
@@ -171,18 +172,21 @@ export function createAppChoices<Entry extends Chosen>(options: {
       record(appId, action, who, "refused", "conflict");
       throw new ActionCallError("conflict");
     }
-    // Paused on it, it takes them as any permission switched on.
-    if (allowed === "inPlace" && installed.get(appId) === entry) {
-      const before = entry.granted;
-      entry.granted = options.grants.of(entry.manifest);
-      entry.grantsRevision += 1;
-      delete entry.waiting;
-      options.eventsForApps.permissions(appId, before, entry.granted);
-      for (const permission of entry.granted) {
-        if (!before.includes(permission)) {
-          options.onPermission?.(entry, permission, true);
-        }
-      }
+    if (allowed === "replaced" || installed.get(appId) !== entry) return;
+    // Paused on it, it takes them as any permission switched on, and so does
+    // the version that runs while the update waits for room, for those it
+    // also asks for.
+    const before = entry.granted;
+    entry.granted = options.grants.of(entry.manifest);
+    const added = entry.granted.filter(
+      (permission) => !before.includes(permission),
+    );
+    if (allowed === "inPlace") delete entry.waiting;
+    else if (added.length === 0) return;
+    entry.grantsRevision += 1;
+    options.eventsForApps.permissions(appId, before, entry.granted);
+    for (const permission of added) {
+      options.onPermission?.(entry, permission, true);
     }
   }
 
