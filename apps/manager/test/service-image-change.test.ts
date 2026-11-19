@@ -518,40 +518,44 @@ describe("a service's new image", () => {
       expect(services.status("zigbee2mqtt")).toMatchObject({ state: "failed" });
     });
 
-    it("puts them back when the manager itself goes back before the verdict", async () => {
-      const { docker, services, store } = await setup();
-      await services.reconcile();
-      // The manager rolled back to one that pins what the copy was taken
-      // under, here the current image, and the unjudged version is newer.
-      const newer = "ghcr.io/koenkk/zigbee2mqtt:9.9.9";
-      docker.load(newer, { title: "zigbee2mqtt", version: "9.9.9" });
-      await store.update((draft) => {
-        draft.imageChanges!.zigbee2mqtt = {
-          ...draft.imageChanges!.zigbee2mqtt!,
-          from: zigbee2mqttImage,
-          to: newer,
-        };
-      });
-      docker.containers.delete(docker.container(bridge)!.id);
-      docker.run({
-        name: bridge,
-        Image: newer,
-        Labels: {
-          "sanctum.managed": "true",
-          "sanctum.role": "zigbee2mqtt",
-          "sanctum.definition": "from-the-newer-manager",
-        },
-        HostConfig: { Binds: [`${volume}:/app/data`] },
-      });
-      docker.volumeData.set(volume, "migrated further");
-      docker.onStart = null;
+    it.each(["waiting", "settled"])(
+      "restores on manager rollback with a %s trial",
+      async (trial) => {
+        const { docker, services, settle, store } = await setup();
+        await services.reconcile();
+        // The manager rolled back to one that pins what the copy was taken
+        // under, here the current image, and the unjudged version is newer.
+        const newer = "ghcr.io/koenkk/zigbee2mqtt:9.9.9";
+        docker.load(newer, { title: "zigbee2mqtt", version: "9.9.9" });
+        await store.update((draft) => {
+          draft.imageChanges!.zigbee2mqtt = {
+            ...draft.imageChanges!.zigbee2mqtt!,
+            from: zigbee2mqttImage,
+            to: newer,
+          };
+        });
+        docker.containers.delete(docker.container(bridge)!.id);
+        docker.run({
+          name: bridge,
+          Image: newer,
+          Labels: {
+            "sanctum.managed": "true",
+            "sanctum.role": "zigbee2mqtt",
+            "sanctum.definition": "from-the-newer-manager",
+          },
+          HostConfig: { Binds: [`${volume}:/app/data`] },
+        });
+        docker.volumeData.set(volume, "migrated further");
+        docker.onStart = null;
+        if (trial === "settled") settle();
 
-      await services.reconcile();
+        await services.reconcile();
 
-      expect(docker.volumeData.get(volume)).toBe("the network key");
-      expect(docker.imageOf(bridge)?.tags.has(zigbee2mqttImage)).toBe(true);
-      expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
-      expect(hasImage(docker, newer)).toBe(false);
-    });
+        expect(docker.volumeData.get(volume)).toBe("the network key");
+        expect(docker.imageOf(bridge)?.tags.has(zigbee2mqttImage)).toBe(true);
+        expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
+        expect(hasImage(docker, newer)).toBe(false);
+      },
+    );
   });
 });

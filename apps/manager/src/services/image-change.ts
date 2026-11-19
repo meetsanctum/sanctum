@@ -278,8 +278,18 @@ export function createImageChanges(options: {
     await pruneSnapshots(backupsDir, copyPrefix(service), keptCopies);
     const old = await inspectImage(docker, change.from);
     if (old) await removeUnusedImage(docker, old.Id);
-    await saveChange(service, undefined);
+    await store.update((draft) => {
+      delete draft.imageChanges?.[service];
+      (draft.images ??= {})[service] = change.to;
+    });
     log(`${service} stayed up on ${change.to}`);
+  }
+
+  async function resolveTrial(service: string, change: ImageChange) {
+    const verdict = await judge(service, change);
+    if (verdict === "failed") await putBack(service, change);
+    else if (verdict === "up") await commit(service, change);
+    return verdict;
   }
 
   // The image the service should run now, taking the next step of a change of
@@ -295,13 +305,10 @@ export function createImageChanges(options: {
 
     if (change?.to === spec.image) {
       if (change.status === "kept-back") return change.from;
-      const verdict = await judge(service, change);
-      if (verdict === "failed") {
-        await putBack(service, change);
-        return change.from;
-      }
-      if (verdict === "up") await commit(service, change);
-      else if (
+      const verdict = await resolveTrial(service, change);
+      if (verdict === "failed") return change.from;
+      if (
+        verdict === "waiting" &&
         !holdsTheSlot(change) &&
         stoppedHolding.get(service) !== change.to
       ) {
@@ -374,21 +381,16 @@ export function createImageChanges(options: {
     // Before its data is erased: a copy a crash left still has its volume.
     removeCopyContainer,
 
-    // Before an unwanted service's container goes. A restore must finish
-    // even when nothing needs the service now or its hardware is absent.
-    // Otherwise its journal would hold the slot forever. A version on trial
-    // is judged first, since only its container shows how it ran: one that
-    // failed goes back now, rather than run again on the data it changed
-    // once the service is needed again, and one that stayed up commits. One
-    // not judged yet is watched afresh when it runs again.
-    async resume(service: string) {
+    // A restore must finish even if nothing needs the service or its hardware
+    // is absent. Before removing an unwanted container, also judge the trial
+    // while Docker still has its restart count. A trial still waiting for a
+    // verdict is watched again when the service runs.
+    async resume(service: string, { isUnneeded = false } = {}) {
       const change = store.current().imageChanges?.[service];
-      if (change?.status === "checking") {
-        const verdict = await judge(service, change);
-        if (verdict === "failed") await putBack(service, change);
-        else if (verdict === "up") await commit(service, change);
-      } else if (change?.status === "restoring") {
+      if (change?.status === "restoring") {
         await putBack(service, change);
+      } else if (isUnneeded && change?.status === "checking") {
+        await resolveTrial(service, change);
       }
     },
 

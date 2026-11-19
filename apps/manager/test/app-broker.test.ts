@@ -58,6 +58,15 @@ async function home(permissions: string[]) {
   return { docker, apps, services, start, networksOf };
 }
 
+function interceptBrokerNetwork(docker: FakeDocker) {
+  const getNetwork = docker.getNetwork.bind(docker);
+  const handle = getNetwork(network);
+  vi.spyOn(docker, "getNetwork").mockImplementation((name) =>
+    name === network ? handle : getNetwork(name),
+  );
+  return handle;
+}
+
 describe("the broker's network", () => {
   it("is an app's only network when it uses Zigbee2MQTT, reaching nothing beyond, with the broker on it", async () => {
     const { docker, services, start, networksOf } = await home([
@@ -235,28 +244,52 @@ describe("the broker's network", () => {
     await services.reconcile();
     await start();
     // The broker, made again, joins it between the look and the removal.
-    const getNetwork = docker.getNetwork.bind(docker);
-    let joined = false;
-    vi.spyOn(docker, "getNetwork").mockImplementation((name) => {
-      const each = getNetwork(name);
-      if (name !== network) return each;
-      return {
-        ...each,
-        remove: async () => {
-          if (!joined) {
-            joined = true;
-            await each.connect({ Container: "sanctum-mosquitto" });
-          }
-          await each.remove();
-        },
-      };
+    const handle = interceptBrokerNetwork(docker);
+    const remove = handle.remove;
+    vi.spyOn(handle, "remove").mockImplementationOnce(async () => {
+      await handle.connect({ Container: "sanctum-mosquitto" });
+      await remove();
     });
 
     await apps.remove(app);
 
-    expect(joined).toBe(true);
+    expect(handle.remove).toHaveBeenCalledTimes(2);
     expect(docker.networks.has(network)).toBe(false);
     expect(networksOf("sanctum-mosquitto")).not.toContain(network);
+  });
+
+  it("removes the network if the broker goes away before disconnect", async () => {
+    const { docker, apps, services, start } = await home([
+      "services:zigbee2mqtt",
+    ]);
+    await services.need("zigbee2mqtt", app);
+    await services.reconcile();
+    await start();
+    const handle = interceptBrokerNetwork(docker);
+    vi.spyOn(handle, "disconnect").mockImplementationOnce(
+      async ({ Container }) => {
+        await docker.getContainer(Container).remove();
+        throw notFound(`endpoint ${Container} not found`);
+      },
+    );
+
+    await apps.remove(app);
+
+    expect(docker.container("sanctum-mosquitto")).toBeUndefined();
+    expect(docker.networks.has(network)).toBe(false);
+  });
+
+  it("reports a network removal error without retrying unless Docker reports active endpoints", async () => {
+    const { docker, apps, start } = await home(["services:zigbee2mqtt"]);
+    await start();
+    const handle = interceptBrokerNetwork(docker);
+    const failure = new Error("Docker refused to remove the network");
+    vi.spyOn(handle, "remove").mockRejectedValue(failure);
+
+    await expect(apps.remove(app)).rejects.toBe(failure);
+
+    expect(handle.remove).toHaveBeenCalledTimes(1);
+    expect(docker.networks.has(network)).toBe(true);
   });
 
   it("doesn't fail the broker for a network removed just before it joins", async () => {
@@ -268,23 +301,37 @@ describe("the broker's network", () => {
     await start();
     const container = docker.container("sanctum-mosquitto")!;
     delete container.networks[network];
-    const getNetwork = docker.getNetwork.bind(docker);
-    vi.spyOn(docker, "getNetwork").mockImplementation((name) => {
-      const each = getNetwork(name);
-      if (name !== network) return each;
-      return {
-        ...each,
-        connect: async () => {
-          await apps.remove(app);
-          throw notFound(`network ${network} not found`);
-        },
-      };
+    const handle = interceptBrokerNetwork(docker);
+    vi.spyOn(handle, "connect").mockImplementationOnce(async () => {
+      await apps.remove(app);
+      throw notFound(`network ${network} not found`);
     });
 
     await services.reconcile();
 
     expect(docker.networks.has(network)).toBe(false);
     expect(services.status("mosquitto").state).toBe("running");
+  });
+
+  it("reports a connection failure when the broker goes away and the network stays", async () => {
+    const { docker, services, start } = await home(["services:zigbee2mqtt"]);
+    await start();
+    await services.need("zigbee2mqtt", app);
+    const handle = interceptBrokerNetwork(docker);
+    vi.spyOn(handle, "connect").mockImplementationOnce(
+      async ({ Container }) => {
+        await docker.getContainer(Container).remove();
+        throw notFound(`No such container: ${Container}`);
+      },
+    );
+
+    await services.reconcile();
+
+    expect(docker.networks.has(network)).toBe(true);
+    expect(services.status("mosquitto")).toMatchObject({
+      state: "failed",
+      problem: "No such container: sanctum-mosquitto",
+    });
   });
 
   it("does not recreate a network removed while the broker reconciles", async () => {

@@ -215,13 +215,22 @@ describe("a service's new image, taking its turn", () => {
       const { docker, operations, services, settle, store } = await setup();
       await services.reconcile();
       settle();
+      // The container started, but the manager stopped before recording it.
+      await store.update((draft) => {
+        draft.images!.zigbee2mqtt = oldImage;
+      });
       await unneeded(store);
 
       await services.reconcile();
 
       expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
+      expect(store.current().images?.zigbee2mqtt).toBe(zigbee2mqttImage);
       expect(docker.container(bridge)).toBeUndefined();
       expect(await operations.current()).toBeNull();
+
+      await services.need("zigbee2mqtt", app);
+      await services.reconcile();
+      expect(store.current().imageChanges?.zigbee2mqtt).toBeUndefined();
     });
 
     it("keeps a version not judged yet on trial, watched again when it runs", async () => {

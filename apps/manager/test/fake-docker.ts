@@ -657,7 +657,12 @@ export class FakeDocker implements DockerClientLike {
             (container) => container.networks[name],
           )
         ) {
-          throw new Error(`Network ${name} is still in use`);
+          throw Object.assign(
+            new Error(`network ${name} has active endpoints`),
+            {
+              statusCode: 403,
+            },
+          );
         }
         this.networks.delete(name);
         this.internalNetworks.delete(name);
