@@ -34,10 +34,10 @@ const appUser = "1000:1000";
 const mebibyte = 1024 * 1024;
 // What an update needs free, which Settings → Status warns under too.
 const keptForUpdates = 1536 * mebibyte;
-// A file's change time comes from a clock that may lag by a tick, 10 ms at
-// most: a change to a file whose time is older than this gives it a new one.
+// Leave time for the kernel's coarse clock to tick between samples.
 const changeTimeLagMs = 50;
 const nanosecondsPerMs = 1_000_000n;
+const nanosecondsPerSecond = 1000n * nanosecondsPerMs;
 // Samples of the images' room before one that moves counts as holding nothing.
 const samplingTries = 3;
 
@@ -136,13 +136,11 @@ export function createAppImages(options: {
   // readings that agree. Its change time says whether they moved: a write, a
   // discard and a truncate each set it while holding the file's lock, a discard
   // after the blocks it gives back, so no growth follows a discard before
-  // it's set. An image whose change time holds across a sample, and was set
-  // longer before it began than the clock's coarsest tick, can only have grown
-  // until its last blocks were read, and the fewest blocks read are then no
-  // more than it had when what's free was read. Its change time is read once
-  // more after those blocks, since one reading takes the time before them.
-  // An image that moved is sampled again, and counted as holding nothing when
-  // it never holds still, so the room is never more than there is.
+  // it's set. When the same change time is still visible after reading the
+  // blocks and is too old for a new write to repeat it, the fewest blocks read
+  // give a lower bound on what the image held when what's free was read.
+  // An unsettled image is sampled again, then counted as holding nothing if
+  // it never settles.
   async function available() {
     const { images } = await read();
     const kept = Object.entries(images).filter(([, record]) => !record.damaged);
@@ -153,24 +151,34 @@ export function createAppImages(options: {
         ),
       );
     for (let tries = 1; ; tries++) {
-      const settledBefore =
-        BigInt(Date.now() - changeTimeLagMs) * nanosecondsPerMs;
+      const startedAt = performance.now();
+      const startedAtMs = Date.now();
       const before = await files();
       const availableBytes = await free();
       const after = await files();
       const confirmed = await files();
+      // A backward wall-clock adjustment can repeat an old change time.
+      // Use the earlier start time implied by either wall-clock reading.
+      const endedAtMs = Date.now();
+      const elapsedMs = Math.ceil(performance.now() - startedAt);
+      const settledBefore =
+        BigInt(Math.min(startedAtMs, endedAtMs - elapsedMs) - changeTimeLagMs) *
+        nanosecondsPerMs;
       const samples = kept.map(([app, record], index) => {
         const read = [before, after, confirmed].map(
           (files) => files[index] ?? null,
         );
+        const changedAt = read[0]?.ctimeNs;
+        // Ext4 with 128-byte inodes rounds down to the whole second.
+        const cutoff =
+          changedAt !== undefined && changedAt % nanosecondsPerSecond === 0n
+            ? settledBefore - nanosecondsPerSecond
+            : settledBefore;
         const still =
           read.every((file) => file === null) ||
-          read.every(
-            (file) =>
-              file !== null &&
-              file.ctimeNs === read[0]?.ctimeNs &&
-              file.ctimeNs < settledBefore,
-          );
+          (changedAt !== undefined &&
+            changedAt < cutoff &&
+            read.every((file) => file?.ctimeNs === changedAt));
         return { app, record, read, still };
       });
       if (tries < samplingTries && samples.some(({ still }) => !still)) {

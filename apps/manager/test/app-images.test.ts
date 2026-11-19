@@ -22,6 +22,10 @@ vi.mock("../src/durable.js", async (original) => ({
   ...(await original<typeof import("../src/durable.js")>()),
   syncFileSystem: async (path: string) => void durable.synced.push(path),
 }));
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, stat: vi.fn(fs.stat) };
+});
 
 const app = "sanctum.weather";
 const mebibyte = 1024 * 1024;
@@ -450,6 +454,52 @@ describe("what the card keeps for images", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(ctimeMs + 10);
+      const { room } = await images.available();
+      expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an image with a whole-second change time as unsettled within that second", async () => {
+    const { folder, images } = await setup({ free: 4096 * mebibyte });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    const reading = await stat(file, { bigint: true });
+    const ctimeNs = reading.ctimeNs - (reading.ctimeNs % 1_000_000_000n);
+    vi.mocked(stat).mockResolvedValue({ ...reading, ctimeNs });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Number(ctimeNs / 1_000_000n) + 500);
+      const { room } = await images.available();
+      expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+
+      vi.setSystemTime(Number(ctimeNs / 1_000_000n) + 1250);
+      const settled = await images.available();
+      expect(settled.room()).toBe((4096 - (256 - 16) - 1536) * mebibyte);
+    } finally {
+      vi.mocked(stat).mockReset();
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an image as unsettled if the clock returns to its change time during a sample", async () => {
+    let whileFree = async () => {};
+    const { folder, images } = await setup({
+      free: 4096 * mebibyte,
+      whileFree: () => whileFree(),
+    });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    const { ctimeMs } = await stat(file);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(ctimeMs + 2000);
+      whileFree = async () => {
+        vi.setSystemTime(ctimeMs + 10);
+      };
       const { room } = await images.available();
       expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
     } finally {

@@ -560,11 +560,13 @@ describe("apps' images on real Docker", () => {
     );
   });
 
-  // What the room left for images rests on: the kernel sets an image's change
-  // time when a discard gives its blocks back, and when a write takes some.
+  // Discard directly on the loop device so filesystem metadata writes can't
+  // change the backing file's timestamp on the discard's behalf.
   it("changes an image's change time as a discard gives blocks back and a write takes them", async () => {
     const own = await docker("inspect", "-f", "{{.Image}}", manager);
     const file = "/sanctum-data/images/test.discard.img";
+    const writeMb = 16;
+    const writeBytes = writeMb * 1024 * 1024;
     const reading = `node -e 'const s = require("node:fs").statSync("${file}", { bigint: true }); console.log(JSON.stringify({ blocks: String(s.blocks), changed: String(s.ctimeNs) }))'`;
     const out = await docker(
       "run",
@@ -576,38 +578,32 @@ describe("apps' images on real Docker", () => {
       "sh",
       "-c",
       `set -e
+device=
+trap 'if [ -n "$device" ]; then losetup -d "$device"; fi; rm -f "${file}"' EXIT
 truncate -s 64M ${file}
-mkfs.ext4 -F -q -b 4096 ${file}
-free=$(losetup -f | cut -d' ' -f1)
+free=$(losetup -f)
 [ -e "$free" ] || mknod "$free" b 7 "\${free#/dev/loop}"
 device=$(losetup -f --show ${file})
-mkdir -p /m
-mount -o discard,sync "$device" /m
-dd if=/dev/urandom of=/m/data bs=1M count=16 conv=fsync 2>/dev/null
-sync -f /m
-sleep 0.1
+dd if=/dev/urandom of="$device" bs=1M count=${writeMb} conv=fsync 2>/dev/null
 ${reading}
-rm /m/data
-sync -f /m
-sleep 0.1
+# The backing filesystem may report whole seconds.
+sleep 1.1
+blkdiscard --length ${writeBytes} "$device"
 ${reading}
-dd if=/dev/urandom of=/m/data bs=1M count=16 conv=fsync 2>/dev/null
-sync -f /m
-${reading}
-umount /m
-losetup -d "$device"
-rm ${file}`,
+sleep 1.1
+dd if=/dev/urandom of="$device" bs=1M count=${writeMb} conv=fsync 2>/dev/null
+${reading}`,
     );
     const [written, discarded, again] = out
       .split("\n")
       .map((line) => JSON.parse(line) as { blocks: string; changed: string });
-    const sixteen = (16 * 1024 * 1024) / 512;
+    const writtenBlocks = writeBytes / 512;
 
     expect(Number(discarded!.blocks)).toBeLessThan(
-      Number(written!.blocks) - sixteen * 0.9,
+      Number(written!.blocks) - writtenBlocks * 0.9,
     );
     expect(Number(again!.blocks)).toBeGreaterThan(
-      Number(discarded!.blocks) + sixteen * 0.9,
+      Number(discarded!.blocks) + writtenBlocks * 0.9,
     );
     expect(discarded!.changed).not.toBe(written!.changed);
     expect(again!.changed).not.toBe(discarded!.changed);
