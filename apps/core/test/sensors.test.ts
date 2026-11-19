@@ -34,7 +34,7 @@ describe("a climate sensor", () => {
 
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
       // A new device is named after what it is until it is in a room.
-      name: "Sensor",
+      name: "Environment Sensor",
       battery: 87,
       capabilities: [
         {
@@ -67,7 +67,7 @@ describe("a climate sensor", () => {
     );
 
     expect(await deviceOf(core, maya.token, sensor)).toMatchObject({
-      name: "Office Sensor",
+      name: "Office Environment Sensor",
       roomId: office.id,
     });
   });

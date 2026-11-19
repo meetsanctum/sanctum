@@ -6,8 +6,10 @@ import {
   type DeclaredType,
   deviceTypeOf,
   deviceTypes,
+  deviceWords,
   fitsType,
   ownTypeOf,
+  sensorMeasures,
   showAsChoices,
   shownAsOf,
   shownType,
@@ -107,6 +109,67 @@ describe("what a driver may say a device is", () => {
   it("is unknown only for a device with no capability Sanctum uses", () => {
     expect(fitsType("unknown", new Set())).toBe(true);
     expect(fitsType("unknown", new Set(["light"]))).toBe(false);
+  });
+});
+
+describe("what a device is called", () => {
+  it("is its type's words, whatever it measures, for any type but a sensor", () => {
+    expect(deviceWords("motion", ["illuminance", "temperature"])).toEqual({
+      title: "Motion sensor",
+      noun: "motion sensor",
+    });
+    expect(deviceWords("light", ["temperature"])).toEqual({
+      title: "Light",
+      noun: "light",
+    });
+  });
+
+  it("is a sensor's one measure, by its own words", () => {
+    expect(deviceWords("sensor", ["temperature"])).toEqual({
+      title: "Temperature sensor",
+      noun: "temperature sensor",
+    });
+    expect(deviceWords("sensor", ["humidity"]).title).toBe("Humidity sensor");
+    expect(deviceWords("sensor", ["illuminance"]).title).toBe("Light sensor");
+    // Two readings of the same measure are still one measure.
+    expect(deviceWords("sensor", ["temperature", "temperature"]).title).toBe(
+      "Temperature sensor",
+    );
+  });
+
+  it("is an environment sensor for a sensor that measures several things", () => {
+    for (const measures of [
+      ["temperature", "humidity"],
+      ["temperature", "humidity", "illuminance"],
+    ] as const) {
+      expect(deviceWords("sensor", measures), measures.join()).toEqual({
+        title: "Environment sensor",
+        noun: "environment sensor",
+      });
+    }
+  });
+
+  it("is a sensor for one that says no measure", () => {
+    expect(deviceWords("sensor", [])).toEqual({
+      title: "Sensor",
+      noun: "sensor",
+    });
+  });
+
+  it("has words for every measure, a title and its noun", () => {
+    for (const measure of sensorMeasures) {
+      const { title, noun } = deviceWords("sensor", [measure]);
+      expect(noun).toBe(title.toLowerCase());
+    }
+  });
+
+  it.each([
+    { measures: ["temperature"], title: "Temperature sensor" },
+    { measures: ["temperature", "humidity"], title: "Environment sensor" },
+  ] as const)("returns independent words for $title", ({ measures, title }) => {
+    const words = deviceWords("sensor", measures);
+    words.title = "Other sensor";
+    expect(deviceWords("sensor", measures).title).toBe(title);
   });
 });
 
