@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createAppRemoving } from "../src/app-host/removing.js";
 import { createListTurns } from "../src/app-host/list-turns.js";
+import { ManagerUnavailable } from "../src/manager.js";
 import { apart, base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
 import { claimed, post, testCore } from "./support.js";
@@ -62,7 +63,6 @@ describe("finishing an app's removal", () => {
   it.each(["container", "lookup", "release"])(
     "keeps the removal unfinished after a failed %s, then retries it",
     async (failure) => {
-      const core = await testCore();
       const removeAppContainer = vi.fn(async () => {
         if (failure === "container") throw new Error("manager unavailable");
       });
@@ -73,6 +73,10 @@ describe("finishing an app's removal", () => {
       const releaseService = vi.fn(async () => {
         if (failure === "release") throw new Error("manager unavailable");
       });
+      const { manager } = fakeManager();
+      const core = await testCore({
+        manager: { ...manager, removeAppContainer },
+      });
       const removing = createAppRemoving({
         gate: core.gate,
         turns: createListTurns(),
@@ -81,9 +85,8 @@ describe("finishing an app's removal", () => {
         updates: { shownFor: () => undefined },
         workflows: () => core.workflows.forApps,
         devices: core.devices,
-        entities: core.entities,
         activity: core.activity,
-        manager: { removeAppContainer, servicesHeldBy, releaseService },
+        manager: { servicesHeldBy, releaseService },
         log: () => undefined,
       });
       core.removedApps.record(
@@ -124,10 +127,8 @@ describe("finishing an app's removal", () => {
       updates: { shownFor: () => undefined },
       workflows: () => core.workflows.forApps,
       devices: core.devices,
-      entities: core.entities,
       activity: core.activity,
       manager: {
-        removeAppContainer: async () => undefined,
         // A request from a core that stopped, which landed after the
         // removal finished.
         servicesHeldBy: async () => ["mosquitto"],
@@ -174,10 +175,8 @@ describe("finishing an app's removal", () => {
       updates: { shownFor: () => undefined },
       workflows: () => core.workflows.forApps,
       devices: core.devices,
-      entities: core.entities,
       activity: core.activity,
       manager: {
-        removeAppContainer: async () => undefined,
         servicesHeldBy: async () => ["mosquitto"],
         releaseService,
       },
@@ -198,7 +197,7 @@ describe("finishing an app's removal", () => {
     await expect(turns.take(async () => "next")).resolves.toBe("next");
   });
 
-  it("gives up waiting on an installed app's removal past the limit", async () => {
+  it("waits for the same installed app cleanup when a removal is retried", async () => {
     const { manager } = fakeManager();
     const app = defineApp({
       ...base,
@@ -208,10 +207,13 @@ describe("finishing an app's removal", () => {
     });
     const { core } = await apart(app, { manager });
     await running(core, app.id);
-    let finish!: () => void;
-    manager.removeAppContainer = vi.fn(
-      () => new Promise<void>((resolve) => (finish = resolve)),
-    );
+    let finishCleanup!: () => void;
+    const cleanup = new Promise<void>((resolve) => (finishCleanup = resolve));
+    const removeAppContainer = vi
+      .fn(async (): Promise<void> => undefined)
+      .mockReturnValueOnce(cleanup);
+    manager.removeAppContainer = removeAppContainer;
+    const servicesHeldBy = vi.spyOn(manager, "servicesHeldBy");
     const removing = createAppRemoving({
       gate: core.gate,
       turns: createListTurns(),
@@ -220,7 +222,6 @@ describe("finishing an app's removal", () => {
       updates: { shownFor: () => undefined },
       workflows: () => core.workflows.forApps,
       devices: core.devices,
-      entities: core.entities,
       activity: core.activity,
       manager,
       finishWithinMs: 50,
@@ -228,10 +229,21 @@ describe("finishing an app's removal", () => {
     });
     core.removedApps.record(app.id, {}, { name: "Example", version: "1.0.0" });
 
-    await expect(removing.finish(app.id)).rejects.toThrow();
+    try {
+      await expect(removing.finish(app.id)).rejects.toThrow();
+      await expect(removing.finish(app.id)).rejects.toBeInstanceOf(
+        ManagerUnavailable,
+      );
+      expect(removeAppContainer).toHaveBeenCalledTimes(1);
+      expect(servicesHeldBy).not.toHaveBeenCalled();
+      expect(core.removedApps.get(app.id)?.isDone).toBe(false);
+    } finally {
+      finishCleanup();
+    }
 
-    expect(core.removedApps.get(app.id)?.isDone).toBe(false);
-    finish();
+    await removing.finish(app.id);
+    expect(servicesHeldBy).toHaveBeenCalledTimes(1);
+    expect(core.removedApps.get(app.id)?.isDone).toBe(true);
   });
 
   it("finishes a removal already under way before closing its database", async () => {

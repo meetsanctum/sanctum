@@ -57,6 +57,7 @@ async function setup() {
       manager,
       entities: { removeApp: () => undefined },
       finishRemoval,
+      releaseLeftover: async () => undefined,
       now,
       log,
       ...overrides,
@@ -79,8 +80,19 @@ describe("deletion deadlines and recovery", () => {
   it("tries an unfinished removal again each hour, its data kept", async () => {
     const home = await setup();
     home.record("sanctum.other", false);
+    const deleting = home.start();
+    vi.useFakeTimers();
+    try {
+      deleting.start();
+      await home.turns.settled();
+      expect(home.finishRemoval).not.toHaveBeenCalled();
 
-    await home.start().expire();
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      await home.turns.settled();
+    } finally {
+      deleting.close();
+      vi.useRealTimers();
+    }
 
     expect(home.finishRemoval).toHaveBeenCalledWith("sanctum.other");
     expect(home.finishRemoval).not.toHaveBeenCalledWith(appId);
@@ -267,6 +279,26 @@ describe("deletion deadlines and recovery", () => {
 
     expect(home.manager.deleteAppData).toHaveBeenCalledTimes(2);
     expect(home.manager.eraseServiceData).toHaveBeenCalledTimes(2);
+    expect(home.removed.get(appId)).toBeUndefined();
+  });
+
+  it("resumes Delete now if releasing a leftover hold failed", async () => {
+    const home = await setup();
+    const releaseLeftover = vi
+      .fn(async (_id: string): Promise<void> => undefined)
+      .mockRejectedValueOnce(new ManagerUnavailable("No answer"));
+    const deleting = home.start({ releaseLeftover });
+
+    await expect(deleting.deleteNow(someone, appId)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    expect(home.removed.get(appId)?.isDeleting).toBe(true);
+    expect(home.manager.deleteAppData).not.toHaveBeenCalled();
+
+    await deleting.expire();
+
+    expect(releaseLeftover).toHaveBeenCalledTimes(2);
+    expect(home.manager.deleteAppData).toHaveBeenCalledWith(appId);
     expect(home.removed.get(appId)).toBeUndefined();
   });
 

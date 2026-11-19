@@ -44,6 +44,7 @@ function call(
   path: string,
   body?: unknown,
   timeoutMs = 5_000,
+  signal?: AbortSignal,
 ) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
@@ -59,6 +60,7 @@ function call(
             }
           : {},
         timeout: timeoutMs,
+        signal,
       },
       (response) => {
         let text = "";
@@ -234,6 +236,7 @@ export function createManagerClient(options: {
         }
         continue;
       } catch (error) {
+        if (signal?.aborted) return;
         if (!waiting) {
           log(
             `manager: waiting for ${socketPath} (${error instanceof Error ? error.message : String(error)})`,
@@ -241,6 +244,7 @@ export function createManagerClient(options: {
           waiting = true;
         }
       }
+      if (closed || signal?.aborted) return;
       await pause(delay, signal);
       delay = Math.min(delay * 2, retry.maxMs);
     }
@@ -265,10 +269,10 @@ export function createManagerClient(options: {
       }
       return true;
     }, signal);
+    if (signal?.aborted) {
+      throw new ManagerUnavailable("The manager did not answer in time");
+    }
     if (!answer) {
-      if (signal?.aborted && !closed) {
-        throw new ManagerUnavailable("The manager did not answer in time");
-      }
       throw new Error("The manager client was closed");
     }
     if ("refusal" in answer) {
@@ -590,14 +594,24 @@ export function createManagerClient(options: {
     },
 
     // The services the manager keeps for the app, whatever this core asked for.
-    async servicesHeldBy(app: string, options?: { signal?: AbortSignal }) {
+    async servicesHeldBy(
+      app: string,
+      { signal }: { signal?: AbortSignal } = {},
+    ) {
       return ask(async () => {
-        const response = await call(socketPath, "GET", "/api/services");
+        const response = await call(
+          socketPath,
+          "GET",
+          "/api/services",
+          undefined,
+          undefined,
+          signal,
+        );
         expectGranted(response);
         return parseBody(heldServices, response.body)
           .services.filter(({ apps }) => apps.includes(app))
           .map(({ name }) => name);
-      }, options?.signal);
+      }, signal);
     },
 
     // The app's permission for the service was switched off: one call,
@@ -615,7 +629,7 @@ export function createManagerClient(options: {
     async releaseService(
       service: string,
       app: string,
-      options?: { signal?: AbortSignal },
+      { signal }: { signal?: AbortSignal } = {},
     ) {
       await ask(async () => {
         const response = await call(
@@ -624,9 +638,10 @@ export function createManagerClient(options: {
           servicePath(service, app),
           undefined,
           30_000,
+          signal,
         );
         expectGranted(response);
-      }, options?.signal);
+      }, signal);
     },
 
     // Updates, asked once each: whoever asked waits for the answer and asks

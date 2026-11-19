@@ -62,12 +62,14 @@ export function createAppDeleting(options: {
   finishRemoval: (appId: string) => Promise<void>;
   // Releases what the manager still keeps for a removed app (removing.ts),
   // within the turn already taken.
-  releaseLeftover?: (appId: string) => Promise<void>;
+  releaseLeftover: (appId: string) => Promise<void>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
   const { db, log } = options;
   const now = options.now ?? (() => new Date());
+  const message = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
   let timer: NodeJS.Timeout | undefined;
   let stopping = false;
 
@@ -121,11 +123,11 @@ export function createAppDeleting(options: {
       throw new ActionCallError("unavailable");
     }
     try {
-      // Its removal ends first: its container still has its data. A service
-      // it still holds keeps its data from being erased.
+      // Its removal ends first: its container still has its data.
       if (!row.isDone) await options.finishRemoval(appId);
-      else await options.releaseLeftover?.(appId);
-      options.removed.beginDeleting(appId);
+      if (!row.isDeleting) options.removed.beginDeleting(appId);
+      // Retry an accepted deletion if a leftover hold couldn't be released.
+      if (row.isDone) await options.releaseLeftover(appId);
       await deleteAppData(appId);
       for (const service of servicesOnlyIt(appId)) {
         await eraseServiceData(service);
@@ -177,7 +179,7 @@ export function createAppDeleting(options: {
   // on: the rest resume at the next start. A removal that hasn't finished
   // finishes first, and one whose data is kept is tried again each hour, so
   // what a manager that failed left goes once it answers.
-  function expire() {
+  function expire({ retryKeptRemovals = true } = {}) {
     return options.turns.take(async () => {
       for (const row of options.removed.list()) {
         if (stopping) break;
@@ -185,26 +187,24 @@ export function createAppDeleting(options: {
         const isDue =
           row.isDeleting ||
           row.removedAt.getTime() + keptForMs <= now().getTime();
-        const why = (error: unknown) =>
-          error instanceof Error ? error.message : String(error);
         if (isDue) {
           await deleteData(appId, { actor: "sanctum" }).catch(
             (error: unknown) =>
-              log(`apps: ${appId}'s data stays for now (${why(error)})`),
+              log(`apps: ${appId}'s data stays for now (${message(error)})`),
           );
-        } else if (!row.isDone) {
+        } else if (row.isDone) {
+          await options
+            .releaseLeftover(appId)
+            .catch((error: unknown) =>
+              log(
+                `apps: what ${appId} still holds stays for now (${message(error)})`,
+              ),
+            );
+        } else if (retryKeptRemovals) {
           await options
             .finishRemoval(appId)
             .catch((error: unknown) =>
-              log(`apps: ${appId}'s removal didn't finish (${why(error)})`),
-            );
-        } else {
-          await options
-            .releaseLeftover?.(appId)
-            .catch((error: unknown) =>
-              log(
-                `apps: what ${appId} still holds stays for now (${why(error)})`,
-              ),
+              log(`apps: ${appId}'s removal didn't finish (${message(error)})`),
             );
         }
       }
@@ -243,14 +243,15 @@ export function createAppDeleting(options: {
       stopping = false;
       // A check that fails as a whole is logged, and the next hour's tries
       // again.
-      const check = () =>
-        void expire().catch((error: unknown) =>
+      const check = (retryKeptRemovals: boolean) =>
+        void expire({ retryKeptRemovals }).catch((error: unknown) =>
           log(
-            `apps: removed apps' deadlines weren't checked (${error instanceof Error ? error.message : String(error)})`,
+            `apps: removed apps' deadlines weren't checked (${message(error)})`,
           ),
         );
-      check();
-      timer = setInterval(check, checkEveryMs);
+      // Startup already resumes unfinished removals in the workflow step.
+      check(false);
+      timer = setInterval(check, checkEveryMs, true);
       timer.unref();
     },
 

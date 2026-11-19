@@ -3,9 +3,9 @@ import type { AppRemoval, DeviceInfo } from "@meetsanctum/app-sdk";
 import type { Activity } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
 import type { DeviceChange, Devices } from "../devices/devices.js";
-import type { Entities } from "../entities/entities.js";
+import { ManagerUnavailable, type ManagerClient } from "../manager.js";
 import type { WorkflowsForApps } from "../workflows/for-apps.js";
-import { ActionCallError, withTimeout } from "./errors.js";
+import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { Gate } from "./gate.js";
 import { permissionsRule } from "./grants.js";
 import type { AppHost } from "./host.js";
@@ -20,8 +20,8 @@ import type { AppUpdates } from "./updates.js";
 // household's workflows that use it turn off, and the activity log says so.
 // Then every client hears it's gone, with a driver's devices, which are
 // hidden, and the app stops, its container goes and the manager releases
-// its services, keeping their data. A core that stops part way finishes
-// those steps at its next start. Not while it's updating or going back,
+// its services, keeping their data. Failed steps are tried again at start,
+// each hour and before adding back. Not while it's updating or going back,
 // whose journals hold the app's data; removing waits its turn with adding.
 
 // How long one try at those steps may take. A manager that keeps failing
@@ -37,20 +37,8 @@ export function createAppRemoving(options: {
   updates: Pick<AppUpdates, "shownFor">;
   workflows: () => WorkflowsForApps;
   devices: Pick<Devices, "ofDriver">;
-  entities: Pick<Entities, "removeApp">;
   activity: Pick<Activity, "for">;
-  manager: {
-    removeAppContainer(app: string): Promise<void>;
-    servicesHeldBy?(
-      app: string,
-      options?: { signal?: AbortSignal },
-    ): Promise<string[]>;
-    releaseService(
-      service: string,
-      app: string,
-      options?: { signal?: AbortSignal },
-    ): Promise<void>;
-  };
+  manager: Pick<ManagerClient, "servicesHeldBy" | "releaseService">;
   finishWithinMs?: number;
   // What clients hear: the app gone, and each of its devices hidden.
   onRemoved?: (appId: string) => void;
@@ -82,23 +70,29 @@ export function createAppRemoving(options: {
   }
 
   // A try at a removal's steps, given up on past its limit.
-  async function within<T>(work: (signal: AbortSignal) => Promise<T>) {
+  async function withinDeadline(work: (signal: AbortSignal) => Promise<void>) {
     const giveUp = new AbortController();
-    const timer = setTimeout(
-      () => giveUp.abort(),
-      options.finishWithinMs ?? finishWithinMs,
-    );
     try {
-      return await work(giveUp.signal);
+      await withTimeout(
+        work(giveUp.signal),
+        options.finishWithinMs ?? finishWithinMs,
+      );
+    } catch (error) {
+      if (error instanceof TimedOut) {
+        throw new ManagerUnavailable("App removal did not finish in time");
+      }
+      throw error;
     } finally {
-      clearTimeout(timer);
+      giveUp.abort();
     }
   }
 
   // Every service the manager keeps for it goes, whatever asked for it.
   async function releaseHeld(appId: string, signal: AbortSignal) {
-    const held = await options.manager.servicesHeldBy?.(appId, { signal });
-    for (const service of held ?? []) {
+    signal.throwIfAborted();
+    const held = await options.manager.servicesHeldBy(appId, { signal });
+    for (const service of held) {
+      signal.throwIfAborted();
       await options.manager.releaseService(service, appId, { signal });
     }
   }
@@ -106,25 +100,14 @@ export function createAppRemoving(options: {
   // The steps after the first transaction, each again until it's done: a
   // container or a service that can't go now is logged, and goes with the
   // next try.
-  function finish(appId: string) {
-    return within(async (signal) => {
-      // An installed app stops and its container goes; one a core that
-      // stopped part way left isn't installed, and only its container goes.
-      if (options.host.list().some((app) => app.id === appId)) {
-        // Past the limit its own release goes on, and a request for its
-        // services waits for it (services.ts), as when it's added again.
-        await withTimeout(
-          options.host.remove(appId),
-          options.finishWithinMs ?? finishWithinMs,
-        );
-      } else {
-        // What it brought, if a removal that failed part way left it.
-        options.entities.removeApp(appId);
-        await options.manager.removeAppContainer(appId);
-      }
+  async function finish(appId: string) {
+    await withinDeadline(async (signal) => {
+      // The host keeps its cleanup in flight past the deadline. A retry
+      // waits for it before releasing any other holds or recording success.
+      await options.host.remove(appId);
       await releaseHeld(appId, signal);
-      options.removed.done(appId);
     });
+    options.removed.done(appId);
   }
 
   async function remove(principal: Principal, appId: string) {
@@ -184,11 +167,9 @@ export function createAppRemoving(options: {
     }
     options.onRemoved?.(appId);
     // It's removed once that has committed: a step that fails now is done
-    // again at the next start, and doesn't make the removal fail.
+    // again at the next try, and doesn't make the removal fail.
     await finish(appId).catch((error: unknown) =>
-      log(
-        `apps: ${appId}'s removal finishes at the next start (${message(error)})`,
-      ),
+      log(`apps: ${appId}'s removal didn't finish (${message(error)})`),
     );
   }
 
@@ -210,7 +191,7 @@ export function createAppRemoving(options: {
      * manager after the next core finished its removal.
      */
     releaseLeftover(appId: string) {
-      return within((signal) => releaseHeld(appId, signal));
+      return withinDeadline((signal) => releaseHeld(appId, signal));
     },
 
     /** Finishes the removals a core that stopped left part way. */
