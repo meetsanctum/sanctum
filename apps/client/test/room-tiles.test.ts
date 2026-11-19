@@ -112,6 +112,24 @@ describe("a room's page", () => {
     ]);
   });
 
+  it("opens the contact whose state the tile shows, keeping the tile's key stable", () => {
+    const door = device("door", "Hallway door", "living", [
+      { ...contact(false), id: "left" },
+      { ...contact(true), id: "right" },
+    ]);
+    const [security] = sectionsOfRoom(tilesOf([door], places, new Map(), now), [
+      door,
+    ]);
+
+    expect(security?.tiles).toEqual([
+      expect.objectContaining({
+        key: "door/left",
+        capabilityId: "right",
+        contact: expect.objectContaining({ open: true }),
+      }),
+    ]);
+  });
+
   it("shows a sensor's readings, as today", () => {
     expect(sections([climate("air", "living", 21.5, 48)])).toEqual([
       ["Environment", [["air/temperature", "air sensor", "21.5° · 48%"]]],
@@ -182,6 +200,29 @@ describe("a room's page", () => {
 
     expect(sections([wall], new Map([["wall/right", "single"]]))).toEqual([
       ["Buttons", [["wall/left", "Hall switch", "Single press"]]],
+    ]);
+  });
+
+  it("flashes a remote that can switch a relay without changing its power state", () => {
+    const wall: DeviceInfo = {
+      ...device("wall", "Hall button", "living", [
+        button,
+        plug("relay", false),
+      ]),
+      type: "button",
+    };
+    const [buttons] = sectionsOfRoom(
+      tilesOf([wall], places, new Map([["wall/button", "single"]]), now),
+      [wall],
+    );
+
+    expect(buttons?.tiles).toEqual([
+      expect.objectContaining({
+        key: "wall/relay",
+        status: "Single press",
+        look: "on",
+        on: false,
+      }),
     ]);
   });
 });

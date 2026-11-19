@@ -85,7 +85,9 @@ const offline = (device: DeviceInfo) =>
 // A capability a tile switches: a light or a switch.
 type Switchable = Extract<CapabilityInfo, { kind: "light" | "switch" }>;
 
-const switchable = (capability: CapabilityInfo): capability is Switchable =>
+export const isSwitchable = (
+  capability: CapabilityInfo,
+): capability is Switchable =>
   capability.kind === "light" || capability.kind === "switch";
 
 function tileOf(
@@ -421,7 +423,7 @@ export function tilesOf(
     const roomId =
       device.roomId && rooms.has(device.roomId) ? device.roomId : null;
     const isQuiet = maintenanceOf(device, now) === "quiet";
-    const controls = device.capabilities.filter(switchable);
+    const controls = device.capabilities.filter(isSwitchable);
     const buttons = device.capabilities.filter(
       (each) => each.kind === "button",
     );
@@ -493,14 +495,14 @@ export function sectionsByRoom(
 
 // The kind of the capability that says what a device of a type is: a
 // light's light, a plug's switch, a motion sensor's motion.
-const mainKindOf = (type: DeviceType) =>
+export const primaryKindOf = (type: DeviceType) =>
   deviceTypes.find((each) => each.id === type)?.needs[0];
 
-const switches = (tile: Tile) =>
+const isControlTile = (tile: Tile) =>
   tile.kind === "light" || tile.kind === "switch";
 
 /** A tile of a room's page, and the category whose section it is in: none for a device Sanctum cannot use. */
-export type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
+type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
 
 /**
  * The devices among some tiles as a room's page shows them: one tile for
@@ -513,37 +515,38 @@ export type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
  * flashes only a remote's: a light with a button goes on showing whether it
  * is on.
  */
-export function roomTilesOf(
+function roomTilesOf(
   tiles: readonly Tile[],
   devices: readonly DeviceInfo[],
 ): RoomTile[] {
   const byDevice = new Map<string, Tile[]>();
+  const devicesById = new Map(devices.map((device) => [device.id, device]));
   for (const tile of tiles) {
-    byDevice.set(tile.deviceId, [...(byDevice.get(tile.deviceId) ?? []), tile]);
+    const own = byDevice.get(tile.deviceId);
+    if (own) own.push(tile);
+    else byDevice.set(tile.deviceId, [tile]);
   }
   return [...byDevice].flatMap(([id, own]) => {
-    const device = devices.find((each) => each.id === id);
-    const kind = device && mainKindOf(device.type);
+    const device = devicesById.get(id);
+    const kind = device && primaryKindOf(device.type);
     const ofKind = own.filter((tile) => tile.kind === kind);
     const first = ofKind[0] ?? own[0]!;
-    // Of several motions, contacts or buttons, one seeing motion, open or
-    // just pressed says so, on the first's tile.
-    const active = switches(first)
+    // Keep the tile's key stable but open the part whose state it shows.
+    const active = isControlTile(first)
       ? first
       : (ofKind.find((tile) => tile.on) ?? first);
-    const main = {
-      ...active,
-      key: first.key,
-      capabilityId: first.capabilityId,
-    };
-    const controls = own.filter(switches);
-    const control = switches(main) ? main : controls[0];
+    const controls = own.filter(isControlTile);
+    const control = isControlTile(active) ? active : controls[0];
     const one: Tile = control
-      ? { ...control, status: main.status }
+      ? {
+          ...control,
+          status: active.status,
+          look: active.kind === "button" && active.on ? "on" : control.look,
+        }
       : // A device with several motions or contacts goes by its own name.
-        { ...main, name: device?.name ?? main.name };
+        { ...active, key: first.key, name: device?.name ?? active.name };
     return [
-      { tile: one, category: deviceCategoryOf(main.kind)?.id },
+      { tile: one, category: deviceCategoryOf(active.kind)?.id },
       ...controls
         .filter((tile) => tile.key !== control?.key)
         .map((tile) => ({

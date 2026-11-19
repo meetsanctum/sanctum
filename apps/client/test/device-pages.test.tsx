@@ -47,11 +47,10 @@ function ownApp(): HostedApp {
 
 const theirs: DeviceInfo = { ...lamp, driver: "sanctum.example" };
 const pagesOf = (device: DeviceInfo, apps: HostedApp[]) =>
-  devicePages(
-    apps,
-    device,
-    device.capabilities.map((each) => each.kind),
-  ).map(({ id, device }) => ({ id, parts: device.capabilities.length }));
+  devicePages(apps, device).map(({ id, device }) => ({
+    id,
+    parts: device.capabilities.length,
+  }));
 
 describe("a device's detail", () => {
   it("gives a driver's kind page its own device whole", () => {

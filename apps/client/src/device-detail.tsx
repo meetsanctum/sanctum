@@ -14,7 +14,7 @@ import {
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
 import { Blocks, Footprints, House, Sun, Thermometer } from "lucide-react";
-import { useEffect, useId, type ComponentProps } from "react";
+import { useEffect, useId, useRef, type ComponentProps } from "react";
 
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
@@ -25,7 +25,12 @@ import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
 import { historyPage } from "./device-history";
-import { noRoomName, tileKey } from "./device-tiles";
+import {
+  isSwitchable,
+  noRoomName,
+  primaryKindOf,
+  tileKey,
+} from "./device-tiles";
 import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
@@ -57,22 +62,11 @@ import type { Devices } from "./use-devices";
 type Motion = Extract<DeviceInfo["capabilities"][number], { kind: "motion" }>;
 type Contact = Extract<DeviceInfo["capabilities"][number], { kind: "contact" }>;
 
-type Switchable = Extract<
-  DeviceInfo["capabilities"][number],
-  { kind: "light" | "switch" }
->;
-
-const switchable = (
-  capability: DeviceInfo["capabilities"][number],
-): capability is Switchable =>
-  capability.kind === "light" || capability.kind === "switch";
-
 // The page a tile of each kind opens the detail on: its own.
 const pageOf: Partial<Record<CapabilityKind, string>> = {
   motion: "motion",
   contact: "contact",
   sensor: "readings",
-  button: "apps",
 };
 
 // What a switch has: on and off, which its controls show as one button.
@@ -85,16 +79,14 @@ const switchFeatures: LightFeatures = {
 // The pages apps add to the detail of a device of these kinds, in the
 // order of the apps, each with the device as its app may see it, and a
 // driver's pages on its own devices, with all of each.
-export function devicePages(
-  apps: readonly HostedApp[],
-  device: DeviceInfo,
-  kinds: readonly CapabilityKind[],
-) {
+export function devicePages(apps: readonly HostedApp[], device: DeviceInfo) {
+  const kinds = new Set(device.capabilities.map((each) => each.kind));
   return apps.flatMap((app) => {
+    if (!isShown(app.info)) return [];
+    const isDriver = device.driver === app.info.id;
     const reads = deviceKindsOf(app.info.permissions).reads;
     const seen =
-      device.driver === app.info.id &&
-      app.info.permissions.includes(registerPermission)
+      isDriver && app.info.permissions.includes(registerPermission)
         ? device
         : {
             ...device,
@@ -102,17 +94,13 @@ export function devicePages(
               reads.has(each.kind),
             ),
           };
-    if (!isShown(app.info)) return [];
-    return app.info.provides.devicePages.flatMap((page) => {
-      if (page.devices === "own") {
-        return device.driver === app.info.id
-          ? [{ app, id: page.id, title: page.title, device: seen }]
-          : [];
-      }
-      return page.kinds.some((kind) => kinds.includes(kind))
-        ? [{ app, id: page.id, title: page.title, device: seen }]
-        : [];
-    });
+    return app.info.provides.devicePages
+      .filter((page) =>
+        page.devices === "own"
+          ? isDriver
+          : page.kinds.some((kind) => kinds.has(kind)),
+      )
+      .map((page) => ({ ...page, app, device: seen }));
   });
 }
 
@@ -120,6 +108,8 @@ export function DeviceDetail(props: {
   container: HTMLElement | null;
   /** The tile it shows, kept while it closes. */
   tileKey: string | null;
+  /** A room's tile opens on the device's first page. */
+  openFirstPage?: boolean;
   open: boolean;
   devices: Devices;
   /** The apps whose pages a device's detail may show. */
@@ -148,12 +138,13 @@ export function DeviceDetail(props: {
   // A device Sanctum cannot use, whose tile stands for the device itself.
   const unknown = tile?.kind === "unknown" ? device : undefined;
   const hasDetail = capability !== undefined || unknown !== undefined;
-  // The light or switch it controls: the one whose tile opened it, or the
-  // device's first.
+  // The light or switch whose tile opened it, or the one on the room's tile.
+  const controls = device?.capabilities.filter(isSwitchable) ?? [];
+  const primaryKind = device && primaryKindOf(device.type);
   const control =
-    capability && switchable(capability)
+    capability && isSwitchable(capability)
       ? capability
-      : device?.capabilities.find(switchable);
+      : (controls.find((each) => each.kind === primaryKind) ?? controls[0]);
   const controlTile =
     device &&
     control &&
@@ -175,13 +166,15 @@ export function DeviceDetail(props: {
     device?.shownAs === "door" || device?.shownAs === "window"
       ? device.shownAs
       : undefined;
-  const measures = device?.capabilities.some((each) => each.kind === "sensor");
-  const pages =
-    device && hasDetail
-      ? devicePages(props.apps, device, [
-          ...new Set(device.capabilities.map((each) => each.kind)),
-        ])
-      : [];
+  const hasReadings = device?.capabilities.some(
+    (each) => each.kind === "sensor",
+  );
+  const pages = device && hasDetail ? devicePages(props.apps, device) : [];
+  const buttonPage =
+    !props.openFirstPage && capability?.kind === "button"
+      ? (pages.find((page) => page.kinds.includes("button")) ??
+        pages.find((page) => page.devices === "own"))
+      : undefined;
   const history = device && control ? historyPage(device, control) : null;
   const activity =
     device && hasDetail
@@ -207,7 +200,7 @@ export function DeviceDetail(props: {
       ? `Offline · ${seenText(device.lastSeenAt, now)}`
       : controlTile
         ? controlTile.status
-        : (motion || contact || measures) && device?.lastSeenAt
+        : (motion || contact || hasReadings) && device?.lastSeenAt
           ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
           : tile?.status;
   // The pages apps add, as one page of the detail.
@@ -224,6 +217,7 @@ export function DeviceDetail(props: {
             content: (
               <AppPages
                 pages={pages}
+                initialPage={buttonPage === pages[0] ? undefined : buttonPage}
                 openSettings={props.onOpenAppSettings}
                 openStatus={props.onOpenStatus}
                 household={devices.places?.home}
@@ -270,7 +264,7 @@ export function DeviceDetail(props: {
               },
             ]
           : []),
-        ...(measures
+        ...(hasReadings
           ? [
               {
                 id: "readings",
@@ -299,7 +293,15 @@ export function DeviceDetail(props: {
         ...[history, activity].flatMap((page) => page ?? []),
       ]
     : [];
-  const initial = capability && pageOf[capability.kind];
+  const initial =
+    props.openFirstPage || !capability
+      ? undefined
+      : capability.kind === "button"
+        ? buttonPage
+          ? "apps"
+          : "activity"
+        : pageOf[capability.kind];
+  const detailKey = `${props.openFirstPage ? "room" : "part"}/${tile?.key}`;
 
   return (
     <Overlay
@@ -325,7 +327,7 @@ export function DeviceDetail(props: {
         (control && controlTile ? (
           <LightControls
             // Each tile's detail opens afresh, on its own page.
-            key={tile.key}
+            key={detailKey}
             name={name}
             features={
               control.kind === "light" ? control.features : switchFeatures
@@ -341,7 +343,7 @@ export function DeviceDetail(props: {
           />
         ) : (
           <SwipePages
-            key={tile.key}
+            key={detailKey}
             label={name}
             pages={after}
             initial={initial}
@@ -355,17 +357,50 @@ export function DeviceDetail(props: {
 // at most, each under the shell's notice while its app isn't running.
 function AppPages(props: {
   pages: ReturnType<typeof devicePages>;
+  initialPage?: ReturnType<typeof devicePages>[number];
   openSettings: (app: string) => void;
   openStatus: () => void;
   household: ComponentProps<typeof DeviceFrame>["household"];
   isAway: boolean;
   onEscape: () => void;
 }) {
+  const initial = useRef<HTMLDivElement>(null);
+  const initialId = props.initialPage?.id;
+  const initialApp = props.initialPage?.app.info.id;
+  useEffect(() => {
+    const target = initial.current;
+    const column = target?.parentElement;
+    const scrollArea = target?.closest("[data-slot=scroll-area]");
+    if (!target || !column || !scrollArea) return;
+
+    // Earlier frames can grow as they load. Keep the opening page in view
+    // until someone starts navigating the app pages themselves.
+    const show = () => {
+      if (!target.closest("[inert]")) {
+        target.scrollIntoView({ block: "start", inline: "nearest" });
+      }
+    };
+    const observer = new ResizeObserver(show);
+    observer.observe(column);
+    show();
+    const stop = () => observer.disconnect();
+    const events = ["pointerdown", "wheel", "keydown"];
+    for (const event of events) scrollArea.addEventListener(event, stop, true);
+    return () => {
+      stop();
+      for (const event of events)
+        scrollArea.removeEventListener(event, stop, true);
+    };
+  }, [initialApp, initialId]);
+
   return (
     <div className="flex w-[520px] max-w-full flex-col gap-8">
       {props.pages.map(({ app, id, title, device }) => (
         <div
           key={`${app.info.id}/${id}/${device.id}`}
+          ref={
+            id === initialId && app.info.id === initialApp ? initial : undefined
+          }
           className="flex flex-col gap-3"
         >
           <AppNotice

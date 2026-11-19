@@ -5,13 +5,21 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { HostedApp } from "../src/apps";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail } from "../src/device-detail";
 import { forgetPageTicket } from "../src/frames/page-ticket";
 import { useDevices } from "../src/use-devices";
 import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
+import { motionCapability } from "./device-tiles-fixtures";
 import { unknownHome } from "./home-fixtures";
-import { light, places, plug, sensor } from "./place-pages-fixtures";
+import {
+  contactSensor,
+  light,
+  places,
+  plug,
+  sensor,
+} from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({
   coreJson: vi.fn(),
@@ -27,6 +35,12 @@ let live: ReturnType<typeof createLiveFeed>;
 let devices: DeviceInfo[];
 
 const presses = pressesApp(["devices.read:button"]);
+const driver = pressesApp(["devices.register"]);
+driver.info.id = "sanctum.example";
+driver.info.name = "Example";
+driver.info.provides.devicePages = [
+  { id: "example.status", title: "Status", kinds: [], devices: "own" },
+];
 
 const button: CapabilityInfo = {
   id: "button",
@@ -43,6 +57,7 @@ const button: CapabilityInfo = {
 // A light with a button and a temperature sensor, as an ESPHome panel.
 const panel: DeviceInfo = {
   ...light("panel", "Desk panel", "office", true),
+  driver: driver.info.id,
   capabilities: [
     ...light("panel", "", null, true).capabilities,
     button,
@@ -66,15 +81,20 @@ const relay: DeviceInfo = {
   ],
 };
 
-function Detail(props: { tileKey: string }) {
+function Detail(props: {
+  tileKey: string;
+  openFirstPage?: boolean;
+  apps?: readonly HostedApp[];
+}) {
   const shown = useDevices(live);
   return (
     <DeviceDetail
       container={container}
       tileKey={props.tileKey}
+      openFirstPage={props.openFirstPage}
       open
       devices={shown}
-      apps={[presses]}
+      apps={props.apps ?? [presses]}
       live={live}
       home={unknownHome}
       onClose={() => {}}
@@ -86,10 +106,11 @@ function Detail(props: { tileKey: string }) {
   );
 }
 
-async function open(tileKey: string) {
-  await act(async () =>
-    root.render(<Detail key={tileKey} tileKey={tileKey} />),
-  );
+async function open(
+  tileKey: string,
+  options: { openFirstPage?: boolean; apps?: readonly HostedApp[] } = {},
+) {
+  await act(async () => root.render(<Detail tileKey={tileKey} {...options} />));
   await act(async () => live.refresh());
 }
 
@@ -119,7 +140,9 @@ beforeEach(() => {
   devices = [panel, relay];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init) => {
-    const page = devicePageAnswer(path, presses.info.id);
+    const page =
+      devicePageAnswer(path, presses.info.id) ??
+      devicePageAnswer(path, driver.info.id);
     if (page) return page;
     if (path === "/api/devices") return devices;
     if (path === "/api/places") return places;
@@ -175,6 +198,83 @@ describe("a light with a button and a temperature sensor", () => {
       );
     },
   );
+
+  it("uses the primary light from Readings even when an auxiliary relay is listed first", async () => {
+    devices = [
+      {
+        ...panel,
+        capabilities: [
+          { ...plug.capabilities[0]!, id: "relay" },
+          ...panel.capabilities,
+        ],
+      },
+    ];
+    await open("panel/temperature");
+
+    expect(dialog().querySelector("h2")?.textContent).toBe("Desk panel light");
+    expect(dialog().textContent).toContain("Office · 40%");
+    expect(tabs()).toContainEqual(["Brightness", "false"]);
+    expect(tabs()).toContainEqual(["Readings", "true"]);
+  });
+
+  it("stays on Readings when a live device update adds another page before it", async () => {
+    await open("panel/temperature");
+    await act(async () =>
+      live.publish({
+        type: "device",
+        id: panel.id,
+        device: {
+          ...panel,
+          capabilities: [...panel.capabilities, motionCapability(false)],
+        },
+      }),
+    );
+
+    expect(tabs()).toContainEqual(["Motion", "false"]);
+    expect(tabs()).toContainEqual(["Readings", "true"]);
+  });
+
+  it("opens a button's Activity when no app provides its page", async () => {
+    await open("panel/button", { apps: [] });
+
+    expect(tabs()).toContainEqual(["Activity", "true"]);
+  });
+
+  it("reveals Presses below the driver's app page when opened from the button", async () => {
+    const revealed: string[] = [];
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value(this: Element) {
+        revealed.push(this.querySelector("iframe")?.title ?? "");
+      },
+    });
+    try {
+      await open("panel/button", { apps: [driver, presses] });
+
+      expect(tabs()).toContainEqual(["From apps", "true"]);
+      expect(
+        [...dialog().querySelectorAll("iframe")].map((frame) => frame.title),
+      ).toEqual(["Example: Status", "Presses: Presses"]);
+      expect(revealed).toContain("Presses: Presses");
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+});
+
+it("starts on the first page from a room even when that tile represents another capability", async () => {
+  const contact = contactSensor("door", "Hallway door", "office", false);
+  devices = [
+    {
+      ...contact,
+      capabilities: [...contact.capabilities, motionCapability(false)],
+    },
+  ];
+  await open("door/contact");
+  expect(tabs()).toContainEqual(["Contact", "true"]);
+
+  await open("door/contact", { openFirstPage: true });
+  expect(tabs()).toContainEqual(["Motion", "true"]);
 });
 
 describe("a device with two switches", () => {

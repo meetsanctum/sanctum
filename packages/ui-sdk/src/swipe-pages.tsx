@@ -53,13 +53,20 @@ export function SwipePages(props: {
   initial?: string;
 }) {
   const { pages } = props;
-  const [chosen, setPage] = useState(() =>
-    Math.max(
+  const [chosen, setChosen] = useState(() => {
+    const index = Math.max(
       0,
       pages.findIndex((each) => each.id === props.initial),
-    ),
-  );
-  const page = Math.min(chosen, pages.length - 1);
+    );
+    return { id: pages[index]?.id, index };
+  });
+  // A capability or an app can add or remove pages while the detail is open.
+  const selectedIndex = pages.findIndex((each) => each.id === chosen.id);
+  const page =
+    selectedIndex >= 0
+      ? selectedIndex
+      : Math.min(chosen.index, pages.length - 1);
+  const setPage = (index: number) => setChosen({ id: pages[index]?.id, index });
   const [dx, setDx] = useState<number | null>(null);
   const swipe = useRef<Swipe | null>(null);
   const swiped = useRef(false);
