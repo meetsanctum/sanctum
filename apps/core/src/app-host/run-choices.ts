@@ -49,6 +49,11 @@ export function createAppRunChoices(options: {
     log,
   } = options;
   const followingOff = new WeakMap<InstalledApp, Promise<void>>();
+  // Each Turn off or Turn on counts, and so does the end of following it.
+  const offChanges = new WeakMap<
+    InstalledApp,
+    { count: number; following: number }
+  >();
 
   async function followOff(entry: InstalledApp) {
     await reconcile(entry);
@@ -65,6 +70,13 @@ export function createAppRunChoices(options: {
   }
 
   return {
+    // How many times it was turned off or on, or followed that, so a change
+    // meanwhile can be told apart from none. Nothing while it's following
+    // one, whose stop or start can end at any time.
+    offChangeOf(entry: InstalledApp) {
+      const changes = offChanges.get(entry);
+      return changes?.following ? undefined : (changes?.count ?? 0);
+    },
     // It stops, or starts again, after whatever it's doing now. A driver's devices
     // are offline meanwhile, and it says otherwise as it comes back.
     onOff(entry: InstalledApp, off: boolean) {
@@ -74,12 +86,20 @@ export function createAppRunChoices(options: {
       announce(entry);
       // One at a time for an app, each doing what was last asked for: its stop can
       // take seconds, and someone can change their mind while it does.
+      const changes = offChanges.get(entry) ?? { count: 0, following: 0 };
+      offChanges.set(entry, changes);
+      changes.count += 1;
+      changes.following += 1;
       const work = (followingOff.get(entry) ?? Promise.resolve())
         .then(() => followOff(entry))
         .catch((error: unknown) => {
           log(
             `apps: ${entry.app.id} didn't follow Turn off (${String(error)})`,
           );
+        })
+        .finally(() => {
+          changes.count += 1;
+          changes.following -= 1;
         });
       followingOff.set(entry, work);
     },

@@ -58,13 +58,17 @@ describe("going back and allowing an update", () => {
       installed,
       updates,
       waiting,
+      offChangeOf: () => 0,
       announce: () => undefined,
       log: () => undefined,
     });
 
     const [goingBack, allowing] = await Promise.all([
       choices.onGoBack(entry, "copy-1"),
-      choices.onAllowUpdate(entry, "waiting-1", () => undefined),
+      choices.onAllowUpdate(entry, "waiting-1", {
+        alongside: () => undefined,
+        applyGrants: () => undefined,
+      }),
     ]);
 
     expect(swaps).toHaveLength(1);

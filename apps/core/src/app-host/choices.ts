@@ -30,6 +30,13 @@ type Chosen = {
   waiting?: AppWaitingUpdate;
 };
 
+export type AllowUpdateEffects = {
+  // The activity entry goes in the transaction that grants what it needs.
+  alongside: () => void;
+  // If the installed version stays, it takes what it also asks for.
+  applyGrants: () => void;
+};
+
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -63,15 +70,12 @@ export function createAppChoices<Entry extends Chosen>(options: {
   onRestart?: (entry: Entry) => boolean;
   // Someone asked to go back from an app's last update: whether it can.
   onGoBack?: (entry: Entry, copyId: string) => Promise<boolean>;
-  // Someone allowed the version that waits, named by its id: false when it
-  // wasn't still the one waiting; otherwise whether it replaces the one that
-  // runs, or is the one installed, paused for want of what was granted.
+  // Someone allowed the version that waits, named by its id.
   onAllowUpdate?: (
     entry: Entry,
     id: string,
-    // Its entry, written in the transaction that grants what it needs.
-    alongside: () => void,
-  ) => Promise<false | "unavailable" | "replaced" | "inPlace">;
+    effects: AllowUpdateEffects,
+  ) => Promise<boolean | "unavailable">;
   // Someone turned an app off or on.
   onOff?: (entry: Entry, off: boolean) => void;
   // Tries again an update that waits for room.
@@ -149,8 +153,8 @@ export function createAppChoices<Entry extends Chosen>(options: {
   }
 
   // Allows the newer version that waits for what it newly needs, which the
-  // client shows first, granting those and starting its update. Like its
-  // grants, it's the household's to choose.
+  // client shows first, granting those and starting the update once it has
+  // room. Like its grants, it's the household's to choose.
   async function allowUpdate(request: {
     principal: Principal;
     appId: string;
@@ -160,9 +164,23 @@ export function createAppChoices<Entry extends Chosen>(options: {
     const entry = entryOf(appId);
     const action = "allow-update";
     const who = admit(principal, appId, action, permissionsRule);
-    const allowed = await options.onAllowUpdate?.(entry, id, () =>
-      record(appId, action, who, "ok"),
-    );
+    const allowed = await options.onAllowUpdate?.(entry, id, {
+      alongside: () => record(appId, action, who, "ok"),
+      applyGrants() {
+        const before = entry.granted;
+        const granted = options.grants.of(entry.manifest);
+        const added = granted.filter(
+          (permission) => !before.includes(permission),
+        );
+        if (added.length === 0) return;
+        entry.granted = granted;
+        entry.grantsRevision += 1;
+        options.eventsForApps.permissions(appId, before, granted);
+        for (const permission of added) {
+          options.onPermission?.(entry, permission, true);
+        }
+      },
+    });
     if (allowed === "unavailable") {
       record(appId, action, who, "failed", "unavailable");
       throw new ActionCallError("unavailable");
@@ -170,19 +188,6 @@ export function createAppChoices<Entry extends Chosen>(options: {
     if (!allowed) {
       record(appId, action, who, "refused", "conflict");
       throw new ActionCallError("conflict");
-    }
-    // Paused on it, it takes them as any permission switched on.
-    if (allowed === "inPlace" && installed.get(appId) === entry) {
-      const before = entry.granted;
-      entry.granted = options.grants.of(entry.manifest);
-      entry.grantsRevision += 1;
-      delete entry.waiting;
-      options.eventsForApps.permissions(appId, before, entry.granted);
-      for (const permission of entry.granted) {
-        if (!before.includes(permission)) {
-          options.onPermission?.(entry, permission, true);
-        }
-      }
     }
   }
 
