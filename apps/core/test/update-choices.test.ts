@@ -58,7 +58,7 @@ describe("going back and allowing an update", () => {
       installed,
       updates,
       waiting,
-      offChangeOf: () => undefined,
+      offChangeOf: () => 0,
       announce: () => undefined,
       log: () => undefined,
     });

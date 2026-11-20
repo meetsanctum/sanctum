@@ -580,8 +580,14 @@ describe("allowing an update", () => {
         version: "1.0.0",
         waiting,
       });
-      expect((await allow()).statusCode).toBe(200);
-      expect(room.reserved).toHaveLength(turnsBackOn ? 2 : 1);
+      // Allow answers a conflict until a Turn on still under way ends.
+      await vi.waitFor(async () =>
+        expect((await allow()).statusCode).toBe(200),
+      );
+      // Only the update's own is left, for its start: none while it's off.
+      expect(room.reserved.length - room.released.length).toBe(
+        turnsBackOn ? 1 : 0,
+      );
       await vi.waitFor(() =>
         expect(stateOf(core, id)).toMatchObject({
           state: turnsBackOn ? "running" : "off",
@@ -590,6 +596,41 @@ describe("allowing an update", () => {
       );
     },
   );
+
+  it("releases the reservation if a Turn on still under way ends during the check", async () => {
+    const home = await versions();
+    const before = await home.coreWith(version("1.0.0"), { allowed: false });
+    await running(before, id);
+    const owner = await claimed(before);
+    const room = counting(home);
+    const core = await home.coreWith(
+      version("2.0.0", { permissions: [people] }),
+      { allowed: false },
+    );
+    await running(core, id);
+    const waiting = stateOf(core, id).waiting!;
+    const turn = (off: boolean) =>
+      post(core, `/api/apps/${id}/off`, { off }, owner);
+    expect((await turn(true)).statusCode).toBe(200);
+    await vi.waitFor(() => expect(stateOf(core, id).state).toBe("off"));
+    room.beforeReserve = async () => {
+      room.beforeReserve = async () => {};
+      await running(core, id);
+    };
+
+    const allow = () =>
+      post(core, `/api/apps/${id}/update/allow`, { id: waiting.id }, owner);
+    const [on, allowed] = await Promise.all([turn(false), allow()]);
+
+    expect(on.statusCode).toBe(200);
+    expect(allowed.statusCode).toBe(409);
+    expect(room.released).toEqual(["reservation-1"]);
+    expect(stateOf(core, id)).toMatchObject({ version: "1.0.0", waiting });
+    await vi.waitFor(async () => expect((await allow()).statusCode).toBe(200));
+    await vi.waitFor(() => expect(committedOf(core)?.version).toBe("2.0.0"), {
+      timeout: 4_000,
+    });
+  });
 
   it("starts as before when the manager can't answer", async () => {
     const home = await versions();

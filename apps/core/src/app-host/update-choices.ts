@@ -10,8 +10,9 @@ export function createAppUpdateChoices(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   updates: Pick<AppUpdates, "startGoingBack" | "swapTo" | "shownFor">;
   waiting: WaitingUpdates;
-  // The latest Turn on or Turn off work, even after it has finished.
-  offChangeOf: (entry: InstalledApp) => Promise<void> | undefined;
+  // How many times it was turned off or on, or followed that; nothing while
+  // it follows one.
+  offChangeOf: (entry: InstalledApp) => number | undefined;
   // Clients hear of a wait that changed.
   announce: (entry: InstalledApp) => void;
   log: (message: string) => void;
@@ -116,6 +117,7 @@ export function createAppUpdateChoices(options: {
         canAllow: () =>
           isCurrent() && updates.shownFor(appId)?.stage !== "goingBack",
         isRoomCurrent: () =>
+          offChange !== undefined &&
           options.offChangeOf(entry) === offChange &&
           entry.grantsRevision === grantsRevision,
         alongside: effects.alongside,
