@@ -65,6 +65,9 @@ export function createAppRunChoices(options: {
   }
 
   return {
+    // The latest Turn off or Turn on it follows, even once that's done, so
+    // a change meanwhile can be told apart from none.
+    offChangeOf: (entry: InstalledApp) => followingOff.get(entry),
     // It stops, or starts again, after whatever it's doing now. A driver's devices
     // are offline meanwhile, and it says otherwise as it comes back.
     onOff(entry: InstalledApp, off: boolean) {

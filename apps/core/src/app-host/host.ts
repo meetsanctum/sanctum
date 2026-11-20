@@ -254,7 +254,7 @@ export function createAppHost(options: {
     contextFor,
     deliver,
   });
-  const runChoices = createAppRunChoices({
+  const { offChangeOf, ...runChoices } = createAppRunChoices({
     installed,
     off: options.off,
     waiting: options.waiting,
@@ -273,9 +273,10 @@ export function createAppHost(options: {
     installed,
     ...runChoices,
     ...createAppUpdateChoices({
-      ...options,
       installed,
-      offChangeOf: (entry) => followingOff.get(entry),
+      updates: options.updates,
+      waiting: options.waiting,
+      offChangeOf,
       announce,
       log,
     }),
