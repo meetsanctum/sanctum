@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { BigIntStats } from "node:fs";
 import { access, mkdir, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -33,6 +34,14 @@ const appUser = "1000:1000";
 const mebibyte = 1024 * 1024;
 // What an update needs free, which Settings → Status warns under too.
 const keptForUpdates = 1536 * mebibyte;
+// A file's change time comes from a coarse clock that ticks at least every
+// 10 ms: a change to a file whose time is older than this gives it a new one,
+// and waiting this long between samples lets a recent one settle.
+const changeTimeLagMs = 50;
+const nanosecondsPerMs = 1_000_000n;
+const nanosecondsPerSecond = 1000n * nanosecondsPerMs;
+// Samples of the images' room before one that moves counts as holding nothing.
+const samplingTries = 3;
 
 export const defaultImageMb = 256;
 
@@ -122,33 +131,89 @@ export function createAppImages(options: {
     );
   }
 
-  // What the images may still grow to, which the card has to keep for them.
-  // Their blocks are read before and after what's free, and the fewer
-  // counted: growth meanwhile is then still counted as promised, and blocks
-  // a discard gave back meanwhile are counted as promised again, so the
-  // room is never more than there is.
+  // What the images may still grow to, which the card has to keep for them,
+  // read with what's free. Nothing reads a running image's blocks and what's
+  // free at one instant, and its blocks go down with a discard as well as up
+  // with a write, so a discard and growth after it can hide between two
+  // readings that agree. Its change time says whether they moved: a write, a
+  // discard and a truncate each set it while holding the file's lock, a discard
+  // after the blocks it gives back, so no growth follows a discard before
+  // it's set. When the same change time is still visible after reading the
+  // blocks and is too old for a new write to repeat it, the fewest blocks read
+  // give a lower bound on what the image held when what's free was read.
+  // An unsettled image is sampled again, then counted as holding nothing if
+  // it never settles.
   async function available() {
     const { images } = await read();
     const kept = Object.entries(images).filter(([, record]) => !record.damaged);
     const files = () =>
-      Promise.all(kept.map(([app]) => stat(fileOf(app)).catch(() => null)));
-    const before = await files();
-    const availableBytes = await free();
-    const after = await files();
+      Promise.all(
+        kept.map(([app]) =>
+          stat(fileOf(app), { bigint: true }).catch(() => null),
+        ),
+      );
+    for (let tries = 1; ; tries++) {
+      const startedAt = performance.now();
+      const startedAtMs = Date.now();
+      const before = await files();
+      const availableBytes = await free();
+      const after = await files();
+      const confirmed = await files();
+      // A backward wall-clock adjustment can repeat an old change time.
+      // Use the earlier start time implied by either wall-clock reading.
+      const endedAtMs = Date.now();
+      const elapsedMs = Math.ceil(performance.now() - startedAt);
+      const settledBefore =
+        BigInt(Math.min(startedAtMs, endedAtMs - elapsedMs) - changeTimeLagMs) *
+        nanosecondsPerMs;
+      const samples = kept.map(([app, record], index) => {
+        const read = [before, after, confirmed].map(
+          (files) => files[index] ?? null,
+        );
+        const changedAt = read[0]?.ctimeNs;
+        // Ext4 with 128-byte inodes rounds down to the whole second.
+        const cutoff =
+          changedAt !== undefined && changedAt % nanosecondsPerSecond === 0n
+            ? settledBefore - nanosecondsPerSecond
+            : settledBefore;
+        const still =
+          read.every((file) => file === null) ||
+          (changedAt !== undefined &&
+            changedAt < cutoff &&
+            read.every((file) => file?.ctimeNs === changedAt));
+        return { app, record, read, still };
+      });
+      if (tries < samplingTries && samples.some(({ still }) => !still)) {
+        await new Promise((done) => setTimeout(done, changeTimeLagMs));
+        continue;
+      }
+      return roomFrom(samples, availableBytes);
+    }
+  }
+
+  function roomFrom(
+    samples: {
+      app: string;
+      record: ImageRecord;
+      read: (BigIntStats | null)[];
+      still: boolean;
+    }[],
+    availableBytes: number | null,
+  ) {
     const sizes = new Map<string, number>();
     let promised = 0;
-    kept.forEach(([app, record], index) => {
-      const [first, last] = [before[index], after[index]];
+    for (const { app, record, read, still } of samples) {
       // Growth may have reached the disk just before saving its record failed.
       const capacity = Math.max(
         record.sizeMb * mebibyte,
-        first?.size ?? 0,
-        last?.size ?? 0,
+        ...read.map((file) => Number(file?.size ?? 0)),
       );
-      const allocated = Math.min(first?.blocks ?? 0, last?.blocks ?? 0) * 512;
+      const allocated = still
+        ? Math.min(...read.map((file) => Number(file?.blocks ?? 0))) * 512
+        : 0;
       sizes.set(app, Math.floor(capacity / mebibyte));
       promised += Math.max(0, capacity - allocated);
-    });
+    }
     const sizeMb = (app: string) => sizes.get(app) ?? 0;
     return {
       sizeMb,

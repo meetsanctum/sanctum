@@ -560,6 +560,57 @@ describe("apps' images on real Docker", () => {
     );
   });
 
+  // What the room left for images rests on: the kernel sets an image's change
+  // time when a discard gives its blocks back, and when a write takes some.
+  // The discard goes straight to the loop device, so no journal write sets the
+  // time on its behalf.
+  it("changes an image's change time as a discard gives blocks back and a write takes them", async () => {
+    const own = await docker("inspect", "-f", "{{.Image}}", manager);
+    const file = "/sanctum-data/images/test.discard.img";
+    const writeMb = 16;
+    const writeBytes = writeMb * 1024 * 1024;
+    const reading = `node -e 'const s = require("node:fs").statSync("${file}", { bigint: true }); console.log(JSON.stringify({ blocks: String(s.blocks), changed: String(s.ctimeNs) }))'`;
+    const out = await docker(
+      "run",
+      "--rm",
+      "--privileged",
+      "-v",
+      `${dataVolume}:/sanctum-data`,
+      own,
+      "sh",
+      "-c",
+      `set -e
+device=
+trap 'if [ -n "$device" ]; then losetup -d "$device"; fi; rm -f "${file}"' EXIT
+truncate -s 64M ${file}
+free=$(losetup -f)
+[ -e "$free" ] || mknod "$free" b 7 "\${free#/dev/loop}"
+device=$(losetup -f --show ${file})
+dd if=/dev/urandom of="$device" bs=1M count=${writeMb} conv=fsync 2>/dev/null
+${reading}
+# The backing filesystem may report whole seconds.
+sleep 1.1
+blkdiscard --length ${writeBytes} "$device"
+${reading}
+sleep 1.1
+dd if=/dev/urandom of="$device" bs=1M count=${writeMb} conv=fsync 2>/dev/null
+${reading}`,
+    );
+    const [written, discarded, again] = out
+      .split("\n")
+      .map((line) => JSON.parse(line) as { blocks: string; changed: string });
+    const writtenBlocks = writeBytes / 512;
+
+    expect(Number(discarded!.blocks)).toBeLessThan(
+      Number(written!.blocks) - writtenBlocks * 0.9,
+    );
+    expect(Number(again!.blocks)).toBeGreaterThan(
+      Number(discarded!.blocks) + writtenBlocks * 0.9,
+    );
+    expect(discarded!.changed).not.toBe(written!.changed);
+    expect(again!.changed).not.toBe(discarded!.changed);
+  }, 120_000);
+
   it("leaves no helper behind", async () => {
     expect(
       await docker(

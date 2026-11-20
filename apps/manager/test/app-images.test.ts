@@ -5,6 +5,7 @@ import {
   readdir,
   rename,
   rm,
+  stat,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -21,6 +22,10 @@ vi.mock("../src/durable.js", async (original) => ({
   ...(await original<typeof import("../src/durable.js")>()),
   syncFileSystem: async (path: string) => void durable.synced.push(path),
 }));
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, stat: vi.fn(fs.stat) };
+});
 
 const app = "sanctum.weather";
 const mebibyte = 1024 * 1024;
@@ -389,6 +394,117 @@ describe("what the card keeps for images", () => {
     const { room } = await images.available();
 
     expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+  });
+
+  // Its blocks go back to the disk and are taken again between two readings
+  // of them that agree.
+  async function discardAndGrow(file: string) {
+    await truncate(file, 0);
+    await writeFile(file, Buffer.alloc(16 * mebibyte, 1));
+    await truncate(file, 256 * mebibyte);
+  }
+
+  it("counts an image that discards and grows again through every sample as holding nothing", async () => {
+    let whileFree = async () => {};
+    const { folder, images } = await setup({
+      free: 4096 * mebibyte,
+      whileFree: () => whileFree(),
+    });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    let samples = 0;
+    whileFree = async () => {
+      samples++;
+      await discardAndGrow(file);
+    };
+
+    const { room } = await images.available();
+
+    expect(samples).toBe(3);
+    expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+  });
+
+  it("counts what an image holds once it holds still after a discard and growth", async () => {
+    let whileFree = async () => {};
+    const { folder, images } = await setup({
+      free: 4096 * mebibyte,
+      whileFree: () => whileFree(),
+    });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    whileFree = async () => {
+      whileFree = async () => {};
+      await discardAndGrow(file);
+    };
+
+    const { room } = await images.available();
+
+    expect(room()).toBe((4096 - (256 - 16) - 1536) * mebibyte);
+  });
+
+  it("counts an image changed within a clock's tick as holding nothing", async () => {
+    const { folder, images } = await setup({ free: 4096 * mebibyte });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    // A coarse clock may give a change in the same tick the same time.
+    const { ctimeMs } = await stat(file);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(ctimeMs + 10);
+      const { room } = await images.available();
+      expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an image with a whole-second change time as unsettled within that second", async () => {
+    const { folder, images } = await setup({ free: 4096 * mebibyte });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    const reading = await stat(file, { bigint: true });
+    const ctimeNs = reading.ctimeNs - (reading.ctimeNs % 1_000_000_000n);
+    vi.mocked(stat).mockResolvedValue({ ...reading, ctimeNs });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Number(ctimeNs / 1_000_000n) + 500);
+      const { room } = await images.available();
+      expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+
+      vi.setSystemTime(Number(ctimeNs / 1_000_000n) + 1250);
+      const settled = await images.available();
+      expect(settled.room()).toBe((4096 - (256 - 16) - 1536) * mebibyte);
+    } finally {
+      vi.mocked(stat).mockReset();
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts an image as unsettled if the clock returns to its change time during a sample", async () => {
+    let whileFree = async () => {};
+    const { folder, images } = await setup({
+      free: 4096 * mebibyte,
+      whileFree: () => whileFree(),
+    });
+    await images.ensure(app, 256);
+    const file = join(folder, `${app}.img`);
+    await discardAndGrow(file);
+    const { ctimeMs } = await stat(file);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(ctimeMs + 2000);
+      whileFree = async () => {
+        vi.setSystemTime(ctimeMs + 10);
+      };
+      const { room } = await images.available();
+      expect(room()).toBe((4096 - 256 - 1536) * mebibyte);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("goes ahead when it can't tell what's free", async () => {
