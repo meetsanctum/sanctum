@@ -1,6 +1,4 @@
 import {
-  lanPort,
-  type Actor,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
@@ -10,7 +8,6 @@ import {
 import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
-import type { Principal } from "../auth/clients.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Firmware } from "../devices/firmware.js";
@@ -20,8 +17,9 @@ import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
 import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
-import type { AppPieces, DeclaredAction } from "./contract.js";
-import { createActionRunner, type Who } from "./actions.js";
+import type { AppPieces } from "./contract.js";
+import { createActionCalls } from "./action-calls.js";
+import { createActionRunner } from "./actions.js";
 import { announcerOf, appStateOf, installedInfoOf } from "./app-info.js";
 import { deviceKinds } from "./calls.js";
 import { createAppChoices } from "./choices.js";
@@ -37,12 +35,7 @@ import type { InstalledApp } from "./installed.js";
 import type { ApartPackage } from "./loader.js";
 import { createAppLifecycle } from "./lifecycle.js";
 import type { NetFetch } from "./net.js";
-import {
-  createAppServices,
-  mayRunServices,
-  serviceOf,
-  type ServiceManager,
-} from "./services.js";
+import { createAppServices, type ServiceManager } from "./services.js";
 import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
 import { createSupervisor, type AppContainerManager } from "./supervisor.js";
@@ -55,6 +48,7 @@ import { createAppInstaller } from "./install.js";
 import type { AppVersions } from "./versions.js";
 import type { WaitingUpdates } from "./waiting.js";
 import { createAppUpdateChoices } from "./update-choices.js";
+import { createAppRunChoices } from "./run-choices.js";
 
 // The app host: installs the apps the core found, gives each its own
 // database and the services it declares, starts and stops them
@@ -63,10 +57,10 @@ import { createAppUpdateChoices } from "./update-choices.js";
 // them (drivers.ts). Every call goes through the permission gate. Every app
 // runs apart, in its own container with its own database, and the core knows
 // it by its manifest alone, never importing its code (apart.ts). The services it holds
-// follow its grants: one switched off loses its broker account before the
-// switch shows it off, and one switched back on gets a new login. What an
-// app brings to the home stays only while it is installed; its settings,
-// which change through the gate too, stay with its database.
+// follow its grants (run-choices.ts), and its actions run as calls from
+// clients, workflows and jobs (action-calls.ts). What an app brings to the
+// home stays only while it is installed; its settings, which change through
+// the gate too, stay with its database.
 
 type Log = (message: string) => void;
 
@@ -134,7 +128,6 @@ export function createAppHost(options: {
   const eventsForApps = createEventsForApps({ timeoutMs, log });
   const appServices = createAppServices({ manager, timeoutMs, log });
 
-  const stateOf = appStateOf;
   // Only while it is still installed: a removal or a new install may have
   // overtaken the change.
   const announceNow = announcerOf(options.onApp, log, ({ manifest }) =>
@@ -237,20 +230,6 @@ export function createAppHost(options: {
     log,
   });
   const startApart = apartStarts.start;
-  const followingOff = new WeakMap<InstalledApp, Promise<void>>();
-  async function followOff(entry: InstalledApp) {
-    await reconcile(entry);
-    if (installed.get(entry.app.id) !== entry) return;
-    if (entry.off) {
-      markDriverOffline(entry);
-      await supervisor.turnedOff(entry);
-    } else if (!entry.link.isConnected()) {
-      // Back on the connection it never lost, if someone was quick; otherwise it
-      // needs a new container, which says when it's ready.
-      startApart(entry);
-    }
-    announce(entry);
-  }
   const { accepts, stopApp, reconcile, gone, uninstall } = createAppLifecycle({
     installed,
     eventsForApps,
@@ -275,32 +254,24 @@ export function createAppHost(options: {
     contextFor,
     deliver,
   });
+  const runChoices = createAppRunChoices({
+    installed,
+    off: options.off,
+    waiting: options.waiting,
+    presses: options.presses,
+    appServices,
+    lan,
+    syncDiscovery: () => handOut?.sync(),
+    supervisor,
+    reconcile,
+    startApart,
+    announce,
+    markDriverOffline,
+    log,
+  });
   const choices = createAppChoices({
     installed,
-    // It stops, or starts again, after whatever it's doing now. A driver's devices
-    // are offline meanwhile, and it says otherwise as it comes back.
-    onOff(entry, off) {
-      if (entry.off === off) return;
-      options.off.set(entry.app.id, off);
-      entry.off = off;
-      announce(entry);
-      // One at a time for an app, each doing what was last asked for: its stop can
-      // take seconds, and someone can change their mind while it does.
-      const work = (followingOff.get(entry) ?? Promise.resolve())
-        .then(() => followOff(entry))
-        .catch((error: unknown) => {
-          log(
-            `apps: ${entry.app.id} didn't follow Turn off (${String(error)})`,
-          );
-        });
-      followingOff.set(entry, work);
-    },
-    // Only one its supervisor has given up on.
-    onRestart(entry) {
-      if (entry.supervision.phase !== "failed") return false;
-      void supervisor.restart(entry);
-      return true;
-    },
+    ...runChoices,
     ...createAppUpdateChoices({
       ...options,
       installed,
@@ -315,108 +286,25 @@ export function createAppHost(options: {
     grants: options.grants,
     eventsForApps,
     onSettings: options.onSettings,
-    // A permission that narrows what it reaches waits for the manager to
-    // confirm the narrower policy, which cuts its connections first.
-    beforeOff(entry, permission) {
-      const service = serviceOf(permission);
-      return lan.switchingOff(
-        entry,
-        permission,
-        service
-          ? appServices.revoke(entry.app.id, entry.services, service)
-          : undefined,
-      );
-    },
-    // What it set going under a permission that is off ends, a service
-    // switched back on gets a new login, and it pauses, starts or restarts.
-    onPermission(entry, permission, granted) {
-      // Its switches can also grant what an installed waiting build needs.
-      if (
-        granted &&
-        entry.waiting?.build === entry.apartIn &&
-        entry.waiting.needs.every((need) => entry.granted.includes(need.id))
-      ) {
-        options.waiting.forget(entry.app.id);
-        delete entry.waiting;
-      }
-      const service = serviceOf(permission);
-      if (granted && service && mayRunServices.includes(entry.origin)) {
-        entry.services.set(service, appServices.request(entry.app.id, service));
-      }
-      if (!granted) {
-        const isPaused = stateOf(entry) === "paused";
-        // Ending these cannot wait behind a start hook, which may itself
-        // be waiting for one of the requests we must abort.
-        if (isPaused) entry.requests.end();
-        else entry.requests.revoke(permission);
-        if (isPaused || !deviceKinds(entry.granted).reads.has("button")) {
-          options.presses().endCaptures(entry.app.id);
-        }
-      }
-      // Granted to look, or no longer: it hears of what that finds, or that
-      // it's gone, within what it may reach. One given a network of its own
-      // needs a container that has one.
-      lan.sync();
-      handOut?.sync();
-      if (granted && lanPort(permission) !== null && !lan.hasNetwork(entry)) {
-        void supervisor.renew(entry);
-      }
-      const settled = reconcile(
-        entry,
-        service ? { restartFor: "its changed services" } : {},
-      );
-      // One taken away pauses it at once. One given back has it starting
-      // at once, which its supervisor announces, and is announced again once
-      // it runs, so no client sees it running before it takes calls.
-      if (granted) void settled.then(() => announce(entry));
-      else announce(entry);
-    },
     log,
   });
 
-  function find(appId: string, actionId: string) {
-    const entry = installed.get(appId);
-    const action = entry?.contract.actions.get(actionId);
-    if (!entry || !action) {
-      throw new ActionCallError("not_found");
-    }
-    return { entry, action };
-  }
-
-  // Runs an action the gate has admitted, while the app takes calls. A
-  // call refused because it does not may have changed something, so it is
-  // logged unless it only reads: pages keep reading a paused app.
-  async function run(
-    entry: InstalledApp,
-    action: DeclaredAction,
-    actor: Actor,
-    who: Who,
-    input: unknown,
-  ) {
-    const deadline = Date.now() + timeoutMs;
-    // One on its way back is waited for, within a call's time, rather than fail.
-    if (!accepts(entry) && stateOf(entry) !== "paused") {
-      await supervisor.arrives(entry, timeoutMs);
-    }
-    const withinMs = deadline - Date.now();
-    if (
-      installed.get(entry.app.id) !== entry ||
-      !accepts(entry) ||
-      withinMs <= 0
-    ) {
-      if (action.tier !== "read") {
-        record(entry.app.id, action.id, who, "refused", "unavailable");
-      }
-      throw new ActionCallError("unavailable");
-    }
-    return track(entry, execute(entry, action, actor, who, input, withinMs));
-  }
+  const { call, invoke } = createActionCalls({
+    installed,
+    gate,
+    supervisor,
+    accepts,
+    record,
+    execute,
+    track,
+    timeoutMs,
+  });
 
   const drivers = createDriverCalls({
     installed,
     accepts,
     arrives: (entry) =>
-      stateOf(entry) === "paused"
+      appStateOf(entry) === "paused"
         ? Promise.resolve(false)
         : supervisor.arrives(entry, timeoutMs),
     contextFor,
@@ -635,53 +523,9 @@ export function createAppHost(options: {
       return entry?.manifest;
     },
 
-    // Runs one action for the principal behind a request: the gate admits
-    // the caller as an actor first.
-    async call(request: {
-      principal: Principal;
-      appId: string;
-      actionId: string;
-      input: unknown;
-    }): Promise<unknown> {
-      const { principal } = request;
-      const { entry, action } = find(request.appId, request.actionId);
-      const who = {
-        personId: principal.person?.id,
-        clientId: principal.client.id,
-      };
-      let actor: Actor;
-      try {
-        actor = gate.admit(principal, action);
-      } catch (error) {
-        if (error instanceof ActionCallError) {
-          record(entry.app.id, action.id, who, "refused", error.code);
-        }
-        throw error;
-      }
-      return run(entry, action, actor, who, request.input);
-    },
+    call,
 
-    // Runs one action for a workflow or for the app itself, as a job does:
-    // the gate permits the actor, then the call goes as any other.
-    async invoke(request: {
-      actor: Actor;
-      appId: string;
-      actionId: string;
-      input: unknown;
-    }): Promise<unknown> {
-      const { actor } = request;
-      const { entry, action } = find(request.appId, request.actionId);
-      const who = { actor: `${actor.kind}:${actor.id}` };
-      try {
-        gate.permit(actor, action);
-      } catch (error) {
-        if (error instanceof ActionCallError) {
-          record(entry.app.id, action.id, who, "refused", error.code);
-        }
-        throw error;
-      }
-      return run(entry, action, actor, who, request.input);
-    },
+    invoke,
 
     /** Whether an app is installed. */
     has(appId: string) {

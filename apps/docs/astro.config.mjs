@@ -32,6 +32,10 @@ export default defineConfig({
           label: "Installing",
           items: [{ autogenerate: { directory: "install" } }],
         },
+        {
+          label: "Devices",
+          items: [{ autogenerate: { directory: "devices" } }],
+        },
       ],
       customCss: [
         "@fontsource/inter/400.css",
