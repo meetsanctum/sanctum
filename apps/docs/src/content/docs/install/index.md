@@ -90,9 +90,10 @@ it touches.
 
 ## 3. Plug in the Zigbee stick
 
-Plug the stick into the machine. Zigbee starts by itself within a minute,
-before or after the next steps. Plug in one stick only: with several,
-Sanctum waits for you to unplug the ones it shouldn't use.
+Plug the stick into the machine, before or after the next steps. Sanctum
+then offers to add the Zigbee app, which brings your Zigbee devices in:
+choose **Add**. Plug in one stick only: with several, Sanctum waits for you
+to unplug the ones it shouldn't use.
 
 ## 4. Build the Mac app
 

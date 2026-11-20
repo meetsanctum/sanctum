@@ -36,6 +36,10 @@ export default defineConfig({
           label: "Devices",
           items: [{ autogenerate: { directory: "devices" } }],
         },
+        {
+          label: "Apps",
+          items: [{ autogenerate: { directory: "apps" } }],
+        },
       ],
       customCss: [
         "@fontsource/inter/400.css",
