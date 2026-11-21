@@ -14,7 +14,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -37,6 +37,7 @@ import {
   tilesIn,
   type Reading,
 } from "./device-tiles";
+import { useEdgeFade } from "./edge-fade";
 import { byFloor, FloorSection } from "./floor-groups";
 import {
   floorLightsButton,
@@ -244,11 +245,6 @@ const statusOrder = [
   "switches",
 ] as const satisfies DeviceCategory[];
 
-// What needs attention has more to say than a count: at least three cells
-// wide, a device tile's width, or half a phone's line.
-const statusTileWide =
-  "min-w-[calc(var(--cell)*3+var(--cell-gap)*2)] max-sm:min-w-[calc(50%-var(--cell-gap)/2)]";
-
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
   key: string;
@@ -257,8 +253,6 @@ type StatusTile = {
   label: string;
   icon: LucideIcon;
   colour: string;
-  // At least three cells wide where the others have two (statusTileWide).
-  wide?: boolean;
   open: () => void;
 };
 
@@ -288,6 +282,8 @@ export function HomeStatus(props: {
   openMaintenance: () => void;
 }) {
   const { devices } = props;
+  const row = useRef<HTMLElement>(null);
+  useEdgeFade(row);
   const unit = unitOf(devices);
   // Lights first, the one with something to press; a remote has nothing
   // to say here.
@@ -344,7 +340,6 @@ export function HomeStatus(props: {
       icon: icons.CircleAlert,
       // Red for a problem, Graphite while there are only rooms to choose.
       colour: attention.problem ? "var(--danger)" : "var(--graphite-text)",
-      wide: true,
       open:
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
@@ -364,10 +359,12 @@ export function HomeStatus(props: {
   if (shown.length === 0) return null;
   return (
     <section
+      ref={row}
       aria-label="Home status"
       // One line that scrolls sideways where its tiles don't fit, each as
-      // wide as its words need, so none is cut. Its padding keeps a focus
-      // ring in what the scroll shows.
+      // wide as its words need, so none is cut, fading at an edge with more
+      // beyond it (edge-fade.ts). Its padding keeps a focus ring in what
+      // the scroll shows.
       className="-m-1 flex shrink-0 gap-(--cell-gap) overflow-x-auto p-1 [scrollbar-width:none]"
     >
       {shown.map((each) => {
@@ -387,7 +384,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? statusTileWide : statusTileWidth} flex h-(--cell) w-max shrink-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"

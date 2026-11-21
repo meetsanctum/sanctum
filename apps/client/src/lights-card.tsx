@@ -85,7 +85,7 @@ export function LightsCard(props: {
   };
   // The tile's left segment: the bulb, "Lights" and how many are on.
   const segment =
-    "flex flex-1 items-center gap-2.5 bg-(--tile) px-3.5 text-left text-(--tile-ink) backdrop-blur-[24px]";
+    "flex flex-1 items-center gap-2.5 bg-(--tile) px-3.5 text-left text-(--tile-ink)";
   const words = (
     <>
       <icons.Lightbulb
@@ -108,7 +108,9 @@ export function LightsCard(props: {
     <div
       role="group"
       aria-label="Lights"
-      className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 gap-0.5 overflow-hidden rounded-lg`}
+      // Its frosted glass is the whole tile's, so a mask on it, as a
+      // scrolling row's fade (edge-fade.ts), keeps the blur.
+      className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 gap-0.5 overflow-hidden rounded-lg backdrop-blur-[24px]`}
     >
       {props.open ? (
         // On Home it opens Lights' page, as the other status tiles do.
@@ -131,7 +133,7 @@ export function LightsCard(props: {
         data-on={on > 0 ? "" : undefined}
         disabled={on === 0}
         onClick={turnOff}
-        className="grid w-(--cell) shrink-0 place-items-center bg-(--tile) text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-50 data-on:bg-(--tile-on) data-on:text-(--tile-on-ink)"
+        className="grid w-(--cell) shrink-0 place-items-center bg-(--tile) text-(--tile-ink) outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-50 data-on:bg-(--tile-on) data-on:text-(--tile-on-ink)"
       >
         <icons.Power aria-hidden="true" className="size-[22px]" />
       </button>

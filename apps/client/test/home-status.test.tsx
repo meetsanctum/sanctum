@@ -238,7 +238,7 @@ describe("the home's status", () => {
     expect(openAttention).toHaveBeenCalledOnce();
   });
 
-  it("gives each tile its whole words, Attention at least a device tile's width and the others two cells", async () => {
+  it("gives each tile its whole words, at least two cells", async () => {
     devices = [
       lamp,
       { ...hallLight, availability: "offline" },
@@ -261,8 +261,9 @@ describe("the home's status", () => {
       "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
     expect(shown(tiles().at(-1)!)).toContain("Offline");
+    // Attention too grows with its words from two cells.
     expect(tiles().at(-1)?.className).toContain(
-      "min-w-[calc(var(--cell)*3+var(--cell-gap)*2)]",
+      "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
   });
 
