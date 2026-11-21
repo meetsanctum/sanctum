@@ -179,13 +179,9 @@ export function DeviceTile(props: {
       onPointerEnd(event);
       return;
     }
-    // Before that the browser took over the gesture, for example to
-    // scroll. Discard its preview, without changing the light.
+    // A press cancelled before it becomes a drag has no preview of its own.
     drag.current = null;
     dragged.current = true;
-    setDragging(false);
-    clearTimeout(clearing.current);
-    setPreview(null);
   };
 
   // A drag or a swipe that ends over the tile is not a tap. A click no
@@ -206,9 +202,10 @@ export function DeviceTile(props: {
     },
     onPointerUp,
     onPointerCancel,
-    // A release the tile does not hear, such as outside the window, still
-    // ends the drag.
-    onLostPointerCapture: onPointerEnd,
+    onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+      // A child can lose its implicit capture when the button starts a drag.
+      if (event.target === event.currentTarget) onPointerEnd(event);
+    },
   };
 
   const level = preview ?? (tile.on ? tile.brightness : undefined);

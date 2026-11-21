@@ -329,23 +329,44 @@ describe.each(["brightness", "hue", "white"] as const)(
       expect(onCommand.mock.calls).toEqual(sent);
     });
 
-    it("ends a cancelled drag where it was", async () => {
-      const slider = await showControl();
-      const initial = input(`Lamp ${control}`).value;
-      await act(async () => {
-        pointer(slider, "pointerdown", 100, 100);
-        pointer(slider, "pointermove", 190, 100);
-      });
-      const dragged = input(`Lamp ${control}`).value;
-      expect(dragged).not.toBe(initial);
-      await act(async () => {
-        // As a host app sends for a lifted finger; capture goes with it.
-        pointer(slider, "pointercancel", 190, 100);
-        pointer(slider, "lostpointercapture", 190, 100);
-      });
-      expect(onCommand).toHaveBeenCalledTimes(1);
-      expect(input(`Lamp ${control}`).value).toBe(dragged);
-    });
+    it.each(["pointercancel", "lostpointercapture"])(
+      "sends the last move on %s even before that move renders",
+      async (event) => {
+        const slider = await showControl();
+        const { x, y, command, shown } = {
+          brightness: {
+            x: 100,
+            y: 0,
+            command: { brightness: 100 },
+            shown: "100%",
+          },
+          hue: {
+            x: 190,
+            y: 100,
+            command: { on: true, hue: 90, saturation: 100 },
+            shown: "90°",
+          },
+          white: {
+            x: 100,
+            y: 0,
+            command: { on: true, colorTemperature: 153 },
+            shown: `${(6500).toLocaleString()} K`,
+          },
+        }[control];
+        await act(async () => pointer(slider, "pointerdown", 100, 100));
+        await act(async () => {
+          pointer(slider, "pointermove", x, y);
+          pointer(slider, event, 0, 200);
+          if (event === "pointercancel") {
+            pointer(slider, "lostpointercapture", 0, 200);
+          }
+        });
+        expect(onCommand.mock.calls).toEqual([[command]]);
+        expect(input(`Lamp ${control}`).getAttribute("aria-valuetext")).toBe(
+          shown,
+        );
+      },
+    );
   },
 );
 

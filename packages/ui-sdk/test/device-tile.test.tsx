@@ -136,6 +136,24 @@ describe("a light's tile", () => {
     expect(button.textContent).toContain("65%");
   });
 
+  it("keeps dimming when capture moves from the label to the tile", async () => {
+    const button = await render(lamp);
+    const label = [...button.querySelectorAll("span")].find(
+      (span) => span.textContent === "Lamp",
+    )!;
+    await act(async () => {
+      pointer(label, "pointerdown", 100);
+      pointer(label, "pointermove", 120);
+      pointer(label, "lostpointercapture", 120);
+      pointer(button, "pointermove", 150);
+    });
+    expect(onDim).not.toHaveBeenCalled();
+    expect(button.textContent).toContain("65%");
+
+    await act(async () => pointer(button, "pointercancel", 0));
+    expect(onDim.mock.calls).toEqual([[lamp, 65]]);
+  });
+
   it("ends a drag when the tile loses the pointer, wherever it is released", async () => {
     const button = await render(lamp);
     await act(async () => {
@@ -160,6 +178,17 @@ describe("a light's tile", () => {
 
     await drag(button, [[140, 0]]);
     expect(onDim).toHaveBeenCalledWith(lamp, 60);
+  });
+
+  it("keeps the last dimming command visible when a later press is cancelled for scrolling", async () => {
+    const button = await render(lamp);
+    await drag(button, [[120, 0]]);
+    await act(async () => {
+      pointer(button, "pointerdown", 100);
+      pointer(button, "pointercancel", 100);
+    });
+    expect(onDim.mock.calls).toEqual([[lamp, 50]]);
+    expect(button.textContent).toBe("Lamp50%");
   });
 
   it("ends a drag where it was when it is cancelled under way", async () => {
