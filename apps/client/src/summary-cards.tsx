@@ -42,7 +42,9 @@ export function SummaryCards(props: {
       // Keep list semantics in Safari when the markers are hidden.
       role="list"
       aria-label={props.label}
-      className={`${statusRow} list-none`}
+      // A tab stop while it scrolls (edge-fade.ts), with the ring a tile's
+      // focus has.
+      className={`${statusRow} list-none rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50`}
     >
       {props.cards.map((card) => (
         <li key={card.id} className={statusTile}>
