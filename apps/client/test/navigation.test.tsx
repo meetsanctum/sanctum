@@ -242,10 +242,8 @@ describe("the dashboard's menu", () => {
     return [...document.querySelectorAll<HTMLElement>("[role=menuitem]")];
   }
 
-  // Night's: Home has no Rename.
   async function startRenaming() {
-    if (!container.querySelector('button[aria-label="Night: more"]'))
-      await render(<Navigation dashboard={night} />);
+    await render(<Navigation dashboard={night} />);
     const items = await openMenu("Night");
     await act(async () =>
       items.find((item) => item.textContent === "Rename")!.click(),
@@ -253,11 +251,15 @@ describe("the dashboard's menu", () => {
     return document.querySelector<HTMLElement>("[role=dialog]")!;
   }
 
-  it("holds Edit Home for Home, and no Rename or Delete", async () => {
-    expect((await openMenu()).map((item) => item.textContent)).toEqual([
-      "Edit Home",
-    ]);
-  });
+  it.each(["Home", "Overview"])(
+    "holds only Edit %s for the Home dashboard",
+    async (name) => {
+      await render(<Navigation dashboard={{ ...home, name }} />);
+      expect((await openMenu(name)).map((item) => item.textContent)).toEqual([
+        `Edit ${name}`,
+      ]);
+    },
+  );
 
   it("holds Rename for another dashboard", async () => {
     await render(<Navigation dashboard={night} />);

@@ -132,6 +132,7 @@ function DashboardMenu(props: {
   onRename: (id: string, name: string) => Promise<unknown>;
   onEditHome?: { disabled: boolean; open: () => void };
 }) {
+  const isHome = props.dashboard.kind === "home";
   const [renaming, setRenaming] = useState<DashboardInfo>();
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -150,16 +151,17 @@ function DashboardMenu(props: {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={8} className="w-44">
-          {props.dashboard.kind === "home" && props.onEditHome && (
-            <DropdownMenuItem
-              disabled={props.onEditHome.disabled}
-              onSelect={props.onEditHome.open}
-            >
-              <LayoutDashboard />
-              <span className="truncate">Edit {props.dashboard.name}</span>
-            </DropdownMenuItem>
-          )}
-          {props.dashboard.kind !== "home" && (
+          {isHome ? (
+            props.onEditHome && (
+              <DropdownMenuItem
+                disabled={props.onEditHome.disabled}
+                onSelect={props.onEditHome.open}
+              >
+                <LayoutDashboard />
+                <span className="truncate">Edit {props.dashboard.name}</span>
+              </DropdownMenuItem>
+            )
+          ) : (
             <DropdownMenuItem onSelect={() => setRenaming(props.dashboard)}>
               <Pencil />
               Rename
@@ -167,12 +169,14 @@ function DashboardMenu(props: {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <RenameDashboard
-        dashboard={renaming}
-        onRename={props.onRename}
-        onClose={() => setRenaming(undefined)}
-        trigger={trigger}
-      />
+      {!isHome && (
+        <RenameDashboard
+          dashboard={renaming}
+          onRename={props.onRename}
+          onClose={() => setRenaming(undefined)}
+          trigger={trigger}
+        />
+      )}
     </>
   );
 }
