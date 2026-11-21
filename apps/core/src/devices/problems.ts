@@ -11,12 +11,11 @@ import {
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { RecordActivity } from "../activity/activity.js";
+import type { ActivityAuthor, RecordActivity } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
-import type { Who } from "./activity.js";
 import type { Devices } from "./devices.js";
 import { devices as deviceTable } from "./schema.js";
 import type { Hold } from "./turns.js";
@@ -59,7 +58,12 @@ export function createProblems(options: {
 }) {
   const { db, devices, drivers, record } = options;
 
-  function log(id: string, outcome: Outcome, who: Who, reason?: string) {
+  function log(
+    id: string,
+    outcome: Outcome,
+    who: ActivityAuthor,
+    reason?: string,
+  ) {
     record({
       action: "device.repair",
       outcome,
@@ -126,7 +130,7 @@ export function createProblems(options: {
     /** For someone the gate has let through: sets the device right with their answers. */
     async repair(
       actor: Actor,
-      who: Who,
+      who: ActivityAuthor,
       input: unknown,
     ): Promise<RepairResult> {
       const parsed = repairRequest.safeParse(input);

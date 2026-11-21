@@ -295,6 +295,7 @@ export function createAppHost(options: {
     gate,
     supervisor,
     accepts,
+    agentWho: activity.agentWho,
     record,
     execute,
     track,
@@ -304,6 +305,7 @@ export function createAppHost(options: {
   const drivers = createDriverCalls({
     installed,
     accepts,
+    requireActiveAgent: gate.requireActiveAgent,
     arrives: (entry) =>
       appStateOf(entry) === "paused"
         ? Promise.resolve(false)

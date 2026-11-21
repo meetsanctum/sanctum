@@ -84,9 +84,19 @@ export async function createAuth(
 
   return {
     isClaimed: () => isClaimed(db),
+    // The adder's name as it stands when an agent acts, for the activity log.
+    agentAdder(id: string) {
+      const addedBy = clients.addedBy(id);
+      if (!addedBy) return null;
+      const name =
+        addedBy.kind === "person"
+          ? (options.people.get(addedBy.id)?.name ?? null)
+          : clients.name(addedBy.id);
+      return { ...addedBy, name };
+    },
     // Signs every device out after a restore from a backup: every client and
     // token is revoked and every pairing request dropped, inside the
-    // restore's transaction. Returns how many clients it signed out.
+    // restore's transaction. Returns how many devices it signed out.
     signOutEveryone(at: Date) {
       const count = clients.revokeAll(at);
       pairing.dropAll();

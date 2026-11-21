@@ -33,7 +33,17 @@ export type ActivityWho =
   | { kind: "workflow"; id: string; name: string | null }
   | { kind: "app"; id: string; name: string | null }
   | { kind: "press"; device: string; name: string | null; action: string }
-  | { kind: "assistant" }
+  | {
+      kind: "agent";
+      id: string;
+      name: string | null;
+      /** The person or shared device who added the AI agent. */
+      addedBy: {
+        kind: "person" | "client";
+        id: string;
+        name: string | null;
+      } | null;
+    }
   | { kind: "device" }
   | { kind: "sanctum" }
   | { kind: "nobody" };

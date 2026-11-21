@@ -1,3 +1,4 @@
+import type { ActivityWho } from "@meetsanctum/app-sdk";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // The activity log: who did what, through which client, and how it ended.
@@ -9,6 +10,10 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // known, or a device did not answer a command.
 export const outcomes = ["ok", "refused", "failed"] as const;
 export type Outcome = (typeof outcomes)[number];
+
+export type AgentAdder = NonNullable<
+  Extract<ActivityWho, { kind: "agent" }>["addedBy"]
+>;
 
 // What an entry is about, which decides how long it is kept and which of
 // the home's lists it shows in (kinds.ts).
@@ -33,9 +38,10 @@ export const activity = sqliteTable(
     // Who: the person and client behind the request, when there is one.
     personId: text("person_id"),
     clientId: text("client_id"),
-    // A shared client's name as it was then, for once it is renamed or
-    // removed.
+    // A shared client's or agent's name as it was then.
     clientName: text("client_name"),
+    // Who added the agent, kept even after that person or device leaves.
+    agentAddedBy: text("agent_added_by", { mode: "json" }).$type<AgentAdder>(),
     // Who, when no person or client is behind it: a workflow or an app
     // acting on its own, such as workflow:<id> or app:sanctum.moods, a
     // device changed outside Sanctum, or Sanctum itself.

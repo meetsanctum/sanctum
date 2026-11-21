@@ -150,7 +150,20 @@ export function createActivityViews(
       case "app":
         return { kind: "app", id: actor.id, name: lookups.app(actor.id) };
       case "assistant-run":
-        return { kind: "assistant" };
+        return {
+          kind: "agent",
+          id: actor.id,
+          name: origin.clientName,
+          // Who added it, by their name now, or as it was while they're gone.
+          addedBy: origin.agentAddedBy && {
+            ...origin.agentAddedBy,
+            name:
+              (origin.agentAddedBy.kind === "person"
+                ? lookups.person(origin.agentAddedBy.id)?.name
+                : lookups.client(origin.agentAddedBy.id)) ??
+              origin.agentAddedBy.name,
+          },
+        };
       case "device":
         return { kind: "device" };
       case "sanctum":

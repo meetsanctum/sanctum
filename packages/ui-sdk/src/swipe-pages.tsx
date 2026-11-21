@@ -49,7 +49,14 @@ const pageScroll = cn(
   "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_40px,black_calc(100%-40px),transparent)]",
 );
 
-type Swipe = { pointerId: number; x: number; y: number; active: boolean };
+type Swipe = {
+  pointerId: number;
+  x: number;
+  y: number;
+  active: boolean;
+  /** How far the last move went sideways. */
+  across: number;
+};
 
 export function SwipePages(props: {
   label: string;
@@ -111,6 +118,7 @@ export function SwipePages(props: {
       x: event.clientX,
       y: event.clientY,
       active: false,
+      across: 0,
     };
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -130,25 +138,35 @@ export function SwipePages(props: {
       swiped.current = true;
       event.currentTarget.setPointerCapture?.(event.pointerId);
     }
+    at.across = across;
     // Past the first or last page it follows a third as far.
     const edge =
       (page === 0 && across > 0) || (page === pages.length - 1 && across < 0);
     setDx(edge ? across / 3 : across);
   };
-  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    const at = swipe.current;
-    if (!at || at.pointerId !== event.pointerId) return;
+  const finish = (across: number) => {
     swipe.current = null;
-    if (!at.active) return;
-    const across = event.clientX - at.x;
     setDx(null);
     if (across < -turnAfter) setPage(Math.min(pages.length - 1, page + 1));
     else if (across > turnAfter) setPage(Math.max(0, page - 1));
   };
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const at = swipe.current;
+    if (!at || at.pointerId !== event.pointerId) return;
+    if (!at.active) {
+      swipe.current = null;
+      return;
+    }
+    finish(event.clientX - at.x);
+  };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
-    if (swipe.current?.pointerId !== event.pointerId) return;
-    swipe.current = null;
-    setDx(null);
+    const at = swipe.current;
+    if (at?.pointerId !== event.pointerId) return;
+    // A vertical move has already left the swipe to scrolling, so a cancel
+    // once it is under way comes from around the page, such as a host app
+    // that reports a lifted finger as cancelled: it ends where the last
+    // move left it.
+    finish(at.active ? at.across : 0);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -184,7 +202,12 @@ export function SwipePages(props: {
         }}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        onLostPointerCapture={onPointerCancel}
+        onLostPointerCapture={(event) => {
+          // A finger's press holds an implicit capture on what it touched,
+          // which ends with a lostpointercapture bubbling up here when the
+          // swipe takes capture: only the pages' own loss ends the swipe.
+          if (event.target === event.currentTarget) onPointerCancel(event);
+        }}
         onClickCapture={(event) => {
           // A swipe that ends over a button does not press it.
           const moved = swiped.current;

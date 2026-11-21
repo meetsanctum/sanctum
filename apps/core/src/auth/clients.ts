@@ -3,11 +3,12 @@ import type {
   ClientKind,
   Platform,
 } from "@meetsanctum/auth-protocol";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
+import { people } from "../people/schema.js";
 import { AuthError } from "./errors.js";
 import { authClients, authTokens } from "./schema.js";
 import { hashToken, newClientToken } from "./tokens.js";
@@ -18,12 +19,25 @@ import { hashToken, newClientToken } from "./tokens.js";
 export type Principal = {
   // Its name as it is now, which a run by hand on a shared client keeps.
   client: { id: string; kind: ClientKind; name: string };
-  // Personal clients only.
-  person?: { id: string };
-  scope: "full" | "widgets";
-};
+} & (
+  | { scope: "full" | "widgets"; person?: { id: string } }
+  | { scope: "agent"; person?: never; addedBy: AddedBy }
+);
+
+// Who added an agent.
+export type AddedBy = { kind: "person" | "client"; id: string };
 
 type Client = typeof authClients.$inferSelect;
+
+function addedByOf(
+  client: Pick<Client, "addedByPersonId" | "addedByClientId">,
+): AddedBy | null {
+  if (client.addedByPersonId)
+    return { kind: "person", id: client.addedByPersonId };
+  if (client.addedByClientId)
+    return { kind: "client", id: client.addedByClientId };
+  return null;
+}
 
 // A successful request updates the client's last-seen time at most this
 // often.
@@ -86,12 +100,39 @@ export function createClients(
     .where(eq(authClients.id, sql.placeholder("id")))
     .prepare();
 
+  const activeById = db
+    .select()
+    .from(authClients)
+    .where(
+      and(
+        eq(authClients.id, sql.placeholder("id")),
+        isNull(authClients.revokedAt),
+      ),
+    )
+    .prepare();
+  const addedByOfAgent = db
+    .select({
+      addedByPersonId: authClients.addedByPersonId,
+      addedByClientId: authClients.addedByClientId,
+    })
+    .from(authClients)
+    .where(
+      and(
+        eq(authClients.id, sql.placeholder("id")),
+        eq(authClients.kind, "agent"),
+      ),
+    )
+    .prepare();
+  const personById = db
+    .select({ id: people.id })
+    .from(people)
+    .where(eq(people.id, sql.placeholder("id")))
+    .prepare();
+
+  // A client that is there, unrevoked. Prepared, since the gate asks it on
+  // every call an agent sends.
   function active(id: string) {
-    return db
-      .select()
-      .from(authClients)
-      .where(and(eq(authClients.id, id), isNull(authClients.revokedAt)))
-      .get();
+    return activeById.get({ id });
   }
 
   // Every client manages every other, shared ones too.
@@ -120,6 +161,19 @@ export function createClients(
       })
       .run();
     return { client, token };
+  }
+
+  function markSeen(client: Client) {
+    const at = now();
+    if (
+      !client.lastSeenAt ||
+      at.getTime() - client.lastSeenAt.getTime() >= lastSeenEveryMs
+    ) {
+      db.update(authClients)
+        .set({ lastSeenAt: at })
+        .where(eq(authClients.id, client.id))
+        .run();
+    }
   }
 
   return {
@@ -158,27 +212,53 @@ export function createClients(
       });
     },
 
+    // Creates an agent and its token: an AI agent the person or shared
+    // client adding it will be behind. It has not been seen until its first
+    // request with the token.
+    createAgent(input: { name: string; platform: Platform; addedBy: AddedBy }) {
+      const { addedBy } = input;
+      return db.transaction(() => {
+        // Added by someone in the household, or a shared device in use.
+        if (
+          addedBy.kind === "client"
+            ? active(addedBy.id)?.kind !== "shared"
+            : !personById.get({ id: addedBy.id })
+        ) {
+          throw new AuthError("forbidden");
+        }
+        return create({
+          name: input.name,
+          kind: "agent",
+          platform: input.platform,
+          createdAt: now(),
+          addedByPersonId: addedBy.kind === "person" ? addedBy.id : null,
+          addedByClientId: addedBy.kind === "client" ? addedBy.id : null,
+        });
+      });
+    },
+
     // The principal a client token stands for, or none when the token is
     // unknown or revoked. Checked against the database on every request, so
-    // revoking takes effect at once.
-    authenticate(token: string): Principal | undefined {
+    // revoking takes effect at once. Only the MCP route marks an agent seen.
+    authenticate(
+      token: string,
+      { recordAgentSeen = false } = {},
+    ): Principal | undefined {
       const found = byToken.get({ tokenHash: hashToken(token) });
       if (!found) {
         return undefined;
       }
       const { client } = found;
-      const at = now();
-      if (
-        !client.lastSeenAt ||
-        at.getTime() - client.lastSeenAt.getTime() >= lastSeenEveryMs
-      ) {
-        db.update(authClients)
-          .set({ lastSeenAt: at })
-          .where(eq(authClients.id, client.id))
-          .run();
+      const identity = { id: client.id, kind: client.kind, name: client.name };
+      if (client.kind === "agent") {
+        const addedBy = addedByOf(client);
+        if (!addedBy) return undefined;
+        if (recordAgentSeen) markSeen(client);
+        return { client: identity, addedBy, scope: "agent" };
       }
+      markSeen(client);
       return {
-        client: { id: client.id, kind: client.kind, name: client.name },
+        client: identity,
         ...(client.personId ? { person: { id: client.personId } } : {}),
         scope: "full",
       };
@@ -197,12 +277,28 @@ export function createClients(
       return nameOf.get({ id })?.name ?? null;
     },
 
-    // Every client sees every client.
+    // Whether an agent is still there, unrevoked: what it sends on is
+    // refused once it isn't (the gate).
+    isActiveAgent(id: string): boolean {
+      return active(id)?.kind === "agent";
+    },
+
+    // Who added an agent, revoked or not, for the activity log; none for
+    // another client, or an agent that went with its person.
+    addedBy(id: string): AddedBy | null {
+      const client = addedByOfAgent.get({ id });
+      return client ? addedByOf(client) : null;
+    },
+
+    // Every client sees every client. Agents aren't devices people use, so
+    // they aren't among them.
     list(principal: Principal): ClientInfo[] {
       return db
         .select()
         .from(authClients)
-        .where(isNull(authClients.revokedAt))
+        .where(
+          and(isNull(authClients.revokedAt), ne(authClients.kind, "agent")),
+        )
         .orderBy(asc(authClients.createdAt))
         .all()
         .map((client) =>
@@ -229,54 +325,80 @@ export function createClients(
           personId: principal.person?.id,
           clientId: principal.client.id,
           subjectId: input.id,
+          detail:
+            renamed.kind === "agent"
+              ? { kind: renamed.kind, name: renamed.name }
+              : undefined,
         });
         return clientInfo(renamed, principal.client.id);
       });
     },
 
-    // Signs every device out after a restore from a backup: every client and
-    // its tokens, so each one returns to the pairing screen. Called inside the
-    // restore's transaction, before the core serves anyone, along with
-    // dropping pairing requests (Auth's signOutEveryone).
+    // Revokes all clients and tokens inside the restore's transaction, before
+    // the core serves anyone. Counts signed-out devices for the activity log.
     revokeAll(at: Date) {
       const clients = db
         .update(authClients)
         .set({ revokedAt: at })
         .where(isNull(authClients.revokedAt))
-        .returning({ id: authClients.id })
+        .returning({ kind: authClients.kind })
         .all();
       db.update(authTokens)
         .set({ revokedAt: at })
         .where(isNull(authTokens.revokedAt))
         .run();
-      return clients.length;
+      return clients.filter(({ kind }) => kind !== "agent").length;
     },
 
-    // Refused from its next request on; its live connections close now.
+    // Refused from its next request on; its live connections close now. The
+    // agents it added go with it.
     revoke(principal: Principal, input: { id: string }) {
       db.transaction(() => {
         manageable(input.id);
         const at = now();
-        db.update(authClients)
-          .set({ revokedAt: at })
-          .where(eq(authClients.id, input.id))
-          .run();
+        const affected = and(
+          isNull(authClients.revokedAt),
+          or(
+            eq(authClients.id, input.id),
+            eq(authClients.addedByClientId, input.id),
+          ),
+        );
         db.update(authTokens)
           .set({ revokedAt: at })
           .where(
             and(
-              eq(authTokens.clientId, input.id),
+              inArray(
+                authTokens.clientId,
+                db
+                  .select({ id: authClients.id })
+                  .from(authClients)
+                  .where(affected),
+              ),
               isNull(authTokens.revokedAt),
             ),
           )
           .run();
-        record({
-          action: "client.revoke",
-          outcome: "ok",
-          personId: principal.person?.id,
-          clientId: principal.client.id,
-          subjectId: input.id,
-        });
+        const revoked = db
+          .update(authClients)
+          .set({ revokedAt: at })
+          .where(affected)
+          .returning({
+            id: authClients.id,
+            name: authClients.name,
+            kind: authClients.kind,
+          })
+          .all();
+        // One entry for the client, and one for each agent it took along.
+        for (const { id, kind, name } of revoked) {
+          record({
+            action: "client.revoke",
+            outcome: "ok",
+            personId: principal.person?.id,
+            clientId: principal.client.id,
+            subjectId: id,
+            detail: kind === "agent" ? { kind, name } : undefined,
+          });
+        }
       });
       connections.closeClient(input.id);
     },

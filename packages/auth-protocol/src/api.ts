@@ -11,7 +11,12 @@ export const platforms = [
 ] as const;
 export type Platform = (typeof platforms)[number];
 
-export type ClientKind = "personal" | "shared";
+/**
+ * A personal client is a person's, a shared client the household's, and an
+ * agent is an AI agent someone added, which reaches the home's MCP endpoint
+ * and nothing else.
+ */
+export type ClientKind = "personal" | "shared" | "agent";
 
 /** Client tokens carry a type prefix so logs and secret scanners can tell them apart. */
 export const clientTokenPrefix = "client_";

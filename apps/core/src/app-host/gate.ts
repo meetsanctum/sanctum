@@ -11,14 +11,18 @@ import { ActionCallError } from "./errors.js";
 // The permission gate: turns the principal behind a request into the actor
 // an action runs as, and refuses what that actor may not do. There are no
 // roles or permissions between people: every person and every shared client
-// may do everything. What runs with no person behind it is held to the
-// everyday tiers. Device commands pass the same gate, with their
-// capability's tier.
+// may do everything. What runs with no person behind it, and what an AI
+// agent runs, is held to the everyday tiers. Device commands pass the same
+// gate, with their capability's tier.
 
 // What the gate weighs: an action, or a device capability's commands.
 export type Rule = Pick<ActionDefinition, "tier">;
 
-export function createGate(people: People) {
+export function createGate(
+  people: People,
+  // Whether an AI agent's client is still there, unrevoked.
+  isActiveAgent: (id: string) => boolean,
+) {
   // Refuses what an actor may not do, taking a person to be in the household
   // still.
   function weigh(actor: Actor, rule: Rule) {
@@ -28,11 +32,13 @@ export function createGate(people: People) {
       case "client":
       case "user":
         return;
-      // An app acting on its own, from its lifecycle hooks and jobs, and a
-      // workflow, which acts for the household whoever made it, do the
-      // everyday things; the rest needs a person's approval.
+      // An app acting on its own, from its lifecycle hooks and jobs, a
+      // workflow, which acts for the household whoever made it, and an AI
+      // agent, which may run when nobody watches, do the everyday things;
+      // the rest needs a person's approval.
       case "app":
       case "workflow":
+      case "assistant-run":
         if (!householdTiers.includes(rule.tier)) {
           throw new ActionCallError("needs_approval");
         }
@@ -43,17 +49,34 @@ export function createGate(people: People) {
     }
   }
 
+  function requireActiveAgent(id: string) {
+    if (!isActiveAgent(id)) {
+      throw new ActionCallError("forbidden");
+    }
+  }
+
   // Refuses what an actor may not do.
   function permit(actor: Actor, rule: Rule) {
-    // Someone removed from the household is refused at once.
+    // Someone removed from the household is refused at once, and so is an
+    // agent removed, or gone with whoever added it, while its work was under
+    // way.
     if (actor.kind === "user" && !people.get(actor.id)) {
       throw new ActionCallError("forbidden");
     }
+    if (actor.kind === "assistant-run") requireActiveAgent(actor.id);
     weigh(actor, rule);
   }
 
   // The actor a principal acts as.
   function actorOf(principal: Principal): Actor {
+    // An agent acts as itself, on behalf of whoever added it.
+    if (principal.scope === "agent") {
+      return {
+        kind: "assistant-run",
+        id: principal.client.id,
+        onBehalfOf: principal.addedBy.id,
+      };
+    }
     // Widget tokens read widget data and nothing else.
     if (principal.scope !== "full") {
       throw new ActionCallError("forbidden");
@@ -90,6 +113,7 @@ export function createGate(people: People) {
     // For an actor already admitted, such as the one behind an action that
     // commands a device.
     permit,
+    requireActiveAgent,
   };
 }
 
