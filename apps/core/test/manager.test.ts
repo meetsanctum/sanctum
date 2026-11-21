@@ -424,16 +424,31 @@ describe("the manager client", () => {
     open.push({ server });
     const giveUp = new AbortController();
 
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const releasing = client.releaseService("mosquitto", "sanctum.example", {
       signal: giveUp.signal,
     });
-    await vi.waitFor(() => expect(received.length).toBeGreaterThan(1));
-    giveUp.abort();
+    const result = expect(releasing).rejects.toBeInstanceOf(ManagerUnavailable);
 
-    await expect(releasing).rejects.toBeInstanceOf(ManagerUnavailable);
-    const asked = received.length;
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    expect(received.length).toBe(asked);
+    try {
+      // Let the second failure reach the client and leave the next retry pending.
+      await vi.waitFor(
+        () => {
+          expect(received).toHaveLength(2);
+          expect(vi.getTimerCount()).toBe(1);
+        },
+        { interval: 1 },
+      );
+      giveUp.abort();
+
+      expect(vi.getTimerCount()).toBe(0);
+      await result;
+    } finally {
+      giveUp.abort();
+      client.close();
+      vi.useRealTimers();
+      await result;
+    }
   });
 
   it.each(["lookup", "release"])(
