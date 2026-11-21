@@ -23,6 +23,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import type { AgentsCanUse } from "../agents/can-use.js";
 import type { Claims } from "./commits.js";
 import { issuesText, type DeclaredEntityType } from "./contract.js";
 import { personInfo } from "../auth/logins.js";
@@ -44,6 +45,11 @@ import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 // be allowed what the call does. A missing permission is the app's mistake
 // and fails it; a refusal for the actor reaches the app as an ActionError it
 // may handle, and answers its caller if it does not.
+//
+// An AI agent's call holds what AI agents can use all the way through: the
+// app sees only the devices, people and other apps' entities the household
+// lets AI agents use, and can't register devices, let them join, or leave
+// jobs and workflows behind that outlive the call.
 
 /**
  * What an app sees of the home's devices: the kinds it may read, and, for a
@@ -174,11 +180,24 @@ export function createCoreCalls(options: {
   watch: NetHolds["watch"];
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
+  // What AI agents can use, which an AI agent's call holds to.
+  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "deviceKinds">;
   log: (message: string) => void;
 }): CoreCalls {
-  const { appId, actor, devices } = options;
+  const { appId, actor, devices, agents } = options;
   const permissions = options.permissions;
-  const view = (): View => deviceViewOf(appId, permissions());
+  const forAgent = actor.kind === "assistant-run";
+  // An AI agent's call sees the kinds both the app and AI agents may read,
+  // and a driver's own devices no more whole than any other.
+  const view = (): View => {
+    const own = deviceViewOf(appId, permissions());
+    if (!forAgent) return own;
+    const reads = agents.deviceKinds().reads;
+    return { kinds: new Set([...own.kinds].filter((kind) => reads.has(kind))) };
+  };
+  function notForAgents() {
+    if (forAgent) throw new ActionError("forbidden");
+  }
   // What a driver reads of its own devices carries the key it registered
   // each by.
   const keyed = (shown: DeviceInfo[]) => {
@@ -278,6 +297,9 @@ export function createCoreCalls(options: {
     // Everyone signed in sees the household, shared clients too.
     async people() {
       need(peopleReadPermission);
+      if (forAgent && !agents.areaOn(peopleReadPermission)) {
+        throw new ActionError("forbidden");
+      }
       return options.people.list().map(personInfo);
     },
 
@@ -286,6 +308,8 @@ export function createCoreCalls(options: {
       return options.places.list();
     },
 
+    // The app's own grant, for an AI agent's call too: what the app works
+    // out from it, such as natural light's curve, is what it offers.
     async location() {
       need(placesLocationPermission);
       return options.places.location();
@@ -327,6 +351,7 @@ export function createCoreCalls(options: {
 
     async register(registration) {
       need(registerPermission);
+      notForAgents();
       return devices.register(appId, registration);
     },
 
@@ -388,9 +413,10 @@ export function createCoreCalls(options: {
     },
 
     // Its own jobs, which touch only its own actions and need no
-    // permission.
+    // permission, but outlive an AI agent's call.
     async scheduleJob(job) {
       open();
+      notForAgents();
       const scheduled = jobCalls().schedule(appId, job);
       options.claims?.()?.jobs.add(scheduled.key);
       return scheduled;
@@ -398,6 +424,7 @@ export function createCoreCalls(options: {
 
     async cancelJob(key) {
       open();
+      notForAgents();
       jobCalls().cancel(appId, key);
       if (typeof key === "string") options.claims?.()?.jobs.delete(key);
     },
@@ -409,6 +436,7 @@ export function createCoreCalls(options: {
 
     async putWorkflow(workflow) {
       need(workflowsManagePermission);
+      notForAgents();
       const kept = keptWorkflows().put(appId, workflow);
       if (kept.appKey) options.claims?.()?.workflows.add(kept.appKey);
       return kept;
@@ -416,6 +444,7 @@ export function createCoreCalls(options: {
 
     async removeWorkflow(key) {
       need(workflowsManagePermission);
+      notForAgents();
       if (typeof key === "string") {
         keptWorkflows().remove(appId, key);
         options.claims?.()?.workflows.delete(key);
@@ -473,7 +502,10 @@ export function createCoreCalls(options: {
       if (!standardEntityTypes.some((standard) => standard.id === type)) {
         throw new Error(`${type} is not a standard entity type`);
       }
-      return options.entities.list({ type });
+      const entities = options.entities.list({ type });
+      return forAgent
+        ? entities.filter((entity) => agents.canUse(entity.app, type))
+        : entities;
     },
 
     async fetch(request) {
@@ -483,6 +515,7 @@ export function createCoreCalls(options: {
 
     async joining(joining) {
       need(registerPermission);
+      notForAgents();
       options.pairing().joining(appId, joining);
     },
 

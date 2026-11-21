@@ -3,12 +3,15 @@ import { isDeepStrictEqual } from "node:util";
 import {
   assertDriverProblems,
   appManifestSchema,
+  assistantOfferOf,
+  householdTiers,
   roomSectionKinds,
   standardEntityTypes,
   tierSchema,
   tileShapeProblemsOf,
   widgetEntityType,
   type AppDefinition,
+  type AssistantOffer,
   type StaticManifest,
   type Tier,
   type WidgetDefinition,
@@ -307,12 +310,68 @@ export type AppPieces = {
 /** A type of entity an app may publish, with the check its state must pass. */
 export type DeclaredEntityType = { id: string; state: SchemaCheck };
 
+/**
+ * What an app offers AI agents: one of its actions, or an entity type it
+ * provides, which counts as reading. The household switches each by its id.
+ */
+export type DeclaredOffer = AssistantOffer & {
+  id: string;
+  kind: "action" | "entity";
+  title: string;
+  tier: Tier;
+  needs: readonly string[];
+};
+
 export type AppContract = {
   actions: ReadonlyMap<string, DeclaredAction>;
   events: ReadonlyMap<string, SchemaCheck>;
   entityTypes: ReadonlyMap<string, DeclaredEntityType>;
   pieces: AppPieces;
+  offers: ReadonlyMap<string, DeclaredOffer>;
 };
+
+// What the app offers AI agents. A standard type's offer is the core's own,
+// whatever copy of the SDK the app brought, and an action outside the
+// everyday tiers is no offer, since an AI agent may never run it.
+function offersOf(manifest: StaticManifest) {
+  const offers = new Map<string, DeclaredOffer>();
+  const add = (offer: DeclaredOffer) => {
+    if (offers.has(offer.id)) {
+      throw new Error(`It offers AI agents two things as ${offer.id}`);
+    }
+    offers.set(offer.id, offer);
+  };
+  for (const action of manifest.actions) {
+    const offer = assistantOfferOf(
+      (action as { assistant?: unknown }).assistant,
+    );
+    if (!offer || !householdTiers.includes(action.tier)) continue;
+    add({
+      ...offer,
+      id: action.id,
+      kind: "action",
+      title: action.title,
+      tier: action.tier,
+      needs: offer.needs ?? [],
+    });
+  }
+  for (const type of manifest.provides.entities) {
+    const standard = standardEntityTypes.find((each) => each.id === type.id);
+    const offer = standard
+      ? (standard.assistant ?? null)
+      : assistantOfferOf((type as { assistant?: unknown }).assistant);
+    if (!offer) continue;
+    add({
+      ...offer,
+      id: type.id,
+      kind: "entity",
+      title: type.title,
+      tier: "read",
+      needs: offer.needs ?? [],
+    });
+  }
+  return offers;
+}
 
 // A card's checks and buttons must run the app's own read or write actions
 // with an input they take (widgets.ts), read here from the manifest.
@@ -403,6 +462,7 @@ export function contractOf(manifest: StaticManifest): AppContract {
       conditions: new Map(manifest.provides.conditions.map(piece)),
       steps: new Map(manifest.provides.steps.map(piece)),
     },
+    offers: offersOf(manifest),
   };
 }
 

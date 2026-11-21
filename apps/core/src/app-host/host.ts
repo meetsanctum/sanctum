@@ -8,6 +8,7 @@ import {
 import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
+import type { AgentsCanUse, AppOffers } from "../agents/can-use.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Firmware } from "../devices/firmware.js";
@@ -94,6 +95,8 @@ export function createAppHost(options: {
   // What the manager found on the home's network (discovery/sightings.ts).
   sightings?: () => readonly Sighting[];
   grants: AppGrants;
+  // What AI agents can use of each app, and of the core.
+  agents: Pick<AgentsCanUse, "adopt" | "areaOn" | "canUse" | "deviceKinds">;
   commits: AppCommits;
   updates: AppUpdates;
   versions: Pick<AppVersions, "last">;
@@ -197,6 +200,7 @@ export function createAppHost(options: {
     entities: options.entities,
     updates: options.updates,
     grants: options.grants,
+    agents: options.agents,
     versions: options.versions,
     waiting: options.waiting,
     off: options.off,
@@ -296,6 +300,7 @@ export function createAppHost(options: {
     supervisor,
     accepts,
     agentWho: activity.agentWho,
+    agentCanUse: options.agents.canUse,
     record,
     execute,
     track,
@@ -581,6 +586,14 @@ export function createAppHost(options: {
     /** One of an installed app's actions. */
     action(appId: string, actionId: string) {
       return installed.get(appId)?.contract.actions.get(actionId);
+    },
+
+    /** What each installed app offers AI agents. */
+    offers(): AppOffers[] {
+      return [...installed.values()].map((entry) => ({
+        app: entry.app.id,
+        offers: entry.contract.offers,
+      }));
     },
 
     /** The workflow pieces of each installed app. */

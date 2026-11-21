@@ -1,4 +1,5 @@
 import {
+  controlPermission,
   capabilityOf,
   isCapabilityKind,
   shownAsOf,
@@ -270,7 +271,10 @@ export function createDevices(
 
   // What the gate weighs for a capability's commands.
   function ruleFor(kind: CapabilityKind): Rule {
-    return { tier: capabilityOf(kind).tier };
+    return {
+      tier: capabilityOf(kind).tier,
+      agentArea: controlPermission(kind),
+    };
   }
 
   // A command that passed the gate: it asks for state, and goes to the

@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import type { AssistantOffer } from "./ai-agents.js";
+
 import type { WidgetDefinition } from "./widgets.js";
 
 // What an app brings to the home, declared in its manifest under `provides`:
@@ -20,6 +22,8 @@ export interface EntityTypeDefinition<State extends z.ZodType = z.ZodType> {
   readonly state: State;
   /** Set on the core's standard types only (weather.ts), which apps read with entities.read:<type>. */
   readonly standard?: boolean;
+  /** What it offers AI agents as information; left out, they never see it. */
+  readonly assistant?: AssistantOffer;
 }
 
 export function defineEntityType<State extends z.ZodType>(

@@ -1,3 +1,4 @@
+import { activityReadPermission, historyReadPermission } from "./ai-agents.js";
 import type { CapabilityKind } from "./devices.js";
 import { lanPort } from "./lan.js";
 import { turnOnType } from "./lights.js";
@@ -27,6 +28,8 @@ export const permissionIcons = [
   "network",
   "share-2",
   "shield",
+  "list",
+  "history",
 ] as const;
 export type PermissionIcon = (typeof permissionIcons)[number];
 
@@ -80,6 +83,17 @@ const fixed: Record<string, PermissionWords> = {
     icon: "map-pin",
   },
   "people.read": { title: "See who lives here", detail: null, icon: "users" },
+  // Areas of the core's AI agents can use (ai-agents.ts); no app asks for them.
+  [activityReadPermission]: {
+    title: "See what happened at home",
+    detail: null,
+    icon: "list",
+  },
+  [historyReadPermission]: {
+    title: "See what your devices reported",
+    detail: null,
+    icon: "history",
+  },
   "devices.register": {
     title: "Bring devices into your home",
     detail: null,

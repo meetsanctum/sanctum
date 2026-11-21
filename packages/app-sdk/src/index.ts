@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import {
+  aiAreas,
+  assistantOfferSchema,
+  type AssistantOffer,
+} from "./ai-agents.js";
+
+import {
   appManifestSchema,
   defaultData,
   defaultMemory,
@@ -44,6 +50,7 @@ import {
 import { previewProblems, type PieceWords } from "./workflows.js";
 
 export * from "./activity.js";
+export * from "./ai-agents.js";
 export * from "./app-definition.js";
 export * from "./app-manifest.js";
 export * from "./context.js";
@@ -131,10 +138,8 @@ export interface ActionDefinition<
   readonly tier: Tier;
   readonly input: Input;
   readonly output: Output;
-  readonly assistant?: {
-    readonly expose: boolean;
-    readonly description: string;
-  };
+  /** What it offers AI agents; left out, they never see it. */
+  readonly assistant?: AssistantOffer;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -438,6 +443,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   const asked = permissionIds(app.permissions);
   assertUniqueIds("permission", asked);
   assertProvides(app);
+  assertAssistantOffers(app);
   assertRoomSections(app);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
@@ -508,6 +514,7 @@ export function toStaticManifest(app: AppDefinition) {
         title: type.title,
         standard: type.standard ?? false,
         state: z.toJSONSchema(type.state),
+        assistant: type.assistant ?? null,
       })),
       widgets: (app.provides?.widgets ?? []).map((widget) => ({
         ...widgetInfo(widget),
@@ -741,6 +748,46 @@ function assertAction(action: ActionDefinition) {
   }
   if (!tierSchema.safeParse(action.tier).success) {
     throw new Error(`"${id}" needs a tier: ${tierSchema.options.join(", ")}`);
+  }
+}
+
+// What an app offers AI agents: only what a person could do from a page, so
+// nothing past write, and needs that name an area of the core's or another
+// of its own offers.
+function assertAssistantOffers(app: AppDefinition) {
+  const offers = [
+    ...app.actions.map((action) => ({ ...action, kind: "action" })),
+    ...(app.provides?.entities ?? []).map((type) => ({
+      ...type,
+      tier: "read" as const,
+      kind: "entity type",
+    })),
+  ].filter((item) => item.assistant !== undefined);
+  const offered = new Set(offers.map((item) => item.id));
+  // The household switches each by its id.
+  assertUniqueIds(
+    "offer to AI agents",
+    offers.map((item) => item.id),
+  );
+  for (const item of offers) {
+    const offer = assistantOfferSchema.safeParse(item.assistant);
+    if (!offer.success) {
+      throw new Error(
+        `The ${item.kind} "${item.id}" offers AI agents something they can't read: ${z.prettifyError(offer.error)}`,
+      );
+    }
+    if (!householdTiers.includes(item.tier)) {
+      throw new Error(
+        `The ${item.kind} "${item.id}" can't be offered to AI agents: they do only what's read or write`,
+      );
+    }
+    for (const need of offer.data.needs ?? []) {
+      if (need === item.id || (!aiAreas.includes(need) && !offered.has(need))) {
+        throw new Error(
+          `The ${item.kind} "${item.id}" needs "${need}", which is neither an area of the core's nor another of the app's offers`,
+        );
+      }
+    }
   }
 }
 

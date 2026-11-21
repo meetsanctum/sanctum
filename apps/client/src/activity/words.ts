@@ -1,5 +1,6 @@
 import {
   deviceTypes,
+  permissionWords,
   type ActivityInfo,
   type ActivityTrigger,
   type ActivityWho,
@@ -834,6 +835,20 @@ function setupEntry(entry: ActivityInfo): Words | null {
       return entry.detail?.kind === "agent"
         ? said(`Removed ${name ?? "an AI agent"}`)
         : said(`Signed out ${name ?? "a device"}`);
+    case "agents.can-use": {
+      // An app's offer by the title it kept, one of the core's areas by its
+      // permission's words.
+      const item = String(entry.detail?.item ?? "");
+      const title =
+        typeof entry.detail?.title === "string"
+          ? entry.detail.title
+          : permissionWords(item).title;
+      return said(
+        entry.detail?.on === true
+          ? `Let AI agents use “${title}”`
+          : `Stopped AI agents using “${title}”`,
+      );
+    }
     case "pairing.open":
       return said("Let devices join");
     case "pairing.close":
