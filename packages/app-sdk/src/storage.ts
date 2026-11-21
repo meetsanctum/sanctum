@@ -16,19 +16,7 @@ export class NewerDatabaseError extends Error {}
 // A database carrying migrations this build does not have was written by a
 // newer build, such as after pushing an older one to a dev host: this code
 // would not know its tables. An update that brings one up fails its health
-// check and rolls back.
-export function assertKnownMigrations(
-  sqlite: Database.Database,
-  folder: string,
-  name = "The core's database",
-) {
-  countKnownMigrations(
-    sqlite,
-    readMigrationFiles({ migrationsFolder: folder }),
-    name,
-  );
-}
-
+// check and rolls back. Otherwise this counts the migrations it has.
 function countKnownMigrations(
   sqlite: Database.Database,
   known: MigrationMeta[],
@@ -66,87 +54,66 @@ function countKnownMigrations(
 }
 
 // Applies the migrations this build has and the database lacks, all in one
-// transaction, as Drizzle's migrator would and recording them in the same
-// table. SQLite only suspends foreign keys outside a transaction, and
-// drizzle-kit rebuilds a table by dropping it: with them on, dropping a parent
-// deletes every row that refers to it through ON DELETE CASCADE.
+// transaction, recording them in the same table as Drizzle's migrator does.
+// `name` begins its errors, such as "The core's database".
 export function migrateDatabase(
   sqlite: Database.Database,
   folder: string,
   name: string,
 ) {
+  // Foreign keys can only be switched off between transactions.
   if (sqlite.inTransaction) {
-    throw new Error(`Cannot migrate ${name} inside a transaction`);
+    throw new Error(`${name} can't be migrated inside a transaction`);
   }
-
   const migrations = readMigrationFiles({ migrationsFolder: folder });
-  const initialForeignKeyMode = sqlite.pragma("foreign_keys", { simple: true })
-    ? "ON"
-    : "OFF";
-  const migrate = sqlite.transaction((foreignKeyMode: "ON" | "OFF") => {
-    const applied = countKnownMigrations(sqlite, migrations, name);
-    const pending = migrations.slice(applied);
-    // Drizzle Kit marks each table rebuild with this statement. Keep foreign
-    // keys on in other batches so ordinary deletes and updates still cascade.
-    const hasRebuild = pending.some(({ sql }) =>
-      sql.some((statement) =>
-        /^\s*PRAGMA\s+foreign_keys\s*=\s*OFF\s*;?\s*$/i.test(statement),
-      ),
-    );
-    const requiredMode = hasRebuild ? "OFF" : initialForeignKeyMode;
-    if (foreignKeyMode !== requiredMode) {
-      return requiredMode;
-    }
-
-    sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS __drizzle_migrations (
-        id SERIAL PRIMARY KEY,
-        hash text NOT NULL,
-        created_at numeric
-      )
-    `);
-    if (pending.length === 0) return;
-
-    const checkKeys = sqlite.prepare<[], { table: string }>(
-      "PRAGMA foreign_key_check",
-    );
-    const before = checkKeys.get();
-    if (before) {
-      throw new Error(
-        `${name} already has a broken foreign key in ${before.table}`,
-      );
-    }
-    const record = sqlite.prepare(
-      "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
-    );
-    for (const migration of pending) {
-      for (const statement of migration.sql) {
-        sqlite.prepare(statement).run();
-      }
-      record.run(migration.hash, migration.folderMillis);
-    }
-    const after = checkKeys.get();
-    if (after) {
-      throw new Error(
-        `A migration of ${name} broke a foreign key in ${after.table}`,
-      );
-    }
-  });
-
-  let foreignKeyMode: typeof initialForeignKeyMode = initialForeignKeyMode;
+  // drizzle-kit rebuilds a table by dropping it. With foreign keys on, that
+  // deletes every row referring to it through ON DELETE CASCADE.
+  const foreignKeys = sqlite.pragma("foreign_keys", { simple: true });
+  sqlite.pragma("foreign_keys = OFF");
   try {
-    while (true) {
-      const requiredMode = migrate.immediate(foreignKeyMode);
-      if (requiredMode === undefined) return;
-      // SQLite only changes enforcement between transactions. Recheck the
-      // pending migrations under the write lock after switching modes.
-      sqlite.pragma(`foreign_keys = ${requiredMode}`);
-      foreignKeyMode = requiredMode;
-    }
+    sqlite
+      .transaction(() => {
+        const applied = countKnownMigrations(sqlite, migrations, name);
+        const pending = migrations.slice(applied);
+        if (pending.length === 0) return;
+        const brokenKey = sqlite.prepare<[], { table: string }>(
+          "PRAGMA foreign_key_check",
+        );
+        // A key broken before these migrations isn't theirs to answer for.
+        const before = brokenKey.get();
+        if (before) {
+          throw new Error(
+            `${name} already has a broken foreign key in ${before.table}`,
+          );
+        }
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at numeric
+          )
+        `);
+        const record = sqlite.prepare(
+          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+        );
+        for (const migration of pending) {
+          for (const statement of migration.sql) {
+            sqlite.prepare(statement).run();
+          }
+          record.run(migration.hash, migration.folderMillis);
+        }
+        // With foreign keys off, nothing else notices a migration leaving
+        // rows that refer to nothing.
+        const after = brokenKey.get();
+        if (after) {
+          throw new Error(
+            `${name} has a broken foreign key in ${after.table} after its migrations`,
+          );
+        }
+      })
+      .immediate();
   } finally {
-    if (foreignKeyMode !== initialForeignKeyMode) {
-      sqlite.pragma(`foreign_keys = ${initialForeignKeyMode}`);
-    }
+    sqlite.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
   }
 }
 

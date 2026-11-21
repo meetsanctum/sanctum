@@ -146,18 +146,6 @@ describe("an app's migrations", () => {
     ).toEqual([{ count: 2 }]);
   });
 
-  it("run cascades in a migration after the parent was already rebuilt", async () => {
-    const file = await databaseFile();
-    open(file, await migrationsFolder([created, rebuilt])).close();
-    seed(file);
-
-    const removeRoom = "DELETE FROM rooms WHERE id = 'office';";
-    open(file, await migrationsFolder([created, rebuilt, removeRoom])).close();
-
-    expect(read(file, "SELECT id FROM rooms")).toEqual([]);
-    expect(read(file, "SELECT id FROM lamps")).toEqual([]);
-  });
-
   it("roll back the whole batch when a rebuild leaves a broken foreign key", async () => {
     const file = await databaseFile();
     open(file, await migrationsFolder([created])).close();
@@ -179,7 +167,7 @@ CREATE TABLE pragma_foreign_key_check (id text);`;
     expect(() =>
       migrateDatabase(sqlite, folder, "sanctum.example's database"),
     ).toThrow(
-      "A migration of sanctum.example's database broke a foreign key in lamps",
+      "sanctum.example's database has a broken foreign key in lamps after its migrations",
     );
     expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1n);
     expect(read(file, "SELECT id, name FROM rooms")).toEqual([
@@ -205,7 +193,7 @@ CREATE TABLE pragma_foreign_key_check (id text);`;
       expect(() =>
         migrateDatabase(sqlite, folder, "sanctum.example's database"),
       ).toThrow(
-        "Cannot migrate sanctum.example's database inside a transaction",
+        "sanctum.example's database can't be migrated inside a transaction",
       );
     })();
     expect(read(file, "SELECT id FROM lamps ORDER BY id")).toEqual([

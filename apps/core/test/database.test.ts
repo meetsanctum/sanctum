@@ -152,7 +152,9 @@ describe("the core's database", () => {
 
     expect(() =>
       openCoreDatabase(dataDir, { migrationsFolder: folder }),
-    ).toThrow("Core migration broke a foreign key in auth_tokens");
+    ).toThrow(
+      "The core's database has a broken foreign key in auth_tokens after its migrations",
+    );
     const previous = openCoreDatabase(dataDir);
     onTestFinished(previous.close);
     expect(previous.db.$client.pragma("foreign_key_check")).toEqual([]);
