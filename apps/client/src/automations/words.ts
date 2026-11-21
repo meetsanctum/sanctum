@@ -10,6 +10,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
+import { plural } from "../plural";
+
 // How Automations reads a piece: its sentence or a trigger's card, with a
 // token for each field it names, worded from the markers the field's JSON
 // Schema carries. The client knows no piece by its id; the sentences,
@@ -179,7 +181,7 @@ export function formatOffset(minutes: number, style: Style) {
 /** How long something has lasted, as "10 minutes", or "10 min" on a card. */
 export function formatMinutes(minutes: number, style: Style) {
   if (style === "card") return `${minutes} min`;
-  return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return plural(minutes, "minute");
 }
 
 const lux = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 });

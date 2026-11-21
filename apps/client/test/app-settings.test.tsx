@@ -456,6 +456,38 @@ describe("an app's settings page", () => {
     }
   });
 
+  it("previews samples that share a name", async () => {
+    const { roomSections } = manifests[moods.id]!.provides;
+    const section = roomSections[0]!;
+    roomSections[0] = {
+      ...section,
+      kind: "buttons",
+      preview: [
+        { icon: "sparkles", name: "Aurora", active: true },
+        { icon: "moon", name: "Aurora", active: false },
+      ],
+    };
+    const reportError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await show(moods);
+
+      const preview = container.querySelector('[role="img"]')!;
+      expect(
+        [...preview.querySelectorAll("button")].map((button) => [
+          button.textContent,
+          button.getAttribute("aria-pressed"),
+        ]),
+      ).toEqual([
+        ["Aurora", "true"],
+        ["Aurora", "false"],
+      ]);
+      expect(reportError).not.toHaveBeenCalled();
+    } finally {
+      reportError.mockRestore();
+      roomSections[0] = section;
+    }
+  });
+
   it("counts only existing rooms that contain its tiles", async () => {
     const request = vi.mocked(coreJson).getMockImplementation()!;
     vi.mocked(coreJson).mockImplementation(async (path, init) =>

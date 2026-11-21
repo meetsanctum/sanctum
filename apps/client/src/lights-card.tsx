@@ -1,6 +1,7 @@
 import { icons, type Tile } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 
+import { plural } from "./plural";
 import type { Devices } from "./use-devices";
 
 // The card for all the lights of the home, one component wherever it is:
@@ -28,9 +29,6 @@ export const statusTileWidth =
 // How long a card keeps what its switch did where a screen reader finds
 // it: long enough to be read out, short enough not to be met as news later.
 const saidForMs = 10_000;
-
-const lightsCounted = (count: number) =>
-  count === 1 ? "1 light" : `${count} lights`;
 
 /**
  * What the home's lights are doing, as the card says it and Lights' item in
@@ -78,7 +76,7 @@ export function LightsCard(props: {
     return () => window.clearTimeout(timer);
   }, [did]);
   const { on, value } = lightsStatus(tiles);
-  const label = on > 0 ? `Turn off ${lightsCounted(on)}` : "Turn off lights";
+  const label = on > 0 ? `Turn off ${plural(on, "light")}` : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;
     setDid(undefined);
@@ -91,7 +89,7 @@ export function LightsCard(props: {
         say(
           failed.length === 0
             ? "Lights turned off"
-            : `${lightsCounted(failed.length)} did not turn off`,
+            : `${plural(failed.length, "light")} did not turn off`,
         ),
       () => say("The lights could not be turned off"),
     );
