@@ -12,15 +12,19 @@ part:
 | Category    | Id            | Holds         | Its page also has                              |
 | ----------- | ------------- | ------------- | ---------------------------------------------- |
 | Lights      | `lights`      | Light parts   | How many are on, with **Turn all off**         |
-| Switches    | `switches`    | Switch parts  | How many are on                                |
 | Environment | `environment` | Sensor parts  | Ranges for temperature and humidity            |
-| Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
 | Security    | `security`    | Contact parts | A summary of what is open                      |
+| Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
+| Switches    | `switches`    | Switch parts  | How many are on                                |
 | Buttons     | `buttons`     | Button parts  | Nothing more                                   |
 
 The sidebar lists them in this order, under Categories, and only those with
-at least one part in them. A category's page groups its parts by room.
-Parts from unassigned devices in the category appear under **No room**.
+at least one part in them. Beside the name, categories with a status tile
+on Home show the same status, such as "2 on" or "19.5–21.5°".
+Buttons shows only its name. Presence names one room with motion or shows
+a count such as "2 rooms" when several rooms have motion. A category's
+page groups its parts by room. Parts from unassigned devices in the
+category appear under **No room**.
 
 ## A device shows in every category it fits
 

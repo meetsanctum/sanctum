@@ -30,6 +30,30 @@ export const statusTileWidth =
 // it: long enough to be read out, short enough not to be met as news later.
 const saidForMs = 10_000;
 
+/**
+ * What the home's lights are doing, as the card says it and Lights' item in
+ * the sidebar: "2 on", "All off", "Offline" or "1 offline". A light that
+ * does not answer may still be on, so while none that answers is on it says
+ * how many do not, not "All off".
+ */
+export function lightsStatus(tiles: readonly Tile[]) {
+  let on = 0;
+  let offline = 0;
+  for (const tile of tiles) {
+    if (tile.disabled) offline++;
+    else if (tile.on) on++;
+  }
+  const value =
+    on > 0
+      ? `${on} on`
+      : offline === tiles.length
+        ? "Offline"
+        : offline > 0
+          ? `${offline} offline`
+          : "All off";
+  return { on, value };
+}
+
 export function LightsCard(props: {
   /** The home's lights. */
   tiles: readonly Tile[];
@@ -51,18 +75,7 @@ export function LightsCard(props: {
     const timer = window.setTimeout(() => setDid(undefined), saidForMs);
     return () => window.clearTimeout(timer);
   }, [did]);
-  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const offline = tiles.filter((tile) => tile.disabled).length;
-  // A light that does not answer may still be on, so while none that
-  // answers is on the card says how many do not, not "All off".
-  const status =
-    on > 0
-      ? `${on} on`
-      : offline === tiles.length
-        ? "Offline"
-        : offline > 0
-          ? `${offline} offline`
-          : "All off";
+  const { on, value } = lightsStatus(tiles);
   const label = on > 0 ? `Turn off ${plural(on, "light")}` : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;
@@ -97,7 +110,7 @@ export function LightsCard(props: {
         {/* A pause between its lines, which a screen reader runs together. */}
         <span className="sr-only">, </span>
         <span className="text-[15px] leading-5 font-medium tabular-nums">
-          {status}
+          {value}
         </span>
       </span>
     </>

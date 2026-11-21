@@ -590,7 +590,7 @@ export function sectionsOfRoom(
 }
 
 /** A category's or a group's status: "3 on", "Off", or nothing for no tiles. */
-export function onMeta(tiles: Tile[]) {
+export function onMeta(tiles: readonly Tile[]) {
   const on = tiles.filter((tile) => tile.on).length;
   return on ? `${on} on` : tiles.length ? "Off" : "";
 }

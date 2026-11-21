@@ -97,12 +97,15 @@ export function homeMotion(
 /**
  * Where there is motion now, as the home's status says it: "Office",
  * "Office and Hall", "3 rooms" or "Quiet". Motion from a sensor in no
- * room counts only while no room has any, as "Motion now".
+ * room counts only while no room has any, as "Motion now". The sidebar,
+ * narrower, names one room at most and counts from two ("2 rooms").
  */
-export function motionWhere(motion: HomeMotion) {
+export function motionWhere(motion: HomeMotion, roomsNamed: 1 | 2 = 2) {
   const { rooms } = motion;
   if (rooms.length === 0) return motion.elsewhere ? "Motion now" : "Quiet";
   if (rooms.length === 1) return rooms[0]!;
-  if (rooms.length === 2) return `${rooms[0]} and ${rooms[1]}`;
+  if (rooms.length === 2 && roomsNamed === 2) {
+    return `${rooms[0]} and ${rooms[1]}`;
+  }
   return `${rooms.length} rooms`;
 }
