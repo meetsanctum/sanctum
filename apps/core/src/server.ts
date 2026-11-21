@@ -8,6 +8,7 @@ import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
 
 import { registerActivityRoutes } from "./activity/routes.js";
+import { registerAgentRoutes } from "./agents/routes.js";
 import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
 import { registerAppRoutes } from "./app-host/routes.js";
@@ -57,6 +58,7 @@ export function createServer(
     | "gate"
     | "activity"
     | "activityViews"
+    | "agentsCanUse"
     | "apps"
     | "availableApps"
     | "appAdding"
@@ -198,6 +200,7 @@ export function createServer(
         views: options.activityViews,
         gate,
       });
+      registerAgentRoutes(core, { canUse: options.agentsCanUse, gate });
       registerAppRoutes(core, {
         host: options.apps,
         available: options.availableApps,

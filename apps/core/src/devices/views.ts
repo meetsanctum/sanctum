@@ -23,8 +23,10 @@ type CapabilityRow = typeof deviceCapabilities.$inferSelect;
  */
 export type View = {
   kinds?: ReadonlySet<CapabilityKind>;
-  /** The driver app whose own devices this shows whole. */
+  /** The driver app whose own devices this shows whole by default. */
   own?: string;
+  /** The kinds the driver may see on its own devices when restricted. */
+  ownKinds?: ReadonlySet<CapabilityKind>;
 };
 
 /**
@@ -35,8 +37,7 @@ export type View = {
  * unless it's the driver that brings it, which sees all of it.
  */
 export function viewOf(device: DeviceInfo, view: View = {}): DeviceInfo | null {
-  const { kinds } = view;
-  if (view.own !== undefined && device.driver === view.own) return device;
+  const kinds = view.own === device.driver ? view.ownKinds : view.kinds;
   if (!kinds) return device;
   const capabilities = device.capabilities.filter((capability) =>
     kinds.has(capability.kind),

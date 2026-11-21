@@ -1,6 +1,7 @@
 import { and, eq, inArray, like, ne } from "drizzle-orm";
 
 import type { Activity } from "../activity/activity.js";
+import { agentItems } from "../agents/schema.js";
 import type { Principal } from "../auth/clients.js";
 import { durably, type CoreDatabase } from "../database.js";
 import { devices } from "../devices/schema.js";
@@ -155,6 +156,7 @@ export function createAppDeleting(options: {
         appUpdatesWaiting,
         appsOff,
         pinnedApps,
+        agentItems,
       ]) {
         db.delete(table).where(eq(table.appId, appId)).run();
       }

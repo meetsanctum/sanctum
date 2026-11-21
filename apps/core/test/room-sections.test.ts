@@ -247,6 +247,7 @@ describe("room sections", () => {
         found: { report() {} },
         emit() {},
         entities: core.entities,
+        agents: core.agentsCanUse,
         // A type looser than its section, as no install would let through.
         entityType: () => ({
           id: spotType.id,

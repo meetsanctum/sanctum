@@ -256,6 +256,9 @@ describe("an agent", () => {
   it("does not resend an unconfirmed device command after revocation", async () => {
     const { core, maya, plug } = await lampsCore({ confirmMs: 250 });
     radio.confirms = false;
+    core.agentsCanUse.setArea("devices.control:switch", true, {
+      clientId: maya.client.id,
+    });
     const { token, client } = addAgent(core, {
       kind: "person",
       id: maya.person.id,

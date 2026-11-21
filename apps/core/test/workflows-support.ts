@@ -72,6 +72,8 @@ const note = defineAction({
   tier: "write",
   // Whose turn it was, which the editor asks for as the note is added.
   needs: ["people.read"],
+  // AI agents may write one too.
+  assistant: { starts: "on", description: "Write a note for the household." },
   input: z.object({ text: z.string() }),
   output: z.object({ noted: z.number() }),
   async run(ctx, input) {

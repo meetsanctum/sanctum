@@ -54,6 +54,12 @@ export const sunType = defineEntityType({
   title: "Sun",
   state: sunTimesSchema,
   standard: true,
+  // Sunrise and sunset tell roughly where the home is.
+  assistant: {
+    starts: "off",
+    description:
+      "Today's and the coming days' sunrise, sunset and solar noon where the home is.",
+  },
 });
 
 export const forecastDaySchema = z.object({
@@ -125,4 +131,9 @@ export const forecastType = defineEntityType({
   title: "Forecast",
   state: forecastSchema,
   standard: true,
+  assistant: {
+    starts: "on",
+    description:
+      "Today's and the coming days' weather where the home is, by day and by hour, in the home's time zone.",
+  },
 });

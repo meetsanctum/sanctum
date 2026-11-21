@@ -1,8 +1,4 @@
-import {
-  sunTimesSchema,
-  sunType,
-  type AvailableApp,
-} from "@meetsanctum/app-sdk";
+import { sunTimesSchema, sunType } from "@meetsanctum/app-sdk";
 
 import { createActivity } from "./activity/activity.js";
 import {
@@ -10,14 +6,10 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
-import { createAppAdding } from "./app-host/adding.js";
-import { createAppDeleting } from "./app-host/deleting.js";
-import { createListTurns } from "./app-host/list-turns.js";
+import { createAgentsCanUse } from "./agents/can-use.js";
 import { createRemovedApps } from "./app-host/removed.js";
-import { createAppRemoving } from "./app-host/removing.js";
 import { createAddedApps } from "./app-host/added.js";
-import { createAvailableApps } from "./app-host/available.js";
-import { needOf } from "./app-host/fit.js";
+import { createAppList } from "./app-host/app-list.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
 import { createAppHost } from "./app-host/host.js";
@@ -29,9 +21,7 @@ import { createAppsOff } from "./app-host/off.js";
 import type { AppContainerManager } from "./app-host/supervisor.js";
 import { createAppCommits } from "./app-host/commits.js";
 import { loadApartPackage, type ApartPackage } from "./app-host/loader.js";
-import { createDeviceOffers } from "./app-host/device-offers.js";
 import { createRoomWaits, updateRoom } from "./app-host/room-waits.js";
-import { createHardwareOffers } from "./app-host/hardware-offers.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
@@ -227,7 +217,17 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  const gate = createGate(people, auth.clients.isActiveAgent);
+  // What AI agents can use, of each installed app's and of the core's.
+  const agentsCanUse = createAgentsCanUse(db, {
+    record: activity.for("agents"),
+    apps: () => apps.offers(),
+    now,
+  });
+  const gate = createGate(
+    people,
+    auth.clients.isActiveAgent,
+    agentsCanUse.areaOn,
+  );
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -416,6 +416,7 @@ export async function createModules(
   const apps = createAppHost({
     gate,
     activity,
+    agents: agentsCanUse,
     manager: options.manager,
     people,
     places,
@@ -490,119 +491,42 @@ export async function createModules(
     now: now ?? (() => new Date()),
     log,
   });
-  // What the image ships that the household hasn't added, asked of the
-  // manager briefly, since a client waits for the answer.
-  const appNeed = (app: AvailableApp) =>
-    needOf(app, grantsStore.answers(app.id));
-  const availableApps = createAvailableApps({
-    shipped: options.shippedApps ?? (() => []),
-    added: addedApps,
-    removed: removedApps,
-    staged: async (check) =>
-      (await options.manager.stagedApps?.(5_000, check)) ?? {},
-    loadPackage: loadStagedPackage,
-    pagesNeedIn: (appId, folder) => pages.pagesNeedIn(appId, folder),
-    host: () => options.manager.hostStatus(),
-    need: appNeed,
-    capacity: async (apps) =>
-      options.manager.capabilities().reserves
-        ? ((await options.manager.appCapacity?.(apps)) ?? null)
-        : null,
-    log,
-  });
-  // A Zigbee stick plugged in brings up its app's add sheet.
-  const hardwareOffers = createHardwareOffers({
-    db,
-    gate,
-    added: addedApps,
-    available: availableApps,
-    manager: options.manager,
-    hasInstalled: () => apps.hasInstalled(),
-    onOffer: live.offer,
-    now,
-    log,
-  });
   // An update that waits for room is tried again until there's some.
   const roomWaits = createRoomWaits({
     retry: (signal) => apps.retryRoomWaits(signal),
     log,
   });
-  // An app the home could add for devices found on its network is offered
-  // in Add devices.
-  const deviceOffers = createDeviceOffers({
-    available: availableApps,
-    added: addedApps,
-    hasInstalled: () => apps.hasInstalled(),
-    sightings: () => sightings?.list() ?? [],
-    onChange: () => pairing.refresh(),
-    log,
-  });
-  // Adding and removing apps take turns.
-  const listTurns = createListTurns();
-  const appAdding = createAppAdding({
-    gate,
-    turns: listTurns,
-    removed: removedApps,
-    workflows: () => workflows.forApps,
-    devices,
-    finishRemoval: (appId) => appRemoving.finish(appId),
-    onDevice: live.device,
-    available: availableApps,
-    added: addedApps,
-    offers: hardwareOffers,
-    activity,
-    hasInstalled: () => apps.hasInstalled(),
-    need: appNeed,
-    reserve: async (appId, need) => {
-      if (!options.manager.capabilities().reserves) return;
-      const reservation = await options.manager.reserveForApp?.(appId, need);
-      const release = options.manager.releaseAppReservation;
-      if (reservation && release) {
-        return () => release(appId, reservation.id);
-      }
-    },
-    install: async (pkg) => {
-      // The app has been recorded and its offer ends even if it can't start.
-      pairing.refresh();
-      void deviceOffers.check();
-      if (!options.installAdded) throw new Error("this core installs no app");
-      await options.installAdded(pkg);
-    },
-    info: (appId) => apps.info(appId),
-    log,
-  });
-  // Deleting a removed app's data, by Delete now or after its 30 days.
-  const appDeleting = createAppDeleting({
+  // The home's list of apps: what it could add, and adding, removing and
+  // deleting them.
+  const {
+    availableApps,
+    hardwareOffers,
+    deviceOffers,
+    listTurns,
+    appAdding,
+    appDeleting,
+    appRemoving,
+  } = createAppList({
     db,
     gate,
-    turns: listTurns,
-    removed: removedApps,
+    manager: options.manager,
+    shippedApps: options.shippedApps,
+    installAdded: options.installAdded,
+    apps,
     added: addedApps,
-    activity,
-    manager: options.manager,
-    entities,
-    finishRemoval: (appId) => appRemoving.finish(appId),
-    releaseLeftover: (appId) => appRemoving.releaseLeftover(appId),
-    now,
-    log,
-  });
-  const appRemoving = createAppRemoving({
-    gate,
-    turns: listTurns,
-    host: apps,
     removed: removedApps,
+    grants: grantsStore,
     updates: appUpdates,
-    workflows: () => workflows.forApps,
+    loadPackage: loadStagedPackage,
+    pages,
+    live,
+    sightings,
+    pairing,
     devices,
+    workflows: () => workflows.forApps,
     activity,
-    manager: options.manager,
-    onRemoved(appId) {
-      live.appRemoved(appId);
-      // Removed, it can be offered again.
-      pairing.refresh();
-      void deviceOffers.check();
-    },
-    onDevice: live.device,
+    entities,
+    now,
     log,
   });
   const workflows = createWorkflows(db, {
@@ -742,6 +666,7 @@ export async function createModules(
   return {
     activity,
     activityViews,
+    agentsCanUse,
     managerAudit,
     people,
     auth,
@@ -784,6 +709,7 @@ export async function createModules(
 }
 
 export type Modules = Awaited<ReturnType<typeof createModules>>;
+export type ModulesOptions = Parameters<typeof createModules>[1];
 
 // The days of the home's sun, from the first app that provides it; none
 // while no app does.

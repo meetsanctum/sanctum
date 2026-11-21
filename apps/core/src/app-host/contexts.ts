@@ -17,6 +17,7 @@ import type { Problems } from "../devices/problems.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Presses } from "../devices/presses.js";
 import type { Entities } from "../entities/entities.js";
+import type { AgentsCanUse } from "../agents/can-use.js";
 import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
 import { createCoreCalls } from "./calls.js";
@@ -58,6 +59,7 @@ export function createAppContexts(options: {
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
+  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
   now: () => Date;
   // Whether someone turned an app off: other apps don't read what it brought.
@@ -205,6 +207,7 @@ export function createAppContexts(options: {
       watch: (permission) => entry.requests.watch(permission),
       pairing: options.pairing,
       secrets: options.secrets,
+      agents: options.agents,
       log: (text) => log(`${appId}: ${text}`),
     });
     const ctx = createAppContext({

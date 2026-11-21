@@ -2,6 +2,7 @@ import { appApiVersion, appSectionOrderFrom } from "@meetsanctum/app-sdk";
 import { coreSocketName } from "@meetsanctum/app-sdk/protocol";
 import { join } from "node:path";
 
+import type { AgentsCanUse } from "../agents/can-use.js";
 import type { Entities } from "../entities/entities.js";
 import { apartApp, apartStorage } from "./apart.js";
 import type { AppContexts } from "./contexts.js";
@@ -39,6 +40,7 @@ export function createAppInstaller(options: {
   entities: Pick<Entities, "reconcileTypes">;
   updates: Pick<AppUpdates, "holdsBack">;
   grants: Pick<AppGrants, "adopt" | "of">;
+  agents: Pick<AgentsCanUse, "adopt">;
   versions: Pick<AppVersions, "last">;
   waiting: Pick<WaitingUpdates, "get" | "of">;
   off: Pick<AppsOff, "isOff">;
@@ -132,10 +134,10 @@ export function createAppInstaller(options: {
     // A new version of an app the home has run answers as an update, and
     // what it needs that waits for someone stays unanswered.
     const waiting = options.waiting.get(appId);
-    const isUpdate = !isAdding && options.versions.last(appId) !== undefined;
+    const previous = isAdding ? undefined : options.versions.last(appId);
     options.grants.adopt(
       manifest,
-      isUpdate
+      previous
         ? {
             waits:
               waiting?.folder === pkg.apart.folder
@@ -143,6 +145,12 @@ export function createAppInstaller(options: {
                 : [],
           }
         : undefined,
+    );
+    // What it offers AI agents, answered the same way: an app the home has
+    // run brings what it newly offers in off, whatever its version says.
+    options.agents.adopt(
+      { app: appId, offers: contract.offers },
+      { asUpdate: previous !== undefined },
     );
     const granted = options.grants.of(manifest);
     const held = (name: string) => granted.includes(servicePermission(name));

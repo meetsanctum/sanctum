@@ -4,7 +4,6 @@ import {
   shownAsOf,
   type Actor,
   type CapabilityInfo,
-  type CapabilityKind,
   type DeviceCommand,
   type DeviceInfo,
   type DriverCommand,
@@ -17,7 +16,7 @@ import type {
   ChangedBy,
 } from "../activity/activity.js";
 import { ActionCallError } from "../app-host/errors.js";
-import type { Gate, Rule } from "../app-host/gate.js";
+import { deviceCommandRule, type Gate } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
@@ -268,11 +267,6 @@ export function createDevices(
     return { device: shown, capability };
   }
 
-  // What the gate weighs for a capability's commands.
-  function ruleFor(kind: CapabilityKind): Rule {
-    return { tier: capabilityOf(kind).tier };
-  }
-
   // A command that passed the gate: it asks for state, and goes to the
   // driver unless it has to wait for the light to turn on. The capability
   // then says who set it: the app whose code sent it, if any, and the actor
@@ -320,12 +314,16 @@ export function createDevices(
     if (ending) {
       await ending;
       if (actor.kind === "assistant-run") {
-        admitted(who, device.id, () => gate.requireActiveAgent(actor.id));
+        admitted(who, device.id, () =>
+          gate.permit(actor, deviceCommandRule(capability.kind)),
+        );
       }
     }
     refuseWhileStopping();
     const row = capabilityRow(device.id, capability.id);
-    if (!row) throw new ActionCallError("not_found");
+    if (!row || row.kind !== capability.kind) {
+      throw new ActionCallError("not_found");
+    }
     // A command that holds only while the capability is on, or off: checked
     // here, after any wait, against what it shows now, an on or off still on
     // its way included. Whoever sent it went by an earlier state, so it
@@ -357,7 +355,7 @@ export function createDevices(
       onResend?: () => void,
     ) => {
       if (onResend && actor.kind === "assistant-run") {
-        gate.requireActiveAgent(actor.id);
+        gate.permit(actor, deviceCommandRule(capability.kind));
       }
       onResend?.();
       if (isStopping || options.driverRun?.(driver) !== wentThrough) {
@@ -462,7 +460,7 @@ export function createDevices(
         visible(request.data.device, request.data.capability, view),
       );
       const actor = admitted(who, target.device.id, () =>
-        gate.admit(principal, ruleFor(target.capability.kind)),
+        gate.admit(principal, deviceCommandRule(target.capability.kind)),
       );
       return run(
         actor,
@@ -501,7 +499,7 @@ export function createDevices(
         visible(device, capability, view),
       );
       admitted(who, target.device.id, () =>
-        gate.permit(actor, ruleFor(target.capability.kind)),
+        gate.permit(actor, deviceCommandRule(target.capability.kind)),
       );
       return run(actor, app, who, view, target, command, whileOn);
     },

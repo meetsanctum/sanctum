@@ -115,6 +115,10 @@
             "days"
           ],
           "additionalProperties": false
+        },
+        "assistant": {
+          "starts": "off",
+          "description": "Today's and the coming days' sunrise, sunset and solar noon where the home is."
         }
       },
       {
@@ -387,6 +391,10 @@
             "days"
           ],
           "additionalProperties": false
+        },
+        "assistant": {
+          "starts": "on",
+          "description": "Today's and the coming days' weather where the home is, by day and by hour, in the home's time zone."
         }
       }
     ],

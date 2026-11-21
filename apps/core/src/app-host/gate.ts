@@ -1,7 +1,10 @@
 import {
+  capabilityOf,
+  controlPermission,
   householdTiers,
   type ActionDefinition,
   type Actor,
+  type CapabilityKind,
 } from "@meetsanctum/app-sdk";
 
 import type { Principal } from "../auth/clients.js";
@@ -15,13 +18,21 @@ import { ActionCallError } from "./errors.js";
 // agent runs, is held to the everyday tiers. Device commands pass the same
 // gate, with their capability's tier.
 
-// What the gate weighs: an action, or a device capability's commands.
-export type Rule = Pick<ActionDefinition, "tier">;
+// What the gate weighs: an action, or a device capability's commands, which
+// name the area of the core's that AI agents need switched on for them
+// (agents/can-use.ts).
+export type Rule = Pick<ActionDefinition, "tier"> & { agentArea?: string };
+
+export function deviceCommandRule(kind: CapabilityKind): Rule {
+  return { tier: capabilityOf(kind).tier, agentArea: controlPermission(kind) };
+}
 
 export function createGate(
   people: People,
   // Whether an AI agent's client is still there, unrevoked.
   isActiveAgent: (id: string) => boolean,
+  // Whether the household lets AI agents use one of the core's areas.
+  agentAreaOn: (area: string) => boolean,
 ) {
   // Refuses what an actor may not do, taking a person to be in the household
   // still.
@@ -41,6 +52,13 @@ export function createGate(
       case "assistant-run":
         if (!householdTiers.includes(rule.tier)) {
           throw new ActionCallError("needs_approval");
+        }
+        if (
+          actor.kind === "assistant-run" &&
+          rule.agentArea !== undefined &&
+          !agentAreaOn(rule.agentArea)
+        ) {
+          throw new ActionCallError("forbidden");
         }
         return;
       // Any other actor is refused.

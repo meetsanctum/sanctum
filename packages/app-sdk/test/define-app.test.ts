@@ -286,12 +286,14 @@ describe("what an app provides", () => {
           title: "List",
           standard: false,
           state: expect.objectContaining({ type: "object" }),
+          assistant: null,
         },
         {
           id: "sun",
           title: "Sun",
           standard: true,
           state: expect.objectContaining({ type: "object" }),
+          assistant: sunType.assistant,
         },
       ],
       widgets: [
