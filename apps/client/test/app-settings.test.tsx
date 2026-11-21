@@ -444,8 +444,8 @@ describe("an app's settings page", () => {
           each.getAttribute("aria-pressed"),
         ]),
       ).toEqual([
-        ["Aurora", "", "true"],
-        ["Night", "", "false"],
+        ["Aurora", "Aurora", "true"],
+        ["Night", "Night", "false"],
       ]);
       // Chips on a line of their own, as beside a room's lights button.
       expect(

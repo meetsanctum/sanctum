@@ -242,7 +242,7 @@ describe("Home with floors", () => {
     // The power symbol and its words, White while any is on.
     expect(off.textContent).toBe("Turn off lights");
     expect(off.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(off.dataset.look).toBe("on");
+    expect(off.dataset.on).toBe("");
     // Under the heading's line, before the floor's rooms.
     const heading = container.querySelector("#home-floor-ground")!;
     expect(heading.parentElement?.nextElementSibling?.contains(off)).toBe(true);
@@ -250,7 +250,7 @@ describe("Home with floors", () => {
     // come on room by room.
     const first = button("Turn off lights on First floor")!;
     expect(first.disabled).toBe(true);
-    expect(first.dataset.look).toBe("off");
+    expect(first.dataset.on).toBeUndefined();
     // The rooms on no floor have none.
     expect(
       [...container.querySelectorAll("button")].filter((each) =>

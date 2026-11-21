@@ -192,9 +192,10 @@ export const isRowEmpty = (row: RoomRowParts) =>
  * its lights button, a chip that says what it does ("Turn off lights") and
  * is White while any light is on (lights-button.tsx), and apps' buttons,
  * chips with their icon and name, such as Natural light; then apps' tiles
- * with their names, such as the room's moods. The lights button says whether the lights are on, the rest which look they have, so
- * at most one of those is lit: Natural light before a mood that matches the
- * curve, and a running app's look before the last one a paused app said.
+ * with their names, such as the room's moods. The lights button says
+ * whether the lights are on, the rest which look they have. At most one
+ * look is lit: Natural light before a mood that matches the curve, and a
+ * running app's look before the last one a paused app said.
  * Each is named with the room, since several rooms' are in reach on Home.
  * While every light is offline the core can reach none, so the whole row
  * dims; while an app isn't running its own buttons and tiles dim and say so.
@@ -210,20 +211,18 @@ export function RoomRow(props: {
     ({ entity }) => entity.tile.active,
   );
   const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
-  const tileOf = (
-    { app, section, entity }: RowEntry,
-    shape: "chip" | "tile",
-  ) => {
+  const tileOf = ({ app, section, entity }: RowEntry) => {
+    const isChip = section.kind === "buttons";
     const notRunning = stateShort(app);
     const label = `${entity.tile.name} in ${roomName}`;
     return (
       <SectionTile
         key={entityKey(entity.app, entity.key)}
-        chip={shape === "chip"}
+        chip={isChip}
         icon={tileIconOf[entity.tile.icon]}
         name={entity.tile.name}
         label={notRunning ? `${label}, ${notRunning.toLowerCase()}` : label}
-        status={shape === "chip" ? undefined : (notRunning ?? undefined)}
+        status={isChip ? undefined : (notRunning ?? undefined)}
         active={lit?.entity === entity}
         disabled={notRunning !== null || dark}
         failures={entities.failuresOf(entity)}
@@ -241,12 +240,12 @@ export function RoomRow(props: {
       {hasChips && (
         <div className="flex flex-wrap gap-2">
           {row.lights && <LightsButton lights={row.lights} />}
-          {row.buttons.map((each) => tileOf(each, "chip"))}
+          {row.buttons.map(tileOf)}
         </div>
       )}
       {row.tiles.length > 0 && (
         <div className="tile-grid auto-rows-(--cell)">
-          {row.tiles.map((each) => tileOf(each, "tile"))}
+          {row.tiles.map(tileOf)}
         </div>
       )}
     </div>

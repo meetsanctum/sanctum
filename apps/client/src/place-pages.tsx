@@ -61,8 +61,8 @@ import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
-// complete and fixed. A room's page opens with its name, its motion, whether
-// its contact sensors are open and what its sensors read under it, then its
+// complete and fixed. A room's page opens with its name, what its sensors
+// read, whether its contact sensors are open and its motion, then its
 // row: its lights button, Natural light and its moods (room-sections.tsx),
 // then its devices in a section for each category, and last the devices Sanctum
 // cannot use. A category's page shows its tiles in a section
@@ -251,11 +251,14 @@ const categoryOrder = [
   "buttons",
 ] as const satisfies DeviceCategory[];
 
-const categoryOf = (id: DeviceCategory) =>
-  deviceCategories.find((each) => each.id === id)!;
+const sidebarCategories = categoryOrder.map((id) =>
+  deviceCategories.find((each) => each.id === id)!,
+);
 
 // A remote has nothing to say in the home's status.
-const statusOrder = categoryOrder.filter((id) => id !== "buttons");
+const statusCategories = sidebarCategories.filter(
+  (category) => category.id !== "buttons",
+);
 
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
@@ -297,26 +300,24 @@ export function HomeStatus(props: {
   const row = useRef<HTMLElement>(null);
   useEdgeFade(row);
   const unit = unitOf(devices);
-  // Lights first, the one with something to press; a remote has nothing
-  // to say here.
-  const shown = statusOrder.flatMap((id): StatusItem[] => {
-    const category = categoryOf(id);
+  const shown = statusCategories.flatMap((category): StatusItem[] => {
+    const { id } = category;
     const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
     const open = () => props.openCategory(id);
     if (id === "lights") return [{ key: id, tiles: own, open }];
     let value: string;
     let label: string;
-    if (category.id === "environment") {
+    if (id === "environment") {
       // The temperatures when they have any; never the light level.
       const [reading] = readingsOf(sensorReadings(own), unit, climateMeasures);
       value = reading?.text ?? "No readings";
       label = reading?.spoken ?? value;
-    } else if (category.id === "presence") {
+    } else if (id === "presence") {
       const motion = homeMotion(own, devices.places);
       value = motion.answering ? motionWhere(motion) : "No readings";
       label = value;
-    } else if (category.id === "security") {
+    } else if (id === "security") {
       const contacts = contactsOf(own);
       value = contacts ? contactsStatus(contacts) : "No readings";
       label = value;
@@ -324,10 +325,10 @@ export function HomeStatus(props: {
       value = onMeta(own);
       label = value;
     }
-    const look = categoryLooks[category.id];
+    const look = categoryLooks[id];
     return [
       {
-        key: category.id,
+        key: id,
         title: category.title,
         value,
         label: `${category.title}, ${label}`,
@@ -683,8 +684,7 @@ export function SidebarPlaces(props: {
   ) => void;
 }) {
   const { devices, current, open } = props;
-  const shown = categoryOrder
-    .map(categoryOf)
+  const shown = sidebarCategories
     .map((category) => ({
       ...category,
       tiles: tilesIn(category, devices.tiles),

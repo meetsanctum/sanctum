@@ -1,5 +1,6 @@
-import type { Floor } from "@meetsanctum/app-sdk";
+import type { Floor, LightsResult } from "@meetsanctum/app-sdk";
 import { icons, SectionTile, type Tile } from "@meetsanctum/ui-sdk";
+import { useState } from "react";
 
 import type { Devices } from "./use-devices";
 
@@ -29,7 +30,7 @@ export type LightsButtonState = {
   /** Its words with whose lights they are, its accessible name. */
   label: string;
   isDisabled: boolean;
-  onPress: () => void;
+  onPress: () => Promise<LightsResult>;
 };
 
 /**
@@ -38,6 +39,14 @@ export type LightsButtonState = {
  */
 export function LightsButton(props: { lights: LightsButtonState }) {
   const { lights } = props;
+  const [failures, setFailures] = useState(0);
+  const showFailure = () => setFailures((count) => count + 1);
+  const press = () => {
+    // Individual failures also show on the affected devices' tiles.
+    void lights.onPress().then(({ switched, failed }) => {
+      if (switched === 0 && failed.length > 0) showFailure();
+    }, showFailure);
+  };
   return (
     <SectionTile
       chip
@@ -46,7 +55,8 @@ export function LightsButton(props: { lights: LightsButtonState }) {
       label={lights.label}
       lit={lights.isOn}
       disabled={lights.isDisabled}
-      onClick={lights.onPress}
+      failures={failures}
+      onClick={press}
     />
   );
 }
@@ -66,13 +76,11 @@ export function roomLightsButton(
     label: `${words} in ${room.name}`,
     isDisabled: lights.every((tile) => tile.disabled),
     onPress: () =>
-      void devices
-        .switchLights(
-          { kind: "room", id: room.id },
-          lights,
-          isOn ? "off" : "on",
-        )
-        .catch(() => undefined),
+      devices.switchLights(
+        { kind: "room", id: room.id },
+        lights,
+        isOn ? "off" : "on",
+      ),
   };
 }
 
@@ -90,8 +98,6 @@ export function floorLightsButton(
     label: `Turn off lights on ${floor.name}`,
     isDisabled: !isOn,
     onPress: () =>
-      void devices
-        .switchLights({ kind: "floor", id: floor.id }, lights, "off")
-        .catch(() => undefined),
+      devices.switchLights({ kind: "floor", id: floor.id }, lights, "off"),
   };
 }

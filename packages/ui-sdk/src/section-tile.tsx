@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { Button } from "./components/ui/button";
 import { showFailed } from "./show-failed";
 
 /**
@@ -62,40 +63,65 @@ export function SectionTile(props: {
   const { tileRef } = props;
   // A tile with its icon alone still has its name, to be read and hovered.
   const said = props.iconOnly ? (props.label ?? props.name) : props.label;
+  const buttonProps = {
+    ref: (element: HTMLButtonElement | null) => {
+      surface.current = element;
+      tileRef?.(element);
+    },
+    type: "button" as const,
+    "aria-label": said,
+    "aria-pressed": props.active,
+    disabled: props.disabled,
+    "data-editing": props.editing ? "" : undefined,
+    "data-dragging": props.dragging ? "" : undefined,
+    onClick: props.onClick,
+    onPointerDown: props.onPointerDown,
+    onPointerMove: props.onPointerMove,
+    onPointerUp: props.onPointerUp,
+    onPointerCancel: props.onPointerCancel,
+    onKeyDown: props.onKeyDown,
+  };
+  const failureWash = (
+    <span
+      ref={wash}
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 rounded-[inherit] bg-(--danger) opacity-0"
+    />
+  );
+  if (props.chip && !props.iconOnly) {
+    return (
+      <Button
+        {...buttonProps}
+        variant="glass"
+        size="chip"
+        data-on={props.lit ? "" : undefined}
+        title={props.label ?? props.name}
+        className="relative max-w-full self-start"
+      >
+        {failureWash}
+        <Icon
+          aria-hidden="true"
+          data-icon="inline-start"
+          className="relative size-[18px]"
+        />
+        {/* Its label stays available on hover while the chip is disabled. */}
+        <span className="pointer-events-auto relative min-w-0 truncate">
+          {props.name}
+        </span>
+        {props.children}
+      </Button>
+    );
+  }
   return (
     <button
-      ref={(element) => {
-        surface.current = element;
-        tileRef?.(element);
-      }}
-      type="button"
-      aria-label={said}
+      {...buttonProps}
       title={props.iconOnly ? said : undefined}
-      aria-pressed={props.active}
-      disabled={props.disabled}
       data-look={props.active || props.lit ? "on" : "off"}
-      data-editing={props.editing ? "" : undefined}
-      data-dragging={props.dragging ? "" : undefined}
-      onClick={props.onClick}
-      onPointerDown={props.onPointerDown}
-      onPointerMove={props.onPointerMove}
-      onPointerUp={props.onPointerUp}
-      onPointerCancel={props.onPointerCancel}
-      onKeyDown={props.onKeyDown}
-      className={`${props.iconOnly ? "col-span-1 justify-center rounded-lg" : props.chip ? "h-9 gap-1.5 rounded-md ps-2.5 pe-3 text-[13px] leading-[18px] font-medium whitespace-nowrap" : "col-span-3 gap-3 rounded-lg px-3.5 py-3"} group relative flex min-w-0 items-center overflow-hidden bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`}
+      className={`${props.iconOnly ? "col-span-1 justify-center" : "col-span-3 gap-3 px-3.5 py-3"} group relative flex min-w-0 items-center overflow-hidden rounded-lg bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`}
     >
-      <span
-        ref={wash}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-(--danger) opacity-0"
-      />
+      {failureWash}
       {props.iconOnly ? (
         <Icon aria-hidden="true" className="relative size-[22px]" />
-      ) : props.chip ? (
-        <>
-          <Icon aria-hidden="true" className="relative size-[18px]" />
-          <span className="relative">{props.name}</span>
-        </>
       ) : (
         <>
           <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) group-data-[look=on]:bg-(--tile-on-ink)/8">

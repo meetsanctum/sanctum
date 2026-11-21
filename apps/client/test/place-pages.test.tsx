@@ -228,7 +228,7 @@ describe("all the lights of a room", () => {
     expect(all.querySelector("svg.lucide-power")).not.toBeNull();
     // Its words say what it does, so it is no pressed switch.
     expect(all.hasAttribute("aria-pressed")).toBe(false);
-    expect(all.dataset.look).toBe("on");
+    expect(all.dataset.on).toBe("");
     await click(all);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "room", id: "office" }, to: "off" },
@@ -239,7 +239,7 @@ describe("all the lights of a room", () => {
     devices = [{ ...lamp, availability: "offline" }];
     await show("room", "office");
     const all = button("Turn on lights in Office")!;
-    expect(all.dataset.look).toBe("off");
+    expect(all.dataset.on).toBeUndefined();
     expect(all.disabled).toBe(true);
     // Nothing a mood sets could answer either.
     expect(tile("Relax")?.disabled).toBe(true);
