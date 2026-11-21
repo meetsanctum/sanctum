@@ -125,13 +125,14 @@ export function TopBar(props: {
 }
 
 // The ⋮ menu at the right end of the top bar, on a dashboard: Edit Home on
-// Home's, then Rename. Every client offers it, shared tablets included: the
-// dashboards are the household's.
+// Home's, Rename on the others. Home keeps its name. Every client offers it,
+// shared tablets included: the dashboards are the household's.
 function DashboardMenu(props: {
   dashboard: DashboardInfo;
   onRename: (id: string, name: string) => Promise<unknown>;
   onEditHome?: { disabled: boolean; open: () => void };
 }) {
+  const isHome = props.dashboard.kind === "home";
   const [renaming, setRenaming] = useState<DashboardInfo>();
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -150,27 +151,32 @@ function DashboardMenu(props: {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={8} className="w-44">
-          {props.dashboard.kind === "home" && props.onEditHome && (
-            <DropdownMenuItem
-              disabled={props.onEditHome.disabled}
-              onSelect={props.onEditHome.open}
-            >
-              <LayoutDashboard />
-              <span className="truncate">Edit {props.dashboard.name}</span>
+          {isHome ? (
+            props.onEditHome && (
+              <DropdownMenuItem
+                disabled={props.onEditHome.disabled}
+                onSelect={props.onEditHome.open}
+              >
+                <LayoutDashboard />
+                <span className="truncate">Edit {props.dashboard.name}</span>
+              </DropdownMenuItem>
+            )
+          ) : (
+            <DropdownMenuItem onSelect={() => setRenaming(props.dashboard)}>
+              <Pencil />
+              Rename
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => setRenaming(props.dashboard)}>
-            <Pencil />
-            Rename
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <RenameDashboard
-        dashboard={renaming}
-        onRename={props.onRename}
-        onClose={() => setRenaming(undefined)}
-        trigger={trigger}
-      />
+      {!isHome && (
+        <RenameDashboard
+          dashboard={renaming}
+          onRename={props.onRename}
+          onClose={() => setRenaming(undefined)}
+          trigger={trigger}
+        />
+      )}
     </>
   );
 }

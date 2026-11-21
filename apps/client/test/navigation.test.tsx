@@ -49,12 +49,15 @@ let rename = async (id: string, name: string) => {
 
 function Navigation({
   onDashboard = true,
+  dashboard = home,
   pinned = [],
   isLoading = false,
   isVeiled = false,
   account,
 }: {
   onDashboard?: boolean;
+  /** The dashboard on show. */
+  dashboard?: DashboardInfo;
   pinned?: PinnedApp[];
   /** The household's pins are not read yet. */
   isLoading?: boolean;
@@ -96,11 +99,11 @@ function Navigation({
               pinApps={() => opened.push("pin apps")}
             />
           }
-          dashboards={[home, night].map((dashboard) => ({
-            ...dashboard,
-            background: dashboardBackground[dashboard.background],
-            home: dashboard.kind === "home",
-            current: onDashboard && dashboard.id === home.id,
+          dashboards={[home, night].map((each) => ({
+            ...each,
+            background: dashboardBackground[each.background],
+            home: each.kind === "home",
+            current: onDashboard && each.id === dashboard.id,
             onSelect: sidebar.close,
           }))}
         />
@@ -111,7 +114,7 @@ function Navigation({
           sidebarShown={sidebar.docked || sidebar.floating !== null}
           sidebarDocked={sidebar.docked}
           onSidebar={sidebar.toggle}
-          dashboard={onDashboard ? home : undefined}
+          dashboard={onDashboard ? dashboard : undefined}
           onRename={(id, name) => rename(id, name)}
           onEditHome={{ disabled: false, open: () => setEditing(true) }}
           editingHome={
@@ -228,10 +231,10 @@ describe("the dashboard's menu", () => {
       (candidate) => candidate.textContent === name,
     )!;
 
-  async function openMenu() {
+  async function openMenu(name = "Home") {
     await act(async () =>
       container
-        .querySelector('button[aria-label="Home: more"]')!
+        .querySelector(`button[aria-label="${name}: more"]`)!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         ),
@@ -240,16 +243,27 @@ describe("the dashboard's menu", () => {
   }
 
   async function startRenaming() {
-    const items = await openMenu();
+    await render(<Navigation dashboard={night} />);
+    const items = await openMenu("Night");
     await act(async () =>
       items.find((item) => item.textContent === "Rename")!.click(),
     );
     return document.querySelector<HTMLElement>("[role=dialog]")!;
   }
 
-  it("holds Edit Home and Rename for Home, and no Delete", async () => {
-    expect((await openMenu()).map((item) => item.textContent)).toEqual([
-      "Edit Home",
+  it.each(["Home", "Overview"])(
+    "holds only Edit %s for the Home dashboard",
+    async (name) => {
+      await render(<Navigation dashboard={{ ...home, name }} />);
+      expect((await openMenu(name)).map((item) => item.textContent)).toEqual([
+        `Edit ${name}`,
+      ]);
+    },
+  );
+
+  it("holds Rename for another dashboard", async () => {
+    await render(<Navigation dashboard={night} />);
+    expect((await openMenu("Night")).map((item) => item.textContent)).toEqual([
       "Rename",
     ]);
   });
@@ -277,19 +291,19 @@ describe("the dashboard's menu", () => {
       "Rename this dashboard",
     );
     const name = dialog.querySelector("input")!;
-    expect(name.value).toBe("Home");
+    expect(name.value).toBe("Night");
 
-    await type(name, "  Living room ");
+    await type(name, "  Bedtime ");
     await act(async () => button("Save").click());
 
-    expect(renamed).toEqual([{ id: "home", name: "Living room" }]);
+    expect(renamed).toEqual([{ id: "night", name: "Bedtime" }]);
     await vi.waitFor(() =>
       expect(document.querySelector("[role=dialog]")).toBeNull(),
     );
     // Radix hands focus back on a timer once the dialog has unmounted.
     await vi.waitFor(() =>
       expect(document.activeElement?.getAttribute("aria-label")).toBe(
-        "Home: more",
+        "Night: more",
       ),
     );
   });
@@ -337,7 +351,7 @@ describe("the dashboard's menu", () => {
     await act(async () => finish());
 
     expect(document.querySelector("[role=dialog]")).toBe(reopened);
-    expect(reopened.querySelector("input")!.value).toBe("Home");
+    expect(reopened.querySelector("input")!.value).toBe("Night");
     expect(button("Save").disabled).toBe(false);
   });
 });

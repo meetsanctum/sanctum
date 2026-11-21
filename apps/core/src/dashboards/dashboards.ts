@@ -6,12 +6,14 @@ import {
   type DeviceInfo,
 } from "@meetsanctum/app-sdk";
 import {
+  and,
   asc,
   count,
   desc,
   eq,
   inArray,
   max,
+  ne,
   notInArray,
   sql,
 } from "drizzle-orm";
@@ -78,9 +80,9 @@ export type DashboardChangedBy = { personId?: string; clientId: string };
 
 export class DashboardsError extends Error {
   constructor(
-    // home_dashboard: Home cannot be removed. too_many_dashboards: it has
-    // maxDashboards already. not_on_home: an order names a device Home does
-    // not have.
+    // home_dashboard: Home keeps its name and cannot be removed.
+    // too_many_dashboards: it has maxDashboards already. not_on_home: an
+    // order names a device Home does not have.
     readonly code:
       "not_found" | "home_dashboard" | "too_many_dashboards" | "not_on_home",
     message: string,
@@ -330,18 +332,29 @@ export function createDashboards(
       by: DashboardChangedBy,
       input: z.input<typeof dashboardChanges>,
     ): DashboardInfo {
-      const { id: dashboardId, ...changes } = dashboardChanges.parse(input);
+      const { id: dashboardId, name } = dashboardChanges.parse(input);
       return change(by, "dashboard.update", () => {
         const updated = db
           .update(dashboards)
-          .set({ ...changes, updatedAt: now() })
-          .where(eq(dashboards.id, dashboardId))
+          .set({ name, updatedAt: now() })
+          .where(
+            and(eq(dashboards.id, dashboardId), ne(dashboards.kind, "home")),
+          )
           .returning(info)
           .get();
-        if (!updated) {
+        if (updated) {
+          return { subjectId: dashboardId, result: infoOf(updated) };
+        }
+        const existing = db
+          .select({ id: dashboards.id })
+          .from(dashboards)
+          .where(eq(dashboards.id, dashboardId))
+          .get();
+        if (!existing) {
           throw notFound(dashboardId);
         }
-        return { subjectId: dashboardId, result: infoOf(updated) };
+        // The words about Home, such as Add to Home, use its name.
+        throw new DashboardsError("home_dashboard", "Home keeps its name");
       });
     },
 
