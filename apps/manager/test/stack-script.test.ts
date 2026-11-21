@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +15,17 @@ afterEach(async () => {
     folders.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
 });
+
+async function holdDisplayPort() {
+  const server = createServer();
+  await new Promise<void>((done, fail) => {
+    server.once("error", fail).listen(0, "0.0.0.0", done);
+  });
+  return {
+    port: String((server.address() as AddressInfo).port),
+    close: promisify(server.close.bind(server)),
+  };
+}
 
 // Exercise the real CLI with a Docker double, so a failed startup cannot leave
 // containers behind and settings changes are checked without starting a stack.
@@ -38,6 +50,12 @@ appendFileSync(process.env.STACK_TEST_COMMANDS, JSON.stringify(args) + "\\n");
 if (args[0] === "port") console.log("127.0.0.1:45000");
 if (args[0] === "image" && args[1] === "inspect") console.log("sha256:current");
 if (args[0] === "compose" && process.env.STACK_TEST_FAIL_COMPOSE) process.exit(1);
+if (args[0] === "compose" && args.includes("up")) {
+  appendFileSync(process.env.STACK_TEST_COMMANDS, JSON.stringify([
+    "stack-env", process.env.SANCTUM_STACK_CORE_ENV,
+    process.env.SANCTUM_DISPLAY_ENABLED, process.env.SANCTUM_DISPLAY_PORT,
+  ]) + "\\n");
+}
 if (args[0] === "inspect") {
   const format = args[2];
   if (format.includes(".Config.Env")) {
@@ -209,6 +227,60 @@ describe("development stack CLI", () => {
     expect(exec).toContain("APPROVE_CODE=ABCD-EFGH");
     expect(exec).toContain("APPROVE_NAME=Hall display");
     expect(exec).toContain("sanctum-one-core");
+  });
+
+  it("refuses to approve through a core belonging to another stack", async () => {
+    const tree = await worktree();
+
+    await expect(
+      tree.run("approve", { STACK_TEST_CORE_OWNER: "another-stack" }, [
+        "ABCD-EFGH",
+      ]),
+    ).rejects.toThrow("it doesn't belong to stack one");
+    expect(
+      (await tree.commands()).some(([command]) => command === "exec"),
+    ).toBe(false);
+  });
+
+  it("sets the display port for Vite and preserves configured origins", async () => {
+    const tree = await worktree();
+    const { port, close } = await holdDisplayPort();
+    await close();
+
+    await tree.run("display", {
+      SANCTUM_DISPLAY_PORT: port,
+      CORE_ALLOWED_ORIGINS: "app://sanctum,http://localhost:5173",
+    });
+
+    const settings = (await tree.commands()).find(
+      ([command]) => command === "stack-env",
+    );
+    expect(settings?.slice(2)).toEqual(["true", port]);
+    expect(settings?.[1]).toContain(
+      "CORE_ALLOWED_ORIGINS=app://sanctum,http://localhost:5173",
+    );
+  });
+
+  it("rejects an invalid display port before starting Docker", async () => {
+    const tree = await worktree();
+
+    await expect(
+      tree.run("display", { SANCTUM_DISPLAY_PORT: "0" }),
+    ).rejects.toThrow("SANCTUM_DISPLAY_PORT must be a port from 1 to 65535");
+    expect(await tree.commands()).toEqual([]);
+  });
+
+  it("rejects an occupied display port before starting Docker", async () => {
+    const tree = await worktree();
+    const { port, close } = await holdDisplayPort();
+    try {
+      await expect(
+        tree.run("display", { SANCTUM_DISPLAY_PORT: port }),
+      ).rejects.toThrow(`Cannot use display port ${port}`);
+      expect(await tree.commands()).toEqual([]);
+    } finally {
+      await close();
+    }
   });
 
   it.each(["", "another-stack"])(

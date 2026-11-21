@@ -18,6 +18,10 @@ if (!code) {
   console.error("Give the code the device shows: pnpm dev:approve ABCD-EFGH");
   process.exit(1);
 }
+if (new URL(base).protocol !== "http:") {
+  console.error("pnpm dev:approve requires a plain-HTTP stack.");
+  process.exit(1);
+}
 
 async function call(path, body, token) {
   const response = await fetch(`${base}${path}`, {
@@ -67,9 +71,13 @@ const { token, client } = await call("/api/auth/sign-in/finish", {
   client: { name: "pnpm dev:approve", platform: "macos" },
 });
 try {
-  await call("/api/auth/pair/lookup", { code }, token);
   await call("/api/auth/pair/approve", { code, name }, token);
   console.log(`Approved ${name}.`);
 } finally {
-  await call("/api/auth/clients/revoke", { id: client.id }, token);
+  try {
+    await call("/api/auth/clients/revoke", { id: client.id }, token);
+  } catch (error) {
+    console.error("Could not sign out the temporary client:", error);
+    process.exitCode = 1;
+  }
 }

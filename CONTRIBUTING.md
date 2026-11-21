@@ -58,26 +58,25 @@ app finds hosts on the network and talks to them cross-origin; see
 ### A wall display
 
 ```sh
-pnpm dev:display              # pnpm dev, with a bridge on the network on :8123
+pnpm dev:display             # run the client on the network on :8123
 pnpm dev:approve ABCD-EFGH    # approve the code the display shows
 ```
 
-`pnpm dev:display` runs the stack as `pnpm dev` does, and a bridge on every
-network interface of the Mac (`deploy/dev/display.mjs`) to the client's dev
-server. A wall display such as Shelly's shows a web page only in the slot its
-app keeps for Home Assistant, and accepts an address only once it answers
-Home Assistant's first sign-in step: the bridge answers that step and passes
-everything else through. The core allows the bridge's addresses as origins,
-so apps' pages open in frames there too. Give the display the address the
-bridge prints, choose the home, then "This is a shared device", and approve
-its code with `pnpm dev:approve <code> [name]`, which signs in as the seed's
-login. Anything on the network reaches the stack through the bridge, with
-that login.
+`pnpm dev:display` runs the plain-HTTP development stack and opens the
+client's dev server on the Mac's network interfaces. A wall display such as
+Shelly's accepts an address in its Home Assistant slot only when it answers
+Home Assistant's first sign-in step. The dev server answers that step and
+serves the Sanctum client. The core allows the network addresses as origins
+so apps' pages can open in frames. Give the display a Network address from
+Vite's output, choose the home, then "This is a shared device". Approve its
+code with `pnpm dev:approve <code> [name]` after setting up the home with
+`pnpm dev:seed`. Anyone on the network can reach the stack over this port
+and use the seed's login.
 
-`SANCTUM_DISPLAY_PORT` sets the bridge's port, for a second worktree's
-stack. With `SANCTUM_DISPLAY_TOUCHES=true` the page posts each touch
-gesture's pointer and touch events, which the bridge appends to
-`.sanctum-display-touches.jsonl` in the worktree.
+`SANCTUM_DISPLAY_PORT` sets the display port. Give each concurrent
+worktree's display mode its own port. Set `SANCTUM_DISPLAY_TOUCHES=true` to
+record each gesture's pointer and touch events in the worktree's
+`.sanctum-display-touches.jsonl` file.
 
 ## Checks
 

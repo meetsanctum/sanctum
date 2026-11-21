@@ -9,7 +9,7 @@
 #   pnpm dev:down      remove it and its data
 #   pnpm dev:status    its address, port and containers, and any other stacks
 #   pnpm dev:logs      follow a container's log: core (default), manager or a service
-#   pnpm dev:display   pnpm dev, with a bridge for a wall display on the network
+#   pnpm dev:display   pnpm dev, with the client on the network for a wall display
 #   pnpm dev:approve   approve a shared device's pairing code, as the seed's login
 #
 # SANCTUM_STACK names the stack, SANCTUM_STACK_PORT sets its port, and
@@ -267,50 +267,67 @@ down() {
   echo "Stack ${stack} is gone"
 }
 
-# Rebuilds a package when its source changes, and Node in the container
-# restarts when its built code does.
-watch() {
+dev() {
+  trap stop_stack EXIT
+  up
+  # Rebuilds a package when its source changes, and Node in the container
+  # restarts when its built code does.
   pnpm turbo watch build dev --concurrency=30 \
     --filter=@meetsanctum/core... --filter=@meetsanctum/manager... \
     --filter='./catalog/apps/*' --filter=@meetsanctum/client... \
     --filter=@meetsanctum/website --filter=@meetsanctum/docs
 }
 
-dev() {
-  trap stop_stack EXIT
-  up
-  watch
-}
-
-# `pnpm dev` with a bridge on the home network to the client's dev server, for
-# a wall display (deploy/dev/display.mjs). The core allows the bridge's
-# origins too, so apps' pages open in their frames on the display.
+# The client's dev server listens on the home network for a wall display.
+# The core allows those origins so apps' pages open in their frames.
 display() {
-  local port="${SANCTUM_DISPLAY_PORT:-8123}" address bridge
+  if [[ "${SANCTUM_STACK_HTTPS:-false}" == "true" ]]; then
+    echo "pnpm dev:display requires a plain-HTTP stack. Unset SANCTUM_STACK_HTTPS." >&2
+    return 1
+  fi
+  local port="${SANCTUM_DISPLAY_PORT:-8123}" display_origins
   local origins="${CORE_ALLOWED_ORIGINS:-app://sanctum}"
-  for address in $(node -e '
-    for (const each of Object.values(require("node:os").networkInterfaces()).flat())
-      if (each.family === "IPv4" && !each.internal) console.log(each.address);
-  '); do
-    origins+=",http://${address}:${port}"
-  done
-  export CORE_ALLOWED_ORIGINS="$origins"
-  node deploy/dev/display.mjs &
-  bridge=$!
-  # shellcheck disable=SC2064
-  trap "kill ${bridge} 2>/dev/null || true; stop_stack" EXIT
-  up
-  watch
+  display_origins="$(node -e '
+    const { createServer } = require("node:net");
+    const { networkInterfaces } = require("node:os");
+    const port = process.argv[1];
+    if (!/^[1-9]\d*$/.test(port) || Number(port) > 65535) {
+      console.error("SANCTUM_DISPLAY_PORT must be a port from 1 to 65535.");
+      process.exit(1);
+    }
+    // Check before starting Docker. Vite also requires this exact port.
+    const probe = createServer((socket) => socket.destroy());
+    probe.once("error", (error) => {
+      console.error(`Cannot use display port ${port}: ${error.message}`);
+      process.exitCode = 1;
+    });
+    probe.listen(Number(port), "0.0.0.0", () => {
+      probe.close();
+      const origins = Object.values(networkInterfaces())
+        .flat()
+        .filter((address) => address?.family === "IPv4" && !address.internal)
+        .map(({ address }) => new URL(`http://${address}:${port}`).origin);
+      console.log(origins.join(","));
+    });
+  ' -- "$port")"
+  export CORE_ALLOWED_ORIGINS="$origins${display_origins:+,$display_origins}"
+  export SANCTUM_DISPLAY_ENABLED=true SANCTUM_DISPLAY_PORT="$port"
+  dev
 }
 
 # Runs a script of deploy/dev in the core's container, where its dependencies
 # are, against the core inside it: `in_core <script> [docker exec options]`.
 in_core() {
-  local script="$1" env scheme
+  local script="$1" name owner env scheme
   shift
-  settings
+  name="$(container core)"
+  owner="$(docker inspect -f '{{index .Config.Labels "sanctum.stack"}}' "$name")"
+  if [[ "$owner" != "$stack" ]]; then
+    echo "Refusing to run a command in ${name}: it doesn't belong to stack ${stack}" >&2
+    return 1
+  fi
   # This can run from a new shell that didn't start the stack with HTTPS.
-  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(container core)")"
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$name")"
   if grep -qx 'CORE_PLAIN_HTTP=true' <<<"$env"; then
     scheme="http"
   else
@@ -319,7 +336,7 @@ in_core() {
   docker exec -i -w /app/apps/core \
     -e SEED_CORE_URL="${scheme}://127.0.0.1:4100" \
     -e NODE_TLS_REJECT_UNAUTHORIZED="$([[ "$scheme" == "https" ]] && echo 0 || echo 1)" \
-    "$@" "$(container core)" node --no-warnings --input-type=module - <"deploy/dev/${script}"
+    "$@" "$name" node --no-warnings --input-type=module - <"deploy/dev/${script}"
 }
 
 seed() {
