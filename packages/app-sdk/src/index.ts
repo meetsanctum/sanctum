@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { AssistantOffer } from "./ai-agents.js";
+import { assertAssistantOffers } from "./ai-offer-validation.js";
 import {
   appManifestSchema,
   defaultData,
@@ -44,6 +46,7 @@ import {
 import { previewProblems, type PieceWords } from "./workflows.js";
 
 export * from "./activity.js";
+export * from "./ai-agents.js";
 export * from "./app-definition.js";
 export * from "./app-manifest.js";
 export * from "./context.js";
@@ -131,10 +134,8 @@ export interface ActionDefinition<
   readonly tier: Tier;
   readonly input: Input;
   readonly output: Output;
-  readonly assistant?: {
-    readonly expose: boolean;
-    readonly description: string;
-  };
+  /** What it offers AI agents; left out, they never see it. */
+  readonly assistant?: AssistantOffer;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -438,6 +439,12 @@ export function defineApp(app: AppDefinition): AppDefinition {
   const asked = permissionIds(app.permissions);
   assertUniqueIds("permission", asked);
   assertProvides(app);
+  assertAssistantOffers(
+    app.actions,
+    (app.provides?.entities ?? []).map(
+      (type) => standardEntityTypes.find((each) => each.id === type.id) ?? type,
+    ),
+  );
   assertRoomSections(app);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
@@ -508,6 +515,9 @@ export function toStaticManifest(app: AppDefinition) {
         title: type.title,
         standard: type.standard ?? false,
         state: z.toJSONSchema(type.state),
+        assistant:
+          (standardEntityTypes.find((each) => each.id === type.id) ?? type)
+            .assistant ?? null,
       })),
       widgets: (app.provides?.widgets ?? []).map((widget) => ({
         ...widgetInfo(widget),

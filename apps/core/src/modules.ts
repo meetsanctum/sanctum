@@ -10,6 +10,7 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
+import { createAgentsCanUse } from "./agents/can-use.js";
 import { createAppAdding } from "./app-host/adding.js";
 import { createAppDeleting } from "./app-host/deleting.js";
 import { createListTurns } from "./app-host/list-turns.js";
@@ -227,7 +228,17 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  const gate = createGate(people, auth.clients.isActiveAgent);
+  // What AI agents can use, of each installed app's and of the core's.
+  const agentsCanUse = createAgentsCanUse(db, {
+    record: activity.for("agents"),
+    apps: () => apps.offers(),
+    now,
+  });
+  const gate = createGate(
+    people,
+    auth.clients.isActiveAgent,
+    agentsCanUse.areaOn,
+  );
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -416,6 +427,7 @@ export async function createModules(
   const apps = createAppHost({
     gate,
     activity,
+    agents: agentsCanUse,
     manager: options.manager,
     people,
     places,
@@ -742,6 +754,7 @@ export async function createModules(
   return {
     activity,
     activityViews,
+    agentsCanUse,
     managerAudit,
     people,
     auth,

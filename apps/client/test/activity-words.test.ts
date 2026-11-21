@@ -249,6 +249,29 @@ describe("an entry's words", () => {
     expect(words.title).toBe("Renamed an AI agent to Office agent");
   });
 
+  it("names what the household let AI agents use, or stopped", () => {
+    const area = activityWords(
+      entry({
+        action: "agents.can-use",
+        detail: { item: "people.read", on: true },
+      }),
+    );
+    const offer = activityWords(
+      entry({
+        action: "agents.can-use",
+        detail: {
+          app: "sanctum.moods",
+          item: "moods.run",
+          title: "Run a mood",
+          on: false,
+        },
+      }),
+    );
+
+    expect(area.title).toBe("Let AI agents use “See who lives here”");
+    expect(offer.title).toBe("Stopped AI agents using “Run a mood”");
+  });
+
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
       entry({

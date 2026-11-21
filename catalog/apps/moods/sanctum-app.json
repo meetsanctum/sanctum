@@ -3578,7 +3578,8 @@
             "input"
           ],
           "additionalProperties": false
-        }
+        },
+        "assistant": null
       },
       {
         "id": "lights.turnOn",
@@ -3694,7 +3695,8 @@
             "rank"
           ],
           "additionalProperties": false
-        }
+        },
+        "assistant": null
       }
     ],
     "widgets": [],

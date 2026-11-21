@@ -86,9 +86,10 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       preview: { device: "Desk lamp" },
     },
     assistant: {
-      expose: true,
+      starts: "on",
       description:
         "Have a light follow the sun through the day, or stop following it.",
+      needs: ["devices.control:light"],
     },
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);

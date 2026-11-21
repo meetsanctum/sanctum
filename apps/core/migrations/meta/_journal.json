@@ -330,6 +330,13 @@
       "when": 1795291661480,
       "tag": "0046_agent_one_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1795294417712,
+      "tag": "0047_agent_can_use",
+      "breakpoints": true
     }
   ]
 }

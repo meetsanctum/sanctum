@@ -31,6 +31,7 @@ describe("service connections from ended contexts", () => {
         found: { report() {} },
         emit() {},
         entities: core.entities,
+        agents: core.agentsCanUse,
         entityType: () => undefined,
         isTileType: () => false,
         settings: () => ({}),

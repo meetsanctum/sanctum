@@ -13,14 +13,18 @@ import type { Supervisor } from "./supervisor.js";
 type ActionRunner = ReturnType<typeof createActionRunner<InstalledApp>>;
 
 // Calls to installed apps' actions: a client's request, which the gate admits
-// as an actor, and a workflow's or the app's own, which the gate permits. Each
-// runs while the app takes calls, and a refusal goes to the activity log.
+// as an actor, and a workflow's or the app's own, which the gate permits. An
+// AI agent runs only what the app offers and the household switched on, with
+// what it needs. Each runs while the app takes calls, and a refusal goes to
+// the activity log.
 export function createActionCalls(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   gate: Gate;
   supervisor: Pick<Supervisor, "arrives">;
   accepts: (entry: InstalledApp) => boolean;
   agentWho: Activity["agentWho"];
+  // Whether AI agents may run one of an app's actions now.
+  agentCanUse: (appId: string, actionId: string) => boolean;
   record: ActionRunner["record"];
   execute: ActionRunner["execute"];
   // Counts a call under way until it settles.
@@ -37,6 +41,17 @@ export function createActionCalls(options: {
       throw new ActionCallError("not_found");
     }
     return { entry, action };
+  }
+
+  // The gate's answer, then, for an AI agent, the household's.
+  function admits(entry: InstalledApp, action: DeclaredAction, actor: Actor) {
+    if (
+      actor.kind === "assistant-run" &&
+      !options.agentCanUse(entry.app.id, action.id)
+    ) {
+      throw new ActionCallError("forbidden");
+    }
+    return actor;
   }
 
   function check<T>(
@@ -70,7 +85,10 @@ export function createActionCalls(options: {
     if (!accepts(entry) && appStateOf(entry) !== "paused") {
       await supervisor.arrives(entry, timeoutMs);
       if (actor.kind === "assistant-run") {
-        check(entry, action, who, () => gate.requireActiveAgent(actor.id));
+        check(entry, action, who, () => {
+          gate.requireActiveAgent(actor.id);
+          admits(entry, action, actor);
+        });
       }
     }
     const withinMs = deadline - Date.now();
@@ -106,7 +124,7 @@ export function createActionCalls(options: {
           ? options.agentWho(principal.client.id)
           : { personId: principal.person?.id, clientId: principal.client.id };
       const actor = check(entry, action, who, () =>
-        gate.admit(principal, action),
+        admits(entry, action, gate.admit(principal, action)),
       );
       return run(entry, action, actor, who, request.input);
     },
@@ -125,7 +143,10 @@ export function createActionCalls(options: {
         actor.kind === "assistant-run"
           ? options.agentWho(actor.id)
           : { actor: `${actor.kind}:${actor.id}` };
-      check(entry, action, who, () => gate.permit(actor, action));
+      check(entry, action, who, () => {
+        gate.permit(actor, action);
+        admits(entry, action, actor);
+      });
       return run(entry, action, actor, who, request.input);
     },
   };

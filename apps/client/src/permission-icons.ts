@@ -4,7 +4,9 @@ import {
   CircleDot,
   DoorClosed,
   Globe,
+  History,
   Lightbulb,
+  List,
   MapPin,
   Network,
   Radar,
@@ -37,4 +39,6 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   network: Network,
   "share-2": Share2,
   shield: Shield,
+  list: List,
+  history: History,
 };
