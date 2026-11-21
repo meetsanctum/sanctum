@@ -58,7 +58,7 @@ app finds hosts on the network and talks to them cross-origin; see
 ### A wall display
 
 ```sh
-pnpm dev:display             # run the client on the network on :8123
+pnpm dev:display              # pnpm dev, with the client on the network on :8123
 pnpm dev:approve ABCD-EFGH    # approve the code the display shows
 ```
 
