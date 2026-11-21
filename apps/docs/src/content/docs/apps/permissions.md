@@ -39,7 +39,9 @@ Anyone in the household can switch any of them, from any device.
   lights”", and starts again by itself once you turn the permission back
   on.
 
-## What apps may ask for
+## What your apps ask for
+
+These are the permissions the apps in Sanctum ask for:
 
 | Permission                      | What it lets the app do                                     |
 | ------------------------------- | ----------------------------------------------------------- |

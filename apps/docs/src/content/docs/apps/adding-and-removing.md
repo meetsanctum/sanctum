@@ -77,6 +77,8 @@ for Zigbee or ESPHome its devices, with their rooms and history.
 Under **Add apps**, a removed app shows the date until which its data is
 kept. To delete it sooner, choose the button under the app, such as
 **Delete Zigbee's data now**. This can't be undone, so Sanctum asks first.
-Adding the app back afterwards starts it from scratch. If no other app
-uses the Zigbee network, deleting Zigbee's data also erases that network,
-so every Zigbee device has to be paired again.
+Adding the app back afterwards starts it from scratch.
+
+When Zigbee's data is deleted, now or once its 30 days are over, the Zigbee
+network is erased too, unless another app still uses it. Every Zigbee
+device then has to be paired again.

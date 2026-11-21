@@ -15,6 +15,9 @@ its settings say "Updating to" and the new version.
 If a new version doesn't start and the previous version can still run on
 this Sanctum, the app goes back and restores its saved data. Its settings
 say so, for example "Version 0.4.0 didn't start, so it's back on 0.3.0".
+If the previous version can't run here, the app stays on the new one, and
+Sanctum keeps trying to start it, as
+[When an app isn't running](#when-an-app-isnt-running) describes.
 
 ## When an update waits
 
@@ -37,15 +40,15 @@ Settings → Needs attention lists every app with an update waiting.
 If an app's last update doesn't suit you, open its settings and choose
 **Go back to** and the version before, such as **Go back to 0.3.0**, at
 the end of the page. Sanctum asks first because the app's data goes back to
-how it was before the update, and anything the app saved since is lost.
+how it was before the update, and anything else it saved since is lost.
 Settings you've chosen stay where the previous version can use them.
 Automations that use the app may need changing. The app stays on the
 previous version until an update newer than the one you went back from
 arrives.
 
 Sanctum offers **Go back** while it has a copy of the previous version that
-can still run here. The button is hidden while the app is off, paused or
-changing versions.
+can still run here. The button is hidden while the app is off, paused,
+starting or changing versions.
 
 ## When an app isn't running
 
