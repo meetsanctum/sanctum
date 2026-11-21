@@ -19,6 +19,9 @@ import type { CoreDatabase } from "../database.js";
 import { activityTimes as times, kindOf } from "./kinds.js";
 import { activity, kinds, type Kind } from "./schema.js";
 
+// What an AI agent's entries name it by: its client.
+const agentActor = "assistant-run:";
+
 // Writes and reads the activity log. A write inside a transaction is part of
 // it, so a change and its entry commit or roll back together; live clients
 // hear of an entry once it has committed. What runs within a press, a
@@ -218,11 +221,16 @@ export function createActivity(
   function write(source: string, entry: NewActivityEntry, joining?: Joining) {
     const at = entry.at ?? now();
     const causeId = entry.causeId ?? causes.getStore()?.id ?? null;
+    // A shared client's name, or an AI agent's, as it was then.
+    const agent = entry.actor?.startsWith(agentActor)
+      ? entry.actor.slice(agentActor.length)
+      : undefined;
     const named =
       entry.clientName ??
       (entry.clientId && !entry.personId
         ? clientName?.(entry.clientId)
         : undefined) ??
+      (agent ? clientName?.(agent) : undefined) ??
       null;
     if (joining && entry.outcome === "ok") {
       const previous = entry.subjectId

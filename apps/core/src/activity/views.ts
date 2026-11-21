@@ -25,6 +25,8 @@ export type ActivityLookups = {
   } | null;
   // Revoked clients too.
   client(id: string): string | null;
+  // Who added an AI agent, by its client.
+  addedBy(id: string): { kind: "person" | "client"; id: string } | null;
   app(id: string): string | null;
   // An app's action's title.
   action(app: string, id: string): string | null;
@@ -149,8 +151,22 @@ export function createActivityViews(
         };
       case "app":
         return { kind: "app", id: actor.id, name: lookups.app(actor.id) };
-      case "assistant-run":
-        return { kind: "assistant" };
+      case "assistant-run": {
+        const addedBy = lookups.addedBy(actor.id);
+        return {
+          kind: "agent",
+          id: actor.id,
+          name: origin.clientName ?? lookups.client(actor.id),
+          addedBy: addedBy && {
+            ...addedBy,
+            name:
+              addedBy.kind === "person"
+                ? (lookups.person(addedBy.id)?.name ??
+                  activity.nameThen(addedBy.id))
+                : lookups.client(addedBy.id),
+          },
+        };
+      }
       case "device":
         return { kind: "device" };
       case "sanctum":

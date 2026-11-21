@@ -6,6 +6,7 @@ import {
   integer,
   sqliteTable,
   text,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
 import { people } from "../people/schema.js";
@@ -37,7 +38,7 @@ export const authLogins = sqliteTable("auth_logins", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-export const clientKinds = ["personal", "shared"] as const;
+export const clientKinds = ["personal", "shared", "agent"] as const;
 
 export const authClients = sqliteTable(
   "auth_clients",
@@ -53,6 +54,16 @@ export const authClients = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     // The person who signed in on it, or the person who approved it.
     createdBy: text("created_by"),
+    // Who added an agent: a person, or a shared client. An agent goes with
+    // them: removing the person removes it, revoking the client revokes it
+    // (clients.ts).
+    addedByPersonId: text("added_by_person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    addedByClientId: text("added_by_client_id").references(
+      (): AnySQLiteColumn => authClients.id,
+      { onDelete: "cascade" },
+    ),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
   },
@@ -60,6 +71,11 @@ export const authClients = sqliteTable(
     check(
       "auth_clients_person",
       sql`(${table.kind} = 'personal') = (${table.personId} is not null)`,
+    ),
+    // An agent has exactly one who added it; no other client has one.
+    check(
+      "auth_clients_added_by",
+      sql`(${table.kind} = 'agent') = ((${table.addedByPersonId} is not null) != (${table.addedByClientId} is not null))`,
     ),
   ],
 );

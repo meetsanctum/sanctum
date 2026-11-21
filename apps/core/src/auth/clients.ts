@@ -3,7 +3,7 @@ import type {
   ClientKind,
   Platform,
 } from "@meetsanctum/auth-protocol";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
@@ -20,8 +20,14 @@ export type Principal = {
   client: { id: string; kind: ClientKind; name: string };
   // Personal clients only.
   person?: { id: string };
-  scope: "full" | "widgets";
+  // Agents only: the person or shared client who added it.
+  addedBy?: AddedBy;
+  // An agent's token opens the MCP endpoint and nothing else (routes.ts).
+  scope: "full" | "widgets" | "agent";
 };
+
+// Who added an agent.
+export type AddedBy = { kind: "person" | "client"; id: string };
 
 type Client = typeof authClients.$inferSelect;
 
@@ -158,6 +164,22 @@ export function createClients(
       });
     },
 
+    // Creates an agent and its token: an AI agent the person or shared
+    // client adding it will be behind. It has not been seen until its first
+    // request with the token.
+    createAgent(input: { name: string; platform: Platform; addedBy: AddedBy }) {
+      const { addedBy } = input;
+      return create({
+        name: input.name,
+        kind: "agent",
+        platform: input.platform,
+        createdAt: now(),
+        createdBy: addedBy.kind === "person" ? addedBy.id : undefined,
+        addedByPersonId: addedBy.kind === "person" ? addedBy.id : null,
+        addedByClientId: addedBy.kind === "client" ? addedBy.id : null,
+      });
+    },
+
     // The principal a client token stands for, or none when the token is
     // unknown or revoked. Checked against the database on every request, so
     // revoking takes effect at once.
@@ -176,6 +198,15 @@ export function createClients(
           .set({ lastSeenAt: at })
           .where(eq(authClients.id, client.id))
           .run();
+      }
+      if (client.kind === "agent") {
+        return {
+          client: { id: client.id, kind: client.kind, name: client.name },
+          addedBy: client.addedByPersonId
+            ? { kind: "person", id: client.addedByPersonId }
+            : { kind: "client", id: client.addedByClientId ?? "" },
+          scope: "agent",
+        };
       }
       return {
         client: { id: client.id, kind: client.kind, name: client.name },
@@ -197,12 +228,31 @@ export function createClients(
       return nameOf.get({ id })?.name ?? null;
     },
 
-    // Every client sees every client.
+    // Who added an agent, revoked or not, for the activity log; none for
+    // another client, or an agent that went with its person.
+    addedBy(id: string): AddedBy | null {
+      const client = db
+        .select({
+          person: authClients.addedByPersonId,
+          client: authClients.addedByClientId,
+        })
+        .from(authClients)
+        .where(eq(authClients.id, id))
+        .get();
+      if (client?.person) return { kind: "person", id: client.person };
+      if (client?.client) return { kind: "client", id: client.client };
+      return null;
+    },
+
+    // Every client sees every client. Agents aren't devices people use, so
+    // they aren't among them.
     list(principal: Principal): ClientInfo[] {
       return db
         .select()
         .from(authClients)
-        .where(isNull(authClients.revokedAt))
+        .where(
+          and(isNull(authClients.revokedAt), ne(authClients.kind, "agent")),
+        )
         .orderBy(asc(authClients.createdAt))
         .all()
         .map((client) =>
@@ -252,20 +302,34 @@ export function createClients(
       return clients.length;
     },
 
-    // Refused from its next request on; its live connections close now.
+    // Refused from its next request on; its live connections close now. The
+    // agents it added go with it.
     revoke(principal: Principal, input: { id: string }) {
       db.transaction(() => {
         manageable(input.id);
         const at = now();
-        db.update(authClients)
+        const revoked = db
+          .update(authClients)
           .set({ revokedAt: at })
-          .where(eq(authClients.id, input.id))
-          .run();
+          .where(
+            and(
+              isNull(authClients.revokedAt),
+              or(
+                eq(authClients.id, input.id),
+                eq(authClients.addedByClientId, input.id),
+              ),
+            ),
+          )
+          .returning({ id: authClients.id })
+          .all();
         db.update(authTokens)
           .set({ revokedAt: at })
           .where(
             and(
-              eq(authTokens.clientId, input.id),
+              inArray(
+                authTokens.clientId,
+                revoked.map((client) => client.id),
+              ),
               isNull(authTokens.revokedAt),
             ),
           )

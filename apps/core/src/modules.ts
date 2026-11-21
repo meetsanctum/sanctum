@@ -628,6 +628,7 @@ export async function createModules(
   const activityViews = createActivityViews(activity, {
     person: (id) => people.list().find((person) => person.id === id) ?? null,
     client: (id) => auth.clients.name(id),
+    addedBy: (id) => auth.clients.addedBy(id),
     // An app that's gone by the name its entries kept.
     app: (id) =>
       apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),

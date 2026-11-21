@@ -316,6 +316,20 @@
       "when": 1795041669489,
       "tag": "0044_update-room",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1795290728090,
+      "tag": "0045_agent_added_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1795290733723,
+      "tag": "0046_agent_one_adder",
+      "breakpoints": true
     }
   ]
 }

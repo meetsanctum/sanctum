@@ -11,9 +11,9 @@ import { ActionCallError } from "./errors.js";
 // The permission gate: turns the principal behind a request into the actor
 // an action runs as, and refuses what that actor may not do. There are no
 // roles or permissions between people: every person and every shared client
-// may do everything. What runs with no person behind it is held to the
-// everyday tiers. Device commands pass the same gate, with their
-// capability's tier.
+// may do everything. What runs with no person behind it, and what an AI
+// agent runs, is held to the everyday tiers. Device commands pass the same
+// gate, with their capability's tier.
 
 // What the gate weighs: an action, or a device capability's commands.
 export type Rule = Pick<ActionDefinition, "tier">;
@@ -28,11 +28,13 @@ export function createGate(people: People) {
       case "client":
       case "user":
         return;
-      // An app acting on its own, from its lifecycle hooks and jobs, and a
-      // workflow, which acts for the household whoever made it, do the
-      // everyday things; the rest needs a person's approval.
+      // An app acting on its own, from its lifecycle hooks and jobs, a
+      // workflow, which acts for the household whoever made it, and an AI
+      // agent, which may run when nobody watches, do the everyday things;
+      // the rest needs a person's approval.
       case "app":
       case "workflow":
+      case "assistant-run":
         if (!householdTiers.includes(rule.tier)) {
           throw new ActionCallError("needs_approval");
         }
@@ -54,6 +56,14 @@ export function createGate(people: People) {
 
   // The actor a principal acts as.
   function actorOf(principal: Principal): Actor {
+    // An agent acts as itself, on behalf of whoever added it.
+    if (principal.scope === "agent" && principal.addedBy) {
+      return {
+        kind: "assistant-run",
+        id: principal.client.id,
+        onBehalfOf: principal.addedBy.id,
+      };
+    }
     // Widget tokens read widget data and nothing else.
     if (principal.scope !== "full") {
       throw new ActionCallError("forbidden");

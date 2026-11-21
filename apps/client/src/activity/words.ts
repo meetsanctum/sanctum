@@ -180,8 +180,8 @@ export function whoWords(who: ActivityWho): string {
       return `Outside ${productName}, at the device or its switch`;
     case "sanctum":
       return productName;
-    case "assistant":
-      return "Assistant";
+    case "agent":
+      return who.name ?? "An AI agent";
     case "nobody":
       return "";
   }
@@ -197,6 +197,13 @@ export function byWords(entry: ActivityInfo) {
     );
   } else {
     parts.push(whoWords(who));
+    // An AI agent acts for whoever added it.
+    if (who.kind === "agent" && who.addedBy) {
+      const { kind, name } = who.addedBy;
+      const gone =
+        kind === "person" ? "someone who has left" : "a shared device";
+      parts.push(`added by ${name ?? gone}`);
+    }
     // The automation in between, unless an app keeps it for a press.
     if (
       run &&

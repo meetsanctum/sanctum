@@ -140,6 +140,11 @@ export async function registerAuth(
 
   app.decorateRequest("principal", null);
 
+  // The one path an agent's token opens: the MCP endpoint. Anywhere else it
+  // is refused, so a token an AI agent holds can't act as a person's or a
+  // shared device's, here or in the live connection (live.ts).
+  const agentPath = "/api/mcp";
+
   // Every route needs a client token unless it is marked public: health,
   // the routes before a principal exists and the WebSocket, which
   // authenticates with its first message. CORS preflights never reach here.
@@ -151,6 +156,9 @@ export async function registerAuth(
     const found = token ? auth.authenticate(token) : undefined;
     if (!found) {
       return reply.code(401).send({ error: "invalid_client_token" });
+    }
+    if (found.scope === "agent" && request.url.split("?")[0] !== agentPath) {
+      return reply.code(403).send({ error: "forbidden" });
     }
     request.principal = found;
   });

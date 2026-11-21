@@ -186,6 +186,35 @@ describe("an entry's words", () => {
     ).toBe("Outside Sanctum, at the device or its switch");
   });
 
+  it("names an AI agent and who added it", () => {
+    const agent = (
+      addedBy: {
+        kind: "person" | "client";
+        id: string;
+        name: string | null;
+      } | null,
+    ) =>
+      activityWords(
+        entry({
+          who: {
+            kind: "agent",
+            id: "codex",
+            name: "Codex on the office Mac",
+            addedBy,
+          },
+        }),
+        "device",
+      ).detail;
+
+    expect(agent({ kind: "person", id: "sam", name: "Sam" })).toBe(
+      "Codex on the office Mac, added by Sam",
+    );
+    expect(agent({ kind: "person", id: "sam", name: null })).toBe(
+      "Codex on the office Mac, added by someone who has left",
+    );
+    expect(agent(null)).toBe("Codex on the office Mac");
+  });
+
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
       entry({
