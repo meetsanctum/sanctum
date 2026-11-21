@@ -231,7 +231,7 @@ export function RoomRow(props: {
     const key = entityKey(entity.app, entity.key);
     // Buttons are chips beside the lights button, tiles tiles under them.
     return section.kind === "buttons" ? (
-      <SectionButton key={key} {...shared} />
+      <SectionButton key={key} layout="room" {...shared} />
     ) : (
       <SectionTile key={key} {...shared} status={notRunning ?? undefined} />
     );

@@ -11,16 +11,7 @@ import {
 import { Button } from "./components/ui/button";
 import { showFailed } from "./show-failed";
 
-/**
- * A tile in a room's row or an app's own page, such as a mood's: frosted
- * glass, White while active, its icon in a circle and its name, with a
- * status under it if it has one. With `iconOnly` it is one cell square with
- * its icon alone, and says its name to a screen reader and on hover. With
- * `chip` it is a chip, 36 px high, its icon and its name in a line, such as
- * a room's lights button or Natural light's. A failed tap shows on it as on
- * a device's tile.
- */
-export function SectionTile(props: {
+type SectionTileProps = {
   icon: LucideIcon;
   name: string;
   status?: ReactNode;
@@ -49,7 +40,24 @@ export function SectionTile(props: {
   onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerCancel?: (event: PointerEvent<HTMLButtonElement>) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
-}) {
+};
+
+/**
+ * A tile in a room's row or an app's own page, such as a mood's: frosted
+ * glass, White while active, its icon in a circle and its name, with a
+ * status under it if it has one. With `iconOnly` it is one cell square with
+ * its icon alone, and says its name to a screen reader and on hover. With
+ * `chip` it is a chip, 36 px high, its icon and its name in a line, such as
+ * a room's lights button or Natural light's. A failed tap shows on it as on
+ * a device's tile.
+ */
+export function SectionTile(props: SectionTileProps) {
+  return <SectionTileSurface {...props} isInlineChip={false} />;
+}
+
+export function SectionTileSurface(
+  props: SectionTileProps & { isInlineChip: boolean },
+) {
   const Icon = props.icon;
   const surface = useRef<HTMLButtonElement | null>(null);
   const wash = useRef<HTMLSpanElement>(null);
@@ -89,23 +97,31 @@ export function SectionTile(props: {
     />
   );
   if (props.chip && !props.iconOnly) {
+    const { isInlineChip } = props;
     return (
       <Button
         {...buttonProps}
+        type={isInlineChip ? undefined : "button"}
         variant="glass"
         size="chip"
         data-on={props.lit ? "" : undefined}
-        title={props.label ?? props.name}
-        className="relative max-w-full self-start"
+        title={isInlineChip ? undefined : (props.label ?? props.name)}
+        className={isInlineChip ? "relative" : "relative max-w-full self-start"}
       >
         {failureWash}
         <Icon
           aria-hidden="true"
           data-icon="inline-start"
-          className="relative size-[18px]"
+          className={isInlineChip ? "relative" : "relative size-[18px]"}
         />
-        {/* Its label stays available on hover while the chip is disabled. */}
-        <span className="pointer-events-auto relative min-w-0 truncate">
+        {/* A room chip's label stays available on hover while disabled. */}
+        <span
+          className={
+            isInlineChip
+              ? "relative"
+              : "pointer-events-auto relative min-w-0 truncate"
+          }
+        >
           {props.name}
         </span>
         {props.children}

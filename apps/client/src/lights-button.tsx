@@ -49,6 +49,7 @@ export function LightsButton(props: { lights: LightsButtonState }) {
   };
   return (
     <SectionButton
+      layout="room"
       icon={icons.Power}
       name={lights.words}
       label={lights.label}

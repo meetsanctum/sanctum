@@ -140,7 +140,7 @@ function samplesOf(tiles: readonly SampleTile[], isChip: boolean) {
       onClick: () => undefined,
     };
     return isChip ? (
-      <SectionButton key={tile.name} {...shared} />
+      <SectionButton key={tile.name} layout="room" {...shared} />
     ) : (
       <SectionTile key={tile.name} {...shared} />
     );

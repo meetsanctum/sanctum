@@ -1,5 +1,5 @@
 {
-  "version": "0.1.15",
+  "version": "0.1.16",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2573,7 +2573,7 @@
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
       "export * from \"./section-button\";",
-      "export * from \"./section-tile\";",
+      "export { SectionTile } from \"./section-tile\";",
       "export * from \"./swipe-pages\";",
       "export * from \"./temperature-unit\";",
       "export * from \"./tile-icons\";",
@@ -2699,6 +2699,7 @@
       "    icon: LucideIcon;",
       "    name: string;",
       "    label?: string;",
+      "    layout?: \"inline\" | \"room\";",
       "    active?: boolean;",
       "    lit?: boolean;",
       "    disabled?: boolean;",
@@ -2709,7 +2710,7 @@
     "section-tile.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",
       "import { type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from \"react\";",
-      "export declare function SectionTile(props: {",
+      "type SectionTileProps = {",
       "    icon: LucideIcon;",
       "    name: string;",
       "    status?: ReactNode;",
@@ -2730,7 +2731,12 @@
       "    onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;",
       "    onPointerCancel?: (event: PointerEvent<HTMLButtonElement>) => void;",
       "    onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;",
-      "}): import(\"react\").JSX.Element;"
+      "};",
+      "export declare function SectionTile(props: SectionTileProps): import(\"react\").JSX.Element;",
+      "export declare function SectionTileSurface(props: SectionTileProps & {",
+      "    isInlineChip: boolean;",
+      "}): import(\"react\").JSX.Element;",
+      "export {};"
     ],
     "show-failed.d.ts": [
       "export declare function showFailed(button: HTMLElement | null, wash: HTMLElement | null): void;"
