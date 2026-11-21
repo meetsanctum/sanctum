@@ -83,8 +83,8 @@ kept. To delete it sooner, choose the button under the app, such as
 **Delete Zigbee's data now**. This can't be undone, so Sanctum asks first.
 Adding the app back afterwards starts it from scratch.
 
-Deleting an app's data also deletes the device records it brought into
-Sanctum. If you add the app back, add its devices again. When Zigbee's data
+Deleting an app's data also removes the devices it brought in, so if you
+add the app back, add its devices again. When Zigbee's data
 is deleted, now or once its 30 days are over, the Zigbee network is erased
 too, unless another app still uses it. If the network is erased, you also
 have to pair every Zigbee device again.
