@@ -1,7 +1,8 @@
 import type { Actor } from "@meetsanctum/app-sdk";
 
+import type { Activity, ActivityAuthor } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
-import type { createActionRunner, Who } from "./actions.js";
+import type { createActionRunner } from "./actions.js";
 import { appStateOf } from "./app-info.js";
 import type { DeclaredAction } from "./contract.js";
 import { ActionCallError } from "./errors.js";
@@ -19,6 +20,7 @@ export function createActionCalls(options: {
   gate: Gate;
   supervisor: Pick<Supervisor, "arrives">;
   accepts: (entry: InstalledApp) => boolean;
+  agentWho: Activity["agentWho"];
   record: ActionRunner["record"];
   execute: ActionRunner["execute"];
   // Counts a call under way until it settles.
@@ -37,6 +39,22 @@ export function createActionCalls(options: {
     return { entry, action };
   }
 
+  function check<T>(
+    entry: InstalledApp,
+    action: DeclaredAction,
+    who: ActivityAuthor,
+    admit: () => T,
+  ): T {
+    try {
+      return admit();
+    } catch (error) {
+      if (error instanceof ActionCallError) {
+        record(entry.app.id, action.id, who, "refused", error.code);
+      }
+      throw error;
+    }
+  }
+
   // Runs an action the gate has admitted, while the app takes calls. A
   // call refused because it does not may have changed something, so it is
   // logged unless it only reads: pages keep reading a paused app.
@@ -44,13 +62,16 @@ export function createActionCalls(options: {
     entry: InstalledApp,
     action: DeclaredAction,
     actor: Actor,
-    who: Who,
+    who: ActivityAuthor,
     input: unknown,
   ) {
     const deadline = Date.now() + timeoutMs;
     // One on its way back is waited for, within a call's time, rather than fail.
     if (!accepts(entry) && appStateOf(entry) !== "paused") {
       await supervisor.arrives(entry, timeoutMs);
+      if (actor.kind === "assistant-run") {
+        check(entry, action, who, () => gate.requireActiveAgent(actor.id));
+      }
     }
     const withinMs = deadline - Date.now();
     if (
@@ -82,17 +103,11 @@ export function createActionCalls(options: {
       const { entry, action } = find(request.appId, request.actionId);
       const who =
         principal.scope === "agent"
-          ? { actor: `assistant-run:${principal.client.id}` }
+          ? options.agentWho(principal.client.id)
           : { personId: principal.person?.id, clientId: principal.client.id };
-      let actor: Actor;
-      try {
-        actor = gate.admit(principal, action);
-      } catch (error) {
-        if (error instanceof ActionCallError) {
-          record(entry.app.id, action.id, who, "refused", error.code);
-        }
-        throw error;
-      }
+      const actor = check(entry, action, who, () =>
+        gate.admit(principal, action),
+      );
       return run(entry, action, actor, who, request.input);
     },
 
@@ -106,15 +121,11 @@ export function createActionCalls(options: {
     }): Promise<unknown> {
       const { actor } = request;
       const { entry, action } = find(request.appId, request.actionId);
-      const who = { actor: `${actor.kind}:${actor.id}` };
-      try {
-        gate.permit(actor, action);
-      } catch (error) {
-        if (error instanceof ActionCallError) {
-          record(entry.app.id, action.id, who, "refused", error.code);
-        }
-        throw error;
-      }
+      const who =
+        actor.kind === "assistant-run"
+          ? options.agentWho(actor.id)
+          : { actor: `${actor.kind}:${actor.id}` };
+      check(entry, action, who, () => gate.permit(actor, action));
       return run(entry, action, actor, who, request.input);
     },
   };

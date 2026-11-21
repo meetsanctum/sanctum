@@ -75,7 +75,7 @@ function migrateCoreDatabase(sqlite: Database.Database, folder: string) {
         "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
       );
       for (const migration of pending) {
-        for (const statement of migration.sql) sqlite.exec(statement);
+        for (const statement of migration.sql) sqlite.prepare(statement).run();
         record.run(migration.hash, migration.folderMillis);
       }
       const violation = sqlite

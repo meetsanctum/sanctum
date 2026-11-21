@@ -227,7 +227,7 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  const gate = createGate(people, { active: auth.clients.isActiveAgent });
+  const gate = createGate(people, auth.clients.isActiveAgent);
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -624,7 +624,6 @@ export async function createModules(
   const activityViews = createActivityViews(activity, {
     person: (id) => people.get(id) ?? null,
     client: auth.clients.name,
-    addedBy: auth.clients.addedBy,
     // An app that's gone by the name its entries kept.
     app: (id) =>
       apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),
@@ -640,7 +639,7 @@ export async function createModules(
   });
   activity.nameClients({
     name: auth.clients.name,
-    agentAdder: activityViews.agentAdder,
+    agentAdder: auth.agentAdder,
   });
   // Live clients hear of a committed entry and the entries it adds to.
   activity.follow((entry) => {

@@ -5,9 +5,9 @@ import {
   type AppSettings,
 } from "@meetsanctum/app-sdk";
 
+import type { ActivityAuthor } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import type { Principal } from "../auth/clients.js";
-import type { Who } from "./actions.js";
 import type { EventsForApps } from "./events-for-apps.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
@@ -47,7 +47,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
   record: (
     appId: string,
     actionId: string,
-    who: Who,
+    who: ActivityAuthor,
     outcome: Outcome,
     reason?: string,
     subjectId?: string,
@@ -100,7 +100,7 @@ export function createAppChoices<Entry extends Chosen>(options: {
     appId: string,
     action: string,
     rule: Parameters<Gate["admit"]>[1],
-  ): Who {
+  ): ActivityAuthor {
     const who = {
       personId: principal.person?.id,
       clientId: principal.client.id,

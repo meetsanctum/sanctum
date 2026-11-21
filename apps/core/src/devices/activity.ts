@@ -6,7 +6,12 @@ import {
   type FirmwareInfo,
 } from "@meetsanctum/app-sdk";
 
-import type { Activity, ActivityEntry, Joining } from "../activity/activity.js";
+import type {
+  Activity,
+  ActivityAuthor,
+  ActivityEntry,
+  Joining,
+} from "../activity/activity.js";
 import { activityTimes } from "../activity/kinds.js";
 import type { Outcome } from "../activity/schema.js";
 import type { deviceCapabilities } from "./schema.js";
@@ -17,9 +22,6 @@ import type { deviceCapabilities } from "./schema.js";
 // answer; a light or switch turned on or off outside Sanctum; a device going
 // offline and coming back; and, for Maintenance, one on a battery going
 // quiet, its battery going low and a new battery.
-
-// The person and client behind a call, or the actor acting on its own.
-export type Who = { personId?: string; clientId?: string; actor?: string };
 
 /** A command as its entry says it: what it asked of which capability, and the app that sent it. */
 export type Sent = {
@@ -63,7 +65,7 @@ export function createDeviceLog(options: {
   // A command's entry; it answers the entry's id, or the one it joined.
   // One that failed after joining others keeps their cause.
   function command(
-    who: Who,
+    who: ActivityAuthor,
     deviceId: string,
     outcome: Outcome,
     reason?: string,
@@ -77,9 +79,7 @@ export function createDeviceLog(options: {
         action: "device.command",
         outcome,
         reason,
-        personId: who.personId,
-        clientId: who.clientId,
-        actor: who.actor,
+        ...who,
         app: sent?.app ?? null,
         subjectId: deviceId,
         detail: sent && {
@@ -102,7 +102,7 @@ export function createDeviceLog(options: {
      */
     unanswered(
       entryId: string,
-      who: Who,
+      who: ActivityAuthor,
       deviceId: string,
       sent: Sent,
       failure: { reason: string; hasResent: boolean },

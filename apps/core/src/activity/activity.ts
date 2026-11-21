@@ -19,9 +19,6 @@ import type { CoreDatabase } from "../database.js";
 import { activityTimes as times, kindOf } from "./kinds.js";
 import { activity, kinds, type AgentAdder, type Kind } from "./schema.js";
 
-// What an AI agent's entries name it by: its client.
-const agentActor = "assistant-run:";
-
 // Writes and reads the activity log. A write inside a transaction is part of
 // it, so a change and its entry commit or roll back together; live clients
 // hear of an entry once it has committed. What runs within a press, a
@@ -34,13 +31,17 @@ export type ActivityEntry = typeof activity.$inferSelect;
 export type ChangedBy = { personId?: string; clientId: string };
 export type NewActivityEntry = Omit<
   typeof activity.$inferInsert,
-  "id" | "at" | "source" | "kind" | "count" | "firstAt" | "agentAddedBy"
+  "id" | "at" | "source" | "kind" | "count" | "firstAt"
 > & {
   // Given when what it causes runs before it is written.
   id?: string;
   // Given when it happened elsewhere, as the manager's audit did.
   at?: Date;
 };
+export type ActivityAuthor = Pick<
+  NewActivityEntry,
+  "personId" | "clientId" | "actor" | "clientName" | "agentAddedBy"
+>;
 
 // Entries written in the same millisecond keep the order they were written
 // in.
@@ -187,6 +188,15 @@ export function createActivity(
       .get();
   }
 
+  // Keep the names before a call waits, since the agent or its adder may leave.
+  function agentWho(id: string) {
+    return {
+      actor: `assistant-run:${id}`,
+      clientName: clientNames?.name(id) ?? null,
+      agentAddedBy: clientNames?.agentAdder(id) ?? null,
+    };
+  }
+
   // Takes out what is past keeping, then the oldest past the most kept,
   // devices' first.
   function prune() {
@@ -226,15 +236,6 @@ export function createActivity(
   function write(source: string, entry: NewActivityEntry, joining?: Joining) {
     const at = entry.at ?? now();
     const causeId = entry.causeId ?? causes.getStore()?.id ?? null;
-    // A shared client's name, or an AI agent's, as it was then.
-    const agentId = entry.actor?.startsWith(agentActor)
-      ? entry.actor.slice(agentActor.length)
-      : undefined;
-    const namedClientId = agentId ?? (entry.personId ? null : entry.clientId);
-    const named =
-      entry.clientName ??
-      (namedClientId ? clientNames?.name(namedClientId) : null) ??
-      null;
     if (joining && entry.outcome === "ok") {
       const previous = entry.subjectId
         ? latestAbout(entry.subjectId)
@@ -269,6 +270,12 @@ export function createActivity(
       }
     }
     const id = entry.id ?? randomUUID();
+    const clientName =
+      entry.clientName ??
+      (entry.clientId && !entry.personId
+        ? clientNames?.name(entry.clientId)
+        : null) ??
+      null;
     db.insert(activity)
       .values({
         ...entry,
@@ -277,8 +284,7 @@ export function createActivity(
         source,
         kind: kindOf({ source, ...entry }),
         causeId,
-        clientName: named,
-        agentAddedBy: agentId ? clientNames?.agentAdder(agentId) : null,
+        clientName,
       })
       .run();
     publish(id);
@@ -288,6 +294,8 @@ export function createActivity(
   }
 
   return {
+    agentWho,
+
     // A writer for one module or app; it answers the entry's id, or the
     // id of the entry it joined.
     for(source: string) {

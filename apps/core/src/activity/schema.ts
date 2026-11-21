@@ -1,6 +1,5 @@
+import type { ActivityWho } from "@meetsanctum/app-sdk";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-
-import type { AddedBy } from "../auth/clients.js";
 
 // The activity log: who did what, through which client, and how it ended.
 // Entries hold ids and outcomes, with a few words of detail, never secrets,
@@ -12,7 +11,9 @@ import type { AddedBy } from "../auth/clients.js";
 export const outcomes = ["ok", "refused", "failed"] as const;
 export type Outcome = (typeof outcomes)[number];
 
-export type AgentAdder = AddedBy & { name: string | null };
+export type AgentAdder = NonNullable<
+  Extract<ActivityWho, { kind: "agent" }>["addedBy"]
+>;
 
 // What an entry is about, which decides how long it is kept and which of
 // the home's lists it shows in (kinds.ts).

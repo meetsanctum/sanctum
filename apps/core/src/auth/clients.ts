@@ -302,27 +302,29 @@ export function createClients(
           personId: principal.person?.id,
           clientId: principal.client.id,
           subjectId: input.id,
+          detail:
+            renamed.kind === "agent"
+              ? { kind: renamed.kind, name: renamed.name }
+              : undefined,
         });
         return clientInfo(renamed, principal.client.id);
       });
     },
 
-    // Signs every device out after a restore from a backup: every client and
-    // its tokens, so each one returns to the pairing screen. Called inside the
-    // restore's transaction, before the core serves anyone, along with
-    // dropping pairing requests (Auth's signOutEveryone).
+    // Revokes all clients and tokens inside the restore's transaction, before
+    // the core serves anyone. Counts signed-out devices for the activity log.
     revokeAll(at: Date) {
       const clients = db
         .update(authClients)
         .set({ revokedAt: at })
         .where(isNull(authClients.revokedAt))
-        .returning({ id: authClients.id })
+        .returning({ kind: authClients.kind })
         .all();
       db.update(authTokens)
         .set({ revokedAt: at })
         .where(isNull(authTokens.revokedAt))
         .run();
-      return clients.length;
+      return clients.filter(({ kind }) => kind !== "agent").length;
     },
 
     // Refused from its next request on; its live connections close now. The
@@ -357,16 +359,21 @@ export function createClients(
           .update(authClients)
           .set({ revokedAt: at })
           .where(affected)
-          .returning({ id: authClients.id })
+          .returning({
+            id: authClients.id,
+            name: authClients.name,
+            kind: authClients.kind,
+          })
           .all();
         // One entry for the client, and one for each agent it took along.
-        for (const { id } of revoked) {
+        for (const { id, kind, name } of revoked) {
           record({
             action: "client.revoke",
             outcome: "ok",
             personId: principal.person?.id,
             clientId: principal.client.id,
             subjectId: id,
+            detail: kind === "agent" ? { kind, name } : undefined,
           });
         }
       });

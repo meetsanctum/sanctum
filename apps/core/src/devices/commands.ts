@@ -17,7 +17,7 @@ type State = Record<string, unknown>;
 // up, and fails with it when it cannot go.
 type Retry = {
   send: State;
-  deliver: (send: State) => Promise<void>;
+  deliver: (send: State, onResend: () => void) => Promise<void>;
   hasResent: boolean;
   // A newer move has the light: it is not sent again.
   isCancelled?: boolean;
@@ -143,7 +143,6 @@ export function createCommandTracking(options: {
     retry: Retry,
   ) {
     const key = keyOf(device, capability);
-    retry.hasResent = true;
     retry.deadline = undefined;
     command.state = options.write(device, capability, {
       ...command.state,
@@ -151,16 +150,18 @@ export function createCommandTracking(options: {
     });
     if (command.state.sync !== "pending") {
       // Its capability no longer supports what it asks.
-      command.unanswered?.("no_answer", true);
+      command.unanswered?.("no_answer", false);
       return;
     }
     try {
-      retry.resent?.();
-    } catch {
-      // Its entry not saying so must not keep it from going, or waiting.
-    }
-    try {
-      await retry.deliver(retry.send);
+      await retry.deliver(retry.send, () => {
+        retry.hasResent = true;
+        try {
+          retry.resent?.();
+        } catch {
+          // Its entry not saying so must not keep it from going, or waiting.
+        }
+      });
     } catch (error) {
       retry.failure =
         error instanceof ActionCallError ? error.code : "app_failed";
@@ -203,7 +204,7 @@ export function createCommandTracking(options: {
       before: Settled & { setBy: StoredSetBy | null },
       state: Prepared,
       setBy: StoredSetBy,
-      deliver: (send: State) => Promise<void>,
+      deliver: Retry["deliver"],
     ) {
       const key = keyOf(device, capability);
       const predecessor = current.get(key);

@@ -11,13 +11,17 @@ import {
 } from "@meetsanctum/app-sdk";
 import { and, asc, eq } from "drizzle-orm";
 
-import type { Activity, ChangedBy } from "../activity/activity.js";
+import type {
+  Activity,
+  ActivityAuthor,
+  ChangedBy,
+} from "../activity/activity.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Gate, Rule } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
-import { createDeviceLog, type Who } from "./activity.js";
+import { createDeviceLog } from "./activity.js";
 import { ownDeviceType } from "./classification.js";
 import { createCommandTracking } from "./commands.js";
 import { createDriverReports } from "./driver-reports.js";
@@ -277,7 +281,7 @@ export function createDevices(
   async function run(
     actor: Actor,
     app: string | null,
-    who: Who,
+    who: ActivityAuthor,
     view: View,
     target: { device: DeviceInfo; capability: CapabilityInfo },
     command: unknown,
@@ -313,7 +317,12 @@ export function createDevices(
     // the move can overwrite who set the light, and its final report can
     // confirm a command that has not gone out yet.
     const ending = options.beforeCommand?.(device.id, capability.id);
-    if (ending) await ending;
+    if (ending) {
+      await ending;
+      if (actor.kind === "assistant-run") {
+        admitted(who, device.id, () => gate.requireActiveAgent(actor.id));
+      }
+    }
     refuseWhileStopping();
     const row = capabilityRow(device.id, capability.id);
     if (!row) throw new ActionCallError("not_found");
@@ -343,7 +352,14 @@ export function createDevices(
     // ran when it first went: a driver that has restarted never gets it again,
     // since a light switched twice is worse than one someone switches again.
     const wentThrough = options.driverRun?.(driver);
-    const send = async (command: Record<string, unknown>) => {
+    const send = async (
+      command: Record<string, unknown>,
+      onResend?: () => void,
+    ) => {
+      if (onResend && actor.kind === "assistant-run") {
+        gate.requireActiveAgent(actor.id);
+      }
+      onResend?.();
       if (isStopping || options.driverRun?.(driver) !== wentThrough) {
         throw new ActionCallError("unavailable");
       }
@@ -398,7 +414,11 @@ export function createDevices(
     return visible(device.id, capability.id, view).capability;
   }
 
-  function admitted<T>(who: Who, deviceId: string, check: () => T): T {
+  function admitted<T>(
+    who: ActivityAuthor,
+    deviceId: string,
+    check: () => T,
+  ): T {
     try {
       return check();
     } catch (error) {
@@ -434,10 +454,10 @@ export function createDevices(
         throw new ActionCallError("invalid_request");
       }
       const view: View = {};
-      const who = {
-        personId: principal.person?.id,
-        clientId: principal.client.id,
-      };
+      const who =
+        principal.scope === "agent"
+          ? options.activity.agentWho(principal.client.id)
+          : { personId: principal.person?.id, clientId: principal.client.id };
       const target = admitted(who, request.data.device, () =>
         visible(request.data.device, request.data.capability, view),
       );
@@ -470,11 +490,13 @@ export function createDevices(
       }
       const { device, capability, command, whileOn } = request.data;
       const who =
-        actor.kind === "user"
-          ? { personId: actor.id }
-          : actor.kind === "client"
-            ? { clientId: actor.id }
-            : { actor: `${actor.kind}:${actor.id}` };
+        actor.kind === "assistant-run"
+          ? options.activity.agentWho(actor.id)
+          : actor.kind === "user"
+            ? { personId: actor.id }
+            : actor.kind === "client"
+              ? { clientId: actor.id }
+              : { actor: `${actor.kind}:${actor.id}` };
       const target = admitted(who, device, () =>
         visible(device, capability, view),
       );

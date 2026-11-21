@@ -215,6 +215,40 @@ describe("an entry's words", () => {
     expect(agent(null)).toBe("Codex on the office Mac");
   });
 
+  it("describes an agent being removed", () => {
+    const words = activityWords(
+      entry({
+        action: "client.revoke",
+        detail: { kind: "agent", name: "Office agent" },
+        subject: {
+          type: "client",
+          id: "agent",
+          name: "Office agent",
+          gone: true,
+        },
+      }),
+    );
+
+    expect(words.title).toBe("Removed Office agent");
+  });
+
+  it("keeps the name given to an agent in the rename entry", () => {
+    const words = activityWords(
+      entry({
+        action: "client.rename",
+        detail: { kind: "agent", name: "Office agent" },
+        subject: {
+          type: "client",
+          id: "agent",
+          name: "Study agent",
+          gone: false,
+        },
+      }),
+    );
+
+    expect(words.title).toBe("Renamed an AI agent to Office agent");
+  });
+
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
       entry({

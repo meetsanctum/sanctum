@@ -8,7 +8,8 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import type { AddedBy } from "../src/auth/clients.js";
 import { registerAuth } from "../src/auth/routes.js";
 import { authClients, authTokens } from "../src/auth/schema.js";
-import { personWithClient } from "./devices-support.js";
+import { apart, running, useCleanUps } from "./app-apart-support.js";
+import { lampsCore, personWithClient, radio } from "./devices-support.js";
 import {
   claimed,
   get,
@@ -18,6 +19,8 @@ import {
   type TestCore,
 } from "./support.js";
 import { samplePackage } from "./workflows-support.js";
+
+useCleanUps();
 
 // AI agents: clients someone adds, whose token opens the MCP endpoint and
 // nothing else, which act on behalf of whoever added them, do the everyday
@@ -209,6 +212,73 @@ describe("an agent", () => {
     );
   });
 
+  it("cannot start an app action that waited for the app to come back", async () => {
+    const app = samplePackage.app;
+    const { core, session, reconnect } = await apart(app);
+    await claimed(core);
+    const ben = personWithClient(core);
+    const { token, client } = addAgent(core, {
+      kind: "person",
+      id: ben.person.id,
+    });
+    await running(core, app.id);
+    await session.shutdown(100);
+    await expect.poll(() => core.apps.isRunning(app.id)).toBe(false);
+
+    const call = core.apps.call({
+      principal: core.auth.clients.authenticate(token)!,
+      appId: app.id,
+      actionId: "sample.note",
+      input: { text: "Tidy the office" },
+    });
+    const result = call.catch((error: unknown) => error);
+    core.people.remove(ben.person.id);
+    reconnect();
+    await running(core, app.id);
+
+    expect(await result).toMatchObject({ code: "forbidden" });
+    const entry = core.activity
+      .recent()
+      .find((each) => each.action === "sample.note")!;
+    expect(entry).toMatchObject({ outcome: "refused", reason: "forbidden" });
+    expect(core.activityViews.info(entry).who).toEqual({
+      kind: "agent",
+      id: client.id,
+      name: client.name,
+      addedBy: { kind: "person", id: ben.person.id, name: ben.person.name },
+    });
+  });
+
+  it("does not resend an unconfirmed device command after revocation", async () => {
+    const { core, maya, plug } = await lampsCore({ confirmMs: 250 });
+    radio.confirms = false;
+    const { token, client } = addAgent(core, {
+      kind: "person",
+      id: maya.person.id,
+    });
+    const actor = core.gate.admit(core.auth.clients.authenticate(token)!, {
+      tier: "write",
+    });
+
+    await core.devices.command(
+      actor,
+      { device: plug, capability: "power", command: { on: true } },
+      {},
+      null,
+    );
+    core.auth.clients.revoke(core.auth.clients.authenticate(maya.token)!, {
+      id: client.id,
+    });
+
+    const entry = () =>
+      core.activity.recent().find((each) => each.action === "device.command");
+    await expect
+      .poll(entry)
+      .toMatchObject({ outcome: "failed", reason: "forbidden" });
+    expect(radio.received).toHaveLength(1);
+    expect(entry()?.detail?.resent).toBeUndefined();
+  });
+
   it("isn't listed among the clients", async () => {
     const { core, maya } = await household();
     addAgent(core, { kind: "person", id: maya.person.id });
@@ -267,6 +337,19 @@ describe("an agent", () => {
       .entries.filter((entry) => entry.action === "client.revoke")
       .map((entry) => entry.subjectId);
     expect(gone.sort()).toEqual([client.id, kitchen.id].sort());
+  });
+
+  it("is revoked on restore without being counted as a signed-out device", async () => {
+    const { core, maya } = await household();
+    const { token } = addAgent(core, { kind: "person", id: maya.person.id });
+
+    const signedOut = core.db.transaction(() =>
+      core.auth.signOutEveryone(core.now()),
+    );
+
+    expect(signedOut).toBe(1);
+    expect(core.auth.clients.authenticate(token)).toBeUndefined();
+    expect(core.auth.clients.authenticate(maya.token)).toBeUndefined();
   });
 
   it("requires an active shared device as a client adder", async () => {
@@ -335,7 +418,7 @@ describe("the activity log", () => {
     core.activity.for("devices")({
       action: "device.command",
       outcome: "ok",
-      actor: `assistant-run:${client.id}`,
+      ...core.activity.agentWho(client.id),
     });
     await post(core, "/api/auth/clients/revoke", { id: client.id }, maya);
 
@@ -350,6 +433,10 @@ describe("the activity log", () => {
       name: "Codex on the office Mac",
       addedBy: { kind: "person", id: maya.person.id, name: "Maya" },
     });
+    const removal = core.activity
+      .recent()
+      .find((each) => each.action === "client.revoke");
+    expect(removal?.detail).toEqual({ kind: "agent", name: client.name });
   });
 
   it("keeps the agent and its adder on an app action after the adder leaves", async () => {
@@ -367,6 +454,12 @@ describe("the activity log", () => {
       actionId: "sample.note",
       input: { text: "Tidy the office" },
     });
+    await core.apps.call({
+      principal: core.auth.clients.authenticate(token)!,
+      appId: samplePackage.app.id,
+      actionId: "sample.note",
+      input: { text: "Water the plants" },
+    });
     await post(
       core,
       "/api/auth/clients/rename",
@@ -383,10 +476,11 @@ describe("the activity log", () => {
     expect(core.auth.clients.authenticate(token)).toBeUndefined();
 
     const response = await get(core, "/api/activity", maya);
-    const entry = response
+    const entries = response
       .json<ActivityPage>()
-      .entries.find((each) => each.action === "sample.note");
-    expect(entry?.who).toEqual({
+      .entries.filter((each) => each.action === "sample.note");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]?.who).toEqual({
       kind: "agent",
       id: client.id,
       name: "Codex on the office Mac",

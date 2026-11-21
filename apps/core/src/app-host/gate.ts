@@ -21,7 +21,7 @@ export type Rule = Pick<ActionDefinition, "tier">;
 export function createGate(
   people: People,
   // Whether an AI agent's client is still there, unrevoked.
-  agents: { active(id: string): boolean },
+  isActiveAgent: (id: string) => boolean,
 ) {
   // Refuses what an actor may not do, taking a person to be in the household
   // still.
@@ -49,6 +49,12 @@ export function createGate(
     }
   }
 
+  function requireActiveAgent(id: string) {
+    if (!isActiveAgent(id)) {
+      throw new ActionCallError("forbidden");
+    }
+  }
+
   // Refuses what an actor may not do.
   function permit(actor: Actor, rule: Rule) {
     // Someone removed from the household is refused at once, and so is an
@@ -57,9 +63,7 @@ export function createGate(
     if (actor.kind === "user" && !people.get(actor.id)) {
       throw new ActionCallError("forbidden");
     }
-    if (actor.kind === "assistant-run" && !agents.active(actor.id)) {
-      throw new ActionCallError("forbidden");
-    }
+    if (actor.kind === "assistant-run") requireActiveAgent(actor.id);
     weigh(actor, rule);
   }
 
@@ -109,6 +113,7 @@ export function createGate(
     // For an actor already admitted, such as the one behind an action that
     // commands a device.
     permit,
+    requireActiveAgent,
   };
 }
 
