@@ -2,6 +2,7 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { House, PanelLeft } from "lucide-react";
 import type { ComponentProps, ReactNode, Ref } from "react";
 
+import { getShell } from "./shell";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import { UserMenu, type Account } from "./user-menu";
 
@@ -34,7 +35,8 @@ export function SidebarToggle({
 
 // What the sidebar holds, docked beside the page or floating over it: its
 // top row, where the macOS traffic lights sit and which moves the window,
-// with the floating sidebar's own toggle at its end; the pinned apps, Apps
+// with the floating sidebar's own toggle at its end, and which a docked
+// sidebar elsewhere, with neither, leaves out; the pinned apps, Apps
 // last (sidebar-pins.tsx); the home's dashboards under Dashboards, Home
 // first with its house and the others with their background as a swatch;
 // then the categories and the rooms (place-pages.tsx), each under its own
@@ -55,15 +57,17 @@ export function SidebarContent(props: {
 }) {
   return (
     <>
-      <div className="sidebar-top flex h-10 shrink-0 items-center justify-end">
-        {props.toggle && (
-          <SidebarToggle
-            label={props.toggle.label}
-            onClick={props.toggle.onClick}
-            className="me-1"
-          />
-        )}
-      </div>
+      {(props.toggle || getShell().platform === "macos") && (
+        <div className="sidebar-top flex h-10 shrink-0 items-center justify-end">
+          {props.toggle && (
+            <SidebarToggle
+              label={props.toggle.label}
+              onClick={props.toggle.onClick}
+              className="me-1"
+            />
+          )}
+        </div>
+      )}
       <nav
         ref={props.navRef}
         aria-label="Pinned apps, dashboards, categories and rooms"
