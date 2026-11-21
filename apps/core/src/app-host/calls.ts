@@ -181,7 +181,7 @@ export function createCoreCalls(options: {
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
   // What AI agents can use, which an AI agent's call holds to.
-  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "deviceKinds">;
+  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
 }): CoreCalls {
   const { appId, actor, devices, agents } = options;
@@ -190,10 +190,14 @@ export function createCoreCalls(options: {
   // An AI agent's call sees the kinds both the app and AI agents may read,
   // and a driver's own devices no more whole than any other.
   const view = (): View => {
-    const own = deviceViewOf(appId, permissions());
-    if (!forAgent) return own;
-    const reads = agents.deviceKinds().reads;
-    return { kinds: new Set([...own.kinds].filter((kind) => reads.has(kind))) };
+    const appView = deviceViewOf(appId, permissions());
+    if (!forAgent) return appView;
+    const reads = agents.readableDeviceKinds();
+    return {
+      kinds: new Set([...appView.kinds].filter((kind) => reads.has(kind))),
+      own: appView.own,
+      ownKinds: reads,
+    };
   };
   function notForAgents() {
     if (forAgent) throw new ActionError("forbidden");
@@ -504,7 +508,7 @@ export function createCoreCalls(options: {
       }
       const entities = options.entities.list({ type });
       return forAgent
-        ? entities.filter((entity) => agents.canUse(entity.app, type))
+        ? entities.filter((entity) => agents.canUse(entity.app, type, "entity"))
         : entities;
     },
 

@@ -2,13 +2,11 @@ import {
   aiAlwaysOn,
   aiAreas,
   aiAreasOnAtFirst,
-  aiControlKinds,
   capabilityKinds,
   controlPermission,
   readPermission,
   type AiCanUse,
   type AiOfferInfo,
-  type CapabilityKind,
 } from "@meetsanctum/app-sdk";
 import { and, eq } from "drizzle-orm";
 
@@ -40,6 +38,7 @@ export type AppOffers = {
 
 const tierRank = { read: 0, write: 1 } as const;
 const isArea = (id: string) => aiAreas.includes(id);
+const itemKey = (offer: DeclaredOffer) => `${offer.kind}:${offer.id}`;
 
 export function createAgentsCanUse(
   db: CoreDatabase,
@@ -89,45 +88,44 @@ export function createAgentsCanUse(
     );
   }
 
-  // Whether an offer is on, with everything it needs: the core's areas, and
-  // the app's own offers, which count with what they need in turn.
-  function usableIn(
-    app: AppOffers,
-    rows: ReturnType<typeof itemRows>,
-    id: string,
-    seen: Set<string> = new Set(),
-  ): boolean {
-    const offer = app.offers.get(id);
-    if (!offer || rows.get(id)?.on !== true || seen.has(id)) return false;
-    seen.add(id);
-    return offer.needs.every((need) =>
-      isArea(need) ? areaOn(need) : usableIn(app, rows, need, seen),
-    );
-  }
+  function accessOf(app: AppOffers, rows: ReturnType<typeof itemRows>) {
+    const answers = new Map<string, boolean>();
 
-  // What an offer needs that's off, so AI agents can't use it while it is on.
-  function missingIn(
-    app: AppOffers,
-    rows: ReturnType<typeof itemRows>,
-    offer: DeclaredOffer,
-  ) {
-    return offer.needs.filter((need) =>
-      isArea(need)
-        ? !areaOn(need)
-        : !usableIn(app, rows, need, new Set([offer.id])),
-    );
+    function needOn(id: string): boolean {
+      // A manifest can name both an area and an offer with the same id.
+      // A prerequisite must identify one permission unambiguously.
+      if (isArea(id)) return !app.offers.has(id) && areaOn(id);
+      return offerOn(id);
+    }
+
+    function offerOn(id: string): boolean {
+      const answer = answers.get(id);
+      if (answer !== undefined) return answer;
+      const offer = app.offers.get(id);
+      if (!offer || rows.get(itemKey(offer))?.on !== true) return false;
+      // An offer is unavailable while checking its own prerequisites. A
+      // cycle stays off, and shared prerequisites reuse the finished answer.
+      answers.set(id, false);
+      const isUsable = offer.needs.every(needOn);
+      answers.set(id, isUsable);
+      return isUsable;
+    }
+
+    return { needOn, offerOn };
   }
 
   function offerInfo(app: AppOffers, rows: ReturnType<typeof itemRows>) {
+    const { needOn } = accessOf(app, rows);
     return [...app.offers.values()].map((offer): AiOfferInfo => ({
       app: app.app,
       id: offer.id,
       kind: offer.kind,
+      tier: offer.tier,
       title: offer.title,
       description: offer.description,
-      on: rows.get(offer.id)?.on === true,
+      on: rows.get(itemKey(offer))?.on === true,
       needs: [...offer.needs],
-      missing: missingIn(app, rows, offer),
+      missing: offer.needs.filter((need) => !needOn(need)),
     }));
   }
 
@@ -146,14 +144,16 @@ export function createAgentsCanUse(
       const updatedAt = now();
       db.transaction(() => {
         for (const offer of app.offers.values()) {
-          const row = rows.get(offer.id);
-          const tier = offer.tier === "read" ? "read" : "write";
+          const itemId = itemKey(offer);
+          const row = rows.get(itemId);
+          const tier = offer.tier;
           if (!row) {
             db.insert(agentItems)
               .values({
                 appId: app.app,
-                itemId: offer.id,
-                on: !asUpdate && offer.starts === "on",
+                itemId,
+                // An answer without a kind may be for a different offer.
+                on: !asUpdate && !rows.has(offer.id) && offer.starts === "on",
                 tier,
                 updatedAt,
               })
@@ -166,10 +166,7 @@ export function createAgentsCanUse(
           db.update(agentItems)
             .set(rose ? { tier, on: false, updatedAt } : { tier })
             .where(
-              and(
-                eq(agentItems.appId, app.app),
-                eq(agentItems.itemId, offer.id),
-              ),
+              and(eq(agentItems.appId, app.app), eq(agentItems.itemId, itemId)),
             )
             .run();
         }
@@ -179,25 +176,24 @@ export function createAgentsCanUse(
     areaOn,
 
     /** Whether AI agents may use one of an app's offers now. */
-    canUse(appId: string, id: string): boolean {
+    canUse(appId: string, id: string, kind: DeclaredOffer["kind"]): boolean {
       const app = offersOf(appId);
-      return app ? usableIn(app, itemRows(appId), id) : false;
+      return app?.offers.get(id)?.kind === kind
+        ? accessOf(app, itemRows(appId)).offerOn(id)
+        : false;
     },
 
     /**
-     * The capability kinds AI agents may read and control. Controlling a
-     * kind includes reading it, as it does for apps.
+     * The capability kinds AI agents may read. Controlling a kind includes
+     * reading it, as it does for apps.
      */
-    deviceKinds() {
-      const controls = new Set<CapabilityKind>(
-        aiControlKinds.filter((kind) => areaOn(controlPermission(kind))),
-      );
-      const reads = new Set<CapabilityKind>(
+    readableDeviceKinds() {
+      return new Set(
         capabilityKinds.filter(
-          (kind) => controls.has(kind) || areaOn(readPermission(kind)),
+          (kind) =>
+            areaOn(controlPermission(kind)) || areaOn(readPermission(kind)),
         ),
       );
-      return { reads, controls };
     },
 
     /** Everything AI agents can use, as Settings and apps' pages show it. */
@@ -248,16 +244,17 @@ export function createAgentsCanUse(
     setOffer(appId: string, id: string, on: boolean, by: ChangedBy): boolean {
       const offer = offersOf(appId)?.offers.get(id);
       if (!offer) throw new ActionCallError("not_found");
-      const row = itemRows(appId).get(id);
+      const itemId = itemKey(offer);
+      const row = itemRows(appId).get(itemId);
       if (row?.on === on) return false;
       db.transaction(() => {
         const set = {
           on,
-          tier: offer.tier === "read" ? ("read" as const) : ("write" as const),
+          tier: offer.tier,
           updatedAt: now(),
         };
         db.insert(agentItems)
-          .values({ appId, itemId: id, ...set })
+          .values({ appId, itemId, ...set })
           .onConflictDoUpdate({
             target: [agentItems.appId, agentItems.itemId],
             set,

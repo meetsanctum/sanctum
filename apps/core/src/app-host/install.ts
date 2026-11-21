@@ -134,10 +134,10 @@ export function createAppInstaller(options: {
     // A new version of an app the home has run answers as an update, and
     // what it needs that waits for someone stays unanswered.
     const waiting = options.waiting.get(appId);
-    const isUpdate = !isAdding && options.versions.last(appId) !== undefined;
+    const previous = isAdding ? undefined : options.versions.last(appId);
     options.grants.adopt(
       manifest,
-      isUpdate
+      previous
         ? {
             waits:
               waiting?.folder === pkg.apart.folder
@@ -152,8 +152,7 @@ export function createAppInstaller(options: {
       { app: appId, offers: contract.offers },
       {
         asUpdate:
-          isUpdate &&
-          options.versions.last(appId)?.version !== manifest.version,
+          previous !== undefined && previous.version !== manifest.version,
       },
     );
     const granted = options.grants.of(manifest);

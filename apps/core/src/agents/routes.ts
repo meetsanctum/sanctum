@@ -19,7 +19,7 @@ import type { AgentsCanUse } from "./can-use.js";
 //   POST /api/agents/can-use/area     SwitchAiArea → AiCanUse
 //   POST /api/agents/can-use/offer    SwitchAiOffer → AiCanUse
 
-const id = z.string().min(1).max(128);
+const id = z.string().min(1);
 
 const schemas = {
   area: z.object({ id, on: z.boolean() }) satisfies z.ZodType<SwitchAiArea>,

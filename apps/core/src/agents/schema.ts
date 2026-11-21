@@ -15,6 +15,7 @@ export const agentItems = sqliteTable(
   "agent_items",
   {
     appId: text("app_id").notNull(),
+    // The kind and id together, since an action and an entity can share an id.
     itemId: text("item_id").notNull(),
     on: integer("on", { mode: "boolean" }).notNull(),
     // The tier it had when last answered: one that rises goes back off.

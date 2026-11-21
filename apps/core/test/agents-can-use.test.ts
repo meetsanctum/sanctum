@@ -1,6 +1,8 @@
 import {
   defineAction,
   defineApp,
+  defineEntityType,
+  registerPermission,
   toStaticManifest,
   type AiCanUse,
   type Actor,
@@ -10,6 +12,7 @@ import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
 import { createAgentsCanUse, type AppOffers } from "../src/agents/can-use.js";
+import { agentItems } from "../src/agents/schema.js";
 import { createCoreCalls } from "../src/app-host/calls.js";
 import { contractOf } from "../src/app-host/contract.js";
 import { lampsCore, personWithClient, radio } from "./devices-support.js";
@@ -74,6 +77,8 @@ const reset = defineAction({
   run: async () => ({}),
 });
 
+const longEntityId = `example.${"extended".repeat(16)}`;
+
 const examplePackage: AppPackage = {
   app: defineApp({
     id: "sanctum.example",
@@ -83,6 +88,22 @@ const examplePackage: AppPackage = {
     permissions: [{ id: "people.read", reason: "For the test.", needed: true }],
     actions: [tidy, peek, count, reset],
     events: [],
+    provides: {
+      entities: [
+        defineEntityType({
+          id: reset.id,
+          title: "Example state",
+          state: z.object({}),
+          assistant: { starts: "on", description: "See the example state." },
+        }),
+        defineEntityType({
+          id: longEntityId,
+          title: "Detailed state",
+          state: z.object({}),
+          assistant: { starts: "on", description: "See the detailed state." },
+        }),
+      ],
+    },
   }),
   origin: "official",
 };
@@ -150,6 +171,7 @@ describe("what AI agents can use", () => {
         app: "sanctum.example",
         id: "example.tidy",
         kind: "action",
+        tier: "write",
         title: "Tidy up",
         description: "Tidy the home, for everyone in it.",
         on: true,
@@ -160,6 +182,7 @@ describe("what AI agents can use", () => {
         app: "sanctum.example",
         id: "example.peek",
         kind: "action",
+        tier: "read",
         title: "Peek",
         description: "Look at nothing much.",
         on: false,
@@ -170,8 +193,31 @@ describe("what AI agents can use", () => {
         app: "sanctum.example",
         id: "example.count",
         kind: "action",
+        tier: "read",
         title: "Count everyone",
         description: "Count the people at home.",
+        on: true,
+        needs: [],
+        missing: [],
+      },
+      {
+        app: "sanctum.example",
+        id: reset.id,
+        kind: "entity",
+        tier: "read",
+        title: "Example state",
+        description: "See the example state.",
+        on: true,
+        needs: [],
+        missing: [],
+      },
+      {
+        app: "sanctum.example",
+        id: longEntityId,
+        kind: "entity",
+        tier: "read",
+        title: "Detailed state",
+        description: "See the detailed state.",
         on: true,
         needs: [],
         missing: [],
@@ -236,7 +282,7 @@ describe("what AI agents can use", () => {
     const unknown = await post(
       core,
       "/api/agents/can-use/offer",
-      { app: "sanctum.example", id: "example.reset", on: true },
+      { app: "sanctum.example", id: "example.unknown", on: true },
       maya,
     );
     expect(unknown.statusCode).toBe(404);
@@ -272,8 +318,7 @@ describe("what AI agents can use", () => {
     await expect(run(core, principal(), "example.tidy")).rejects.toMatchObject({
       code: "forbidden",
     });
-    // What the app leaves out, AI agents never run, and what it offers
-    // off they run once it's on.
+    // An entity's switch does not apply to an action with the same id.
     await expect(run(core, principal(), "example.reset")).rejects.toMatchObject(
       { code: "forbidden" },
     );
@@ -307,6 +352,21 @@ describe("what AI agents can use", () => {
     expect(await run(core, principal(), "example.count")).toEqual({
       people: 2,
     });
+  });
+
+  it("can switch an offer with a long manifest id off", async () => {
+    const { core, maya } = await household();
+    const response = await post(
+      core,
+      "/api/agents/can-use/offer",
+      { app: "sanctum.example", id: longEntityId, on: false },
+      maya,
+    );
+    expect(response.statusCode).toBe(200);
+    expect(
+      response.json<AiCanUse>().offers.find(({ id }) => id === longEntityId)
+        ?.on,
+    ).toBe(false);
   });
 
   it("leaves a person's own calls alone", async () => {
@@ -365,6 +425,36 @@ describe("an AI agent's device command", () => {
     });
     expect(radio.received.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("does not resend after the household switches off control", async () => {
+    const { core, maya, lamp } = await lampsCore({ confirmMs: 250 });
+    radio.confirms = false;
+    const agent = core.auth.clients.createAgent({
+      name: "Office agent",
+      platform: "macos",
+      addedBy: { kind: "person", id: maya.person.id },
+    });
+
+    await core.devices.commandFor(
+      core.auth.clients.authenticate(agent.token)!,
+      {
+        device: lamp,
+        capability: "light",
+        command: { on: true },
+      },
+    );
+    core.agentsCanUse.setArea("devices.control:light", false, {
+      clientId: maya.client.id,
+    });
+
+    const entry = () =>
+      core.activity.recent().find((each) => each.action === "device.command");
+    await expect
+      .poll(entry)
+      .toMatchObject({ outcome: "failed", reason: "forbidden" });
+    expect(radio.received).toHaveLength(1);
+    expect(entry()?.detail?.resent).toBeUndefined();
+  });
 });
 
 describe("answers kept for an app's offers", () => {
@@ -409,9 +499,35 @@ describe("answers kept for an app's offers", () => {
       apps = [{ app: "sanctum.example", offers: offered }];
       store.adopt(apps[0]!, { asUpdate });
     };
-    const isOn = () => store.canUse("sanctum.example", "example.look");
-    return { store, install, isOn };
+    const isOn = () =>
+      store.canUse("sanctum.example", "example.look", "action");
+    return { db: core.db, store, install, isOn };
   }
+
+  it("allows offers that share a prerequisite and denies cycles", async () => {
+    const { store: canUse, install, isOn } = await store();
+    const look = offers("read").get("example.look")!;
+    const entries = [
+      { ...look, needs: ["example.left", "example.right"] },
+      { ...look, id: "example.left", needs: ["example.shared"] },
+      { ...look, id: "example.right", needs: ["example.shared"] },
+      { ...look, id: "example.shared" },
+      { ...look, id: "example.first", needs: ["example.second"] },
+      { ...look, id: "example.second", needs: ["example.first"] },
+    ];
+    install(new Map(entries.map((offer) => [offer.id, offer])), false);
+
+    expect(isOn()).toBe(true);
+    expect(canUse.canUse("sanctum.example", "example.first", "action")).toBe(
+      false,
+    );
+    expect(
+      canUse.list().offers.find(({ id }) => id === look.id)?.missing,
+    ).toEqual([]);
+    expect(
+      canUse.list().offers.find(({ id }) => id === "example.first")?.missing,
+    ).toEqual(["example.second"]);
+  });
 
   it("takes the app's default when the home adds it", async () => {
     const { install, isOn } = await store();
@@ -426,6 +542,36 @@ describe("answers kept for an app's offers", () => {
     expect(isOn()).toBe(false);
   });
 
+  it("keeps separate answers for an action and an entity with the same id", async () => {
+    const { store: canUse, install, isOn } = await store();
+    const action = offers("read").get("example.look")!;
+    install(offers("read"), false);
+    expect(isOn()).toBe(true);
+
+    install(new Map([[action.id, { ...action, kind: "entity" }]]), true);
+    expect(canUse.canUse("sanctum.example", action.id, "entity")).toBe(false);
+    expect(isOn()).toBe(false);
+
+    install(offers("read"), true);
+    expect(isOn()).toBe(true);
+  });
+
+  it("leaves an offer off when an earlier answer has no kind", async () => {
+    const { db, install, isOn } = await store();
+    db.insert(agentItems)
+      .values({
+        appId: "sanctum.example",
+        itemId: "example.look",
+        on: false,
+        tier: "read",
+        updatedAt: new Date(),
+      })
+      .run();
+
+    install(offers("read"), false);
+    expect(isOn()).toBe(false);
+  });
+
   it("keeps an answer through an update, and switches one whose tier rose off", async () => {
     const { install, isOn } = await store();
     install(offers("read"), false);
@@ -437,7 +583,7 @@ describe("answers kept for an app's offers", () => {
 });
 
 describe("an app's calls on an AI agent's behalf", () => {
-  async function agentCalls() {
+  async function agentCalls({ asDriver = false } = {}) {
     const { core, maya, lamp, plug } = await lampsCore();
     const agent = core.auth.clients.createAgent({
       name: "Codex on the office Mac",
@@ -445,17 +591,20 @@ describe("an app's calls on an AI agent's behalf", () => {
       addedBy: { kind: "person", id: maya.person.id },
     });
     const calls = createCoreCalls({
-      appId: "sanctum.example",
+      appId: asDriver ? core.devices.get(lamp)!.driver : "sanctum.example",
       actor: {
         kind: "assistant-run",
         id: agent.client.id,
         onBehalfOf: maya.person.id,
       },
-      permissions: () => [
-        "devices.control:light",
-        "devices.control:switch",
-        "devices.read:button",
-      ],
+      permissions: () =>
+        asDriver
+          ? [registerPermission]
+          : [
+              "devices.control:light",
+              "devices.control:switch",
+              "devices.read:button",
+            ],
       permissionsRevision: () => 0,
       query: async () => ({}),
       ended: () => false,
@@ -517,5 +666,19 @@ describe("an app's calls on an AI agent's behalf", () => {
         when: { at: "2026-11-22T08:00:00.000Z" },
       }),
     ).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("a driver sees the allowed kinds of its own devices", async () => {
+    const { core, maya, lamp, plug, calls } = await agentCalls({
+      asDriver: true,
+    });
+    expect((await calls.devices()).map((device) => device.id).sort()).toEqual(
+      [lamp, plug].sort(),
+    );
+
+    core.agentsCanUse.setArea("devices.read:switch", false, {
+      clientId: maya.client.id,
+    });
+    expect((await calls.devices()).map((device) => device.id)).toEqual([lamp]);
   });
 });

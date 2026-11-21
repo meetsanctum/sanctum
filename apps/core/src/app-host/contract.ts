@@ -4,13 +4,13 @@ import {
   assertDriverProblems,
   appManifestSchema,
   assistantOfferOf,
-  householdTiers,
   roomSectionKinds,
   standardEntityTypes,
   tierSchema,
   tileShapeProblemsOf,
   widgetEntityType,
   type AppDefinition,
+  type AiOfferInfo,
   type AssistantOffer,
   type StaticManifest,
   type Tier,
@@ -318,7 +318,7 @@ export type DeclaredOffer = AssistantOffer & {
   id: string;
   kind: "action" | "entity";
   title: string;
-  tier: Tier;
+  tier: AiOfferInfo["tier"];
   needs: readonly string[];
 };
 
@@ -342,10 +342,8 @@ function offersOf(manifest: StaticManifest) {
     offers.set(offer.id, offer);
   };
   for (const action of manifest.actions) {
-    const offer = assistantOfferOf(
-      (action as { assistant?: unknown }).assistant,
-    );
-    if (!offer || !householdTiers.includes(action.tier)) continue;
+    const offer = assistantOfferOf(action.assistant);
+    if (!offer || (action.tier !== "read" && action.tier !== "write")) continue;
     add({
       ...offer,
       id: action.id,
@@ -359,7 +357,7 @@ function offersOf(manifest: StaticManifest) {
     const standard = standardEntityTypes.find((each) => each.id === type.id);
     const offer = standard
       ? (standard.assistant ?? null)
-      : assistantOfferOf((type as { assistant?: unknown }).assistant);
+      : assistantOfferOf(type.assistant);
     if (!offer) continue;
     add({
       ...offer,

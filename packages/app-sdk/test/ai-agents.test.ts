@@ -9,6 +9,7 @@ import {
   defineEntityType,
   forecastType,
   sunType,
+  toStaticManifest,
   type AssistantOffer,
   type Tier,
 } from "../src/index.js";
@@ -84,9 +85,34 @@ describe("an app's offers to AI agents", () => {
     ).toThrow(/Duplicate offer to AI agents id/);
   });
 
+  it("refuses circular prerequisites between offers", () => {
+    expect(() =>
+      app([
+        action("example.tidy", "write", offer(["example.look"])),
+        action("example.look", "read", offer(["example.tidy"])),
+      ]),
+    ).toThrow(/circular AI offer dependency/);
+  });
+
+  it("refuses a prerequisite that names both a core area and an offer", () => {
+    expect(() =>
+      app([
+        action("example.tidy", "write", offer(["people.read"])),
+        action("people.read", "read", offer()),
+      ]),
+    ).toThrow(/names both an area and an offer/);
+  });
+
   it("starts the forecast on and the sun, which tells where the home is, off", () => {
     expect(forecastType.assistant?.starts).toBe("on");
     expect(sunType.assistant?.starts).toBe("off");
+  });
+
+  it("uses the standard type's offer in the manifest", () => {
+    const manifest = toStaticManifest(
+      app([], [{ ...sunType, assistant: offer() }]),
+    );
+    expect(manifest.provides.entities[0]?.assistant).toEqual(sunType.assistant);
   });
 });
 
@@ -110,5 +136,15 @@ describe("an offer read from a manifest", () => {
     ).toBeNull();
     expect(assistantOfferOf(null)).toBeNull();
     expect(assistantOfferOf({ starts: "maybe", description: "x" })).toBeNull();
+  });
+
+  it("does not use expose as a fallback for an invalid offer", () => {
+    expect(
+      assistantOfferOf({
+        starts: "off",
+        expose: true,
+        description: "Follow the sun.",
+      }),
+    ).toBeNull();
   });
 });

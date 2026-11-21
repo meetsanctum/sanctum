@@ -1,7 +1,10 @@
 import {
+  capabilityOf,
+  controlPermission,
   householdTiers,
   type ActionDefinition,
   type Actor,
+  type CapabilityKind,
 } from "@meetsanctum/app-sdk";
 
 import type { Principal } from "../auth/clients.js";
@@ -19,6 +22,10 @@ import { ActionCallError } from "./errors.js";
 // name the area of the core's that AI agents need switched on for them
 // (agents/can-use.ts).
 export type Rule = Pick<ActionDefinition, "tier"> & { agentArea?: string };
+
+export function deviceCommandRule(kind: CapabilityKind): Rule {
+  return { tier: capabilityOf(kind).tier, agentArea: controlPermission(kind) };
+}
 
 export function createGate(
   people: People,

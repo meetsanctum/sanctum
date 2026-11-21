@@ -40,7 +40,7 @@ export const assistantOfferSchema = z.strictObject({
 });
 
 // What an SDK before `starts` wrote: only `expose: true` offered it.
-const exposed = z.object({
+const exposed = z.strictObject({
   expose: z.boolean(),
   description: z.string().trim().min(1).max(300),
 });
@@ -60,10 +60,7 @@ export function assistantOfferOf(raw: unknown): AssistantOffer | null {
 }
 
 /** The kinds of device AI agents may control: never a sensor's own settings. */
-export const aiControlKinds = [
-  "light",
-  "switch",
-] as const satisfies readonly CapabilityKind[];
+const aiControlKinds: readonly CapabilityKind[] = ["light", "switch"];
 
 /**
  * The core's areas AI agents can use, by the permission each is. Control
@@ -76,7 +73,7 @@ export const aiAreas: readonly string[] = [
   readPermission("switch"),
   controlPermission("switch"),
   ...capabilityKinds
-    .filter((kind) => !(aiControlKinds as readonly string[]).includes(kind))
+    .filter((kind) => !aiControlKinds.includes(kind))
     .map(readPermission),
   activityReadPermission,
   historyReadPermission,
@@ -106,6 +103,7 @@ export type AiOfferInfo = {
   /** The action's id, or the entity type's. */
   id: string;
   kind: "action" | "entity";
+  tier: "read" | "write";
   title: string;
   description: string;
   on: boolean;

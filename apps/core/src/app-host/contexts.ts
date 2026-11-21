@@ -59,7 +59,7 @@ export function createAppContexts(options: {
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
-  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "deviceKinds">;
+  agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
   now: () => Date;
   // Whether someone turned an app off: other apps don't read what it brought.

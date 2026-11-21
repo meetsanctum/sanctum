@@ -14,6 +14,7 @@ import {
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
+import { deviceCommandRule, type Gate } from "./gate.js";
 
 // What Devices asks of driver apps, the Drivers contract: their devices'
 // commands, moving a light while a remote's button is held, letting new
@@ -37,7 +38,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
   installed: ReadonlyMap<string, Entry>;
   // Whether the app takes calls now.
   accepts: (entry: Entry) => boolean;
-  requireActiveAgent: (id: string) => void;
+  permit: Gate["permit"];
   // Waits for one that's on its way back, answering whether it came in time.
   arrives: (entry: Entry) => Promise<boolean>;
   // A context for app code, acting as `actor`.
@@ -137,9 +138,10 @@ export function createDriverCalls<Entry extends Driving>(options: {
     // device's report confirms it.
     deliver(driverId: string, command: DriverCommand, actor: Actor) {
       return toDriver(driverId, actor, "take a command", (driver, ctx) => {
-        // Check at dispatch, including retries and calls that waited for the driver.
-        if (actor.kind === "assistant-run")
-          options.requireActiveAgent(actor.id);
+        // The household may have changed access while the driver was starting.
+        if (actor.kind === "assistant-run") {
+          options.permit(actor, deviceCommandRule(command.kind));
+        }
         return driver.command(ctx, command);
       });
     },

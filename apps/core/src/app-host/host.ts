@@ -96,7 +96,10 @@ export function createAppHost(options: {
   sightings?: () => readonly Sighting[];
   grants: AppGrants;
   // What AI agents can use of each app, and of the core.
-  agents: Pick<AgentsCanUse, "adopt" | "areaOn" | "canUse" | "deviceKinds">;
+  agents: Pick<
+    AgentsCanUse,
+    "adopt" | "areaOn" | "canUse" | "readableDeviceKinds"
+  >;
   commits: AppCommits;
   updates: AppUpdates;
   versions: Pick<AppVersions, "last">;
@@ -300,7 +303,8 @@ export function createAppHost(options: {
     supervisor,
     accepts,
     agentWho: activity.agentWho,
-    agentCanUse: options.agents.canUse,
+    agentCanUse: (appId, actionId) =>
+      options.agents.canUse(appId, actionId, "action"),
     record,
     execute,
     track,
@@ -310,7 +314,7 @@ export function createAppHost(options: {
   const drivers = createDriverCalls({
     installed,
     accepts,
-    requireActiveAgent: gate.requireActiveAgent,
+    permit: gate.permit,
     arrives: (entry) =>
       appStateOf(entry) === "paused"
         ? Promise.resolve(false)
