@@ -170,14 +170,18 @@ export function DeviceTile(props: {
     onPointerEnd(event);
   };
   const onPointerCancel = (event: PointerEvent<HTMLButtonElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return;
-    // The browser took over the gesture, for example to scroll. Discard
-    // its preview before capture is released, without changing the light.
+    const at = drag.current;
+    if (at?.pointerId !== event.pointerId) return;
+    // Once a sideways drag has started the browser no longer scrolls, so a
+    // cancel then comes from around the page, such as a host app that
+    // reports a lifted finger as cancelled: the drag ends where it was.
+    if (at.active) {
+      onPointerEnd(event);
+      return;
+    }
+    // A press cancelled before it becomes a drag has no preview of its own.
     drag.current = null;
     dragged.current = true;
-    setDragging(false);
-    clearTimeout(clearing.current);
-    setPreview(null);
   };
 
   // A drag or a swipe that ends over the tile is not a tap. A click no
@@ -198,9 +202,10 @@ export function DeviceTile(props: {
     },
     onPointerUp,
     onPointerCancel,
-    // A release the tile does not hear, such as outside the window, still
-    // ends the drag.
-    onLostPointerCapture: onPointerEnd,
+    onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+      // A child can lose its implicit capture when the button starts a drag.
+      if (event.target === event.currentTarget) onPointerEnd(event);
+    },
   };
 
   const level = preview ?? (tile.on ? tile.brightness : undefined);
