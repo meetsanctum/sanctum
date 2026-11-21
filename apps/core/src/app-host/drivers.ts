@@ -37,6 +37,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
   installed: ReadonlyMap<string, Entry>;
   // Whether the app takes calls now.
   accepts: (entry: Entry) => boolean;
+  requireActiveAgent: (id: string) => void;
   // Waits for one that's on its way back, answering whether it came in time.
   arrives: (entry: Entry) => Promise<boolean>;
   // A context for app code, acting as `actor`.
@@ -135,9 +136,12 @@ export function createDriverCalls<Entry extends Driving>(options: {
     // actor behind it. It resolves once the driver has sent it on; the
     // device's report confirms it.
     deliver(driverId: string, command: DriverCommand, actor: Actor) {
-      return toDriver(driverId, actor, "take a command", (driver, ctx) =>
-        driver.command(ctx, command),
-      );
+      return toDriver(driverId, actor, "take a command", (driver, ctx) => {
+        // Check at dispatch, including retries and calls that waited for the driver.
+        if (actor.kind === "assistant-run")
+          options.requireActiveAgent(actor.id);
+        return driver.command(ctx, command);
+      });
     },
 
     // Has a driver move one of its lights, or stop it, as while a remote's

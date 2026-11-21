@@ -180,8 +180,8 @@ export function whoWords(who: ActivityWho): string {
       return `Outside ${productName}, at the device or its switch`;
     case "sanctum":
       return productName;
-    case "assistant":
-      return "Assistant";
+    case "agent":
+      return who.name ?? "An AI agent";
     case "nobody":
       return "";
   }
@@ -197,6 +197,13 @@ export function byWords(entry: ActivityInfo) {
     );
   } else {
     parts.push(whoWords(who));
+    // An AI agent acts for whoever added it.
+    if (who.kind === "agent" && who.addedBy) {
+      const { kind, name } = who.addedBy;
+      const gone =
+        kind === "person" ? "someone who has left" : "a shared device";
+      parts.push(`added by ${name ?? gone}`);
+    }
     // The automation in between, unless an app keeps it for a press.
     if (
       run &&
@@ -816,10 +823,17 @@ function setupEntry(entry: ActivityInfo): Words | null {
       return said("Let a shared device join");
     case "client.pair":
       return said(`Paired ${name ?? "a device"}`);
-    case "client.rename":
+    case "client.rename": {
+      const renamedTo = entry.detail?.name;
+      if (entry.detail?.kind === "agent" && typeof renamedTo === "string") {
+        return said(`Renamed an AI agent to ${renamedTo}`);
+      }
       return said(`Renamed a device ${name ?? ""}`.trim());
+    }
     case "client.revoke":
-      return said(`Signed out ${name ?? "a device"}`);
+      return entry.detail?.kind === "agent"
+        ? said(`Removed ${name ?? "an AI agent"}`)
+        : said(`Signed out ${name ?? "a device"}`);
     case "pairing.open":
       return said("Let devices join");
     case "pairing.close":

@@ -38,6 +38,8 @@ declare module "fastify" {
   interface FastifyContextConfig {
     // Runs before a principal exists, so needs no token.
     public?: boolean;
+    // The MCP endpoint, the one route an agent's token opens.
+    agent?: boolean;
   }
   interface FastifyRequest {
     principal: Principal | null;
@@ -148,9 +150,18 @@ export async function registerAuth(
       return;
     }
     const token = bearerToken(request.headers.authorization);
-    const found = token ? auth.authenticate(token) : undefined;
+    // An agent's token opens the route marked as the MCP endpoint and
+    // nothing else, so it can't act as a person's or a shared device's,
+    // here or in the live connection (live.ts).
+    const isAgentEndpoint = request.routeOptions.config?.agent === true;
+    const found = token
+      ? auth.authenticate(token, { recordAgentSeen: isAgentEndpoint })
+      : undefined;
     if (!found) {
       return reply.code(401).send({ error: "invalid_client_token" });
+    }
+    if (found.scope === "agent" && !isAgentEndpoint) {
+      return reply.code(403).send({ error: "forbidden" });
     }
     request.principal = found;
   });

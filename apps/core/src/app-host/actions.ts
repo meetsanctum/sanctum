@@ -6,7 +6,11 @@ import {
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
-import type { Activity, Joining } from "../activity/activity.js";
+import type {
+  Activity,
+  ActivityAuthor,
+  Joining,
+} from "../activity/activity.js";
 import { activityTimes } from "../activity/kinds.js";
 import type { Outcome } from "../activity/schema.js";
 import type { AppContract, DeclaredAction } from "./contract.js";
@@ -17,10 +21,6 @@ import type { EmittedEvent } from "./app-work.js";
 // call that may change something has its entry as it starts, and what the
 // action does has it as its cause, so a light a mood turned on names whoever
 // ran the mood; how the call ended changes the entry after.
-
-// Who is behind a call, for the activity log: the person and client behind
-// a request, or the workflow or app acting on its own.
-export type Who = { personId?: string; clientId?: string; actor?: string };
 
 // An app's own call joins its last entry for the same action.
 const appSteps: Joining = {
@@ -60,7 +60,7 @@ export function createActionRunner<
   function record(
     appId: string,
     actionId: string,
-    who: Who,
+    who: ActivityAuthor,
     outcome: Outcome,
     reason?: string,
     subjectId?: string,
@@ -69,7 +69,7 @@ export function createActionRunner<
       { action: actionId, outcome, reason, subjectId, ...who },
       // An app acting on its own, as on a job, joins its last entry for
       // the same action, so natural light's steps are one entry.
-      who.actor && !activity.cause() ? appSteps : undefined,
+      who.actor?.startsWith("app:") && !activity.cause() ? appSteps : undefined,
     );
   }
 
@@ -82,7 +82,7 @@ export function createActionRunner<
     entry: Entry,
     declared: DeclaredAction,
     actor: Actor,
-    who: Who,
+    who: ActivityAuthor,
     rawInput: unknown,
     withinMs = timeoutMs,
   ): Promise<unknown> {

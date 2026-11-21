@@ -227,7 +227,7 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  const gate = createGate(people);
+  const gate = createGate(people, auth.clients.isActiveAgent);
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -621,13 +621,9 @@ export async function createModules(
     timeZone: options.timeZone ?? (() => places.timeZone()),
     sun: options.sun ?? (() => sunDays(entities)),
   });
-  // Each entry by its names now; a shared client's entries keep its name
-  // then. Live clients hear of an entry once it has committed, and of what
-  // led to it again, since what a press or run led to grew.
-  activity.nameClients((id) => auth.clients.name(id) ?? undefined);
   const activityViews = createActivityViews(activity, {
-    person: (id) => people.list().find((person) => person.id === id) ?? null,
-    client: (id) => auth.clients.name(id),
+    person: (id) => people.get(id) ?? null,
+    client: auth.clients.name,
     // An app that's gone by the name its entries kept.
     app: (id) =>
       apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),
@@ -641,6 +637,11 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
+  activity.nameClients({
+    name: auth.clients.name,
+    agentAdder: auth.agentAdder,
+  });
+  // Live clients hear of a committed entry and the entries it adds to.
   activity.follow((entry) => {
     if (entry.action === "sanctum.stop") return;
     try {

@@ -2,12 +2,11 @@ import type { Actor, DriverRemoval } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { Activity } from "../activity/activity.js";
+import type { Activity, ActivityAuthor } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
-import type { Who } from "./activity.js";
 import { deviceCapabilities, devices } from "./schema.js";
 import type { Hold, Turns } from "./turns.js";
 
@@ -61,7 +60,11 @@ export function createRemoval(
     removing: removing as ReadonlySet<string>,
 
     // For someone the gate has let through.
-    async remove(actor: Actor, who: Who, input: unknown): Promise<void> {
+    async remove(
+      actor: Actor,
+      who: ActivityAuthor,
+      input: unknown,
+    ): Promise<void> {
       const parsed = removalRequest.safeParse(input);
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
@@ -79,7 +82,7 @@ export function createRemoval(
 
   async function removeNow(
     actor: Actor,
-    who: Who,
+    who: ActivityAuthor,
     id: string,
     force: boolean,
     hold: Hold,

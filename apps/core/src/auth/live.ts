@@ -119,7 +119,8 @@ export async function registerLive(
       clearTimeout(timer);
       const message = parse(raw);
       const principal = message && options.authenticate(message.token);
-      if (!principal) {
+      // An agent's token opens the MCP endpoint only (routes.ts).
+      if (!principal || principal.scope === "agent") {
         refuse();
         return;
       }

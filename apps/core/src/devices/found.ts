@@ -12,11 +12,10 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-import type { RecordActivity } from "../activity/activity.js";
+import type { ActivityAuthor, RecordActivity } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
-import type { Who } from "./activity.js";
 import type { Devices } from "./devices.js";
 import type { Hold } from "./turns.js";
 
@@ -74,7 +73,7 @@ export function createFound(options: {
   function log(
     device: { name: string; id?: string },
     outcome: Outcome,
-    who: Who,
+    who: ActivityAuthor,
     reason?: string,
   ) {
     record({
@@ -147,7 +146,11 @@ export function createFound(options: {
     },
 
     /** For someone the gate has let through: adds a found device with their answers. */
-    async add(actor: Actor, who: Who, input: unknown): Promise<AddResult> {
+    async add(
+      actor: Actor,
+      who: ActivityAuthor,
+      input: unknown,
+    ): Promise<AddResult> {
       const parsed = addRequest.safeParse(input);
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
