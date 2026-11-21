@@ -9,6 +9,8 @@
 #   pnpm dev:down      remove it and its data
 #   pnpm dev:status    its address, port and containers, and any other stacks
 #   pnpm dev:logs      follow a container's log: core (default), manager or a service
+#   pnpm dev:display   pnpm dev, with the client on the network for a wall display
+#   pnpm dev:approve   approve a shared device's pairing code, as the seed's login
 #
 # SANCTUM_STACK names the stack, SANCTUM_STACK_PORT sets its port, and
 # SANCTUM_STACK_HTTPS=true has its core serve HTTPS with the host CA, as on a
@@ -276,11 +278,56 @@ dev() {
     --filter=@meetsanctum/website --filter=@meetsanctum/docs
 }
 
-seed() {
-  local env
-  settings
+# The client's dev server listens on the home network for a wall display.
+# The core allows those origins so apps' pages open in their frames.
+display() {
+  if [[ "${SANCTUM_STACK_HTTPS:-false}" == "true" ]]; then
+    echo "pnpm dev:display requires a plain-HTTP stack. Unset SANCTUM_STACK_HTTPS." >&2
+    return 1
+  fi
+  local port="${SANCTUM_DISPLAY_PORT:-8123}" display_origins
+  local origins="${CORE_ALLOWED_ORIGINS:-app://sanctum}"
+  display_origins="$(node -e '
+    const { createServer } = require("node:net");
+    const { networkInterfaces } = require("node:os");
+    const port = process.argv[1];
+    if (!/^[1-9]\d*$/.test(port) || Number(port) > 65535) {
+      console.error("SANCTUM_DISPLAY_PORT must be a port from 1 to 65535.");
+      process.exit(1);
+    }
+    // Check before starting Docker. Vite also requires this exact port.
+    const probe = createServer((socket) => socket.destroy());
+    probe.once("error", (error) => {
+      console.error(`Cannot use display port ${port}: ${error.message}`);
+      process.exitCode = 1;
+    });
+    probe.listen(Number(port), "0.0.0.0", () => {
+      probe.close();
+      const origins = Object.values(networkInterfaces())
+        .flat()
+        .filter((address) => address?.family === "IPv4" && !address.internal)
+        .map(({ address }) => new URL(`http://${address}:${port}`).origin);
+      console.log(origins.join(","));
+    });
+  ' -- "$port")"
+  export CORE_ALLOWED_ORIGINS="$origins${display_origins:+,$display_origins}"
+  export SANCTUM_DISPLAY_ENABLED=true SANCTUM_DISPLAY_PORT="$port"
+  dev
+}
+
+# Runs a script of deploy/dev in the core's container, where its dependencies
+# are, against the core inside it: `in_core <script> [docker exec options]`.
+in_core() {
+  local script="$1" name owner env scheme
+  shift
+  name="$(container core)"
+  owner="$(docker inspect -f '{{index .Config.Labels "sanctum.stack"}}' "$name")"
+  if [[ "$owner" != "$stack" ]]; then
+    echo "Refusing to run a command in ${name}: it doesn't belong to stack ${stack}" >&2
+    return 1
+  fi
   # This can run from a new shell that didn't start the stack with HTTPS.
-  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(container core)")"
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$name")"
   if grep -qx 'CORE_PLAIN_HTTP=true' <<<"$env"; then
     scheme="http"
   else
@@ -289,7 +336,17 @@ seed() {
   docker exec -i -w /app/apps/core \
     -e SEED_CORE_URL="${scheme}://127.0.0.1:4100" \
     -e NODE_TLS_REJECT_UNAUTHORIZED="$([[ "$scheme" == "https" ]] && echo 0 || echo 1)" \
-    "$(container core)" node --no-warnings --input-type=module - <deploy/dev/seed.mjs
+    "$@" "$name" node --no-warnings --input-type=module - <"deploy/dev/${script}"
+}
+
+seed() {
+  in_core seed.mjs
+}
+
+# `pnpm dev:approve <code> [name]`: a plain-HTTP stack's shared device, as
+# the display that shows the code; the name is "Wall display" unless given.
+approve() {
+  in_core approve.mjs -e APPROVE_CODE="${1:-}" -e APPROVE_NAME="${2:-}"
 }
 
 status() {
@@ -310,14 +367,16 @@ status() {
 
 case "${1:-}" in
   dev) dev ;;
+  display) display ;;
   up) up ;;
   seed) seed ;;
+  approve) approve "${2:-}" "${3:-}" ;;
   stop) stop_stack ;;
   down) down ;;
   status) status ;;
   logs) docker logs -f "$(container "${2:-core}")" ;;
   *)
-    echo "Usage: $0 dev|up|seed|stop|down|status|logs [core|manager|<service>]" >&2
+    echo "Usage: $0 dev|display|up|seed|approve <code> [name]|stop|down|status|logs [core|manager|<service>]" >&2
     exit 1
     ;;
 esac

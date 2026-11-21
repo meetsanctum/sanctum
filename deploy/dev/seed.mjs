@@ -1,7 +1,8 @@
 // `pnpm dev:seed` (deploy/dev/stack.sh): claims a new development home and
 // puts its fake lights and contact sensors in rooms. It runs in the core's
 // container, where its dependencies are. The login is only ever for a
-// stack, which listens on this Mac alone.
+// stack, which listens on this Mac alone unless `pnpm dev:display` puts it
+// on the network.
 import { keyStretching } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
