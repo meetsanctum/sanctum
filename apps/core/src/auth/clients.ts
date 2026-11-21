@@ -247,6 +247,12 @@ export function createClients(
       return nameOf.get({ id })?.name ?? null;
     },
 
+    // Whether an agent is still there, unrevoked: what it sends on is
+    // refused once it isn't (the gate).
+    isActiveAgent(id: string): boolean {
+      return active(id)?.kind === "agent";
+    },
+
     // Who added an agent, revoked or not, for the activity log; none for
     // another client, or an agent that went with its person.
     addedBy(id: string): AddedBy | null {
@@ -347,14 +353,22 @@ export function createClients(
             ),
           )
           .run();
-        db.update(authClients).set({ revokedAt: at }).where(affected).run();
-        record({
-          action: "client.revoke",
-          outcome: "ok",
-          personId: principal.person?.id,
-          clientId: principal.client.id,
-          subjectId: input.id,
-        });
+        const revoked = db
+          .update(authClients)
+          .set({ revokedAt: at })
+          .where(affected)
+          .returning({ id: authClients.id })
+          .all();
+        // One entry for the client, and one for each agent it took along.
+        for (const { id } of revoked) {
+          record({
+            action: "client.revoke",
+            outcome: "ok",
+            personId: principal.person?.id,
+            clientId: principal.client.id,
+            subjectId: id,
+          });
+        }
       });
       connections.closeClient(input.id);
     },

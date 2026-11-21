@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4b97f6ca-a0fb-403e-90ad-20d09ba3963f",
-  "prevId": "d548b3bb-2fb5-4f7c-828a-bb36043c8bff",
+  "id": "53dcfa12-59de-48b6-bba5-018aad5e176d",
+  "prevId": "8ad6e53a-c112-4400-a0db-5cbd9be5fb52",
   "tables": {
     "activity": {
       "name": "activity",
@@ -72,6 +72,13 @@
         },
         "client_name": {
           "name": "client_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "agent_added_by": {
+          "name": "agent_added_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -824,7 +831,7 @@
         },
         "auth_clients_added_by": {
           "name": "auth_clients_added_by",
-          "value": "(\"auth_clients\".\"kind\" = 'agent') = ((\"auth_clients\".\"added_by_person_id\" is not null) != (\"auth_clients\".\"added_by_client_id\" is not null))"
+          "value": "((\"auth_clients\".\"added_by_person_id\" is not null) + (\"auth_clients\".\"added_by_client_id\" is not null)) = (\"auth_clients\".\"kind\" = 'agent')"
         }
       }
     },

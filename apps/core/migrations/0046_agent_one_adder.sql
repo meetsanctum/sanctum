@@ -15,7 +15,7 @@ CREATE TABLE `__new_auth_clients` (
 	FOREIGN KEY (`added_by_person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`added_by_client_id`) REFERENCES `auth_clients`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "auth_clients_person" CHECK(("__new_auth_clients"."kind" = 'personal') = ("__new_auth_clients"."person_id" is not null)),
-	CONSTRAINT "auth_clients_added_by" CHECK(("__new_auth_clients"."kind" = 'agent') = (("__new_auth_clients"."added_by_person_id" is not null) != ("__new_auth_clients"."added_by_client_id" is not null)))
+	CONSTRAINT "auth_clients_added_by" CHECK((("__new_auth_clients"."added_by_person_id" is not null) + ("__new_auth_clients"."added_by_client_id" is not null)) = ("__new_auth_clients"."kind" = 'agent'))
 );
 --> statement-breakpoint
 INSERT INTO `__new_auth_clients`("id", "name", "kind", "person_id", "platform", "created_at", "created_by", "added_by_person_id", "added_by_client_id", "last_seen_at", "revoked_at") SELECT "id", "name", "kind", "person_id", "platform", "created_at", "created_by", "added_by_person_id", "added_by_client_id", "last_seen_at", "revoked_at" FROM `auth_clients`;--> statement-breakpoint

@@ -18,7 +18,11 @@ import { ActionCallError } from "./errors.js";
 // What the gate weighs: an action, or a device capability's commands.
 export type Rule = Pick<ActionDefinition, "tier">;
 
-export function createGate(people: People) {
+export function createGate(
+  people: People,
+  // Whether an AI agent's client is still there, unrevoked.
+  agents: { active(id: string): boolean },
+) {
   // Refuses what an actor may not do, taking a person to be in the household
   // still.
   function weigh(actor: Actor, rule: Rule) {
@@ -47,8 +51,13 @@ export function createGate(people: People) {
 
   // Refuses what an actor may not do.
   function permit(actor: Actor, rule: Rule) {
-    // Someone removed from the household is refused at once.
+    // Someone removed from the household is refused at once, and so is an
+    // agent removed, or gone with whoever added it, while its work was under
+    // way.
     if (actor.kind === "user" && !people.get(actor.id)) {
+      throw new ActionCallError("forbidden");
+    }
+    if (actor.kind === "assistant-run" && !agents.active(actor.id)) {
       throw new ActionCallError("forbidden");
     }
     weigh(actor, rule);

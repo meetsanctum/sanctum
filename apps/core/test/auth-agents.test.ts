@@ -91,6 +91,22 @@ describe("an agent's token", () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe(client.id);
     expect(lastSeen(core, client.id)).toEqual(core.now());
+    // Only the MCP route itself, however its path is dressed.
+    for (const url of [
+      "/api/mcp/",
+      "/api/mcp/x",
+      "/API/MCP",
+      "//api/mcp",
+      "/api/mcp%2f..%2fauth%2fme",
+      "/api/places?/api/mcp",
+    ]) {
+      const other = await server.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(other.statusCode, url).toBe(403);
+    }
   });
 
   it("can't open a live connection", async () => {
@@ -151,7 +167,10 @@ describe("an agent", () => {
 
   it("does the everyday things only", async () => {
     const { core, maya } = await household();
-    const { token } = addAgent(core, { kind: "person", id: maya.person.id });
+    const { token, client } = addAgent(core, {
+      kind: "person",
+      id: maya.person.id,
+    });
     const principal = core.auth.clients.authenticate(token)!;
 
     expect(() => core.gate.admit(principal, { tier: "read" })).not.toThrow();
@@ -165,12 +184,29 @@ describe("an agent", () => {
       core.gate.permit(
         {
           kind: "assistant-run",
-          id: "agent",
+          id: client.id,
           onBehalfOf: maya.person.id,
         },
         { tier: "destructive" },
       ),
     ).toThrow(expect.objectContaining({ code: "needs_approval" }));
+  });
+
+  it("is refused what it sends on once it's removed", async () => {
+    const { core, maya } = await household();
+    const { token, client } = addAgent(core, {
+      kind: "person",
+      id: maya.person.id,
+    });
+    const actor = core.gate.admit(core.auth.clients.authenticate(token)!, {
+      tier: "write",
+    });
+
+    await post(core, "/api/auth/clients/revoke", { id: client.id }, maya);
+
+    expect(() => core.gate.permit(actor, { tier: "write" })).toThrow(
+      expect.objectContaining({ code: "forbidden" }),
+    );
   });
 
   it("isn't listed among the clients", async () => {
@@ -225,6 +261,12 @@ describe("an agent", () => {
       .where(inArray(authTokens.clientId, [kitchen.id, client.id]))
       .all();
     expect(revokedTokens).toEqual([{ at: core.now() }, { at: core.now() }]);
+    // The log says each went: the shared device, and the agent with it.
+    const gone = core.activity
+      .page({ limit: 20 })
+      .entries.filter((entry) => entry.action === "client.revoke")
+      .map((entry) => entry.subjectId);
+    expect(gone.sort()).toEqual([client.id, kitchen.id].sort());
   });
 
   it("requires an active shared device as a client adder", async () => {

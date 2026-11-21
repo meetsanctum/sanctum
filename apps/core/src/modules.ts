@@ -227,7 +227,7 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  const gate = createGate(people);
+  const gate = createGate(people, { active: auth.clients.isActiveAgent });
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),

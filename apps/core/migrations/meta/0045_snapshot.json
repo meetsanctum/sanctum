@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d548b3bb-2fb5-4f7c-828a-bb36043c8bff",
+  "id": "8ad6e53a-c112-4400-a0db-5cbd9be5fb52",
   "prevId": "3467df2a-b4d7-406b-85bc-f9008c3bf42f",
   "tables": {
     "activity": {
@@ -72,6 +72,13 @@
         },
         "client_name": {
           "name": "client_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "agent_added_by": {
+          "name": "agent_added_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
