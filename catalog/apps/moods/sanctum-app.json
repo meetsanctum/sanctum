@@ -1,7 +1,7 @@
 {
   "id": "sanctum.moods",
   "name": "Moods",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "core": "^2.0.0",
   "protocol": 11,
   "summary": "Moods for each room, and what remotes and motion do with its lights.",
@@ -576,7 +576,14 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "off",
+        "description": "Save a new mood without applying it. Give the room ID, a name, an optional icon and the desired state of each selected light, identified by device and capability.",
+        "needs": [
+          "moods.mood",
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "moods.updateMood",
@@ -1018,7 +1025,14 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Run a saved mood in its room. This can turn off other lights in the room. Returns the number of successful light commands and the lights whose commands failed.",
+        "needs": [
+          "moods.mood",
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "moods.previewMood",
@@ -3579,7 +3593,10 @@
           ],
           "additionalProperties": false
         },
-        "assistant": null
+        "assistant": {
+          "starts": "on",
+          "description": "The rooms' moods, with each mood's room ID, name, icon, display order and whether it is active. Pass a mood's input to moods.runMood to run it."
+        }
       },
       {
         "id": "lights.turnOn",

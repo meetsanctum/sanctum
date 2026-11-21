@@ -690,6 +690,23 @@ describe("natural light", () => {
       "naturalLight.preview",
       "naturalLight.check",
     ]);
+    // What AI agents can use: following, pausing and bringing a room to
+    // it, with the lights. Today's curve starts off, as the sun does, since
+    // its sunrise and sunset tell roughly where the home is.
+    expect(
+      [...manifest.actions, ...manifest.provides.entities].flatMap(
+        ({ id, assistant }) =>
+          assistant ? [[id, assistant.starts, assistant.needs ?? []]] : [],
+      ),
+    ).toEqual([
+      ["naturalLight.follow", "on", ["devices.control:light"]],
+      ["naturalLight.followRoom", "on", ["devices.control:light"]],
+      ["naturalLight.bringRoom", "on", ["devices.control:light"]],
+      ["naturalLight.resume", "on", ["devices.control:light"]],
+      ["naturalLight.pause", "on", ["devices.control:light"]],
+      ["naturalLight.preview", "off", []],
+      ["naturalLight.target", "on", ["devices.control:light"]],
+    ]);
     // Each with its words, and a light for their {device} on its
     // settings page.
     expect(manifest.provides.steps).toEqual([

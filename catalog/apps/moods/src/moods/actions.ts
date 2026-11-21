@@ -9,7 +9,7 @@ import { z } from "zod";
 import { failedLight, sendCommands } from "../lights.js";
 import { refreshRoom } from "../refresh.js";
 import { lightsInRoom, type Light } from "../targets.js";
-import { moodType } from "./entities.js";
+import { moodType, publishMoods } from "./entities.js";
 import { moodIcons } from "./icons.js";
 import {
   lightKey,
@@ -161,10 +161,17 @@ export const createMood = defineAction({
   tier: "write",
   input: z.object({ roomId, name, icon: icon.default("sparkles"), lights }),
   output: mood,
+  assistant: {
+    starts: "off",
+    description:
+      "Save a new mood without applying it. Give the room ID, a name, an optional icon and the desired state of each selected light, identified by device and capability.",
+    needs: ["moods.mood", "devices.control:light"],
+  },
   async run(ctx, input) {
     await assertRoom(ctx, input.roomId);
     const created = await insertMood(ctx.storage.db, input);
-    await refreshRoom(ctx, created.roomId);
+    // No schedule or remote choice can refer to the new mood yet.
+    await publishMoods(ctx, [created.roomId]);
     return created;
   },
 });
@@ -244,6 +251,12 @@ export const runMood = defineAction({
   input: z.object({ id: entityOf(moodType.id) }),
   output: ran,
   words: { sentence: "Run {id}", preview: { id: "Aurora" } },
+  assistant: {
+    starts: "on",
+    description:
+      "Run a saved mood in its room. This can turn off other lights in the room. Returns the number of successful light commands and the lights whose commands failed.",
+    needs: ["moods.mood", "devices.control:light"],
+  },
   async run(ctx, input) {
     const found = await readMood(ctx.storage.db, input.id);
     if (!found) throw new ActionError("not_found");

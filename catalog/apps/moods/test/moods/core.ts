@@ -222,13 +222,26 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     removeSecret: unused,
     log() {},
   };
-  const context = (actor: Actor) =>
-    createAppContext({
+  const context = (actor: Actor) => {
+    const forbidden = async () => {
+      throw new ActionError("forbidden");
+    };
+    return createAppContext({
       appId: moodsApp.id,
       actor,
-      core,
+      core:
+        actor.kind === "assistant-run"
+          ? {
+              ...core,
+              scheduleJob: forbidden,
+              cancelJob: forbidden,
+              putWorkflow: forbidden,
+              removeWorkflow: forbidden,
+            }
+          : core,
       handlers: actor === itself ? handlers : undefined,
     });
+  };
 
   async function hand(event: CoreEvent) {
     if (!state.followed.includes(event.name)) return;
@@ -249,9 +262,10 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     async call<Action extends ActionDefinition>(
       action: Action,
       input: ActionInput<Action>,
+      actor: Actor = alex,
     ): Promise<ActionOutput<Action>> {
       return action.output.parse(
-        await action.run(context(alex), action.input.parse(input)),
+        await action.run(context(actor), action.input.parse(input)),
       ) as ActionOutput<Action>;
     },
     hand,

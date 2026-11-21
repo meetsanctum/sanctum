@@ -114,6 +114,12 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       follow: z.boolean(),
     }),
     output: failedLights,
+    assistant: {
+      starts: "on",
+      description:
+        "Set whether the room's compatible lights follow the sun. Use a room ID for placeId, or null for lights in no room. Returns the lights it could not update.",
+      needs: ["devices.control:light"],
+    },
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
       const failed: { device: string; capability: string }[] = [];
@@ -157,6 +163,12 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       sentence: "Bring {placeId} to natural light",
       preview: { placeId: "Living room" },
     },
+    assistant: {
+      starts: "on",
+      description:
+        "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
+      needs: ["devices.control:light"],
+    },
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
       const failed = await bringToNaturalLight(
@@ -179,6 +191,12 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     words: {
       sentence: "Resume natural light on {device}",
       preview: { device: "Desk lamp" },
+    },
+    assistant: {
+      starts: "on",
+      description:
+        "Clear a pause or manual dimming so a light follows the curve again. This keeps the light's current on or off state.",
+      needs: ["devices.control:light"],
     },
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
@@ -220,6 +238,12 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
       sentence: "Pause natural light on {device}",
       preview: { device: "Desk lamp" },
     },
+    assistant: {
+      starts: "on",
+      description:
+        "Pause natural light for a light that is on and follows it. It keeps its current look until natural light is resumed or the light is switched off.",
+      needs: ["devices.control:light"],
+    },
     async run(ctx, input) {
       const options = await followOptionsFor(ctx, timing);
       return runForLight(input.device, input.capability, async () => {
@@ -254,6 +278,13 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     input: z.object({}),
     // None until the home has a location and the sun rises and sets today.
     output: preview.nullable(),
+    // Off to start, as the sun is: the curve's sunrise and sunset tell
+    // roughly where the home is.
+    assistant: {
+      starts: "off",
+      description:
+        "Today's natural light curve, with the home's time zone, sunrise and sunset, colour temperature in kelvin and brightness. Returns null when the home's location or today's sunrise and sunset are unavailable.",
+    },
     async run(ctx) {
       const options = await followOptionsFor(ctx, timing);
       const now = options.now();

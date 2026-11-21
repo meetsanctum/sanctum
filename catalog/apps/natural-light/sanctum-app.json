@@ -1,7 +1,7 @@
 {
   "id": "sanctum.natural-light",
   "name": "Natural light",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "core": "^2.0.0",
   "protocol": 11,
   "summary": "Lights that follow the colour of daylight through the day.",
@@ -279,7 +279,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Set whether the room's compatible lights follow the sun. Use a room ID for placeId, or null for lights in no room. Returns the lights it could not update.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.bringRoom",
@@ -329,7 +335,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.resume",
@@ -411,7 +423,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Clear a pause or manual dimming so a light follows the curve again. This keeps the light's current on or off state.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.pause",
@@ -493,7 +511,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Pause natural light for a light that is on and follows it. It keeps its current look until natural light is resumed or the light is switched off.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.preview",
@@ -685,7 +709,10 @@
           }
         ]
       },
-      "assistant": null
+      "assistant": {
+        "starts": "off",
+        "description": "Today's natural light curve, with the home's time zone, sunrise and sunset, colour temperature in kelvin and brightness. Returns null when the home's location or today's sunrise and sunset are unavailable."
+      }
     },
     {
       "id": "naturalLight.check",
@@ -766,7 +793,13 @@
           ],
           "additionalProperties": false
         },
-        "assistant": null
+        "assistant": {
+          "starts": "on",
+          "description": "Each light that follows the sun, identified by device and capability, with its status and the curve's target temperature in mireds and brightness in percent. A paused light can report a target while keeping its current look.",
+          "needs": [
+            "devices.control:light"
+          ]
+        }
       },
       {
         "id": "naturalLight.room",

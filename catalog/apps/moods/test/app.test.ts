@@ -1,4 +1,4 @@
-import { permissionIds } from "@meetsanctum/app-sdk";
+import { permissionIds, toStaticManifest } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import moodsApp from "../src/index.js";
@@ -41,6 +41,22 @@ describe("Moods", () => {
     expect(moodsApp.provides?.entities?.map((type) => type.id)).toEqual([
       "moods.mood",
       "lights.turnOn",
+    ]);
+  });
+
+  it("offers AI agents its moods and running one, and creating one off to start", () => {
+    const manifest = toStaticManifest(moodsApp);
+    // Its list of moods is the entity's; previews, deleting and ordering
+    // moods, schedules, presses and motion stay the household's, in Moods.
+    expect(
+      [...manifest.actions, ...manifest.provides.entities].flatMap(
+        ({ id, assistant }) =>
+          assistant ? [[id, assistant.starts, assistant.needs ?? []]] : [],
+      ),
+    ).toEqual([
+      ["moods.createMood", "off", ["moods.mood", "devices.control:light"]],
+      ["moods.runMood", "on", ["moods.mood", "devices.control:light"]],
+      ["moods.mood", "on", []],
     ]);
   });
 
