@@ -4,7 +4,7 @@ import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
 import { byFloor, FloorSection, roomsOn } from "./floor-groups";
-import { floorLightsButton, lightsButton } from "./lights-button";
+import { floorLightsButton, roomLightsButton } from "./lights-button";
 import { placeMotionText } from "./motion";
 import { PlaceReadings, unitOf } from "./place-pages";
 import {
@@ -56,7 +56,7 @@ export function HomeRooms(props: {
           props.apps,
           entities,
           room.id,
-          lightsButton(
+          roomLightsButton(
             own.filter((tile) => tile.kind === "light"),
             room,
             devices,

@@ -18,31 +18,32 @@ import type { Devices } from "./use-devices";
 // as their tiles are. It sends the core the way its words say, off or on,
 // and no toggle, so a screen a moment behind never does the opposite.
 
-const onCount = (tiles: readonly Tile[]) =>
-  tiles.filter((tile) => tile.on && !tile.disabled).length;
+const hasLightsOn = (lights: readonly Tile[]) =>
+  lights.some((tile) => tile.on && !tile.disabled);
 
-/** A place's button for all its lights, as lightsButton makes it. */
-export type LightsSwitch = {
-  on: number;
+/** A place's button for all its lights. */
+export type LightsButtonState = {
+  isOn: boolean;
   /** What it shows: "Turn off lights" or "Turn on lights". */
   words: string;
   /** Its words with whose lights they are, its accessible name. */
   label: string;
-  disabled?: boolean;
-  onToggle: () => void;
+  isDisabled: boolean;
+  onPress: () => void;
 };
 
 /** A room's or a floor's button for all its lights. */
-export function LightsButton(props: { lights: LightsSwitch }) {
+export function LightsButton(props: { lights: LightsButtonState }) {
   const { lights } = props;
   return (
     <Button
       variant="glass"
       size="chip"
+      type="button"
       aria-label={lights.label}
-      data-on={lights.on > 0 ? "" : undefined}
-      disabled={lights.disabled}
-      onClick={lights.onToggle}
+      data-on={lights.isOn ? "" : undefined}
+      disabled={lights.isDisabled}
+      onClick={lights.onPress}
       className="self-start"
     >
       <icons.Power aria-hidden="true" data-icon="inline-start" />
@@ -52,25 +53,25 @@ export function LightsButton(props: { lights: LightsSwitch }) {
 }
 
 // A room's button: off while any light is on, on otherwise.
-export function lightsButton(
+export function roomLightsButton(
   lights: Tile[],
   room: { id: string; name: string },
   devices: Devices,
-): LightsSwitch | undefined {
+): LightsButtonState | undefined {
   if (lights.length === 0) return undefined;
-  const on = onCount(lights);
-  const words = on > 0 ? "Turn off lights" : "Turn on lights";
+  const isOn = hasLightsOn(lights);
+  const words = isOn ? "Turn off lights" : "Turn on lights";
   return {
-    on,
+    isOn,
     words,
     label: `${words} in ${room.name}`,
-    disabled: lights.every((tile) => tile.disabled),
-    onToggle: () =>
+    isDisabled: lights.every((tile) => tile.disabled),
+    onPress: () =>
       void devices
         .switchLights(
           { kind: "room", id: room.id },
           lights,
-          on > 0 ? "off" : "on",
+          isOn ? "off" : "on",
         )
         .catch(() => undefined),
   };
@@ -81,15 +82,15 @@ export function floorLightsButton(
   lights: Tile[],
   floor: Floor,
   devices: Devices,
-): LightsSwitch | undefined {
+): LightsButtonState | undefined {
   if (lights.length === 0) return undefined;
-  const on = onCount(lights);
+  const isOn = hasLightsOn(lights);
   return {
-    on,
+    isOn,
     words: "Turn off lights",
     label: `Turn off lights on ${floor.name}`,
-    disabled: on === 0,
-    onToggle: () =>
+    isDisabled: !isOn,
+    onPress: () =>
       void devices
         .switchLights({ kind: "floor", id: floor.id }, lights, "off")
         .catch(() => undefined),

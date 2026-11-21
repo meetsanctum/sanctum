@@ -13,7 +13,7 @@ import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
-import { LightsButton, type LightsSwitch } from "./lights-button";
+import { LightsButton, type LightsButtonState } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow) under its lights
@@ -152,7 +152,7 @@ type RowEntry = AppSection & { entity: SectionEntity };
 
 /** A room's row: its lights button, then apps' buttons, then apps' tiles. */
 type RoomRowParts = {
-  lights?: LightsSwitch;
+  lights?: LightsButtonState;
   buttons: RowEntry[];
   tiles: RowEntry[];
 };
@@ -175,7 +175,7 @@ export function roomRowOf(
   apps: readonly AppInfo[],
   entities: SectionEntities,
   roomId: string,
-  lights: LightsSwitch | undefined,
+  lights: LightsButtonState | undefined,
 ): RoomRowParts {
   return {
     lights,
@@ -205,7 +205,7 @@ export function RoomRow(props: {
   entities: SectionEntities;
 }) {
   const { row, roomName, entities } = props;
-  const dark = row.lights?.disabled === true;
+  const dark = row.lights?.isDisabled === true;
   const active = [...row.buttons, ...row.tiles].filter(
     ({ entity }) => entity.tile.active,
   );

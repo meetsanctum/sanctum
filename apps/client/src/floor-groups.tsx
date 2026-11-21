@@ -2,7 +2,7 @@ import type { Floor, Places } from "@meetsanctum/app-sdk";
 import { icons } from "@meetsanctum/ui-sdk";
 import type { ReactNode } from "react";
 
-import { LightsButton, type LightsSwitch } from "./lights-button";
+import { LightsButton, type LightsButtonState } from "./lights-button";
 
 // Rooms under their floors, as Home and the category pages show them once
 // the home has floors: each floor in the household's order, then the rooms
@@ -62,7 +62,7 @@ export function FloorSection(props: {
   floor: Floor | null;
   /** Its heading's id, unique on the page. */
   id: string;
-  lights?: LightsSwitch;
+  lights?: LightsButtonState;
   children: ReactNode;
 }) {
   const { floor, lights } = props;

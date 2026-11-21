@@ -237,7 +237,7 @@ describe("the home's status", () => {
     expect(openAttention).toHaveBeenCalledOnce();
   });
 
-  it("gives what needs attention a device tile's width, and the other tiles two cells", async () => {
+  it("gives Attention a device tile's width and Environment two cells on desktop", async () => {
     devices = [
       lamp,
       { ...hallLight, availability: "offline" },
@@ -249,8 +249,10 @@ describe("the home's status", () => {
     expect(tiles()[0]?.className).toContain(
       "sm:w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
+    expect(tiles().every((tile) => tile.classList.contains("col-span-3"))).toBe(
+      true,
+    );
     expect(shown(tiles().at(-1)!)).toContain("Offline");
-    expect(tiles().at(-1)?.classList).toContain("col-span-3");
     expect(tiles().at(-1)?.className).toContain(
       "sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]",
     );

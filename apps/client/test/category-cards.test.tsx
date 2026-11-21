@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, LightsResult } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,6 +12,7 @@ import {
   contactSensor,
   hallLight,
   lamp,
+  light,
   loose,
   places,
   plug,
@@ -83,6 +84,14 @@ const offline = (device: DeviceInfo): DeviceInfo => ({
   ...device,
   availability: "offline",
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolveValue) => {
+    resolve = resolveValue;
+  });
+  return { promise, resolve };
+}
 
 async function click(element: HTMLElement | null | undefined) {
   if (!element) throw new Error("Nothing to click");
@@ -178,6 +187,42 @@ describe("Lights' card", () => {
     expect(did?.textContent).toBe("Lights turned off");
   });
 
+  it("keeps the newest answer when an earlier press finishes late", async () => {
+    const first = deferred<LightsResult>();
+    const second = deferred<LightsResult>();
+    const responses = [first.promise, second.promise];
+    const coreAnswers = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/devices/lights"
+        ? responses.shift()!
+        : coreAnswers(path, init),
+    );
+    await show("lights");
+    const off = lightsCard()!.querySelector("button");
+    const did = lightsCard()!.querySelector("[role=status]");
+    await click(off);
+
+    // Another light comes on while the first press is still pending.
+    devices = [lamp, light(hallLight.id, hallLight.name, "hall", true)];
+    await act(async () => live.refresh());
+    expect(off?.disabled).toBe(false);
+    await click(off);
+
+    await act(async () => {
+      second.resolve({ on: false, switched: 1, failed: [] });
+    });
+    expect(did?.textContent).toBe("Lights turned off");
+
+    await act(async () => {
+      first.resolve({
+        on: false,
+        switched: 0,
+        failed: [{ device: lamp.id, capability: "light" }],
+      });
+    });
+    expect(did?.textContent).toBe("Lights turned off");
+  });
+
   it("keeps its switch, disabled, while every light is off: the home's lights are never all turned on", async () => {
     devices = [hallLight, loose];
     await show("lights");
@@ -189,7 +234,7 @@ describe("Lights' card", () => {
     expect(off?.getAttribute("aria-label")).toBe("Turn off lights");
   });
 
-  it("does not count a light that does not answer as off", async () => {
+  it("counts reachable lights and says Offline when none answer", async () => {
     devices = [lamp, offline(hallLight)];
     await show("lights");
     expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 on"]);

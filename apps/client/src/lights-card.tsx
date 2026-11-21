@@ -1,5 +1,5 @@
 import { icons, type Tile } from "@meetsanctum/ui-sdk";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Devices } from "./use-devices";
 
@@ -41,27 +41,31 @@ export function LightsCard(props: {
   // and come back on if it fails, so a light coming on cannot tell a failed
   // press from a later change.
   const [did, setDid] = useState<string>();
+  const latestPress = useRef(0);
   useEffect(() => {
     if (did === undefined) return;
     const timer = window.setTimeout(() => setDid(undefined), saidForMs);
     return () => window.clearTimeout(timer);
   }, [did]);
-  // A light that does not answer is not counted as off.
-  const offline = tiles.filter((tile) => tile.disabled).length;
   const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const status =
-    on > 0 ? `${on} on` : offline === tiles.length ? "Offline" : "All off";
+  const isOffline = tiles.every((tile) => tile.disabled);
+  const status = on > 0 ? `${on} on` : isOffline ? "Offline" : "All off";
   const label = on > 0 ? `Turn off ${lightsCounted(on)}` : "Turn off lights";
   const turnOff = () => {
+    const press = ++latestPress.current;
     setDid(undefined);
+    // Another light can come on while this press is still waiting.
+    const say = (result: string) => {
+      if (press === latestPress.current) setDid(result);
+    };
     void devices.switchLights({ kind: "home" }, [...tiles], "off").then(
       ({ failed }) =>
-        setDid(
+        say(
           failed.length === 0
             ? "Lights turned off"
             : `${lightsCounted(failed.length)} did not turn off`,
         ),
-      () => setDid("The lights could not be turned off"),
+      () => say("The lights could not be turned off"),
     );
   };
   // The tile's left segment: the bulb, "Lights" and how many are on.
@@ -119,15 +123,6 @@ export function LightsCard(props: {
       <span role="status" className="sr-only">
         {did}
       </span>
-    </div>
-  );
-}
-
-/** A lights card on a line of its own, at the top of a page or a floor. */
-export function LightsCardLine(props: Parameters<typeof LightsCard>[0]) {
-  return (
-    <div className="tile-grid shrink-0 auto-rows-(--cell)">
-      <LightsCard {...props} />
     </div>
   );
 }

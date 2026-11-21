@@ -38,8 +38,12 @@ import {
   type Reading,
 } from "./device-tiles";
 import { byFloor, FloorSection } from "./floor-groups";
-import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
-import { LightsCard, LightsCardLine } from "./lights-card";
+import {
+  floorLightsButton,
+  LightsButton,
+  roomLightsButton,
+} from "./lights-button";
+import { LightsCard } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -252,9 +256,10 @@ type StatusTile = {
   // what needs attention has more to say than a count.
   wide?: boolean;
   open: () => void;
-  /** Lights' tile, with its switch (lights-card.tsx): the home's lights. */
-  lights?: Tile[];
 };
+
+type StatusItem =
+  StatusTile | { key: "lights"; tiles: Tile[]; open: () => void };
 
 /**
  * The home's status on the dashboard: a tile for what the sensors read,
@@ -282,10 +287,12 @@ export function HomeStatus(props: {
   const unit = unitOf(devices);
   // What the sensors read first, the most glanceable; a remote has nothing
   // to say here.
-  const shown = statusOrder.flatMap((id): StatusTile[] => {
+  const shown = statusOrder.flatMap((id): StatusItem[] => {
     const category = deviceCategories.find((each) => each.id === id)!;
     const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
+    const open = () => props.openCategory(id);
+    if (id === "lights") return [{ key: id, tiles: own, open }];
     let value: string;
     let label: string;
     if (category.id === "environment") {
@@ -314,8 +321,7 @@ export function HomeStatus(props: {
         label: `${category.title}, ${label}`,
         icon: look.icon,
         colour: look.colour,
-        open: () => props.openCategory(category.id),
-        lights: category.id === "lights" ? own : undefined,
+        open,
       },
     ];
   });
@@ -361,11 +367,11 @@ export function HomeStatus(props: {
       className="tile-grid shrink-0 auto-rows-(--cell) sm:flex sm:flex-wrap"
     >
       {shown.map((each) => {
-        if (each.lights) {
+        if ("tiles" in each) {
           return (
             <LightsCard
               key={each.key}
-              tiles={each.lights}
+              tiles={each.tiles}
               devices={devices}
               open={each.open}
             />
@@ -377,7 +383,7 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "col-span-3 sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]" : "col-span-2 max-sm:col-span-3 sm:w-[calc(var(--cell)*2+var(--cell-gap))]"} flex h-(--cell) min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${each.wide ? "sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]" : "sm:w-[calc(var(--cell)*2+var(--cell-gap))]"} col-span-3 flex h-(--cell) min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
@@ -421,7 +427,7 @@ export function RoomPage(props: {
     props.apps,
     entities,
     room.id,
-    lightsButton(
+    roomLightsButton(
       own.filter((tile) => tile.kind === "light"),
       room,
       devices,
@@ -554,7 +560,9 @@ export function CategoryPage(props: {
         }
       />
       {category.id === "lights" && own.length > 0 && (
-        <LightsCardLine tiles={own} devices={devices} />
+        <div className="tile-grid shrink-0 auto-rows-(--cell)">
+          <LightsCard tiles={own} devices={devices} />
+        </div>
       )}
       {category.id === "environment" && (
         <SummaryCards
@@ -596,7 +604,7 @@ function CategorySections(props: {
     ? (section: TileSection) => {
         // The lights in no room are not together, so have no button.
         if (section.id === noRoomSection) return null;
-        const lights = lightsButton(
+        const lights = roomLightsButton(
           section.tiles,
           { id: section.id, name: section.title },
           devices,

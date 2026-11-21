@@ -49,7 +49,7 @@ function SummaryCard(props: { card: Summary }) {
   return (
     <li
       data-active={card.active ? "" : undefined}
-      className="col-span-3 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-(--tile) px-3.5 pt-3 pb-3.5 text-(--tile-ink) backdrop-blur-[24px] data-active:bg-(--tile-on) data-active:text-(--tile-on-ink)"
+      className="col-span-3 flex min-w-0 items-center rounded-lg bg-(--tile) px-3.5 pt-3 pb-3.5 text-(--tile-ink) backdrop-blur-[24px] data-active:bg-(--tile-on) data-active:text-(--tile-on-ink)"
     >
       <span className="flex min-w-0 flex-col">
         <span className="flex items-center gap-2 text-[13px] leading-[18px] font-medium">
