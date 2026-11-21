@@ -491,12 +491,15 @@ function Wheel(props: {
     `${props.colour.hue}/${props.colour.saturation}/${props.mireds}`,
     props.failures,
   );
-  const dragging = useRef<number | null>(null);
+  const drag = useRef<{
+    pointerId: number;
+    value: Colour | { mireds: number };
+  } | null>(null);
   const keys = useThrottledSend(onPick, !disabled);
 
   useEffect(() => {
     if (!disabled) return;
-    dragging.current = null;
+    drag.current = null;
     preview.clear();
   }, [disabled, preview.clear]);
 
@@ -527,9 +530,14 @@ function Wheel(props: {
     };
   };
   const end = (picked: Colour | { mireds: number }) => {
-    dragging.current = null;
+    drag.current = null;
     onPick(picked);
     preview.hold(picked);
+  };
+  const endAtLastMove = (event: PointerEvent<HTMLDivElement>) => {
+    // A release can arrive before the last move's preview renders.
+    const active = drag.current;
+    if (active?.pointerId === event.pointerId) end(active.value);
   };
 
   let pin: { x: number; y: number; fill: string };
@@ -574,31 +582,30 @@ function Wheel(props: {
           disabled ||
           event.button !== 0 ||
           event.isPrimary === false ||
-          dragging.current !== null
+          drag.current !== null
         )
           return;
         keys.flush();
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        dragging.current = event.pointerId;
-        preview.drag(at(event));
+        const value = at(event);
+        drag.current = { pointerId: event.pointerId, value };
+        preview.drag(value);
       }}
       onPointerMove={(event) => {
-        if (dragging.current === event.pointerId) preview.drag(at(event));
+        const active = drag.current;
+        if (active?.pointerId !== event.pointerId) return;
+        active.value = at(event);
+        preview.drag(active.value);
       }}
       onPointerUp={(event) => {
-        if (dragging.current === event.pointerId) end(at(event));
+        if (drag.current?.pointerId === event.pointerId) end(at(event));
       }}
-      onPointerCancel={(event) => {
-        if (dragging.current !== event.pointerId) return;
-        dragging.current = null;
-        preview.clear();
-      }}
+      // The wheel takes no touch gestures, so a cancel comes from around the
+      // page, such as a host app that reports a lifted finger as cancelled:
+      // the drag ends where it was.
+      onPointerCancel={endAtLastMove}
       onLostPointerCapture={(event) => {
-        // A release the wheel does not hear still ends the drag where it
-        // was.
-        if (dragging.current === event.pointerId && preview.value) {
-          end(preview.value);
-        }
+        if (event.target === event.currentTarget) endAtLastMove(event);
       }}
       style={{ background }}
       className="absolute inset-0 animate-in rounded-full duration-200 fade-in-0 [touch-action:none] has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50"

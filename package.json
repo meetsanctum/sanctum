@@ -7,7 +7,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "bash deploy/dev/stack.sh dev",
+    "dev:display": "bash deploy/dev/stack.sh display",
     "dev:seed": "bash deploy/dev/stack.sh seed",
+    "dev:approve": "bash deploy/dev/stack.sh approve",
     "dev:stop": "bash deploy/dev/stack.sh stop",
     "dev:down": "bash deploy/dev/stack.sh down",
     "dev:status": "bash deploy/dev/stack.sh status",

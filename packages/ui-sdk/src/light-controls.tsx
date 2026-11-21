@@ -153,14 +153,14 @@ export function BrightnessSlider(props: {
   const disabled = props.disabled ?? false;
   const level = state.on && !disabled ? (state.brightness ?? 100) : 0;
   const preview = usePreview<number>(String(level), props.failures);
-  const dragging = useRef<number | null>(null);
+  const drag = useRef<{ pointerId: number; value: number } | null>(null);
   const [isDragging, setDragging] = useState(false);
   const keys = useThrottledSend(props.onBrightness, !disabled);
   const shown = preview.value ?? level;
 
   useEffect(() => {
     if (!disabled) return;
-    dragging.current = null;
+    drag.current = null;
     setDragging(false);
     preview.clear();
   }, [disabled, preview.clear]);
@@ -172,12 +172,18 @@ export function BrightnessSlider(props: {
     );
   };
   const end = (to: number) => {
-    dragging.current = null;
+    drag.current = null;
     setDragging(false);
     // A previous command may still be in flight even when this matches
     // the reported level, so the final choice must always go out.
     props.onBrightness(to);
     preview.hold(to);
+  };
+  const endAtLastMove = (event: PointerEvent<HTMLDivElement>) => {
+    // A release from the browser or its host may arrive before React renders
+    // the last move. Use the value tracked by the drag itself.
+    const active = drag.current;
+    if (active?.pointerId === event.pointerId) end(active.value);
   };
   const Icon = shown >= 34 ? Sun : SunDim;
 
@@ -192,33 +198,31 @@ export function BrightnessSlider(props: {
             disabled ||
             event.button !== 0 ||
             event.isPrimary === false ||
-            dragging.current !== null
+            drag.current !== null
           )
             return;
           keys.flush();
           event.currentTarget.setPointerCapture?.(event.pointerId);
-          dragging.current = event.pointerId;
+          const value = at(event);
+          drag.current = { pointerId: event.pointerId, value };
           setDragging(true);
-          preview.drag(at(event));
+          preview.drag(value);
         }}
         onPointerMove={(event) => {
-          if (dragging.current === event.pointerId) preview.drag(at(event));
+          const active = drag.current;
+          if (active?.pointerId !== event.pointerId) return;
+          active.value = at(event);
+          preview.drag(active.value);
         }}
         onPointerUp={(event) => {
-          if (dragging.current === event.pointerId) end(at(event));
+          if (drag.current?.pointerId === event.pointerId) end(at(event));
         }}
-        onPointerCancel={(event) => {
-          if (dragging.current !== event.pointerId) return;
-          dragging.current = null;
-          setDragging(false);
-          preview.clear();
-        }}
+        // The slider takes no touch gestures, so a cancel comes from around the
+        // page, such as a host app that reports a lifted finger as cancelled:
+        // the drag ends where it was.
+        onPointerCancel={endAtLastMove}
         onLostPointerCapture={(event) => {
-          // A release the slider does not hear still ends the drag where
-          // it was.
-          if (dragging.current === event.pointerId && preview.value !== null) {
-            end(preview.value);
-          }
+          if (event.target === event.currentTarget) endAtLastMove(event);
         }}
         data-dragging={isDragging ? "" : undefined}
         className="group relative h-72 w-24 overflow-hidden rounded-2xl bg-white/14 [touch-action:none] has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50"

@@ -1,19 +1,21 @@
 import type { StorageQuery, StorageResult } from "@meetsanctum/app-sdk";
+import { migrateDatabase } from "@meetsanctum/app-sdk/storage";
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 // An app's own database for its tests: a SQLite file in memory with the
-// app's migrations applied, answering the app's statements as the core's
-// storage does, rows as arrays of values.
+// app's migrations applied as its runner applies them, answering the app's
+// statements as the core's storage does, rows as arrays of values.
 // It does not check what a statement does, as the core does.
 
 export function createTestStorage(options: { migrationsFolder: string }) {
   const sqlite = new Database(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-  migrate(drizzle({ client: sqlite }), {
-    migrationsFolder: options.migrationsFolder,
-  });
+  try {
+    sqlite.pragma("foreign_keys = ON");
+    migrateDatabase(sqlite, options.migrationsFolder, "The app's database");
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
 
   return {
     /** CoreCalls' `query`, for createAppContext. */

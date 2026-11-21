@@ -55,6 +55,29 @@ certificate authority, and the desktop app pins that authority. The desktop
 app finds hosts on the network and talks to them cross-origin; see
 [apps/desktop](apps/desktop/README.md).
 
+### A wall display
+
+```sh
+pnpm dev:display              # pnpm dev, with the client on the network on :8123
+pnpm dev:approve ABCD-EFGH    # approve the code the display shows
+```
+
+`pnpm dev:display` runs the plain-HTTP development stack and opens the
+client's dev server on the Mac's network interfaces. A wall display such as
+Shelly's accepts an address in its Home Assistant slot only when it answers
+Home Assistant's first sign-in step. The dev server answers that step and
+serves the Sanctum client. The core allows the network addresses as origins
+so apps' pages can open in frames. Give the display a Network address from
+Vite's output, choose the home, then "This is a shared device". Approve its
+code with `pnpm dev:approve <code> [name]` after setting up the home with
+`pnpm dev:seed`. Anyone on the network can reach the stack over this port
+and use the seed's login.
+
+`SANCTUM_DISPLAY_PORT` sets the display port. Give each concurrent
+worktree's display mode its own port. Set `SANCTUM_DISPLAY_TOUCHES=true` to
+record each gesture's pointer and touch events in the worktree's
+`.sanctum-display-touches.jsonl` file.
+
 ## Checks
 
 ```sh

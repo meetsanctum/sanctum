@@ -4,9 +4,20 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 
+import { displayBridge } from "./dev/display.ts";
 import { productName } from "./src/brand.ts";
 
 const coreUrl = process.env.SANCTUM_CORE_URL ?? "http://127.0.0.1:4100";
+const displayPort =
+  process.env.SANCTUM_DISPLAY_ENABLED === "true"
+    ? Number(process.env.SANCTUM_DISPLAY_PORT)
+    : undefined;
+const touchLog =
+  process.env.SANCTUM_DISPLAY_TOUCHES === "true"
+    ? fileURLToPath(
+        new URL("../../.sanctum-display-touches.jsonl", import.meta.url),
+      )
+    : undefined;
 
 function brand(): Plugin {
   return {
@@ -17,7 +28,12 @@ function brand(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), brand()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    brand(),
+    displayPort ? displayBridge(touchLog) : undefined,
+  ],
   resolve: {
     // The alias the shadcn components import from (components.json).
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
@@ -25,7 +41,10 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   server: {
-    port: 5173,
+    // Use the display port directly so this worktree always serves its own stack.
+    host: displayPort ? "0.0.0.0" : undefined,
+    port: displayPort ?? 5173,
+    strictPort: Boolean(displayPort),
     proxy: {
       // The live WebSocket too.
       "/api": { target: coreUrl, ws: true },
