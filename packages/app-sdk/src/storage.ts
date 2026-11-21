@@ -1,6 +1,4 @@
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -55,6 +53,74 @@ export function assertKnownMigrations(
   }
 }
 
+// Applies the migrations this build has and the database lacks, all in one
+// transaction, as Drizzle's migrator would and recording them in the same
+// table. SQLite only suspends foreign keys outside a transaction, and
+// drizzle-kit rebuilds a table by dropping it: with them on, dropping a parent
+// deletes every row that refers to it through ON DELETE CASCADE.
+export function migrateDatabase(
+  sqlite: Database.Database,
+  folder: string,
+  name: string,
+) {
+  const migrations = readMigrationFiles({ migrationsFolder: folder });
+  const brokenKey = () =>
+    sqlite
+      .prepare<[], { table: string }>(
+        "SELECT * FROM pragma_foreign_key_check LIMIT 1",
+      )
+      .get();
+  const foreignKeys = sqlite.pragma("foreign_keys", { simple: true });
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    sqlite
+      .transaction(() => {
+        assertKnownMigrations(sqlite, folder, name);
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at numeric
+          )
+        `);
+        const applied = sqlite
+          .prepare<[], { count: number }>(
+            "SELECT count(*) AS count FROM __drizzle_migrations",
+          )
+          .get()!.count;
+        const pending = migrations.slice(applied);
+        if (pending.length === 0) return;
+        // A key broken before these migrations isn't theirs to answer for.
+        const before = brokenKey();
+        if (before) {
+          throw new Error(
+            `${name} already has a broken foreign key in ${before.table}`,
+          );
+        }
+        const record = sqlite.prepare(
+          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+        );
+        for (const migration of pending) {
+          for (const statement of migration.sql) {
+            sqlite.prepare(statement).run();
+          }
+          record.run(migration.hash, migration.folderMillis);
+        }
+        // With foreign keys off, nothing else notices a migration leaving
+        // rows that refer to nothing.
+        const after = brokenKey();
+        if (after) {
+          throw new Error(
+            `A migration of ${name} broke a foreign key in ${after.table}`,
+          );
+        }
+      })
+      .immediate();
+  } finally {
+    sqlite.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
+  }
+}
+
 // What an app's statements may do: read and change its own rows, in
 // transactions if it likes. Its schema changes only through its migrations,
 // and nothing may name another file (ATTACH, VACUUM INTO) or change the
@@ -99,14 +165,11 @@ export function openAppStorage(
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("foreign_keys = ON");
     if (options.migrationsFolder) {
-      assertKnownMigrations(
+      migrateDatabase(
         sqlite,
         options.migrationsFolder,
         `${options.appId}'s database`,
       );
-      migrate(drizzle({ client: sqlite }), {
-        migrationsFolder: options.migrationsFolder,
-      });
     }
   } catch (error) {
     sqlite.close();
