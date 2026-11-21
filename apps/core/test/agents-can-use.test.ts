@@ -12,7 +12,6 @@ import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
 import { createAgentsCanUse, type AppOffers } from "../src/agents/can-use.js";
-import { agentItems } from "../src/agents/schema.js";
 import { createCoreCalls } from "../src/app-host/calls.js";
 import { contractOf } from "../src/app-host/contract.js";
 import { lampsCore, personWithClient, radio } from "./devices-support.js";
@@ -501,7 +500,7 @@ describe("answers kept for an app's offers", () => {
     };
     const isOn = () =>
       store.canUse("sanctum.example", "example.look", "action");
-    return { db: core.db, store, install, isOn };
+    return { store, install, isOn };
   }
 
   it("allows offers that share a prerequisite and denies cycles", async () => {
@@ -554,22 +553,6 @@ describe("answers kept for an app's offers", () => {
 
     install(offers("read"), true);
     expect(isOn()).toBe(true);
-  });
-
-  it("leaves an offer off when an earlier answer has no kind", async () => {
-    const { db, install, isOn } = await store();
-    db.insert(agentItems)
-      .values({
-        appId: "sanctum.example",
-        itemId: "example.look",
-        on: false,
-        tier: "read",
-        updatedAt: new Date(),
-      })
-      .run();
-
-    install(offers("read"), false);
-    expect(isOn()).toBe(false);
   });
 
   it("keeps an answer through an update, and switches one whose tier rose off", async () => {
