@@ -207,6 +207,9 @@ describe("all the lights of a room", () => {
     ];
     await show("category", "buttons");
     expect(container.querySelector("header")?.textContent).toBe("Buttons");
+    expect(
+      container.querySelector("nav [aria-current=page]")?.textContent,
+    ).toBe("Buttons");
     await act(async () => {
       live.publish({
         type: "press",
@@ -218,6 +221,9 @@ describe("all the lights of a room", () => {
       });
     });
     expect(container.querySelector("header")?.textContent).toBe("Buttons");
+    expect(
+      container.querySelector("nav [aria-current=page]")?.textContent,
+    ).toBe("Buttons");
   });
 
   it("of a room, from its row, through the core", async () => {
@@ -259,6 +265,7 @@ describe("a category's page", () => {
     ]);
     const current = container.querySelector("nav [aria-current=page]");
     expect(current?.textContent).toBe("Lights1 on");
+    expect(current?.getAttribute("aria-label")).toBe("Lights, 1 on");
     expect(
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
@@ -716,11 +723,15 @@ describe("the climate", () => {
     ).toEqual([
       "Lights1 on",
       "Switches1 on",
-      // What Home's status tile says, with its words for a screen reader.
-      "Environment19.5–21.5°19.5 to 21.5°",
+      "Environment19.5–21.5°",
       "Office",
       "Hall",
       "Attic",
     ]);
+    expect(
+      container
+        .querySelector("nav [aria-current=page]")
+        ?.getAttribute("aria-label"),
+    ).toBe("Environment, 19.5 to 21.5°");
   });
 });

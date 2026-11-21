@@ -293,14 +293,15 @@ export function HomeStatus(props: {
     if (own.length === 0) return [];
     const open = () => props.openCategory(id);
     if (id === "lights") return [{ key: id, tiles: own, open }];
-    const { value, spoken } = categoryStatus(id, own, devices)!;
+    const status = categoryStatus(id, own, devices);
+    if (!status) return [];
     const look = categoryLooks[category.id];
     return [
       {
         key: category.id,
         title: category.title,
-        value,
-        label: `${category.title}, ${spoken}`,
+        value: status.value,
+        label: `${category.title}, ${status.spoken}`,
         icon: look.icon,
         colour: look.colour,
         open,
@@ -396,16 +397,16 @@ export function HomeStatus(props: {
  * The sidebar names one room with motion at most, so its words fit and
  * change less as people move about.
  */
-export function categoryStatus(
+function categoryStatus(
   id: DeviceCategory,
   own: readonly Tile[],
   devices: Devices,
   where: "home" | "sidebar" = "home",
-): { value: string; spoken: string } | null {
+): { value: string; spoken: string } | undefined {
   const said = (value: string) => ({ value, spoken: value });
   switch (id) {
     case "lights":
-      return said(lightsStatus(own));
+      return said(lightsStatus(own).value);
     case "environment": {
       const [reading] = readingsOf(
         sensorReadings(own),
@@ -431,7 +432,7 @@ export function categoryStatus(
     case "switches":
       return said(onMeta(own));
     case "buttons":
-      return null;
+      return undefined;
   }
 }
 
@@ -716,10 +717,7 @@ export function SidebarPlaces(props: {
           icon={categoryLooks[category.id].icon}
           colour={categoryLooks[category.id].colour}
           name={category.title}
-          meta={
-            categoryStatus(category.id, category.tiles, devices, "sidebar") ??
-            undefined
-          }
+          meta={categoryStatus(category.id, category.tiles, devices, "sidebar")}
           current={
             current?.page === "category" && current.params.id === category.id
           }

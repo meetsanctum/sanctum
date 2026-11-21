@@ -39,15 +39,21 @@ const lightsCounted = (count: number) =>
  * how many do not, not "All off".
  */
 export function lightsStatus(tiles: readonly Tile[]) {
-  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const offline = tiles.filter((tile) => tile.disabled).length;
-  return on > 0
-    ? `${on} on`
-    : offline === tiles.length
-      ? "Offline"
-      : offline > 0
-        ? `${offline} offline`
-        : "All off";
+  let on = 0;
+  let offline = 0;
+  for (const tile of tiles) {
+    if (tile.disabled) offline++;
+    else if (tile.on) on++;
+  }
+  const value =
+    on > 0
+      ? `${on} on`
+      : offline === tiles.length
+        ? "Offline"
+        : offline > 0
+          ? `${offline} offline`
+          : "All off";
+  return { on, value };
 }
 
 export function LightsCard(props: {
@@ -71,8 +77,7 @@ export function LightsCard(props: {
     const timer = window.setTimeout(() => setDid(undefined), saidForMs);
     return () => window.clearTimeout(timer);
   }, [did]);
-  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const status = lightsStatus(tiles);
+  const { on, value } = lightsStatus(tiles);
   const label = on > 0 ? `Turn off ${lightsCounted(on)}` : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;
@@ -107,7 +112,7 @@ export function LightsCard(props: {
         {/* A pause between its lines, which a screen reader runs together. */}
         <span className="sr-only">, </span>
         <span className="text-[15px] leading-5 font-medium tabular-nums">
-          {status}
+          {value}
         </span>
       </span>
     </>

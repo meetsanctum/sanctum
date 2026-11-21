@@ -26,6 +26,7 @@ export function SidebarItem(
     <Button
       variant="ghost"
       size="item"
+      aria-label={props.meta && `${props.name}, ${props.meta.spoken}`}
       aria-current={props.current ? "page" : undefined}
       onClick={props.onSelect}
       style={
@@ -48,7 +49,7 @@ export function SidebarItem(
           <props.icon aria-hidden="true" className="size-4.5" />
         </span>
       )}
-      {/* A status as long as "Office and Hall" is cut before the name. */}
+      {/* A long status is cut before the category name. */}
       <span
         className={
           props.meta ? "flex-1 whitespace-nowrap" : "min-w-0 flex-1 truncate"
@@ -58,12 +59,7 @@ export function SidebarItem(
       </span>
       {props.meta && (
         <span className="min-w-0 truncate text-[13px] font-normal text-foreground/65 group-aria-[current=page]:text-background/65">
-          <span aria-hidden={props.meta.spoken !== props.meta.value}>
-            {props.meta.value}
-          </span>
-          {props.meta.spoken !== props.meta.value && (
-            <span className="sr-only">{props.meta.spoken}</span>
-          )}
+          {props.meta.value}
         </span>
       )}
     </Button>
