@@ -26,7 +26,6 @@ import type { ReactNode } from "react";
 import { Sentence } from "./automations/parts";
 import type { Part } from "./automations/words";
 import { Section } from "./components";
-import { RowSquares } from "./room-sections";
 
 // What an app adds to the home, on its settings page: a driver's devices,
 // its widgets and room section, each drawn by the shell from the manifest's
@@ -130,12 +129,12 @@ function HomeSlice(props: {
   );
 }
 
-// A section's samples as its tiles or squares, which press nothing.
-function samplesOf(tiles: readonly SampleTile[], iconOnly = false) {
+// A section's samples as its tiles or chips, which press nothing.
+function samplesOf(tiles: readonly SampleTile[], isChip: boolean) {
   return tiles.map((tile) => (
     <SectionTile
       key={tile.name}
-      iconOnly={iconOnly}
+      chip={isChip}
       icon={tileIconOf[tile.icon]}
       name={tile.name}
       active={tile.active}
@@ -227,7 +226,7 @@ export function AppAdds(props: {
         const rooms = now.rooms.filter((room) => placeIds.has(room.id));
         const room = rooms[0] ?? now.rooms[0];
         const tiles = section.preview ?? [];
-        const isButtons = section.kind === "buttons";
+        const isButtonSection = section.kind === "buttons";
         const samples = tiles.map((tile) =>
           tile.active ? `${tile.name}, which is on` : tile.name,
         );
@@ -250,7 +249,7 @@ export function AppAdds(props: {
             {tiles.length > 0 && (
               <HomeSlice
                 background={props.background}
-                label={`A preview of ${possessive(app.name)} ${isButtons ? "buttons" : "tiles"} in a room's row: ${list(samples)}`}
+                label={`A preview of ${possessive(app.name)} ${isButtonSection ? "buttons" : "tiles"} in a room's row: ${list(samples)}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[15px] leading-5 font-medium text-white">
                   {room?.name ?? "Living room"}
@@ -259,14 +258,14 @@ export function AppAdds(props: {
                     className="size-4 text-white/65"
                   />
                 </span>
-                <div className="tile-grid auto-rows-(--cell)">
-                  {isButtons ? (
-                    <RowSquares count={tiles.length}>
-                      {samplesOf(tiles, true)}
-                    </RowSquares>
-                  ) : (
-                    samplesOf(tiles)
-                  )}
+                <div
+                  className={
+                    isButtonSection
+                      ? "flex flex-wrap gap-2"
+                      : "tile-grid auto-rows-(--cell)"
+                  }
+                >
+                  {samplesOf(tiles, isButtonSection)}
                 </div>
               </HomeSlice>
             )}

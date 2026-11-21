@@ -425,7 +425,7 @@ describe("an app's settings page", () => {
     expect(preview.className).toContain("home-slice");
   });
 
-  it("previews room buttons as squares in a room's row", async () => {
+  it("previews room buttons as chips in a room's row", async () => {
     const { roomSections } = manifests[moods.id]!.provides;
     const tiles = roomSections[0]!;
     roomSections[0] = { ...tiles, kind: "buttons" };
@@ -444,13 +444,13 @@ describe("an app's settings page", () => {
           each.getAttribute("aria-pressed"),
         ]),
       ).toEqual([
-        ["", "Aurora", "true"],
-        ["", "Night", "false"],
+        ["Aurora", "Aurora", "true"],
+        ["Night", "Night", "false"],
       ]);
-      // On a phone they share the first half of the line, as in a room's row.
+      // Chips on a line of their own, as beside a room's lights button.
       expect(
         preview.querySelector("button")!.parentElement!.className,
-      ).toContain("max-sm:col-span-3");
+      ).toContain("flex-wrap");
     } finally {
       roomSections[0] = tiles;
     }

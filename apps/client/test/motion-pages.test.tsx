@@ -19,6 +19,7 @@ import {
 } from "../src/place-pages";
 import { useSectionEntities } from "../src/room-sections";
 import { useDevices } from "../src/use-devices";
+import { contactSensor } from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -265,7 +266,7 @@ afterEach(async () => {
 });
 
 describe("a room's line", () => {
-  it("starts with its motion and ends with its light level", async () => {
+  it("says what its sensors read first and ends with its motion", async () => {
     devices = [
       motionSensor(
         "office",
@@ -274,14 +275,15 @@ describe("a room's line", () => {
         { temperature: 21, illuminance: 318 },
       ),
       climate("desk", "office", 21.5, 48),
+      contactSensor("door", "Door", "office", true),
     ];
     await show("room", "office");
 
     expect(readingsLine()).toBe(
-      "Motion nowTemperature 21–21.5°Humidity 48%Light level 320 lx",
+      "Temperature 21–21.5°Humidity 48%Light level 320 lxContact sensors 1 openMotion now",
     );
     // Its motion sensor under Environment and under Presence, after it.
-    expect(headings()).toEqual(["Environment", "Presence"]);
+    expect(headings()).toEqual(["Environment", "Presence", "Security"]);
   });
 
   it("is quiet since the last of its sensors went quiet, with light as a range, offline ones left out", async () => {
@@ -308,7 +310,7 @@ describe("a room's line", () => {
     ];
     await show("room", "office");
 
-    expect(readingsLine()).toBe("Quiet for 3 minLight level 40–320 lx");
+    expect(readingsLine()).toBe("Light level 40–320 lxQuiet for 3 min");
   });
 
   it("moves on each minute", async () => {
@@ -349,7 +351,7 @@ describe("the Presence category", () => {
     ],
   });
 
-  it("opens with each room's last 24 hours above its sensors by room, after Environment in the sidebar", async () => {
+  it("opens with each room's last 24 hours above its sensors by room, after Environment and Security in the sidebar", async () => {
     devices = [
       motionSensor(
         "office",
@@ -358,6 +360,7 @@ describe("the Presence category", () => {
         { temperature: 21 },
       ),
       motionSensor("hall", "hall", { motion: false, minutesAgo: 30 }),
+      contactSensor("door", "Door", "office", true),
       loose(),
     ];
     await show("category", "presence");
@@ -378,6 +381,7 @@ describe("the Presence category", () => {
       ),
     ).toEqual([
       "Environment21°",
+      "Security1 open",
       "PresenceOffice",
       "Office",
       "Hall",

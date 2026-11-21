@@ -722,8 +722,8 @@ describe("the climate", () => {
       ),
     ).toEqual([
       "Lights1 on",
-      "Switches1 on",
       "Environment19.5–21.5°",
+      "Switches1 on",
       "Office",
       "Hall",
       "Attic",

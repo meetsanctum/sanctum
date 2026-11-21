@@ -12,10 +12,10 @@ part:
 | Category    | Id            | Holds         | Its page also has                              |
 | ----------- | ------------- | ------------- | ---------------------------------------------- |
 | Lights      | `lights`      | Light parts   | How many are on, with **Turn all off**         |
-| Switches    | `switches`    | Switch parts  | How many are on                                |
 | Environment | `environment` | Sensor parts  | Ranges for temperature and humidity            |
-| Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
 | Security    | `security`    | Contact parts | A summary of what is open                      |
+| Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
+| Switches    | `switches`    | Switch parts  | How many are on                                |
 | Buttons     | `buttons`     | Button parts  | Nothing more                                   |
 
 The sidebar lists them in this order, under Categories, and only those with

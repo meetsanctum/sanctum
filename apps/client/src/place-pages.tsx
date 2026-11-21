@@ -61,8 +61,8 @@ import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
-// complete and fixed. A room's page opens with its name, its motion, whether
-// its contact sensors are open and what its sensors read under it, then its
+// complete and fixed. A room's page opens with its name, what its sensors
+// read, whether its contact sensors are open and its motion, then its
 // row: its lights button, Natural light and its moods (room-sections.tsx),
 // then its devices in a section for each category, and last the devices Sanctum
 // cannot use. A category's page shows its tiles in a section
@@ -110,14 +110,14 @@ export const unitOf = (devices: Devices) =>
 
 // A room's or a category's page has its name in the top bar, as a
 // dashboard and an app's page do, and on a phone opening the page
-// (PageBar). A room's opens with its motion and what its sensors read,
-// offline ones left out; a category's with its status.
+// (PageBar). A room's opens with what its sensors read, offline ones left
+// out, its contact sensors and its motion; a category's with its status.
 function PlaceHeader(props: {
   title: string;
   subtitle?: string;
-  /** Its motion in words, first in the line of readings. */
+  /** Its motion in words, last in the line of readings. */
   motion?: string | null;
-  /** Its contact sensors in words, after its motion. */
+  /** Its contact sensors in words, before its motion. */
   contact?: PlaceContact | null;
   readings?: Reading[];
 }) {
@@ -159,9 +159,11 @@ export type PlaceContact = {
 };
 
 /**
- * A place's motion, whether its contact sensors are open and what its
- * sensors read, in a line: under a room page's name, and under a room's
- * name on Home. Nothing without any.
+ * What a place's sensors read, whether its contact sensors are open and its
+ * motion, in a line: under a room page's name, and under a room's name on
+ * Home. They come in the categories' order, Environment's temperature,
+ * humidity and light level, then Security, then Presence. Nothing without
+ * any.
  */
 export function PlaceReadings(props: {
   motion?: string | null;
@@ -177,23 +179,6 @@ export function PlaceReadings(props: {
       data-slot="readings"
       className={`m-0 flex flex-wrap gap-x-4 gap-y-1 ${props.className}`}
     >
-      {props.motion && (
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <icons.Footprints aria-hidden="true" className="text-white/65" />
-          {props.motion}
-        </span>
-      )}
-      {contact && (
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <Contact
-            aria-hidden="true"
-            className="text-white/65"
-            strokeDasharray={contact.isUnknown ? "3 3" : undefined}
-          />
-          {contact.label && <span className="sr-only">{contact.label} </span>}
-          {contact.text}
-        </span>
-      )}
       {props.readings?.map((each) => {
         const Icon = readingIcons[each.measure];
         return (
@@ -207,6 +192,23 @@ export function PlaceReadings(props: {
           </span>
         );
       })}
+      {contact && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Contact
+            aria-hidden="true"
+            className="text-white/65"
+            strokeDasharray={contact.isUnknown ? "3 3" : undefined}
+          />
+          {contact.label && <span className="sr-only">{contact.label} </span>}
+          {contact.text}
+        </span>
+      )}
+      {props.motion && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <icons.Footprints aria-hidden="true" className="text-white/65" />
+          {props.motion}
+        </span>
+      )}
     </p>
   );
 }
@@ -237,13 +239,26 @@ function Sections(props: {
   );
 }
 
-const statusOrder = [
+// The categories in the shell's order, Home's status row and the sidebar
+// alike: Lights first, the one with something to press, then Environment,
+// Security and Presence, as a room's line of readings has them.
+const categoryOrder = [
   "lights",
   "environment",
   "security",
   "presence",
   "switches",
+  "buttons",
 ] as const satisfies DeviceCategory[];
+
+const sidebarCategories = categoryOrder.map((id) =>
+  deviceCategories.find((each) => each.id === id)!,
+);
+
+// A remote has nothing to say in the home's status.
+const statusCategories = sidebarCategories.filter(
+  (category) => category.id !== "buttons",
+);
 
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
@@ -285,20 +300,18 @@ export function HomeStatus(props: {
   const row = useRef<HTMLElement>(null);
   useEdgeFade(row);
   const unit = unitOf(devices);
-  // Lights first, the one with something to press; a remote has nothing
-  // to say here.
-  const shown = statusOrder.flatMap((id): StatusItem[] => {
-    const category = deviceCategories.find((each) => each.id === id)!;
+  const shown = statusCategories.flatMap((category): StatusItem[] => {
+    const { id } = category;
     const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
     const open = () => props.openCategory(id);
     if (id === "lights") return [{ key: id, tiles: own, open }];
     const status = categoryStatus(id, own, devices);
     if (!status) return [];
-    const look = categoryLooks[category.id];
+    const look = categoryLooks[id];
     return [
       {
-        key: category.id,
+        key: id,
         title: category.title,
         value: status.value,
         label: `${category.title}, ${status.spoken}`,
@@ -701,7 +714,7 @@ export function SidebarPlaces(props: {
   ) => void;
 }) {
   const { devices, current, open } = props;
-  const shown = deviceCategories
+  const shown = sidebarCategories
     .map((category) => ({
       ...category,
       tiles: tilesIn(category, devices.tiles),
