@@ -48,8 +48,17 @@ export function LightsCard(props: {
     return () => window.clearTimeout(timer);
   }, [did]);
   const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const isOffline = tiles.every((tile) => tile.disabled);
-  const status = on > 0 ? `${on} on` : isOffline ? "Offline" : "All off";
+  const offline = tiles.filter((tile) => tile.disabled).length;
+  // A light that does not answer may still be on, so while none that
+  // answers is on the card says how many do not, not "All off".
+  const status =
+    on > 0
+      ? `${on} on`
+      : offline === tiles.length
+        ? "Offline"
+        : offline > 0
+          ? `${offline} offline`
+          : "All off";
   const label = on > 0 ? `Turn off ${lightsCounted(on)}` : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;

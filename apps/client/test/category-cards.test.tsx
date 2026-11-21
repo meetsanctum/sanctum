@@ -234,16 +234,17 @@ describe("Lights' card", () => {
     expect(off?.getAttribute("aria-label")).toBe("Turn off lights");
   });
 
-  it("counts reachable lights and says Offline when none answer", async () => {
+  it("counts reachable lights, and says how many are offline rather than All off", async () => {
     devices = [lamp, offline(hallLight)];
     await show("lights");
     expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 on"]);
 
+    // The lamp that does not answer may still be on.
     devices = [hallLight, offline(lamp)];
     await act(async () => {
       live.refresh();
     });
-    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "All off"]);
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 offline"]);
 
     devices = [offline(lamp), offline(hallLight)];
     await act(async () => {
