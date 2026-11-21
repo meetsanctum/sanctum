@@ -6,7 +6,7 @@ import {
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, PageBar, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -26,6 +26,7 @@ import {
   waitingWords,
 } from "./app-state";
 import { productName } from "./brand";
+import { SettingsPageBar } from "./components";
 import {
   Dialog,
   DialogContent,
@@ -185,6 +186,9 @@ export function AppPage(props: {
   onChanged: (app: AppInfo) => void;
   openStatus: () => void;
   onDone: () => void;
+  // The page under it in Settings, which Back returns to: without one it
+  // was opened from elsewhere, and Done closes it.
+  backTo?: string;
 }) {
   const { app } = props;
   const { manifest, entities, workflows } = useHomeNow(app);
@@ -207,11 +211,11 @@ export function AppPage(props: {
   }, [showsAtStart]);
   return (
     <>
-      <PageBar title={`${app.name} settings`}>
-        <Button variant="outline" onClick={props.onDone}>
-          Done
-        </Button>
-      </PageBar>
+      <SettingsPageBar
+        title={`${app.name} settings`}
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       <div ref={start} className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-3">
           <AppIcon

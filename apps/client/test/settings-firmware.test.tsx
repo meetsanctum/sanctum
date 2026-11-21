@@ -399,7 +399,7 @@ describe("Settings → Devices' firmware", () => {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="main"
+          page="devices"
           params={{}}
           open={() => undefined}
           back={() => undefined}
@@ -452,7 +452,9 @@ describe("Settings → Devices' firmware", () => {
 
   it("says an update is available, and asks before starting it", async () => {
     await show();
-    expect(container.textContent).toContain("Devices1 update");
+    expect(
+      document.querySelector("#settings-devices > span")?.textContent,
+    ).toBe("1 update");
     expect(lineOf("Office light")).toContain(
       "Update available · Office · Hue Essential",
     );

@@ -57,10 +57,14 @@ import {
 import { usePins } from "./pins";
 import { useSectionEntities } from "./room-sections";
 import { SettingsPage, settingsApp } from "./settings";
+import {
+  isSettingsRouteAvailable,
+  useSettingsNavigation,
+} from "./settings-navigation";
 import { maintenanceSettingsPage } from "./settings-maintenance";
 import { statusSettingsPage } from "./settings-status";
 import { appSettingsPage } from "./settings-apps";
-import { SetupGuide, SetupLeft, type SetupTarget } from "./setup-guide";
+import { SetupGuide, SetupLeft } from "./setup-guide";
 import { StickOffer } from "./stick-offer";
 import { getShell, type FoundHost, type StoredHost } from "./shell";
 import { ShellFrame } from "./shell-frame";
@@ -99,9 +103,8 @@ function useCoreStatus() {
 // lists the dashboards, the categories and the rooms
 // (home-sidebar.tsx). Room pages draw apps' room sections from their
 // entities (place-pages.tsx). An app's page opens its preferences,
-// Settings → Apps → the app. There is no Back: the sidebar
-// leads everywhere, and a page that another opened, such as an editor, has
-// its own way out, which returns to the page under it. Until the screen
+// Settings → Apps → the app. The sidebar leads between apps and places.
+// A page opened from another has its own way back. Until the screen
 // has first connected to the stored host, and whenever the core is away after
 // that, such as when an update restarts it, the connection veil covers the
 // screen and it reconnects by itself; it offers a way out once the home has
@@ -317,8 +320,7 @@ export function Home(props: {
     setRoutes((current) => {
       const remaining = current.filter((route) =>
         route.app === settingsApp.id
-          ? route.page !== appSettingsPage ||
-            installed.some((app) => app.id === route.params.id)
+          ? isSettingsRouteAvailable(route, installed)
           : route.app === placePages ||
             route.app === appsPage ||
             route.app === automationsApp.id ||
@@ -364,18 +366,7 @@ export function Home(props: {
   useEffect(() => {
     if (!onDashboard || dashboard?.kind !== "home") setEditingHome(false);
   }, [onDashboard, dashboard?.kind]);
-  // A step of the setup guide Settings is to start, once: coming back to
-  // Settings later starts nothing.
-  const [setupStep, setSetupStep] = useState<SetupTarget>();
-  const setupStarted = useCallback(() => setSetupStep(undefined), []);
-  const openSettings = () => {
-    setSetupStep(undefined);
-    setRoutes([{ app: settingsApp.id, page: "main", params: {} }]);
-  };
-  const openSetup = (step: SetupTarget) => {
-    setSetupStep(step);
-    setRoutes([{ app: settingsApp.id, page: "main", params: {} }]);
-  };
+  const settings = useSettingsNavigation(routes, setRoutes, installed);
   const openAutomations = () =>
     setRoutes([{ app: automationsApp.id, page: "main", params: {} }]);
   // Somewhere new from the sidebar, which takes the floating one away.
@@ -387,7 +378,7 @@ export function Home(props: {
   // What Apps lists, and what may be pinned.
   const listed = listedApps(
     [
-      { ...settingsApp, onOpen: openSettings },
+      { ...settingsApp, onOpen: settings.openSettings },
       { ...automationsApp, onOpen: openAutomations },
     ],
     installed,
@@ -471,7 +462,7 @@ export function Home(props: {
                 me?.person
                   ? {
                       person: me.person,
-                      onSettings: openSettings,
+                      onSettings: settings.openSettings,
                       onSignOut: signOut,
                     }
                   : undefined
@@ -510,7 +501,10 @@ export function Home(props: {
                   }
                 />
                 <PageBarSlot.Provider value={pageSlot}>
-                  <main className={`page${appPage ? " app-page" : ""}`}>
+                  <main
+                    ref={settings.scrollArea}
+                    className={`page${appPage ? " app-page" : ""}`}
+                  >
                     {onDashboard && dashboard && (
                       <h1 className="sr-only">
                         {isEditingHome
@@ -553,6 +547,7 @@ export function Home(props: {
                         params={route.params}
                         open={opener(settingsApp.id)}
                         back={back}
+                        backTo={settings.backTo}
                         apps={installed}
                         onAppChanged={appChanged}
                         onAppAdded={appAdded}
@@ -570,8 +565,8 @@ export function Home(props: {
                         onUpdating={setUpdateRunning}
                         status={shownStatus}
                         statusFailed={statusFailed}
-                        start={route.page === "main" ? setupStep : undefined}
-                        onStarted={setupStarted}
+                        start={settings.start}
+                        onStarted={settings.onStarted}
                       />
                     ) : route?.app === placePages ? (
                       route.page === "room" ? (
@@ -651,7 +646,7 @@ export function Home(props: {
                           devices={devices}
                           live={live}
                           person={me?.person?.name ?? null}
-                          open={openSetup}
+                          open={settings.openSetup}
                         />
                       ) : (
                         <>
@@ -659,7 +654,7 @@ export function Home(props: {
                             <SetupLeft
                               devices={devices}
                               live={live}
-                              open={openSetup}
+                              open={settings.openSetup}
                             />
                           )}
                           <HomeStatus
@@ -667,7 +662,7 @@ export function Home(props: {
                             problems={shownStatus?.problems ?? []}
                             notSetUp={shownStatus?.notSetUp}
                             apps={installed}
-                            openAttention={openSettings}
+                            openAttention={settings.openOverview}
                             openStatus={() =>
                               opener(settingsApp.id)(statusSettingsPage)
                             }

@@ -99,7 +99,7 @@ export function updatesOf(devices: readonly DeviceInfo[]) {
     .sort((a, b) => rank(a)! - rank(b)! || byName(a, b));
 }
 
-/** Maintenance's heading hint: how many batteries to replace and updates, if any. */
+/** Settings' row for Maintenance: how many batteries to replace and updates, if any. */
 export function maintenanceHint(devices: readonly DeviceInfo[], now: number) {
   const batteries = dueBatteries(devices, now).length;
   const updates = updatesOf(devices).length;
@@ -111,31 +111,6 @@ export function maintenanceHint(devices: readonly DeviceInfo[], now: number) {
       .filter(Boolean)
       .join(" · ") || undefined
   );
-}
-
-/** A few names, such as "Office light and Hall light" or "Desk lamp, Office light and 2 more". */
-export function namesOf(devices: readonly DeviceInfo[]) {
-  const names = devices.map((device) => device.name);
-  if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
-}
-
-/** The line of Settings' row for updates: the one that leads, then the rest. */
-export function updatesLine(updates: readonly DeviceInfo[]) {
-  const [first, ...rest] = updates;
-  if (!first) return "";
-  const state = first.firmware?.state;
-  const lead =
-    state === "failed"
-      ? `${first.name}'s update didn't finish`
-      : state === "updating"
-        ? `${first.name} is updating, ${Math.floor(first.firmware?.progress ?? 0)}%`
-        : state === "waiting"
-          ? `${first.name} updates when it wakes`
-          : null;
-  if (!lead) return namesOf(updates);
-  if (rest.length === 0) return lead;
-  return `${lead} · ${state === "updating" ? "then " : ""}${namesOf(rest)}`;
 }
 
 /** What the dashboard's Batteries tile says, while a battery is to replace: one device by its name, several by their number. */

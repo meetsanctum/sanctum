@@ -1,5 +1,5 @@
 import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { Button, PageBar, useTemperatureUnit } from "@meetsanctum/ui-sdk";
+import { Button, useTemperatureUnit } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Check,
@@ -13,7 +13,7 @@ import {
 import type { ReactNode } from "react";
 
 import { productName } from "./brand";
-import { Section } from "./components";
+import { Section, SettingsPageBar } from "./components";
 import {
   connectionText,
   fineDetail,
@@ -69,10 +69,11 @@ const plainRound = (Icon: LucideIcon) => (
   </span>
 );
 
-// The line of System's row and of Sanctum in Needs attention: the first
-// problem, or every one, in red after a sign; or a green check and
-// "Everything's running" with what's free and how warm it is.
-function SummaryLine(props: {
+// The line of System's rows, in Settings and on its System page, and of
+// Sanctum in Needs attention: the first problem, or every one, in red after
+// a sign; or a green check and "Everything's running" with what's free and
+// how warm it is.
+export function SummaryLine(props: {
   status: SystemStatus | undefined;
   failed: boolean;
   unit: TemperatureUnit;
@@ -130,7 +131,7 @@ function SummaryLine(props: {
 }
 
 // What a screen reader hears of the summary, as SummaryLine shows it.
-function summarySpoken(
+export function summarySpoken(
   status: SystemStatus | undefined,
   unit: TemperatureUnit,
   failed = false,
@@ -420,6 +421,9 @@ function Loading() {
 export function StatusPage(props: {
   apps: readonly AppInfo[];
   onDone: () => void;
+  // The page under it in Settings, which Back returns to: without one it
+  // was opened from elsewhere, and Done closes it.
+  backTo?: string;
   onPowerAccepted?: (action: PowerAction) => void;
 }) {
   const { status, failed } = useSystemStatus({ enabled: true, everyMs: 5_000 });
@@ -428,11 +432,11 @@ export function StatusPage(props: {
   const host = failed ? null : status?.host;
   return (
     <>
-      <PageBar title="Status">
-        <Button variant="outline" onClick={props.onDone}>
-          Done
-        </Button>
-      </PageBar>
+      <SettingsPageBar
+        title="Status"
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       {!status && !failed ? (
         <Loading />
       ) : (

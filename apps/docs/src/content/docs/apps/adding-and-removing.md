@@ -7,8 +7,8 @@ sidebar:
 
 ## Adding an app
 
-1. Open **Settings**. Under **Add apps**, choose **Add** beside the app you
-   want.
+1. Open **Settings → Apps**. Under **Add apps**, choose **Add** beside the
+   app you want.
 2. The sheet shows what the app adds to your home, how much memory it can
    use and the permissions it needs or asks to start with, together with
    the reason for each.
@@ -38,7 +38,7 @@ You don't have to look for these two:
   into Sanctum's computer brings up an offer on connected devices in your
   home. Choose **Add Zigbee** or **Cancel**. If someone cancels the offer,
   it closes on every device and stays closed while the stick stays plugged
-  in. You can still add Zigbee from **Settings** under **Add apps**.
+  in. You can still add Zigbee from **Settings → Apps** under **Add apps**.
 - **ESPHome.** If the ESPHome app isn't installed, Sanctum can offer it
   when it finds ESPHome devices on your network. In **Add devices**, the
   **ESPHome** card says how many it found, such as "2 ESPHome devices found".

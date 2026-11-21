@@ -209,7 +209,7 @@ describe("Settings → Rooms", () => {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="main"
+          page="rooms"
           params={{}}
           start={start}
           onStarted={started}
@@ -277,17 +277,12 @@ describe("Settings → Rooms", () => {
     expect(section().textContent).toContain("Add room");
   });
 
-  it("opens with Add room for the dashboard's setup, showing the section", async () => {
-    const scrolled = vi.fn();
+  it("opens with Add room for the dashboard's setup", async () => {
     started.mockClear();
-    Element.prototype.scrollIntoView = scrolled;
 
     await show(admin, "add-room");
 
     expect(dialog()?.textContent).toContain("Add a room");
-    expect(scrolled.mock.contexts).toEqual([
-      document.getElementById("settings-rooms"),
-    ]);
     expect(started).toHaveBeenCalledOnce();
   });
 

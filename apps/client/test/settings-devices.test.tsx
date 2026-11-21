@@ -137,7 +137,7 @@ describe("Settings → Devices", () => {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="main"
+          page="devices"
           params={{}}
           open={() => undefined}
           back={() => undefined}
@@ -204,7 +204,7 @@ describe("Settings → Devices", () => {
     expect(container.textContent).toContain("Add devices");
   });
 
-  it("says on its heading what waits to be added, and follows it live", async () => {
+  it("says over its list what waits to be added, and follows it live", async () => {
     const found = {
       driver: "sanctum.zigbee",
       key: "0x1",
@@ -216,14 +216,15 @@ describe("Settings → Devices", () => {
     };
     pairing = { ...pairing, found: [found, { ...found, key: "0x2" }] };
     await show(admin);
-    const heading = () =>
-      document.querySelector("#settings-devices")!.parentElement!.textContent;
-    expect(heading()).toBe("Devices2 found on your network");
+    // On its own page, the section's hint leads its card.
+    const hint = () =>
+      document.querySelector("#settings-devices > span")?.textContent;
+    expect(hint()).toBe("2 found on your network");
 
     await act(async () =>
       live.publish({ type: "pairing", pairing: { ...pairing, found: [] } }),
     );
-    expect(heading()).toBe("Devices");
+    expect(hint()).toBeUndefined();
   });
 
   it("lists the devices and follows them live", async () => {

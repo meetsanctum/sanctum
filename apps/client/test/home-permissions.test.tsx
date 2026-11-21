@@ -126,6 +126,11 @@ it("keeps a confirmed permission change when an older app refresh finishes", asy
       .click(),
   );
   await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>("main nav button")]
+      .find((button) => button.textContent?.startsWith("Apps"))!
+      .click(),
+  );
+  await act(async () =>
     [...container.querySelectorAll<HTMLButtonElement>("main li button")]
       .find((button) => button.textContent?.startsWith("Test app"))!
       .click(),

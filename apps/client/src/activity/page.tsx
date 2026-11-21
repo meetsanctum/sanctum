@@ -4,12 +4,12 @@ import type {
   DeviceInfo,
   Places,
 } from "@meetsanctum/app-sdk";
-import { Button, PageBar, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { Section } from "../components";
+import { Section, SettingsPageBar } from "../components";
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { coreDevices } from "../core-devices";
 import { coreJson } from "../core-fetch";
@@ -17,7 +17,6 @@ import { daysOf, foldCauses, useActivity, type Folded } from "./data";
 import {
   ActivityEnd,
   ActivityProblem,
-  ActivityRow,
   ActivitySkeleton,
   FoldedRow,
   type ListContext,
@@ -81,6 +80,9 @@ export function ActivityPage(props: {
   apps: readonly AppInfo[];
   live: LiveFeed;
   onDone: () => void;
+  // The page under it in Settings, which Back returns to: without one it
+  // was opened from elsewhere, and Done closes it.
+  backTo?: string;
 }) {
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [device, setDevice] = useState(props.device);
@@ -114,11 +116,11 @@ export function ActivityPage(props: {
 
   return (
     <>
-      <PageBar title="Activity">
-        <Button variant="outline" onClick={props.onDone}>
-          Done
-        </Button>
-      </PageBar>
+      <SettingsPageBar
+        title="Activity"
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       <div className="flex shrink-0 flex-wrap items-center gap-3">
         <ToggleGroup
           type="single"
@@ -202,52 +204,5 @@ export function ActivityPage(props: {
         </>
       )}
     </>
-  );
-}
-
-// How many entries Settings shows.
-const newest = 5;
-
-/** Settings → Activity: the newest few, and Show all. */
-export function ActivitySection(props: {
-  apps: readonly AppInfo[];
-  live: LiveFeed;
-  onShowAll: () => void;
-}) {
-  const activity = useActivity({}, props.live, { limit: newest });
-  const context: ListContext = {
-    where: "home",
-    apps: props.apps,
-    rooms: () => null,
-  };
-  return (
-    <Section
-      id="settings-activity"
-      title="Activity"
-      hint="Who did what in the home"
-      action={
-        <Button variant="outline" size="sm" onClick={props.onShowAll}>
-          Show all
-        </Button>
-      }
-    >
-      {activity.state === "loading" ? (
-        <ActivitySkeleton />
-      ) : activity.state === "failed" ? (
-        <ActivityProblem what="Activity didn't load" onRetry={activity.retry} />
-      ) : activity.entries.length === 0 ? (
-        <p className="m-0 text-[13px] font-medium text-muted-foreground">
-          Nothing has happened yet.
-        </p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
-          {activity.entries.slice(0, newest).map((entry) => (
-            <li key={entry.id}>
-              <ActivityRow entry={entry} context={context} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
   );
 }
