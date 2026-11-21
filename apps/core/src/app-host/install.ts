@@ -146,14 +146,11 @@ export function createAppInstaller(options: {
           }
         : undefined,
     );
-    // What it offers AI agents, answered the same way: a version the home
-    // hasn't run brings what it newly offers in off.
+    // What it offers AI agents, answered the same way: an app the home has
+    // run brings what it newly offers in off, whatever its version says.
     options.agents.adopt(
       { app: appId, offers: contract.offers },
-      {
-        asUpdate:
-          previous !== undefined && previous.version !== manifest.version,
-      },
+      { asUpdate: previous !== undefined },
     );
     const granted = options.grants.of(manifest);
     const held = (name: string) => granted.includes(servicePermission(name));

@@ -3,10 +3,11 @@ import type {
   SwitchAiArea,
   SwitchAiOffer,
 } from "@meetsanctum/app-sdk";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import type { Gate } from "../app-host/gate.js";
+import { ActionCallError } from "../app-host/errors.js";
+import type { Gate, Rule } from "../app-host/gate.js";
 import { permissionsRule } from "../app-host/grants.js";
 import { changedBy, parseRequest } from "../auth/callers.js";
 import type { AgentsCanUse } from "./can-use.js";
@@ -35,21 +36,29 @@ export function registerAgentRoutes(
   options: { canUse: AgentsCanUse; gate: Gate },
 ) {
   const { canUse, gate } = options;
+  // Refused here as well as by the auth hook: an AI agent's token never
+  // reads or changes what AI agents can use.
+  const admit = (request: FastifyRequest, rule: Rule) => {
+    if (request.principal?.scope === "agent") {
+      throw new ActionCallError("forbidden");
+    }
+    gate.admit(request.principal!, rule);
+  };
 
   app.get("/api/agents/can-use", async (request): Promise<AiCanUse> => {
-    gate.admit(request.principal!, { tier: "read" });
+    admit(request, { tier: "read" });
     return canUse.list();
   });
 
   app.post("/api/agents/can-use/area", async (request): Promise<AiCanUse> => {
-    gate.admit(request.principal!, permissionsRule);
+    admit(request, permissionsRule);
     const { id: area, on } = parseRequest(schemas.area, request.body);
     canUse.setArea(area, on, changedBy(request.principal!));
     return canUse.list();
   });
 
   app.post("/api/agents/can-use/offer", async (request): Promise<AiCanUse> => {
-    gate.admit(request.principal!, permissionsRule);
+    admit(request, permissionsRule);
     const body = parseRequest(schemas.offer, request.body);
     canUse.setOffer(body.app, body.id, body.on, changedBy(request.principal!));
     return canUse.list();

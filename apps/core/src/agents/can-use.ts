@@ -28,7 +28,7 @@ import { agentAreas, agentItems } from "./schema.js";
 // a new version of one the home has run brings what it newly offers in
 // off, whatever its default. An item whose tier rises goes back off, since
 // the household said yes to less. Answers outlive the app's removal, so one
-// coming back keeps them.
+// coming back keeps them, and go with its data.
 
 /** One app's offers, as its contract keeps them. */
 export type AppOffers = {
@@ -152,8 +152,7 @@ export function createAgentsCanUse(
               .values({
                 appId: app.app,
                 itemId,
-                // An answer without a kind may be for a different offer.
-                on: !asUpdate && !rows.has(offer.id) && offer.starts === "on",
+                on: !asUpdate && offer.starts === "on",
                 tier,
                 updatedAt,
               })
