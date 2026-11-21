@@ -1,7 +1,5 @@
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { readMigrationFiles } from "drizzle-orm/migrator";
+import { readMigrationFiles, type MigrationMeta } from "drizzle-orm/migrator";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -18,26 +16,25 @@ export class NewerDatabaseError extends Error {}
 // A database carrying migrations this build does not have was written by a
 // newer build, such as after pushing an older one to a dev host: this code
 // would not know its tables. An update that brings one up fails its health
-// check and rolls back.
-export function assertKnownMigrations(
+// check and rolls back. Otherwise this counts the migrations it has.
+function countKnownMigrations(
   sqlite: Database.Database,
-  folder: string,
-  name = "The core's database",
+  known: MigrationMeta[],
+  name: string,
 ) {
-  const known = readMigrationFiles({ migrationsFolder: folder });
   const table = sqlite
     .prepare(
       "select 1 from sqlite_master where type = 'table' and name = '__drizzle_migrations'",
     )
     .get();
   if (!table) {
-    return;
+    return 0;
   }
   const applied = sqlite
-    .prepare(
+    .prepare<[], { hash: string; createdAt: number | bigint | string }>(
       "select hash, created_at as createdAt from __drizzle_migrations order by created_at",
     )
-    .all() as { hash: string; createdAt: number | string }[];
+    .all();
   // The applied history must be an exact prefix of this build's migrations.
   // Timestamps alone miss changed SQL, and membership alone misses gaps that
   // Drizzle skips because it only applies migrations after the latest timestamp.
@@ -52,6 +49,71 @@ export function assertKnownMigrations(
     throw new NewerDatabaseError(
       `${name} migration history does not match this build; it was written by a newer or different build`,
     );
+  }
+  return applied.length;
+}
+
+// Applies the migrations this build has and the database lacks, all in one
+// transaction, recording them in the same table as Drizzle's migrator does.
+// `name` begins its errors, such as "The core's database".
+export function migrateDatabase(
+  sqlite: Database.Database,
+  folder: string,
+  name: string,
+) {
+  // Foreign keys can only be switched off between transactions.
+  if (sqlite.inTransaction) {
+    throw new Error(`${name} can't be migrated inside a transaction`);
+  }
+  const migrations = readMigrationFiles({ migrationsFolder: folder });
+  // drizzle-kit rebuilds a table by dropping it. With foreign keys on, that
+  // deletes every row referring to it through ON DELETE CASCADE.
+  const foreignKeys = sqlite.pragma("foreign_keys", { simple: true });
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    sqlite
+      .transaction(() => {
+        const applied = countKnownMigrations(sqlite, migrations, name);
+        const pending = migrations.slice(applied);
+        if (pending.length === 0) return;
+        const brokenKey = sqlite.prepare<[], { table: string }>(
+          "PRAGMA foreign_key_check",
+        );
+        // A key broken before these migrations isn't theirs to answer for.
+        const before = brokenKey.get();
+        if (before) {
+          throw new Error(
+            `${name} already has a broken foreign key in ${before.table}`,
+          );
+        }
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at numeric
+          )
+        `);
+        const record = sqlite.prepare(
+          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+        );
+        for (const migration of pending) {
+          for (const statement of migration.sql) {
+            sqlite.prepare(statement).run();
+          }
+          record.run(migration.hash, migration.folderMillis);
+        }
+        // With foreign keys off, nothing else notices a migration leaving
+        // rows that refer to nothing.
+        const after = brokenKey.get();
+        if (after) {
+          throw new Error(
+            `${name} has a broken foreign key in ${after.table} after its migrations`,
+          );
+        }
+      })
+      .immediate();
+  } finally {
+    sqlite.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
   }
 }
 
@@ -99,14 +161,11 @@ export function openAppStorage(
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("foreign_keys = ON");
     if (options.migrationsFolder) {
-      assertKnownMigrations(
+      migrateDatabase(
         sqlite,
         options.migrationsFolder,
         `${options.appId}'s database`,
       );
-      migrate(drizzle({ client: sqlite }), {
-        migrationsFolder: options.migrationsFolder,
-      });
     }
   } catch (error) {
     sqlite.close();

@@ -1,10 +1,9 @@
-import { assertKnownMigrations } from "@meetsanctum/app-sdk/storage";
+import { migrateDatabase } from "@meetsanctum/app-sdk/storage";
 import Database from "better-sqlite3";
 import {
   drizzle,
   type BetterSQLite3Database,
 } from "drizzle-orm/better-sqlite3";
-import { readMigrationFiles } from "drizzle-orm/migrator";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,64 +47,6 @@ export function durably<T>(db: CoreDatabase, work: () => T): T {
   }
 }
 
-function migrateCoreDatabase(sqlite: Database.Database, folder: string) {
-  const migrations = readMigrationFiles({ migrationsFolder: folder });
-  const brokenKey = () =>
-    sqlite
-      .prepare<[], { table: string }>(
-        "SELECT * FROM pragma_foreign_key_check LIMIT 1",
-      )
-      .get();
-  // SQLite can only suspend foreign keys before the transaction. Otherwise
-  // rebuilding a table deletes rows that refer to it through ON DELETE CASCADE.
-  sqlite.pragma("foreign_keys = OFF");
-  try {
-    sqlite
-      .transaction(() => {
-        assertKnownMigrations(sqlite, folder);
-        sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS __drizzle_migrations (
-        id SERIAL PRIMARY KEY,
-        hash text NOT NULL,
-        created_at numeric
-      )
-    `);
-        const applied = sqlite
-          .prepare<[], { count: number }>(
-            "SELECT count(*) AS count FROM __drizzle_migrations",
-          )
-          .get()!.count;
-        const pending = migrations.slice(applied);
-        if (pending.length === 0) return;
-        // A key broken before this build's migrations isn't theirs to answer for.
-        const before = brokenKey();
-        if (before) {
-          throw new Error(
-            `The core's database already has a broken foreign key in ${before.table}`,
-          );
-        }
-
-        const record = sqlite.prepare(
-          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
-        );
-        for (const migration of pending) {
-          for (const statement of migration.sql)
-            sqlite.prepare(statement).run();
-          record.run(migration.hash, migration.folderMillis);
-        }
-        const violation = brokenKey();
-        if (violation) {
-          throw new Error(
-            `Core migration broke a foreign key in ${violation.table}`,
-          );
-        }
-      })
-      .immediate();
-  } finally {
-    sqlite.pragma("foreign_keys = ON");
-  }
-}
-
 // Opens the database, migrating it to this build's schema.
 export function openCoreDatabase(
   dataDir: string,
@@ -115,7 +56,12 @@ export function openCoreDatabase(
   const sqlite = new Database(join(dataDir, coreDatabaseFile));
   try {
     sqlite.pragma("journal_mode = WAL");
-    migrateCoreDatabase(sqlite, options.migrationsFolder ?? migrationsFolder);
+    sqlite.pragma("foreign_keys = ON");
+    migrateDatabase(
+      sqlite,
+      options.migrationsFolder ?? migrationsFolder,
+      "The core's database",
+    );
     const db = drizzle({ client: sqlite });
     return { db, close: () => sqlite.close() };
   } catch (error) {
