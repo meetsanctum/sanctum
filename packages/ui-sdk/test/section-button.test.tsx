@@ -32,21 +32,31 @@ it("keeps the inline button's sizing and implicit form submission", () => {
   }
 });
 
-it("renders room buttons with the same shape and semantics as tile chips", () => {
-  const props = { ...control, lit: true, label: "Preview in Office" };
-  expect(renderToStaticMarkup(<SectionButton {...props} layout="room" />)).toBe(
-    renderToStaticMarkup(<SectionTile {...props} chip />),
-  );
+const roomControl = {
+  ...control,
+  lit: true,
+  disabled: true,
+  label: "Preview in Office",
+};
+
+it.each([
+  ["a room button", <SectionButton {...roomControl} layout="room" />],
+  ["a tile chip", <SectionTile {...roomControl} chip />],
+])("keeps %s lit with a hover label while disabled", (_name, element) => {
   const container = document.createElement("div");
-  container.innerHTML = renderToStaticMarkup(
-    <SectionButton {...props} layout="room" />,
-  );
+  container.innerHTML = renderToStaticMarkup(element);
   const button = container.querySelector("button")!;
   expect(button.type).toBe("button");
+  expect(button.disabled).toBe(true);
   expect(button.title).toBe("Preview in Office");
+  expect(button.getAttribute("aria-label")).toBe(button.title);
   expect(button.hasAttribute("data-on")).toBe(true);
   expect(button.hasAttribute("aria-pressed")).toBe(false);
+  expect(button.classList.contains("max-w-full")).toBe(true);
   expect(button.querySelector("svg")?.classList.contains("size-[18px]")).toBe(
     true,
+  );
+  expect(button.querySelector(".pointer-events-auto")?.textContent).toBe(
+    "Preview",
   );
 });

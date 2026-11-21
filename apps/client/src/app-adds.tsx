@@ -132,7 +132,8 @@ function HomeSlice(props: {
 
 // A section's samples as its tiles or chips, which press nothing.
 function samplesOf(tiles: readonly SampleTile[], isChip: boolean) {
-  return tiles.map((tile) => {
+  // A manifest gives each preview a fixed order, and names can repeat.
+  return tiles.map((tile, index) => {
     const shared = {
       icon: tileIconOf[tile.icon],
       name: tile.name,
@@ -140,9 +141,9 @@ function samplesOf(tiles: readonly SampleTile[], isChip: boolean) {
       onClick: () => undefined,
     };
     return isChip ? (
-      <SectionButton key={tile.name} layout="room" {...shared} />
+      <SectionButton key={index} layout="room" {...shared} />
     ) : (
-      <SectionTile key={tile.name} {...shared} />
+      <SectionTile key={index} {...shared} />
     );
   });
 }

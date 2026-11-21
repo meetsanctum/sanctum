@@ -1,5 +1,5 @@
 {
-  "version": "0.1.16",
+  "version": "0.1.17",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2572,8 +2572,7 @@
       "export * from \"./page-bar\";",
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
-      "export * from \"./section-button\";",
-      "export { SectionTile } from \"./section-tile\";",
+      "export { SectionButton, SectionTile } from \"./section-controls\";",
       "export * from \"./swipe-pages\";",
       "export * from \"./temperature-unit\";",
       "export * from \"./tile-icons\";",
@@ -2692,9 +2691,9 @@
       "    stop(): Promise<void>;",
       "};"
     ],
-    "section-button.d.ts": [
+    "section-controls.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",
-      "import type { MouseEvent } from \"react\";",
+      "import { type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from \"react\";",
       "export declare function SectionButton(props: {",
       "    icon: LucideIcon;",
       "    name: string;",
@@ -2705,12 +2704,8 @@
       "    disabled?: boolean;",
       "    failures?: number;",
       "    onClick: (event: MouseEvent<HTMLButtonElement>) => void;",
-      "}): import(\"react\").JSX.Element;"
-    ],
-    "section-tile.d.ts": [
-      "import type { LucideIcon } from \"lucide-react\";",
-      "import { type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from \"react\";",
-      "type SectionTileProps = {",
+      "}): import(\"react\").JSX.Element;",
+      "export declare function SectionTile(props: {",
       "    icon: LucideIcon;",
       "    name: string;",
       "    status?: ReactNode;",
@@ -2731,12 +2726,7 @@
       "    onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;",
       "    onPointerCancel?: (event: PointerEvent<HTMLButtonElement>) => void;",
       "    onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;",
-      "};",
-      "export declare function SectionTile(props: SectionTileProps): import(\"react\").JSX.Element;",
-      "export declare function SectionTileSurface(props: SectionTileProps & {",
-      "    isInlineChip: boolean;",
-      "}): import(\"react\").JSX.Element;",
-      "export {};"
+      "}): import(\"react\").JSX.Element;"
     ],
     "show-failed.d.ts": [
       "export declare function showFailed(button: HTMLElement | null, wash: HTMLElement | null): void;"
