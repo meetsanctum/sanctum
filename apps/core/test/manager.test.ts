@@ -433,7 +433,10 @@ describe("the manager client", () => {
     await expect(releasing).rejects.toBeInstanceOf(ManagerUnavailable);
     const asked = received.length;
     await new Promise((resolve) => setTimeout(resolve, 60));
-    expect(received.length).toBe(asked);
+    // A request sent just before giving up can still reach the manager
+    // after the caller has its answer; one that kept asking would have
+    // asked again every 20 ms at most.
+    expect(received.length).toBeLessThanOrEqual(asked + 1);
   });
 
   it.each(["lookup", "release"])(
