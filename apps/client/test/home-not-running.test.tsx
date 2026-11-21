@@ -358,7 +358,10 @@ it("counts a paused app on Home's Attention tile, which leads to its row in Need
   const tile = container.querySelector<HTMLButtonElement>(
     '[aria-label="Home status"] button[aria-label="Moods is paused"]',
   )!;
-  expect(tile.textContent).toBe("MoodsPaused");
+  // What it shows, without the pause only a screen reader hears.
+  const copy = tile.cloneNode(true) as Element;
+  copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
+  expect(copy.textContent).toBe("MoodsPaused");
   // Not a problem: someone switched off what it needs.
   expect(tile.querySelector("svg")?.getAttribute("style")).toContain(
     "--graphite-text",

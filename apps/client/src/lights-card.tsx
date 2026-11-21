@@ -2,29 +2,24 @@ import { icons, type Tile } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 
 import { plural } from "./plural";
+import { statusTileWidth, StatusTileWords } from "./status-tile";
 import type { Devices } from "./use-devices";
 
 // The card for all the lights of the home, one component wherever it is:
 // Home's Lights status tile, which opens Lights' page, and the top of
 // Lights' page. It is a segmented tile, frosted glass a cell high: on the
-// left the bulb in Sun, "Lights" over how many are on; on the right, a cell
-// square, its switch, White while any light is on as a room's button is,
-// so the switch has a tile's touch target. Like Home's other status tiles
-// it is as wide as its words and switch need and never cuts them, at least
-// two cells or half a phone's line (statusTileWidth). The switch only turns lights off: turning every light in the home on at once
+// left a status tile's words (status-tile.tsx), the bulb in Sun, "Lights"
+// over how many are on; on the right, a cell square, its switch, White
+// while any light is on as a room's button is, so the switch has a tile's
+// touch target. Like the other status tiles it is as wide as its words and
+// switch need and never cuts them, at least two cells or half a phone's
+// line. The switch only turns lights off: turning every light in the home on at once
 // is more than one press should do, so they come on room by room. While
 // none is on it stays, dimmed and disabled, so nothing moves when it is
 // pressed and the card always shows what it can do. Its words are its
 // accessible name and tooltip, with how many ("Turn off 2 lights"), and
 // what it did is said to a screen reader as the core answers, since the
 // card's new words alone would not be heard.
-
-/**
- * A status tile's least width: two cells, or half a phone's line. It grows
- * with its words, so none is cut.
- */
-export const statusTileWidth =
-  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)]";
 
 // How long a card keeps what its switch did where a screen reader finds
 // it: long enough to be read out, short enough not to be met as news later.
@@ -98,22 +93,12 @@ export function LightsCard(props: {
   const segment =
     "flex flex-1 items-center gap-2.5 bg-(--tile) px-3.5 text-left text-(--tile-ink)";
   const words = (
-    <>
-      <icons.Lightbulb
-        aria-hidden="true"
-        className="size-[18px] shrink-0 text-(--sun-text)"
-      />
-      <span className="flex flex-col whitespace-nowrap">
-        <span className="text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
-          Lights
-        </span>
-        {/* A pause between its lines, which a screen reader runs together. */}
-        <span className="sr-only">, </span>
-        <span className="text-[15px] leading-5 font-medium tabular-nums">
-          {value}
-        </span>
-      </span>
-    </>
+    <StatusTileWords
+      icon={icons.Lightbulb}
+      colour="var(--sun-text)"
+      title="Lights"
+      value={value}
+    />
   );
   return (
     <div

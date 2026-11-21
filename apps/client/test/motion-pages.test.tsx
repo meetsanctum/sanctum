@@ -225,10 +225,16 @@ const overviewRows = () =>
   [...container.querySelectorAll("li > button")].map(
     (each) => each.textContent,
   );
+// What each of Home's status tiles shows, without the words only a screen
+// reader hears.
 const statusTiles = () =>
   [
     ...container.querySelectorAll("section[aria-label='Home status'] button"),
-  ].map((each) => each.textContent);
+  ].map((each) => {
+    const copy = each.cloneNode(true) as Element;
+    copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
+    return copy.textContent;
+  });
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
