@@ -9,8 +9,13 @@ import Database from "better-sqlite3";
 
 export function createTestStorage(options: { migrationsFolder: string }) {
   const sqlite = new Database(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-  migrateDatabase(sqlite, options.migrationsFolder, "The app's database");
+  try {
+    sqlite.pragma("foreign_keys = ON");
+    migrateDatabase(sqlite, options.migrationsFolder, "The app's database");
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
 
   return {
     /** CoreCalls' `query`, for createAppContext. */

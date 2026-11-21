@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { readMigrationFiles } from "drizzle-orm/migrator";
+import { readMigrationFiles, type MigrationMeta } from "drizzle-orm/migrator";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -22,20 +22,31 @@ export function assertKnownMigrations(
   folder: string,
   name = "The core's database",
 ) {
-  const known = readMigrationFiles({ migrationsFolder: folder });
+  countKnownMigrations(
+    sqlite,
+    readMigrationFiles({ migrationsFolder: folder }),
+    name,
+  );
+}
+
+function countKnownMigrations(
+  sqlite: Database.Database,
+  known: MigrationMeta[],
+  name: string,
+) {
   const table = sqlite
     .prepare(
       "select 1 from sqlite_master where type = 'table' and name = '__drizzle_migrations'",
     )
     .get();
   if (!table) {
-    return;
+    return 0;
   }
   const applied = sqlite
-    .prepare(
+    .prepare<[], { hash: string; createdAt: number | bigint | string }>(
       "select hash, created_at as createdAt from __drizzle_migrations order by created_at",
     )
-    .all() as { hash: string; createdAt: number | string }[];
+    .all();
   // The applied history must be an exact prefix of this build's migrations.
   // Timestamps alone miss changed SQL, and membership alone misses gaps that
   // Drizzle skips because it only applies migrations after the latest timestamp.
@@ -51,6 +62,7 @@ export function assertKnownMigrations(
       `${name} migration history does not match this build; it was written by a newer or different build`,
     );
   }
+  return applied.length;
 }
 
 // Applies the migrations this build has and the database lacks, all in one
@@ -63,61 +75,78 @@ export function migrateDatabase(
   folder: string,
   name: string,
 ) {
+  if (sqlite.inTransaction) {
+    throw new Error(`Cannot migrate ${name} inside a transaction`);
+  }
+
   const migrations = readMigrationFiles({ migrationsFolder: folder });
-  const brokenKey = () =>
-    sqlite
-      .prepare<[], { table: string }>(
-        "SELECT * FROM pragma_foreign_key_check LIMIT 1",
+  const initialForeignKeyMode = sqlite.pragma("foreign_keys", { simple: true })
+    ? "ON"
+    : "OFF";
+  const migrate = sqlite.transaction((foreignKeyMode: "ON" | "OFF") => {
+    const applied = countKnownMigrations(sqlite, migrations, name);
+    const pending = migrations.slice(applied);
+    // Drizzle Kit marks each table rebuild with this statement. Keep foreign
+    // keys on in other batches so ordinary deletes and updates still cascade.
+    const hasRebuild = pending.some(({ sql }) =>
+      sql.some((statement) =>
+        /^\s*PRAGMA\s+foreign_keys\s*=\s*OFF\s*;?\s*$/i.test(statement),
+      ),
+    );
+    const requiredMode = hasRebuild ? "OFF" : initialForeignKeyMode;
+    if (foreignKeyMode !== requiredMode) {
+      return requiredMode;
+    }
+
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at numeric
       )
-      .get();
-  const foreignKeys = sqlite.pragma("foreign_keys", { simple: true });
-  sqlite.pragma("foreign_keys = OFF");
+    `);
+    if (pending.length === 0) return;
+
+    const checkKeys = sqlite.prepare<[], { table: string }>(
+      "PRAGMA foreign_key_check",
+    );
+    const before = checkKeys.get();
+    if (before) {
+      throw new Error(
+        `${name} already has a broken foreign key in ${before.table}`,
+      );
+    }
+    const record = sqlite.prepare(
+      "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+    );
+    for (const migration of pending) {
+      for (const statement of migration.sql) {
+        sqlite.prepare(statement).run();
+      }
+      record.run(migration.hash, migration.folderMillis);
+    }
+    const after = checkKeys.get();
+    if (after) {
+      throw new Error(
+        `A migration of ${name} broke a foreign key in ${after.table}`,
+      );
+    }
+  });
+
+  let foreignKeyMode: typeof initialForeignKeyMode = initialForeignKeyMode;
   try {
-    sqlite
-      .transaction(() => {
-        assertKnownMigrations(sqlite, folder, name);
-        sqlite.exec(`
-          CREATE TABLE IF NOT EXISTS __drizzle_migrations (
-            id SERIAL PRIMARY KEY,
-            hash text NOT NULL,
-            created_at numeric
-          )
-        `);
-        const applied = sqlite
-          .prepare<[], { count: number }>(
-            "SELECT count(*) AS count FROM __drizzle_migrations",
-          )
-          .get()!.count;
-        const pending = migrations.slice(applied);
-        if (pending.length === 0) return;
-        // A key broken before these migrations isn't theirs to answer for.
-        const before = brokenKey();
-        if (before) {
-          throw new Error(
-            `${name} already has a broken foreign key in ${before.table}`,
-          );
-        }
-        const record = sqlite.prepare(
-          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
-        );
-        for (const migration of pending) {
-          for (const statement of migration.sql) {
-            sqlite.prepare(statement).run();
-          }
-          record.run(migration.hash, migration.folderMillis);
-        }
-        // With foreign keys off, nothing else notices a migration leaving
-        // rows that refer to nothing.
-        const after = brokenKey();
-        if (after) {
-          throw new Error(
-            `A migration of ${name} broke a foreign key in ${after.table}`,
-          );
-        }
-      })
-      .immediate();
+    while (true) {
+      const requiredMode = migrate.immediate(foreignKeyMode);
+      if (requiredMode === undefined) return;
+      // SQLite only changes enforcement between transactions. Recheck the
+      // pending migrations under the write lock after switching modes.
+      sqlite.pragma(`foreign_keys = ${requiredMode}`);
+      foreignKeyMode = requiredMode;
+    }
   } finally {
-    sqlite.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
+    if (foreignKeyMode !== initialForeignKeyMode) {
+      sqlite.pragma(`foreign_keys = ${initialForeignKeyMode}`);
+    }
   }
 }
 

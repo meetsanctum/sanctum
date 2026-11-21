@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 
-import { NewerDatabaseError, openAppStorage } from "../src/storage.js";
+import {
+  migrateDatabase,
+  NewerDatabaseError,
+  openAppStorage,
+} from "../src/storage.js";
 
 // An app's migrations: a parent table and a child whose rows go with their
 // parent, then the parent rebuilt the way drizzle-kit writes a change SQLite
@@ -142,21 +146,72 @@ describe("an app's migrations", () => {
     ).toEqual([{ count: 2 }]);
   });
 
-  it("roll back a migration that leaves a broken foreign key", async () => {
+  it("run cascades in a migration after the parent was already rebuilt", async () => {
+    const file = await databaseFile();
+    open(file, await migrationsFolder([created, rebuilt])).close();
+    seed(file);
+
+    const removeRoom = "DELETE FROM rooms WHERE id = 'office';";
+    open(file, await migrationsFolder([created, rebuilt, removeRoom])).close();
+
+    expect(read(file, "SELECT id FROM rooms")).toEqual([]);
+    expect(read(file, "SELECT id FROM lamps")).toEqual([]);
+  });
+
+  it("roll back the whole batch when a rebuild leaves a broken foreign key", async () => {
     const file = await databaseFile();
     open(file, await migrationsFolder([created])).close();
     seed(file);
-    const orphan = `DROP TABLE \`rooms\`;--> statement-breakpoint
-CREATE TABLE \`rooms\` (\`id\` text PRIMARY KEY NOT NULL, \`name\` text NOT NULL);`;
+    const renameRoom = "UPDATE rooms SET name = 'Study';";
+    const orphan = `PRAGMA foreign_keys=OFF;--> statement-breakpoint
+DROP TABLE rooms;--> statement-breakpoint
+CREATE TABLE rooms (id text PRIMARY KEY NOT NULL, name text NOT NULL);--> statement-breakpoint
+PRAGMA foreign_keys=ON;--> statement-breakpoint
+CREATE TABLE pragma_foreign_key_check (id text);`;
 
-    const folder = await migrationsFolder([created, orphan]);
-    expect(() => open(file, folder)).toThrow(
+    const folder = await migrationsFolder([created, renameRoom, orphan]);
+    const sqlite = new Database(file).defaultSafeIntegers();
+    onTestFinished(() => {
+      sqlite.close();
+    });
+    sqlite.pragma("foreign_keys = ON");
+
+    expect(() =>
+      migrateDatabase(sqlite, folder, "sanctum.example's database"),
+    ).toThrow(
       "A migration of sanctum.example's database broke a foreign key in lamps",
     );
-    expect(read(file, "SELECT id FROM rooms")).toEqual([{ id: "office" }]);
+    expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1n);
+    expect(read(file, "SELECT id, name FROM rooms")).toEqual([
+      { id: "office", name: "Office" },
+    ]);
     expect(
       read(file, "SELECT count(*) AS count FROM __drizzle_migrations"),
     ).toEqual([{ count: 1 }]);
+  });
+
+  it("refuse to migrate inside an open transaction", async () => {
+    const file = await databaseFile();
+    open(file, await migrationsFolder([created])).close();
+    seed(file);
+    const folder = await migrationsFolder([created, rebuilt]);
+    const sqlite = new Database(file);
+    onTestFinished(() => {
+      sqlite.close();
+    });
+    sqlite.pragma("foreign_keys = ON");
+
+    sqlite.transaction(() => {
+      expect(() =>
+        migrateDatabase(sqlite, folder, "sanctum.example's database"),
+      ).toThrow(
+        "Cannot migrate sanctum.example's database inside a transaction",
+      );
+    })();
+    expect(read(file, "SELECT id FROM lamps ORDER BY id")).toEqual([
+      { id: "desk" },
+      { id: "shelf" },
+    ]);
   });
 
   it("refuse a database a newer build has migrated", async () => {
