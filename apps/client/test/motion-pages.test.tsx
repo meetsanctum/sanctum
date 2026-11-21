@@ -260,7 +260,7 @@ afterEach(async () => {
 });
 
 describe("a room's line", () => {
-  it("starts with its motion and ends with its light level", async () => {
+  it("says what its sensors read first and ends with its motion", async () => {
     devices = [
       motionSensor(
         "office",
@@ -273,7 +273,7 @@ describe("a room's line", () => {
     await show("room", "office");
 
     expect(readingsLine()).toBe(
-      "Motion nowTemperature 21–21.5°Humidity 48%Light level 320 lx",
+      "Temperature 21–21.5°Humidity 48%Light level 320 lxMotion now",
     );
     // Its motion sensor under Environment and under Presence, after it.
     expect(headings()).toEqual(["Environment", "Presence"]);
@@ -303,7 +303,7 @@ describe("a room's line", () => {
     ];
     await show("room", "office");
 
-    expect(readingsLine()).toBe("Quiet for 3 minLight level 40–320 lx");
+    expect(readingsLine()).toBe("Light level 40–320 lxQuiet for 3 min");
   });
 
   it("moves on each minute", async () => {

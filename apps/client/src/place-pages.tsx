@@ -110,14 +110,14 @@ export const unitOf = (devices: Devices) =>
 
 // A room's or a category's page has its name in the top bar, as a
 // dashboard and an app's page do, and on a phone opening the page
-// (PageBar). A room's opens with its motion and what its sensors read,
-// offline ones left out; a category's with its status.
+// (PageBar). A room's opens with what its sensors read, offline ones left
+// out, its contact sensors and its motion; a category's with its status.
 function PlaceHeader(props: {
   title: string;
   subtitle?: string;
-  /** Its motion in words, first in the line of readings. */
+  /** Its motion in words, last in the line of readings. */
   motion?: string | null;
-  /** Its contact sensors in words, after its motion. */
+  /** Its contact sensors in words, before its motion. */
   contact?: PlaceContact | null;
   readings?: Reading[];
 }) {
@@ -159,9 +159,11 @@ export type PlaceContact = {
 };
 
 /**
- * A place's motion, whether its contact sensors are open and what its
- * sensors read, in a line: under a room page's name, and under a room's
- * name on Home. Nothing without any.
+ * What a place's sensors read, whether its contact sensors are open and its
+ * motion, in a line: under a room page's name, and under a room's name on
+ * Home. They come in the categories' order, Environment's temperature,
+ * humidity and light level, then Security, then Presence. Nothing without
+ * any.
  */
 export function PlaceReadings(props: {
   motion?: string | null;
@@ -177,23 +179,6 @@ export function PlaceReadings(props: {
       data-slot="readings"
       className={`m-0 flex flex-wrap gap-x-4 gap-y-1 ${props.className}`}
     >
-      {props.motion && (
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <icons.Footprints aria-hidden="true" className="text-white/65" />
-          {props.motion}
-        </span>
-      )}
-      {contact && (
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <Contact
-            aria-hidden="true"
-            className="text-white/65"
-            strokeDasharray={contact.isUnknown ? "3 3" : undefined}
-          />
-          {contact.label && <span className="sr-only">{contact.label} </span>}
-          {contact.text}
-        </span>
-      )}
       {props.readings?.map((each) => {
         const Icon = readingIcons[each.measure];
         return (
@@ -207,6 +192,23 @@ export function PlaceReadings(props: {
           </span>
         );
       })}
+      {contact && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Contact
+            aria-hidden="true"
+            className="text-white/65"
+            strokeDasharray={contact.isUnknown ? "3 3" : undefined}
+          />
+          {contact.label && <span className="sr-only">{contact.label} </span>}
+          {contact.text}
+        </span>
+      )}
+      {props.motion && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <icons.Footprints aria-hidden="true" className="text-white/65" />
+          {props.motion}
+        </span>
+      )}
     </p>
   );
 }
@@ -237,13 +239,23 @@ function Sections(props: {
   );
 }
 
-const statusOrder = [
+// The categories in the shell's order, Home's status row and the sidebar
+// alike: Lights first, the one with something to press, then Environment,
+// Security and Presence, as a room's line of readings has them.
+const categoryOrder = [
   "lights",
   "environment",
   "security",
   "presence",
   "switches",
+  "buttons",
 ] as const satisfies DeviceCategory[];
+
+const categoryOf = (id: DeviceCategory) =>
+  deviceCategories.find((each) => each.id === id)!;
+
+// A remote has nothing to say in the home's status.
+const statusOrder = categoryOrder.filter((id) => id !== "buttons");
 
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
@@ -288,7 +300,7 @@ export function HomeStatus(props: {
   // Lights first, the one with something to press; a remote has nothing
   // to say here.
   const shown = statusOrder.flatMap((id): StatusItem[] => {
-    const category = deviceCategories.find((each) => each.id === id)!;
+    const category = categoryOf(id);
     const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
     const open = () => props.openCategory(id);
@@ -671,7 +683,8 @@ export function SidebarPlaces(props: {
   ) => void;
 }) {
   const { devices, current, open } = props;
-  const shown = deviceCategories
+  const shown = categoryOrder
+    .map(categoryOf)
     .map((category) => ({
       ...category,
       tiles: tilesIn(category, devices.tiles),

@@ -148,16 +148,15 @@ afterEach(async () => {
 });
 
 describe("a room's row", () => {
-  it("has the switch, then apps' buttons as squares, then their tiles, with no heading", async () => {
+  it("has the lights button and apps' buttons as chips, then their tiles, with no heading", async () => {
     await show("room");
     expect(rowOf("Office")).toEqual([
       "Turn off lights in Office",
       "Glow in Office",
       "Relax in Office",
     ]);
-    // A square says its name on hover and to a screen reader alone.
-    expect(named("Glow in Office")?.textContent).toBe("");
-    expect(named("Glow in Office")?.title).toBe("Glow in Office");
+    // A chip shows its name, and adds the room for a screen reader.
+    expect(named("Glow in Office")?.textContent).toBe("Glow");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(
       [...container.querySelectorAll("h2")].map((each) => each.textContent),
@@ -182,20 +181,16 @@ describe("a room's row", () => {
     expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("puts its squares in the first half of a phone's line, two to a line", async () => {
+  it("puts its chips on a line of their own, the lights button first, over its tiles", async () => {
     await show("room");
-    const squares = named("Glow in Office")!.parentElement!;
-    expect(squares.className).toContain("contents");
-    expect(squares.className).toContain("max-sm:col-span-3");
-    expect(squares.className).toContain("max-sm:grid-cols-2");
-    expect(squares.style.gridRow).toBe("span 1");
-    // An odd last square, such as a switch alone, keeps its size in the
-    // middle of its line's two places.
-    expect(squares.className).toContain(
-      "max-sm:[&>:last-child:nth-child(odd)]:col-span-2",
+    const chips = named("Glow in Office")!.parentElement!;
+    expect(chips.className).toContain("flex-wrap");
+    expect(chips.firstElementChild?.getAttribute("aria-label")).toBe(
+      "Turn off lights in Office",
     );
-    expect(squares.className).toContain(
-      "max-sm:[&>:last-child:nth-child(odd)]:justify-self-center",
+    expect(chips.nextElementSibling?.matches(".tile-grid")).toBe(true);
+    expect(chips.nextElementSibling?.contains(named("Relax in Office")!)).toBe(
+      true,
     );
   });
 

@@ -7,7 +7,7 @@ import {
   type RoomSectionTile,
 } from "@meetsanctum/app-sdk";
 import { SectionTile, tileIconOf, type LiveFeed } from "@meetsanctum/ui-sdk";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
@@ -16,9 +16,9 @@ import { tileKey } from "./device-tiles";
 import { LightsButton, type LightsButtonState } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
-// section's type in the room, in the room's row (RoomRow) under its lights
-// button, buttons as squares with their icon alone and tiles with their
-// names. No app code runs to draw one. A tap calls the section's action through the
+// section's type in the room, in the room's row (RoomRow): buttons as chips
+// beside its lights button and tiles with their names under them. No app
+// code runs to draw one. A tap calls the section's action through the
 // gate; the lights and switches it could not reach fail on their tiles, and
 // a tap that fails as a whole fails on the section's own tile. While the
 // app isn't running its tiles dim and say so. What a room has is the
@@ -188,11 +188,11 @@ export const isRowEmpty = (row: RoomRowParts) =>
   !row.lights && row.buttons.length === 0 && row.tiles.length === 0;
 
 /**
- * A room's row, under its name on its page and on Home: its lights button,
- * a chip that says what it does ("Turn off lights") and is White while any
- * light is on (lights-button.tsx), then on a line under it apps' buttons,
- * square with their icon alone, then apps' tiles with their names. The
- * button says whether the lights are on, the rest which look they have, so
+ * A room's row, under its name on its page and on Home: on its first line
+ * its lights button, a chip that says what it does ("Turn off lights") and
+ * is White while any light is on (lights-button.tsx), and apps' buttons,
+ * chips with their icon and name, such as Natural light; then apps' tiles
+ * with their names, such as the room's moods. The lights button says whether the lights are on, the rest which look they have, so
  * at most one of those is lit: Natural light before a mood that matches the
  * curve, and a running app's look before the last one a paused app said.
  * Each is named with the room, since several rooms' are in reach on Home.
@@ -210,17 +210,20 @@ export function RoomRow(props: {
     ({ entity }) => entity.tile.active,
   );
   const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
-  const tileOf = ({ app, section, entity }: RowEntry, iconOnly: boolean) => {
+  const tileOf = (
+    { app, section, entity }: RowEntry,
+    shape: "chip" | "tile",
+  ) => {
     const notRunning = stateShort(app);
     const label = `${entity.tile.name} in ${roomName}`;
     return (
       <SectionTile
         key={entityKey(entity.app, entity.key)}
-        iconOnly={iconOnly}
+        chip={shape === "chip"}
         icon={tileIconOf[entity.tile.icon]}
         name={entity.tile.name}
         label={notRunning ? `${label}, ${notRunning.toLowerCase()}` : label}
-        status={iconOnly ? undefined : (notRunning ?? undefined)}
+        status={shape === "chip" ? undefined : (notRunning ?? undefined)}
         active={lit?.entity === entity}
         disabled={notRunning !== null || dark}
         failures={entities.failuresOf(entity)}
@@ -228,43 +231,24 @@ export function RoomRow(props: {
       />
     );
   };
-  const squares = row.buttons.length;
+  const hasChips = row.lights !== undefined || row.buttons.length > 0;
   return (
     <div
       role="group"
       aria-label={`Lights in ${roomName}`}
       className="flex flex-col gap-3"
     >
-      {row.lights && <LightsButton lights={row.lights} />}
-      {(squares > 0 || row.tiles.length > 0) && (
-        <div className="tile-grid auto-rows-(--cell)">
-          {squares > 0 && (
-            <RowSquares count={squares}>
-              {row.buttons.map((each) => tileOf(each, true))}
-            </RowSquares>
-          )}
-          {row.tiles.map((each) => tileOf(each, false))}
+      {hasChips && (
+        <div className="flex flex-wrap gap-2">
+          {row.lights && <LightsButton lights={row.lights} />}
+          {row.buttons.map((each) => tileOf(each, "chip"))}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * A row's squares, in a tile grid: a cell each, and on a phone, whose grid
- * is six columns, the first half of the row's first line between them, two
- * to a line, so they line up with the tiles below. An odd last square, such
- * as Natural light with no other button beside it, keeps its size and
- * sits in the middle of its line's two places, so the line stays on the
- * grid with no hole at its side.
- */
-export function RowSquares(props: { count: number; children: ReactNode }) {
-  return (
-    <div
-      className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap) max-sm:[&>:last-child:nth-child(odd)]:col-span-2 max-sm:[&>:last-child:nth-child(odd)]:w-[calc(50%-var(--cell-gap)/2)] max-sm:[&>:last-child:nth-child(odd)]:justify-self-center"
-      style={{ gridRow: `span ${Math.ceil(props.count / 2)}` }}
-    >
-      {props.children}
+      {row.tiles.length > 0 && (
+        <div className="tile-grid auto-rows-(--cell)">
+          {row.tiles.map((each) => tileOf(each, "tile"))}
+        </div>
+      )}
     </div>
   );
 }

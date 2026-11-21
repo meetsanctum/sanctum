@@ -262,7 +262,7 @@ describe("a room's lights on Lights' page", () => {
     const office = button("Turn off lights in Office")!;
     expect(office.textContent).toBe("Turn off lights");
     expect(office.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(office.dataset.on).toBe("");
+    expect(office.dataset.look).toBe("on");
     expect(office.hasAttribute("aria-pressed")).toBe(false);
     // Between the room's heading and its lights' tiles.
     const section = office.closest("section")!;
@@ -270,7 +270,7 @@ describe("a room's lights on Lights' page", () => {
     expect(office.nextElementSibling?.matches(".tile-grid")).toBe(true);
     const hall = button("Turn on lights in Hall")!;
     expect(hall.textContent).toBe("Turn on lights");
-    expect(hall.dataset.on).toBeUndefined();
+    expect(hall.dataset.look).toBe("off");
 
     await click(office);
     await click(hall);

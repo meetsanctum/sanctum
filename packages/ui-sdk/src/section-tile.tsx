@@ -14,8 +14,9 @@ import { showFailed } from "./show-failed";
  * A tile in a room's row or an app's own page, such as a mood's: frosted
  * glass, White while active, its icon in a circle and its name, with a
  * status under it if it has one. With `iconOnly` it is one cell square with
- * its icon alone, such as a room's switch or Natural light's sun, and says
- * its name to a screen reader and on hover. A failed tap shows on it as on
+ * its icon alone, and says its name to a screen reader and on hover. With
+ * `chip` it is a chip, 36 px high, its icon and its name in a line, such as
+ * a room's lights button or Natural light's. A failed tap shows on it as on
  * a device's tile.
  */
 export function SectionTile(props: {
@@ -32,6 +33,8 @@ export function SectionTile(props: {
   lit?: boolean;
   /** One cell, its icon alone. */
   iconOnly?: boolean;
+  /** A chip, its icon and its name in a line. */
+  chip?: boolean;
   label?: string;
   editing?: boolean;
   dragging?: boolean;
@@ -79,7 +82,7 @@ export function SectionTile(props: {
       onPointerUp={props.onPointerUp}
       onPointerCancel={props.onPointerCancel}
       onKeyDown={props.onKeyDown}
-      className={`${props.iconOnly ? "col-span-1 justify-center" : "col-span-3 gap-3 px-3.5 py-3"} group relative flex min-w-0 items-center overflow-hidden rounded-lg bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`}
+      className={`${props.iconOnly ? "col-span-1 justify-center rounded-lg" : props.chip ? "h-9 gap-1.5 rounded-md ps-2.5 pe-3 text-[13px] leading-[18px] font-medium whitespace-nowrap" : "col-span-3 gap-3 rounded-lg px-3.5 py-3"} group relative flex min-w-0 items-center overflow-hidden bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`}
     >
       <span
         ref={wash}
@@ -88,6 +91,11 @@ export function SectionTile(props: {
       />
       {props.iconOnly ? (
         <Icon aria-hidden="true" className="relative size-[22px]" />
+      ) : props.chip ? (
+        <>
+          <Icon aria-hidden="true" className="relative size-[18px]" />
+          <span className="relative">{props.name}</span>
+        </>
       ) : (
         <>
           <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) group-data-[look=on]:bg-(--tile-on-ink)/8">

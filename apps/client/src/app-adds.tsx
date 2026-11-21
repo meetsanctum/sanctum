@@ -26,7 +26,6 @@ import type { ReactNode } from "react";
 import { Sentence } from "./automations/parts";
 import type { Part } from "./automations/words";
 import { Section } from "./components";
-import { RowSquares } from "./room-sections";
 
 // What an app adds to the home, on its settings page: a driver's devices,
 // its widgets and room section, each drawn by the shell from the manifest's
@@ -130,12 +129,12 @@ function HomeSlice(props: {
   );
 }
 
-// A section's samples as its tiles or squares, which press nothing.
-function samplesOf(tiles: readonly SampleTile[], iconOnly = false) {
+// A section's samples as its tiles or chips, which press nothing.
+function samplesOf(tiles: readonly SampleTile[], chip = false) {
   return tiles.map((tile) => (
     <SectionTile
       key={tile.name}
-      iconOnly={iconOnly}
+      chip={chip}
       icon={tileIconOf[tile.icon]}
       name={tile.name}
       active={tile.active}
@@ -259,15 +258,15 @@ export function AppAdds(props: {
                     className="size-4 text-white/65"
                   />
                 </span>
-                <div className="tile-grid auto-rows-(--cell)">
-                  {isButtons ? (
-                    <RowSquares count={tiles.length}>
-                      {samplesOf(tiles, true)}
-                    </RowSquares>
-                  ) : (
-                    samplesOf(tiles)
-                  )}
-                </div>
+                {isButtons ? (
+                  <div className="flex flex-wrap gap-2">
+                    {samplesOf(tiles, true)}
+                  </div>
+                ) : (
+                  <div className="tile-grid auto-rows-(--cell)">
+                    {samplesOf(tiles)}
+                  </div>
+                )}
               </HomeSlice>
             )}
           </Section>

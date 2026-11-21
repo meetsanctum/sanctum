@@ -1,10 +1,10 @@
 import type { Floor } from "@meetsanctum/app-sdk";
-import { Button, icons, type Tile } from "@meetsanctum/ui-sdk";
+import { icons, SectionTile, type Tile } from "@meetsanctum/ui-sdk";
 
 import type { Devices } from "./use-devices";
 
 // The button for all the lights of a room or a floor: a chip of frosted
-// glass, half a tile high, with the power symbol and its words, "Turn off
+// glass, 36 px high, with the power symbol and its words, "Turn off
 // lights" while any light is on and "Turn on lights" while all are off. It
 // is White while any is on, by its own state and not as a pressed switch,
 // since its words already say what it does. A room's is under its name and
@@ -32,23 +32,22 @@ export type LightsButtonState = {
   onPress: () => void;
 };
 
-/** A room's or a floor's button for all its lights. */
+/**
+ * A room's or a floor's button for all its lights: a chip, as the room's
+ * other buttons beside it are (RoomRow), White while any light is on.
+ */
 export function LightsButton(props: { lights: LightsButtonState }) {
   const { lights } = props;
   return (
-    <Button
-      variant="glass"
-      size="chip"
-      type="button"
-      aria-label={lights.label}
-      data-on={lights.isOn ? "" : undefined}
+    <SectionTile
+      chip
+      icon={icons.Power}
+      name={lights.words}
+      label={lights.label}
+      lit={lights.isOn}
       disabled={lights.isDisabled}
       onClick={lights.onPress}
-      className="self-start"
-    >
-      <icons.Power aria-hidden="true" data-icon="inline-start" />
-      {lights.words}
-    </Button>
+    />
   );
 }
 
