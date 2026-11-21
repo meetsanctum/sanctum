@@ -1,5 +1,5 @@
 {
-  "version": "0.1.13",
+  "version": "0.1.14",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2716,6 +2716,7 @@
       "    active?: boolean;",
       "    lit?: boolean;",
       "    iconOnly?: boolean;",
+      "    chip?: boolean;",
       "    label?: string;",
       "    editing?: boolean;",
       "    dragging?: boolean;",

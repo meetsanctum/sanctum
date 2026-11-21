@@ -21,9 +21,8 @@ import {
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-// A room's row: its switch, then apps' buttons, squares with their icon
-// alone, then apps' tiles with their names, on its page and on Home, with
-// no heading.
+// A room's row: its lights button and apps' buttons as chips, then apps'
+// tiles, on its page and on Home, with no heading.
 
 const glow: AppInfo = {
   ...moods,
@@ -148,16 +147,15 @@ afterEach(async () => {
 });
 
 describe("a room's row", () => {
-  it("has the switch, then apps' buttons as squares, then their tiles, with no heading", async () => {
+  it("has the lights button and apps' buttons as chips, then their tiles, with no heading", async () => {
     await show("room");
     expect(rowOf("Office")).toEqual([
       "Turn off lights in Office",
       "Glow in Office",
       "Relax in Office",
     ]);
-    // A square says its name on hover and to a screen reader alone.
-    expect(named("Glow in Office")?.textContent).toBe("");
-    expect(named("Glow in Office")?.title).toBe("Glow in Office");
+    // A chip shows its name, and adds the room for a screen reader.
+    expect(named("Glow in Office")?.textContent).toBe("Glow");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(
       [...container.querySelectorAll("h2")].map((each) => each.textContent),
@@ -182,24 +180,20 @@ describe("a room's row", () => {
     expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("puts its squares in the first half of a phone's line, two to a line", async () => {
+  it("puts its chips on a line of their own, the lights button first, over its tiles", async () => {
     await show("room");
-    const squares = named("Glow in Office")!.parentElement!;
-    expect(squares.className).toContain("contents");
-    expect(squares.className).toContain("max-sm:col-span-3");
-    expect(squares.className).toContain("max-sm:grid-cols-2");
-    expect(squares.style.gridRow).toBe("span 1");
-    // An odd last square, such as a switch alone, keeps its size in the
-    // middle of its line's two places.
-    expect(squares.className).toContain(
-      "max-sm:[&>:last-child:nth-child(odd)]:col-span-2",
+    const chips = named("Glow in Office")!.parentElement!;
+    expect(chips.className).toContain("flex-wrap");
+    expect(chips.firstElementChild?.getAttribute("aria-label")).toBe(
+      "Turn off lights in Office",
     );
-    expect(squares.className).toContain(
-      "max-sm:[&>:last-child:nth-child(odd)]:justify-self-center",
+    expect(chips.nextElementSibling?.matches(".tile-grid")).toBe(true);
+    expect(chips.nextElementSibling?.contains(named("Relax in Office")!)).toBe(
+      true,
     );
   });
 
-  it("calls the section's action with the square's input on a tap", async () => {
+  it("calls the section's action with the chip's input on a tap", async () => {
     await show("room");
     await act(async () => {
       named("Glow in Office")!.click();
@@ -209,7 +203,7 @@ describe("a room's row", () => {
     ]);
   });
 
-  it("shows a tap that failed on the square", async () => {
+  it("shows a tap that failed on the app's chip", async () => {
     const animate = vi.fn();
     Element.prototype.animate = animate;
     try {
@@ -225,6 +219,38 @@ describe("a room's row", () => {
       delete (Element.prototype as Partial<Element>).animate;
     }
   });
+
+  it.each([
+    {
+      failure: "the request is refused",
+      answer: () => Promise.reject(new Error("unavailable")),
+    },
+    {
+      failure: "no light could be switched",
+      answer: async () => ({
+        on: false,
+        switched: 0,
+        failed: [{ device: lamp.id, capability: lamp.capabilities[0]!.id }],
+      }),
+    },
+  ])(
+    "shows a failure on the room's lights chip when $failure",
+    async ({ answer }) => {
+      const animate = vi.fn();
+      Element.prototype.animate = animate;
+      try {
+        await show("room");
+        const lights = named("Turn off lights in Office")!;
+        vi.mocked(coreJson).mockImplementationOnce(answer);
+        await act(async () => {
+          lights.click();
+        });
+        expect(animate.mock.contexts).toContain(lights);
+      } finally {
+        delete (Element.prototype as Partial<Element>).animate;
+      }
+    },
+  );
 
   it("is under each room's name on Home, as on its page", async () => {
     await show("home");
@@ -248,17 +274,18 @@ describe("a room's row", () => {
     expect(named("Glow in Hall")).toBeDefined();
   });
 
-  it("dims a paused square and gives the highlight to the running app", async () => {
+  it("dims a paused chip and gives the highlight to the running app", async () => {
     await show("room", [moods, { ...glow, state: "paused" }]);
     const paused = named("Glow in Office, paused");
     const mood = named("Relax in Office");
     expect(paused?.disabled).toBe(true);
+    expect(paused?.title).toBe("Glow in Office, paused");
     expect(paused?.getAttribute("aria-pressed")).toBe("false");
     expect(mood?.disabled).toBe(false);
     expect(mood?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("leaves out an app's squares once it is turned off", async () => {
+  it("leaves out an app's chips once it is turned off", async () => {
     await show("room", [moods, { ...glow, state: "off" }]);
     expect(rowOf("Office")).toEqual([
       "Turn off lights in Office",

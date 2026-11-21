@@ -196,11 +196,9 @@ async function show(editing = false) {
 }
 
 // What a part of the page holds, as a screen reader meets it: each tile or
-// button, a row's squares and grid looked through.
+// button, a row's line of chips and grid looked through.
 const parts = (each: Element): Element[] =>
-  each.matches(".tile-grid, .contents")
-    ? [...each.children].flatMap(parts)
-    : [each];
+  each.matches(".tile-grid, .flex-wrap") ? [...each.children] : [each];
 const sections = () =>
   [...container.querySelectorAll("section")].map((section) => ({
     heading: section.querySelector("h2")?.textContent,
