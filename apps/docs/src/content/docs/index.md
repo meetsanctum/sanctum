@@ -20,3 +20,8 @@ it cover [updating](/install/updating/),
 
 [How Sanctum sees a device](/devices/) explains devices' parts and types,
 the categories they show in, and what driver apps tell Sanctum about them.
+
+[What apps do](/apps/) covers the apps in your home:
+[adding and removing them](/apps/adding-and-removing/), what they're
+[allowed to do](/apps/permissions/), and
+[updates and problems](/apps/updates-and-problems/).

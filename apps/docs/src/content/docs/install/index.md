@@ -90,9 +90,9 @@ it touches.
 
 ## 3. Plug in the Zigbee stick
 
-Plug the stick into the machine. Zigbee starts by itself within a minute,
-before or after the next steps. Plug in one stick only: with several,
-Sanctum waits for you to unplug the ones it shouldn't use.
+Plug the stick into the machine. You can also do this after setting up
+your home. Plug in one stick only. With several, Sanctum waits for you to
+unplug the ones it shouldn't use.
 
 ## 4. Build the Mac app
 
@@ -130,10 +130,16 @@ allow it. That is how the app finds your home.
    - **Set where the home is**, for the weather and for lights that follow
      daylight.
    - **Add your rooms**, so each device is named after the room it is in.
-   - **Add lights, switches and remotes**. Choose **Add devices**, then
-     switch a new device on or reset it, as its instructions say. New
-     devices can join for about four minutes; each shows up as it joins, to
-     name and put in a room.
+   - **Add lights, switches and remotes**. When Sanctum offers to add the
+     app for your stick, choose **Add Zigbee**. If Zigbee isn't installed
+     and you don't see the offer,
+     [add Zigbee from Settings](/apps/adding-and-removing/#adding-an-app).
+     When Zigbee is running, go back to Home, choose **Add devices** and
+     choose **Start** on the **Zigbee** card. Switch a new device on or
+     reset it, as its instructions say. New devices can join for about
+     four minutes. Each shows up as it joins, ready to name and put in a room.
+     If the card says **Not set up**, see
+     [Zigbee does not start](/install/troubleshooting/#zigbee-does-not-start).
 
 Set your home up soon after installing. Until someone has, anyone on your
 network who opens the app can.
