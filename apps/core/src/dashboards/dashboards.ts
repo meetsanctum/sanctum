@@ -81,9 +81,8 @@ export type DashboardChangedBy = { personId?: string; clientId: string };
 export class DashboardsError extends Error {
   constructor(
     // home_dashboard: Home keeps its name and cannot be removed.
-    // too_many_dashboards: it has maxDashboards already.
-    // not_on_home: an order names a device Home does
-    // not have.
+    // too_many_dashboards: it has maxDashboards already. not_on_home: an
+    // order names a device Home does not have.
     readonly code:
       "not_found" | "home_dashboard" | "too_many_dashboards" | "not_on_home",
     message: string,
@@ -335,7 +334,6 @@ export function createDashboards(
     ): DashboardInfo {
       const { id: dashboardId, name } = dashboardChanges.parse(input);
       return change(by, "dashboard.update", () => {
-        // Home's name is used for actions such as Add to Home.
         const updated = db
           .update(dashboards)
           .set({ name, updatedAt: now() })
@@ -355,6 +353,7 @@ export function createDashboards(
         if (!existing) {
           throw notFound(dashboardId);
         }
+        // The words about Home, such as Add to Home, use its name.
         throw new DashboardsError("home_dashboard", "Home keeps its name");
       });
     },
