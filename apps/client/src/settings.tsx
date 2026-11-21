@@ -3,13 +3,9 @@ import type { Me } from "@meetsanctum/auth-protocol";
 import { PageBar, type LiveFeed, type PageParams } from "@meetsanctum/ui-sdk";
 import { useEffect } from "react";
 
-import {
-  ActivityPage,
-  ActivitySection,
-  activitySettingsPage,
-} from "./activity/page";
+import { ActivityPage, activitySettingsPage } from "./activity/page";
 import { AppPage } from "./app-settings";
-import { Row, Section } from "./components";
+import { BackButton, Section } from "./components";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
 import { AddAppsSection, appSettingsPage, AppsSection } from "./settings-apps";
@@ -19,9 +15,9 @@ import { NeedsAttentionSection } from "./settings-attention";
 import { HouseholdSection } from "./settings-household";
 import {
   MaintenancePage,
-  MaintenanceSection,
   maintenanceSettingsPage,
 } from "./settings-maintenance";
+import { SettingsOverview, type SettingsArea } from "./settings-overview";
 import { RoomsSection } from "./settings-rooms";
 import { StatusPage, statusSettingsPage } from "./settings-status";
 import type { PowerAction } from "./settings-status-power";
@@ -31,25 +27,71 @@ import type { SystemStatus } from "./system-status";
 import type { Devices } from "./use-devices";
 
 // Settings: a system app, the core's own UI, which the shell brings rather
-// than a package. It shows what needs attention, first while anything does,
-// Sanctum itself included, then Maintenance, what's due for the devices,
-// with a page of it all, which the dashboard's Batteries tile opens too, the
-// household with where the home is, the apps the home has installed, each
-// with a page of its preferences and what it brings, which its own pages
-// open too, the rooms, the devices, the activity log's newest entries with a
-// page of it all, which a device's detail opens too, this device, the
-// clients, and System: Status, with a page of how the machine Sanctum runs
-// on is doing, the version, updates and the last restore. It is the same on
-// every device, a shared one too. Opened from the dashboard's setup guide,
-// it shows the step's section and starts it once: Add room, Add devices, or
-// the home's location.
+// than a package. Its first page shows what needs attention, while anything
+// does, Sanctum itself included, then a row for each area, which opens the
+// area's page: the household with where the home is, the rooms and floors,
+// the devices, Maintenance, what's due for the devices, which the
+// dashboard's Batteries tile opens too, the activity log, which a device's
+// detail opens too, the apps the home has installed, each with a page of its
+// preferences and what it brings, which its own pages open too, with those
+// it can add, the clients, this device among them, and System: Status, with
+// a page of how the machine Sanctum runs on is doing, the version, updates
+// and the last restore. Each page leads with Back, named for the page under
+// it. It is the same on every device, a shared one too. Opened from the
+// dashboard's setup guide, it opens the step's page over its first and
+// starts it once: Add room, Add devices, or the home's location.
 
-// The section each step of the setup guide starts in.
-const sectionOf: Record<SetupTarget, string> = {
-  "add-room": "settings-rooms",
-  "add-devices": "settings-devices",
-  household: "settings-household",
+export const householdSettingsPage = "household";
+export const roomsSettingsPage = "rooms";
+export const devicesSettingsPage = "devices";
+export const appsSettingsPage = "apps";
+export const clientsSettingsPage = "clients";
+export const systemSettingsPage = "system";
+
+/** The page each step of the setup guide opens and starts. */
+export const setupPage: Record<SetupTarget, string> = {
+  "add-room": roomsSettingsPage,
+  "add-devices": devicesSettingsPage,
+  household: householdSettingsPage,
 };
+
+// The page each row of the first page opens.
+const areaPage: Record<SettingsArea, string> = {
+  household: householdSettingsPage,
+  rooms: roomsSettingsPage,
+  devices: devicesSettingsPage,
+  maintenance: maintenanceSettingsPage,
+  activity: activitySettingsPage,
+  apps: appsSettingsPage,
+  clients: clientsSettingsPage,
+  system: systemSettingsPage,
+};
+
+const pageTitles: Record<string, string> = {
+  main: "Settings",
+  [householdSettingsPage]: "Household",
+  [roomsSettingsPage]: "Rooms and floors",
+  [devicesSettingsPage]: "Devices",
+  [maintenanceSettingsPage]: "Maintenance",
+  [activitySettingsPage]: "Activity",
+  [appsSettingsPage]: "Apps",
+  [clientsSettingsPage]: "Clients",
+  [systemSettingsPage]: "System",
+  [statusSettingsPage]: "Status",
+};
+
+/** A page of Settings' title, which Back on the page over it names. */
+export function settingsPageTitle(
+  page: string,
+  params: PageParams,
+  apps: readonly AppInfo[],
+) {
+  if (page === appSettingsPage) {
+    const app = apps.find((each) => each.id === params.id);
+    return app ? `${app.name} settings` : "Settings";
+  }
+  return pageTitles[page] ?? "Settings";
+}
 
 export const settingsApp = {
   id: "sanctum.settings",
@@ -65,6 +107,9 @@ export function SettingsPage(props: {
   open: (page: string, params?: PageParams) => void;
   // Leaves a page Settings or an app opened for the one under it.
   back: () => void;
+  // The title of the page of Settings under this one, which Back names;
+  // without one, a page opened from elsewhere closes with Done.
+  backTo?: string;
   apps: AppInfo[];
   // An app as the core answered after a change on its page, which the
   // shell takes at once for everything that shows it.
@@ -77,7 +122,8 @@ export function SettingsPage(props: {
   core: CoreStatus;
   // The shell's live socket, which Devices and apps' preferences follow.
   live: LiveFeed;
-  // The shell's devices and places, for what needs attention and Maintenance.
+  // The shell's devices and places, for what needs attention, Maintenance
+  // and what the first page's rows say.
   devices: Pick<Devices, "devices" | "places">;
   // What is on Home, which a device's menu changes.
   home: OnHome;
@@ -85,131 +131,144 @@ export function SettingsPage(props: {
   onUpdating: (updating: boolean) => void;
   onPowerAccepted?: (action: PowerAction) => void;
   // The host's status, which Home asks for now and then, for Needs
-  // attention and System's row; the Status page asks often itself.
+  // attention and System's rows; the Status page asks often itself.
   status?: SystemStatus;
   statusFailed?: boolean;
-  // A step of the dashboard's setup guide to start, until it has started.
+  // A step of the dashboard's setup guide to start on its page, until it
+  // has started.
   start?: SetupTarget;
   onStarted?: () => void;
 }) {
-  const { me, start, onStarted } = props;
+  const { start, onStarted, backTo } = props;
   useEffect(() => {
-    if (!start) return;
-    const section = document.getElementById(sectionOf[start]);
-    if (!section) return;
-    section.scrollIntoView();
-    onStarted?.();
+    if (start) onStarted?.();
   }, [start, onStarted]);
-  if (props.page === activitySettingsPage) {
-    return (
-      <ActivityPage
-        device={props.params.device}
-        apps={props.apps}
-        live={props.live}
-        onDone={props.back}
-      />
-    );
-  }
-  if (props.page === maintenanceSettingsPage) {
-    return (
-      <MaintenancePage
-        devices={props.devices.devices}
-        rooms={props.devices.places?.rooms ?? []}
-        apps={props.apps}
-        onDone={props.back}
-      />
-    );
-  }
-  if (props.page === statusSettingsPage) {
-    return (
-      <StatusPage
-        apps={props.apps}
-        onDone={props.back}
-        onPowerAccepted={props.onPowerAccepted}
-      />
-    );
-  }
-  if (props.page === appSettingsPage) {
-    const app = props.apps.find((each) => each.id === props.params.id);
-    return app ? (
-      <AppPage
-        // Another version is another manifest: start again from nothing.
-        key={`${app.id}@${app.version}`}
-        app={app}
-        apps={props.apps}
-        devices={props.devices.devices}
-        rooms={props.devices.places?.rooms ?? []}
-        live={props.live}
-        background={props.homeBackground ?? dashboardBackground.mocha}
-        onChanged={props.onAppChanged ?? (() => undefined)}
-        openStatus={() => props.open(statusSettingsPage)}
-        onDone={props.back}
-      />
-    ) : null;
+  const rooms = props.devices.places?.rooms ?? [];
+  // An area's page has its way back even without a page under it, as in
+  // tests: null, then, which still makes the area's section the page.
+  const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
+  const openStatus = () => props.open(statusSettingsPage);
+  switch (props.page) {
+    case activitySettingsPage:
+      return (
+        <ActivityPage
+          device={props.params.device}
+          apps={props.apps}
+          live={props.live}
+          onDone={props.back}
+          backTo={backTo}
+        />
+      );
+    case maintenanceSettingsPage:
+      return (
+        <MaintenancePage
+          devices={props.devices.devices}
+          rooms={rooms}
+          apps={props.apps}
+          onDone={props.back}
+          backTo={backTo}
+        />
+      );
+    case statusSettingsPage:
+      return (
+        <StatusPage
+          apps={props.apps}
+          onDone={props.back}
+          backTo={backTo}
+          onPowerAccepted={props.onPowerAccepted}
+        />
+      );
+    case appSettingsPage: {
+      const app = props.apps.find((each) => each.id === props.params.id);
+      return app ? (
+        <AppPage
+          // Another version is another manifest: start again from nothing.
+          key={`${app.id}@${app.version}`}
+          app={app}
+          apps={props.apps}
+          devices={props.devices.devices}
+          rooms={rooms}
+          live={props.live}
+          background={props.homeBackground ?? dashboardBackground.mocha}
+          onChanged={props.onAppChanged ?? (() => undefined)}
+          openStatus={openStatus}
+          onDone={props.back}
+          backTo={backTo}
+        />
+      ) : null;
+    }
+    case householdSettingsPage:
+      return <HouseholdSection page={back} />;
+    case roomsSettingsPage:
+      return (
+        <>
+          <PageBar title="Rooms and floors" leading={back} />
+          <RoomsSection live={props.live} adding={start === "add-room"} />
+        </>
+      );
+    case devicesSettingsPage:
+      return (
+        <DevicesSection
+          apps={props.apps}
+          live={props.live}
+          home={props.home}
+          adding={start === "add-devices"}
+          notSetUp={props.status?.notSetUp}
+          page={back}
+        />
+      );
+    case appsSettingsPage:
+      return (
+        <>
+          <AppsSection
+            apps={props.apps}
+            onOpen={(id) => props.open(appSettingsPage, { id })}
+            page={back}
+          />
+          <AddAppsSection
+            apps={props.apps}
+            onAdded={(app) => {
+              props.onAppAdded?.(app);
+              props.open(appSettingsPage, { id: app.id });
+            }}
+          />
+        </>
+      );
+    case clientsSettingsPage:
+      return <ClientsSection page={back} />;
+    case systemSettingsPage:
+      return (
+        <Section id="settings-system" title="System" page={back}>
+          <SystemSettings
+            core={props.core}
+            onUpdating={props.onUpdating}
+            status={props.status}
+            statusFailed={props.statusFailed ?? false}
+            onOpenStatus={openStatus}
+          />
+        </Section>
+      );
   }
   return (
     <>
       <PageBar title="Settings" />
       <NeedsAttentionSection
         devices={props.devices.devices}
-        rooms={props.devices.places?.rooms ?? []}
+        rooms={rooms}
         apps={props.apps}
         status={props.status}
-        onOpenStatus={() => props.open(statusSettingsPage)}
+        onOpenStatus={openStatus}
         onOpenApp={(id) => props.open(appSettingsPage, { id })}
       />
-      <MaintenanceSection
+      <SettingsOverview
+        apps={props.apps}
         devices={props.devices.devices}
-        rooms={props.devices.places?.rooms ?? []}
-        onShowAll={() => props.open(maintenanceSettingsPage)}
+        places={props.devices.places}
+        me={props.me}
+        status={props.status}
+        statusFailed={props.statusFailed ?? false}
+        open={(area) => props.open(areaPage[area])}
       />
-      <HouseholdSection />
-      <AppsSection
-        apps={props.apps}
-        onOpen={(id) => props.open(appSettingsPage, { id })}
-      />
-      <AddAppsSection
-        apps={props.apps}
-        onAdded={(app) => {
-          props.onAppAdded?.(app);
-          props.open(appSettingsPage, { id: app.id });
-        }}
-      />
-      <RoomsSection live={props.live} adding={start === "add-room"} />
-      <DevicesSection
-        apps={props.apps}
-        live={props.live}
-        home={props.home}
-        adding={start === "add-devices"}
-        notSetUp={props.status?.notSetUp}
-      />
-      <ActivitySection
-        apps={props.apps}
-        live={props.live}
-        onShowAll={() => props.open(activitySettingsPage)}
-      />
-      {me && (
-        <Section id="settings-device" title="This device">
-          <Row
-            title={me.client.name}
-            detail={
-              me.person
-                ? `${me.person.name}'s ${me.client.kind} device`
-                : "Shared by the household"
-            }
-          />
-        </Section>
-      )}
-      <ClientsSection />
-      <Section id="settings-system" title="System">
-        <SystemSettings
-          core={props.core}
-          onUpdating={props.onUpdating}
-          status={props.status}
-          statusFailed={props.statusFailed ?? false}
-          onOpenStatus={() => props.open(statusSettingsPage)}
-        />
-      </Section>
     </>
   );
 }

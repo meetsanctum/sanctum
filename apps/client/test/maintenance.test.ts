@@ -6,9 +6,7 @@ import {
   batteryOrder,
   dueBatteries,
   maintenanceHint,
-  namesOf,
   sinceWords,
-  updatesLine,
   updatesOf,
 } from "../src/maintenance";
 
@@ -194,20 +192,7 @@ describe("updates", () => {
     ).toEqual(["Hall light", "Desk lamp", "Office dimmer", "Office light"]);
   });
 
-  it("make Settings' row: the one that leads, then a few names", () => {
-    expect(updatesLine([updating, available, asleep])).toBe(
-      "Desk lamp is updating, 34% · then Office light and Office dimmer",
-    );
-    expect(updatesLine([failed])).toBe("Hall light's update didn't finish");
-    expect(updatesLine([available, lamp("Porch", {})])).toBe(
-      "Office light and Porch",
-    );
-    expect(namesOf([available, updating, failed, asleep])).toBe(
-      "Office light, Desk lamp and 2 more",
-    );
-  });
-
-  it("join batteries in the section's hint", () => {
+  it("join batteries and updates in Settings' row for Maintenance", () => {
     expect(maintenanceHint([low, quiet, updating, available], now)).toBe(
       "2 batteries · 2 updates",
     );

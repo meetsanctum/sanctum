@@ -11,9 +11,9 @@ import {
   dayHeading,
   foldCauses,
 } from "../src/activity/data";
-import { ActivityPage, ActivitySection } from "../src/activity/page";
+import { ActivityPage } from "../src/activity/page";
 import { coreJson } from "../src/core-fetch";
-import { alex, entry } from "./activity-fixtures";
+import { entry } from "./activity-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -434,21 +434,6 @@ describe("the home's Activity", () => {
     });
     expect(container.querySelectorAll("time")).toHaveLength(200);
     expect(button("Show older").disabled).toBe(false);
-  });
-
-  it("shows the newest few in Settings, and opens the rest", async () => {
-    const onShowAll = vi.fn();
-    await act(async () => {
-      root.render(
-        <ActivitySection apps={[]} live={live} onShowAll={onShowAll} />,
-      );
-    });
-    expect(asked()).toEqual(["/api/activity?limit=5"]);
-    expect(container.textContent).toContain("Who did what in the home");
-    expect(container.textContent).toContain("Lamp turned on at 80%");
-    await click("Show all");
-    expect(onShowAll).toHaveBeenCalled();
-    expect(alex.name).toBe("Alex");
   });
 
   it("keeps what it shows on a live refresh until the first page comes again", async () => {

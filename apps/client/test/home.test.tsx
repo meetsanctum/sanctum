@@ -193,6 +193,25 @@ async function openKitchen() {
 const title = () => container.querySelector("header")?.textContent;
 
 // Apps, from the sidebar's last tile, and the app pressed there.
+// One of Settings' areas, from its row on Settings' first page.
+async function openArea(name: string) {
+  await act(async () => {
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        'main nav[aria-label="Settings"] button',
+      ),
+    ]
+      .find((button) => button.textContent?.startsWith(name))!
+      .click();
+  });
+}
+
+// The way back before a page's title, by the page it returns to.
+const backTo = (name: string) =>
+  container.querySelector<HTMLButtonElement>(
+    `.top-bar button[aria-label="Back to ${name}"]`,
+  );
+
 async function openFromOverview(name: string) {
   await act(async () => {
     container
@@ -241,13 +260,67 @@ describe("navigation", () => {
       "Settings",
     ]);
     expect(pageTitle()).toBe("Settings");
+    expect(container.querySelector("main")?.textContent).toContain("Apps1 app");
+    expect(backShown()).toBe(false);
+
+    await openArea("Apps");
+    expect(pageTitle()).toBe("Apps");
     expect(container.querySelector("main")?.textContent).toContain(
       "MoodsVersion 0.1.0",
     );
-    expect(container.querySelector("main")?.textContent).toContain(
-      "Shared by the household",
+    await act(async () => backTo("Settings")!.click());
+    expect(pageTitle()).toBe("Settings");
+  });
+});
+
+describe("Settings' pages", () => {
+  const goHome = async () =>
+    act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("aside button")]
+        .find((button) => button.textContent?.startsWith("Home"))!
+        .click();
+    });
+
+  it("open a step of the setup guide on its page, over Settings' first", async () => {
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("main button")]
+        .find((button) => button.textContent === "Add devices")!
+        .click();
+    });
+
+    expect(pageTitle()).toBe("Devices");
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Add devices",
     );
-    expect(backShown()).toBe(false);
+  });
+
+  it("name the page under them on Back, as Status does over System", async () => {
+    await openFromOverview("Settings");
+    await openArea("System");
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('main button[aria-label^="Status:"]')!
+        .click();
+    });
+
+    expect(pageTitle()).toBe("Status");
+    await act(async () => backTo("System")!.click());
+    expect(pageTitle()).toBe("System");
+    await act(async () => backTo("Settings")!.click());
+    expect(pageTitle()).toBe("Settings");
+  });
+
+  it("open again where Settings was left, until it is left on its first page", async () => {
+    await openFromOverview("Settings");
+    await openArea("Devices");
+    await goHome();
+    await openFromOverview("Settings");
+    expect(pageTitle()).toBe("Devices");
+
+    await act(async () => backTo("Settings")!.click());
+    await goHome();
+    await openFromOverview("Settings");
+    expect(pageTitle()).toBe("Settings");
   });
 });
 
@@ -260,8 +333,9 @@ describe("an app's preferences", () => {
     });
   };
 
-  it("open from Settings → Apps, and Done beside their title returns to Settings", async () => {
+  it("open from Settings → Apps, and Back before their title returns to Apps", async () => {
     await openFromOverview("Settings");
+    await openArea("Apps");
     await act(async () => {
       [...container.querySelectorAll<HTMLButtonElement>("main li button")]
         .find((button) => button.textContent?.startsWith("Moods"))!
@@ -270,8 +344,8 @@ describe("an app's preferences", () => {
 
     expect(pageTitle()).toBe("Moods settings");
     expect(backShown()).toBe(false);
-    await done();
-    expect(pageTitle()).toBe("Settings");
+    await act(async () => backTo("Apps")!.click());
+    expect(pageTitle()).toBe("Apps");
   });
 
   it("are the page Apps opens for an app without one of its own, over Apps, so Done returns there", async () => {
@@ -334,6 +408,7 @@ describe("an app's preferences", () => {
     installed = [moods, weather];
     await refresh();
     await openFromOverview("Settings");
+    await openArea("Apps");
     await act(async () => {
       [...container.querySelectorAll<HTMLButtonElement>("main li button")]
         .find((button) => button.textContent?.startsWith("Weather"))!
@@ -342,7 +417,7 @@ describe("an app's preferences", () => {
     installed = [moods];
     await refresh();
 
-    expect(pageTitle()).toBe("Settings");
+    expect(pageTitle()).toBe("Apps");
   });
 });
 

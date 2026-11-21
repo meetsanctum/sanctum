@@ -5,10 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
-import {
-  MaintenancePage,
-  MaintenanceSection,
-} from "../src/settings-maintenance";
+import { MaintenancePage } from "../src/settings-maintenance";
 
 // Maintenance in Settings: what's due in Settings' section, and the page of
 // every battery and update, whose rows keep their place until it closes.
@@ -180,61 +177,25 @@ async function click(element: Element | undefined) {
   });
 }
 
-describe("Settings' Maintenance section", () => {
-  const onShowAll = vi.fn();
+describe("the Maintenance page", () => {
+  const onDone = vi.fn();
+  const waiting = device("new", "Kitchen sensor", "sensor", {
+    roomId: null,
+    battery: null,
+  });
 
   async function show(devices: DeviceInfo[]) {
     await act(async () =>
       root.render(
-        <MaintenanceSection
+        <MaintenancePage
           devices={devices}
           rooms={rooms}
-          onShowAll={onShowAll}
+          apps={[zigbee]}
+          onDone={onDone}
         />,
       ),
     );
   }
-
-  it("lists what's due: quiet and low batteries, and the updates in one row that opens the page", async () => {
-    onShowAll.mockReset();
-    await show([kitchen, low, quiet, desk, officeLight, porch]);
-
-    expect(container.querySelector("h2")?.textContent).toBe("Maintenance");
-    expect(container.textContent).toContain("2 batteries · 2 updates");
-    expect(rows()).toEqual([
-      "Office buttonNot heard from since Tuesday: try a new battery · Office · Wireless mini switch · last at 6%",
-      "Hall sensorBattery low, 8%: replace it soon · Hall · Temperature and humidity sensor",
-      "2 updatesDesk lamp is updating, 34% · then Office light",
-    ]);
-    await click(
-      container.querySelector("button[aria-label^='2 updates']") ?? undefined,
-    );
-    await click(button("Show all"));
-    expect(onShowAll).toHaveBeenCalledTimes(2);
-  });
-
-  it("says there is nothing to do, and isn't there in a home without devices", async () => {
-    await show([kitchen, porch]);
-    expect(rows()).toEqual([
-      "Nothing to doNo battery to replace · every device is up to date",
-    ]);
-
-    await show([]);
-    expect(container.textContent).toBe("");
-  });
-
-  it("does not call unchecked devices up to date", async () => {
-    await show([{ ...porch, firmware: firmware({ state: null }) }]);
-    expect(container.textContent).not.toContain("Every device is up to date");
-    expect(container.textContent).toContain(
-      "Not every device has been checked",
-    );
-    // What is fine still says so.
-    await show([kitchen, { ...porch, firmware: firmware({ state: null }) }]);
-    expect(rows()).toEqual([
-      "Nothing to doNo battery to replace · not every device has been checked for updates yet",
-    ]);
-  });
 
   it("keeps a row put right while it's shown, saying how", async () => {
     await show([low, quiet]);
@@ -248,10 +209,8 @@ describe("Settings' Maintenance section", () => {
         battery: 12,
       },
     ]);
-    expect(rows()).toEqual([
-      "Office buttonHeard from just now · Office · Wireless mini switch",
-      "Hall sensorNew battery, up from 8% · Hall · Temperature and humidity sensor",
-    ]);
+    expect(container.textContent).toContain("Heard from just now");
+    expect(container.textContent).toContain("New battery, up from 8%");
   });
 
   it("only calls a quiet device heard from after a report, and keeps the time fresh", async () => {
@@ -272,27 +231,6 @@ describe("Settings' Maintenance section", () => {
     });
     expect(container.textContent).toContain("Heard from 2 minutes ago");
   });
-});
-
-describe("the Maintenance page", () => {
-  const onDone = vi.fn();
-  const waiting = device("new", "Kitchen sensor", "sensor", {
-    roomId: null,
-    battery: null,
-  });
-
-  async function show(devices: DeviceInfo[]) {
-    await act(async () =>
-      root.render(
-        <MaintenancePage
-          devices={devices}
-          rooms={rooms}
-          apps={[zigbee]}
-          onDone={onDone}
-        />,
-      ),
-    );
-  }
 
   it("lists every battery, the next to replace first, with its charge at the end", async () => {
     await show([kitchen, waiting, low, quiet, porch]);

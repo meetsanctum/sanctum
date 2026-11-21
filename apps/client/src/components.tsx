@@ -6,7 +6,8 @@ import { productName } from "./brand";
 import { knotPath } from "./knot";
 import { AvatarFallback, Avatar as AvatarRoot } from "./components/ui/avatar";
 import { getShell } from "./shell";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, PageBar, usePhone } from "@meetsanctum/ui-sdk";
+import { ChevronLeft } from "lucide-react";
 
 // Small pieces the screens share.
 
@@ -128,7 +129,10 @@ export function Sheet(props: {
 }
 
 // A titled part of an app's page, such as one of Settings: its heading, with
-// a hint and an action beside it, over a filled card.
+// a hint and an action beside it, over a filled card. A part that is the
+// whole of its page, such as Settings' Devices, gives its title and action
+// to the page's bar instead, after the way back, so the title isn't said
+// twice; its hint leads the card.
 export function Section(props: {
   id: string;
   title: string;
@@ -138,9 +142,43 @@ export function Section(props: {
   // The hint says a problem, in red.
   problem?: boolean;
   action?: ReactNode;
+  // The way back of the page it is the whole of, which makes it that page.
+  page?: ReactNode;
   children: ReactNode;
 }) {
   const Heading = props.level === 3 ? "h3" : "h2";
+  const hint = props.hint && (
+    <span
+      className={cn(
+        "truncate text-[13px] font-medium text-muted-foreground",
+        props.problem && "text-destructive",
+      )}
+    >
+      {props.hint}
+    </span>
+  );
+  const card = (
+    <div className="flex min-w-0 flex-col gap-3 rounded-lg bg-card px-4 py-3.5 text-card-foreground">
+      {props.children}
+    </div>
+  );
+  if (props.page !== undefined) {
+    return (
+      <>
+        <PageBar title={props.title} leading={props.page}>
+          {props.action}
+        </PageBar>
+        <section
+          id={props.id}
+          aria-label={props.title}
+          className="flex min-w-0 shrink-0 flex-col gap-2"
+        >
+          {hint}
+          {card}
+        </section>
+      </>
+    );
+  }
   return (
     <section
       aria-labelledby={props.id}
@@ -154,23 +192,33 @@ export function Section(props: {
           >
             {props.title}
           </Heading>
-          {props.hint && (
-            <span
-              className={cn(
-                "truncate text-[13px] font-medium text-muted-foreground",
-                props.problem && "text-destructive",
-              )}
-            >
-              {props.hint}
-            </span>
-          )}
+          {hint}
         </div>
         {props.action}
       </div>
-      <div className="flex min-w-0 flex-col gap-3 rounded-lg bg-card px-4 py-3.5 text-card-foreground">
-        {props.children}
-      </div>
+      {card}
     </section>
+  );
+}
+
+/**
+ * A page's way back to the one it was opened from, before its title, named
+ * for that page: on a phone its chevron alone, as the bar's other buttons
+ * are there.
+ */
+export function BackButton(props: { to: string; onBack: () => void }) {
+  const isPhone = usePhone();
+  return (
+    <Button
+      variant={isPhone ? "ghost" : "outline"}
+      size={isPhone ? "bar" : "default"}
+      aria-label={`Back to ${props.to}`}
+      onClick={props.onBack}
+      className="me-2"
+    >
+      <ChevronLeft data-icon="inline-start" aria-hidden="true" />
+      {!isPhone && props.to}
+    </Button>
   );
 }
 

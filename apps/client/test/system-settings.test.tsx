@@ -168,8 +168,24 @@ async function openSettings() {
   });
 }
 
-const system = () =>
-  container.querySelector('section[aria-labelledby="settings-system"]')!;
+// Settings' System page, from its row on the first page.
+async function openSystem() {
+  await openSettings();
+  await act(async () => {
+    areaRow("System")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+}
+
+// A row of Settings' first page, by its area's name.
+const areaRow = (area: string) =>
+  [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      'nav[aria-label="Settings"] button',
+    ),
+  ].find((button) => button.textContent?.startsWith(area));
+
+const system = () => container.querySelector("#settings-system")!;
 
 function button(text: string, within: ParentNode = document) {
   return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -216,7 +232,7 @@ describe("Settings → System", () => {
   it("gives a shared client the version and the updates too", async () => {
     me = tablet;
     await render();
-    await openSettings();
+    await openSystem();
 
     expect(system().textContent).toContain("dev-1");
     expect(asked).toContain("/api/system/update");
@@ -225,6 +241,13 @@ describe("Settings → System", () => {
   it("starts with Status, a green check while everything's running", async () => {
     await render();
     await openSettings();
+    expect(
+      container.querySelector('section[aria-labelledby="settings-attention"]'),
+    ).toBeNull();
+    expect(areaRow("System")?.getAttribute("aria-label")).toBe(
+      "System: everything's running",
+    );
+    await openSystem();
 
     const row = button(
       "StatusEverything's running · 6.92 GB free · 58°C",
@@ -236,9 +259,6 @@ describe("Settings → System", () => {
     expect(row?.querySelector("span.text-green")?.textContent).toBe(
       "Everything's running",
     );
-    expect(
-      container.querySelector('section[aria-labelledby="settings-attention"]'),
-    ).toBeNull();
   });
 
   it("puts Sanctum first in Needs attention while its clock isn't synchronised, and both open Status", async () => {
@@ -246,7 +266,7 @@ describe("Settings → System", () => {
     await render();
     await openSettings();
 
-    expect(system().textContent).toContain("StatusClock not synchronised");
+    expect(areaRow("System")?.textContent).toBe("SystemClock not synchronised");
     const attention = container.querySelector(
       'section[aria-labelledby="settings-attention"]',
     )!;
@@ -283,12 +303,12 @@ describe("Settings → System", () => {
     await act(async () => vi.advanceTimersByTimeAsync(0));
 
     expect(attention()).toBeNull();
-    expect(system().textContent).toContain("StatusCan't check right now");
+    expect(areaRow("System")?.textContent).toBe("SystemCan't check right now");
   });
 
   it("updates the host to a build someone chose, once they confirm", async () => {
     await render();
-    await openSettings();
+    await openSystem();
 
     // The newest build is chosen; the running one cannot be.
     const radios = [
@@ -323,7 +343,7 @@ describe("Settings → System", () => {
   it("says when an update rolled back, and why", async () => {
     journal = update({ step: "check", from: "dev-1" });
     await render();
-    await openSettings();
+    await openSystem();
     expect(system().querySelector('[aria-current="step"]')?.textContent).toBe(
       "Checking that it works",
     );
@@ -360,7 +380,7 @@ describe("Settings → System", () => {
   it("keeps the progress while the manager replaces itself", async () => {
     journal = update({ step: "backup", from: "dev-1" });
     await render();
-    await openSettings();
+    await openSystem();
 
     // The new core is up and committed; the manager is away for a moment.
     await report({ state: "offline" });
@@ -393,7 +413,7 @@ describe("Settings → System", () => {
       });
       await render();
       await report({ state: "online", version: channel });
-      await openSettings();
+      await openSystem();
 
       expect(button("Update", system())?.disabled).toBe(false);
       await act(async () => button("Update", system())!.click());
@@ -414,7 +434,7 @@ describe("Settings → System", () => {
       return original(path, init);
     });
     await render();
-    await openSettings();
+    await openSystem();
     expect(system().querySelector('[role="alert"]')).not.toBeNull();
 
     // Restart the effect under fake timers, as when the core comes back.
@@ -429,7 +449,7 @@ describe("Settings → System", () => {
 
   it("keeps an accepted start when an older status response arrives in the same render", async () => {
     await render();
-    await openSettings();
+    await openSystem();
     await report({ state: "offline" });
     let resolveStatus!: (value: unknown) => void;
     let resolveStart!: (value: unknown) => void;

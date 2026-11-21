@@ -202,11 +202,9 @@ async function type(input: HTMLInputElement, value: string) {
 
 describe("Settings → Apps", () => {
   it("opens each app's own page", async () => {
-    await show(admin, "main");
+    await show(admin, "apps");
     const zigbeeRow = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        '[aria-labelledby="settings-apps"] button',
-      ),
+      ...container.querySelectorAll<HTMLButtonElement>("#settings-apps button"),
     ].find((button) => button.textContent?.startsWith("Zigbee"))!;
 
     await act(async () => zigbeeRow.click());

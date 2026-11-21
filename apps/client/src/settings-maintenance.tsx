@@ -1,7 +1,6 @@
 import {
   lowCharge,
   maintenanceOf,
-  onBattery,
   type AppInfo,
   type DeviceInfo,
   type Room,
@@ -15,7 +14,6 @@ import {
   BatteryMedium,
   BatteryWarning,
   Check,
-  ChevronRight,
   CircleAlert,
   CircleStop,
   EllipsisVertical,
@@ -23,7 +21,7 @@ import {
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
-import { Row, Section } from "./components";
+import { BackButton, Row, Section } from "./components";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,11 +42,8 @@ import {
 import { DeviceIcon, roomName } from "./device-parts";
 import {
   batteryOrder,
-  dueBatteries,
   lowBatteryText,
-  maintenanceHint,
   quietText,
-  updatesLine,
   updatesOf,
 } from "./maintenance";
 import { DeviceLine } from "./settings-devices";
@@ -281,114 +276,6 @@ const plainRound = (Icon: typeof Battery) => (
   </span>
 );
 
-/** What Settings' section says under "Nothing to do": what is fine, and firmware not checked yet. */
-function nothingDue(
-  hasBatteries: boolean,
-  hasUpdates: boolean,
-  hasUnchecked: boolean,
-) {
-  const words = [
-    hasBatteries ? "no battery to replace" : null,
-    hasUpdates
-      ? hasUnchecked
-        ? "not every device has been checked for updates yet"
-        : "every device is up to date"
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return words
-    ? words.charAt(0).toUpperCase() + words.slice(1)
-    : "Batteries to replace and firmware updates show here";
-}
-
-/** Settings' Maintenance section: what's due, with Show all for the page. */
-export function MaintenanceSection(props: {
-  devices: readonly DeviceInfo[];
-  rooms: readonly Room[];
-  onShowAll: () => void;
-}) {
-  const { devices, rooms } = props;
-  const now = useMinuteClock();
-  const batteries = useKept(dueBatteries(devices, now), devices, now);
-  const updates = updatesOf(devices);
-  if (devices.length === 0) return null;
-  const hasBatteries = devices.some(onBattery);
-  const hasUpdates = devices.some((device) => device.firmware?.updatable);
-  const hasUnchecked = devices.some(
-    (device) => device.firmware?.updatable && device.firmware.state === null,
-  );
-  return (
-    <Section
-      id="settings-maintenance"
-      title="Maintenance"
-      hint={maintenanceHint(devices, now)}
-      action={
-        <Button variant="outline" size="sm" onClick={props.onShowAll}>
-          Show all
-        </Button>
-      }
-    >
-      <ul className="m-0 flex list-none flex-col gap-3 p-0">
-        {batteries.map(({ device, first }) => {
-          const status = batteryStatus(device, first, now, false);
-          const isQuiet = maintenanceOf(device, now) === "quiet";
-          return (
-            <li key={device.id} className="flex items-center gap-3">
-              <DeviceIcon device={device} />
-              <DeviceLine
-                device={device}
-                status={status}
-                detail={[
-                  whereLine(device, rooms),
-                  isQuiet && device.battery !== null
-                    ? `last at ${device.battery}%`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              />
-            </li>
-          );
-        })}
-        {updates.length > 0 && (
-          <li>
-            <Button
-              variant="row"
-              size="row"
-              type="button"
-              onClick={props.onShowAll}
-              aria-label={`${updates.length === 1 ? "1 update" : `${updates.length} updates`}: ${updatesLine(updates)}. Opens Maintenance`}
-              className="-mx-2.5 w-[calc(100%+20px)]"
-            >
-              {plainRound(RefreshCw)}
-              <Row
-                title={
-                  updates.length === 1
-                    ? "1 update"
-                    : `${updates.length} updates`
-                }
-                detail={updatesLine(updates)}
-              />
-              <ChevronRight
-                aria-hidden="true"
-                className="ms-auto size-4 shrink-0 text-muted-foreground"
-              />
-            </Button>
-          </li>
-        )}
-        {batteries.length === 0 && updates.length === 0 && (
-          <QuietRow
-            icon={doneRound}
-            title="Nothing to do"
-            detail={nothingDue(hasBatteries, hasUpdates, hasUnchecked)}
-          />
-        )}
-      </ul>
-    </Section>
-  );
-}
-
 // An update under way or waiting stops from its menu, never where Update
 // was.
 function RunningMenu(props: { device: DeviceInfo; onStop: () => void }) {
@@ -432,6 +319,9 @@ export function MaintenancePage(props: {
   rooms: readonly Room[];
   apps: readonly AppInfo[];
   onDone: () => void;
+  // The page under it in Settings, which Back returns to: without one it
+  // was opened from elsewhere, and Done closes it.
+  backTo?: string;
 }) {
   const { devices, rooms } = props;
   const now = useMinuteClock();
@@ -527,10 +417,17 @@ export function MaintenancePage(props: {
 
   return (
     <>
-      <PageBar title="Maintenance">
-        <Button variant="outline" onClick={props.onDone}>
-          Done
-        </Button>
+      <PageBar
+        title="Maintenance"
+        leading={
+          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
+        }
+      >
+        {!props.backTo && (
+          <Button variant="outline" onClick={props.onDone}>
+            Done
+          </Button>
+        )}
       </PageBar>
       <Section
         id="maintenance-batteries"

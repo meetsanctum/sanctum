@@ -4,7 +4,13 @@ import {
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
 import { Button, Input } from "@meetsanctum/ui-sdk";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { productName } from "./brand";
 import { Section } from "./components";
@@ -51,9 +57,12 @@ const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 const field =
   "h-10 bg-background text-[15px] text-foreground placeholder:text-muted-foreground md:text-[15px]";
 
-export function HouseholdSection() {
+export function HouseholdSection(props: {
+  // The way back of Settings' Household page, which it is the whole of.
+  page?: ReactNode;
+}) {
   return (
-    <Section id="settings-household" title="Household">
+    <Section id="settings-household" title="Household" page={props.page}>
       <HomeForm />
     </Section>
   );

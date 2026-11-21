@@ -56,7 +56,12 @@ import {
 } from "./place-pages";
 import { usePins } from "./pins";
 import { useSectionEntities } from "./room-sections";
-import { SettingsPage, settingsApp } from "./settings";
+import {
+  SettingsPage,
+  settingsApp,
+  settingsPageTitle,
+  setupPage,
+} from "./settings";
 import { maintenanceSettingsPage } from "./settings-maintenance";
 import { statusSettingsPage } from "./settings-status";
 import { appSettingsPage } from "./settings-apps";
@@ -353,6 +358,8 @@ export function Home(props: {
     opener(settingsApp.id)(appSettingsPage, { id: app });
 
   const route = routes.at(-1);
+  // The page under it, which its Back returns to.
+  const under = routes.at(-2);
   const routeApp = route && apps.find((app) => app.info.id === route.app);
   const isAppPage = !!route && hasPage(routeApp, route.page);
   // A page another of its app's pages opened, such as an editor, has its
@@ -368,13 +375,29 @@ export function Home(props: {
   // Settings later starts nothing.
   const [setupStep, setSetupStep] = useState<SetupTarget>();
   const setupStarted = useCallback(() => setSetupStep(undefined), []);
+  const settingsMain: Route = { app: settingsApp.id, page: "main", params: {} };
+  // The page of Settings someone left it on, over its first, which opening
+  // Settings again returns to; back on its first page, there is none.
+  const settingsLeftOn = useRef<Route>(undefined);
+  useEffect(() => {
+    const [first, second] = routes;
+    if (first?.app === settingsApp.id && first.page === "main") {
+      settingsLeftOn.current =
+        second?.app === settingsApp.id ? second : undefined;
+    }
+  }, [routes]);
   const openSettings = () => {
     setSetupStep(undefined);
-    setRoutes([{ app: settingsApp.id, page: "main", params: {} }]);
+    const inSettings = routes.at(-1)?.app === settingsApp.id;
+    const left = !inSettings ? settingsLeftOn.current : undefined;
+    setRoutes(left ? [settingsMain, left] : [settingsMain]);
   };
   const openSetup = (step: SetupTarget) => {
     setSetupStep(step);
-    setRoutes([{ app: settingsApp.id, page: "main", params: {} }]);
+    setRoutes([
+      settingsMain,
+      { app: settingsApp.id, page: setupPage[step], params: {} },
+    ]);
   };
   const openAutomations = () =>
     setRoutes([{ app: automationsApp.id, page: "main", params: {} }]);
@@ -553,6 +576,15 @@ export function Home(props: {
                         params={route.params}
                         open={opener(settingsApp.id)}
                         back={back}
+                        backTo={
+                          under?.app === settingsApp.id
+                            ? settingsPageTitle(
+                                under.page,
+                                under.params,
+                                installed,
+                              )
+                            : undefined
+                        }
                         apps={installed}
                         onAppChanged={appChanged}
                         onAppAdded={appAdded}
@@ -570,7 +602,11 @@ export function Home(props: {
                         onUpdating={setUpdateRunning}
                         status={shownStatus}
                         statusFailed={statusFailed}
-                        start={route.page === "main" ? setupStep : undefined}
+                        start={
+                          setupStep && route.page === setupPage[setupStep]
+                            ? setupStep
+                            : undefined
+                        }
                         onStarted={setupStarted}
                       />
                     ) : route?.app === placePages ? (

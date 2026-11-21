@@ -244,7 +244,7 @@ describe("Settings → Devices' motion settings", () => {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="main"
+          page="devices"
           params={{}}
           open={() => undefined}
           back={() => undefined}

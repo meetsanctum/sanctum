@@ -16,7 +16,13 @@ import {
 import { Button, pressLabel, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { AddDevices } from "./add-devices";
 import { attentionText } from "./attention";
@@ -125,6 +131,8 @@ export function DevicesSection(props: {
   adding?: boolean;
   // The services the home never set up, for Add devices to say what to do.
   notSetUp?: readonly ServiceNotSetUp[];
+  // The way back of Settings' Devices page, which it is the whole of.
+  page?: ReactNode;
 }) {
   const [devices, setDevices] = useState<DeviceInfo[]>();
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
@@ -513,10 +521,14 @@ export function DevicesSection(props: {
           undefined)
       }
       action={
-        <Button size="sm" onClick={() => setAdding(true)}>
+        <Button
+          size={props.page !== undefined ? "default" : "sm"}
+          onClick={() => setAdding(true)}
+        >
           Add devices
         </Button>
       }
+      page={props.page}
     >
       {devices &&
         (devices.length === 0 ? (

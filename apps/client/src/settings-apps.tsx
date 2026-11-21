@@ -1,7 +1,7 @@
 import type { AppInfo, AvailableApp } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
 import { DeleteAppData } from "./app-delete-data";
@@ -25,9 +25,11 @@ export const appSettingsPage = "app";
 export function AppsSection(props: {
   apps: AppInfo[];
   onOpen: (appId: string) => void;
+  // The way back of Settings' Apps page, which it leads.
+  page?: ReactNode;
 }) {
   return (
-    <Section id="settings-apps" title="Apps">
+    <Section id="settings-apps" title="Apps" page={props.page}>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {props.apps.map((app) => (
           <li key={app.id}>

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 
 import { ApproveDevice } from "./approve-device";
@@ -78,7 +79,10 @@ export function clientDetail(
 
 type Editing = { action: "rename" | "remove"; client: ClientInfo };
 
-export function ClientsSection() {
+export function ClientsSection(props: {
+  // The way back of Settings' Clients page, which it is the whole of.
+  page?: ReactNode;
+}) {
   const [clients, setClients] = useState<ClientInfo[]>();
   const [people, setPeople] = useState<PersonInfo[]>([]);
   const [editing, setEditing] = useState<Editing>();
@@ -107,10 +111,14 @@ export function ClientsSection() {
       id="settings-clients"
       title="Clients"
       action={
-        <Button size="sm" onClick={() => setAdding(true)}>
+        <Button
+          size={props.page !== undefined ? "default" : "sm"}
+          onClick={() => setAdding(true)}
+        >
           Add a shared device
         </Button>
       }
+      page={props.page}
     >
       {clients && (
         <ul className="m-0 flex list-none flex-col gap-3 p-0">

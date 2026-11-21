@@ -202,7 +202,7 @@ describe("Settings → Rooms' floors", () => {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="main"
+          page="rooms"
           params={{}}
           onStarted={() => undefined}
           open={() => undefined}

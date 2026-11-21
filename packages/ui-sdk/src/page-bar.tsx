@@ -14,8 +14,9 @@ import { Button } from "./components/ui/button";
 // An app page's title and its own buttons, in the shell's top bar as a
 // dashboard's name is: the page's one primary action, or what it does and
 // its way out, such as Run, Edit and Done, or an editor's Cancel and Save,
-// which stay in view while it scrolls. On a phone the bar keeps the buttons
-// and the title opens the page instead, where it has the width. The shell
+// which stay in view while it scrolls. A page another opened may lead with
+// its way back, before the title. On a phone the bar keeps the buttons and
+// the title opens the page instead, where it has the width. The shell
 // provides the place in its top bar; outside the shell, as in an app's
 // tests, they make a header of the page's own.
 
@@ -48,6 +49,8 @@ export function PageBar(props: {
   title: string;
   /** Its actions, at most three, which a page in a frame shows only this way. */
   actions?: readonly PageBarAction[];
+  /** Before the title, such as Back, which names the page it returns to. */
+  leading?: ReactNode;
   children?: ReactNode;
 }) {
   const slot = useContext(PageBarSlot);
@@ -92,6 +95,7 @@ export function PageBar(props: {
   if (!slot) {
     return (
       <header className="flex min-h-11 shrink-0 items-center">
+        {props.leading}
         {title}
         {buttons}
       </header>
@@ -104,6 +108,7 @@ export function PageBar(props: {
     <>
       {createPortal(
         <>
+          {props.leading}
           {!isPhone && title}
           {buttons}
         </>,

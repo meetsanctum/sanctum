@@ -113,6 +113,34 @@ describe("in the shell", () => {
   });
 });
 
+it("leads with what comes before the title, such as Back, in the bar and outside the shell", async () => {
+  screenWidth(1280);
+  const bar = (
+    <PageBar title="Status" leading={<Button variant="outline">System</Button>}>
+      <Button variant="outline">Done</Button>
+    </PageBar>
+  );
+  await act(async () => {
+    root.render(
+      <PageBarSlot.Provider value={slot}>{bar}</PageBarSlot.Provider>,
+    );
+  });
+  expect(
+    [...slot.children].map((child) => [child.tagName, child.textContent]),
+  ).toEqual([
+    ["BUTTON", "System"],
+    ["H1", "Status"],
+    ["DIV", "Done"],
+  ]);
+
+  await act(async () => root.render(bar));
+  expect(
+    [...container.querySelector("header")!.children].map(
+      (child) => child.textContent,
+    ),
+  ).toEqual(["System", "Status", "Done"]);
+});
+
 it("makes a header of its own outside the shell", async () => {
   screenWidth(390);
   await render(false);

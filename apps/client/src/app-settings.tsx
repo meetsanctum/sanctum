@@ -26,6 +26,7 @@ import {
   waitingWords,
 } from "./app-state";
 import { productName } from "./brand";
+import { BackButton } from "./components";
 import {
   Dialog,
   DialogContent,
@@ -185,6 +186,9 @@ export function AppPage(props: {
   onChanged: (app: AppInfo) => void;
   openStatus: () => void;
   onDone: () => void;
+  // The page under it in Settings, which Back returns to: without one it
+  // was opened from elsewhere, and Done closes it.
+  backTo?: string;
 }) {
   const { app } = props;
   const { manifest, entities, workflows } = useHomeNow(app);
@@ -207,10 +211,17 @@ export function AppPage(props: {
   }, [showsAtStart]);
   return (
     <>
-      <PageBar title={`${app.name} settings`}>
-        <Button variant="outline" onClick={props.onDone}>
-          Done
-        </Button>
+      <PageBar
+        title={`${app.name} settings`}
+        leading={
+          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
+        }
+      >
+        {!props.backTo && (
+          <Button variant="outline" onClick={props.onDone}>
+            Done
+          </Button>
+        )}
       </PageBar>
       <div ref={start} className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-3">
