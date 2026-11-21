@@ -6,7 +6,12 @@ import {
   type RoomSectionKind,
   type RoomSectionTile,
 } from "@meetsanctum/app-sdk";
-import { SectionTile, tileIconOf, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  SectionButton,
+  SectionTile,
+  tileIconOf,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { useCallback, useState } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
@@ -211,23 +216,24 @@ export function RoomRow(props: {
     ({ entity }) => entity.tile.active,
   );
   const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
-  const tileOf = ({ app, section, entity }: RowEntry) => {
-    const isChip = section.kind === "buttons";
+  const entryOf = ({ app, section, entity }: RowEntry) => {
     const notRunning = stateShort(app);
     const label = `${entity.tile.name} in ${roomName}`;
-    return (
-      <SectionTile
-        key={entityKey(entity.app, entity.key)}
-        chip={isChip}
-        icon={tileIconOf[entity.tile.icon]}
-        name={entity.tile.name}
-        label={notRunning ? `${label}, ${notRunning.toLowerCase()}` : label}
-        status={isChip ? undefined : (notRunning ?? undefined)}
-        active={lit?.entity === entity}
-        disabled={notRunning !== null || dark}
-        failures={entities.failuresOf(entity)}
-        onClick={() => void entities.press(app.id, section, entity)}
-      />
+    const shared = {
+      icon: tileIconOf[entity.tile.icon],
+      name: entity.tile.name,
+      label: notRunning ? `${label}, ${notRunning.toLowerCase()}` : label,
+      active: lit?.entity === entity,
+      disabled: notRunning !== null || dark,
+      failures: entities.failuresOf(entity),
+      onClick: () => void entities.press(app.id, section, entity),
+    };
+    const key = entityKey(entity.app, entity.key);
+    // Buttons are chips beside the lights button, tiles tiles under them.
+    return section.kind === "buttons" ? (
+      <SectionButton key={key} {...shared} />
+    ) : (
+      <SectionTile key={key} {...shared} status={notRunning ?? undefined} />
     );
   };
   const hasChips = row.lights !== undefined || row.buttons.length > 0;
@@ -240,12 +246,12 @@ export function RoomRow(props: {
       {hasChips && (
         <div className="flex flex-wrap gap-2">
           {row.lights && <LightsButton lights={row.lights} />}
-          {row.buttons.map(tileOf)}
+          {row.buttons.map(entryOf)}
         </div>
       )}
       {row.tiles.length > 0 && (
         <div className="tile-grid auto-rows-(--cell)">
-          {row.tiles.map(tileOf)}
+          {row.tiles.map(entryOf)}
         </div>
       )}
     </div>
