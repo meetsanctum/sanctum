@@ -209,9 +209,15 @@ export function BrightnessSlider(props: {
         }}
         onPointerCancel={(event) => {
           if (dragging.current !== event.pointerId) return;
+          // The slider takes no touch gestures, so a cancel comes from
+          // around the page, such as a host app that reports a lifted
+          // finger as cancelled: the drag ends where it was.
+          if (preview.value !== null) {
+            end(preview.value);
+            return;
+          }
           dragging.current = null;
           setDragging(false);
-          preview.clear();
         }}
         onLostPointerCapture={(event) => {
           // A release the slider does not hear still ends the drag where

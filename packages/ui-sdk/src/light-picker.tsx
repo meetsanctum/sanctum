@@ -590,8 +590,14 @@ function Wheel(props: {
       }}
       onPointerCancel={(event) => {
         if (dragging.current !== event.pointerId) return;
+        // The wheel takes no touch gestures, so a cancel comes from around
+        // the page, such as a host app that reports a lifted finger as
+        // cancelled: the drag ends where it was.
+        if (preview.value) {
+          end(preview.value);
+          return;
+        }
         dragging.current = null;
-        preview.clear();
       }}
       onLostPointerCapture={(event) => {
         // A release the wheel does not hear still ends the drag where it

@@ -170,9 +170,17 @@ export function DeviceTile(props: {
     onPointerEnd(event);
   };
   const onPointerCancel = (event: PointerEvent<HTMLButtonElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return;
-    // The browser took over the gesture, for example to scroll. Discard
-    // its preview before capture is released, without changing the light.
+    const at = drag.current;
+    if (at?.pointerId !== event.pointerId) return;
+    // Once a sideways drag has started the browser no longer scrolls, so a
+    // cancel then comes from around the page, such as a host app that
+    // reports a lifted finger as cancelled: the drag ends where it was.
+    if (at.active) {
+      onPointerEnd(event);
+      return;
+    }
+    // Before that the browser took over the gesture, for example to
+    // scroll. Discard its preview, without changing the light.
     drag.current = null;
     dragged.current = true;
     setDragging(false);

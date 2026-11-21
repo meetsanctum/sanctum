@@ -85,6 +85,101 @@ it("leaves sideways scrollbar drags with the scrollbar until release", async () 
   expect(scrollbar.releasePointerCapture).toHaveBeenCalledWith(1);
 });
 
+it("keeps a finger's swipe when the touched element's capture ends", async () => {
+  await act(async () => {
+    root.render(
+      <SwipePages
+        label="Device"
+        pages={["First", "Second"].map((label) => ({
+          id: label.toLowerCase(),
+          label,
+          icon: Sun,
+          content: <div>{label}</div>,
+        }))}
+      />,
+    );
+  });
+  const touched = container.querySelector<HTMLElement>(
+    "[data-slot=swipe-page-content]",
+  )!;
+  const event = (type: string, x: number) => {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      clientX: x,
+      clientY: 100,
+    });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    touched.dispatchEvent(event);
+  };
+  await act(async () => {
+    event("pointerdown", 300);
+    event("pointermove", 280);
+    // A touch holds an implicit capture on what it touched; when the swipe
+    // takes capture, that element loses it and the event bubbles up.
+    event("lostpointercapture", 280);
+    event("pointermove", 200);
+    event("pointerup", 200);
+  });
+
+  expect(
+    container
+      .querySelector('[role=tab][aria-selected="true"]')
+      ?.getAttribute("aria-label"),
+  ).toBe("Second");
+});
+
+it("turns the page for a swipe cancelled under way, as far as it went", async () => {
+  await act(async () => {
+    root.render(
+      <SwipePages
+        label="Device"
+        pages={["First", "Second"].map((label) => ({
+          id: label.toLowerCase(),
+          label,
+          icon: Sun,
+          content: <div>{label}</div>,
+        }))}
+      />,
+    );
+  });
+  const touched = container.querySelector<HTMLElement>(
+    "[data-slot=swipe-page-content]",
+  )!;
+  const event = (type: string, x: number) => {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      clientX: x,
+      clientY: 100,
+    });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    touched.dispatchEvent(event);
+  };
+  const current = () =>
+    container
+      .querySelector('[role=tab][aria-selected="true"]')
+      ?.getAttribute("aria-label");
+
+  // Not far enough: it stays.
+  await act(async () => {
+    event("pointerdown", 300);
+    event("pointermove", 260);
+    // As a host app sends for a lifted finger, away from the last move.
+    event("pointercancel", 0);
+  });
+  expect(current()).toBe("First");
+  expect(container.querySelector("[data-swiping]")).toBeNull();
+
+  await act(async () => {
+    event("pointerdown", 300);
+    event("pointermove", 280);
+    event("pointermove", 200);
+    event("pointercancel", 0);
+  });
+  expect(current()).toBe("Second");
+});
+
 it("scrolls tabs too many for the width to keep the current one in view", async () => {
   // Eight 44 px tabs 20 px apart, after 24 px of room, in a 360 px row.
   const at = (index: number) => 24 + index * 64;

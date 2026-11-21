@@ -146,7 +146,23 @@ describe("a light's tile", () => {
     expect(onDim).toHaveBeenCalledWith(lamp, 0);
   });
 
-  it("abandons a drag when the browser cancels it for scrolling", async () => {
+  it("abandons a press when the browser cancels it for scrolling", async () => {
+    const button = await render(lamp);
+    await act(async () => {
+      pointer(button, "pointerdown", 100);
+      pointer(button, "pointermove", 104);
+      pointer(button, "pointercancel", 104);
+      vi.runAllTimers();
+    });
+    expect(onDim).not.toHaveBeenCalled();
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(button.textContent).toBe("Lamp40%");
+
+    await drag(button, [[140, 0]]);
+    expect(onDim).toHaveBeenCalledWith(lamp, 60);
+  });
+
+  it("ends a drag where it was when it is cancelled under way", async () => {
     const button = await render(lamp);
     await act(async () => {
       pointer(button, "pointerdown", 100);
@@ -154,18 +170,14 @@ describe("a light's tile", () => {
     });
     expect(button.textContent).toContain("50%");
     await act(async () => {
+      // As a host app sends for a lifted finger; capture goes with it.
       pointer(button, "pointercancel", 120);
-      // Cancellation also releases capture; that must not send a command.
       pointer(button, "lostpointercapture", 120);
-      vi.runAllTimers();
     });
-    expect(onDim).not.toHaveBeenCalled();
+    expect(onDim).toHaveBeenCalledTimes(1);
+    expect(onDim).toHaveBeenCalledWith(lamp, 50);
     expect(onToggle).not.toHaveBeenCalled();
-    expect(button.textContent).toBe("Lamp40%");
     expect(button.hasAttribute("data-dragging")).toBe(false);
-
-    await drag(button, [[140, 0]]);
-    expect(onDim).toHaveBeenCalledWith(lamp, 60);
   });
 
   it("sends nothing for a drag that ends where it started", async () => {

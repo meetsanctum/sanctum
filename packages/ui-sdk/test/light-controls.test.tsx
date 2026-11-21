@@ -329,17 +329,22 @@ describe.each(["brightness", "hue", "white"] as const)(
       expect(onCommand.mock.calls).toEqual(sent);
     });
 
-    it("discards a cancelled drag", async () => {
+    it("ends a cancelled drag where it was", async () => {
       const slider = await showControl();
       const initial = input(`Lamp ${control}`).value;
       await act(async () => {
         pointer(slider, "pointerdown", 100, 100);
         pointer(slider, "pointermove", 190, 100);
+      });
+      const dragged = input(`Lamp ${control}`).value;
+      expect(dragged).not.toBe(initial);
+      await act(async () => {
+        // As a host app sends for a lifted finger; capture goes with it.
         pointer(slider, "pointercancel", 190, 100);
         pointer(slider, "lostpointercapture", 190, 100);
       });
-      expect(onCommand).not.toHaveBeenCalled();
-      expect(input(`Lamp ${control}`).value).toBe(initial);
+      expect(onCommand).toHaveBeenCalledTimes(1);
+      expect(input(`Lamp ${control}`).value).toBe(dragged);
     });
   },
 );
