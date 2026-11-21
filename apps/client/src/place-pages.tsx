@@ -44,7 +44,7 @@ import {
   LightsButton,
   roomLightsButton,
 } from "./lights-button";
-import { LightsCard, statusTileWidth } from "./lights-card";
+import { LightsCard, lightsStatus, statusTileWidth } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -293,32 +293,14 @@ export function HomeStatus(props: {
     if (own.length === 0) return [];
     const open = () => props.openCategory(id);
     if (id === "lights") return [{ key: id, tiles: own, open }];
-    let value: string;
-    let label: string;
-    if (category.id === "environment") {
-      // The temperatures when they have any; never the light level.
-      const [reading] = readingsOf(sensorReadings(own), unit, climateMeasures);
-      value = reading?.text ?? "No readings";
-      label = reading?.spoken ?? value;
-    } else if (category.id === "presence") {
-      const motion = homeMotion(own, devices.places);
-      value = motion.answering ? motionWhere(motion) : "No readings";
-      label = value;
-    } else if (category.id === "security") {
-      const contacts = contactsOf(own);
-      value = contacts ? contactsStatus(contacts) : "No readings";
-      label = value;
-    } else {
-      value = onMeta(own);
-      label = value;
-    }
+    const { value, spoken } = categoryStatus(id, own, devices)!;
     const look = categoryLooks[category.id];
     return [
       {
         key: category.id,
         title: category.title,
         value,
-        label: `${category.title}, ${label}`,
+        label: `${category.title}, ${spoken}`,
         icon: look.icon,
         colour: look.colour,
         open,
@@ -404,6 +386,53 @@ export function HomeStatus(props: {
       })}
     </section>
   );
+}
+
+/**
+ * What a category's status tile on Home says, which its item in the sidebar
+ * says too: how many lights or switches are on, the temperatures (never the
+ * light level), where there is motion, or how many contact sensors are
+ * open, with its words for a screen reader. Buttons have nothing to say.
+ * The sidebar names one room with motion at most, so its words fit and
+ * change less as people move about.
+ */
+export function categoryStatus(
+  id: DeviceCategory,
+  own: readonly Tile[],
+  devices: Devices,
+  where: "home" | "sidebar" = "home",
+): { value: string; spoken: string } | null {
+  const said = (value: string) => ({ value, spoken: value });
+  switch (id) {
+    case "lights":
+      return said(lightsStatus(own));
+    case "environment": {
+      const [reading] = readingsOf(
+        sensorReadings(own),
+        unitOf(devices),
+        climateMeasures,
+      );
+      return reading
+        ? { value: reading.text, spoken: reading.spoken }
+        : said("No readings");
+    }
+    case "presence": {
+      const motion = homeMotion(own, devices.places);
+      return said(
+        motion.answering
+          ? motionWhere(motion, where === "sidebar" ? 1 : 2)
+          : "No readings",
+      );
+    }
+    case "security": {
+      const contacts = contactsOf(own);
+      return said(contacts ? contactsStatus(contacts) : "No readings");
+    }
+    case "switches":
+      return said(onMeta(own));
+    case "buttons":
+      return null;
+  }
 }
 
 export function RoomPage(props: {
@@ -657,10 +686,10 @@ function CategorySections(props: {
 }
 
 // The places in the sidebar, after the dashboards: the categories the home
-// has devices for, then the rooms (sidebar-rooms.tsx), each group under its
-// heading. Only Lights says how many are on; the rest would be noise. While
-// any device is in no room, No room comes last among the rooms, the only one
-// in a home that has none yet.
+// has devices for, each saying what its status tile on Home says, then the
+// rooms (sidebar-rooms.tsx), each group under its heading. While any device
+// is in no room, No room comes last among the rooms, the only one in a home
+// that has none yet.
 export function SidebarPlaces(props: {
   devices: Devices;
   /** The place on show, if any. */
@@ -687,7 +716,10 @@ export function SidebarPlaces(props: {
           icon={categoryLooks[category.id].icon}
           colour={categoryLooks[category.id].colour}
           name={category.title}
-          meta={category.id === "lights" ? onMeta(category.tiles) : undefined}
+          meta={
+            categoryStatus(category.id, category.tiles, devices, "sidebar") ??
+            undefined
+          }
           current={
             current?.page === "category" && current.params.id === category.id
           }

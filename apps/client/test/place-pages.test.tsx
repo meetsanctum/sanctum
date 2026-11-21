@@ -263,7 +263,14 @@ describe("a category's page", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Lights1 on", "Switches", "Office", "Hall", "Attic", "No room"]);
+    ).toEqual([
+      "Lights1 on",
+      "Switches1 on",
+      "Office",
+      "Hall",
+      "Attic",
+      "No room",
+    ]);
   });
 
   it("is not in the sidebar while the home has none of its devices", async () => {
@@ -358,7 +365,7 @@ describe("the devices in no room", () => {
     await show(noRoomPage);
     expect(sidebar()).toEqual([
       "Lights1 on",
-      "Switches",
+      "Switches1 on",
       "Office",
       "Hall",
       "Attic",
@@ -377,7 +384,7 @@ describe("the devices in no room", () => {
     devices = [loose];
     await show(noRoomPage);
     expect(headings()).toEqual(["Lights", "Categories", "Rooms"]);
-    expect(sidebar()).toEqual(["LightsOff", "No room"]);
+    expect(sidebar()).toEqual(["LightsAll off", "No room"]);
   });
 
   it("leave the sidebar and their page once each has a room", async () => {
@@ -393,7 +400,7 @@ describe("the devices in no room", () => {
     });
     expect(sidebar()).toEqual([
       "Lights1 on",
-      "Switches",
+      "Switches1 on",
       "Office",
       "Hall",
       "Attic",
@@ -659,7 +666,7 @@ describe("contact sensors", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Lights1 on", "Security", "Office", "Hall", "Attic"]);
+    ).toEqual(["Lights1 on", "Security1 open", "Office", "Hall", "Attic"]);
   });
 });
 
@@ -708,8 +715,9 @@ describe("the climate", () => {
       ),
     ).toEqual([
       "Lights1 on",
-      "Switches",
-      "Environment",
+      "Switches1 on",
+      // What Home's status tile says, with its words for a screen reader.
+      "Environment19.5–21.5°19.5 to 21.5°",
       "Office",
       "Hall",
       "Attic",

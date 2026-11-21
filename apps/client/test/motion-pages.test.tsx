@@ -160,13 +160,18 @@ function Harness(props: { page: "room" | "category" | "status"; id: string }) {
   const entities = useSectionEntities(live, [], shown.fail);
   if (props.page === "status") {
     return (
-      <HomeStatus
-        devices={shown}
-        apps={[]}
-        openCategory={openCategory}
-        openAttention={() => undefined}
-        openMaintenance={() => undefined}
-      />
+      <>
+        <HomeStatus
+          devices={shown}
+          apps={[]}
+          openCategory={openCategory}
+          openAttention={() => undefined}
+          openMaintenance={() => undefined}
+        />
+        <nav>
+          <SidebarPlaces devices={shown} current={null} open={() => {}} />
+        </nav>
+      </>
     );
   }
   return props.page === "room" ? (
@@ -371,7 +376,13 @@ describe("the Presence category", () => {
       [...container.querySelectorAll("nav button")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Environment", "Presence", "Office", "Hall", "No room"]);
+    ).toEqual([
+      "Environment21°",
+      "PresenceOffice",
+      "Office",
+      "Hall",
+      "No room",
+    ]);
   });
 
   it("leaves out rooms without a motion sensor", async () => {
@@ -654,6 +665,41 @@ describe("the home's status", () => {
     )!;
     await act(async () => tile.click());
     expect(openCategory).toHaveBeenCalledWith("presence");
+  });
+
+  it("is what the sidebar's categories say, which count two rooms with motion", async () => {
+    devices = [
+      motionSensor(
+        "office",
+        "office",
+        { motion: true, minutesAgo: 1 },
+        { temperature: 21 },
+      ),
+      motionSensor("hall", "hall", { motion: false, minutesAgo: 30 }),
+    ];
+    await show("status");
+    const categories = () =>
+      [...container.querySelectorAll("nav button")]
+        .slice(0, 2)
+        .map((each) => each.textContent);
+    expect(categories()).toEqual(statusTiles());
+    expect(categories()).toEqual(["Environment21°", "PresenceOffice"]);
+
+    // Two rooms are counted, where Home's tile names them.
+    devices = devices.map((each) =>
+      each.id === "hall"
+        ? motionSensor("hall", "hall", { motion: true, minutesAgo: 1 })
+        : each,
+    );
+    await show("status");
+    expect(statusTiles()).toContain("PresenceOffice and Hall");
+    expect(categories()).toContain("Presence2 rooms");
+
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 2 })];
+    await show("status");
+    expect([...container.querySelectorAll("nav button")][0]?.textContent).toBe(
+      "PresenceQuiet",
+    );
   });
 
   it("says Quiet, or No readings while no motion sensor answers", async () => {

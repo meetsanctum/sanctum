@@ -134,6 +134,9 @@ describe("where there is motion in the home", () => {
     expect(motionWhere(one)).toBe("Office");
     const two = homeMotion([seeing("hall"), seeing("office")], places);
     expect(motionWhere(two)).toBe("Office and Hall");
+    // The sidebar names one room at most.
+    expect(motionWhere(one, 1)).toBe("Office");
+    expect(motionWhere(two, 1)).toBe("2 rooms");
     const three = homeMotion(
       [seeing("hall"), seeing("office"), seeing("kitchen")],
       places,

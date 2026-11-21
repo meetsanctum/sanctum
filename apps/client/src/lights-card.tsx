@@ -32,6 +32,24 @@ const saidForMs = 10_000;
 const lightsCounted = (count: number) =>
   count === 1 ? "1 light" : `${count} lights`;
 
+/**
+ * What the home's lights are doing, as the card says it and Lights' item in
+ * the sidebar: "2 on", "All off", "Offline" or "1 offline". A light that
+ * does not answer may still be on, so while none that answers is on it says
+ * how many do not, not "All off".
+ */
+export function lightsStatus(tiles: readonly Tile[]) {
+  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
+  const offline = tiles.filter((tile) => tile.disabled).length;
+  return on > 0
+    ? `${on} on`
+    : offline === tiles.length
+      ? "Offline"
+      : offline > 0
+        ? `${offline} offline`
+        : "All off";
+}
+
 export function LightsCard(props: {
   /** The home's lights. */
   tiles: readonly Tile[];
@@ -54,17 +72,7 @@ export function LightsCard(props: {
     return () => window.clearTimeout(timer);
   }, [did]);
   const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  const offline = tiles.filter((tile) => tile.disabled).length;
-  // A light that does not answer may still be on, so while none that
-  // answers is on the card says how many do not, not "All off".
-  const status =
-    on > 0
-      ? `${on} on`
-      : offline === tiles.length
-        ? "Offline"
-        : offline > 0
-          ? `${offline} offline`
-          : "All off";
+  const status = lightsStatus(tiles);
   const label = on > 0 ? `Turn off ${lightsCounted(on)}` : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;

@@ -16,7 +16,8 @@ export function SidebarItem(
       }
   ) & {
     name: string;
-    meta?: string;
+    /** Its status, and the words a screen reader says for it. */
+    meta?: { value: string; spoken: string };
     current: boolean;
     onSelect: () => void;
   },
@@ -47,10 +48,22 @@ export function SidebarItem(
           <props.icon aria-hidden="true" className="size-4.5" />
         </span>
       )}
-      <span className="min-w-0 flex-1 truncate">{props.name}</span>
+      {/* A status as long as "Office and Hall" is cut before the name. */}
+      <span
+        className={
+          props.meta ? "flex-1 whitespace-nowrap" : "min-w-0 flex-1 truncate"
+        }
+      >
+        {props.name}
+      </span>
       {props.meta && (
-        <span className="shrink-0 text-[13px] font-normal text-foreground/65 group-aria-[current=page]:text-background/65">
-          {props.meta}
+        <span className="min-w-0 truncate text-[13px] font-normal text-foreground/65 group-aria-[current=page]:text-background/65">
+          <span aria-hidden={props.meta.spoken !== props.meta.value}>
+            {props.meta.value}
+          </span>
+          {props.meta.spoken !== props.meta.value && (
+            <span className="sr-only">{props.meta.spoken}</span>
+          )}
         </span>
       )}
     </Button>

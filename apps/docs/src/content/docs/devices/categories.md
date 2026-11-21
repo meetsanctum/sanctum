@@ -19,7 +19,10 @@ part:
 | Buttons     | `buttons`     | Button parts  | Nothing more                                   |
 
 The sidebar lists them in this order, under Categories, and only those with
-at least one part in them. A category's page groups its parts by room.
+at least one part in them. Beside each name it says what the category's
+status at the top of Home says, such as "2 on" or "19.5–21.5°". Presence
+names a room with motion only while there is one, and counts from two: "2
+rooms". A category's page groups its parts by room.
 Parts from unassigned devices in the category appear under **No room**.
 
 ## A device shows in every category it fits
