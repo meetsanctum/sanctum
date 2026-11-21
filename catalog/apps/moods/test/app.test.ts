@@ -44,6 +44,25 @@ describe("Moods", () => {
     ]);
   });
 
+  it("offers AI agents its moods and running one, and creating one off to start", () => {
+    const offered = [
+      ...moodsApp.actions.map(({ id, assistant }) => ({ id, assistant })),
+      ...(moodsApp.provides?.entities ?? []).map(({ id, assistant }) => ({
+        id,
+        assistant,
+      })),
+    ].flatMap(({ id, assistant }) =>
+      assistant ? [[id, assistant.starts, assistant.needs ?? []]] : [],
+    );
+    // Its list of moods is the entity's; previews, deleting and ordering
+    // moods, schedules, presses and motion stay the household's, in Moods.
+    expect(offered).toEqual([
+      ["moods.createMood", "off", ["moods.mood", "devices.control:light"]],
+      ["moods.runMood", "on", ["moods.mood", "devices.control:light"]],
+      ["moods.mood", "on", []],
+    ]);
+  });
+
   it("runs its moods in workflows, and leaves a place's lights to the core's own pieces", () => {
     const ids = moodsApp.actions.map((action) => action.id);
     expect(ids).not.toContain("moods.switchLights");

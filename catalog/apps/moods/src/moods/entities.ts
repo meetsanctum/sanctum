@@ -39,6 +39,11 @@ export const moodType = defineEntityType({
   id: "moods.mood",
   title: "Mood",
   state: moodState,
+  assistant: {
+    starts: "on",
+    description:
+      "The rooms' moods: each one's room, name and icon, its place among the room's moods, and whether the room's lights show it now. input is what running it takes.",
+  },
 });
 
 // One publication at a time, so a room read before a change never lands

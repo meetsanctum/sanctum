@@ -161,6 +161,12 @@ export const createMood = defineAction({
   tier: "write",
   input: z.object({ roomId, name, icon: icon.default("sparkles"), lights }),
   output: mood,
+  assistant: {
+    starts: "off",
+    description:
+      "Save a new mood for a room, with its name, an icon and the look of each of the room's lights it sets.",
+    needs: ["moods.mood", "devices.control:light"],
+  },
   async run(ctx, input) {
     await assertRoom(ctx, input.roomId);
     const created = await insertMood(ctx.storage.db, input);
@@ -244,6 +250,12 @@ export const runMood = defineAction({
   input: z.object({ id: entityOf(moodType.id) }),
   output: ran,
   words: { sentence: "Run {id}", preview: { id: "Aurora" } },
+  assistant: {
+    starts: "on",
+    description:
+      "Run one of a room's moods, as its tile does: the room's lights take the mood's look, which may turn some of them off. Answers how many lights changed.",
+    needs: ["moods.mood", "devices.control:light"],
+  },
   async run(ctx, input) {
     const found = await readMood(ctx.storage.db, input.id);
     if (!found) throw new ActionError("not_found");

@@ -39,6 +39,12 @@ export const targetType = defineEntityType({
   id: "naturalLight.target",
   title: "Light following the sun",
   state: targetState,
+  assistant: {
+    starts: "on",
+    description:
+      "Each light that follows the sun, by its device and capability, with whether it is following, dimmed, paused, waiting or off, and the colour temperature and brightness natural light sets on it now.",
+    needs: ["devices.control:light"],
+  },
 });
 
 /** The entity's key: the light's device and capability. */

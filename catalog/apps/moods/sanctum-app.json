@@ -1,7 +1,7 @@
 {
   "id": "sanctum.moods",
   "name": "Moods",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "core": "^2.0.0",
   "protocol": 11,
   "summary": "Moods for each room, and what remotes and motion do with its lights.",
@@ -576,7 +576,14 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "off",
+        "description": "Save a new mood for a room, with its name, an icon and the look of each of the room's lights it sets.",
+        "needs": [
+          "moods.mood",
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "moods.updateMood",
@@ -1018,7 +1025,14 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Run one of a room's moods, as its tile does: the room's lights take the mood's look, which may turn some of them off. Answers how many lights changed.",
+        "needs": [
+          "moods.mood",
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "moods.previewMood",
@@ -3579,7 +3593,10 @@
           ],
           "additionalProperties": false
         },
-        "assistant": null
+        "assistant": {
+          "starts": "on",
+          "description": "The rooms' moods: each one's room, name and icon, its place among the room's moods, and whether the room's lights show it now. input is what running it takes."
+        }
       },
       {
         "id": "lights.turnOn",

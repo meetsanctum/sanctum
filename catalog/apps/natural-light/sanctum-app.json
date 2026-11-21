@@ -1,7 +1,7 @@
 {
   "id": "sanctum.natural-light",
   "name": "Natural light",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "core": "^2.0.0",
   "protocol": 11,
   "summary": "Lights that follow the colour of daylight through the day.",
@@ -279,7 +279,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Have every light in a room that takes a colour temperature follow the sun through the day, or stop following it. placeId null means the lights in no room.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.bringRoom",
@@ -329,7 +335,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Bring a room to natural light, as its Natural light button does: the lights that follow the sun come on at its colour and brightness for now, and the room's other lights turn off.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.resume",
@@ -411,7 +423,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Have a light that follows the sun but is paused, or dimmed by someone, follow it again now, at its colour and brightness.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.pause",
@@ -493,7 +511,13 @@
         ],
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": {
+        "starts": "on",
+        "description": "Stop natural light changing a light that follows the sun until the light is switched off, keeping the look it has now.",
+        "needs": [
+          "devices.control:light"
+        ]
+      }
     },
     {
       "id": "naturalLight.preview",
@@ -685,7 +709,10 @@
           }
         ]
       },
-      "assistant": null
+      "assistant": {
+        "starts": "off",
+        "description": "Today's natural light: the colour temperature and brightness it sets through the day, from sunrise to sunset. None until the home has a location and the sun rises and sets today."
+      }
     },
     {
       "id": "naturalLight.check",
@@ -766,7 +793,13 @@
           ],
           "additionalProperties": false
         },
-        "assistant": null
+        "assistant": {
+          "starts": "on",
+          "description": "Each light that follows the sun, by its device and capability, with whether it is following, dimmed, paused, waiting or off, and the colour temperature and brightness natural light sets on it now.",
+          "needs": [
+            "devices.control:light"
+          ]
+        }
       },
       {
         "id": "naturalLight.room",
