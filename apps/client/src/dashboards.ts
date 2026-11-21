@@ -16,9 +16,9 @@ import { getShell } from "./shell";
 // whenever the shell refreshes its live feed, which it first does once the
 // host has answered as itself and then whenever the connection comes back,
 // and followed over it in between. The sidebar lists them, and the top bar
-// names the one on show, with Rename in its ⋮ menu. What is on Home shows as
-// it is changed here, and once the core has answered every change, what it
-// has.
+// names the one on show, with Rename in its ⋮ menu except on Home. What is
+// on Home shows as it is changed here, and once the core has answered every
+// change, what it has.
 export function useDashboards(live: LiveFeed) {
   // None until the core has answered.
   const [dashboards, setDashboards] = useState<DashboardInfo[]>();

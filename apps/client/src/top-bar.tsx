@@ -125,8 +125,8 @@ export function TopBar(props: {
 }
 
 // The ⋮ menu at the right end of the top bar, on a dashboard: Edit Home on
-// Home's, then Rename. Every client offers it, shared tablets included: the
-// dashboards are the household's.
+// Home's, Rename on the others. Home keeps its name. Every client offers it,
+// shared tablets included: the dashboards are the household's.
 function DashboardMenu(props: {
   dashboard: DashboardInfo;
   onRename: (id: string, name: string) => Promise<unknown>;
@@ -159,10 +159,12 @@ function DashboardMenu(props: {
               <span className="truncate">Edit {props.dashboard.name}</span>
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => setRenaming(props.dashboard)}>
-            <Pencil />
-            Rename
-          </DropdownMenuItem>
+          {props.dashboard.kind !== "home" && (
+            <DropdownMenuItem onSelect={() => setRenaming(props.dashboard)}>
+              <Pencil />
+              Rename
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <RenameDashboard

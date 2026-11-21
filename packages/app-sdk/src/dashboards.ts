@@ -43,7 +43,7 @@ export type DashboardInfo = {
 
 /** `POST /api/dashboards/add`: a new dashboard after the others, mocha unless it says. */
 export type AddDashboard = { name: string; background?: DashboardBackground };
-/** `POST /api/dashboards/update`: renames one. */
+/** `POST /api/dashboards/update`: renames one; refused with `home_dashboard` for Home. */
 export type UpdateDashboard = { id: string; name: string };
 /** `POST /api/dashboards/remove`: refused with `home_dashboard` for Home. */
 export type RemoveDashboard = { id: string };

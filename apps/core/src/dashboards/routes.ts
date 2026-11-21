@@ -22,7 +22,7 @@ import {
 //
 //   GET  /api/dashboards              DashboardInfo[], Home first
 //   POST /api/dashboards/add          { name, background? } → DashboardInfo
-//   POST /api/dashboards/update       { id, name } → DashboardInfo
+//   POST /api/dashboards/update       { id, name } → DashboardInfo; refused for Home
 //   POST /api/dashboards/remove       { id }; refused for Home
 //   POST /api/dashboards/home/add     { device } → Home's DashboardInfo
 //   POST /api/dashboards/home/remove  { device } → Home's DashboardInfo

@@ -13,7 +13,8 @@ import {
 } from "./support.js";
 
 // Dashboards: the home's, not a person's or a client's. Every client reads and
-// changes them, shared ones included, and a home always keeps Home. What is on
+// changes them, shared ones included, and a home always keeps Home, by its
+// name. What is on
 // Home is in home-dashboard.test.ts.
 
 async function home() {
@@ -78,12 +79,6 @@ describe("dashboards", () => {
       { id: kitchen.id, name: " Breakfast " },
       maya,
     );
-    const renamedHome = await post(
-      core,
-      "/api/dashboards/update",
-      { id: first.id, name: "Overview" },
-      maya,
-    );
     const removed = await post(
       core,
       "/api/dashboards/remove",
@@ -98,10 +93,9 @@ describe("dashboards", () => {
       kind: "custom",
     });
     expect(renamed.json()).toEqual({ ...kitchen, name: "Breakfast" });
-    expect(renamedHome.json()).toEqual({ ...first, name: "Overview" });
     expect(removed.statusCode).toBe(204);
     expect(await seenBy(core, maya.token)).toEqual([
-      { ...first, name: "Overview" },
+      first,
       { ...kitchen, name: "Breakfast" },
     ]);
     expect(
@@ -113,7 +107,6 @@ describe("dashboards", () => {
         ["dashboard.add", kitchen.id],
         ["dashboard.add", evening.id],
         ["dashboard.update", kitchen.id],
-        ["dashboard.update", first.id],
         ["dashboard.remove", evening.id],
       ].sort(),
     );
@@ -176,7 +169,7 @@ describe("dashboards", () => {
     ).toBe(401);
   });
 
-  it("keep Home, from every client, first among them", async () => {
+  it("keep Home and its name, from every client, first among them", async () => {
     const { core, maya, add } = await home();
     const kitchen = sharedClient(core);
     const [first] = await seenBy(core, maya.token);
@@ -194,12 +187,20 @@ describe("dashboards", () => {
       { id: first.id },
       maya,
     );
+    const renamed = await post(
+      core,
+      "/api/dashboards/update",
+      { id: first.id, name: "Overview" },
+      kitchen,
+    );
     // Even where Home's position comes after another's.
     core.db.run(sql`UPDATE dashboards SET position = 5 WHERE kind = 'home'`);
 
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toEqual({ error: "home_dashboard" });
     expect(refusedAgain.json()).toEqual({ error: "home_dashboard" });
+    expect(renamed.statusCode).toBe(409);
+    expect(renamed.json()).toEqual({ error: "home_dashboard" });
     expect(await seenBy(core, maya.token)).toEqual([first, second]);
     // A refusal records nothing.
     expect(entries(core).map((entry) => entry.action)).toEqual([

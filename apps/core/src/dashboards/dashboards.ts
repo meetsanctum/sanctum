@@ -78,7 +78,8 @@ export type DashboardChangedBy = { personId?: string; clientId: string };
 
 export class DashboardsError extends Error {
   constructor(
-    // home_dashboard: Home cannot be removed. too_many_dashboards: it has
+    // home_dashboard: Home keeps its name and cannot be removed.
+    // too_many_dashboards: it has
     // maxDashboards already. not_on_home: an order names a device Home does
     // not have.
     readonly code:
@@ -332,15 +333,24 @@ export function createDashboards(
     ): DashboardInfo {
       const { id: dashboardId, ...changes } = dashboardChanges.parse(input);
       return change(by, "dashboard.update", () => {
+        const found = db
+          .select({ kind: dashboards.kind })
+          .from(dashboards)
+          .where(eq(dashboards.id, dashboardId))
+          .get();
+        if (!found) {
+          throw notFound(dashboardId);
+        }
+        // The words about Home, such as Add to Home, use its name.
+        if (found.kind === "home") {
+          throw new DashboardsError("home_dashboard", "Home keeps its name");
+        }
         const updated = db
           .update(dashboards)
           .set({ ...changes, updatedAt: now() })
           .where(eq(dashboards.id, dashboardId))
           .returning(info)
-          .get();
-        if (!updated) {
-          throw notFound(dashboardId);
-        }
+          .get()!;
         return { subjectId: dashboardId, result: infoOf(updated) };
       });
     },
