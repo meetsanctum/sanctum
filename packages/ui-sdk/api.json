@@ -1,5 +1,5 @@
 {
-  "version": "0.1.17",
+  "version": "0.1.16",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2350,8 +2350,8 @@
       "import * as React from \"react\";",
       "import { type VariantProps } from \"class-variance-authority\";",
       "declare const buttonVariants: (props?: ({",
-      "    variant?: \"destructive\" | \"link\" | \"tile\" | \"default\" | \"row\" | \"option\" | \"outline\" | \"ghost\" | \"glass\" | \"on-tile\" | \"placeholder\" | \"grip\" | \"choice\" | null | undefined;",
-      "    size?: \"app\" | \"tile\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"label\" | \"option\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | null | undefined;",
+      "    variant?: \"destructive\" | \"link\" | \"tile\" | \"default\" | \"row\" | \"option\" | \"outline\" | \"ghost\" | \"glass\" | \"placeholder\" | \"grip\" | \"choice\" | null | undefined;",
+      "    size?: \"app\" | \"tile\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"label\" | \"option\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | null | undefined;",
       "} & import(\"class-variance-authority/types\").ClassProp) | undefined) => string;",
       "declare function Button({ className, variant, size, asChild, ...props }: React.ComponentProps<\"button\"> & VariantProps<typeof buttonVariants> & {",
       "    asChild?: boolean;",
@@ -2572,7 +2572,8 @@
       "export * from \"./page-bar\";",
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
-      "export { SectionButton, SectionTile } from \"./section-controls\";",
+      "export * from \"./section-button\";",
+      "export * from \"./section-tile\";",
       "export * from \"./swipe-pages\";",
       "export * from \"./temperature-unit\";",
       "export * from \"./tile-icons\";",
@@ -2691,29 +2692,29 @@
       "    stop(): Promise<void>;",
       "};"
     ],
-    "section-controls.d.ts": [
+    "section-button.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",
-      "import { type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from \"react\";",
+      "import type { MouseEvent } from \"react\";",
       "export declare function SectionButton(props: {",
       "    icon: LucideIcon;",
       "    name: string;",
       "    label?: string;",
-      "    layout?: \"inline\" | \"room\";",
       "    active?: boolean;",
       "    lit?: boolean;",
       "    disabled?: boolean;",
       "    failures?: number;",
       "    onClick: (event: MouseEvent<HTMLButtonElement>) => void;",
-      "}): import(\"react\").JSX.Element;",
+      "}): import(\"react\").JSX.Element;"
+    ],
+    "section-tile.d.ts": [
+      "import type { LucideIcon } from \"lucide-react\";",
+      "import { type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from \"react\";",
       "export declare function SectionTile(props: {",
       "    icon: LucideIcon;",
       "    name: string;",
       "    status?: ReactNode;",
       "    disabled?: boolean;",
       "    active?: boolean;",
-      "    lit?: boolean;",
-      "    iconOnly?: boolean;",
-      "    chip?: boolean;",
       "    label?: string;",
       "    editing?: boolean;",
       "    dragging?: boolean;",
@@ -2729,7 +2730,11 @@
       "}): import(\"react\").JSX.Element;"
     ],
     "show-failed.d.ts": [
-      "export declare function showFailed(button: HTMLElement | null, wash: HTMLElement | null): void;"
+      "export declare function showFailed(button: HTMLElement | null, wash: HTMLElement | null): void;",
+      "export declare function useShowFailed(failures?: number, onFailed?: () => void): {",
+      "    surface: import(\"react\").RefObject<HTMLButtonElement | null>;",
+      "    wash: import(\"react\").RefObject<HTMLSpanElement | null>;",
+      "};"
     ],
     "swipe-pages.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",
@@ -2776,7 +2781,6 @@
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
       "    lead?: (section: TileSection) => ReactNode;",
-      "    first?: (section: TileSection) => ReactNode;",
       "}): import(\"react\").JSX.Element[];"
     ],
     "tiles.d.ts": [

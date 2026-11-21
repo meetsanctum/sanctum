@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 // How long a tile shows that a command to it failed, in ms.
 const showFailure = 900;
 
@@ -22,4 +24,24 @@ export function showFailed(
     [0, -6, 6, -4, 4, -2, 0].map((x) => ({ transform: `translateX(${x}px)` })),
     { duration: showFailure / 2, delay: 60, easing: "ease-in-out" },
   );
+}
+
+/**
+ * A tile's or a button's failed taps, each shown once as it comes, after
+ * `onFailed` where a failure undoes something first: the element and its
+ * red wash, to give their refs. Only failures from while it is shown show,
+ * so a page opened later starts calm.
+ */
+export function useShowFailed(failures = 0, onFailed?: () => void) {
+  const surface = useRef<HTMLButtonElement | null>(null);
+  const wash = useRef<HTMLSpanElement>(null);
+  const shown = useRef(failures);
+  useEffect(() => {
+    if (failures <= shown.current) return;
+    shown.current = failures;
+    onFailed?.();
+    showFailed(surface.current, wash.current);
+    // Only a new failure shows, whatever else changed.
+  }, [failures]);
+  return { surface, wash };
 }

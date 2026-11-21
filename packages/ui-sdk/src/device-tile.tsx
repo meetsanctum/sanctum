@@ -16,7 +16,7 @@ import {
   type PointerEvent,
 } from "react";
 
-import { showFailed } from "./show-failed";
+import { useShowFailed } from "./show-failed";
 import { contactIcon } from "./contact-icons";
 import type { Tile } from "./tiles";
 import { useThrottledSend } from "./use-throttled-send";
@@ -71,8 +71,13 @@ export function DeviceTile(props: {
   const drag = useRef<Drag | null>(null);
   const dragged = useRef(false);
   const clearing = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const surface = useRef<HTMLButtonElement>(null);
-  const wash = useRef<HTMLSpanElement>(null);
+  // A failed command leaves the light as it was, so a dragged or stepped
+  // level it was holding goes too.
+  const { surface, wash } = useShowFailed(tile.failures, () => {
+    if (drag.current) return;
+    clearTimeout(clearing.current);
+    setPreview(null);
+  });
   const canDim = tile.dims && !tile.disabled;
   const dimmer = useThrottledSend<number>(
     (level) => props.onDim(tile, level),
@@ -94,20 +99,6 @@ export function DeviceTile(props: {
     if (!drag.current) setPreview(null);
   }, [tile.on, tile.brightness]);
   useEffect(() => () => clearTimeout(clearing.current), []);
-
-  // A failed command leaves the light as it was, so a dragged or stepped
-  // level it was holding goes too. Only failures from while the tile is
-  // shown show: a page opened later starts calm.
-  const failures = useRef(tile.failures ?? 0);
-  useEffect(() => {
-    if ((tile.failures ?? 0) <= failures.current) return;
-    failures.current = tile.failures ?? 0;
-    if (!drag.current) {
-      clearTimeout(clearing.current);
-      setPreview(null);
-    }
-    showFailed(surface.current, wash.current);
-  }, [tile.failures]);
 
   const show = (level: number) => {
     clearTimeout(clearing.current);
