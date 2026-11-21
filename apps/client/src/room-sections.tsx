@@ -6,24 +6,19 @@ import {
   type RoomSectionKind,
   type RoomSectionTile,
 } from "@meetsanctum/app-sdk";
-import {
-  icons,
-  SectionTile,
-  tileIconOf,
-  type LiveFeed,
-} from "@meetsanctum/ui-sdk";
+import { SectionTile, tileIconOf, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useState, type ReactNode } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
-import type { LightsSwitch } from "./lights-button";
+import { LightsButton, type LightsButtonState } from "./lights-button";
 
 // Apps' room sections: the shell draws each from the app's entities of the
-// section's type in the room, in the room's row (RoomRow) after its switch,
-// buttons as squares with their icon alone and tiles with their names. No
-// app code runs to draw one. A tap calls the section's action through the
+// section's type in the room, in the room's row (RoomRow) under its lights
+// button, buttons as squares with their icon alone and tiles with their
+// names. No app code runs to draw one. A tap calls the section's action through the
 // gate; the lights and switches it could not reach fail on their tiles, and
 // a tap that fails as a whole fails on the section's own tile. While the
 // app isn't running its tiles dim and say so. What a room has is the
@@ -155,9 +150,9 @@ function failedDevices(output: unknown): string[] {
 /** One of a room's buttons or tiles, from an app's room section. */
 type RowEntry = AppSection & { entity: SectionEntity };
 
-/** A room's row: its switch, then apps' buttons, then apps' tiles. */
+/** A room's row: its lights button, then apps' buttons, then apps' tiles. */
 type RoomRowParts = {
-  lights?: LightsSwitch;
+  lights?: LightsButtonState;
   buttons: RowEntry[];
   tiles: RowEntry[];
 };
@@ -180,7 +175,7 @@ export function roomRowOf(
   apps: readonly AppInfo[],
   entities: SectionEntities,
   roomId: string,
-  lights: LightsSwitch | undefined,
+  lights: LightsButtonState | undefined,
 ): RoomRowParts {
   return {
     lights,
@@ -193,16 +188,16 @@ export const isRowEmpty = (row: RoomRowParts) =>
   !row.lights && row.buttons.length === 0 && row.tiles.length === 0;
 
 /**
- * A room's row, under its name on its page and on Home: its switch, a square
- * tile with the power symbol that says what it does ("Turn off 3 lights in
- * Kitchen") and is White while any light is on, then apps' buttons, square
- * with their icon alone, then apps' tiles with their names. The switch says
- * whether the lights are on, the rest which look they have, so at most one
- * of those is lit: Natural light before a mood that matches the curve, and
- * a running app's look before the last one a paused app said. Each is named
- * with the room, since several rooms' are in reach on Home. While every
- * light is offline the core can reach none, so the whole row dims; while an
- * app isn't running its own buttons and tiles dim and say so.
+ * A room's row, under its name on its page and on Home: its lights button,
+ * a chip that says what it does ("Turn off lights") and is White while any
+ * light is on (lights-button.tsx), then on a line under it apps' buttons,
+ * square with their icon alone, then apps' tiles with their names. The
+ * button says whether the lights are on, the rest which look they have, so
+ * at most one of those is lit: Natural light before a mood that matches the
+ * curve, and a running app's look before the last one a paused app said.
+ * Each is named with the room, since several rooms' are in reach on Home.
+ * While every light is offline the core can reach none, so the whole row
+ * dims; while an app isn't running its own buttons and tiles dim and say so.
  */
 export function RoomRow(props: {
   row: RoomRowParts;
@@ -210,7 +205,7 @@ export function RoomRow(props: {
   entities: SectionEntities;
 }) {
   const { row, roomName, entities } = props;
-  const dark = row.lights?.disabled === true;
+  const dark = row.lights?.isDisabled === true;
   const active = [...row.buttons, ...row.tiles].filter(
     ({ entity }) => entity.tile.active,
   );
@@ -233,52 +228,40 @@ export function RoomRow(props: {
       />
     );
   };
-  const squares = (row.lights ? 1 : 0) + row.buttons.length;
+  const squares = row.buttons.length;
   return (
     <div
       role="group"
       aria-label={`Lights in ${roomName}`}
-      className="tile-grid auto-rows-(--cell)"
+      className="flex flex-col gap-3"
     >
-      {squares > 0 && (
-        <RowSquares count={squares}>
-          {row.lights && <RoomSwitch lights={row.lights} />}
-          {row.buttons.map((each) => tileOf(each, true))}
-        </RowSquares>
+      {row.lights && <LightsButton lights={row.lights} />}
+      {(squares > 0 || row.tiles.length > 0) && (
+        <div className="tile-grid auto-rows-(--cell)">
+          {squares > 0 && (
+            <RowSquares count={squares}>
+              {row.buttons.map((each) => tileOf(each, true))}
+            </RowSquares>
+          )}
+          {row.tiles.map((each) => tileOf(each, false))}
+        </div>
       )}
-      {row.tiles.map((each) => tileOf(each, false))}
     </div>
-  );
-}
-
-/**
- * A room's switch for all its lights, a square with the power symbol that is
- * White while any light is on: first in its row, and first in its lights on
- * Lights' page.
- */
-export function RoomSwitch(props: { lights: LightsSwitch }) {
-  const { lights } = props;
-  return (
-    <SectionTile
-      iconOnly
-      icon={icons.Power}
-      name={lights.label}
-      lit={lights.on > 0}
-      disabled={lights.disabled}
-      onClick={lights.onToggle}
-    />
   );
 }
 
 /**
  * A row's squares, in a tile grid: a cell each, and on a phone, whose grid
  * is six columns, the first half of the row's first line between them, two
- * to a line, so they line up with the tiles below.
+ * to a line, so they line up with the tiles below. An odd last square, such
+ * as Natural light with no other button beside it, keeps its size and
+ * sits in the middle of its line's two places, so the line stays on the
+ * grid with no hole at its side.
  */
 export function RowSquares(props: { count: number; children: ReactNode }) {
   return (
     <div
-      className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap)"
+      className="contents max-sm:col-span-3 max-sm:grid max-sm:auto-rows-(--cell) max-sm:grid-cols-2 max-sm:gap-(--cell-gap) max-sm:[&>:last-child:nth-child(odd)]:col-span-2 max-sm:[&>:last-child:nth-child(odd)]:w-[calc(50%-var(--cell-gap)/2)] max-sm:[&>:last-child:nth-child(odd)]:justify-self-center"
       style={{ gridRow: `span ${Math.ceil(props.count / 2)}` }}
     >
       {props.children}

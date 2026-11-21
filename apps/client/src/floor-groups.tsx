@@ -2,16 +2,15 @@ import type { Floor, Places } from "@meetsanctum/app-sdk";
 import { icons } from "@meetsanctum/ui-sdk";
 import type { ReactNode } from "react";
 
-import { LightsButton, type LightsSwitch } from "./lights-button";
+import { LightsButton, type LightsButtonState } from "./lights-button";
 
 // Rooms under their floors, as Home and the category pages show them once
 // the home has floors: each floor in the household's order, then the rooms
 // on none under "Other rooms". A floor's heading is one row: the layers
-// mark, its name and, on Home and Lights' page, its switch that turns its
-// lights off, the power symbol alone as a room's switch has it, which
-// starts after the name so the eye finds it there and nothing below moves
-// when it goes. Wider than a phone, the mark hangs at the leading edge, out
-// of the reading line, and everything of the floor aligns with its name, as
+// mark and its name. On Home and Lights' page a floor with lights has its
+// button under its name, which turns them off (lights-button.tsx). Wider
+// than a phone, the mark hangs at the leading edge, out of the reading
+// line, and everything of the floor aligns with its name, as
 // the sidebar indents rooms under their floor. The rooms and the Other
 // rooms heading share an inset equal to the mark's width plus its gap.
 // On a phone, the mark leads the heading's line, and the rooms and the
@@ -63,7 +62,7 @@ export function FloorSection(props: {
   floor: Floor | null;
   /** Its heading's id, unique on the page. */
   id: string;
-  lights?: LightsSwitch;
+  lights?: LightsButtonState;
   children: ReactNode;
 }) {
   const { floor, lights } = props;
@@ -72,20 +71,23 @@ export function FloorSection(props: {
       aria-labelledby={props.id}
       className="flex shrink-0 flex-col gap-5"
     >
-      <div className={`flex items-center gap-2${floor ? "" : " sm:ps-6.5"}`}>
-        {floor && (
-          <icons.Layers aria-hidden="true" className="size-4.5 shrink-0" />
-        )}
-        {/* The row keeps the switch's height while it's gone. */}
-        <div className="flex min-h-9 min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2">
+      <div className="flex flex-col gap-3">
+        <div className={`flex items-center gap-2${floor ? "" : " sm:ps-6.5"}`}>
+          {floor && (
+            <icons.Layers aria-hidden="true" className="size-4.5 shrink-0" />
+          )}
           <h2
             id={props.id}
-            className="m-0 text-[17px] leading-[22px] font-semibold"
+            className="m-0 min-w-0 text-[17px] leading-[22px] font-semibold"
           >
             {floor?.name ?? otherRoomsName}
           </h2>
-          {lights && <LightsButton lights={lights} />}
         </div>
+        {lights && (
+          <div className="flex sm:ps-6.5">
+            <LightsButton lights={lights} />
+          </div>
+        )}
       </div>
       <div className="flex min-w-0 flex-col gap-8 sm:ps-6.5">
         {props.children}

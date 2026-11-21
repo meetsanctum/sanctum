@@ -133,7 +133,7 @@ const moods: AppInfo = {
     devicePages: [],
   },
 };
-const relax: EntityInfo = {
+const relax = {
   app: "sanctum.moods",
   key: "relax",
   type: "moods.mood",
@@ -147,6 +147,12 @@ const relax: EntityInfo = {
     input: { id: "relax" },
   },
   updatedAt: "2026-11-02T10:00:00.000Z",
+} satisfies EntityInfo;
+const work: EntityInfo = {
+  ...relax,
+  key: "work",
+  name: "Work",
+  state: { ...relax.state, name: "Work", order: 1, input: { id: "work" } },
 };
 
 let root: Root;
@@ -189,23 +195,24 @@ async function show(editing = false) {
   });
 }
 
+// What a part of the page holds, as a screen reader meets it: each tile or
+// button, a row's squares and grid looked through.
+const parts = (each: Element): Element[] =>
+  each.matches(".tile-grid, .contents")
+    ? [...each.children].flatMap(parts)
+    : [each];
 const sections = () =>
   [...container.querySelectorAll("section")].map((section) => ({
     heading: section.querySelector("h2")?.textContent,
     groups: [...section.querySelectorAll("[role=group]")].map((group) => [
       group.getAttribute("aria-label"),
-      // A row's squares are together in one part of it, and say only their
-      // names to a screen reader.
+      // Buttons say their accessible names, tiles their names.
       ...[...group.children]
-        .flatMap((each) =>
-          each.matches("button") || each.querySelector(".truncate.text-sm")
-            ? [each]
-            : [...each.children],
-        )
+        .flatMap(parts)
         .map(
           (each) =>
             each.querySelector(".truncate.text-sm")?.textContent ??
-            (each.textContent || each.getAttribute("aria-label")),
+            (each.getAttribute("aria-label") || each.textContent),
         ),
     ]),
   }));
@@ -237,7 +244,7 @@ beforeEach(() => {
     const asked = init?.json as { device?: string; devices?: string[] };
     if (path === "/api/devices") return devices;
     if (path === "/api/places") return places;
-    if (path.startsWith("/api/entities?")) return [relax];
+    if (path.startsWith("/api/entities?")) return [relax, work];
     if (path === "/api/dashboards") {
       return [
         {
@@ -294,7 +301,7 @@ describe("Home", () => {
       {
         heading: "Office",
         groups: [
-          ["Lights in Office", "Turn off 1 light in Office", "Relax"],
+          ["Lights in Office", "Turn off lights in Office", "Relax", "Work"],
           ["On Home", "Desk strip", "Lamp"],
         ],
       },

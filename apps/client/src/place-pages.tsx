@@ -14,7 +14,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -37,8 +37,14 @@ import {
   tilesIn,
   type Reading,
 } from "./device-tiles";
+import { useEdgeFade } from "./edge-fade";
 import { byFloor, FloorSection } from "./floor-groups";
-import { floorLightsButton, lightsButton } from "./lights-button";
+import {
+  floorLightsButton,
+  LightsButton,
+  roomLightsButton,
+} from "./lights-button";
+import { LightsCard, statusTileWidth } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -46,8 +52,6 @@ import {
   isRowEmpty,
   RoomRow,
   roomRowOf,
-  RoomSwitch,
-  RowSquares,
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
@@ -59,13 +63,14 @@ import type { Devices } from "./use-devices";
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, its motion, whether
 // its contact sensors are open and what its sensors read under it, then its
-// row: its switch, Natural light and its moods (room-sections.tsx), then its
-// devices in a section for each category, and last the devices Sanctum
+// row: its lights button, Natural light and its moods (room-sections.tsx),
+// then its devices in a section for each category, and last the devices Sanctum
 // cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards
-// (summary-cards.tsx): Lights' with how many are on and a button that turns
-// them all off, Environment's with the range of each reading across the
-// home, Security's with how many contact sensors are open. Presence's opens
+// (summary-cards.tsx), Environment's with the range of each reading across
+// the home, Security's with how many contact sensors are open; Lights'
+// opens with its card, how many are on with a switch that turns them off
+// (lights-card.tsx). Presence's opens
 // with its overview, each room's last 24 hours (presence-overview.tsx).
 // On Lights' page each room also has its button for all its lights, as on
 // Home. The devices in no room have a page too, last among the rooms while
@@ -212,8 +217,8 @@ function Sections(props: {
   sections: TileSection[];
   devices: Devices;
   onOpen: (tile: Tile) => void;
-  /** What a section's tiles start with. */
-  first?: (section: TileSection) => ReactNode;
+  /** What a section has between its heading and its tiles. */
+  lead?: (section: TileSection) => ReactNode;
   /** Its headings' level, 3 under a floor's. */
   level?: 2 | 3;
 }) {
@@ -226,17 +231,17 @@ function Sections(props: {
         void devices.dim(tile, brightness).catch(() => undefined)
       }
       onOpen={props.onOpen}
-      first={props.first}
+      lead={props.lead}
       level={props.level}
     />
   );
 }
 
 const statusOrder = [
-  "environment",
-  "presence",
-  "security",
   "lights",
+  "environment",
+  "security",
+  "presence",
   "switches",
 ] as const satisfies DeviceCategory[];
 
@@ -248,17 +253,17 @@ type StatusTile = {
   label: string;
   icon: LucideIcon;
   colour: string;
-  // Three cells wide, a device tile's width, where the others have two:
-  // what needs attention has more to say than a count.
-  wide?: boolean;
   open: () => void;
 };
 
+type StatusItem =
+  StatusTile | { key: "lights"; tiles: Tile[]; open: () => void };
+
 /**
- * The home's status on the dashboard: a tile for what the sensors read,
- * where there is motion, how many contact sensors are open, how many
- * lights and switches are on, each opening
- * its category, and last, while Sanctum or any device needs attention, one
+ * The home's status on the dashboard: Lights' card first, with its switch
+ * (lights-card.tsx), then a tile for what the sensors read, how many
+ * contact sensors are open, where there is motion and how many switches
+ * are on, each opening its category, and last, while Sanctum or any device needs attention, one
  * that opens Settings, where they show first, or Status when only Sanctum
  * does, then, while a battery is to replace, Batteries, in Graphite, which
  * opens Maintenance; being last, they move nothing as they come and go.
@@ -277,13 +282,17 @@ export function HomeStatus(props: {
   openMaintenance: () => void;
 }) {
   const { devices } = props;
+  const row = useRef<HTMLElement>(null);
+  useEdgeFade(row);
   const unit = unitOf(devices);
-  // What the sensors read first, the most glanceable; a remote has nothing
+  // Lights first, the one with something to press; a remote has nothing
   // to say here.
-  const shown = statusOrder.flatMap((id): StatusTile[] => {
+  const shown = statusOrder.flatMap((id): StatusItem[] => {
     const category = deviceCategories.find((each) => each.id === id)!;
     const own = tilesIn(category, devices.tiles);
     if (own.length === 0) return [];
+    const open = () => props.openCategory(id);
+    if (id === "lights") return [{ key: id, tiles: own, open }];
     let value: string;
     let label: string;
     if (category.id === "environment") {
@@ -312,7 +321,7 @@ export function HomeStatus(props: {
         label: `${category.title}, ${label}`,
         icon: look.icon,
         colour: look.colour,
-        open: () => props.openCategory(category.id),
+        open,
       },
     ];
   });
@@ -331,7 +340,6 @@ export function HomeStatus(props: {
       icon: icons.CircleAlert,
       // Red for a problem, Graphite while there are only rooms to choose.
       colour: attention.problem ? "var(--danger)" : "var(--graphite-text)",
-      wide: true,
       open:
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
@@ -351,28 +359,43 @@ export function HomeStatus(props: {
   if (shown.length === 0) return null;
   return (
     <section
+      ref={row}
       aria-label="Home status"
-      className="tile-grid shrink-0 auto-rows-(--cell)"
+      // One line that scrolls sideways where its tiles don't fit, each as
+      // wide as its words need, so none is cut, fading at an edge with more
+      // beyond it (edge-fade.ts). Its padding keeps a focus ring in what
+      // the scroll shows.
+      className="-m-1 flex shrink-0 gap-(--cell-gap) overflow-x-auto p-1 [scrollbar-width:none]"
     >
       {shown.map((each) => {
+        if ("tiles" in each) {
+          return (
+            <LightsCard
+              key={each.key}
+              tiles={each.tiles}
+              devices={devices}
+              open={each.open}
+            />
+          );
+        }
         return (
           <button
             key={each.key}
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "col-span-3" : "col-span-2 max-sm:col-span-3"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
               className="size-[18px] shrink-0"
               style={{ color: each.colour }}
             />
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
+            <span className="flex flex-col whitespace-nowrap">
+              <span className="text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
                 {each.title}
               </span>
-              <span className="truncate text-[15px] leading-5 font-medium tabular-nums">
+              <span className="text-[15px] leading-5 font-medium tabular-nums">
                 {each.value}
               </span>
             </span>
@@ -405,7 +428,7 @@ export function RoomPage(props: {
     props.apps,
     entities,
     room.id,
-    lightsButton(
+    roomLightsButton(
       own.filter((tile) => tile.kind === "light"),
       room,
       devices,
@@ -461,38 +484,6 @@ export function NoRoomPage(props: {
       />
     </>
   );
-}
-
-// What Lights' page opens with: a card that says how many lights are on,
-// with the one thing to do about them, turning them all off. A light that
-// does not answer is not counted as off: the card says how many are
-// offline, or "Offline" when none answers.
-function lightsCards(tiles: readonly Tile[], devices: Devices): Summary[] {
-  if (tiles.length === 0) return [];
-  const offline = tiles.filter((tile) => tile.disabled).length;
-  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  return [
-    {
-      id: "lights",
-      icon: on > 0 ? icons.Lightbulb : icons.LightbulbOff,
-      title: "Lights",
-      status:
-        on > 0 ? `${on} on` : offline === tiles.length ? "Offline" : "All off",
-      note: offline > 0 && offline < tiles.length ? `${offline} offline` : null,
-      active: on > 0,
-      action: {
-        label: "Turn all off",
-        onPress: () =>
-          devices.switchLights({ kind: "home" }, [...tiles], "off").then(
-            ({ failed }) =>
-              failed.length === 0
-                ? "Lights turned off"
-                : `${failed.length} ${failed.length === 1 ? "light" : "lights"} did not turn off`,
-            () => "The lights could not be turned off",
-          ),
-      },
-    },
-  ];
 }
 
 // What Environment's page opens with: a card for each reading the home
@@ -569,11 +560,10 @@ export function CategoryPage(props: {
           category.id === "switches" ? onMeta(own) || undefined : undefined
         }
       />
-      {category.id === "lights" && (
-        <SummaryCards
-          label={`${category.title} summary`}
-          cards={lightsCards(own, devices)}
-        />
+      {category.id === "lights" && own.length > 0 && (
+        <div className="flex shrink-0">
+          <LightsCard tiles={own} devices={devices} />
+        </div>
       )}
       {category.id === "environment" && (
         <SummaryCards
@@ -602,8 +592,8 @@ export function CategoryPage(props: {
 
 // A category's rooms, under their floors once the home has floors
 // (floor-groups.tsx), so a room is where it is on Home. On Lights' page each
-// room's lights start with its switch, the square its row starts with, and
-// each floor has its switch that turns them off.
+// room has its lights button over its lights, as its row has on Home, and
+// each floor its button that turns them off (lights-button.tsx).
 function CategorySections(props: {
   sections: TileSection[];
   devices: Devices;
@@ -611,20 +601,16 @@ function CategorySections(props: {
   isLights: boolean;
 }) {
   const { devices, isLights } = props;
-  const first = isLights
+  const lead = isLights
     ? (section: TileSection) => {
-        // The lights in no room are not together, so have no switch.
+        // The lights in no room are not together, so have no button.
         if (section.id === noRoomSection) return null;
-        const lights = lightsButton(
+        const lights = roomLightsButton(
           section.tiles,
           { id: section.id, name: section.title },
           devices,
         );
-        return lights ? (
-          <RowSquares count={1}>
-            <RoomSwitch lights={lights} />
-          </RowSquares>
-        ) : null;
+        return lights ? <LightsButton lights={lights} /> : null;
       }
     : undefined;
   const groups = byFloor(devices.places, props.sections, (section) =>
@@ -636,7 +622,7 @@ function CategorySections(props: {
         sections={props.sections}
         devices={devices}
         onOpen={props.onOpen}
-        first={first}
+        lead={lead}
       />
     );
   }
@@ -661,7 +647,7 @@ function CategorySections(props: {
             sections={items}
             devices={devices}
             onOpen={props.onOpen}
-            first={first}
+            lead={lead}
             level={3}
           />
         </FloorSection>
