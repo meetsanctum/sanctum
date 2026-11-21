@@ -138,6 +138,8 @@ allow it. That is how the app finds your home.
      choose **Start** on the **Zigbee** card. Switch a new device on or
      reset it, as its instructions say. New devices can join for about
      four minutes. Each shows up as it joins, ready to name and put in a room.
+     If the card says **Not set up**, see
+     [Zigbee does not start](/install/troubleshooting/#zigbee-does-not-start).
 
 Set your home up soon after installing. Until someone has, anyone on your
 network who opens the app can.

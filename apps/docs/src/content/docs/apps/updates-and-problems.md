@@ -15,9 +15,11 @@ its settings say "Updating to" and the new version.
 If a new version doesn't start and the previous version can still run on
 this Sanctum, the app goes back and restores its saved data. Its settings
 say so, for example "Version 0.4.0 didn't start, so it's back on 0.3.0".
-If the previous version can't run here, the app stays on the new one, and
-Sanctum keeps trying to start it, as
-[When an app isn't running](#when-an-app-isnt-running) describes.
+It stays on the previous version until another update arrives. If the
+notice says the new version "wasn't ready", Sanctum tries that same
+version again later. If the previous version can't run here, the app stays
+on the new one and follows the usual
+[restart behaviour](#when-an-app-isnt-running).
 
 ## When an update waits
 
@@ -25,10 +27,11 @@ When an update waits, the app's settings say what the new version needs.
 
 - **The new version needs a permission you haven't granted.** Choose
   **Review** in the app's settings to see what it needs. If the app is
-  still on its old version, choose **Update** to grant the permission
-  and start the update. If the old version can't run on this Sanctum,
-  the app stops until you choose **Allow**. **Not now** leaves the
-  update waiting.
+  still on its old version, choose **Update** to grant the permission.
+  The update can then start when there is enough memory. If the old
+  version can't run on this Sanctum, choose **Allow** so the new version
+  can run. If you turned the app off, turn it on when you're ready.
+  **Not now** leaves the update waiting.
 - **The new version needs more memory than is left.** The settings say how
   much more, such as "It needs 64 MB more memory". Turning off an app you
   don't use can make room. Sanctum checks for room every minute.
@@ -57,14 +60,14 @@ its pages and cards dim if it stays down. Turning it off also takes its
 cards off Home. In its settings, **How it's running** shows memory use and
 restarts. A notice near the top says what went wrong when Sanctum knows.
 
-| What it says                                        | What to do                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Starting, or Restarting                             | Give the app time. Sanctum starts it or tries again by itself.                 |
-| Waiting for Zigbee2MQTT, or for Sanctum             | Nothing. It starts once what it waits for is ready.                            |
-| Paused                                              | Turn the [needed permission](/apps/permissions/#changing-your-answer) back on. |
-| Off                                                 | Choose **Turn on** if you want it back.                                        |
-| Stopped after 5 failures in 10 minutes              | Choose **Restart**. If it keeps stopping, the reason under it says why.        |
-| Not running · it starts again when Sanctum restarts | It didn't stop cleanly. Restart Sanctum from Settings → Status.                |
+| What it says                                        | What to do                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Starting, or Restarting                             | Give the app time. Sanctum starts it or tries again by itself.                   |
+| Waiting for Zigbee2MQTT, or for Sanctum             | Nothing. It starts once what it waits for is ready.                              |
+| Paused                                              | Turn the [needed permission](/apps/permissions/#changing-your-answer) back on.   |
+| Off                                                 | Choose **Turn on** if you want it back.                                          |
+| Stopped after 5 failures in 10 minutes              | Choose **Restart**. If it keeps stopping, the reason under it says why.          |
+| Not running · it starts again when Sanctum restarts | It didn't stop cleanly. Go to Settings → System → Status and choose **Restart**. |
 
 Each app has a limit on the memory it uses. One that goes over it restarts,
 and its settings say "It ran out of memory". Only that app restarts, never

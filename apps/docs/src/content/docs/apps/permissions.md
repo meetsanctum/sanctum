@@ -14,8 +14,8 @@ reason is "To fetch the forecast and sun times for where you live."
 ## Needed and optional
 
 Some permissions an app needs to work. These are marked **Needed** in its
-settings. The sheet shows them before you add the app, and adding it allows
-them.
+settings. The sheet shows them before you add the app. Adding it for the
+first time allows them.
 
 The sheet also lists any optional permissions that start on. For example,
 Natural light starts with **See your rooms**. You can switch it off in the

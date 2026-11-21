@@ -10,8 +10,8 @@ sidebar:
 1. Open **Settings**. Under **Add apps**, choose **Add** beside the app you
    want.
 2. The sheet shows what the app adds to your home, how much memory it can
-   use and which permissions it starts with, together with the reason for
-   each.
+   use and the permissions it needs or asks to start with, together with
+   the reason for each.
 3. Choose **Add** followed by the app's name, such as **Add Weather**. Its
    settings open so you can see whether it's running.
 
@@ -28,22 +28,24 @@ The sheet says why, and what would help:
 - **There isn't room for it.** The app needs more memory than is available.
   Turning off an app you don't use can make room.
 - **There isn't space for it.** The app's data won't fit on the disk.
-  Settings → Status shows what is using the space.
+  Settings → System → Status shows what is using the space.
 
 ### Zigbee and ESPHome
 
 You don't have to look for these two:
 
-- **Zigbee.** When you plug a supported Zigbee stick into Sanctum's computer,
-  Sanctum offers to add the Zigbee app on connected devices in your home.
-  Choose **Add Zigbee** or **Cancel**. If someone cancels the offer, it
-  closes on every device. You can still add Zigbee from **Settings** under
-  **Add apps**.
-- **ESPHome.** When ESPHome devices are on your network, **Add devices**
-  shows an **ESPHome** card with a message such as "2 ESPHome devices
-  found". Choose **Add ESPHome** on the card, then **Add ESPHome** in the
-  sheet. Sanctum takes you to **Devices found**, where you can add the
-  devices as the app finds them.
+- **Zigbee.** If the Zigbee app isn't installed, plugging a supported stick
+  into Sanctum's computer brings up an offer on connected devices in your
+  home. Choose **Add Zigbee** or **Cancel**. If someone cancels the offer,
+  it closes on every device and stays closed while the stick stays plugged
+  in. You can still add Zigbee from **Settings** under **Add apps**.
+- **ESPHome.** If the ESPHome app isn't installed, Sanctum can offer it
+  when it finds ESPHome devices on your network. In **Add devices**, the
+  **ESPHome** card says how many it found, such as "2 ESPHome devices found".
+  Choose **Add ESPHome** on the card, then **Add ESPHome** in the sheet.
+  Sanctum takes you to **Devices found**, where you can add the devices as
+  the app finds them. If ESPHome is already running, choose **Devices found**
+  directly in **Add devices**.
 
 ## Turning an app off
 
@@ -71,14 +73,18 @@ Moods is part of Sanctum, so it can't be removed or turned off.
 ### Its data is kept for 30 days
 
 After you remove an app, Sanctum keeps its data for 30 days. If you add the
-app back within that time, it picks up where it left off: its settings, and
-for Zigbee or ESPHome its devices, with their rooms and history.
+app back within that time, it gets back its settings and the permissions
+you chose. For Zigbee or ESPHome, its devices come back with their rooms
+and history. Automations that removal turned off can turn back on by
+themselves if they still have everything they need and nobody changed them.
 
 Under **Add apps**, a removed app shows the date until which its data is
 kept. To delete it sooner, choose the button under the app, such as
 **Delete Zigbee's data now**. This can't be undone, so Sanctum asks first.
 Adding the app back afterwards starts it from scratch.
 
-When Zigbee's data is deleted, now or once its 30 days are over, the Zigbee
-network is erased too, unless another app still uses it. Every Zigbee
-device then has to be paired again.
+Deleting an app's data also deletes the device records it brought into
+Sanctum. If you add the app back, add its devices again. When Zigbee's data
+is deleted, now or once its 30 days are over, the Zigbee network is erased
+too, unless another app still uses it. If the network is erased, you also
+have to pair every Zigbee device again.

@@ -7,8 +7,7 @@ sidebar:
 
 Most of what Sanctum does comes from apps. Moods sets the lights in a room,
 Weather shows the forecast, and Zigbee brings in your Zigbee lights and
-sensors. You add only the apps your home needs. You can turn off or remove
-any app except Moods.
+sensors. You add only the apps your home needs.
 
 ## The apps
 
@@ -28,9 +27,10 @@ explains.
 
 ## Finding your apps
 
-The last tile in the sidebar opens **Apps**, which lists every app in your
-home. Press an app to open it. An app with no page of its own, such as
-ESPHome, opens its settings.
+Choose **Apps** from the tiles at the top of the sidebar. It lists your
+installed apps, along with **Settings** and **Automations**. Press an app
+to open it. An app with no page of its own, such as ESPHome, opens its
+settings.
 
 To keep an app close at hand, choose **Pin apps** at the top of Apps. Press
 an app to pin or unpin it, then choose **Done**. Pinned apps sit at the top
