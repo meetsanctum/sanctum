@@ -7,15 +7,14 @@ import {
   type FirmwareState,
 } from "@meetsanctum/app-sdk";
 
+import { plural } from "./plural";
+
 // Maintenance: what the home's devices need from the household, as Settings,
 // its Maintenance page, the dashboard's Batteries tile and a device's own
 // line and tile say it: a device on a battery gone quiet, a low battery, and
 // firmware to update.
 
 const dayMs = 24 * 60 * 60_000;
-
-const plural = (count: number, one: string, several = `${one}s`) =>
-  `${count} ${count === 1 ? one : several}`;
 
 function startOfDay(at: number) {
   const day = new Date(at);

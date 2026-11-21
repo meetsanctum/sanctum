@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DeviceMenu } from "../src/device-menu";
-import { ShowAsPicker, showAsOf } from "../src/device-parts";
+import { showAsOf } from "../src/device-parts";
 import { light, office } from "./settings-devices-fixtures";
 
 // Show as: what the household may show a device as, in its menu in
@@ -90,14 +90,6 @@ describe("Show as, where it is chosen", () => {
   const trigger = (label: string) =>
     document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 
-  async function showPicker(device: DeviceInfo) {
-    const onChange = vi.fn<(shownAs: DeviceType | null) => void>();
-    await act(async () =>
-      root.render(<ShowAsPicker device={device} onChange={onChange} />),
-    );
-    return onChange;
-  }
-
   async function showMenu(device: DeviceInfo) {
     const onShowAs = vi.fn<(shownAs: DeviceType | null) => void>();
     const nothing = () => undefined;
@@ -120,42 +112,6 @@ describe("Show as, where it is chosen", () => {
     );
     return onShowAs;
   }
-
-  it("reads a contact sensor's type beside its room from the start, and takes a window", async () => {
-    const onChange = await showPicker(sensor);
-    const button = trigger("Hall contact sensor: show as");
-    expect(button.textContent).toBe("Contact sensor");
-
-    await enter(button);
-    const options = items("menuitemradio");
-    expect(options.map((each) => each.textContent)).toEqual([
-      "Contact sensor",
-      "Door",
-      "Window",
-    ]);
-    expect(options.map((each) => each.getAttribute("aria-checked"))).toEqual([
-      "true",
-      "false",
-      "false",
-    ]);
-    await act(async () => options[2]!.click());
-    expect(onChange).toHaveBeenCalledExactlyOnceWith("window");
-  });
-
-  it("reads Door for one shown as a door, and takes it back to a contact sensor", async () => {
-    const onChange = await showPicker(door);
-    const button = trigger("Hall door: show as");
-    expect(button.textContent).toBe("Door");
-
-    await enter(button);
-    await act(async () => items("menuitemradio")[0]!.click());
-    expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
-  });
-
-  it("has no picker for a device that can only be shown as what it is", async () => {
-    await showPicker(lamp);
-    expect(container.querySelector("button")).toBeNull();
-  });
 
   it("is one level down in a contact sensor's menu, with a mark on the one in effect", async () => {
     const onShowAs = await showMenu(door);

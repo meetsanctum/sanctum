@@ -1,5 +1,5 @@
 import type { Floor, LightsResult } from "@meetsanctum/app-sdk";
-import { icons, SectionTile, type Tile } from "@meetsanctum/ui-sdk";
+import { icons, SectionButton, type Tile } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
 import type { Devices } from "./use-devices";
@@ -48,8 +48,7 @@ export function LightsButton(props: { lights: LightsButtonState }) {
     }, showFailure);
   };
   return (
-    <SectionTile
-      chip
+    <SectionButton
       icon={icons.Power}
       name={lights.words}
       label={lights.label}

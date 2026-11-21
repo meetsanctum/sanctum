@@ -45,6 +45,7 @@ import { EditDevice, type Editing } from "./edit-device";
 import { DeviceLine } from "./settings-devices";
 import { SanctumAttentionRow } from "./settings-status";
 import type { SystemStatus } from "./system-status";
+import { plural } from "./plural";
 
 // Settings' Needs attention: first on the page while Sanctum itself, any app
 // or any device needs someone. Sanctum leads, with its first problem, and
@@ -87,8 +88,6 @@ type Row = {
   done?: Done;
 };
 
-const plural = (count: number) => `${count} device${count === 1 ? "" : "s"}`;
-
 // "Sanctum, Moods and 2 devices", "Sanctum", "2 apps", "2 devices".
 function hintOf(sanctum: boolean, apps: readonly AppInfo[], devices: number) {
   const parts = [
@@ -98,7 +97,7 @@ function hintOf(sanctum: boolean, apps: readonly AppInfo[], devices: number) {
       : apps.length > 1
         ? [`${apps.length} apps`]
         : []),
-    ...(devices > 0 ? [plural(devices)] : []),
+    ...(devices > 0 ? [plural(devices, "device")] : []),
   ];
   if (parts.length <= 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;

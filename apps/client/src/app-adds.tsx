@@ -10,7 +10,12 @@ import {
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
-import { SectionTile, tileIconOf, WidgetCard } from "@meetsanctum/ui-sdk";
+import {
+  SectionButton,
+  SectionTile,
+  tileIconOf,
+  WidgetCard,
+} from "@meetsanctum/ui-sdk";
 import {
   ChevronRight,
   FileText,
@@ -26,6 +31,7 @@ import type { ReactNode } from "react";
 import { Sentence } from "./automations/parts";
 import type { Part } from "./automations/words";
 import { Section } from "./components";
+import { plural } from "./plural";
 
 // What an app adds to the home, on its settings page: a driver's devices,
 // its widgets and room section, each drawn by the shell from the manifest's
@@ -55,11 +61,6 @@ const counts = [
   "seven",
   "eight",
 ];
-
-// "3 rooms", "1 automation".
-function many(count: number, one: string, more = `${one}s`) {
-  return `${count} ${count === 1 ? one : more}`;
-}
 
 // What people call devices of each kind, as the sidebar's categories do.
 const kindNouns: Record<CapabilityKind, [string, string]> = {
@@ -131,16 +132,19 @@ function HomeSlice(props: {
 
 // A section's samples as its tiles or chips, which press nothing.
 function samplesOf(tiles: readonly SampleTile[], isChip: boolean) {
-  return tiles.map((tile) => (
-    <SectionTile
-      key={tile.name}
-      chip={isChip}
-      icon={tileIconOf[tile.icon]}
-      name={tile.name}
-      active={tile.active}
-      onClick={() => undefined}
-    />
-  ));
+  return tiles.map((tile) => {
+    const shared = {
+      icon: tileIconOf[tile.icon],
+      name: tile.name,
+      active: tile.active,
+      onClick: () => undefined,
+    };
+    return isChip ? (
+      <SectionButton key={tile.name} {...shared} />
+    ) : (
+      <SectionTile key={tile.name} {...shared} />
+    );
+  });
 }
 
 export function AppAdds(props: {
@@ -168,7 +172,7 @@ export function AppAdds(props: {
         <Section id="settings-app-devices" title="Devices it brings">
           <Line
             icon={SquarePlus}
-            title={own.length === 0 ? "None yet" : many(own.length, "device")}
+            title={own.length === 0 ? "None yet" : plural(own.length, "device")}
             detail={
               own.length === 0
                 ? "Add them in Settings → Devices"
@@ -243,7 +247,7 @@ export function AppAdds(props: {
               detail={
                 rooms.length === 0
                   ? "In no room yet"
-                  : `In ${many(rooms.length, "room")}, in each room's row`
+                  : `In ${plural(rooms.length, "room")}, in each room's row`
               }
             />
             {tiles.length > 0 && (
@@ -410,7 +414,7 @@ function PiecesSection(props: {
                 detail={`${pieceKindWords[piece.kind]} · ${
                   used === 0
                     ? "Used by no automation yet"
-                    : `Used by ${many(used, "automation")}`
+                    : `Used by ${plural(used, "automation")}`
                 }`}
               />
             </li>

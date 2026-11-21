@@ -134,46 +134,6 @@ export function showAsOf(device: Pick<DeviceInfo, "type" | "shownAs">) {
   };
 }
 
-/** What a device is shown as, as a menu of the types its own may be shown as. */
-export function ShowAsPicker(props: {
-  device: DeviceInfo;
-  onChange: (shownAs: DeviceType | null) => void;
-  disabled?: boolean;
-}) {
-  const showAs = showAsOf(props.device);
-  if (!showAs) return null;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={props.disabled}
-          aria-label={`${props.device.name}: show as`}
-          className="max-w-40 shrink-0"
-        >
-          <span className="truncate">
-            {showAs.options.find((each) => each.id === showAs.current)?.title}
-          </span>
-          <ChevronDown data-icon="inline-end" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        <DropdownMenuRadioGroup
-          value={showAs.current}
-          onValueChange={(value) => props.onChange(showAs.choice(value))}
-        >
-          {showAs.options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id}>
-              {option.title}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 const noRoom = "none";
 
 /** Which room a device is in, as a menu of the home's rooms. */
