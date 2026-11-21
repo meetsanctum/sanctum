@@ -27,6 +27,7 @@ async function worktree() {
   await mkdir(bin);
   await cp(script, join(root, "deploy/dev/stack.sh"));
   await writeFile(join(root, "deploy/dev/seed.mjs"), "");
+  await writeFile(join(root, "deploy/dev/approve.mjs"), "");
   await writeFile(commands, "");
   await writeFile(
     join(bin, "docker.mjs"),
@@ -75,8 +76,8 @@ if (args[0] === "inspect") {
 
   return {
     root,
-    run: (command: string, env: NodeJS.ProcessEnv = {}) =>
-      execFile("bash", ["deploy/dev/stack.sh", command], {
+    run: (command: string, env: NodeJS.ProcessEnv = {}, args: string[] = []) =>
+      execFile("bash", ["deploy/dev/stack.sh", command, ...args], {
         cwd: root,
         env: {
           ...process.env,
@@ -194,6 +195,20 @@ describe("development stack CLI", () => {
     );
     expect(exec).toContain("SEED_CORE_URL=https://127.0.0.1:4100");
     expect(exec).toContain("NODE_TLS_REJECT_UNAUTHORIZED=0");
+  });
+
+  it("approves a pairing code as the seed does, with the name given", async () => {
+    const tree = await worktree();
+
+    await tree.run("approve", {}, ["ABCD-EFGH", "Hall display"]);
+
+    const exec = (await tree.commands()).find(
+      ([command]) => command === "exec",
+    );
+    expect(exec).toContain("SEED_CORE_URL=http://127.0.0.1:4100");
+    expect(exec).toContain("APPROVE_CODE=ABCD-EFGH");
+    expect(exec).toContain("APPROVE_NAME=Hall display");
+    expect(exec).toContain("sanctum-one-core");
   });
 
   it.each(["", "another-stack"])(

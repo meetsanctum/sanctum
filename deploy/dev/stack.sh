@@ -9,6 +9,8 @@
 #   pnpm dev:down      remove it and its data
 #   pnpm dev:status    its address, port and containers, and any other stacks
 #   pnpm dev:logs      follow a container's log: core (default), manager or a service
+#   pnpm dev:display   pnpm dev, with a bridge for a wall display on the network
+#   pnpm dev:approve   approve a shared device's pairing code, as the seed's login
 #
 # SANCTUM_STACK names the stack, SANCTUM_STACK_PORT sets its port, and
 # SANCTUM_STACK_HTTPS=true has its core serve HTTPS with the host CA, as on a
@@ -265,19 +267,47 @@ down() {
   echo "Stack ${stack} is gone"
 }
 
-dev() {
-  trap stop_stack EXIT
-  up
-  # Rebuilds a package when its source changes, and Node in the container
-  # restarts when its built code does.
+# Rebuilds a package when its source changes, and Node in the container
+# restarts when its built code does.
+watch() {
   pnpm turbo watch build dev --concurrency=30 \
     --filter=@meetsanctum/core... --filter=@meetsanctum/manager... \
     --filter='./catalog/apps/*' --filter=@meetsanctum/client... \
     --filter=@meetsanctum/website --filter=@meetsanctum/docs
 }
 
-seed() {
-  local env
+dev() {
+  trap stop_stack EXIT
+  up
+  watch
+}
+
+# `pnpm dev` with a bridge on the home network to the client's dev server, for
+# a wall display (deploy/dev/display.mjs). The core allows the bridge's
+# origins too, so apps' pages open in their frames on the display.
+display() {
+  local port="${SANCTUM_DISPLAY_PORT:-8123}" address bridge
+  local origins="${CORE_ALLOWED_ORIGINS:-app://sanctum}"
+  for address in $(node -e '
+    for (const each of Object.values(require("node:os").networkInterfaces()).flat())
+      if (each.family === "IPv4" && !each.internal) console.log(each.address);
+  '); do
+    origins+=",http://${address}:${port}"
+  done
+  export CORE_ALLOWED_ORIGINS="$origins"
+  node deploy/dev/display.mjs &
+  bridge=$!
+  # shellcheck disable=SC2064
+  trap "kill ${bridge} 2>/dev/null || true; stop_stack" EXIT
+  up
+  watch
+}
+
+# Runs a script of deploy/dev in the core's container, where its dependencies
+# are, against the core inside it: `in_core <script> [docker exec options]`.
+in_core() {
+  local script="$1" env scheme
+  shift
   settings
   # This can run from a new shell that didn't start the stack with HTTPS.
   env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(container core)")"
@@ -289,7 +319,17 @@ seed() {
   docker exec -i -w /app/apps/core \
     -e SEED_CORE_URL="${scheme}://127.0.0.1:4100" \
     -e NODE_TLS_REJECT_UNAUTHORIZED="$([[ "$scheme" == "https" ]] && echo 0 || echo 1)" \
-    "$(container core)" node --no-warnings --input-type=module - <deploy/dev/seed.mjs
+    "$@" "$(container core)" node --no-warnings --input-type=module - <"deploy/dev/${script}"
+}
+
+seed() {
+  in_core seed.mjs
+}
+
+# `pnpm dev:approve <code> [name]`: a plain-HTTP stack's shared device, as
+# the display that shows the code; the name is "Wall display" unless given.
+approve() {
+  in_core approve.mjs -e APPROVE_CODE="${1:-}" -e APPROVE_NAME="${2:-}"
 }
 
 status() {
@@ -310,14 +350,16 @@ status() {
 
 case "${1:-}" in
   dev) dev ;;
+  display) display ;;
   up) up ;;
   seed) seed ;;
+  approve) approve "${2:-}" "${3:-}" ;;
   stop) stop_stack ;;
   down) down ;;
   status) status ;;
   logs) docker logs -f "$(container "${2:-core}")" ;;
   *)
-    echo "Usage: $0 dev|up|seed|stop|down|status|logs [core|manager|<service>]" >&2
+    echo "Usage: $0 dev|display|up|seed|approve <code> [name]|stop|down|status|logs [core|manager|<service>]" >&2
     exit 1
     ;;
 esac
