@@ -38,6 +38,8 @@ declare module "fastify" {
   interface FastifyContextConfig {
     // Runs before a principal exists, so needs no token.
     public?: boolean;
+    // The MCP endpoint, the one route an agent's token opens.
+    agent?: boolean;
   }
   interface FastifyRequest {
     principal: Principal | null;
@@ -140,11 +142,6 @@ export async function registerAuth(
 
   app.decorateRequest("principal", null);
 
-  // The one path an agent's token opens: the MCP endpoint. Anywhere else it
-  // is refused, so a token an AI agent holds can't act as a person's or a
-  // shared device's, here or in the live connection (live.ts).
-  const agentPath = "/api/mcp";
-
   // Every route needs a client token unless it is marked public: health,
   // the routes before a principal exists and the WebSocket, which
   // authenticates with its first message. CORS preflights never reach here.
@@ -153,7 +150,10 @@ export async function registerAuth(
       return;
     }
     const token = bearerToken(request.headers.authorization);
-    const isAgentEndpoint = request.routeOptions.url === agentPath;
+    // An agent's token opens the route marked as the MCP endpoint and
+    // nothing else, so it can't act as a person's or a shared device's,
+    // here or in the live connection (live.ts).
+    const isAgentEndpoint = request.routeOptions.config?.agent === true;
     const found = token
       ? auth.authenticate(token, { recordAgentSeen: isAgentEndpoint })
       : undefined;

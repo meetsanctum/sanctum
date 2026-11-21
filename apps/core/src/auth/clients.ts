@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
+import { people } from "../people/schema.js";
 import { AuthError } from "./errors.js";
 import { authClients, authTokens } from "./schema.js";
 import { hashToken, newClientToken } from "./tokens.js";
@@ -99,12 +100,39 @@ export function createClients(
     .where(eq(authClients.id, sql.placeholder("id")))
     .prepare();
 
+  const activeById = db
+    .select()
+    .from(authClients)
+    .where(
+      and(
+        eq(authClients.id, sql.placeholder("id")),
+        isNull(authClients.revokedAt),
+      ),
+    )
+    .prepare();
+  const addedByOfAgent = db
+    .select({
+      addedByPersonId: authClients.addedByPersonId,
+      addedByClientId: authClients.addedByClientId,
+    })
+    .from(authClients)
+    .where(
+      and(
+        eq(authClients.id, sql.placeholder("id")),
+        eq(authClients.kind, "agent"),
+      ),
+    )
+    .prepare();
+  const personById = db
+    .select({ id: people.id })
+    .from(people)
+    .where(eq(people.id, sql.placeholder("id")))
+    .prepare();
+
+  // A client that is there, unrevoked. Prepared, since the gate asks it on
+  // every call an agent sends.
   function active(id: string) {
-    return db
-      .select()
-      .from(authClients)
-      .where(and(eq(authClients.id, id), isNull(authClients.revokedAt)))
-      .get();
+    return activeById.get({ id });
   }
 
   // Every client manages every other, shared ones too.
@@ -190,9 +218,11 @@ export function createClients(
     createAgent(input: { name: string; platform: Platform; addedBy: AddedBy }) {
       const { addedBy } = input;
       return db.transaction(() => {
+        // Added by someone in the household, or a shared device in use.
         if (
-          addedBy.kind === "client" &&
-          active(addedBy.id)?.kind !== "shared"
+          addedBy.kind === "client"
+            ? active(addedBy.id)?.kind !== "shared"
+            : !personById.get({ id: addedBy.id })
         ) {
           throw new AuthError("forbidden");
         }
@@ -256,14 +286,7 @@ export function createClients(
     // Who added an agent, revoked or not, for the activity log; none for
     // another client, or an agent that went with its person.
     addedBy(id: string): AddedBy | null {
-      const client = db
-        .select({
-          addedByPersonId: authClients.addedByPersonId,
-          addedByClientId: authClients.addedByClientId,
-        })
-        .from(authClients)
-        .where(and(eq(authClients.id, id), eq(authClients.kind, "agent")))
-        .get();
+      const client = addedByOfAgent.get({ id });
       return client ? addedByOf(client) : null;
     },
 

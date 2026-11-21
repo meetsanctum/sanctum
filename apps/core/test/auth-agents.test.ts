@@ -83,7 +83,11 @@ describe("an agent's token", () => {
     const server = Fastify();
     onTestFinished(() => server.close());
     await registerAuth(server, { auth: core.auth, people: core.people });
-    server.post("/api/mcp", async (request) => request.principal?.client.id);
+    server.post(
+      "/api/mcp",
+      { config: { agent: true } },
+      async (request) => request.principal?.client.id,
+    );
 
     const response = await server.inject({
       method: "POST",
@@ -352,6 +356,14 @@ describe("an agent", () => {
     expect(core.auth.clients.authenticate(maya.token)).toBeUndefined();
   });
 
+  it("requires someone in the household as a person adder", async () => {
+    const { core } = await household();
+
+    expect(() =>
+      addAgent(core, { kind: "person", id: "someone-who-isnt-here" }),
+    ).toThrow(expect.objectContaining({ code: "forbidden" }));
+  });
+
   it("requires an active shared device as a client adder", async () => {
     const { core, maya } = await household();
     const tablet = sharedClient(core);
@@ -485,6 +497,32 @@ describe("the activity log", () => {
       id: client.id,
       name: "Codex on the office Mac",
       addedBy: { kind: "person", id: ben.person.id, name: "Ben" },
+    });
+  });
+
+  it("names who added the agent as they're named now", async () => {
+    const { core, maya } = await household();
+    const ben = personWithClient(core);
+    const { client } = addAgent(core, { kind: "person", id: ben.person.id });
+    core.activity.for("devices")({
+      action: "device.command",
+      outcome: "ok",
+      ...core.activity.agentWho(client.id),
+    });
+
+    await post(
+      core,
+      "/api/people/update",
+      { id: ben.person.id, name: "Benjamin" },
+      maya,
+    );
+
+    const [entry] = core.activity
+      .page({ limit: 10 })
+      .entries.filter((each) => each.action === "device.command");
+    expect(core.activityViews.info(entry!).who).toMatchObject({
+      kind: "agent",
+      addedBy: { kind: "person", id: ben.person.id, name: "Benjamin" },
     });
   });
 });
