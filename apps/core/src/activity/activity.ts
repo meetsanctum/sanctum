@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 
 import type { CoreDatabase } from "../database.js";
 import { activityTimes as times, kindOf } from "./kinds.js";
-import { activity, kinds, type Kind } from "./schema.js";
+import { activity, kinds, type AgentAdder, type Kind } from "./schema.js";
 
 // What an AI agent's entries name it by: its client.
 const agentActor = "assistant-run:";
@@ -34,7 +34,7 @@ export type ActivityEntry = typeof activity.$inferSelect;
 export type ChangedBy = { personId?: string; clientId: string };
 export type NewActivityEntry = Omit<
   typeof activity.$inferInsert,
-  "id" | "at" | "source" | "kind" | "count" | "firstAt"
+  "id" | "at" | "source" | "kind" | "count" | "firstAt" | "agentAddedBy"
 > & {
   // Given when what it causes runs before it is written.
   id?: string;
@@ -89,7 +89,12 @@ export function createActivity(
   const atMost = options.atMost ?? times.atMost;
   const pruneEvery = options.pruneEvery ?? times.pruneEvery;
   let written = 0;
-  let clientName: ((id: string) => string | undefined) | undefined;
+  let clientNames:
+    | {
+        name(id: string): string | null;
+        agentAdder(id: string): AgentAdder | null;
+      }
+    | undefined;
   let listener: ((entry: ActivityEntry) => void) | undefined;
   let pending: Set<string> | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -222,15 +227,13 @@ export function createActivity(
     const at = entry.at ?? now();
     const causeId = entry.causeId ?? causes.getStore()?.id ?? null;
     // A shared client's name, or an AI agent's, as it was then.
-    const agent = entry.actor?.startsWith(agentActor)
+    const agentId = entry.actor?.startsWith(agentActor)
       ? entry.actor.slice(agentActor.length)
       : undefined;
+    const namedClientId = agentId ?? (entry.personId ? null : entry.clientId);
     const named =
       entry.clientName ??
-      (entry.clientId && !entry.personId
-        ? clientName?.(entry.clientId)
-        : undefined) ??
-      (agent ? clientName?.(agent) : undefined) ??
+      (namedClientId ? clientNames?.name(namedClientId) : null) ??
       null;
     if (joining && entry.outcome === "ok") {
       const previous = entry.subjectId
@@ -275,6 +278,7 @@ export function createActivity(
         kind: kindOf({ source, ...entry }),
         causeId,
         clientName: named,
+        agentAddedBy: agentId ? clientNames?.agentAdder(agentId) : null,
       })
       .run();
     publish(id);
@@ -428,9 +432,9 @@ export function createActivity(
       });
     },
 
-    /** Names a shared client's entries after it, as it is named then. */
-    nameClients(names: (id: string) => string | undefined) {
-      clientName = names;
+    /** Keeps a shared client's or agent's name and who added the agent. */
+    nameClients(names: NonNullable<typeof clientNames>) {
+      clientNames = names;
     },
 
     /** Hears each entry once it has committed, and again when it changes. */

@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 
+import { createClients } from "../src/auth/clients.js";
+import { hashToken } from "../src/auth/tokens.js";
 import { migrationsFolder, openCoreDatabase } from "../src/database.js";
 import { people } from "../src/people/schema.js";
 
@@ -75,6 +77,49 @@ describe("the core's database", () => {
     second.close();
   });
 
+  it("keeps existing personal and shared clients signed in when adding agents", async () => {
+    const dataDir = await tempDir();
+    const previousMigrations = join(await tempDir(), "migrations");
+    await cp(migrationsFolder, previousMigrations, { recursive: true });
+    const journalPath = join(previousMigrations, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      entries: { idx: number }[];
+    };
+    journal.entries = journal.entries.filter((entry) => entry.idx < 45);
+    await writeFile(journalPath, JSON.stringify(journal));
+
+    const before = openCoreDatabase(dataDir, {
+      migrationsFolder: previousMigrations,
+    });
+    // Seed the earlier schema through SQLite since it has no agent columns.
+    before.db.$client.exec(`
+      INSERT INTO people (id, name, colour, created_at, updated_at)
+        VALUES ('maya', 'Maya', '#c5cdac', 0, 0);
+      INSERT INTO auth_clients (id, name, kind, person_id, platform, created_at)
+        VALUES ('laptop', 'Laptop', 'personal', 'maya', 'macos', 0),
+               ('tablet', 'Tablet', 'shared', NULL, 'ios', 0);
+    `);
+    const tokens = ["client_laptop", "client_tablet"];
+    const insertToken = before.db.$client.prepare(
+      "INSERT INTO auth_tokens (id, client_id, kind, token_hash, created_at) VALUES (?, ?, 'client', ?, 0)",
+    );
+    insertToken.run("one", "laptop", hashToken(tokens[0]!));
+    insertToken.run("two", "tablet", hashToken(tokens[1]!));
+    before.close();
+
+    const after = openCoreDatabase(dataDir);
+    onTestFinished(after.close);
+    const clients = createClients(after.db, {
+      record: () => "unused",
+      connections: { closeClient() {}, connectedSince: () => null },
+      now: () => new Date(),
+    });
+    expect(
+      tokens.map((token) => clients.authenticate(token)?.client.kind),
+    ).toEqual(["personal", "shared"]);
+    expect(after.db.$client.pragma("foreign_keys", { simple: true })).toBe(1);
+  });
+
   it("refuses a database a newer build has migrated", async () => {
     const dataDir = await tempDir();
     openCoreDatabase(dataDir, {
@@ -92,6 +137,25 @@ describe("the core's database", () => {
     openCoreDatabase(dataDir, { migrationsFolder: folder }).close();
     openCoreDatabase(dataDir, { migrationsFolder: folder }).close();
     expect(() => openCoreDatabase(dataDir)).toThrow(NewerDatabaseError);
+  });
+
+  it("rolls back a migration that leaves a broken foreign key", async () => {
+    const dataDir = await tempDir();
+    openCoreDatabase(dataDir).close();
+    const folder = await extraMigrations();
+    await appendFile(
+      join(folder, "9999_newer.sql"),
+      `\n--> statement-breakpoint\nINSERT INTO auth_tokens
+        (id, client_id, kind, token_hash, created_at)
+        VALUES ('orphan', 'missing', 'client', 'unused', 0);`,
+    );
+
+    expect(() =>
+      openCoreDatabase(dataDir, { migrationsFolder: folder }),
+    ).toThrow("Core migration broke a foreign key in auth_tokens");
+    const previous = openCoreDatabase(dataDir);
+    onTestFinished(previous.close);
+    expect(previous.db.$client.pragma("foreign_key_check")).toEqual([]);
   });
 
   it("refuses different migration contents with the same timestamp", async () => {

@@ -75,7 +75,7 @@ export const authClients = sqliteTable(
     // An agent has exactly one who added it; no other client has one.
     check(
       "auth_clients_added_by",
-      sql`(${table.kind} = 'agent') = ((${table.addedByPersonId} is not null) != (${table.addedByClientId} is not null))`,
+      sql`((${table.addedByPersonId} is not null) + (${table.addedByClientId} is not null)) = (${table.kind} = 'agent')`,
     ),
   ],
 );

@@ -153,11 +153,14 @@ export async function registerAuth(
       return;
     }
     const token = bearerToken(request.headers.authorization);
-    const found = token ? auth.authenticate(token) : undefined;
+    const isAgentEndpoint = request.routeOptions.url === agentPath;
+    const found = token
+      ? auth.authenticate(token, { recordAgentSeen: isAgentEndpoint })
+      : undefined;
     if (!found) {
       return reply.code(401).send({ error: "invalid_client_token" });
     }
-    if (found.scope === "agent" && request.url.split("?")[0] !== agentPath) {
+    if (found.scope === "agent" && !isAgentEndpoint) {
       return reply.code(403).send({ error: "forbidden" });
     }
     request.principal = found;

@@ -18,18 +18,25 @@ import { hashToken, newClientToken } from "./tokens.js";
 export type Principal = {
   // Its name as it is now, which a run by hand on a shared client keeps.
   client: { id: string; kind: ClientKind; name: string };
-  // Personal clients only.
-  person?: { id: string };
-  // Agents only: the person or shared client who added it.
-  addedBy?: AddedBy;
-  // An agent's token opens the MCP endpoint and nothing else (routes.ts).
-  scope: "full" | "widgets" | "agent";
-};
+} & (
+  | { scope: "full" | "widgets"; person?: { id: string } }
+  | { scope: "agent"; person?: never; addedBy: AddedBy }
+);
 
 // Who added an agent.
 export type AddedBy = { kind: "person" | "client"; id: string };
 
 type Client = typeof authClients.$inferSelect;
+
+function addedByOf(
+  client: Pick<Client, "addedByPersonId" | "addedByClientId">,
+): AddedBy | null {
+  if (client.addedByPersonId)
+    return { kind: "person", id: client.addedByPersonId };
+  if (client.addedByClientId)
+    return { kind: "client", id: client.addedByClientId };
+  return null;
+}
 
 // A successful request updates the client's last-seen time at most this
 // often.
@@ -128,6 +135,19 @@ export function createClients(
     return { client, token };
   }
 
+  function markSeen(client: Client) {
+    const at = now();
+    if (
+      !client.lastSeenAt ||
+      at.getTime() - client.lastSeenAt.getTime() >= lastSeenEveryMs
+    ) {
+      db.update(authClients)
+        .set({ lastSeenAt: at })
+        .where(eq(authClients.id, client.id))
+        .run();
+    }
+  }
+
   return {
     // Creates a personal client and its token. Called inside the claim's or
     // sign-in's transaction.
@@ -169,47 +189,46 @@ export function createClients(
     // request with the token.
     createAgent(input: { name: string; platform: Platform; addedBy: AddedBy }) {
       const { addedBy } = input;
-      return create({
-        name: input.name,
-        kind: "agent",
-        platform: input.platform,
-        createdAt: now(),
-        createdBy: addedBy.kind === "person" ? addedBy.id : undefined,
-        addedByPersonId: addedBy.kind === "person" ? addedBy.id : null,
-        addedByClientId: addedBy.kind === "client" ? addedBy.id : null,
+      return db.transaction(() => {
+        if (
+          addedBy.kind === "client" &&
+          active(addedBy.id)?.kind !== "shared"
+        ) {
+          throw new AuthError("forbidden");
+        }
+        return create({
+          name: input.name,
+          kind: "agent",
+          platform: input.platform,
+          createdAt: now(),
+          addedByPersonId: addedBy.kind === "person" ? addedBy.id : null,
+          addedByClientId: addedBy.kind === "client" ? addedBy.id : null,
+        });
       });
     },
 
     // The principal a client token stands for, or none when the token is
     // unknown or revoked. Checked against the database on every request, so
-    // revoking takes effect at once.
-    authenticate(token: string): Principal | undefined {
+    // revoking takes effect at once. Only the MCP route marks an agent seen.
+    authenticate(
+      token: string,
+      { recordAgentSeen = false } = {},
+    ): Principal | undefined {
       const found = byToken.get({ tokenHash: hashToken(token) });
       if (!found) {
         return undefined;
       }
       const { client } = found;
-      const at = now();
-      if (
-        !client.lastSeenAt ||
-        at.getTime() - client.lastSeenAt.getTime() >= lastSeenEveryMs
-      ) {
-        db.update(authClients)
-          .set({ lastSeenAt: at })
-          .where(eq(authClients.id, client.id))
-          .run();
-      }
+      const identity = { id: client.id, kind: client.kind, name: client.name };
       if (client.kind === "agent") {
-        return {
-          client: { id: client.id, kind: client.kind, name: client.name },
-          addedBy: client.addedByPersonId
-            ? { kind: "person", id: client.addedByPersonId }
-            : { kind: "client", id: client.addedByClientId ?? "" },
-          scope: "agent",
-        };
+        const addedBy = addedByOf(client);
+        if (!addedBy) return undefined;
+        if (recordAgentSeen) markSeen(client);
+        return { client: identity, addedBy, scope: "agent" };
       }
+      markSeen(client);
       return {
-        client: { id: client.id, kind: client.kind, name: client.name },
+        client: identity,
         ...(client.personId ? { person: { id: client.personId } } : {}),
         scope: "full",
       };
@@ -233,15 +252,13 @@ export function createClients(
     addedBy(id: string): AddedBy | null {
       const client = db
         .select({
-          person: authClients.addedByPersonId,
-          client: authClients.addedByClientId,
+          addedByPersonId: authClients.addedByPersonId,
+          addedByClientId: authClients.addedByClientId,
         })
         .from(authClients)
-        .where(eq(authClients.id, id))
+        .where(and(eq(authClients.id, id), eq(authClients.kind, "agent")))
         .get();
-      if (client?.person) return { kind: "person", id: client.person };
-      if (client?.client) return { kind: "client", id: client.client };
-      return null;
+      return client ? addedByOf(client) : null;
     },
 
     // Every client sees every client. Agents aren't devices people use, so
@@ -308,32 +325,29 @@ export function createClients(
       db.transaction(() => {
         manageable(input.id);
         const at = now();
-        const revoked = db
-          .update(authClients)
-          .set({ revokedAt: at })
-          .where(
-            and(
-              isNull(authClients.revokedAt),
-              or(
-                eq(authClients.id, input.id),
-                eq(authClients.addedByClientId, input.id),
-              ),
-            ),
-          )
-          .returning({ id: authClients.id })
-          .all();
+        const affected = and(
+          isNull(authClients.revokedAt),
+          or(
+            eq(authClients.id, input.id),
+            eq(authClients.addedByClientId, input.id),
+          ),
+        );
         db.update(authTokens)
           .set({ revokedAt: at })
           .where(
             and(
               inArray(
                 authTokens.clientId,
-                revoked.map((client) => client.id),
+                db
+                  .select({ id: authClients.id })
+                  .from(authClients)
+                  .where(affected),
               ),
               isNull(authTokens.revokedAt),
             ),
           )
           .run();
+        db.update(authClients).set({ revokedAt: at }).where(affected).run();
         record({
           action: "client.revoke",
           outcome: "ok",

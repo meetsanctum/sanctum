@@ -80,10 +80,10 @@ export function createActionCalls(options: {
     }): Promise<unknown> {
       const { principal } = request;
       const { entry, action } = find(request.appId, request.actionId);
-      const who = {
-        personId: principal.person?.id,
-        clientId: principal.client.id,
-      };
+      const who =
+        principal.scope === "agent"
+          ? { actor: `assistant-run:${principal.client.id}` }
+          : { personId: principal.person?.id, clientId: principal.client.id };
       let actor: Actor;
       try {
         actor = gate.admit(principal, action);

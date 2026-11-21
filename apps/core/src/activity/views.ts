@@ -8,7 +8,9 @@ import type {
   ActivityWho,
 } from "@meetsanctum/app-sdk";
 
+import type { AddedBy } from "../auth/clients.js";
 import type { Activity, ActivityEntry } from "./activity.js";
+import type { AgentAdder } from "./schema.js";
 
 // How clients see an entry of the activity log: who did it, found at the
 // start of its causes, so a light a press turned on through a workflow and
@@ -26,7 +28,7 @@ export type ActivityLookups = {
   // Revoked clients too.
   client(id: string): string | null;
   // Who added an AI agent, by its client.
-  addedBy(id: string): { kind: "person" | "client"; id: string } | null;
+  addedBy(id: string): AddedBy | null;
   app(id: string): string | null;
   // An app's action's title.
   action(app: string, id: string): string | null;
@@ -68,6 +70,16 @@ export function createActivityViews(
   activity: Pick<Activity, "get" | "causedBy" | "nameThen">,
   lookups: ActivityLookups,
 ) {
+  function agentAdder(id: string): AgentAdder | null {
+    const addedBy = lookups.addedBy(id);
+    if (!addedBy) return null;
+    const name =
+      addedBy.kind === "person"
+        ? (lookups.person(addedBy.id)?.name ?? activity.nameThen(addedBy.id))
+        : lookups.client(addedBy.id);
+    return { ...addedBy, name };
+  }
+
   function nameOf(type: ActivityThingType, id: string): string | null {
     switch (type) {
       case "device":
@@ -151,22 +163,13 @@ export function createActivityViews(
         };
       case "app":
         return { kind: "app", id: actor.id, name: lookups.app(actor.id) };
-      case "assistant-run": {
-        const addedBy = lookups.addedBy(actor.id);
+      case "assistant-run":
         return {
           kind: "agent",
           id: actor.id,
           name: origin.clientName ?? lookups.client(actor.id),
-          addedBy: addedBy && {
-            ...addedBy,
-            name:
-              addedBy.kind === "person"
-                ? (lookups.person(addedBy.id)?.name ??
-                  activity.nameThen(addedBy.id))
-                : lookups.client(addedBy.id),
-          },
+          addedBy: origin.agentAddedBy ?? agentAdder(actor.id),
         };
-      }
       case "device":
         return { kind: "device" };
       case "sanctum":
@@ -239,6 +242,8 @@ export function createActivityViews(
   }
 
   return {
+    agentAdder,
+
     info(entry: ActivityEntry): ActivityInfo {
       const chain = chainOf(entry);
       return {

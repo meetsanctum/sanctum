@@ -37,7 +37,7 @@ export type ActivityWho =
       kind: "agent";
       id: string;
       name: string | null;
-      /** The person or shared device who added the AI agent, while it lasts. */
+      /** The person or shared device who added the AI agent. */
       addedBy: {
         kind: "person" | "client";
         id: string;

@@ -57,7 +57,7 @@ export function createGate(people: People) {
   // The actor a principal acts as.
   function actorOf(principal: Principal): Actor {
     // An agent acts as itself, on behalf of whoever added it.
-    if (principal.scope === "agent" && principal.addedBy) {
+    if (principal.scope === "agent") {
       return {
         kind: "assistant-run",
         id: principal.client.id,
