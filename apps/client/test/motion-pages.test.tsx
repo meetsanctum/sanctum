@@ -19,7 +19,10 @@ import {
 } from "../src/place-pages";
 import { useSectionEntities } from "../src/room-sections";
 import { useDevices } from "../src/use-devices";
-import { contactSensor } from "./place-pages-fixtures";
+import {
+  contactSensor,
+  copyWithoutScreenReaderText,
+} from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -228,7 +231,7 @@ const overviewRows = () =>
 const statusTiles = () =>
   [
     ...container.querySelectorAll("section[aria-label='Home status'] button"),
-  ].map((each) => each.textContent);
+  ].map((each) => copyWithoutScreenReaderText(each).textContent);
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

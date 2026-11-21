@@ -10,6 +10,7 @@ import { CategoryPage } from "../src/place-pages";
 import { useDevices } from "../src/use-devices";
 import {
   contactSensor,
+  copyWithoutScreenReaderText,
   hallLight,
   lamp,
   light,
@@ -66,11 +67,23 @@ const lightsSaid = (each: HTMLElement) =>
       ":scope > :first-child > span > span:not(.sr-only)",
     ),
   ].map((line) => line.textContent);
-// What a card says, as it shows it: its name, its status and its note.
-const said = (each: HTMLElement) =>
-  [...each.querySelectorAll(":scope > span > span:not(.sr-only)")].map(
+// What a card says, as it shows it: its name, and its status with its note.
+const said = (each: HTMLElement) => {
+  const copy = copyWithoutScreenReaderText(each);
+  return [...copy.querySelectorAll(":scope > span > span")].map(
     (line) => line.textContent,
   );
+};
+// What a screen reader hears of a card.
+const heard = (each: HTMLElement) => {
+  const copy = each.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll("[aria-hidden]").forEach((hidden) => hidden.remove());
+  return copy.textContent;
+};
+// Whether a card is White, which a status tile never is.
+const white = (each: HTMLElement) => each.className.includes("tile-on");
+const iconColour = (each: HTMLElement) =>
+  each.querySelector("svg")?.style.color;
 const button = (label: string) =>
   [...container.querySelectorAll("button")].find(
     (each) => each.getAttribute("aria-label") === label,
@@ -303,7 +316,7 @@ describe("a room's lights on Lights' page", () => {
 });
 
 describe("Environment's cards", () => {
-  it("range each reading across the home, and are never White", async () => {
+  it("range each reading across the home, as Home's status tiles in Sky", async () => {
     devices = [
       sensor("desk", "office", 21.5, 48),
       sensor("hall", "hall", 19.5, 58),
@@ -318,13 +331,48 @@ describe("Environment's cards", () => {
     expect(card()!.querySelector(".sr-only")?.textContent).toBe(
       ", 19.5 to 21.5°",
     );
-    expect(cards().map((each) => each.dataset.active)).toEqual([
-      undefined,
-      undefined,
+    expect(heard(card()!)).toBe("Temperature, 19.5 to 21.5°");
+    expect(cards().some(white)).toBe(false);
+    expect(cards().map(iconColour)).toEqual([
+      "var(--sky-text)",
+      "var(--sky-text)",
     ]);
+    // One line that scrolls sideways, each card as wide as its words.
+    expect(container.querySelector("ul[role=list]")?.className).toContain(
+      "overflow-x-auto",
+    );
+    expect(cards().every((each) => each.className.includes("w-max"))).toBe(
+      true,
+    );
     expect(cards().some((each) => each.querySelector("button"))).toBe(false);
     // Nothing sums them up under the page's name any more.
     expect(container.querySelector("header p")).toBeNull();
+  });
+
+  it("puts the summary row in the tab order only while it can scroll", async () => {
+    vi.stubGlobal("requestAnimationFrame", (paint: FrameRequestCallback) => {
+      paint(0);
+      return 0;
+    });
+    devices = [sensor("desk", "office", 21.5, 48)];
+    await show("environment");
+
+    const row = container.querySelector<HTMLElement>(
+      '[aria-label="Environment summary"]',
+    )!;
+    expect(row.hasAttribute("tabindex")).toBe(false);
+
+    let width = 260;
+    Object.defineProperties(row, {
+      clientWidth: { get: () => width },
+      scrollWidth: { get: () => Math.max(width, 320) },
+    });
+    row.dispatchEvent(new Event("scroll"));
+    expect(row.tabIndex).toBe(0);
+
+    width = 400;
+    row.dispatchEvent(new Event("scroll"));
+    expect(row.hasAttribute("tabindex")).toBe(false);
   });
 
   it("say how many sensors are not known, and when none reads", async () => {
@@ -333,10 +381,12 @@ describe("Environment's cards", () => {
       offline(sensor("hall", "hall", 19.5, 58)),
     ];
     await show("environment");
+    // The note follows the status on its line, so the card keeps a cell's height.
     expect(cards().map(said)).toEqual([
-      ["Temperature", "21.5°", "1 not known"],
-      ["Humidity", "48%", "1 not known"],
+      ["Temperature", "21.5° · 1 not known"],
+      ["Humidity", "48% · 1 not known"],
     ]);
+    expect(heard(card()!)).toBe("Temperature, 21.5°, 1 not known");
 
     devices = [offline(sensor("hall", "hall", 19.5, 58))];
     await act(async () => {
@@ -350,7 +400,7 @@ describe("Environment's cards", () => {
 });
 
 describe("Security's card", () => {
-  it("is White and says how many are open, and how many are not known", async () => {
+  it("says how many are open, and how many are not known, staying frosted glass", async () => {
     devices = [
       contactSensor("front", "Front door", "hall", true),
       contactSensor("letterbox", "Letterbox", "hall", false),
@@ -358,8 +408,9 @@ describe("Security's card", () => {
     ];
     await show("security");
 
-    expect(card()!.textContent).toBe("Contact sensors, 1 open, 1 not known");
-    expect(card()!.dataset.active).toBe("");
+    expect(heard(card()!)).toBe("Contact sensors, 1 open, 1 not known");
+    expect(white(card()!)).toBe(false);
+    expect(iconColour(card()!)).toBe("var(--iris-text)");
     // It only tells: it is no button and holds none.
     expect(card()!.querySelector("button, a")).toBeNull();
     expect(
@@ -386,12 +437,8 @@ describe("Security's card", () => {
       "Windows, All closed",
       "Contact sensors, No readings",
     ]);
-    // Only the doors' is White, and each has its own glyph, open or closed.
-    expect(cards().map((each) => each.dataset.active)).toEqual([
-      "",
-      undefined,
-      undefined,
-    ]);
+    // None is White, and each has its own glyph, open or closed.
+    expect(cards().some(white)).toBe(false);
     const glyphs = ["door-open", "window-closed", "contact-closed"];
     expect(
       cards().map((each, index) =>
@@ -414,7 +461,7 @@ describe("Security's card", () => {
     await show("security");
 
     expect(card()!.textContent).toBe("Contact sensors, All closed");
-    expect(card()!.dataset.active).toBeUndefined();
+    expect(white(card()!)).toBe(false);
     expect(
       card()!.querySelector("svg")?.classList.contains("lucide-contact-closed"),
     ).toBe(true);
@@ -433,7 +480,9 @@ describe("Security's card", () => {
       });
     });
     expect(card()!.textContent).toBe("Contact sensors, 1 open");
-    expect(card()!.dataset.active).toBe("");
+    expect(
+      card()!.querySelector("svg")?.classList.contains("lucide-contact-open"),
+    ).toBe(true);
   });
 });
 

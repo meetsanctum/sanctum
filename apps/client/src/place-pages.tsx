@@ -44,7 +44,7 @@ import {
   LightsButton,
   roomLightsButton,
 } from "./lights-button";
-import { LightsCard, lightsStatus, statusTileWidth } from "./lights-card";
+import { LightsCard, lightsStatus } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -56,6 +56,7 @@ import {
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
 import { SidebarRooms } from "./sidebar-rooms";
+import { statusRow, statusTile, StatusTileWords } from "./status-tile";
 import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import type { Devices } from "./use-devices";
@@ -354,15 +355,7 @@ export function HomeStatus(props: {
   }
   if (shown.length === 0) return null;
   return (
-    <section
-      ref={row}
-      aria-label="Home status"
-      // One line that scrolls sideways where its tiles don't fit, each as
-      // wide as its words need, so none is cut, fading at an edge with more
-      // beyond it (edge-fade.ts). Its padding keeps a focus ring in what
-      // the scroll shows.
-      className="-m-1 flex shrink-0 gap-(--cell-gap) overflow-x-auto p-1 [scrollbar-width:none]"
-    >
+    <section ref={row} aria-label="Home status" className={statusRow}>
       {shown.map((each) => {
         if ("tiles" in each) {
           return (
@@ -380,21 +373,14 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${statusTile} outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
-            <each.icon
-              aria-hidden="true"
-              className="size-[18px] shrink-0"
-              style={{ color: each.colour }}
+            <StatusTileWords
+              icon={each.icon}
+              colour={each.colour}
+              title={each.title}
+              value={each.value}
             />
-            <span className="flex flex-col whitespace-nowrap">
-              <span className="text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
-                {each.title}
-              </span>
-              <span className="text-[15px] leading-5 font-medium tabular-nums">
-                {each.value}
-              </span>
-            </span>
           </button>
         );
       })}
@@ -530,8 +516,7 @@ export function NoRoomPage(props: {
 }
 
 // What Environment's page opens with: a card for each reading the home
-// ranges across its sensors, with how many of them are not known. Nothing
-// here is on or open, so its cards are never White.
+// ranges across its sensors, with how many of them are not known.
 function environmentCards(
   tiles: readonly Tile[],
   unit: ReturnType<typeof unitOf>,
@@ -554,7 +539,6 @@ function environmentCards(
           reading && known < own.length
             ? `${own.length - known} not known`
             : null,
-        active: false,
       },
     ];
   });
@@ -574,7 +558,6 @@ function securityCards(tiles: readonly Tile[]): Summary[] {
         title,
         status,
         note,
-        active: open,
       },
     ];
   });
@@ -611,6 +594,7 @@ export function CategoryPage(props: {
       {category.id === "environment" && (
         <SummaryCards
           label={`${category.title} summary`}
+          colour={categoryLooks.environment.colour}
           cards={environmentCards(own, unitOf(devices))}
         />
       )}
@@ -620,6 +604,7 @@ export function CategoryPage(props: {
       {category.id === "security" && (
         <SummaryCards
           label={`${category.title} summary`}
+          colour={categoryLooks.security.colour}
           cards={securityCards(own)}
         />
       )}

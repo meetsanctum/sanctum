@@ -10,6 +10,7 @@ import { HomeStatus } from "../src/place-pages";
 import { useDevices } from "../src/use-devices";
 import {
   contactSensor,
+  copyWithoutScreenReaderText,
   hallLight,
   lamp,
   light,
@@ -86,12 +87,8 @@ describe("the home's status", () => {
     [
       ...container.querySelector("section[aria-label='Home status']")!.children,
     ] as HTMLElement[];
-  // What a tile shows, without the words only a screen reader hears.
-  const shown = (each: Element) => {
-    const copy = each.cloneNode(true) as Element;
-    copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
-    return copy.textContent;
-  };
+  const shown = (each: Element) =>
+    copyWithoutScreenReaderText(each).textContent;
 
   it("says what the sensors read and how many lights and switches are on, each opening its category", async () => {
     openCategory.mockReset();
@@ -228,7 +225,7 @@ describe("the home's status", () => {
     await showStatus();
 
     const attention = tiles().at(-1)!;
-    expect(attention.textContent).toBe("CeilingOffline");
+    expect(shown(attention)).toBe("CeilingOffline");
     expect(attention.getAttribute("aria-label")).toBe("Ceiling is offline");
     // A problem's sign is red.
     expect(attention.querySelector("svg")?.getAttribute("style")).toContain(
@@ -311,11 +308,10 @@ describe("the home's status", () => {
       { ...hallLight, availability: "offline" },
     ];
     await showStatus();
-    expect(
-      tiles()
-        .map((each) => each.textContent)
-        .slice(-2),
-    ).toEqual(["CeilingOffline", "hall sensorBattery 8%"]);
+    expect(tiles().map(shown).slice(-2)).toEqual([
+      "CeilingOffline",
+      "hall sensorBattery 8%",
+    ]);
   });
 
   it("removes stale readings and shows Batteries when a quiet day passes without a live event", async () => {

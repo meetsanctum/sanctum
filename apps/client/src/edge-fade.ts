@@ -10,7 +10,10 @@ import { useLayoutEffect, type RefObject } from "react";
 
 const fade = 24;
 
-export function useEdgeFade(ref: RefObject<HTMLElement | null>) {
+export function useEdgeFade(
+  ref: RefObject<HTMLElement | null>,
+  { focusWhenScrollable = false } = {},
+) {
   useLayoutEffect(() => {
     const row = ref.current;
     if (!row) return;
@@ -18,8 +21,17 @@ export function useEdgeFade(ref: RefObject<HTMLElement | null>) {
     const paint = () => {
       frame = 0;
       const box = row.getBoundingClientRect();
+      const maxScroll = row.scrollWidth - row.clientWidth;
       const before = row.scrollLeft > 0;
-      const after = row.scrollLeft + row.clientWidth < row.scrollWidth - 1;
+      const after = row.scrollLeft < maxScroll - 1;
+      if (focusWhenScrollable) {
+        // Rows without controls need a tab stop for keyboard scrolling in Safari.
+        const hasOverflow = maxScroll > 1;
+        if (hasOverflow !== row.hasAttribute("tabindex")) {
+          if (hasOverflow) row.tabIndex = 0;
+          else row.removeAttribute("tabindex");
+        }
+      }
       for (const tile of row.children) {
         if (!(tile instanceof HTMLElement)) continue;
         let mask = "";

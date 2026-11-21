@@ -6,6 +6,12 @@ import type {
   RoomSectionInfo,
 } from "@meetsanctum/app-sdk";
 
+export function copyWithoutScreenReaderText(element: Element) {
+  const copy = element.cloneNode(true) as Element;
+  copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
+  return copy;
+}
+
 export const places: Places = {
   home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
   floors: [],
