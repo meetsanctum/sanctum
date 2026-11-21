@@ -35,12 +35,13 @@ Settings → Needs attention lists every app with an update waiting.
 ## Going back after an update
 
 If an app's last update doesn't suit you, open its settings and choose
-the **Go back to** button with the previous version at the end of the
-page. Sanctum asks first because the app's data goes back to how it was
-before the update, and anything the app saved since is lost. Settings
-you've chosen stay where the previous version can use them. Automations
-that use the app may need changing. The app stays on the previous version
-until an update newer than the one you went back from arrives.
+**Go back to** and the version before, such as **Go back to 0.3.0**, at
+the end of the page. Sanctum asks first because the app's data goes back to
+how it was before the update, and anything the app saved since is lost.
+Settings you've chosen stay where the previous version can use them.
+Automations that use the app may need changing. The app stays on the
+previous version until an update newer than the one you went back from
+arrives.
 
 Sanctum offers **Go back** while it has a copy of the previous version that
 can still run here. The button is hidden while the app is off, paused or
