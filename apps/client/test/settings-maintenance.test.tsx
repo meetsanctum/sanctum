@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { MaintenancePage } from "../src/settings-maintenance";
 
-// Maintenance in Settings: what's due in Settings' section, and the page of
-// every battery and update, whose rows keep their place until it closes.
+// The Maintenance page lists every battery and update, and keeps resolved
+// rows in place until it closes.
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),

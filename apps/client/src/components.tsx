@@ -222,6 +222,27 @@ export function BackButton(props: { to: string; onBack: () => void }) {
   );
 }
 
+export function SettingsPageBar(props: {
+  title: string;
+  backTo?: string;
+  onBack: () => void;
+}) {
+  return (
+    <PageBar
+      title={props.title}
+      leading={
+        props.backTo && <BackButton to={props.backTo} onBack={props.onBack} />
+      }
+    >
+      {!props.backTo && (
+        <Button variant="outline" onClick={props.onBack}>
+          Done
+        </Button>
+      )}
+    </PageBar>
+  );
+}
+
 // A thing and a line about it.
 export function Row(props: { title: string; detail: string }) {
   return (

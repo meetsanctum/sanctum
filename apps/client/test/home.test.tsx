@@ -1,159 +1,25 @@
 // @vitest-environment jsdom
-import type {
-  AppInfo,
-  DashboardInfo,
-  EntityInfo,
-  LiveMessage,
-  WidgetContent,
-} from "@meetsanctum/app-sdk";
+import type { AppInfo, EntityInfo, WidgetContent } from "@meetsanctum/app-sdk";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { coreJson } from "../src/core-fetch";
-import type { CoreStatus } from "../src/core-status";
-import { Home } from "../src/Home";
-import type { StoredHost } from "../src/shell";
 import {
   homeDashboard,
-  host,
   moods,
   naturalLight,
   night,
   weather,
 } from "./home-shell-fixtures";
+import {
+  container,
+  homeData,
+  mockCoreJson,
+  publishCoreStatus,
+  pushLive,
+  refresh,
+  remountHome,
+} from "./home-shell-harness";
 import { light } from "./settings-devices-fixtures";
-
-vi.mock("../src/core-fetch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/core-fetch")>()),
-  coreJson: vi.fn(),
-  currentCredential: () => null,
-}));
-vi.mock("../src/auth/session", () => ({
-  followHost: (host: StoredHost, found: (url: string) => void) => {
-    found(host.url);
-    return () => {};
-  },
-}));
-const coreStatus = vi.hoisted(() => ({
-  publish: (_status: CoreStatus) => {},
-}));
-vi.mock("../src/core-status", () => ({
-  startCoreStatusPolling: (onStatus: (status: CoreStatus) => void) => {
-    coreStatus.publish = onStatus;
-    onStatus({ state: "online", version: "dev" });
-    return { stop() {}, checkNow() {} };
-  },
-}));
-// What the core pushes over the live socket.
-const socket = vi.hoisted(() => ({
-  push: (_message: LiveMessage) => {},
-}));
-vi.mock("../src/live", () => ({
-  connectLive: (
-    _onState: unknown,
-    onMessage: (message: LiveMessage) => void,
-  ) => {
-    socket.push = onMessage;
-    return { stop() {}, retryNow() {} };
-  },
-}));
-
-let root: Root;
-let container: HTMLDivElement;
-let installed: AppInfo[];
-let dashboards: DashboardInfo[];
-// What the apps show, which the shell reads by app and type.
-let entities: EntityInfo[];
-let devices: unknown[];
-// The household's pinned apps.
-let pins: string[];
-
-function renderHome() {
-  root.render(
-    <Home
-      host={host}
-      onHostMoved={() => {}}
-      onSignedOut={() => {}}
-      onCertificateChanged={() => {}}
-    />,
-  );
-}
-
-beforeEach(async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.clear();
-  installed = [moods];
-  dashboards = [homeDashboard];
-  entities = [];
-  devices = [];
-  pins = [];
-  vi.mocked(coreJson).mockReset();
-  vi.mocked(coreJson).mockImplementation(async (path, init) => {
-    if (path.startsWith("/api/entities?")) {
-      const query = new URLSearchParams(path.slice(path.indexOf("?")));
-      return entities.filter(
-        (entity) =>
-          entity.app === query.get("app") && entity.type === query.get("type"),
-      );
-    }
-    switch (path) {
-      case "/api/auth/me":
-        return { client: { kind: "shared" }, person: null };
-      case "/api/apps":
-        return installed;
-      case "/api/dashboards":
-        return dashboards;
-      case "/api/dashboards/update": {
-        const { id, name } = init!.json as { id: string; name: string };
-        dashboards = dashboards.map((dashboard) =>
-          dashboard.id === id ? { ...dashboard, name } : dashboard,
-        );
-        return dashboards.find((dashboard) => dashboard.id === id);
-      }
-      case "/api/pins":
-        return pins;
-      case "/api/pins/update":
-        pins = (init!.json as { apps: string[] }).apps;
-        return pins;
-      case "/api/devices":
-        return devices;
-      case "/api/entities":
-        return [];
-      case "/api/apps/sanctum.natural-light/settings":
-        return { shape: "balanced" };
-      case "/api/apps/sanctum.natural-light/actions/naturalLight.preview":
-        return null;
-      case "/api/places":
-        return {
-          home: {
-            name: "Our home",
-            timeZone: "UTC",
-            temperatureUnit: "celsius",
-          },
-          rooms: [{ id: "kitchen", name: "Kitchen", floorId: null }],
-          floors: [],
-          zones: [],
-        };
-      default:
-        throw new Error(`Unexpected request: ${path}`);
-    }
-  });
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => renderHome());
-});
-
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
-});
-
-async function refresh() {
-  await act(async () => window.dispatchEvent(new Event("focus")));
-}
 
 // An app's page carries its title in the top bar; a room's page and a
 // dashboard in the page.
@@ -192,7 +58,6 @@ async function openKitchen() {
 
 const title = () => container.querySelector("header")?.textContent;
 
-// Apps, from the sidebar's last tile, and the app pressed there.
 // One of Settings' areas, from its row on Settings' first page.
 async function openArea(name: string) {
   await act(async () => {
@@ -212,6 +77,7 @@ const backTo = (name: string) =>
     `.top-bar button[aria-label="Back to ${name}"]`,
   );
 
+// Apps, from the sidebar's last tile, and the app pressed there.
 async function openFromOverview(name: string) {
   await act(async () => {
     container
@@ -322,6 +188,59 @@ describe("Settings' pages", () => {
     await openFromOverview("Settings");
     expect(pageTitle()).toBe("Settings");
   });
+
+  it("opens Needs attention from Home even when Settings was left on another page", async () => {
+    const lamp = light("lamp", "Lamp", {
+      availability: "offline",
+      roomId: "kitchen",
+    });
+    homeData.devices = [lamp];
+    await refresh();
+    await openFromOverview("Settings");
+    await openArea("Devices");
+    await goHome();
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'main button[aria-label="Lamp is offline"]',
+        )!
+        .click(),
+    );
+
+    expect(pageTitle()).toBe("Settings");
+    expect(container.querySelector("#settings-attention")).not.toBeNull();
+  });
+
+  it("reopens the remembered area from a Settings page opened outside Settings", async () => {
+    homeData.pins = ["sanctum.settings"];
+    await refresh();
+    await openFromOverview("Settings");
+    await openArea("Devices");
+    await openFromOverview("Moods");
+    expect(pageTitle()).toBe("Moods settings");
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'aside ul[aria-label="Pinned apps"] button[aria-label="Settings"]',
+        )!
+        .click(),
+    );
+
+    expect(pageTitle()).toBe("Devices");
+    expect(backTo("Settings")).not.toBeNull();
+  });
+
+  it("starts each Settings page at the top of its scroll area", async () => {
+    await openFromOverview("Settings");
+    const main = container.querySelector("main")!;
+    main.scrollTop = 250;
+
+    await openArea("Devices");
+
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
 });
 
 describe("an app's preferences", () => {
@@ -357,7 +276,7 @@ describe("an app's preferences", () => {
   });
 
   it("open from the same button at the end of the bar on every app page, never on Sanctum's own", async () => {
-    installed = [moods, weather];
+    homeData.installed = [moods, weather];
     await refresh();
     const gear = (name: string) =>
       container.querySelector<HTMLButtonElement>(
@@ -381,7 +300,7 @@ describe("an app's preferences", () => {
   });
 
   it("open from the app's own page, and Done returns to it", async () => {
-    installed = [moods, naturalLight];
+    homeData.installed = [moods, naturalLight];
     await refresh();
     await openFromOverview("Natural light");
     await act(async () => {
@@ -405,7 +324,7 @@ describe("an app's preferences", () => {
   });
 
   it("go when their app does", async () => {
-    installed = [moods, weather];
+    homeData.installed = [moods, weather];
     await refresh();
     await openFromOverview("Settings");
     await openArea("Apps");
@@ -414,7 +333,7 @@ describe("an app's preferences", () => {
         .find((button) => button.textContent?.startsWith("Weather"))!
         .click();
     });
-    installed = [moods];
+    homeData.installed = [moods];
     await refresh();
 
     expect(pageTitle()).toBe("Apps");
@@ -430,7 +349,7 @@ describe("the home's installed apps", () => {
 
   it("keeps a room's page when Moods goes: rooms are the shell's", async () => {
     await openKitchen();
-    installed = [];
+    homeData.installed = [];
     await refresh();
     expect(pageTitle()).toBe("Kitchen");
   });
@@ -439,11 +358,11 @@ describe("the home's installed apps", () => {
     { name: "app", apps: [moods] },
     { name: "page", apps: [moods, { ...weather, pages: [] }] },
   ])("returns home when the current $name disappears", async ({ apps }) => {
-    installed = [moods, weather];
+    homeData.installed = [moods, weather];
     await refresh();
     await openFromOverview("Weather");
     expect(pageTitle()).toBe("Weather");
-    installed = apps;
+    homeData.installed = apps;
     await refresh();
     expect(pageTitle()).toBe("Home");
     expect(container.querySelector("header")?.textContent).toBe("Home");
@@ -456,11 +375,11 @@ describe("the home's installed apps", () => {
       resolve = done;
     });
     // A focus refresh asks for the identity first and then the apps.
-    vi.mocked(coreJson)
+    mockCoreJson
       .mockResolvedValueOnce({ client: { kind: "shared" }, person: null })
       .mockReturnValueOnce(pending);
     await refresh();
-    installed = [];
+    homeData.installed = [];
     await refresh();
     await act(async () => {
       resolve([moods, weather]);
@@ -496,12 +415,12 @@ describe("apps' widgets", () => {
     container.querySelector<HTMLElement>("main article[aria-labelledby]");
   // A home with a device shows its dashboard, not how to set it up.
   beforeEach(() => {
-    devices = [light("lamp", "Lamp")];
+    homeData.devices = [light("lamp", "Lamp")];
   });
 
   it("draws each card on Home after the rooms, from what its app shows, and follows it", async () => {
-    installed = [moods, withCard];
-    entities = [
+    homeData.installed = [moods, withCard];
+    homeData.entities = [
       card({
         blocks: [
           { kind: "headline", icon: "cloud-sun", value: { temperature: 8.2 } },
@@ -520,7 +439,7 @@ describe("apps' widgets", () => {
     );
 
     await act(async () =>
-      socket.push({
+      pushLive({
         type: "entity",
         app: "sanctum.weather",
         key: "home",
@@ -531,7 +450,7 @@ describe("apps' widgets", () => {
     expect(cardOnHome()?.textContent).toBe("WeatherRain soon.");
 
     await act(async () =>
-      socket.push({
+      pushLive({
         type: "entity",
         app: "sanctum.weather",
         key: "home",
@@ -543,8 +462,8 @@ describe("apps' widgets", () => {
   });
 
   it("runs a card's check through the gate as whoever pressed it", async () => {
-    installed = [withCard];
-    entities = [
+    homeData.installed = [withCard];
+    homeData.entities = [
       card({
         blocks: [
           {
@@ -571,14 +490,14 @@ describe("apps' widgets", () => {
         .click(),
     );
 
-    expect(coreJson).toHaveBeenCalledWith(
+    expect(mockCoreJson).toHaveBeenCalledWith(
       "/api/apps/sanctum.weather/actions/weather.remind",
       { method: "POST", json: { thing: "umbrella" } },
     );
   });
 
   it("shows none for an app that has shown no card", async () => {
-    installed = [moods, withCard];
+    homeData.installed = [moods, withCard];
     await refresh();
 
     expect(cardOnHome()).toBeNull();
@@ -587,12 +506,12 @@ describe("apps' widgets", () => {
 
 describe("the home's dashboards", () => {
   beforeEach(async () => {
-    dashboards = [homeDashboard, night];
+    homeData.dashboards = [homeDashboard, night];
     await refresh();
   });
 
   const dashboardItems = async () =>
-    (await showSidebar()).slice(0, dashboards.length);
+    (await showSidebar()).slice(0, homeData.dashboards.length);
 
   async function openDashboardMenu() {
     await act(async () =>
@@ -621,14 +540,14 @@ describe("the home's dashboards", () => {
         document.querySelector("[role=menu], [role=dialog]"),
       ).not.toBeNull();
 
-      await act(async () => coreStatus.publish({ state: "offline" }));
+      await act(async () => publishCoreStatus({ state: "offline" }));
 
       expect(container.querySelector(".veil")?.textContent).toContain(
         "Reconnecting",
       );
       expect(document.querySelector("[role=menu], [role=dialog]")).toBeNull();
       await act(async () =>
-        coreStatus.publish({ state: "online", version: "dev" }),
+        publishCoreStatus({ state: "online", version: "dev" }),
       );
       expect(document.querySelector("[role=menu], [role=dialog]")).toBeNull();
       expect(
@@ -642,12 +561,12 @@ describe("the home's dashboards", () => {
     await startRenaming();
 
     await act(async () =>
-      socket.push({ type: "dashboards", dashboards: [homeDashboard] }),
+      pushLive({ type: "dashboards", dashboards: [homeDashboard] }),
     );
 
     expect(title()).toBe("Home");
     expect(document.querySelector("[role=dialog]")).toBeNull();
-    expect(coreJson).not.toHaveBeenCalledWith(
+    expect(mockCoreJson).not.toHaveBeenCalledWith(
       "/api/dashboards/update",
       expect.anything(),
     );
@@ -683,9 +602,7 @@ describe("the home's dashboards", () => {
     expect(title()).toBe("Night");
     expect(pageTitle()).toBe("Night");
 
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await act(async () => renderHome());
+    await remountHome();
     expect(title()).toBe("Night");
     expect(
       (await dashboardItems()).map((item) => item.getAttribute("aria-current")),
@@ -701,7 +618,7 @@ describe("the home's dashboards", () => {
 
   it("follows what the core pushes", async () => {
     await act(async () =>
-      socket.push({
+      pushLive({
         type: "dashboards",
         dashboards: [{ ...night, name: "Bedtime" }, homeDashboard],
       }),
@@ -716,7 +633,7 @@ describe("the home's dashboards", () => {
   it("falls back to the first when the one on show is gone", async () => {
     await choose("Night");
     await act(async () =>
-      socket.push({ type: "dashboards", dashboards: [homeDashboard] }),
+      pushLive({ type: "dashboards", dashboards: [homeDashboard] }),
     );
     expect(title()).toBe("Home");
   });
@@ -740,7 +657,7 @@ describe("the home's dashboards", () => {
         .click(),
     );
 
-    expect(coreJson).toHaveBeenCalledWith("/api/dashboards/update", {
+    expect(mockCoreJson).toHaveBeenCalledWith("/api/dashboards/update", {
       method: "POST",
       json: { id: "d-night", name: "Bedtime" },
     });
@@ -752,7 +669,7 @@ describe("the home's dashboards", () => {
 
   it("opens Home editing from the empty card on another dashboard", async () => {
     await act(async () =>
-      socket.push({
+      pushLive({
         type: "device",
         id: "unknown",
         device: {
@@ -816,7 +733,7 @@ describe("the pinned apps", () => {
   };
 
   it("are the household's, Apps last, each opening its app and marked while it is on show", async () => {
-    pins = ["sanctum.settings", "sanctum.gone"];
+    homeData.pins = ["sanctum.settings", "sanctum.gone"];
     await refresh();
     // An app the home doesn't have has no tile.
     expect(tiles()).toEqual(["Settings", "Apps"]);
@@ -827,7 +744,7 @@ describe("the pinned apps", () => {
   });
 
   it("mark an app without a page of its own while its settings are on show", async () => {
-    pins = ["sanctum.settings", "sanctum.moods"];
+    homeData.pins = ["sanctum.settings", "sanctum.moods"];
     await refresh();
     await press(tile("Moods"));
     expect(pageTitle()).toBe("Moods settings");
@@ -856,13 +773,13 @@ describe("the pinned apps", () => {
         'main button[aria-label="Pin Automations"]',
       )!,
     );
-    expect(coreJson).toHaveBeenCalledWith("/api/pins/update", {
+    expect(mockCoreJson).toHaveBeenCalledWith("/api/pins/update", {
       method: "POST",
       json: { apps: ["sanctum.automations"] },
     });
     expect(tiles()).toEqual(["Automations", "Apps"]);
 
-    await act(async () => socket.push({ type: "pins", apps: [] }));
+    await act(async () => pushLive({ type: "pins", apps: [] }));
     expect(tiles()).toEqual(["Pin apps", "Apps"]);
   });
 });

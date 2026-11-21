@@ -4,12 +4,12 @@ import type {
   DeviceInfo,
   Places,
 } from "@meetsanctum/app-sdk";
-import { Button, PageBar, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { BackButton, Section } from "../components";
+import { Section, SettingsPageBar } from "../components";
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { coreDevices } from "../core-devices";
 import { coreJson } from "../core-fetch";
@@ -116,18 +116,11 @@ export function ActivityPage(props: {
 
   return (
     <>
-      <PageBar
+      <SettingsPageBar
         title="Activity"
-        leading={
-          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
-        }
-      >
-        {!props.backTo && (
-          <Button variant="outline" onClick={props.onDone}>
-            Done
-          </Button>
-        )}
-      </PageBar>
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       <div className="flex shrink-0 flex-wrap items-center gap-3">
         <ToggleGroup
           type="single"

@@ -49,7 +49,7 @@ export function PageBar(props: {
   title: string;
   /** Its actions, at most three, which a page in a frame shows only this way. */
   actions?: readonly PageBarAction[];
-  /** Before the title, such as Back, which names the page it returns to. */
+  /** Before the title in the shell's bar, or within the page in a frame. */
   leading?: ReactNode;
   children?: ReactNode;
 }) {
@@ -84,11 +84,15 @@ export function PageBar(props: {
   // In a frame the shell draws the title and the actions; anything else
   // in the bar stays in the page.
   if (sink) {
-    return props.children ? (
+    const leading = typeof props.leading === "boolean" ? null : props.leading;
+    return leading != null || props.children ? (
       <header className="flex shrink-0 items-center">
-        <div className="ms-auto flex shrink-0 items-center gap-2 ps-3">
-          {props.children}
-        </div>
+        {leading}
+        {props.children && (
+          <div className="ms-auto flex shrink-0 items-center gap-2 ps-3">
+            {props.children}
+          </div>
+        )}
       </header>
     ) : null;
   }

@@ -1,6 +1,6 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
-import { Button, useTemperatureUnit } from "@meetsanctum/ui-sdk";
+import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   ChevronRight,
   Gauge,
@@ -30,7 +30,7 @@ import { useMinuteClock } from "./device-firmware";
 // open Sanctum with Sanctum itself.
 
 /** One of Settings' areas, by the page it opens. */
-export type SettingsArea =
+type SettingsArea =
   | "household"
   | "rooms"
   | "devices"
@@ -46,13 +46,28 @@ const unitNames = { celsius: "Celsius", fahrenheit: "Fahrenheit" } as const;
 const zonePlace = (zone: string) =>
   zone.split("/").at(-1)!.replaceAll("_", " ");
 
-const counted = (count: number, one: string, many = `${one}s`) =>
-  `${count} ${count === 1 ? one : many}`;
+const counted = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+function describeRoomsAndFloors(places: Places | undefined) {
+  const rooms = places?.rooms ?? [];
+  const floors = places?.floors.length ?? 0;
+  const roomCount = rooms.length
+    ? counted(rooms.length, "room")
+    : "No rooms yet";
+  if (!floors) return roomCount;
+
+  const floorIds = new Set(rooms.map((room) => room.floorId));
+  const separator =
+    !floorIds.has(null) && floorIds.size === floors ? " on " : " · ";
+  return `${roomCount}${separator}${counted(floors, "floor")}`;
+}
 
 export function SettingsOverview(props: {
   apps: readonly AppInfo[];
   devices: readonly DeviceInfo[];
   places: Places | undefined;
+  live: LiveFeed;
   me?: Me;
   status: SystemStatus | undefined;
   statusFailed: boolean;
@@ -61,9 +76,7 @@ export function SettingsOverview(props: {
   const { places } = props;
   const now = useMinuteClock();
   const unit = useTemperatureUnit() ?? "celsius";
-  const others = useOtherClients();
-  const rooms = places?.rooms.length ?? 0;
-  const floors = places?.floors.length ?? 0;
+  const others = useOtherClients(props.live);
   const updates = props.apps.filter((app) => app.waiting).length;
   const row = (
     area: SettingsArea,
@@ -99,11 +112,7 @@ export function SettingsOverview(props: {
           "rooms",
           Layers,
           "Rooms and floors",
-          rooms === 0
-            ? "No rooms yet"
-            : floors === 0
-              ? counted(rooms, "room")
-              : `${counted(rooms, "room")} on ${counted(floors, "floor")}`,
+          describeRoomsAndFloors(places),
         )}
         {row(
           "devices",
@@ -165,21 +174,28 @@ export function SettingsOverview(props: {
 }
 
 // How many clients there are besides this one, once the core has said.
-function useOtherClients() {
+function useOtherClients(live: LiveFeed) {
   const [others, setOthers] = useState<number>();
   useEffect(() => {
-    let current = true;
-    coreJson<ClientInfo[]>("/api/auth/clients")
-      .then((clients) => {
-        if (current) {
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const clients = await coreJson<ClientInfo[]>("/api/auth/clients");
+        if (current === request) {
           setOthers(clients.filter((client) => !client.current).length);
         }
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
+      } catch {
+        // The next shell refresh can ask again.
+      }
     };
-  }, []);
+    void refresh();
+    const stop = live.subscribe({ refresh: () => void refresh() });
+    return () => {
+      request++;
+      stop();
+    };
+  }, [live]);
   return others;
 }
 

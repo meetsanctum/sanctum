@@ -111,14 +111,9 @@ export function ClientsSection(props: {
       id="settings-clients"
       title="Clients"
       action={
-        <Button
-          size={props.page !== undefined ? "default" : "sm"}
-          onClick={() => setAdding(true)}
-        >
-          Add a shared device
-        </Button>
+        <Button onClick={() => setAdding(true)}>Add a shared device</Button>
       }
-      page={props.page}
+      page={props.page ?? null}
     >
       {clients && (
         <ul className="m-0 flex list-none flex-col gap-3 p-0">

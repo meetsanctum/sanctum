@@ -62,7 +62,11 @@ export function HouseholdSection(props: {
   page?: ReactNode;
 }) {
   return (
-    <Section id="settings-household" title="Household" page={props.page}>
+    <Section
+      id="settings-household"
+      title="Household"
+      page={props.page ?? null}
+    >
       <HomeForm />
     </Section>
   );

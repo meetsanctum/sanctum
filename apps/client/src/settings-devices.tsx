@@ -520,15 +520,8 @@ export function DevicesSection(props: {
           .join(" · ") ||
           undefined)
       }
-      action={
-        <Button
-          size={props.page !== undefined ? "default" : "sm"}
-          onClick={() => setAdding(true)}
-        >
-          Add devices
-        </Button>
-      }
-      page={props.page}
+      action={<Button onClick={() => setAdding(true)}>Add devices</Button>}
+      page={props.page ?? null}
     >
       {devices &&
         (devices.length === 0 ? (

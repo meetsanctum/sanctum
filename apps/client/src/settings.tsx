@@ -17,7 +17,7 @@ import {
   MaintenancePage,
   maintenanceSettingsPage,
 } from "./settings-maintenance";
-import { SettingsOverview, type SettingsArea } from "./settings-overview";
+import { SettingsOverview } from "./settings-overview";
 import { RoomsSection } from "./settings-rooms";
 import { StatusPage, statusSettingsPage } from "./settings-status";
 import type { PowerAction } from "./settings-status-power";
@@ -41,30 +41,18 @@ import type { Devices } from "./use-devices";
 // dashboard's setup guide, it opens the step's page over its first and
 // starts it once: Add room, Add devices, or the home's location.
 
-export const householdSettingsPage = "household";
-export const roomsSettingsPage = "rooms";
-export const devicesSettingsPage = "devices";
-export const appsSettingsPage = "apps";
-export const clientsSettingsPage = "clients";
-export const systemSettingsPage = "system";
+const householdSettingsPage = "household";
+const roomsSettingsPage = "rooms";
+const devicesSettingsPage = "devices";
+const appsSettingsPage = "apps";
+const clientsSettingsPage = "clients";
+const systemSettingsPage = "system";
 
 /** The page each step of the setup guide opens and starts. */
 export const setupPage: Record<SetupTarget, string> = {
   "add-room": roomsSettingsPage,
   "add-devices": devicesSettingsPage,
   household: householdSettingsPage,
-};
-
-// The page each row of the first page opens.
-const areaPage: Record<SettingsArea, string> = {
-  household: householdSettingsPage,
-  rooms: roomsSettingsPage,
-  devices: devicesSettingsPage,
-  maintenance: maintenanceSettingsPage,
-  activity: activitySettingsPage,
-  apps: appsSettingsPage,
-  clients: clientsSettingsPage,
-  system: systemSettingsPage,
 };
 
 const pageTitles: Record<string, string> = {
@@ -100,7 +88,7 @@ export const settingsApp = {
 } as const;
 
 export function SettingsPage(props: {
-  // Settings' page, main or one app's, and its params.
+  // Settings' overview, an area's page, or a page it opens.
   page: string;
   params: PageParams;
   // Opens another of Settings' pages over this one.
@@ -144,8 +132,6 @@ export function SettingsPage(props: {
     if (start) onStarted?.();
   }, [start, onStarted]);
   const rooms = props.devices.places?.rooms ?? [];
-  // An area's page has its way back even without a page under it, as in
-  // tests: null, then, which still makes the area's section the page.
   const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
   const openStatus = () => props.open(statusSettingsPage);
   switch (props.page) {
@@ -264,10 +250,11 @@ export function SettingsPage(props: {
         apps={props.apps}
         devices={props.devices.devices}
         places={props.devices.places}
+        live={props.live}
         me={props.me}
         status={props.status}
         statusFailed={props.statusFailed ?? false}
-        open={(area) => props.open(areaPage[area])}
+        open={props.open}
       />
     </>
   );

@@ -6,7 +6,7 @@ import {
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, PageBar, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -26,7 +26,7 @@ import {
   waitingWords,
 } from "./app-state";
 import { productName } from "./brand";
-import { BackButton } from "./components";
+import { SettingsPageBar } from "./components";
 import {
   Dialog,
   DialogContent,
@@ -211,18 +211,11 @@ export function AppPage(props: {
   }, [showsAtStart]);
   return (
     <>
-      <PageBar
+      <SettingsPageBar
         title={`${app.name} settings`}
-        leading={
-          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
-        }
-      >
-        {!props.backTo && (
-          <Button variant="outline" onClick={props.onDone}>
-            Done
-          </Button>
-        )}
-      </PageBar>
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       <div ref={start} className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-3">
           <AppIcon

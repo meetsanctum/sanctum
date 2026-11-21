@@ -1,5 +1,5 @@
 import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { Button, PageBar, useTemperatureUnit } from "@meetsanctum/ui-sdk";
+import { Button, useTemperatureUnit } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Check,
@@ -13,7 +13,7 @@ import {
 import type { ReactNode } from "react";
 
 import { productName } from "./brand";
-import { BackButton, Section } from "./components";
+import { Section, SettingsPageBar } from "./components";
 import {
   connectionText,
   fineDetail,
@@ -432,18 +432,11 @@ export function StatusPage(props: {
   const host = failed ? null : status?.host;
   return (
     <>
-      <PageBar
+      <SettingsPageBar
         title="Status"
-        leading={
-          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
-        }
-      >
-        {!props.backTo && (
-          <Button variant="outline" onClick={props.onDone}>
-            Done
-          </Button>
-        )}
-      </PageBar>
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       {!status && !failed ? (
         <Loading />
       ) : (

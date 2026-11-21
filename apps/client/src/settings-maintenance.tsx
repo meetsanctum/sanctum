@@ -5,7 +5,7 @@ import {
   type DeviceInfo,
   type Room,
 } from "@meetsanctum/app-sdk";
-import { Button, PageBar } from "@meetsanctum/ui-sdk";
+import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Battery,
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
-import { BackButton, Row, Section } from "./components";
+import { Row, Section, SettingsPageBar } from "./components";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -417,18 +417,11 @@ export function MaintenancePage(props: {
 
   return (
     <>
-      <PageBar
+      <SettingsPageBar
         title="Maintenance"
-        leading={
-          props.backTo && <BackButton to={props.backTo} onBack={props.onDone} />
-        }
-      >
-        {!props.backTo && (
-          <Button variant="outline" onClick={props.onDone}>
-            Done
-          </Button>
-        )}
-      </PageBar>
+        backTo={props.backTo}
+        onBack={props.onDone}
+      />
       <Section
         id="maintenance-batteries"
         title="Batteries"

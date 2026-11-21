@@ -29,7 +29,7 @@ export function AppsSection(props: {
   page?: ReactNode;
 }) {
   return (
-    <Section id="settings-apps" title="Apps" page={props.page}>
+    <Section id="settings-apps" title="Apps" page={props.page ?? null}>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {props.apps.map((app) => (
           <li key={app.id}>

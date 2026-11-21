@@ -194,16 +194,41 @@ describe("its actions", () => {
     await act(async () => {
       root.render(
         <PageBarSink.Provider value={said}>
-          <PageBar title="Edit mood" actions={actions([])} />
+          <PageBar title="Edit mood" actions={actions([])} leading={false} />
         </PageBarSink.Provider>,
       );
     });
     expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(container.querySelector("header")).toBeNull();
     expect(said).toHaveBeenLastCalledWith(
       "Edit mood",
       expect.arrayContaining([
         expect.objectContaining({ id: "save", label: "Save", primary: true }),
       ]),
     );
+  });
+
+  it("keeps a frame's leading control usable inside its page", async () => {
+    const said = vi.fn();
+    const back = vi.fn();
+    await act(async () => {
+      root.render(
+        <PageBarSink.Provider value={said}>
+          <PageBar
+            title="Edit mood"
+            leading={<Button onClick={back}>Back</Button>}
+          >
+            <Button>Preview</Button>
+          </PageBar>
+        </PageBarSink.Provider>,
+      );
+    });
+    expect(buttonsIn(container)).toEqual([
+      ["Back", null],
+      ["Preview", null],
+    ]);
+    await act(async () => container.querySelector("button")!.click());
+    expect(back).toHaveBeenCalledOnce();
+    expect(said).toHaveBeenLastCalledWith("Edit mood", []);
   });
 });

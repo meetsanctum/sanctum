@@ -48,8 +48,11 @@ const home: Places = {
     timeZone: "Europe/Zurich",
     temperatureUnit: "celsius",
   },
-  floors: [{ id: "ground", name: "Ground floor" }] as Places["floors"],
-  rooms: [office, { id: "hall", name: "Hall", floorId: "ground" }],
+  floors: [{ id: "ground", name: "Ground floor", level: 0 }],
+  rooms: [
+    { ...office, floorId: "ground" },
+    { id: "hall", name: "Hall", floorId: "ground" },
+  ],
   zones: [],
 };
 const weather: AppInfo = {
@@ -67,6 +70,7 @@ let wentBack: number;
 const live = createLiveFeed();
 
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   clients = [maya.client, tablet, { ...tablet, id: "phone", name: "Phone" }];
   opened = [];
   wentBack = 0;
@@ -171,6 +175,28 @@ describe("Settings' first page", () => {
       "ClientsThis device",
       "SystemCan't check right now",
     ]);
+  });
+
+  it("counts rooms and floors without putting unassigned rooms on a floor", async () => {
+    await show({ places: { ...home, rooms: [office, home.rooms[1]!] } });
+    expect(row("Rooms and floors").textContent).toBe(
+      "Rooms and floors2 rooms · 1 floor",
+    );
+
+    await show({ places: { ...home, rooms: [] } });
+    expect(row("Rooms and floors").textContent).toBe(
+      "Rooms and floorsNo rooms yet · 1 floor",
+    );
+  });
+
+  it("updates the client count on the shell's next refresh", async () => {
+    await show();
+    expect(row("Clients").textContent).toBe("ClientsThis device and 2 others");
+
+    clients = [maya.client, tablet];
+    await act(async () => live.refresh());
+
+    expect(row("Clients").textContent).toBe("ClientsThis device and 1 other");
   });
 
   it("opens each area's page", async () => {
