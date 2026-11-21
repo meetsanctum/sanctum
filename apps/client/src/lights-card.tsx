@@ -8,16 +8,22 @@ import type { Devices } from "./use-devices";
 // Lights' page. It is a segmented tile, frosted glass a cell high: on the
 // left the bulb in Sun, "Lights" over how many are on; on the right, a cell
 // square, its switch, White while any light is on as a room's button is,
-// so the switch has a tile's touch target. Wider than a phone it is as
-// wide as its words and switch need, at least two cells as Home's other
-// status tiles are; on a phone it takes half the row as tiles do. The
-// switch only turns lights off: turning every light in the home on at once
+// so the switch has a tile's touch target. Like Home's other status tiles
+// it is as wide as its words and switch need and never cuts them, at least
+// two cells or half a phone's line (statusTileWidth). The switch only turns lights off: turning every light in the home on at once
 // is more than one press should do, so they come on room by room. While
 // none is on it stays, dimmed and disabled, so nothing moves when it is
 // pressed and the card always shows what it can do. Its words are its
 // accessible name and tooltip, with how many ("Turn off 2 lights"), and
 // what it did is said to a screen reader as the core answers, since the
 // card's new words alone would not be heard.
+
+/**
+ * A status tile's least width: two cells, or half a phone's line. It grows
+ * with its words, so none is cut.
+ */
+export const statusTileWidth =
+  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)]";
 
 // How long a card keeps what its switch did where a screen reader finds
 // it: long enough to be read out, short enough not to be met as news later.
@@ -79,20 +85,20 @@ export function LightsCard(props: {
   };
   // The tile's left segment: the bulb, "Lights" and how many are on.
   const segment =
-    "flex min-w-0 flex-1 items-center gap-2.5 bg-(--tile) px-3.5 text-left text-(--tile-ink) backdrop-blur-[24px]";
+    "flex flex-1 items-center gap-2.5 bg-(--tile) px-3.5 text-left text-(--tile-ink) backdrop-blur-[24px]";
   const words = (
     <>
       <icons.Lightbulb
         aria-hidden="true"
         className="size-[18px] shrink-0 text-(--sun-text)"
       />
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
+      <span className="flex flex-col whitespace-nowrap">
+        <span className="text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
           Lights
         </span>
         {/* A pause between its lines, which a screen reader runs together. */}
         <span className="sr-only">, </span>
-        <span className="truncate text-[15px] leading-5 font-medium tabular-nums">
+        <span className="text-[15px] leading-5 font-medium tabular-nums">
           {status}
         </span>
       </span>
@@ -102,7 +108,7 @@ export function LightsCard(props: {
     <div
       role="group"
       aria-label="Lights"
-      className="col-span-3 flex h-(--cell) min-w-0 gap-0.5 overflow-hidden rounded-lg sm:w-fit sm:min-w-[calc(var(--cell)*2+var(--cell-gap))]"
+      className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 gap-0.5 overflow-hidden rounded-lg`}
     >
       {props.open ? (
         // On Home it opens Lights' page, as the other status tiles do.

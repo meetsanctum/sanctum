@@ -104,15 +104,16 @@ describe("the home's status", () => {
     ];
     await showStatus();
 
+    // Lights first, the one with something to press.
     expect(tiles().map(shown)).toEqual([
-      "Environment19.5–21.5°",
       "Lights1 on",
+      "Environment19.5–21.5°",
       "Switches1 on",
     ]);
-    expect(tiles()[0]?.getAttribute("aria-label")).toBe(
+    expect(tiles()[1]?.getAttribute("aria-label")).toBe(
       "Environment, 19.5 to 21.5°",
     );
-    await click(tiles()[0] as HTMLElement);
+    await click(tiles()[1] as HTMLElement);
     expect(openCategory).toHaveBeenCalledWith("environment");
   });
 
@@ -147,7 +148,7 @@ describe("the home's status", () => {
     expect(openCategory).toHaveBeenCalledWith("lights");
   });
 
-  it("counts the contact sensors that are open after Presence, and opens Security", async () => {
+  it("counts the contact sensors that are open before Presence, and opens Security", async () => {
     openCategory.mockReset();
     devices = [
       lamp,
@@ -156,9 +157,9 @@ describe("the home's status", () => {
     ];
     await showStatus();
 
-    expect(tiles().map(shown)).toEqual(["Security1 open", "Lights1 on"]);
-    expect(tiles()[0]?.getAttribute("aria-label")).toBe("Security, 1 open");
-    await click(tiles()[0] as HTMLElement);
+    expect(tiles().map(shown)).toEqual(["Lights1 on", "Security1 open"]);
+    expect(tiles()[1]?.getAttribute("aria-label")).toBe("Security, 1 open");
+    await click(tiles()[1] as HTMLElement);
     expect(openCategory).toHaveBeenCalledWith("security");
   });
 
@@ -190,8 +191,8 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map(shown)).toEqual([
-      "Environment19.5–21.5°",
       "Lights1 on",
+      "Environment19.5–21.5°",
       "BatteriesReplace 2",
     ]);
     expect(tiles().at(-1)?.getAttribute("aria-label")).toBe(
@@ -206,7 +207,7 @@ describe("the home's status", () => {
     expect(shown(tiles().at(-1)!)).toBe("hall sensorBattery 8%");
     devices = [lamp, { ...sensor("hall", "hall", 19.5, 58), battery: 10 }];
     await showStatus();
-    expect(tiles().map(shown)).toEqual(["Environment19.5°", "Lights1 on"]);
+    expect(tiles().map(shown)).toEqual(["Lights1 on", "Environment19.5°"]);
   });
 
   it("has only the categories the home has, and says when no sensor reads anything", async () => {
@@ -214,8 +215,8 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map(shown)).toEqual([
-      "EnvironmentNo readings",
       "Lights1 on",
+      "EnvironmentNo readings",
       // The sensor that doesn't answer needs attention.
       "hall sensorOffline",
     ]);
@@ -237,7 +238,7 @@ describe("the home's status", () => {
     expect(openAttention).toHaveBeenCalledOnce();
   });
 
-  it("gives Attention a device tile's width and Environment two cells on desktop", async () => {
+  it("gives each tile its whole words, Attention at least a device tile's width and the others two cells", async () => {
     devices = [
       lamp,
       { ...hallLight, availability: "offline" },
@@ -245,16 +246,23 @@ describe("the home's status", () => {
     ];
     await showStatus();
 
-    // Environment, Lights, then Attention.
-    expect(tiles()[0]?.className).toContain(
-      "sm:w-[calc(var(--cell)*2+var(--cell-gap))]",
-    );
-    expect(tiles().every((tile) => tile.classList.contains("col-span-3"))).toBe(
+    // Lights, Environment, then Attention, in one line that scrolls.
+    expect(
+      container.querySelector("section[aria-label='Home status']")?.classList,
+    ).toContain("overflow-x-auto");
+    expect(tiles().every((tile) => tile.classList.contains("w-max"))).toBe(
       true,
+    );
+    expect(tiles().every((tile) => tile.classList.contains("shrink-0"))).toBe(
+      true,
+    );
+    expect(container.querySelector(".truncate")).toBeNull();
+    expect(tiles()[1]?.className).toContain(
+      "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
     expect(shown(tiles().at(-1)!)).toContain("Offline");
     expect(tiles().at(-1)?.className).toContain(
-      "sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]",
+      "min-w-[calc(var(--cell)*3+var(--cell-gap)*2)]",
     );
   });
 
@@ -289,8 +297,8 @@ describe("the home's status", () => {
     ];
     await showStatus();
     expect(tiles().map(shown)).toEqual([
-      "Environment19.5°",
       "Lights1 on",
+      "Environment19.5°",
       "hall sensorBattery 8%",
     ]);
   });

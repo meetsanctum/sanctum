@@ -43,7 +43,7 @@ import {
   LightsButton,
   roomLightsButton,
 } from "./lights-button";
-import { LightsCard } from "./lights-card";
+import { LightsCard, statusTileWidth } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -237,12 +237,17 @@ function Sections(props: {
 }
 
 const statusOrder = [
-  "environment",
-  "presence",
-  "security",
   "lights",
+  "environment",
+  "security",
+  "presence",
   "switches",
 ] as const satisfies DeviceCategory[];
+
+// What needs attention has more to say than a count: at least three cells
+// wide, a device tile's width, or half a phone's line.
+const statusTileWide =
+  "min-w-[calc(var(--cell)*3+var(--cell-gap)*2)] max-sm:min-w-[calc(50%-var(--cell-gap)/2)]";
 
 // A tile of the home's status: what it is about, what it says, and what it opens.
 type StatusTile = {
@@ -252,8 +257,7 @@ type StatusTile = {
   label: string;
   icon: LucideIcon;
   colour: string;
-  // Three cells wide, a device tile's width, where the others have two:
-  // what needs attention has more to say than a count.
+  // At least three cells wide where the others have two (statusTileWide).
   wide?: boolean;
   open: () => void;
 };
@@ -262,10 +266,10 @@ type StatusItem =
   StatusTile | { key: "lights"; tiles: Tile[]; open: () => void };
 
 /**
- * The home's status on the dashboard: a tile for what the sensors read,
- * where there is motion, how many contact sensors are open, how many
- * lights and switches are on, each opening
- * its category, and last, while Sanctum or any device needs attention, one
+ * The home's status on the dashboard: Lights' card first, with its switch
+ * (lights-card.tsx), then a tile for what the sensors read, how many
+ * contact sensors are open, where there is motion and how many switches
+ * are on, each opening its category, and last, while Sanctum or any device needs attention, one
  * that opens Settings, where they show first, or Status when only Sanctum
  * does, then, while a battery is to replace, Batteries, in Graphite, which
  * opens Maintenance; being last, they move nothing as they come and go.
@@ -285,7 +289,7 @@ export function HomeStatus(props: {
 }) {
   const { devices } = props;
   const unit = unitOf(devices);
-  // What the sensors read first, the most glanceable; a remote has nothing
+  // Lights first, the one with something to press; a remote has nothing
   // to say here.
   const shown = statusOrder.flatMap((id): StatusItem[] => {
     const category = deviceCategories.find((each) => each.id === id)!;
@@ -361,10 +365,10 @@ export function HomeStatus(props: {
   return (
     <section
       aria-label="Home status"
-      // Wider than a phone its tiles flow in a row, since Lights' is as
-      // wide as its words and switch need; on a phone each takes half the
-      // row.
-      className="tile-grid shrink-0 auto-rows-(--cell) sm:flex sm:flex-wrap"
+      // One line that scrolls sideways where its tiles don't fit, each as
+      // wide as its words need, so none is cut. Its padding keeps a focus
+      // ring in what the scroll shows.
+      className="-m-1 flex shrink-0 gap-(--cell-gap) overflow-x-auto p-1 [scrollbar-width:none]"
     >
       {shown.map((each) => {
         if ("tiles" in each) {
@@ -383,18 +387,18 @@ export function HomeStatus(props: {
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]" : "sm:w-[calc(var(--cell)*2+var(--cell-gap))]"} col-span-3 flex h-(--cell) min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${each.wide ? statusTileWide : statusTileWidth} flex h-(--cell) w-max shrink-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
               className="size-[18px] shrink-0"
               style={{ color: each.colour }}
             />
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
+            <span className="flex flex-col whitespace-nowrap">
+              <span className="text-[13px] leading-[18px] font-medium text-(--tile-secondary)">
                 {each.title}
               </span>
-              <span className="truncate text-[15px] leading-5 font-medium tabular-nums">
+              <span className="text-[15px] leading-5 font-medium tabular-nums">
                 {each.value}
               </span>
             </span>
@@ -560,7 +564,7 @@ export function CategoryPage(props: {
         }
       />
       {category.id === "lights" && own.length > 0 && (
-        <div className="tile-grid shrink-0 auto-rows-(--cell)">
+        <div className="flex shrink-0">
           <LightsCard tiles={own} devices={devices} />
         </div>
       )}
