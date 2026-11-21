@@ -59,6 +59,10 @@ const buttonVariants = cva(
         // with Carbon ink while on, as a switch or by its own words (data-on).
         glass:
           "bg-white/14 text-white hover:bg-white/20 hover:text-white active:bg-white/24 aria-pressed:bg-white aria-pressed:text-(--carbon) aria-pressed:hover:bg-white/90 aria-pressed:hover:text-(--carbon) data-on:bg-white data-on:text-(--carbon) data-on:hover:bg-white/90 data-on:hover:text-(--carbon)",
+        // On a tile or a card that is on, which is White: its ink at 8% at
+        // rest and 12% under the pointer, such as a summary card's action.
+        "on-tile":
+          "bg-(--tile-on-ink)/8 text-(--tile-on-ink) hover:bg-(--tile-on-ink)/12 hover:text-(--tile-on-ink) active:bg-(--tile-on-ink)/16",
         // A dashed outline where something can go but nothing is yet, such
         // as the sidebar's pins with nothing pinned.
         placeholder:
@@ -90,9 +94,14 @@ const buttonVariants = cva(
         sm: "h-8 gap-1 rounded-[min(var(--radius-md),10px)] px-2.5 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
         // A wide action of its own, such as a card's button or a sheet's.
         lg: "h-11 gap-2 px-4 text-[15px]",
-        // A small switch in a line of them, such as a room's lights button
-        // or a mood's Preview.
+        // A small switch in a line of them, such as a room's Lights or a
+        // mood's Preview.
         chip: "h-9 gap-1.5 px-3 text-[13px] has-data-[icon=inline-start]:ps-2.5",
+        // A switch in a heading with its icon alone, such as a floor's
+        // lights: a chip's height and corners, square, with an 18 px icon,
+        // pressable in the 44 px around it.
+        "icon-chip":
+          "relative size-9 before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-4.5",
         // A row's ⋮ menu and a dialog's close: 32 px with 10 px corners,
         // pressable in the 44 px around it.
         "icon-sm":
