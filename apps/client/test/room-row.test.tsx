@@ -151,7 +151,7 @@ describe("a room's row", () => {
   it("has the switch, then apps' buttons as squares, then their tiles, with no heading", async () => {
     await show("room");
     expect(rowOf("Office")).toEqual([
-      "Turn off 1 light in Office",
+      "Turn off lights in Office",
       "Glow in Office",
       "Relax in Office",
     ]);
@@ -189,6 +189,14 @@ describe("a room's row", () => {
     expect(squares.className).toContain("max-sm:col-span-3");
     expect(squares.className).toContain("max-sm:grid-cols-2");
     expect(squares.style.gridRow).toBe("span 1");
+    // An odd last square, such as a switch alone, keeps its size in the
+    // middle of its line's two places.
+    expect(squares.className).toContain(
+      "max-sm:[&>:last-child:nth-child(odd)]:col-span-2",
+    );
+    expect(squares.className).toContain(
+      "max-sm:[&>:last-child:nth-child(odd)]:justify-self-center",
+    );
   });
 
   it("calls the section's action with the square's input on a tap", async () => {
@@ -223,7 +231,7 @@ describe("a room's row", () => {
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(named("Glow in Hall")?.getAttribute("aria-pressed")).toBe("false");
     expect(rowOf("Office")).toEqual([
-      "Turn off 1 light in Office",
+      "Turn off lights in Office",
       "Glow in Office",
       "Relax in Office",
     ]);
@@ -253,7 +261,7 @@ describe("a room's row", () => {
   it("leaves out an app's squares once it is turned off", async () => {
     await show("room", [moods, { ...glow, state: "off" }]);
     expect(rowOf("Office")).toEqual([
-      "Turn off 1 light in Office",
+      "Turn off lights in Office",
       "Relax in Office",
     ]);
   });

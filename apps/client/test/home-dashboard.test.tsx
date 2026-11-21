@@ -189,23 +189,24 @@ async function show(editing = false) {
   });
 }
 
+// What a part of the page holds, as a screen reader meets it: each tile or
+// button, a row's squares and grid looked through.
+const parts = (each: Element): Element[] =>
+  each.matches("button") || each.querySelector(".truncate.text-sm")
+    ? [each]
+    : [...each.children].flatMap(parts);
 const sections = () =>
   [...container.querySelectorAll("section")].map((section) => ({
     heading: section.querySelector("h2")?.textContent,
     groups: [...section.querySelectorAll("[role=group]")].map((group) => [
       group.getAttribute("aria-label"),
-      // A row's squares are together in one part of it, and say only their
-      // names to a screen reader.
+      // Buttons say their accessible names, tiles their names.
       ...[...group.children]
-        .flatMap((each) =>
-          each.matches("button") || each.querySelector(".truncate.text-sm")
-            ? [each]
-            : [...each.children],
-        )
+        .flatMap(parts)
         .map(
           (each) =>
             each.querySelector(".truncate.text-sm")?.textContent ??
-            (each.textContent || each.getAttribute("aria-label")),
+            (each.getAttribute("aria-label") || each.textContent),
         ),
     ]),
   }));
@@ -294,7 +295,7 @@ describe("Home", () => {
       {
         heading: "Office",
         groups: [
-          ["Lights in Office", "Turn off 1 light in Office", "Relax"],
+          ["Lights in Office", "Turn off lights in Office", "Relax"],
           ["On Home", "Desk strip", "Lamp"],
         ],
       },

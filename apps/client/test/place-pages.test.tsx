@@ -222,13 +222,13 @@ describe("all the lights of a room", () => {
 
   it("of a room, from its row, through the core", async () => {
     await show("room", "office");
-    const all = button("Turn off 1 light in Office")!;
-    // A square with the power symbol, which says what it does on hover.
-    expect(all.textContent).toBe("");
-    expect(all.title).toBe("Turn off 1 light in Office");
+    const all = button("Turn off lights in Office")!;
+    // A chip with the power symbol and what it does, White while any is on.
+    expect(all.textContent).toBe("Turn off lights");
+    expect(all.querySelector("svg.lucide-power")).not.toBeNull();
     // Its words say what it does, so it is no pressed switch.
     expect(all.hasAttribute("aria-pressed")).toBe(false);
-    expect(all.dataset.look).toBe("on");
+    expect(all.dataset.on).toBe("");
     await click(all);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "room", id: "office" }, to: "off" },
@@ -239,7 +239,7 @@ describe("all the lights of a room", () => {
     devices = [{ ...lamp, availability: "offline" }];
     await show("room", "office");
     const all = button("Turn on lights in Office")!;
-    expect(all.dataset.look).toBe("off");
+    expect(all.dataset.on).toBeUndefined();
     expect(all.disabled).toBe(true);
     // Nothing a mood sets could answer either.
     expect(tile("Relax")?.disabled).toBe(true);
@@ -458,7 +458,7 @@ describe("a room's page", () => {
     ];
     await show("room", "office", [awnings, spots, moods, alarms]);
     expect(row()).toEqual([
-      "Turn off 1 light in Office",
+      "Turn off lights in Office",
       "Relax in Office",
       "Desk in Office",
       "Door in Office",
@@ -472,7 +472,7 @@ describe("a room's page", () => {
   it("shows a room's moods in their order, the active one pressed, and runs one on a tap", async () => {
     await show("room", "office");
     expect(row()).toEqual([
-      "Turn off 1 light in Office",
+      "Turn off lights in Office",
       "Relax in Office",
       "Work in Office",
     ]);

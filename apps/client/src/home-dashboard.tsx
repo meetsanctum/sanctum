@@ -1,4 +1,4 @@
-import type { AppInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo, Floor } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 
 import { placeContacts } from "./contact";
@@ -18,14 +18,14 @@ import type { Devices } from "./use-devices";
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
 // says what its motion and sensors say, as its page's header does; then its
-// row, its switch, Natural light and its moods, as on its page; then its
+// row, its lights button, Natural light and its moods, as on its page; then its
 // devices on Home, in the household's order. Devices on Home
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put
 // on it, so a sensor needs no tile here for its readings. A room with
 // nothing to show is in the sidebar only. Once the home has floors, its
-// rooms are under them (floor-groups.tsx), each floor's heading with the
-// button that turns its lights off while any is on. Space groups them: a
+// rooms are under them (floor-groups.tsx), a floor with lights with its
+// button that turns them off. Space groups them: a
 // room's parts sit 12 px apart, rooms 32 px and floors 56 px, so each is
 // closer to its own than to the next.
 
@@ -89,6 +89,12 @@ export function HomeRooms(props: {
     (place) => place.room?.id ?? null,
   );
   const homeLights = devices.tiles.filter((tile) => tile.kind === "light");
+  const floorLights = (floor: Floor) => {
+    const rooms = roomsOn(devices.places, floor);
+    return homeLights.filter(
+      (tile) => tile.roomId !== null && rooms.has(tile.roomId),
+    );
+  };
 
   // A room's section; its heading is a level down under a floor's.
   const roomSection = (place: (typeof shown)[number], level: 2 | 3) => {
@@ -168,15 +174,7 @@ export function HomeRooms(props: {
                 id={`home-floor-${floor?.id ?? "other-rooms"}`}
                 lights={
                   floor
-                    ? floorLightsButton(
-                        homeLights.filter(
-                          (tile) =>
-                            tile.roomId !== null &&
-                            roomsOn(devices.places, floor).has(tile.roomId),
-                        ),
-                        floor,
-                        devices,
-                      )
+                    ? floorLightsButton(floorLights(floor), floor, devices)
                     : undefined
                 }
               >

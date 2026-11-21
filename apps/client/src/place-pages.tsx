@@ -38,7 +38,8 @@ import {
   type Reading,
 } from "./device-tiles";
 import { byFloor, FloorSection } from "./floor-groups";
-import { floorLightsButton, lightsButton } from "./lights-button";
+import { floorLightsButton, LightsButton, lightsButton } from "./lights-button";
+import { LightsCard, LightsCardLine } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
@@ -46,8 +47,6 @@ import {
   isRowEmpty,
   RoomRow,
   roomRowOf,
-  RoomSwitch,
-  RowSquares,
   type SectionEntities,
 } from "./room-sections";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
@@ -59,13 +58,14 @@ import type { Devices } from "./use-devices";
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, its motion, whether
 // its contact sensors are open and what its sensors read under it, then its
-// row: its switch, Natural light and its moods (room-sections.tsx), then its
-// devices in a section for each category, and last the devices Sanctum
+// row: its lights button, Natural light and its moods (room-sections.tsx),
+// then its devices in a section for each category, and last the devices Sanctum
 // cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards
-// (summary-cards.tsx): Lights' with how many are on and a button that turns
-// them all off, Environment's with the range of each reading across the
-// home, Security's with how many contact sensors are open. Presence's opens
+// (summary-cards.tsx), Environment's with the range of each reading across
+// the home, Security's with how many contact sensors are open; Lights'
+// opens with its card, how many are on with a switch that turns them off
+// (lights-card.tsx). Presence's opens
 // with its overview, each room's last 24 hours (presence-overview.tsx).
 // On Lights' page each room also has its button for all its lights, as on
 // Home. The devices in no room have a page too, last among the rooms while
@@ -212,8 +212,8 @@ function Sections(props: {
   sections: TileSection[];
   devices: Devices;
   onOpen: (tile: Tile) => void;
-  /** What a section's tiles start with. */
-  first?: (section: TileSection) => ReactNode;
+  /** What a section has between its heading and its tiles. */
+  lead?: (section: TileSection) => ReactNode;
   /** Its headings' level, 3 under a floor's. */
   level?: 2 | 3;
 }) {
@@ -226,7 +226,7 @@ function Sections(props: {
         void devices.dim(tile, brightness).catch(() => undefined)
       }
       onOpen={props.onOpen}
-      first={props.first}
+      lead={props.lead}
       level={props.level}
     />
   );
@@ -252,6 +252,8 @@ type StatusTile = {
   // what needs attention has more to say than a count.
   wide?: boolean;
   open: () => void;
+  /** Lights' tile, with its switch (lights-card.tsx): the home's lights. */
+  lights?: Tile[];
 };
 
 /**
@@ -313,6 +315,7 @@ export function HomeStatus(props: {
         icon: look.icon,
         colour: look.colour,
         open: () => props.openCategory(category.id),
+        lights: category.id === "lights" ? own : undefined,
       },
     ];
   });
@@ -352,16 +355,29 @@ export function HomeStatus(props: {
   return (
     <section
       aria-label="Home status"
-      className="tile-grid shrink-0 auto-rows-(--cell)"
+      // Wider than a phone its tiles flow in a row, since Lights' is as
+      // wide as its words and switch need; on a phone each takes half the
+      // row.
+      className="tile-grid shrink-0 auto-rows-(--cell) sm:flex sm:flex-wrap"
     >
       {shown.map((each) => {
+        if (each.lights) {
+          return (
+            <LightsCard
+              key={each.key}
+              tiles={each.lights}
+              devices={devices}
+              open={each.open}
+            />
+          );
+        }
         return (
           <button
             key={each.key}
             type="button"
             aria-label={each.label}
             onClick={each.open}
-            className={`${each.wide ? "col-span-3" : "col-span-2 max-sm:col-span-3"} flex min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
+            className={`${each.wide ? "col-span-3 sm:w-[calc(var(--cell)*3+var(--cell-gap)*2)]" : "col-span-2 max-sm:col-span-3 sm:w-[calc(var(--cell)*2+var(--cell-gap))]"} flex h-(--cell) min-w-0 items-center gap-2.5 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50`}
           >
             <each.icon
               aria-hidden="true"
@@ -463,38 +479,6 @@ export function NoRoomPage(props: {
   );
 }
 
-// What Lights' page opens with: a card that says how many lights are on,
-// with the one thing to do about them, turning them all off. A light that
-// does not answer is not counted as off: the card says how many are
-// offline, or "Offline" when none answers.
-function lightsCards(tiles: readonly Tile[], devices: Devices): Summary[] {
-  if (tiles.length === 0) return [];
-  const offline = tiles.filter((tile) => tile.disabled).length;
-  const on = tiles.filter((tile) => tile.on && !tile.disabled).length;
-  return [
-    {
-      id: "lights",
-      icon: on > 0 ? icons.Lightbulb : icons.LightbulbOff,
-      title: "Lights",
-      status:
-        on > 0 ? `${on} on` : offline === tiles.length ? "Offline" : "All off",
-      note: offline > 0 && offline < tiles.length ? `${offline} offline` : null,
-      active: on > 0,
-      action: {
-        label: "Turn all off",
-        onPress: () =>
-          devices.switchLights({ kind: "home" }, [...tiles], "off").then(
-            ({ failed }) =>
-              failed.length === 0
-                ? "Lights turned off"
-                : `${failed.length} ${failed.length === 1 ? "light" : "lights"} did not turn off`,
-            () => "The lights could not be turned off",
-          ),
-      },
-    },
-  ];
-}
-
 // What Environment's page opens with: a card for each reading the home
 // ranges across its sensors, with how many of them are not known. Nothing
 // here is on or open, so its cards are never White.
@@ -569,11 +553,8 @@ export function CategoryPage(props: {
           category.id === "switches" ? onMeta(own) || undefined : undefined
         }
       />
-      {category.id === "lights" && (
-        <SummaryCards
-          label={`${category.title} summary`}
-          cards={lightsCards(own, devices)}
-        />
+      {category.id === "lights" && own.length > 0 && (
+        <LightsCardLine tiles={own} devices={devices} />
       )}
       {category.id === "environment" && (
         <SummaryCards
@@ -602,8 +583,8 @@ export function CategoryPage(props: {
 
 // A category's rooms, under their floors once the home has floors
 // (floor-groups.tsx), so a room is where it is on Home. On Lights' page each
-// room's lights start with its switch, the square its row starts with, and
-// each floor has its switch that turns them off.
+// room has its lights button over its lights, as its row has on Home, and
+// each floor its button that turns them off (lights-button.tsx).
 function CategorySections(props: {
   sections: TileSection[];
   devices: Devices;
@@ -611,20 +592,16 @@ function CategorySections(props: {
   isLights: boolean;
 }) {
   const { devices, isLights } = props;
-  const first = isLights
+  const lead = isLights
     ? (section: TileSection) => {
-        // The lights in no room are not together, so have no switch.
+        // The lights in no room are not together, so have no button.
         if (section.id === noRoomSection) return null;
         const lights = lightsButton(
           section.tiles,
           { id: section.id, name: section.title },
           devices,
         );
-        return lights ? (
-          <RowSquares count={1}>
-            <RoomSwitch lights={lights} />
-          </RowSquares>
-        ) : null;
+        return lights ? <LightsButton lights={lights} /> : null;
       }
     : undefined;
   const groups = byFloor(devices.places, props.sections, (section) =>
@@ -636,7 +613,7 @@ function CategorySections(props: {
         sections={props.sections}
         devices={devices}
         onOpen={props.onOpen}
-        first={first}
+        lead={lead}
       />
     );
   }
@@ -661,7 +638,7 @@ function CategorySections(props: {
             sections={items}
             devices={devices}
             onOpen={props.onOpen}
-            first={first}
+            lead={lead}
             level={3}
           />
         </FloorSection>

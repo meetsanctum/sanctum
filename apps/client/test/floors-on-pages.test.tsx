@@ -19,8 +19,8 @@ import { useDevices } from "../src/use-devices";
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // Floors on Home, Lights' page and the sidebar: rooms under their floors in
-// the household's order, then those on none; a floor's button that turns
-// its lights off while any is on; and floors folding in the sidebar, which
+// the household's order, then those on none; a floor's lights button,
+// which turns them off while any is on; and floors folding in the sidebar, which
 // each device remembers.
 
 const places: Places = {
@@ -139,6 +139,15 @@ const button = (label: string) =>
   [...container.querySelectorAll("button")].find(
     (each) => each.getAttribute("aria-label") === label,
   );
+// A lights card (lights-card.tsx) by its name, and what it says.
+const lightsCard = (label: string) =>
+  container.querySelector<HTMLElement>(`[role=group][aria-label="${label}"]`);
+const said = (card: HTMLElement) =>
+  [
+    ...card.querySelectorAll(
+      ":scope > :first-child > span > span:not(.sr-only)",
+    ),
+  ].map((line) => line.textContent);
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -211,7 +220,8 @@ describe("Home with floors", () => {
     const findSection = (id: string) =>
       container.querySelector(`section[aria-labelledby="${id}"]`)!;
     const ground = findSection("home-floor-ground");
-    const groundHeading = ground.firstElementChild!;
+    // The heading's line, over the floor's lights button.
+    const groundHeading = ground.firstElementChild!.firstElementChild!;
     expect(
       groundHeading.firstElementChild?.matches(
         'svg.lucide-layers[aria-hidden="true"]',
@@ -219,29 +229,36 @@ describe("Home with floors", () => {
     ).toBe(true);
     expect(groundHeading.classList).not.toContain("sm:ps-6.5");
     const other = findSection("home-floor-other-rooms");
-    const otherHeading = other.firstElementChild!;
+    const otherHeading = other.firstElementChild!.firstElementChild!;
     expect(otherHeading.querySelector("svg.lucide-layers")).toBeNull();
     expect(otherHeading.classList).toContain("sm:ps-6.5");
     expect(ground.lastElementChild?.classList).toContain("sm:ps-6.5");
     expect(other.lastElementChild?.classList).toContain("sm:ps-6.5");
   });
 
-  it("turns a floor's lights off from its heading, while any is on", async () => {
+  it("has a floor's lights button under its name, which turns them off", async () => {
     await show(<HomeHarness />);
-    const off = button("Turn off 2 lights on Ground floor");
-    // The power symbol alone, White, its words its tooltip.
-    expect(off?.textContent).toBe("");
-    expect(off?.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(off?.title).toBe("Turn off 2 lights on Ground floor");
-    expect(off?.dataset.on).toBe("");
-    const heading = container.querySelector("#home-floor-ground");
-    expect(heading?.nextElementSibling).toBe(off);
-    // All off upstairs: its heading is its name alone.
+    const off = button("Turn off lights on Ground floor")!;
+    // The power symbol and its words, White while any is on.
+    expect(off.textContent).toBe("Turn off lights");
+    expect(off.querySelector("svg.lucide-power")).not.toBeNull();
+    expect(off.dataset.on).toBe("");
+    // Under the heading's line, before the floor's rooms.
+    const heading = container.querySelector("#home-floor-ground")!;
+    expect(heading.parentElement?.nextElementSibling?.contains(off)).toBe(true);
+    // All off upstairs: its button stays, disabled, since a floor's lights
+    // come on room by room.
+    const first = button("Turn off lights on First floor")!;
+    expect(first.disabled).toBe(true);
+    expect(first.dataset.on).toBeUndefined();
+    // The rooms on no floor have none.
     expect(
-      container.querySelector("#home-floor-first")?.nextElementSibling,
-    ).toBe(null);
+      [...container.querySelectorAll("button")].filter((each) =>
+        each.getAttribute("aria-label")?.startsWith("Turn off lights on "),
+      ),
+    ).toHaveLength(2);
 
-    await act(async () => off!.click());
+    await act(async () => off.click());
     expect(
       vi
         .mocked(coreJson)
@@ -252,7 +269,7 @@ describe("Home with floors", () => {
 });
 
 describe("Lights' page with floors", () => {
-  it("heads its rooms by floor, each floor with its switch and each room with its own", async () => {
+  it("heads its rooms by floor, each floor and each room with its lights button", async () => {
     await show(<LightsHarness />);
     expect(outline()).toEqual([
       "h2 First floor",
@@ -264,8 +281,11 @@ describe("Lights' page with floors", () => {
       "h3 Shed",
       "h3 No room",
     ]);
-    expect(button("Turn off 2 lights on Ground floor")).toBeDefined();
-    expect(button("Turn off 1 light in Kitchen")).toBeDefined();
+    // The home's card, segmented, its switch on the right.
+    expect(said(lightsCard("Lights")!)).toEqual(["Lights", "2 on"]);
+    expect(button("Turn off lights on Ground floor")?.disabled).toBe(false);
+    expect(button("Turn off lights on First floor")?.disabled).toBe(true);
+    expect(button("Turn off lights in Kitchen")).toBeDefined();
     expect(button("Turn on lights in Bedroom")).toBeDefined();
   });
 });

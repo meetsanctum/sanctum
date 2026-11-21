@@ -20,7 +20,7 @@ import {
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-// What a category's page opens with: Lights' card and its one button, a
+// What a category's page opens with: Lights' card and its switch, a
 // button for each room's lights, Environment's cards and Security's.
 
 let root: Root;
@@ -55,6 +55,16 @@ async function show(id: string) {
 const cards = () =>
   [...container.querySelectorAll("ul[role=list] > li")] as HTMLElement[];
 const card = () => cards()[0] ?? null;
+// Lights' card: the home's, with its switch (lights-card.tsx).
+const lightsCard = () =>
+  container.querySelector<HTMLElement>('[role=group][aria-label="Lights"]');
+// What its left segment says: "Lights" and how many are on.
+const lightsSaid = (each: HTMLElement) =>
+  [
+    ...each.querySelectorAll(
+      ":scope > :first-child > span > span:not(.sr-only)",
+    ),
+  ].map((line) => line.textContent);
 // What a card says, as it shows it: its name, its status and its note.
 const said = (each: HTMLElement) =>
   [...each.querySelectorAll(":scope > span > span:not(.sr-only)")].map(
@@ -109,25 +119,29 @@ afterEach(async () => {
 });
 
 describe("Lights' card", () => {
-  it("says how many are on, White, with a button that turns the home's lights off", async () => {
+  it("says how many are on, with a switch that turns the home's lights off", async () => {
     await show("lights");
 
-    expect(cards()).toHaveLength(1);
-    expect(said(card()!)).toEqual(["Lights", "1 on"]);
-    expect(card()!.dataset.active).toBe("");
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 on"]);
     expect(
-      card()!.querySelector("svg")?.classList.contains("lucide-lightbulb"),
+      lightsCard()!
+        .querySelector("svg")
+        ?.classList.contains("lucide-lightbulb"),
     ).toBe(true);
-    const off = card()!.querySelector("button");
-    expect(off?.textContent).toBe("Turn all off");
+    const off = lightsCard()!.querySelector("button");
+    // The power symbol alone, White while any is on, its words its tooltip.
+    expect(off?.textContent).toBe("");
+    expect(off?.getAttribute("aria-label")).toBe("Turn off 1 light");
+    expect(off?.title).toBe("Turn off 1 light");
+    expect(off?.dataset.on).toBe("");
     // What it did is said where a screen reader already listens.
-    const did = card()!.querySelector("[role=status]");
+    const did = lightsCard()!.querySelector("[role=status]");
     expect(did?.textContent).toBe("");
     await click(off);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "home" }, to: "off" },
     ]);
-    expect(card()!.querySelector("[role=status]")).toBe(did);
+    expect(lightsCard()!.querySelector("[role=status]")).toBe(did);
     expect(did?.textContent).toBe("Lights turned off");
   });
 
@@ -135,12 +149,12 @@ describe("Lights' card", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     failed = [{ device: "lamp", capability: "light" }];
     await show("lights");
-    await click(card()!.querySelector("button"));
-    const did = card()!.querySelector("[role=status]");
+    await click(lightsCard()!.querySelector("button"));
+    const did = lightsCard()!.querySelector("[role=status]");
     expect(did?.textContent).toBe("1 light did not turn off");
-    // The light that stayed on is back on the card, which keeps its button.
-    expect(said(card()!)).toEqual(["Lights", "1 on"]);
-    expect(card()!.querySelector("button")).not.toBeNull();
+    // The light that stayed on is back on the card, its switch White.
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 on"]);
+    expect(lightsCard()!.querySelector("button")?.disabled).toBe(false);
 
     await act(async () => {
       vi.advanceTimersByTime(9_000);
@@ -155,64 +169,62 @@ describe("Lights' card", () => {
   it("says each press's own answer", async () => {
     failed = [{ device: "lamp", capability: "light" }];
     await show("lights");
-    await click(card()!.querySelector("button"));
-    const did = card()!.querySelector("[role=status]");
+    await click(lightsCard()!.querySelector("button"));
+    const did = lightsCard()!.querySelector("[role=status]");
     expect(did?.textContent).toBe("1 light did not turn off");
 
     failed = [];
-    await click(card()!.querySelector("button"));
+    await click(lightsCard()!.querySelector("button"));
     expect(did?.textContent).toBe("Lights turned off");
   });
 
-  it("has no button while every light is off: the home's lights are never all turned on", async () => {
+  it("keeps its switch, disabled, while every light is off: the home's lights are never all turned on", async () => {
     devices = [hallLight, loose];
     await show("lights");
 
-    expect(said(card()!)).toEqual(["Lights", "All off"]);
-    expect(card()!.dataset.active).toBeUndefined();
-    expect(card()!.querySelector("button")).toBeNull();
-    expect(
-      card()!.querySelector("svg")?.classList.contains("lucide-lightbulb-off"),
-    ).toBe(true);
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "All off"]);
+    const off = lightsCard()!.querySelector("button");
+    expect(off?.disabled).toBe(true);
+    expect(off?.dataset.on).toBeUndefined();
+    expect(off?.getAttribute("aria-label")).toBe("Turn off lights");
   });
 
   it("does not count a light that does not answer as off", async () => {
     devices = [lamp, offline(hallLight)];
     await show("lights");
-    expect(said(card()!)).toEqual(["Lights", "1 on", "1 offline"]);
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "1 on"]);
 
     devices = [hallLight, offline(lamp)];
     await act(async () => {
       live.refresh();
     });
-    expect(said(card()!)).toEqual(["Lights", "All off", "1 offline"]);
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "All off"]);
 
     devices = [offline(lamp), offline(hallLight)];
     await act(async () => {
       live.refresh();
     });
-    expect(said(card()!)).toEqual(["Lights", "Offline"]);
-    expect(card()!.querySelector("button")).toBeNull();
+    expect(lightsSaid(lightsCard()!)).toEqual(["Lights", "Offline"]);
+    expect(lightsCard()!.querySelector("button")?.disabled).toBe(true);
   });
 });
 
 describe("a room's lights on Lights' page", () => {
-  it("start with the room's switch, the power symbol alone, which says what it does", async () => {
+  it("have the room's lights button over them, which says what it does", async () => {
     await show("lights");
 
-    const office = button("Turn off 1 light in Office")!;
-    expect(office.textContent).toBe("");
+    const office = button("Turn off lights in Office")!;
+    expect(office.textContent).toBe("Turn off lights");
     expect(office.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(office.title).toBe("Turn off 1 light in Office");
-    expect(office.dataset.look).toBe("on");
+    expect(office.dataset.on).toBe("");
     expect(office.hasAttribute("aria-pressed")).toBe(false);
-    // First in the room's grid, before its lights' tiles.
-    const grid = office.closest(".tile-grid")!;
-    expect(grid.firstElementChild?.contains(office)).toBe(true);
-    expect(grid.querySelectorAll("button").length).toBeGreaterThan(1);
+    // Between the room's heading and its lights' tiles.
+    const section = office.closest("section")!;
+    expect(section.querySelector("h2, h3")?.nextElementSibling).toBe(office);
+    expect(office.nextElementSibling?.matches(".tile-grid")).toBe(true);
     const hall = button("Turn on lights in Hall")!;
-    expect(hall.title).toBe("Turn on lights in Hall");
-    expect(hall.dataset.look).toBe("off");
+    expect(hall.textContent).toBe("Turn on lights");
+    expect(hall.dataset.on).toBeUndefined();
 
     await click(office);
     await click(hall);
@@ -228,12 +240,17 @@ describe("a room's lights on Lights' page", () => {
       [...container.querySelectorAll("button")]
         .map((each) => each.getAttribute("aria-label"))
         .filter((label) => label?.startsWith("Turn")),
-    ).toEqual(["Turn off 1 light in Office", "Turn on lights in Hall"]);
+    ).toEqual([
+      // The home's, on Lights' card.
+      "Turn off 1 light",
+      "Turn off lights in Office",
+      "Turn on lights in Hall",
+    ]);
   });
 
   it("are on no other category's page", async () => {
     await show("switches");
-    expect(button("Turn off 1 light in Office")).toBeUndefined();
+    expect(button("Turn off lights in Office")).toBeUndefined();
   });
 });
 
