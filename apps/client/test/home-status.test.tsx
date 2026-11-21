@@ -10,6 +10,7 @@ import { HomeStatus } from "../src/place-pages";
 import { useDevices } from "../src/use-devices";
 import {
   contactSensor,
+  copyWithoutScreenReaderText,
   hallLight,
   lamp,
   light,
@@ -86,12 +87,8 @@ describe("the home's status", () => {
     [
       ...container.querySelector("section[aria-label='Home status']")!.children,
     ] as HTMLElement[];
-  // What a tile shows, without the words only a screen reader hears.
-  const shown = (each: Element) => {
-    const copy = each.cloneNode(true) as Element;
-    copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
-    return copy.textContent;
-  };
+  const shown = (each: Element) =>
+    copyWithoutScreenReaderText(each).textContent;
 
   it("says what the sensors read and how many lights and switches are on, each opening its category", async () => {
     openCategory.mockReset();

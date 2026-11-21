@@ -19,7 +19,10 @@ import {
 } from "../src/place-pages";
 import { useSectionEntities } from "../src/room-sections";
 import { useDevices } from "../src/use-devices";
-import { contactSensor } from "./place-pages-fixtures";
+import {
+  contactSensor,
+  copyWithoutScreenReaderText,
+} from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -225,16 +228,10 @@ const overviewRows = () =>
   [...container.querySelectorAll("li > button")].map(
     (each) => each.textContent,
   );
-// What each of Home's status tiles shows, without the words only a screen
-// reader hears.
 const statusTiles = () =>
   [
     ...container.querySelectorAll("section[aria-label='Home status'] button"),
-  ].map((each) => {
-    const copy = each.cloneNode(true) as Element;
-    copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
-    return copy.textContent;
-  });
+  ].map((each) => copyWithoutScreenReaderText(each).textContent);
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

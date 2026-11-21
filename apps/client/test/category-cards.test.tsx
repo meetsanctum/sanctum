@@ -10,6 +10,7 @@ import { CategoryPage } from "../src/place-pages";
 import { useDevices } from "../src/use-devices";
 import {
   contactSensor,
+  copyWithoutScreenReaderText,
   hallLight,
   lamp,
   light,
@@ -68,8 +69,7 @@ const lightsSaid = (each: HTMLElement) =>
   ].map((line) => line.textContent);
 // What a card says, as it shows it: its name, and its status with its note.
 const said = (each: HTMLElement) => {
-  const copy = each.cloneNode(true) as HTMLElement;
-  copy.querySelectorAll(".sr-only").forEach((hidden) => hidden.remove());
+  const copy = copyWithoutScreenReaderText(each);
   return [...copy.querySelectorAll(":scope > span > span")].map(
     (line) => line.textContent,
   );
@@ -347,6 +347,32 @@ describe("Environment's cards", () => {
     expect(cards().some((each) => each.querySelector("button"))).toBe(false);
     // Nothing sums them up under the page's name any more.
     expect(container.querySelector("header p")).toBeNull();
+  });
+
+  it("puts the summary row in the tab order only while it can scroll", async () => {
+    vi.stubGlobal("requestAnimationFrame", (paint: FrameRequestCallback) => {
+      paint(0);
+      return 0;
+    });
+    devices = [sensor("desk", "office", 21.5, 48)];
+    await show("environment");
+
+    const row = container.querySelector<HTMLElement>(
+      '[aria-label="Environment summary"]',
+    )!;
+    expect(row.hasAttribute("tabindex")).toBe(false);
+
+    let width = 260;
+    Object.defineProperties(row, {
+      clientWidth: { get: () => width },
+      scrollWidth: { get: () => Math.max(width, 320) },
+    });
+    row.dispatchEvent(new Event("scroll"));
+    expect(row.tabIndex).toBe(0);
+
+    width = 400;
+    row.dispatchEvent(new Event("scroll"));
+    expect(row.hasAttribute("tabindex")).toBe(false);
   });
 
   it("say how many sensors are not known, and when none reads", async () => {

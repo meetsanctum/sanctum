@@ -2,7 +2,7 @@ import { icons, type Tile } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 
 import { plural } from "./plural";
-import { statusTileWidth, StatusTileWords } from "./status-tile";
+import { statusTileFrame, StatusTileWords } from "./status-tile";
 import type { Devices } from "./use-devices";
 
 // The card for all the lights of the home, one component wherever it is:
@@ -106,7 +106,7 @@ export function LightsCard(props: {
       aria-label="Lights"
       // Its frosted glass is the whole tile's, so a mask on it, as a
       // scrolling row's fade (edge-fade.ts), keeps the blur.
-      className={`${statusTileWidth} flex h-(--cell) w-max shrink-0 gap-0.5 overflow-hidden rounded-lg backdrop-blur-[24px]`}
+      className={`${statusTileFrame} gap-0.5 overflow-hidden`}
     >
       {props.open ? (
         // On Home it opens Lights' page, as the other status tiles do.

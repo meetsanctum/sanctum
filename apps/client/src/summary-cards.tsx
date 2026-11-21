@@ -34,7 +34,7 @@ export function SummaryCards(props: {
   cards: readonly Summary[];
 }) {
   const row = useRef<HTMLUListElement>(null);
-  useEdgeFade(row);
+  useEdgeFade(row, { focusWhenScrollable: true });
   if (props.cards.length === 0) return null;
   return (
     <ul
