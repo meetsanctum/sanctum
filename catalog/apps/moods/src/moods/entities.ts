@@ -42,7 +42,7 @@ export const moodType = defineEntityType({
   assistant: {
     starts: "on",
     description:
-      "The rooms' moods: each one's room, name and icon, its place among the room's moods, and whether the room's lights show it now. input is what running it takes.",
+      "The rooms' moods, with each mood's room ID, name, icon, display order and whether it is active. Pass a mood's input to moods.runMood to run it.",
   },
 });
 

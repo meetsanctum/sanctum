@@ -42,7 +42,7 @@ export const targetType = defineEntityType({
   assistant: {
     starts: "on",
     description:
-      "Each light that follows the sun, by its device and capability, with whether it is following, dimmed, paused, waiting or off, and the colour temperature and brightness natural light sets on it now.",
+      "Each light that follows the sun, identified by device and capability, with its status and the curve's target temperature in mireds and brightness in percent. A paused light can report a target while keeping its current look.",
     needs: ["devices.control:light"],
   },
 });

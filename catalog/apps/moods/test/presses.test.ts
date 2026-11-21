@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CapabilityInfo } from "@meetsanctum/app-sdk";
 
+import { createMood } from "../src/moods/actions.js";
 import { choosePress, listPresses } from "../src/presses/actions.js";
 import {
   buttonOf,
@@ -164,6 +165,41 @@ describe("syncing a remote's choices", () => {
       defaults: { roomId: "office", dimmer: false },
     });
     expect(home.state.workflows.get("press:remote:single")).toEqual(before);
+  });
+
+  it("keeps a remote's choice when an AI agent that cannot see it creates a mood", async () => {
+    const light = device("desk", "office", [lightCapability({ on: true })]);
+    const home = startableHome({ devices: [remote(), light] });
+    await home.start();
+    await home.call(choosePress, {
+      device: "remote",
+      action: "single",
+      choice: homeOff,
+    });
+    const workflow = home.state.workflows.get("press:remote:single");
+    expect(workflow).toBeDefined();
+
+    home.state.readDevices = (devices) =>
+      devices.filter((device) => device.id === light.id);
+    const mood = await home.call(
+      createMood,
+      {
+        roomId: "office",
+        name: "Reading",
+        lights: [
+          { device: light.id, capability: "light", state: { on: true } },
+        ],
+      },
+      { kind: "assistant-run", id: "agent", onBehalfOf: "person" },
+    );
+    home.state.readDevices = null;
+
+    expect(home.state.entities.get(mood.id)).toMatchObject({ name: "Reading" });
+    expect(home.state.workflows.get("press:remote:single")).toEqual(workflow);
+    const remotePresses = await home.call(listPresses, { device: "remote" });
+    expect(remotePresses.presses).toMatchObject([
+      { action: "single", choice: homeOff },
+    ]);
   });
 
   it("keeps a later queued save after an earlier save rolls back", async () => {

@@ -117,7 +117,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "on",
       description:
-        "Have every light in a room that takes a colour temperature follow the sun through the day, or stop following it. placeId null means the lights in no room.",
+        "Set whether the room's compatible lights follow the sun. Use a room ID for placeId, or null for lights in no room. Returns the lights it could not update.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {
@@ -166,7 +166,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "on",
       description:
-        "Bring a room to natural light, as its Natural light button does: the lights that follow the sun come on at its colour and brightness for now, and the room's other lights turn off.",
+        "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {
@@ -195,7 +195,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "on",
       description:
-        "Have a light that follows the sun but is paused, or dimmed by someone, follow it again now, at its colour and brightness.",
+        "Clear a pause or manual dimming so a light follows the curve again. This keeps the light's current on or off state.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {
@@ -241,7 +241,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "on",
       description:
-        "Stop natural light changing a light that follows the sun until the light is switched off, keeping the look it has now.",
+        "Pause natural light for a light that is on and follows it. It keeps its current look until natural light is resumed or the light is switched off.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {
@@ -283,7 +283,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "off",
       description:
-        "Today's natural light: the colour temperature and brightness it sets through the day, from sunrise to sunset. None until the home has a location and the sun rises and sets today.",
+        "Today's natural light curve, with the home's time zone, sunrise and sunset, colour temperature in kelvin and brightness. Returns null when the home's location or today's sunrise and sunset are unavailable.",
     },
     async run(ctx) {
       const options = await followOptionsFor(ctx, timing);
