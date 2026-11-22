@@ -238,6 +238,12 @@ export function createActivityViews(
   return {
     info(entry: ActivityEntry): ActivityInfo {
       const chain = chainOf(entry);
+      let detail = entry.detail;
+      // Keep the recorded kind for filtering when a device changes kinds.
+      if (entry.kind === "devices" && detail && "capabilityKind" in detail) {
+        const { capabilityKind: _capabilityKind, ...shown } = detail;
+        detail = shown;
+      }
       return {
         id: entry.id,
         at: entry.at.toISOString(),
@@ -251,7 +257,7 @@ export function createActivityViews(
           : null,
         outcome: entry.outcome,
         reason: entry.reason,
-        detail: entry.detail,
+        detail,
         who: whoOf(chain.at(-1)!),
         app: appOf(chain),
         run: runOf(chain),

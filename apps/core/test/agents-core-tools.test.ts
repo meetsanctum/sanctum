@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
+import { createDeviceLog } from "../src/devices/activity.js";
 import { connect, names } from "./agents-support.js";
 import { command, lampsCore, radio, settled } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
@@ -349,6 +350,53 @@ describe("the core's tools for AI agents", () => {
     ).toMatchObject({ isError: false, content: { switched: 1 } });
   });
 
+  it("reports a device-command limit through an app's action", async () => {
+    const { core, client, lamp } = await household({
+      agentCommandLimits: { agentPerMinute: 1, homePerMinute: 10 },
+    });
+    expect(
+      await call(client, "sanctum_example_glow", { device: lamp }),
+    ).toMatchObject({ isError: false });
+
+    expect(
+      await call(client, "sanctum_example_glow", { device: lamp }),
+    ).toMatchObject({ isError: true, content: { error: "limited" } });
+    expect(entries(core, "example.glow").at(-1)).toMatchObject({
+      outcome: "refused",
+      reason: "limited",
+      call: entries(core, "agents.limited")[0]?.call,
+    });
+  });
+
+  it("counts only commands sent to a device against the home's limit", async () => {
+    const { core, client, lamp } = await household({
+      agentCommandLimits: { agentPerMinute: 10, homePerMinute: 1 },
+    });
+    const secondAgent = core.auth.clients.createAgent({
+      name: "Other agent",
+      platform: "macos",
+      addedBy: { kind: "person", id: core.people.list()[0]!.id },
+    });
+    const second = await connect(core, secondAgent.token);
+    const send = (caller: Client, command: object) =>
+      call(caller, "device_command", {
+        device: lamp,
+        capability: "light",
+        command,
+      });
+
+    expect(await send(client, { colorTemperature: 400 })).toMatchObject({
+      isError: false,
+      content: { waitingFor: null },
+    });
+    expect(radio.received).toHaveLength(0);
+    expect(await send(second, { on: true })).toMatchObject({ isError: false });
+    expect(await send(client, { on: false })).toMatchObject({
+      isError: true,
+      content: { error: "limited" },
+    });
+  });
+
   it("gives an app action's commands the action's call id", async () => {
     const { core, client, lamp } = await household();
 
@@ -364,6 +412,40 @@ describe("the core's tools for AI agents", () => {
     await call(client, "sanctum_example_glow", { device: lamp });
     expect(entries(core, "example.glow")[1]!.call).not.toBe(action!.call);
   });
+
+  it.each(["original", null])(
+    "keeps the call id %s when a joined command fails later",
+    async (callId) => {
+      const { core, lamp } = await household();
+      const log = createDeviceLog({ activity: core.activity, confirmMs: 100 });
+      const who = { actor: "sanctum" };
+      const sent = {
+        capability: "light",
+        kind: "light" as const,
+        app: null,
+        asked: { brightness: 50 },
+      };
+      const write = () => log.command(who, lamp, "ok", undefined, sent);
+      const join = () => {
+        const first = write();
+        expect(write()).toBe(first);
+        return first;
+      };
+      const id =
+        callId === null ? join() : core.activity.duringCall(callId, join);
+
+      core.activity.duringCall("later", () => {
+        log.unanswered(id, who, lamp, sent, {
+          reason: "no_answer",
+          hasResent: true,
+        });
+      });
+      expect(entries(core, "device.command").at(-1)).toMatchObject({
+        outcome: "failed",
+        call: callId,
+      });
+    },
+  );
 
   it("reads only what apps bring that's switched on", async () => {
     const { core, client, token } = await household();
@@ -452,6 +534,51 @@ describe("the core's tools for AI agents", () => {
     ]);
   });
 
+  it("paginates only visible activity and refuses a hidden device filter", async () => {
+    const { core, client, area, lamp, plug } = await household();
+    await area("activity.read", true);
+    await area("devices.read:switch", false);
+    const record = core.activity.for("devices");
+    const recordOffline = (device: string) =>
+      record({ action: "device.offline", outcome: "ok", subjectId: device });
+    recordOffline(plug);
+    recordOffline(lamp);
+    const near = recordOffline(lamp);
+    recordOffline(plug);
+    record({ action: "device.command", outcome: "refused", subjectId: lamp });
+    record({
+      action: "device.changed",
+      outcome: "ok",
+      subjectId: lamp,
+      detail: { capability: "light", on: true },
+    });
+    record({
+      action: "device.command",
+      outcome: "ok",
+      subjectId: lamp,
+      detail: {
+        capability: "light",
+        capabilityKind: "switch",
+        asked: { on: true },
+      },
+    });
+
+    expect(await call(client, "activity", { limit: 1 })).toMatchObject({
+      isError: false,
+      content: { entries: [{ device: { id: lamp } }], next: near },
+    });
+    expect(
+      await call(client, "activity", { limit: 1, before: near }),
+    ).toMatchObject({
+      isError: false,
+      content: { entries: [{ device: { id: lamp } }], next: null },
+    });
+    expect(await call(client, "activity", { device: plug })).toMatchObject({
+      isError: true,
+      content: { error: "not_found" },
+    });
+  });
+
   it("reads up to 10 days of history for the devices it may see", async () => {
     const { core, client, area, lamp } = await household();
     await area("history.read", true);
@@ -489,5 +616,28 @@ describe("the core's tools for AI agents", () => {
     expect(
       await call(client, "history", { device: lamp, capability: "light" }),
     ).toMatchObject({ isError: true, content: { error: "not_found" } });
+  });
+
+  it("keeps history within the last ten days of the core's clock", async () => {
+    const { core, client, area, lamp } = await household();
+    await area("history.read", true);
+    const dayMs = 86_400_000;
+    core.advance(11 * dayMs);
+    const from = new Date(core.now().getTime() - 10 * dayMs).toISOString();
+    await radio.press("lamp-1", { on: true });
+    await settled();
+    const to = core.now().toISOString();
+
+    expect(
+      await call(client, "history", {
+        device: lamp,
+        capability: "light",
+        from,
+        to,
+      }),
+    ).toMatchObject({
+      isError: false,
+      content: { from, to, states: [{ at: to, state: { on: true } }] },
+    });
   });
 });

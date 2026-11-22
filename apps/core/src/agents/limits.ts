@@ -34,7 +34,7 @@ export type AgentCommandLimits = {
 
 // Enough for turning off every light of a large home at once, and a few
 // rooms more, but not for a loop that keeps switching them.
-export const agentCommandLimits: AgentCommandLimits = {
+const agentCommandLimits: AgentCommandLimits = {
   agentPerMinute: 120,
   homePerMinute: 240,
 };
@@ -61,7 +61,10 @@ function minuteWindows(
   };
 
   /** Counts one, or answers how many seconds until there's room. */
-  return function take(agentId: string): number | undefined {
+  return function take(
+    agentId: string,
+    shouldCount = true,
+  ): number | undefined {
     const at = now();
     for (const [id, times] of recent) {
       if (times.at(-1)! > at - minuteMs) break;
@@ -76,6 +79,7 @@ function minuteWindows(
       home.length >= limits.homePerMinute ? home[0]! + minuteMs - at : 0;
     const wait = Math.max(agentWait, homeWait);
     if (wait > 0) return Math.ceil(wait / 1_000);
+    if (!shouldCount) return;
     times.push(at);
     // Keep agents in order of their latest, so idle ones expire.
     recent.delete(agentId);
@@ -133,14 +137,12 @@ export function createAgentCommandLimiter(
 ) {
   const take = minuteWindows(limits, now);
   return {
-    takeCommand(agentId: string): LimitRefusal | undefined {
-      const retryAfter = take(agentId);
+    takeCommand(agentId: string, shouldCount = true): LimitRefusal | undefined {
+      const retryAfter = take(agentId, shouldCount);
       if (retryAfter !== undefined) return { limited: "commands", retryAfter };
     },
   };
 }
-
-export type AgentCommandLimiter = ReturnType<typeof createAgentCommandLimiter>;
 
 /**
  * Logs an agent held back by a limit, at most once a minute for each agent

@@ -68,6 +68,7 @@ type Open = {
 type Connection = {
   socket: Socket;
   phase: "hello" | "preparing" | "ready" | "gone";
+  protocol: number;
   generation: number;
   calls: Map<string, Open>;
   // The start context's call, which lasts until stop has answered.
@@ -196,6 +197,7 @@ export function createAppLink(options: {
     current = connection;
     lastGeneration += 1;
     connection.generation = lastGeneration;
+    connection.protocol = said.protocol;
     connection.phase = "preparing";
     clearTimeout(connection.timer);
     connection.timer = setTimeout(
@@ -280,7 +282,9 @@ export function createAppLink(options: {
       .then(
         (value): Outcome => ({ ok: true, value }),
         (error: unknown): Outcome =>
-          isActionError(error)
+          isActionError(error) &&
+          // Protocol 11 runners close their connection on an unknown code.
+          (error.code !== "limited" || connection.protocol >= 12)
             ? failureOf(error, error.code)
             : failureOf(error),
       )
@@ -336,6 +340,7 @@ export function createAppLink(options: {
     const connection: Connection = {
       socket,
       phase: "hello",
+      protocol: oldestProtocolVersion,
       generation: 0,
       calls: new Map(),
       lastCall: 0,

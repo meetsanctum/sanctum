@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { deviceCapabilities } from "../src/devices/schema.js";
+import { connect } from "./agents-support.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, type TestCore } from "./support.js";
 import {
@@ -19,13 +20,7 @@ import {
 // it. Brighter and dimmer step a light a fifth of its range from the level last
 // asked of it.
 
-async function office(
-  options: {
-    holdLimitMs?: number;
-    holdSettleMs?: number;
-    confirmMs?: number;
-  } = {},
-) {
+async function office(options: Parameters<typeof lampsCore>[0] = {}) {
   const context = await lampsCore(options);
   const { core, maya, lamp } = context;
   const token = maya.token;
@@ -169,7 +164,13 @@ describe("holding a remote's button", () => {
             entry.action === "device.command" && entry.subjectId === desk,
         )
         .map((entry) => [entry.outcome, entry.actor, entry.detail]),
-    ).toEqual([["ok", `workflow:${id}`, { capability: "light", move: "up" }]]);
+    ).toEqual([
+      [
+        "ok",
+        `workflow:${id}`,
+        { capability: "light", capabilityKind: "light", move: "up" },
+      ],
+    ]);
     const [run] = await runsOf(core, token, id);
     expect(run!.steps[0]!.output).toEqual({
       on: true,
@@ -198,6 +199,38 @@ describe("holding a remote's button", () => {
         .filter(({ command }) => command.key === "lamp-1")
         .map(({ command }) => command.command),
     ).toEqual([{ on: true, brightness: 1 }]);
+    await release();
+  });
+
+  it("keeps a remote's light moving when the agent is already at its command limit", async () => {
+    const home = await office({
+      agentCommandLimits: { agentPerMinute: 1, homePerMinute: 2 },
+    });
+    const { core, maya, token, lamp, desk } = home;
+    await addWorkflow(core, token, {
+      graph: pressing(home, "hold", "dimWhileHeld"),
+    });
+    const agent = core.auth.clients.createAgent({
+      name: "Home agent",
+      platform: "macos",
+      addedBy: { kind: "person", id: maya.person.id },
+    });
+    const client = await connect(core, agent.token);
+    const send = (device: string, on: boolean) =>
+      client.callTool({
+        name: "device_command",
+        arguments: { device, capability: "light", command: { on } },
+      });
+    expect((await send(lamp, true)).isError).not.toBe(true);
+    await press(core, "hold");
+    expect(core.holds.isMoving(desk, "light")).toBe(true);
+
+    expect(await send(desk, false)).toMatchObject({
+      isError: true,
+      structuredContent: { error: "limited" },
+    });
+    expect(core.holds.isMoving(desk, "light")).toBe(true);
+    expect(movesOf("desk-1")).toEqual([{ move: "down", percentPerSecond: 25 }]);
     await release();
   });
 

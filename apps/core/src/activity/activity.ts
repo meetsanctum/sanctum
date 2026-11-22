@@ -1,3 +1,4 @@
+import type { CapabilityKind } from "@meetsanctum/app-sdk";
 import {
   and,
   asc,
@@ -48,7 +49,7 @@ export type ActivityAuthor = Pick<
 const rowid = sql<number>`rowid`;
 
 // When an entry joins the one before it about the same subject: by the
-// same who, from the same cause, both ok, within `withinMs`, and when
+// same who, from the same cause and tool call, both ok, within `withinMs`, and when
 // `matches` says the one before is like it. `detail` says what the joined
 // entry keeps.
 export type Joining = {
@@ -70,6 +71,8 @@ const calls = new AsyncLocalStorage<string>();
 export type ActivityQuery = {
   subjectId?: string;
   kind?: Kind;
+  /** When set, only entries about these devices and their visible capabilities. */
+  deviceCapabilities?: Record<string, Readonly<Record<string, CapabilityKind>>>;
   // An entry's id: those older than it.
   before?: string;
   limit: number;
@@ -77,6 +80,23 @@ export type ActivityQuery = {
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? null) === (b ?? null);
+
+function deviceActivityIn(
+  visible: NonNullable<ActivityQuery["deviceCapabilities"]>,
+) {
+  const devices = JSON.stringify(visible);
+  const capabilities = sql`json_extract(${devices}, '$.' || json_quote(${activity.subjectId}))`;
+  const capability = sql`json_extract(${activity.detail}, '$.capability')`;
+  const kind = sql`json_extract(${capabilities}, '$.' || json_quote(${capability}))`;
+  const recordedKind = sql`json_extract(${activity.detail}, '$.capabilityKind')`;
+  // A capability can reuse an old id after its kind changes. A press is
+  // always a button's, but a change or command needs its recorded kind.
+  return sql`(${capabilities} is not null and (
+    (${capability} is null and ${activity.action} not in ('device.command', 'device.changed', 'device.press'))
+    or (${activity.action} = 'device.press' and ${kind} = 'button')
+    or (${activity.action} <> 'device.press' and ${kind} = ${recordedKind})
+  ))`;
+}
 
 export function createActivity(
   db: CoreDatabase,
@@ -238,7 +258,8 @@ export function createActivity(
   function write(source: string, entry: NewActivityEntry, joining?: Joining) {
     const at = entry.at ?? now();
     const causeId = entry.causeId ?? causes.getStore()?.id ?? null;
-    const callId = entry.callId ?? calls.getStore() ?? null;
+    const callId =
+      entry.callId === undefined ? (calls.getStore() ?? null) : entry.callId;
     if (joining && entry.outcome === "ok") {
       const previous = entry.subjectId
         ? latestAbout(entry.subjectId)
@@ -345,11 +366,19 @@ export function createActivity(
       if (query.subjectId)
         conditions.push(eq(activity.subjectId, query.subjectId));
       if (query.kind) conditions.push(eq(activity.kind, query.kind));
+      if (query.deviceCapabilities) {
+        conditions.push(deviceActivityIn(query.deviceCapabilities));
+      }
       const anchor = query.before
         ? db
             .select({ at: activity.at, rowid })
             .from(activity)
-            .where(eq(activity.id, query.before))
+            .where(
+              and(
+                eq(activity.id, query.before),
+                ...(query.deviceCapabilities ? conditions : []),
+              ),
+            )
             .get()
         : undefined;
       if (anchor) {

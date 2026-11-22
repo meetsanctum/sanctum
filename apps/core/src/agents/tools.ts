@@ -33,7 +33,7 @@ import {
 
 type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
 
-export type AgentToolsOptions = {
+type AgentToolsOptions = {
   canUse: () => AiCanUse;
   /** The core's own tools (core-tools.ts). */
   core: CoreTools;
@@ -191,9 +191,13 @@ export function createAgentTools(options: AgentToolsOptions) {
           : answer(overview(principal));
       }
       const canUse = options.canUse();
-      if (options.core.has(name)) {
-        return options.core.call(name, principal, input ?? {}, canUse);
-      }
+      const coreResult = await options.core.call(
+        name,
+        principal,
+        input ?? {},
+        canUse,
+      );
+      if (coreResult) return coreResult;
       const offer = namedActions(canUse.offers).get(name);
       if (!offer || !inputSchemaOf(offer)) return undefined;
       try {

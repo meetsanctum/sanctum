@@ -243,6 +243,12 @@ export async function createModules(
     agentWho: activity.agentWho,
     now: ticks,
   });
+  function checkAgentCommand(agentId: string, shouldCount = true) {
+    const refusal = agentCommands.takeCommand(agentId, shouldCount);
+    if (!refusal) return;
+    logAgentLimited(agentId, refusal.limited);
+    throw new ActionCallError("limited");
+  }
   const gate = createGate(
     people,
     auth.clients.isActiveAgent,
@@ -286,13 +292,17 @@ export async function createModules(
     removeFromDriver: (driver, removal, actor, hold) =>
       apps.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
-    beforeCommand: (device, capability) => holds.interrupt(device, capability),
-    agentCommand(agentId) {
-      const refusal = agentCommands.takeCommand(agentId);
-      if (!refusal) return;
-      logAgentLimited(agentId, refusal.limited);
-      throw new ActionCallError("limited");
+    beforeCommand(device, capability, actor) {
+      // A command already over the limit must leave a remote's hold alone.
+      if (
+        actor.kind === "assistant-run" &&
+        holds.isMoving(device, capability)
+      ) {
+        checkAgentCommand(actor.id, false);
+      }
+      return holds.interrupt(device, capability);
     },
+    agentCommand: checkAgentCommand,
     onChange: (change) =>
       eventBus.publish({ name: "device.changed", ...change }),
     confirmMs: options.confirmMs,

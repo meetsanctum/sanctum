@@ -19,6 +19,7 @@
 // whether it can.
 // 11 has a driver say every device's type as it registers it, and the core
 // takes it, so a driver built before is refused.
-export const protocolVersion = 11;
+// 12 lets an app distinguish a device command held back by the rate limit.
+export const protocolVersion = 12;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

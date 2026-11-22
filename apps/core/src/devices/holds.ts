@@ -133,7 +133,11 @@ export function createHolds(options: {
       reason,
       actor: `${actor.kind}:${actor.id}`,
       subjectId: target.device,
-      detail: { capability: target.capability, move: move.move },
+      detail: {
+        capability: target.capability,
+        capabilityKind: "light",
+        move: move.move,
+      },
     });
   }
 

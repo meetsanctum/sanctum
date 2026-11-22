@@ -429,6 +429,7 @@ export function createCore(
           server = createServer(config, {
             ...modules!,
             lifecycle,
+            now: replaced.now,
             https: certificate && {
               key: certificate.key,
               cert: certificate.cert,

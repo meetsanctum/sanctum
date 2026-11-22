@@ -18,13 +18,13 @@ import { z } from "zod";
 import type {
   Activity,
   ActivityAuthor,
-  ActivityEntry,
   NewActivityEntry,
 } from "../activity/activity.js";
 import type { ActivityViews } from "../activity/views.js";
 import type { Principal } from "../auth/clients.js";
 import type { Devices } from "../devices/devices.js";
 import { lightsPlace, type Lights } from "../devices/lights.js";
+import { commandRequest } from "../devices/requests.js";
 import type { View } from "../devices/views.js";
 import type { Entities } from "../entities/entities.js";
 import {
@@ -53,10 +53,10 @@ import { areasPage } from "./overview.js";
 
 type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
 
-export type CoreToolsOptions = {
+type CoreToolsOptions = {
   readableDeviceKinds: () => ReadonlySet<CapabilityKind>;
   appName: (appId: string) => string | undefined;
-  devices: Pick<Devices, "get" | "commandFor">;
+  devices: Pick<Devices, "get" | "list" | "commandFor">;
   lights: Pick<Lights, "switchFor">;
   entities: Pick<Entities, "list">;
   activity: Pick<Activity, "page">;
@@ -132,13 +132,6 @@ const deviceCommandAreas = capabilityKinds
   .map(controlPermission)
   .filter((area) => aiAreas.includes(area));
 
-// What an entry about a device says, by the capability it names: a press is
-// a remote's, and a command or a change outside Sanctum is one capability's.
-function capabilityOfEntry(entry: ActivityEntry) {
-  const capability = entry.detail?.capability;
-  return typeof capability === "string" ? capability : undefined;
-}
-
 export function createCoreTools(options: CoreToolsOptions) {
   const now = options.now ?? (() => new Date());
   const view = (): View => ({ kinds: options.readableDeviceKinds() });
@@ -179,8 +172,8 @@ export function createCoreTools(options: CoreToolsOptions) {
   };
 
   const commandInput = z.strictObject({
-    device: z.string().min(1).max(64),
-    capability: z.string().min(1).max(32),
+    device: commandRequest.shape.device,
+    capability: commandRequest.shape.capability,
     command: z.record(z.string(), z.unknown()),
   });
 
@@ -326,22 +319,22 @@ export function createCoreTools(options: CoreToolsOptions) {
   function whoFor(
     who: ActivityInfo["who"],
     self: string,
-    namesPeople: boolean,
-    kinds: ReadonlySet<CapabilityKind>,
+    canNamePeople: boolean,
+    canSeeRemote: (device: string) => boolean,
   ) {
     switch (who.kind) {
       case "person":
       case "client":
-        return namesPeople
+        return canNamePeople
           ? { kind: who.kind, name: who.name }
           : { kind: who.kind };
       case "agent":
         if (who.id === self) return { kind: "agent", self: true };
-        return namesPeople
+        return canNamePeople
           ? { kind: "agent", name: who.name }
           : { kind: "agent" };
       case "press":
-        return kinds.has("button")
+        return canSeeRemote(who.device)
           ? { kind: "press", remote: who.name, action: who.action }
           : { kind: "press" };
       case "workflow":
@@ -370,46 +363,54 @@ export function createCoreTools(options: CoreToolsOptions) {
     async run(principal, input, canUse) {
       const parsed = activityInput.safeParse(input);
       if (!parsed.success) return invalidInput();
-      const kinds = options.readableDeviceKinds();
       const seen = view();
-      const namesPeople = isOn(canUse, peopleReadPermission);
+      const { device: deviceId } = parsed.data;
+      const target =
+        deviceId === undefined ? null : options.devices.get(deviceId, seen);
+      if (deviceId !== undefined && !target) {
+        return toolError("not_found", "There's no such device in the home.");
+      }
+      const devices = new Map(
+        (target ? [target] : options.devices.list(seen)).map((device) => [
+          device.id,
+          device,
+        ]),
+      );
+      const canNamePeople = isOn(canUse, peopleReadPermission);
+      const canSeeRemote = (id: string) =>
+        (devices.get(id) ?? options.devices.get(id, seen))?.capabilities.some(
+          (capability) => capability.kind === "button",
+        ) === true;
       const self = principal.client.id;
       const page = options.activity.page({
         kind: "devices",
-        subjectId: parsed.data.device,
+        subjectId: deviceId,
+        deviceCapabilities: Object.fromEntries(
+          [...devices.values()].map(({ id, capabilities }) => [
+            id,
+            Object.fromEntries(capabilities.map(({ id, kind }) => [id, kind])),
+          ]),
+        ),
         before: parsed.data.before,
         limit: parsed.data.limit,
       });
-      const entries = page.entries.flatMap((entry) => {
-        const device = entry.subjectId
-          ? options.devices.get(entry.subjectId, seen)
-          : null;
-        if (!device) return [];
-        const capability = capabilityOfEntry(entry);
-        if (
-          capability !== undefined &&
-          !device.capabilities.some((each) => each.id === capability)
-        ) {
-          return [];
-        }
-        if (entry.action === "device.press" && !kinds.has("button")) return [];
+      const entries = page.entries.map((entry) => {
+        const device = devices.get(entry.subjectId!)!;
         const info = options.activityViews.info(entry);
         const mine = entry.actor === `assistant-run:${self}`;
-        return [
-          {
-            at: info.at,
-            action: info.action,
-            outcome: info.outcome,
-            reason: info.reason,
-            ...(info.count > 1 && { count: info.count }),
-            device: { id: device.id, name: device.name },
-            detail: info.detail,
-            who: whoFor(info.who, self, namesPeople, kinds),
-            app: info.app?.name ?? null,
-            automation: info.run?.name ?? null,
-            ...(mine && entry.callId && { call: entry.callId }),
-          },
-        ];
+        return {
+          at: info.at,
+          action: info.action,
+          outcome: info.outcome,
+          reason: info.reason,
+          ...(info.count > 1 && { count: info.count }),
+          device: { id: device.id, name: device.name },
+          detail: info.detail,
+          who: whoFor(info.who, self, canNamePeople, canSeeRemote),
+          app: info.app?.name ?? null,
+          automation: info.run?.name ?? null,
+          ...(mine && entry.callId && { call: entry.callId }),
+        };
       });
       return answer({
         entries,
@@ -429,7 +430,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       title: "History",
       description: [
         "What one device's capability reported, for devices whose history the household keeps and that you may see: each change, or with `period` its 5-minute or hourly minimum, maximum and mean.",
-        "`from` and `to` are ISO times, the last day unless given, and go back 10 days at most.",
+        "`from` and `to` are ISO times, the last day unless given, and go back 10 days at most. Use at most two days per request for 5-minute roll-ups.",
         notInstructions,
       ].join(" "),
       inputSchema: inputSchemaOf(historyInput),
@@ -440,23 +441,34 @@ export function createCoreTools(options: CoreToolsOptions) {
     async run(_principal, input) {
       const parsed = historyInput.safeParse(input);
       if (!parsed.success) return invalidInput();
-      const { period, ...query } = parsed.data;
-      const earliest = now().getTime() - historyTimes.statesKeptMs;
+      const {
+        period,
+        from: requestedFrom,
+        to: requestedTo,
+        ...target
+      } = parsed.data;
+      const at = now();
+      const earliest = at.getTime() - historyTimes.statesKeptMs;
       // A day until `to` unless asked, as history reads.
+      const to = requestedTo ?? at;
       const from =
-        query.from ??
-        new Date((query.to ?? now()).getTime() - 24 * historyTimes.hourMs);
+        requestedFrom ?? new Date(to.getTime() - 24 * historyTimes.hourMs);
       if (from.getTime() < earliest) {
         return toolError(
           "invalid_input",
           "History goes back 10 days at most for AI agents.",
         );
       }
-      return answer(
-        period === undefined
-          ? options.history.states(view(), query)
-          : options.history.statistics(view(), { ...query, period }),
-      );
+      const query = { ...target, from, to };
+      if (period !== undefined) {
+        return answer(options.history.statistics(view(), { ...query, period }));
+      }
+      const result = options.history.states(view(), query);
+      // History can include an older sample to seed the range's initial state.
+      return answer({
+        ...result,
+        states: result.states.filter(({ at }) => Date.parse(at) >= earliest),
+      });
     },
   };
 
@@ -487,15 +499,14 @@ export function createCoreTools(options: CoreToolsOptions) {
         .filter((tool) => tool.usable(canUse))
         .map((tool) => tool.tool(canUse)),
 
-    has: (name: string) => Object.hasOwn(tools, name),
-
     /** Runs one, answering its refusals and failures by their code. */
     async call(
       name: string,
       principal: AgentPrincipal,
       input: Record<string, unknown>,
       canUse: AiCanUse,
-    ): Promise<CallToolResult> {
+    ): Promise<CallToolResult | undefined> {
+      if (!Object.hasOwn(tools, name)) return undefined;
       const tool = tools[name]!;
       if (!tool.usable(canUse)) {
         return refused(principal, name, tool.refusal(canUse));

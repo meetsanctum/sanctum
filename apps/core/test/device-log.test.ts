@@ -45,7 +45,12 @@ describe("a command that went again", () => {
     expect(commands()).toEqual([
       expect.objectContaining({
         outcome: "ok",
-        detail: { capability: "light", asked: { on: true }, resent: true },
+        detail: {
+          capability: "light",
+          capabilityKind: "light",
+          asked: { on: true },
+          resent: true,
+        },
       }),
     ]);
   });
@@ -66,6 +71,7 @@ describe("a command that went again", () => {
         count: 2,
         detail: {
           capability: "light",
+          capabilityKind: "light",
           asked: { brightness: 50 },
           from: { brightness: 40 },
         },
@@ -100,6 +106,7 @@ describe("a command that went again", () => {
         causeId: run,
         detail: {
           capability: "light",
+          capabilityKind: "light",
           asked: { brightness: 50 },
           resent: true,
         },

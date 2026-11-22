@@ -75,6 +75,7 @@ export function createServer(
     // The core's phase and readiness (lifecycle.ts): only the health check
     // answers while an update is on trial, until the manager commits it.
     lifecycle: Pick<CoreLifecycle, "phase" | "readiness">;
+    now?: () => Date;
     // HTTPS and WSS on the host; none only for `pnpm dev` and tests.
     https?: CoreHttps;
   },
@@ -218,6 +219,7 @@ export function createServer(
             activity,
             activityViews: options.activityViews,
             history: options.history,
+            now: options.now,
             record: activity.for("agents"),
             agentWho: (id) => activity.agentWho(id),
           }),
