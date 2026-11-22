@@ -4,6 +4,13 @@ import type { DeviceProblem } from "./device-problems.js";
 import type { DeviceType } from "./device-types.js";
 import type { FirmwareInfo } from "./firmware.js";
 import type { Actor, Tier } from "./index.js";
+import {
+  media,
+  mediaFeatures,
+  type MediaCommand,
+  type MediaFeatures,
+  type MediaState,
+} from "./media.js";
 
 // Devices and their typed capabilities: the core's contract with driver
 // apps, which bring devices in, and with the apps that use them. A light
@@ -467,6 +474,7 @@ export const capabilities = {
   sensor,
   motion,
   contact,
+  media,
 } as const;
 
 export type CapabilityKind = keyof typeof capabilities;
@@ -487,6 +495,7 @@ type Kinds = {
     command: MotionCommand;
   };
   contact: { features: ContactFeatures; state: ContactState; command: never };
+  media: { features: MediaFeatures; state: MediaState; command: MediaCommand };
 };
 export type FeaturesOf<K extends CapabilityKind> = Kinds[K]["features"];
 export type StateOf<K extends CapabilityKind> = Kinds[K]["state"];
@@ -693,6 +702,11 @@ export const capabilityRegistration = z.discriminatedUnion("kind", [
     id: capabilityId,
     kind: z.literal("contact"),
     features: contactFeatures.default({}),
+  }),
+  z.strictObject({
+    id: capabilityId,
+    kind: z.literal("media"),
+    features: mediaFeatures.default(mediaFeatures.parse({})),
   }),
 ]);
 

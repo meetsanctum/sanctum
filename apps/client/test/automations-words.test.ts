@@ -307,9 +307,11 @@ describe("Automations' words for motion and light", () => {
     expect(deviceKindsFor(deviceCondition, { field: "value" })).toEqual([
       "sensor",
     ]);
+    // Anything that turns on and off, a media player with power too.
     expect(deviceKindsFor(deviceCondition, { field: "on" })).toEqual([
       "light",
       "switch",
+      "media",
     ]);
     expect(deviceKindsFor(deviceTrigger, { kind: "motion" })).toEqual([
       "motion",

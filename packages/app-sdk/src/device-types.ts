@@ -84,6 +84,35 @@ const types = [
     needs: ["contact"],
     chosenOnly: true,
   },
+  // A speaker Sanctum can hear through, such as a voice assistant's, which
+  // plays too. Nothing in its kinds tells it from any other media player, so
+  // its driver says so.
+  {
+    id: "smart-speaker",
+    title: "Smart speaker",
+    noun: "speaker",
+    needs: ["media"],
+    declaredOnly: true,
+  },
+  // Whatever plays that isn't a smart speaker: a TV box, a speaker that
+  // only plays.
+  {
+    id: "media-player",
+    title: "Media player",
+    noun: "media player",
+    needs: ["media"],
+    showAs: ["tv", "speaker"],
+  },
+  // What a media player is, where the household says so: the TV a box
+  // plays on, or a speaker that only plays.
+  { id: "tv", title: "TV", noun: "TV", needs: ["media"], chosenOnly: true },
+  {
+    id: "speaker",
+    title: "Speaker",
+    noun: "speaker",
+    needs: ["media"],
+    chosenOnly: true,
+  },
   { id: "sensor", title: "Sensor", noun: "sensor", needs: ["sensor"] },
   // What none of the above fits: a device with no capability Sanctum has,
   // which it cannot use. A room's name before it would promise more than

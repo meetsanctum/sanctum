@@ -97,6 +97,7 @@ const categoryLooks: Record<
   presence: { icon: icons.Footprints, colour: "var(--leaf-text)" },
   // An open window is a fact and no warning, so Security is never red.
   security: { icon: icons.Shield, colour: "var(--iris-text)" },
+  media: { icon: icons.TvMinimalPlay, colour: "var(--blossom-text)" },
   buttons: { icon: icons.CircleDot, colour: "var(--graphite-text)" },
 };
 

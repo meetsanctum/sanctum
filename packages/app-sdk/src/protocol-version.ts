@@ -21,6 +21,7 @@
 // takes it, so a driver built before is refused.
 // 12 tells an app when an AI agent's device command is held back by its
 // limit a minute, as `limited`.
-export const protocolVersion = 12;
+// 13 brings media players: a driver may register the `media` kind.
+export const protocolVersion = 13;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

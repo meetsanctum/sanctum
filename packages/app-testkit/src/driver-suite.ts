@@ -58,6 +58,30 @@ export function sampleCommands(
   if (kind === "switch") {
     return [{ on: true }, { on: false }];
   }
+  if (kind === "media") {
+    // Each thing it can do, and back again where that has a way back.
+    const media = capabilityOf("media").features.parse(features) as {
+      power: boolean;
+      playback: string[];
+      volume: "level" | "steps" | null;
+      mute: boolean;
+    };
+    const can = (word: string) => media.playback.includes(word);
+    return [
+      ...(media.power ? [{ on: false }, { on: true }] : []),
+      ...(can("play") ? [{ activity: "playing" }] : []),
+      ...(can("pause") ? [{ activity: "paused" }] : []),
+      ...(["next", "previous", "stop"] as const)
+        .filter(can)
+        .map((playback) => ({ playback })),
+      ...(can("seek") ? [{ position: 0 }] : []),
+      ...(media.volume === "level" ? [{ volume: 40 }, { volume: 20 }] : []),
+      ...(media.volume !== null
+        ? [{ volumeStep: "up" }, { volumeStep: "down" }]
+        : []),
+      ...(media.mute ? [{ muted: true }, { muted: false }] : []),
+    ];
+  }
   if (kind === "motion") {
     // Each setting it has, changed and back again.
     const motion = capabilityOf("motion").features.parse(features) as {
@@ -207,7 +231,7 @@ export function describeDriver(harness: DriverHarness) {
             );
           });
 
-          it("carries out commands and reports them done", async () => {
+          it("carries out commands and reports done those that ask for state", async () => {
             const { key, capability } = await bring();
             for (const command of sampleCommands(kind, capability.features)) {
               const from = core.reports.length;
@@ -216,6 +240,9 @@ export function describeDriver(harness: DriverHarness) {
                 string,
                 unknown
               >;
+              // A command that asks for no state, such as a media player's
+              // next track, is done once the driver takes it.
+              if (Object.keys(desired).length === 0) continue;
               await core.until(
                 () =>
                   core.reports

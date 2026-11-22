@@ -1,6 +1,6 @@
 ---
 title: What each part does
-description: The six parts a device can have, what each one says and what it can be asked to do.
+description: The seven parts a device can have, what each one says and what it can be asked to do.
 sidebar:
   order: 4
 ---
@@ -20,6 +20,7 @@ change colour has no colours to choose.
 | Sensor  | `sensor`  | One reading                   | Nothing                            |
 | Motion  | `motion`  | Motion or none                | Change its settings                |
 | Contact | `contact` | Open or closed                | Nothing                            |
+| Media   | `media`   | What it plays, and how loud   | Play, pause, skip, set its volume  |
 | Button  | `button`  | That it was pressed, and how  | Nothing                            |
 
 ## Light
@@ -76,6 +77,32 @@ Some motion sensors have settings, each only where the sensor has it:
 A contact part says whether what it sits on is open or closed, and Sanctum
 remembers since when: "Open for 12 min". It is asked nothing. The household
 can [show it as a door or a window](/devices/types/#door-and-window).
+
+## Media
+
+A media part is something that plays: a TV box, a speaker, a smart speaker.
+It says what it can do when it joins, and only that is offered:
+
+- **Power:** whether it turns on and off.
+- **Playback:** which of play, pause, stop, next, previous and seek it
+  takes.
+- **Volume:** a level it can be set to, only up and down, or neither. A TV
+  box that sends its sound to the TV over HDMI can only pass up and down on
+  to the TV, which never says how loud it is.
+- **Mute:** whether it can be muted.
+
+It says whether it is playing, paused, loading or idle, and whatever it
+knows of what is playing: its title, artist, album, series, season and
+episode, how long it is and where it is, and the app playing it. Where it
+has them, it also says whether it is on, its volume and whether it is muted.
+
+Turning it on or off, playing or pausing, a volume and mute wait for the
+player to say it did them, as a light's on does. A step of the volume,
+stop, next, previous and a place in what is playing ask for nothing the
+player can confirm, so each is done once its driver takes it.
+
+History keeps when a media player played and when it was on, never what it
+played or how loud.
 
 ## Button
 

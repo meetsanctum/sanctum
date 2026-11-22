@@ -24,10 +24,16 @@ describe("the device types", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(titles).size).toBe(titles.length);
     for (const type of deviceTypes) {
-      expect(type.title).toMatch(/^[A-Z][a-z]+( [a-z]+)*$/);
-      // A noun is its title as a name ends with it: "Office motion sensor".
+      // Sentence case, an acronym such as TV keeping its capitals.
+      expect(type.title).toMatch(/^([A-Z][a-z]+|[A-Z]{2,})( [a-z]+)*$/);
+      // A noun is how a name ends, its title or the end of it: "Office
+      // motion sensor", and a smart speaker's "Office Speaker".
       if (type.noun !== null) {
-        expect(type.noun).toBe(type.title.toLowerCase());
+        expect(
+          type.title.toLowerCase().endsWith(type.noun.toLowerCase()),
+          type.id,
+        ).toBe(true);
+        expect(type.noun, type.id).toMatch(/^([a-z]+|[A-Z]{2,})( [a-z]+)*$/);
       }
     }
     // Only what Sanctum cannot use has none.
@@ -174,10 +180,11 @@ describe("what a device is called", () => {
 });
 
 describe("what a device may be shown as", () => {
-  it("is a door or a window for a contact sensor, and nothing else for the rest", () => {
+  it("is a door or a window for a contact sensor, a TV or a speaker for a media player, and nothing else for the rest", () => {
     expect(shownAsOf("contact")).toEqual(["door", "window"]);
+    expect(shownAsOf("media-player")).toEqual(["tv", "speaker"]);
     for (const type of deviceTypes) {
-      if (type.id !== "contact") {
+      if (type.id !== "contact" && type.id !== "media-player") {
         expect(shownAsOf(type.id), type.id).toEqual([]);
       }
     }

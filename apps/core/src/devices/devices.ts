@@ -272,11 +272,34 @@ export function createDevices(
     return { device: shown, capability };
   }
 
-  // A command that passed the gate: it asks for state, and goes to the
-  // driver unless it has to wait for the light to turn on. The capability
-  // then says who set it: the app whose code sent it, if any, and the actor
-  // behind it. A command that fails leaves the last one standing, as it
-  // leaves the last target.
+  // A command that asked for no state went through: what the capability
+  // shows stays as it was, and it says who set it last, also where an
+  // earlier command still waiting for its report is restored.
+  function setByOnly(
+    deviceId: string,
+    capabilityId: string,
+    setBy: StoredSetBy,
+  ) {
+    commands.moved(deviceId, capabilityId, setBy);
+    changing(deviceId, () =>
+      db
+        .update(deviceCapabilities)
+        .set({ setBy, updatedAt: now() })
+        .where(
+          and(
+            eq(deviceCapabilities.deviceId, deviceId),
+            eq(deviceCapabilities.id, capabilityId),
+          ),
+        )
+        .run(),
+    );
+  }
+
+  // A command that passed the gate: it goes to the driver unless it has to
+  // wait for the light to turn on, and one that asks for state waits for
+  // the device's report. The capability then says who set it: the app
+  // whose code sent it, if any, and the actor behind it. A command that
+  // fails leaves the last one standing, as it leaves the last target.
   async function run(
     actor: Actor,
     app: string | null,
@@ -343,19 +366,28 @@ export function createDevices(
     if (whileOn !== undefined && shownState(row)?.on !== whileOn) {
       throw new ActionCallError("conflict");
     }
-    const prepared = prepare(row, parsed.data as Record<string, unknown>);
-    if (prepared.send && actor.kind === "assistant-run") {
-      options.agentCommand?.(actor.id);
-    }
     const setBy: StoredSetBy = {
       app,
       actor,
       asked: definition.desired(parsed.data) as Record<string, unknown>,
       at: now().toISOString(),
     };
+    // A command that asks for no state, such as a media player's next track
+    // or a step of its volume, is done once its driver takes it: no report
+    // can confirm it, so nothing waits for one or sends it again.
+    const asksNothing = Object.keys(setBy.asked).length === 0;
+    const prepared = asksNothing
+      ? null
+      : prepare(row, parsed.data as Record<string, unknown>);
+    if ((asksNothing || prepared?.send) && actor.kind === "assistant-run") {
+      options.agentCommand?.(actor.id);
+    }
     const sent = {
       ...addressed,
       asked: setBy.asked,
+      ...(asksNothing && {
+        command: parsed.data as Record<string, unknown>,
+      }),
     };
     const { driver, key } = reads.address(device.id)!;
     // Sending it again, if the device does not confirm it in time, goes the
@@ -386,6 +418,27 @@ export function createDevices(
         actor,
       );
     };
+    if (!prepared) {
+      try {
+        await send(parsed.data as Record<string, unknown>);
+      } catch (error) {
+        const failure =
+          error instanceof ActionCallError
+            ? error
+            : new ActionCallError("app_failed");
+        deviceLog.command(
+          who,
+          device.id,
+          failure.status >= 500 ? "failed" : "refused",
+          failure.code,
+          sent,
+        );
+        throw failure;
+      }
+      deviceLog.command(who, device.id, "ok", undefined, sent);
+      setByOnly(device.id, capability.id, setBy);
+      return visible(device.id, capability.id, view).capability;
+    }
     const delivery = commands.begin(
       device.id,
       capability.id,
@@ -656,21 +709,7 @@ export function createDevices(
 
     // A light a remote's hold set moving (holds.ts): a move asks for no
     // state, so its target stays as it was, and it says who set it last.
-    moved(deviceId: string, capabilityId: string, setBy: StoredSetBy) {
-      commands.moved(deviceId, capabilityId, setBy);
-      changing(deviceId, () =>
-        db
-          .update(deviceCapabilities)
-          .set({ setBy, updatedAt: now() })
-          .where(
-            and(
-              eq(deviceCapabilities.deviceId, deviceId),
-              eq(deviceCapabilities.id, capabilityId),
-            ),
-          )
-          .run(),
-      );
-    },
+    moved: setByOnly,
 
     // A device as the core keeps it, with its driver and key.
     row(id: string) {
