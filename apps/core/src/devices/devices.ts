@@ -287,7 +287,8 @@ export function createDevices(
     return { device: shown, capability };
   }
 
-  // Writes who set a capability after a command that asked for no state.
+  // Writes who set a capability last, after a command or a remote's hold
+  // that asked for no state: what it shows stays as it was.
   function writeSetBy(
     deviceId: string,
     capabilityId: string,
