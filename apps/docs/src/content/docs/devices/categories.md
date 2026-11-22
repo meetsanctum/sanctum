@@ -1,13 +1,13 @@
 ---
 title: Categories
-description: The six categories that gather devices' parts, and how a room's page groups tiles by device.
+description: The seven categories that gather devices' parts, and how a room's page groups tiles by device.
 sidebar:
   order: 3
 ---
 
 Categories gather what's alike across the home: every light, every
-sensor's reading, every door. Sanctum has six, and each holds one kind of
-part:
+sensor's reading, every door. Sanctum has seven, and each holds one kind
+of part:
 
 | Category    | Id            | Holds         | Its page also has                              |
 | ----------- | ------------- | ------------- | ---------------------------------------------- |
@@ -16,6 +16,7 @@ part:
 | Security    | `security`    | Contact parts | A summary of what is open                      |
 | Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
 | Switches    | `switches`    | Switch parts  | How many are on                                |
+| Media       | `media`       | Media parts   | How many TVs, speakers and others are playing  |
 | Buttons     | `buttons`     | Button parts  | Nothing more                                   |
 
 The sidebar lists them in this order, under Categories, and only those with
@@ -34,8 +35,9 @@ Environment for its light level. Environment shows a device's sensor
 readings together on one tile.
 
 Home also shows the parts of any device you add to it. The status at the
-top of Home summarises temperature or humidity, motion, contacts, lights
-and switches across the home, including devices you haven't added to Home.
+top of Home summarises temperature or humidity, motion, contacts, lights,
+switches and how many media players are playing across the home, including
+devices you haven't added to Home.
 
 ## A room's page groups tiles by device
 
@@ -61,6 +63,7 @@ room's readings sits under the room name.
 | Button                       | "Idle", or the press for a moment after one                                |
 | Motion sensor                | "Motion now", or "Quiet for 5 min"                                         |
 | Contact sensor, door, window | "Closed", or "Open for 12 min"                                             |
+| Media player, TV, speaker    | "Playing · The News", "Paused", "On · TV", "Off" or "Not playing"          |
 | Sensor                       | Its readings                                                               |
 | Unknown device               | The name its driver gives it                                               |
 
@@ -70,9 +73,10 @@ gone quiet say "Not heard from". A light or switch that doesn't confirm a
 change says "Not responding".
 
 On a tile that can switch something on or off, press the round icon to
-toggle it. Press the rest of the tile to open the device. Each extra light
-or switch has a tile named after its part, so a module with two relays has
-two tiles.
+toggle it. On a media player's tile, the icon plays or pauses where the
+player supports it. Press the rest of the tile to open the device. Each
+extra light or switch has a tile named after its part, so a module with two
+relays has two tiles.
 
 Only a button's tile lights up when it is pressed. A light that has a
 button goes on showing whether the light is on.
@@ -84,13 +88,17 @@ Opening a device shows the tabs that apply to it, in this order.
 1. Light or switch controls. A light can have **Colour** or **White**
    followed by **Brightness**, depending on its features. **Power** appears
    when neither control applies.
-2. **Motion**.
-3. **Contact**, **Door** or **Window**, depending on how the device is shown.
-4. **Readings**, with all the device's sensor readings.
-5. Content from apps, such as a remote's **Presses**. Multiple app pages
+2. **Playing**, what a media player plays, with its playback controls and
+   position. Press Space on this tab to play or pause. A player with power
+   controls also has **Remote**, with power above any volume steps. Other
+   players with volume or mute controls have them under **Volume**.
+3. **Motion**.
+4. **Contact**, **Door** or **Window**, depending on how the device is shown.
+5. **Readings**, with all the device's sensor readings.
+6. Content from apps, such as a remote's **Presses**. Multiple app pages
    share a **From apps** tab.
-6. **History** for the light or switch whose controls are shown.
-7. **Activity**, with what the device did and what was done to it.
+7. **History** for the light or switch whose controls are shown.
+8. **Activity**, with what the device did and what was done to it.
 
 A room tile opens the first tab. A category tile opens the tab for its
 part. For example, a sensor tile under Environment opens **Readings**, and

@@ -13,10 +13,10 @@ and no others. A device that fits none of them is an unknown device.
 | Type           | Id              | What it is                                   | Needs   | Example name in the Office | On a room's page |
 | -------------- | --------------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
 | Light          | `light`         | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
-| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
-| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
-| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
-| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
+| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Media            |
+| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Media            |
+| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Media            |
+| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Media            |
 | Plug           | `plug`          | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
 | Switch         | `switch`        | A relay or wall switch                       | Switch  | Office Switch              | Switches         |
 | Button         | `button`        | A remote or wall button                      | Button  | Office Button              | Buttons          |
@@ -30,9 +30,6 @@ and no others. A device that fits none of them is an unknown device.
 **Needs** is the part a device must have to be of that type. A driver can
 declare a device with a light part as a light even if it also has a button
 or a temperature sensor.
-
-Devices with only a media part use a generic tile. A device with other
-parts can appear in their sections.
 
 ## How a device gets its type
 

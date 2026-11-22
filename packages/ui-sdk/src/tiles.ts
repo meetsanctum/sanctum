@@ -2,8 +2,8 @@ import type { LightState, SensorMeasure } from "@meetsanctum/app-sdk";
 
 import type { ContactShownAs } from "./contact-icons";
 
-// The home's lights, switches, remotes, sensors, motion sensors and contact
-// sensors as tiles, and a tile for a device Sanctum cannot use:
+// The home's lights, switches, remotes, sensors, motion sensors, contact
+// sensors and media players as tiles, and a tile for a device Sanctum cannot use:
 // what a tile shows, which the shell works out from the core's devices and
 // an app's page from its own draft, such as a mood's lights. The tiles draw
 // it and say what was pressed; they hold no device state.
@@ -16,12 +16,20 @@ export type Tile = {
    * A remote's tile switches nothing: it shows its latest press. Nor does a
    * sensor's, one for each device, which shows its readings, or a motion
    * sensor's, which says whether it sees motion, or a contact
-   * sensor's, which says whether what it sits on is open. An unknown
+   * sensor's, which says whether what it sits on is open. A media
+   * player's plays or pauses with its round button. An unknown
    * device's, one for a device with nothing Sanctum can use, says what its
    * driver calls it; its `capabilityId` is empty.
    */
   kind:
-    "light" | "switch" | "button" | "sensor" | "motion" | "contact" | "unknown";
+    | "light"
+    | "switch"
+    | "button"
+    | "sensor"
+    | "motion"
+    | "contact"
+    | "media"
+    | "unknown";
   /** The room it is in, or null when it is in none the home has. */
   roomId: string | null;
   name: string;
@@ -58,6 +66,11 @@ export type Tile = {
    * it nothing is known of the sensor, which is never the same as closed.
    */
   contact?: { open: boolean; changedAt: string | null };
+  /**
+   * Whether a media player is playing, and whether its round button can
+   * play or pause it now: not while it is off or has nothing to play.
+   */
+  media?: { playing: boolean; canPlayPause: boolean };
   /** How many commands to it have failed here, so its tile shows each. */
   failures?: number;
 };

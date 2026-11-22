@@ -3,6 +3,7 @@ import {
   type CapabilityInfo,
   type DeviceInfo,
   type LightCommand,
+  type MediaCommand,
   type LightsPlace,
   type LightsRequest,
   type LightsResult,
@@ -17,6 +18,7 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { useMinuteClock } from "./device-firmware";
 import { tileKey, tilesOf } from "./device-tiles";
+import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
 // the dashboard and room and category pages alike: read whenever the shell
@@ -309,9 +311,10 @@ export function useDevices(live: LiveFeed) {
   // The core answers with the capability as it now stands, the asked-for
   // state pending until the device confirms it. When it cannot deliver the
   // command, it keeps the state from before and says so. A switch takes
-  // only on or off: a brightness above 0 turns it on.
+  // only on or off: a brightness above 0 turns it on. A media player's
+  // command goes as it is, and shows once the core has taken it.
   const command = useCallback(
-    async (tile: Tile, asked: LightCommand) => {
+    async (tile: Tile, asked: LightCommand | MediaCommand) => {
       // A later command or a live device update takes precedence over this
       // response, which may arrive after the device has already answered.
       for (const pending of pendingCommands.current) {
@@ -328,11 +331,13 @@ export function useDevices(live: LiveFeed) {
       };
       pendingCommands.current.add(pending);
       const commands = send([tile.key]);
+      const light = asked as LightCommand;
       const sending =
-        tile.kind === "light"
+        tile.kind === "light" || tile.kind === "media"
           ? asked
-          : { on: asked.on ?? (asked.brightness ?? 0) > 0 };
-      const shown = askedOf(sending);
+          : { on: light.on ?? (light.brightness ?? 0) > 0 };
+      const shown =
+        tile.kind === "media" ? undefined : askedOf(sending as LightCommand);
       const answered = shown ? ask([tile.key], shown) : undefined;
       try {
         const capability = await coreJson<CapabilityInfo>(
@@ -381,8 +386,13 @@ export function useDevices(live: LiveFeed) {
     [updateDevices, send, forget, failOnce, ask],
   );
 
+  // A light or switch turns on or off; a media player plays or pauses.
   const toggle = useCallback(
-    (tile: Tile) => command(tile, { on: !tile.on }),
+    (tile: Tile) =>
+      command(
+        tile,
+        tile.kind === "media" ? playPauseCommand(tile) : { on: !tile.on },
+      ),
     [command],
   );
 

@@ -2,6 +2,7 @@ import type {
   CapabilityKind,
   DeviceInfo,
   LightFeatures,
+  MediaCommand,
 } from "@meetsanctum/app-sdk";
 import { registerPermission } from "@meetsanctum/app-sdk";
 import {
@@ -13,7 +14,15 @@ import {
   usePhone,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { Blocks, Footprints, House, Sun, Thermometer } from "lucide-react";
+import {
+  Blocks,
+  Footprints,
+  House,
+  Play,
+  Sun,
+  Thermometer,
+  Volume2,
+} from "lucide-react";
 import { useEffect, useId, useRef, type ComponentProps } from "react";
 
 import { activityPage } from "./activity/device-page";
@@ -21,6 +30,13 @@ import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
 import { contactPageName } from "./contact";
 import { DeviceFrame } from "./frames/device-frame";
+import { isMedia, mediaText } from "./media";
+import {
+  MediaPlaying,
+  MediaRemote,
+  MediaVolume,
+  RemoteIcon,
+} from "./media-detail";
 import { ContactPage } from "./contact-detail";
 import type { OnHome } from "./dashboards";
 import { useMinuteClock } from "./device-firmware";
@@ -41,7 +57,8 @@ import type { Devices } from "./use-devices";
 // controls straight on its glass and no card. Its name, room and status sit
 // in the header with Done, and opposite Done, Add to Home, which says On
 // Home while it is. Its pages are the device's, in one order whichever
-// tile opened it: its light's or switch's controls, its Motion
+// tile opened it: its light's or switch's controls, a media player's
+// Playing and its Remote or Volume (media-detail.tsx), its Motion
 // (motion-detail.tsx), its Contact (contact-detail.tsx), its Readings and
 // their history (sensor-detail.tsx), the pages apps add for its kinds, each
 // drawn by its app in the app's scope, such as Moods' Presses, its light's
@@ -67,6 +84,7 @@ const pageOf: Partial<Record<CapabilityKind, string>> = {
   motion: "motion",
   contact: "contact",
   sensor: "readings",
+  media: "playing",
 };
 
 // What a switch has: on and off, which its controls show as one button.
@@ -162,6 +180,15 @@ export function DeviceDetail(props: {
       : device?.capabilities.find(
           (each): each is Contact => each.kind === "contact",
         );
+  // The media player whose tile opened it, or the device's first.
+  const player =
+    capability?.kind === "media"
+      ? capability
+      : device?.capabilities.find(isMedia);
+  const playerTile =
+    device &&
+    player &&
+    devices.tiles.find((each) => each.key === tileKey(device.id, player.id));
   const contactShownAs =
     device?.shownAs === "door" || device?.shownAs === "window"
       ? device.shownAs
@@ -193,16 +220,21 @@ export function DeviceDetail(props: {
     if (gone) onClose();
   }, [gone, onClose]);
 
-  const name = controlTile?.name ?? device?.name ?? "";
+  const openedPlayer = capability?.kind === "media" ? capability : undefined;
+  const name = openedPlayer
+    ? ((props.openFirstPage ? device?.name : tile?.name) ?? "")
+    : (controlTile?.name ?? device?.name ?? "");
   const room = devices.places?.rooms.find((each) => each.id === tile?.roomId);
   const status =
     device?.availability === "offline"
       ? `Offline · ${seenText(device.lastSeenAt, now)}`
-      : controlTile
-        ? controlTile.status
-        : (motion || contact || hasReadings) && device?.lastSeenAt
-          ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
-          : tile?.status;
+      : openedPlayer
+        ? mediaText(openedPlayer, { what: false })
+        : controlTile
+          ? controlTile.status
+          : (motion || contact || hasReadings) && device?.lastSeenAt
+            ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
+            : tile?.status;
   // The pages apps add, as one page of the detail.
   const fromApps =
     pages.length > 0
@@ -228,9 +260,59 @@ export function DeviceDetail(props: {
           },
         ]
       : [];
+  const mediaProps = player &&
+    device &&
+    playerTile && {
+      name: playerTile.name,
+      device,
+      capability: player,
+      disabled: playerTile.disabled,
+      failures: playerTile.failures,
+      onCommand: (command: MediaCommand) =>
+        void devices.command(playerTile, command).catch(() => undefined),
+    };
   // Every page after its controls'.
   const after = device
     ? [
+        ...(mediaProps
+          ? [
+              {
+                id: "playing",
+                label: "Playing",
+                icon: Play,
+                content: (
+                  <MediaPlaying key={`${device.id}/playing`} {...mediaProps} />
+                ),
+              },
+              // A player with power has a Remote, with its power; one
+              // without has its Volume, mute and level.
+              ...(mediaProps.capability.features.power
+                ? [
+                    {
+                      id: "remote",
+                      label: "Remote",
+                      icon: RemoteIcon,
+                      content: <MediaRemote {...mediaProps} />,
+                    },
+                  ]
+                : mediaProps.capability.features.volume !== null ||
+                    mediaProps.capability.features.mute
+                  ? [
+                      {
+                        id: "volume",
+                        label: "Volume",
+                        icon: Volume2,
+                        content: (
+                          <MediaVolume
+                            key={`${device.id}/volume`}
+                            {...mediaProps}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+            ]
+          : []),
         ...(motion
           ? [
               {

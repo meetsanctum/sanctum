@@ -519,6 +519,37 @@ describe("a tile that opens its device's detail", () => {
   });
 });
 
+it("plays or pauses from the tile surface when there is no detail to open", async () => {
+  const player: Tile = {
+    key: "speaker/player",
+    deviceId: "speaker",
+    capabilityId: "player",
+    kind: "media",
+    roomId: null,
+    name: "Speaker",
+    status: "Paused",
+    on: false,
+    look: "off",
+    dims: false,
+    disabled: false,
+    media: { playing: false, canPlayPause: true },
+  };
+  const playable = await render(player);
+  expect(playable.getAttribute("aria-label")).toBe("Play Speaker");
+  await act(async () => playable.click());
+  expect(onToggle).toHaveBeenCalledWith(player);
+
+  const idle = {
+    ...player,
+    status: "Not playing",
+    media: { playing: false, canPlayPause: false },
+  };
+  const unplayable = await render(idle);
+  expect(unplayable.disabled).toBe(true);
+  await act(async () => unplayable.click());
+  expect(onToggle).toHaveBeenCalledTimes(1);
+});
+
 describe("a motion sensor's tile", () => {
   const motion: Tile = {
     key: "hall/occupancy",
