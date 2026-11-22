@@ -33,6 +33,7 @@ import {
 } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
+import { productName } from "../brand";
 import { Row, Section } from "../components";
 import {
   Dialog,
@@ -78,22 +79,33 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
   const { info, refresh, answered } = useModels(props.live);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Editing>();
+  const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const sources = info?.sources ?? [];
   const inUse = sources.find((source) => source.inUse);
   const others = sources.filter((source) => !source.inUse);
 
   const act = async (path: string) => {
+    if (isActing) return;
+    setIsActing(true);
     try {
-      answered(await coreJson<ModelsInfo>(path, { method: "POST" }));
+      answered(
+        await coreJson<ModelsInfo>(path, {
+          method: "POST",
+          signal: AbortSignal.timeout(10_000),
+        }),
+      );
     } catch {
       void refresh();
+    } finally {
+      setIsActing(false);
     }
   };
   const row = (source: ModelSourceInfo) => (
     <SourceRow
       key={source.id}
       source={source}
+      isActing={isActing}
       onUse={() => void act(`/api/models/sources/${source.id}/use`)}
       onCheck={() => void act(`/api/models/sources/${source.id}/check`)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
@@ -106,7 +118,11 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
         id="settings-models"
         title={modelsTitle}
         action={
-          <Button ref={addButton} onClick={() => setAdding(true)}>
+          <Button
+            ref={addButton}
+            disabled={isActing}
+            onClick={() => setAdding(true)}
+          >
             Add a source
           </Button>
         }
@@ -118,10 +134,9 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
               Your home has no AI model yet
             </span>
             <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-              Apps that use AI ask your home's model for answers. It can run on
-              a computer in your home that runs Ollama, where nothing leaves
-              your home, or with an AI provider and your own API key, which is
-              faster, but what's asked leaves your home.
+              Your home's AI model can run on a computer in your home with a
+              local Ollama model, or with an AI provider and your own API key.
+              With a provider, what's asked leaves your home.
             </p>
           </div>
         )}
@@ -140,7 +155,7 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
             {others.map(row)}
           </ul>
           <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-            Sanctum never switches to another source on its own.
+            {productName} never switches to another source on its own.
           </p>
         </Section>
       )}
@@ -207,6 +222,7 @@ function CheckStatus(props: { source: ModelSourceInfo }) {
 
 function SourceRow(props: {
   source: ModelSourceInfo;
+  isActing: boolean;
   onUse: () => void;
   onCheck: () => void;
   onEdit: (
@@ -241,6 +257,7 @@ function SourceRow(props: {
           <Button
             variant="outline"
             size="sm"
+            disabled={props.isActing}
             aria-describedby={detailId}
             onClick={props.onUse}
           >
@@ -253,6 +270,7 @@ function SourceRow(props: {
               ref={menuButton}
               variant="ghost"
               size="icon-sm"
+              disabled={props.isActing}
               aria-label={`${name}: more`}
               aria-describedby={detailId}
             >
@@ -349,20 +367,32 @@ function EditSource(props: {
     if (opened?.action !== "model") return;
     // Listed again, as a model may have been pulled since; a provider's
     // list needs its key, which only the core holds.
-    const signal = start();
+    const controller = new AbortController();
+    const { signal } = controller;
     void coreJson<ModelSourceLook>(
       `/api/models/sources/${opened.source.id}/models`,
       { signal },
     )
       .then((look) => {
         if (signal.aborted) return;
-        if (look.found) setModels(look.models);
-        else setProblem(problemText(look.problem, opened.source));
+        if (!look.found) {
+          setProblem(problemText(look.problem, opened.source));
+        } else if (look.models.length === 0) {
+          setProblem("This source has no models to choose from.");
+        } else {
+          setModels(look.models);
+          if (
+            !look.models.some((choice) => choice.id === opened.source.model)
+          ) {
+            setModel(look.models[0]!.id);
+          }
+        }
       })
       .catch(() => {
         if (!signal.aborted) setProblem("That did not work. Try again.");
       });
-  }, [props.editing, cancel, start]);
+    return () => controller.abort();
+  }, [props.editing, cancel]);
 
   const close = () => {
     cancel();
@@ -420,7 +450,7 @@ function EditSource(props: {
     <Dialog
       open={!!props.editing}
       onOpenChange={(open) => {
-        if (!open) close();
+        if (!open && !working) close();
       }}
     >
       <DialogContent
@@ -443,10 +473,10 @@ function EditSource(props: {
                   ? "The models on that computer. For another, run ollama pull there."
                   : "The models your key can use.")}
               {action === "key" &&
-                "Sanctum checks the new key, then keeps it sealed and never shows it again."}
+                `${productName} checks the new key, then keeps it sealed and never shows it again.`}
               {action === "remove" &&
                 (source?.inUse
-                  ? "It's the source in use: apps that use AI get no answer until you use another. Its key and tokens go with it."
+                  ? "It's the source in use. Its key and tokens go with it. You can choose another source after removing it."
                   : "Its key and the tokens it counted go with it.")}
             </DialogDescription>
           </DialogHeader>
@@ -455,6 +485,7 @@ function EditSource(props: {
               aria-label="Computer"
               value={text}
               maxLength={64}
+              disabled={working}
               onChange={(event) => setText(event.target.value)}
               required
               autoFocus
@@ -467,6 +498,7 @@ function EditSource(props: {
               autoComplete="off"
               value={text}
               maxLength={512}
+              disabled={working}
               onChange={(event) => setText(event.target.value)}
               required
               autoFocus
@@ -476,6 +508,7 @@ function EditSource(props: {
             <NativeSelect
               aria-label="Model"
               value={model}
+              disabled={working}
               onChange={(event) => setModel(event.target.value)}
               className="w-full"
             >
@@ -496,6 +529,7 @@ function EditSource(props: {
               type="button"
               variant="outline"
               autoFocus={action === "remove"}
+              disabled={working}
               onClick={close}
             >
               Cancel

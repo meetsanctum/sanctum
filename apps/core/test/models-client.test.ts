@@ -6,6 +6,7 @@ import {
   parseAddress,
   resolveHomeAddress,
 } from "../src/models/addresses.js";
+import { checkSource } from "../src/models/check.js";
 import { chat, ModelError, type ModelPiece } from "../src/models/client.js";
 import { ollamaModelName } from "../src/models/endpoints.js";
 
@@ -30,6 +31,13 @@ describe("a computer's address", () => {
       name: "office-mac.local",
       port: 11434,
     });
+    const name = [
+      "a".repeat(63),
+      "b".repeat(63),
+      "c".repeat(63),
+      "d".repeat(61),
+    ].join(".");
+    expect(parseAddress(`${name}:65535`)).toEqual({ name, port: 65535 });
   });
 
   it("refuses a URL, a path or a port out of range", () => {
@@ -39,6 +47,7 @@ describe("a computer's address", () => {
       "192.168.1.40:0",
       "192.168.1.40:70000",
       "user@192.168.1.40",
+      "[fd00::5%en0]",
       "",
     ]) {
       expect(() => parseAddress(typed), typed).toThrow(AddressProblem);
@@ -60,6 +69,7 @@ describe("a computer's address", () => {
       "::1",
       "100.64.0.1",
       "fe80::1",
+      "fd00::5%en0",
     ]) {
       expect(isHomeAddress(address), address).toBe(false);
     }
@@ -151,6 +161,42 @@ describe("the client", () => {
     await expect(
       ask('data: {"choices":[{"delta":{"content":"Once"}}]}\n\n'),
     ).rejects.toMatchObject({ problem: "answer" });
+  });
+
+  it("treats a tool call cut short by the token limit as incomplete", async () => {
+    const pieces = await ask(
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"lights","arguments":"{"}}]},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+    );
+    expect(pieces).toEqual([
+      { type: "end", stop: "limit", tokens: { read: 0, written: 0 } },
+    ]);
+  });
+
+  it("refuses malformed token usage and filtered answers", async () => {
+    for (const chunk of [
+      { usage: { prompt_tokens: "40", completion_tokens: 6 } },
+      { choices: [{ finish_reason: "content_filter" }] },
+    ]) {
+      await expect(
+        ask(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`),
+      ).rejects.toMatchObject({ problem: "answer" });
+    }
+  });
+
+  it("distinguishes an empty answer from a call to a different tool", async () => {
+    const check = (body: string) =>
+      checkSource({
+        endpoint: endpoint(body),
+        model: "qwen3:8b",
+        inHome: true,
+        now: () => new Date(),
+      });
+    const empty = await check("data: [DONE]\n\n");
+    expect(empty.check).toMatchObject({ outcome: "failed", problem: "answer" });
+    const otherTool = await check(
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"other","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n',
+    );
+    expect(otherTool.check).toMatchObject({ outcome: "noTool" });
   });
 
   it("names a key that's refused", async () => {

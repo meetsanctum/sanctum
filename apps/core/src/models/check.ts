@@ -13,7 +13,7 @@ import {
 // home's tools well, and the check says so.
 
 /** How long a check waits for the first word, and for the whole answer. */
-export const checkLimits = {
+const checkLimits = {
   firstWordInHomeMs: 90_000,
   firstWordProviderMs: 30_000,
   wholeMs: 120_000,
@@ -38,7 +38,7 @@ const question = {
   ],
 };
 
-export type CheckResult = { check: ModelCheck; tokens: ModelTokens };
+type CheckResult = { check: ModelCheck; tokens: ModelTokens };
 
 export async function checkSource(options: {
   endpoint: ModelEndpoint;
@@ -63,6 +63,7 @@ export async function checkSource(options: {
     ...(options.signal ? [options.signal] : []),
   ]);
   let firstWordMs: number | undefined;
+  let answered = false;
   let usedTool = false;
   let tokens: ModelTokens = { read: 0, written: 0 };
   try {
@@ -70,14 +71,24 @@ export async function checkSource(options: {
       options.endpoint,
       { model: options.model, ...question, maxTokens: checkLimits.maxTokens },
       signal,
-    )) {
-      if (firstWordMs === undefined) {
+      () => {
         firstWordMs = Math.round(performance.now() - started);
         clearTimeout(firstWordTimer);
+      },
+    )) {
+      if (piece.type === "text") answered ||= piece.text.trim() !== "";
+      if (piece.type === "tool") {
+        answered = true;
+        usedTool ||=
+          piece.name === question.tools[0]!.name &&
+          typeof piece.input === "object" &&
+          piece.input !== null &&
+          !Array.isArray(piece.input) &&
+          Object.keys(piece.input).length === 0;
       }
-      if (piece.type === "tool") usedTool = true;
       if (piece.type === "end") tokens = piece.tokens;
     }
+    if (!answered) throw new ModelError("answer", "the source gave no answer");
   } catch (error) {
     const problem = error instanceof ModelError ? error.problem : "answer";
     return { check: { at, outcome: "failed", problem }, tokens };

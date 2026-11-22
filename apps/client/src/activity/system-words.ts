@@ -3,7 +3,8 @@ import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { productName } from "../brand";
 import { durationText, timeText } from "../device-history-data";
 import { formatBytes, serviceName } from "../system-status";
-import { byWords, type Words } from "./words";
+import { byWords } from "./actor-words";
+import type { Words } from "./words";
 
 // How the activity log's entries of Sanctum itself read: its starts,
 // restarts, shutdowns and updates, its services, and the apps' versions it

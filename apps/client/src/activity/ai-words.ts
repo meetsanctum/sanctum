@@ -2,11 +2,11 @@ import {
   modelProviders,
   permissionWords,
   type ActivityInfo,
-  type ModelProvider,
 } from "@meetsanctum/app-sdk";
 
 import { providerNames } from "../models/words";
-import { byWords, type Words } from "./words";
+import { byWords } from "./actor-words";
+import type { Words } from "./words";
 
 // How the activity log's entries of AI read: adding an AI agent and what AI
 // agents can use, what they were refused or held back from, and the home's
@@ -18,8 +18,7 @@ function sourceWords(detail: ActivityInfo["detail"]) {
   if (typeof detail?.computer === "string") {
     return `${model} on ${detail.computer}`;
   }
-  const provider = modelProviders.find((each) => each === detail?.kind) as
-    ModelProvider | undefined;
+  const provider = modelProviders.find((each) => each === detail?.kind);
   return provider ? `${model} with ${providerNames[provider]}` : model;
 }
 

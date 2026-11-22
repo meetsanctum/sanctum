@@ -20,7 +20,7 @@ export type FakeSources = {
   // What each source answers, which a test can change.
   ollama: {
     up: boolean;
-    models: { name: string; size: number }[];
+    models: { name: string; size: number; remote_host?: string }[];
     answer: FakeAnswer;
   };
   openRouter: { key: string; answer: FakeAnswer };

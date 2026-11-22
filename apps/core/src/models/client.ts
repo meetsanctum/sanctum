@@ -1,4 +1,5 @@
 import type { ModelProblem } from "@meetsanctum/app-sdk";
+import { z } from "zod";
 
 // The client for OpenAI's chat completions, which Ollama, OpenAI and
 // OpenRouter all answer: it streams an answer as server-sent events and
@@ -108,21 +109,36 @@ function wireMessage(message: ModelMessage) {
   }
 }
 
-type Chunk = {
-  choices?: {
-    delta?: {
-      content?: string | null;
-      tool_calls?: {
-        index?: number;
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }[];
-    };
-    finish_reason?: string | null;
-  }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
-  error?: unknown;
-};
+const toolDelta = z.object({
+  index: z.int().nonnegative().optional(),
+  id: z.string().nullish(),
+  function: z
+    .object({ name: z.string().nullish(), arguments: z.string().nullish() })
+    .nullish(),
+});
+
+const streamChunk = z.object({
+  choices: z
+    .array(
+      z.object({
+        delta: z
+          .object({
+            content: z.string().nullish(),
+            tool_calls: z.array(toolDelta).nullish(),
+          })
+          .nullish(),
+        finish_reason: z.string().nullish(),
+      }),
+    )
+    .nullish(),
+  usage: z
+    .object({
+      prompt_tokens: z.int().nonnegative().nullish(),
+      completion_tokens: z.int().nonnegative().nullish(),
+    })
+    .nullish(),
+  error: z.unknown().optional(),
+});
 
 /** The lines of an event stream's data, one JSON chunk or [DONE] each. */
 async function* dataLines(body: ReadableStream<Uint8Array>) {
@@ -150,6 +166,7 @@ export async function* chat(
   endpoint: ModelEndpoint,
   request: ModelRequest,
   signal: AbortSignal,
+  onFirstPiece?: () => void,
 ): AsyncGenerator<ModelPiece> {
   let response: Response;
   try {
@@ -199,13 +216,14 @@ export async function* chat(
   let finished = false;
   try {
     for await (const data of dataLines(response.body)) {
+      if (!data) continue;
       if (data === "[DONE]") {
         finished = true;
         break;
       }
-      let chunk: Chunk;
+      let chunk: z.infer<typeof streamChunk>;
       try {
-        chunk = JSON.parse(data) as Chunk;
+        chunk = streamChunk.parse(JSON.parse(data));
       } catch {
         throw new ModelError("answer", "the source sent a broken piece");
       }
@@ -218,8 +236,13 @@ export async function* chat(
       }
       for (const choice of chunk.choices ?? []) {
         const text = choice.delta?.content;
+        const toolCalls = choice.delta?.tool_calls ?? [];
+        if (text || toolCalls.length > 0) {
+          onFirstPiece?.();
+          onFirstPiece = undefined;
+        }
         if (text) yield { type: "text", text };
-        for (const call of choice.delta?.tool_calls ?? []) {
+        for (const call of toolCalls) {
           const index = call.index ?? 0;
           const kept = calls.get(index) ?? { id: "", name: "", args: "" };
           kept.id ||= call.id ?? "";
@@ -228,6 +251,15 @@ export async function* chat(
           calls.set(index, kept);
         }
         if (choice.finish_reason) {
+          if (
+            choice.finish_reason === "error" ||
+            choice.finish_reason === "content_filter"
+          ) {
+            throw new ModelError(
+              "answer",
+              "the source didn't complete the answer",
+            );
+          }
           stop =
             choice.finish_reason === "length"
               ? "limit"
@@ -246,9 +278,14 @@ export async function* chat(
   for (const [index, call] of [...calls].sort(([a], [b]) => a - b)) {
     let input: unknown;
     try {
-      input = call.args.trim() === "" ? {} : JSON.parse(call.args);
+      input = JSON.parse(call.args);
     } catch {
+      if (stop === "limit") continue;
       throw new ModelError("answer", "a tool call's input isn't JSON");
+    }
+    if (!call.name) {
+      if (stop === "limit") continue;
+      throw new ModelError("answer", "a tool call has no name");
     }
     yield {
       type: "tool",

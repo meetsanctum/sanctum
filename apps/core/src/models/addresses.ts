@@ -2,12 +2,15 @@ import { ollamaPort } from "@meetsanctum/app-sdk";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 
+import { withTimeout } from "../app-host/errors.js";
+
 // Where a computer in the home is: an address on the home's network, never
-// the internet, the host itself or a special range. A name is looked up once,
+// the internet or loopback. A name is looked up once,
 // when the source is added, and the address it gave is the one used from
 // then on, so a name that later resolves elsewhere can't move it.
 
 const home = new BlockList();
+const lookupTimeoutMs = 10_000;
 home.addSubnet("10.0.0.0", 8, "ipv4");
 home.addSubnet("172.16.0.0", 12, "ipv4");
 home.addSubnet("192.168.0.0", 16, "ipv4");
@@ -19,7 +22,7 @@ home.addSubnet("fc00::", 7, "ipv6");
 /** Whether an address is on a home's own network. */
 export function isHomeAddress(address: string): boolean {
   const family = isIP(address);
-  if (family === 0) return false;
+  if (family === 0 || address.includes("%")) return false;
   return home.check(address, family === 4 ? "ipv4" : "ipv6");
 }
 
@@ -38,7 +41,7 @@ export class AddressProblem extends Error {
  */
 export function parseAddress(typed: string): { name: string; port: number } {
   const text = typed.trim();
-  if (text.length === 0 || text.length > 253 || /[/?#@\s]/.test(text)) {
+  if (text.length === 0 || text.length > 260 || /[\\/?#@%\s]/.test(text)) {
     throw new AddressProblem("refused");
   }
   let name = text;
@@ -52,7 +55,12 @@ export function parseAddress(typed: string): { name: string; port: number } {
     name = withPort[1]!;
     port = Number(withPort[2]);
   }
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  if (
+    name.length > 253 ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535
+  ) {
     throw new AddressProblem("refused");
   }
   return { name, port };
@@ -73,7 +81,7 @@ export async function resolveHomeAddress(
   }
   let found: string[];
   try {
-    found = await lookup(name);
+    found = await withTimeout(lookup(name), lookupTimeoutMs);
   } catch {
     throw new AddressProblem("unreachable");
   }

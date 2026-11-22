@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
-import { modelSources } from "../src/models/schema.js";
+import { modelSources, modelTokens } from "../src/models/schema.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
 
@@ -51,7 +51,12 @@ const addOfficeMac = (core: TestCore, token: string, model = "qwen3:8b") =>
 
 describe("AI models", () => {
   it("finds Ollama on a computer in the home and lists its models", async () => {
-    const { core, token } = await home();
+    const { core, token, sources } = await home();
+    sources.ollama.models.push({
+      name: "cloud-alias:latest",
+      size: 300,
+      remote_host: "https://ollama.com",
+    });
     const look = await post(
       core,
       "/api/models/look",
@@ -103,6 +108,22 @@ describe("AI models", () => {
       found: false,
       problem: "unreachable",
       address: "192.168.1.40:11434",
+    });
+  });
+
+  it("reports an invalid answer when the computer has no Ollama model-list route", async () => {
+    const sources = fakeSources();
+    sources.fetchers.home = async () => new Response(null, { status: 404 });
+    const { core, token } = await home(sources);
+    const look = await post(
+      core,
+      "/api/models/look",
+      { kind: "computer", address: officeMac },
+      { token },
+    );
+    expect(look.json<ModelSourceLook>()).toMatchObject({
+      found: false,
+      problem: "answer",
     });
   });
 
@@ -244,6 +265,44 @@ describe("AI models", () => {
     expect(removed.json<ModelsInfo>().sources).toMatchObject([
       { id: mac!.id, inUse: false },
     ]);
+    const added = await addOfficeMac(core, token, "llama3.2:3b");
+    expect(
+      added.json<ModelsInfo>().sources.map((source) => source.inUse),
+    ).toEqual([false, false]);
+  });
+
+  it("replaces a key that no longer opens", async () => {
+    const { core, token, sources } = await home();
+    await post(
+      core,
+      "/api/models/sources",
+      {
+        kind: "openrouter",
+        key: sources.openRouter.key,
+        model: "openai/gpt-5-mini",
+      },
+      { token },
+    );
+    const [source] = (await checked(core)).sources;
+    core.db
+      .update(modelSources)
+      .set({ sealedKey: "unreadable" })
+      .where(eq(modelSources.id, source!.id))
+      .run();
+    sources.openRouter.key = "sk-or-v1-replacement-5f2b";
+
+    const changed = await send(
+      core,
+      "PATCH",
+      `/api/models/sources/${source!.id}`,
+      token,
+      { key: sources.openRouter.key },
+    );
+    expect(changed.statusCode).toBe(200);
+    expect((await checked(core)).sources[0]).toMatchObject({
+      keyEnd: "5f2b",
+      check: { outcome: "answered" },
+    });
   });
 
   it("renames a computer and changes its model", async () => {
@@ -264,6 +323,72 @@ describe("AI models", () => {
         modelName: "Llama3.2 3B",
       },
     ]);
+  });
+
+  it("discards the check still running for a model that was changed", async () => {
+    const sources = fakeSources();
+    sources.ollama.answer = { callsTool: false, delayMs: 250 };
+    const { core, token } = await home(sources);
+    await addOfficeMac(core, token);
+    await vi.waitFor(() => expect(sources.chats).toHaveLength(1));
+    const [source] = core.models.info().sources;
+    sources.ollama.answer = { callsTool: true };
+
+    const changed = await send(
+      core,
+      "PATCH",
+      `/api/models/sources/${source!.id}`,
+      token,
+      { model: "llama3.2:3b" },
+    );
+    expect(changed.statusCode).toBe(200);
+    expect((await checked(core)).sources[0]).toMatchObject({
+      model: "llama3.2:3b",
+      check: { outcome: "answered" },
+    });
+    expect(sources.chats.map((ask) => ask.model)).toEqual([
+      "qwen3:8b",
+      "llama3.2:3b",
+    ]);
+  });
+
+  it("counts the last 30 calendar days across a change of the clocks", async () => {
+    const sources = fakeSources();
+    const core = await testCore({
+      modelFetchers: sources.fetchers,
+      startsAt: "2026-10-30T22:30:00.000Z",
+      timeZone: "Europe/Zurich",
+    });
+    const { token } = await claimed(core);
+    await addOfficeMac(core, token);
+    const [source] = (await checked(core)).sources;
+    const sourceId = source!.id;
+    core.db
+      .insert(modelTokens)
+      .values([
+        { day: "2026-09-30", sourceId, usedBy: "check", tokens: 100 },
+        { day: "2026-10-01", sourceId, usedBy: "check", tokens: 20 },
+      ])
+      .run();
+    expect(core.models.info().sources[0]?.tokens).toEqual({
+      today: 46,
+      month: 66,
+    });
+  });
+
+  it("does not send a check when a local model has become a remote alias", async () => {
+    const { core, token, sources } = await home();
+    await addOfficeMac(core, token);
+    const [source] = (await checked(core)).sources;
+    sources.ollama.models.find(
+      (choice) => choice.name === source!.model,
+    )!.remote_host = "https://ollama.com";
+    await post(core, `/api/models/sources/${source!.id}/check`, {}, { token });
+    expect((await checked(core)).sources[0]?.check).toMatchObject({
+      outcome: "failed",
+      problem: "model",
+    });
+    expect(sources.chats).toHaveLength(1);
   });
 
   it("says since when the source in use hasn't answered", async () => {

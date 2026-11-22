@@ -84,6 +84,19 @@ beforeEach(() => {
       ];
       return info() as never;
     }
+    if (path === "/api/models/sources/mac/models") {
+      return {
+        found: true,
+        models: [{ id: "llama3.2:3b", name: "Llama3.2 3B" }],
+      } as never;
+    }
+    if (path === "/api/models/sources/mac" && method === "PATCH") {
+      sources = [
+        { ...mac, ...(init.json as Partial<ModelSourceInfo>) },
+        router,
+      ];
+      return info() as never;
+    }
     throw new Error(`Unexpected request: ${method} ${path}`);
   });
   container = document.createElement("div");
@@ -126,6 +139,22 @@ const labelled = (name: string) =>
     (input) => input.labels?.[0]?.textContent === name,
   )!;
 
+async function selectMenuItem(action: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(
+    `button[aria-label="${sourceName(mac)}: more"]`,
+  )!;
+  await act(async () => {
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+  await click(
+    [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+      (candidate) => candidate.textContent === action,
+    )!,
+  );
+}
+
 describe("the words for AI models", () => {
   it("names a source by its model and where it runs", () => {
     expect(sourceName(mac)).toBe("Qwen3 8B on Office Mac");
@@ -162,6 +191,16 @@ describe("the words for AI models", () => {
     expect(
       checkLine({ ...mac, downSince: "2026-11-23T11:02:00Z" }, now)?.text,
     ).toContain("Check that Office Mac is awake and Ollama is running there.");
+    expect(
+      checkLine(
+        {
+          ...router,
+          downSince: "2026-11-23T11:02:00Z",
+          check: { at: now.toISOString(), outcome: "failed", problem: "key" },
+        },
+        now,
+      )?.text,
+    ).toContain("OpenRouter didn't take that key.");
     expect(checkLine({ ...mac, checking: true }, now)?.tone).toBe("plain");
   });
 });
@@ -194,6 +233,34 @@ describe("Settings → AI models", () => {
     await show();
     expect(container.textContent).toContain("Your home has no AI model yet");
     expect(container.textContent).not.toContain("Tokens used");
+  });
+
+  it("keeps a typed computer name until it is saved", async () => {
+    await show();
+    await selectMenuItem("Rename computer");
+    const input = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Computer"]',
+    )!;
+    await type(input, "Studio Mac");
+    expect(input.value).toBe("Studio Mac");
+    await click(button("Save"));
+    expect(requests).toContainEqual([
+      "PATCH",
+      "/api/models/sources/mac",
+      { computer: "Studio Mac" },
+    ]);
+  });
+
+  it("can change to the sole available model when the saved model is gone", async () => {
+    await show();
+    await selectMenuItem("Change model");
+    expect(button("Save").disabled).toBe(false);
+    await click(button("Save"));
+    expect(requests).toContainEqual([
+      "PATCH",
+      "/api/models/sources/mac",
+      { model: "llama3.2:3b" },
+    ]);
   });
 
   it("adds a computer once Sanctum has found Ollama there", async () => {

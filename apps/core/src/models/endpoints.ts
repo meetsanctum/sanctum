@@ -1,8 +1,4 @@
-import type {
-  ModelChoice,
-  ModelProvider,
-  ModelSourceKind,
-} from "@meetsanctum/app-sdk";
+import type { ModelChoice, ModelProvider } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
@@ -26,27 +22,20 @@ export type ModelFetchers = {
 
 const providers = {
   openrouter: {
-    name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
     maxTokensField: "max_tokens",
   },
   openai: {
-    name: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     maxTokensField: "max_completion_tokens",
   },
 } as const satisfies Record<
   ModelProvider,
   {
-    name: string;
     baseUrl: string;
     maxTokensField: ModelEndpoint["maxTokensField"];
   }
 >;
-
-/** A provider's name, such as OpenRouter. */
-export const providerName = (provider: ModelProvider) =>
-  providers[provider].name;
 
 /** What a source is reached by: a computer's address, or a provider's key. */
 export type SourceReach =
@@ -99,7 +88,8 @@ async function getJson(
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw new ModelError(problemOfStatus(response.status));
+    const problem = problemOfStatus(response.status);
+    throw new ModelError(!key || problem === "model" ? "answer" : problem);
   }
   try {
     return (await response.json()) as unknown;
@@ -110,7 +100,14 @@ async function getJson(
 }
 
 const ollamaTags = z.object({
-  models: z.array(z.object({ name: z.string(), size: z.number().optional() })),
+  models: z.array(
+    z.object({
+      name: z.string(),
+      size: z.number().optional(),
+      remote_host: z.string().optional(),
+      remote_model: z.string().optional(),
+    }),
+  ),
 });
 const openAiModels = z.object({
   data: z.array(z.object({ id: z.string(), name: z.string().optional() })),
@@ -156,6 +153,12 @@ export async function listModels(
       );
       if (!found.success) throw new ModelError("answer", "not Ollama's list");
       return found.data.models
+        .filter(
+          (model) =>
+            !model.remote_host &&
+            !model.remote_model &&
+            !model.name.endsWith("-cloud"),
+        )
         .map((model) => ({
           id: model.name,
           name: ollamaModelName(model.name),
@@ -201,6 +204,3 @@ export async function listModels(
     }
   }
 }
-
-/** Whether a source is in the home, so its first word may take longer. */
-export const isInHome = (kind: ModelSourceKind) => kind === "computer";

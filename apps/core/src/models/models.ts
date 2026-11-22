@@ -2,13 +2,12 @@ import type {
   AddModelSource,
   ChangeModelSource,
   LookAtModelSource,
-  ModelCheck,
   ModelChoice,
   ModelSourceInfo,
   ModelSourceLook,
   ModelsInfo,
 } from "@meetsanctum/app-sdk";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { ChangedBy, NewActivityEntry } from "../activity/activity.js";
@@ -24,9 +23,7 @@ import { checkSource } from "./check.js";
 import { ModelError, type ModelTokens } from "./client.js";
 import {
   endpointOf,
-  isInHome,
   listModels,
-  ollamaModelName,
   type ModelFetchers,
   type SourceReach,
 } from "./endpoints.js";
@@ -41,9 +38,10 @@ import { modelSources, modelTokens } from "./schema.js";
 // to another source on its own.
 
 /** How often the source in use is asked whether it answers. */
-export const watchEveryMs = 60_000;
+const watchEveryMs = 60_000;
 
 type SourceRow = typeof modelSources.$inferSelect;
+type RunningCheck = { controller: AbortController; run: Promise<void> };
 
 // Why a source's list didn't come: a list is small, so one that takes too
 // long is as good as no answer, whatever the model.
@@ -71,16 +69,15 @@ export function createModels(
     timeZone: () => string | null;
     log: (message: string) => void;
     now?: () => Date;
-    // A name's addresses; the system's lookup unless a test gives one.
-    lookup?: (name: string) => Promise<string[]>;
   },
 ) {
   const now = options.now ?? (() => new Date());
   // Checks under way, by source, and since when the one in use hasn't
   // answered: both only while the core runs.
-  const checking = new Map<string, Promise<void>>();
-  const down = new Map<string, Date>();
+  const checking = new Map<string, RunningCheck>();
   const stopping = new AbortController();
+  let downSince: Date | undefined;
+  let watching: AbortController | undefined;
   let watchTimer: NodeJS.Timeout | undefined;
 
   function dayOf(date: Date) {
@@ -94,6 +91,9 @@ export function createModels(
 
   const rows = () =>
     db.select().from(modelSources).orderBy(modelSources.createdAt).all();
+
+  const activeRow = () =>
+    db.select().from(modelSources).where(eq(modelSources.inUse, true)).get();
 
   function rowOf(id: string) {
     const row = db
@@ -124,7 +124,10 @@ export function createModels(
 
   function tokensOf(sourceId: string) {
     const today = dayOf(now());
-    const monthStart = dayOf(new Date(now().getTime() - 29 * 86_400_000));
+    // Shift a calendar date, so a change of the clocks can't move the window.
+    const start = new Date(`${today}T00:00:00Z`);
+    start.setUTCDate(start.getUTCDate() - 29);
+    const monthStart = start.toISOString().slice(0, 10);
     const days = db
       .select({
         day: modelTokens.day,
@@ -135,6 +138,7 @@ export function createModels(
         and(
           eq(modelTokens.sourceId, sourceId),
           gte(modelTokens.day, monthStart),
+          lte(modelTokens.day, today),
         ),
       )
       .groupBy(modelTokens.day)
@@ -146,7 +150,6 @@ export function createModels(
   }
 
   function infoOf(row: SourceRow): ModelSourceInfo {
-    const downSince = down.get(row.id);
     return {
       id: row.id,
       kind: row.kind,
@@ -158,7 +161,7 @@ export function createModels(
         : {}),
       ...(row.keyEnd ? { keyEnd: row.keyEnd } : {}),
       inUse: row.inUse,
-      ...(row.check ? { check: row.check as ModelCheck } : {}),
+      ...(row.check ? { check: row.check } : {}),
       ...(checking.has(row.id) ? { checking: true } : {}),
       ...(row.inUse && downSince ? { downSince: downSince.toISOString() } : {}),
       tokens: tokensOf(row.id),
@@ -186,7 +189,7 @@ export function createModels(
     if (request.kind === "computer") {
       return {
         kind: "computer",
-        address: await resolveHomeAddress(request.address, options.lookup),
+        address: await resolveHomeAddress(request.address),
       };
     }
     return { kind: request.kind, key: request.key.trim() };
@@ -213,11 +216,9 @@ export function createModels(
     }
   }
 
-  /** The model the household picked, as the source lists it now. */
-  async function choiceOf(reach: SourceReach, model: string) {
-    let models: ModelChoice[];
+  async function choicesForSave(reach: SourceReach): Promise<ModelChoice[]> {
     try {
-      models = await listModels(reach, options.fetchers);
+      return await listModels(reach, options.fetchers);
     } catch (error) {
       throw new ActionCallError(
         error instanceof ModelError && error.problem === "key"
@@ -225,25 +226,43 @@ export function createModels(
           : "unavailable",
       );
     }
-    const choice = models.find((each) => each.id === model);
-    if (!choice) throw new ActionCallError("not_found");
-    return choice;
+  }
+
+  function cancelWatch() {
+    watching?.abort();
+    watching = undefined;
+  }
+
+  function cancelCheck(id: string) {
+    checking.get(id)?.controller.abort();
+    checking.delete(id);
   }
 
   /** Runs a check of a source, once at a time, and keeps how it went. */
-  function startCheck(id: string) {
-    const under = checking.get(id);
-    if (under) return under;
+  function startCheck(row: SourceRow) {
+    const { id } = row;
+    if (checking.has(id)) return;
+    if (row.inUse) cancelWatch();
+    const controller = new AbortController();
+    const signal = AbortSignal.any([stopping.signal, controller.signal]);
     const run = (async () => {
-      const row = rowOf(id);
       let result: Awaited<ReturnType<typeof checkSource>>;
       try {
+        const reach = reachOf(row);
+        if (reach.kind === "computer") {
+          // A tag can be removed or replaced by a remote model after setup.
+          const available = await listModels(reach, options.fetchers, signal);
+          if (!available.some((choice) => choice.id === row.model)) {
+            throw new ModelError("model");
+          }
+        }
+        signal.throwIfAborted();
         result = await checkSource({
-          endpoint: endpointOf(reachOf(row), options.fetchers),
+          endpoint: endpointOf(reach, options.fetchers),
           model: row.model,
-          inHome: isInHome(row.kind),
+          inHome: row.kind === "computer",
           now,
-          signal: stopping.signal,
+          signal,
         });
       } catch (error) {
         const problem = error instanceof ModelError ? error.problem : "answer";
@@ -252,24 +271,18 @@ export function createModels(
           tokens: { read: 0, written: 0 },
         };
       }
-      if (stopping.signal.aborted) return;
+      if (signal.aborted) return;
+      const current = rowOf(id);
       durably(db, () => {
-        const still = db
-          .select({ id: modelSources.id })
-          .from(modelSources)
-          .where(eq(modelSources.id, id))
-          .get();
-        if (!still) return;
         db.update(modelSources)
           .set({ check: result.check })
           .where(eq(modelSources.id, id))
           .run();
         count(id, "check", result.tokens);
       });
-      if (result.check.outcome === "failed") {
-        if (!down.has(id)) down.set(id, now());
-      } else {
-        down.delete(id);
+      if (current.inUse) {
+        if (result.check.outcome !== "failed") downSince = undefined;
+        else if (result.check.problem === "unreachable") downSince ??= now();
       }
     })()
       .catch((error: unknown) => {
@@ -277,9 +290,10 @@ export function createModels(
           `models: checking ${id} failed (${error instanceof Error ? error.message : String(error)})`,
         );
       })
-      .finally(() => checking.delete(id));
-    checking.set(id, run);
-    return run;
+      .finally(() => {
+        if (checking.get(id)?.controller === controller) checking.delete(id);
+      });
+    checking.set(id, { controller, run });
   }
 
   async function add(request: AddModelSource, by: ChangedBy) {
@@ -292,14 +306,15 @@ export function createModels(
       }
       throw error;
     }
-    const choice = await choiceOf(reach, request.model);
+    const choices = await choicesForSave(reach);
+    const choice = choices.find((each) => each.id === request.model);
+    if (!choice) throw new ActionCallError("not_found");
     const id = randomUUID();
     const row: SourceRow = {
       id,
       kind: request.kind,
       model: choice.id,
-      modelName:
-        request.kind === "computer" ? ollamaModelName(choice.id) : choice.name,
+      modelName: choice.name,
       computer: request.kind === "computer" ? request.computer.trim() : null,
       host: reach.kind === "computer" ? reach.address.host : null,
       port: reach.kind === "computer" ? reach.address.port : null,
@@ -314,14 +329,8 @@ export function createModels(
     };
     durably(db, () => {
       // The first source is the one in use.
-      const inUse = db
-        .select({ id: modelSources.id })
-        .from(modelSources)
-        .where(eq(modelSources.inUse, true))
-        .get();
-      db.insert(modelSources)
-        .values({ ...row, inUse: !inUse })
-        .run();
+      row.inUse = !db.select({ id: modelSources.id }).from(modelSources).get();
+      db.insert(modelSources).values(row).run();
       options.record({
         action: "models.add",
         outcome: "ok",
@@ -330,7 +339,7 @@ export function createModels(
         detail: named(row),
       });
     });
-    void startCheck(id);
+    startCheck(row);
     return info();
   }
 
@@ -351,8 +360,9 @@ export function createModels(
         detail: named(row),
       });
     });
-    down.clear();
-    void startCheck(id);
+    cancelWatch();
+    downSince = undefined;
+    startCheck({ ...row, inUse: true });
     return info();
   }
 
@@ -363,22 +373,48 @@ export function createModels(
       if (row.kind !== "computer") throw new ActionCallError("invalid_request");
       set.computer = request.computer.trim();
     }
-    let reach = reachOf(row);
-    if (request.key !== undefined) {
-      if (reach.kind === "computer")
-        throw new ActionCallError("invalid_request");
-      reach = { kind: reach.kind, key: request.key.trim() };
-      set.sealedKey = options.sealer.seal(keyBoundTo(id), reach.key);
-      set.keyEnd = reach.key.slice(-4);
-    }
-    if (request.model !== undefined || request.key !== undefined) {
-      const choice = await choiceOf(reach, request.model ?? row.model);
-      set.model = choice.id;
-      set.modelName =
-        row.kind === "computer" ? ollamaModelName(choice.id) : choice.name;
+    const changesConnection =
+      request.model !== undefined || request.key !== undefined;
+    if (changesConnection) {
+      let reach: SourceReach;
+      if (request.key === undefined) {
+        try {
+          reach = reachOf(row);
+        } catch (error) {
+          if (error instanceof ModelError && error.problem === "key") {
+            throw new ActionCallError("forbidden");
+          }
+          throw error;
+        }
+      } else {
+        if (row.kind === "computer")
+          throw new ActionCallError("invalid_request");
+        const key = request.key.trim();
+        reach = { kind: row.kind, key };
+        set.sealedKey = options.sealer.seal(keyBoundTo(id), key);
+        set.keyEnd = key.slice(-4);
+      }
+      const choices = await choicesForSave(reach);
+      const choice = choices.find(
+        (each) => each.id === (request.model ?? row.model),
+      );
+      if (request.model !== undefined && !choice)
+        throw new ActionCallError("not_found");
+      if (choice) {
+        set.model = choice.id;
+        set.modelName = choice.name;
+      }
+      set.check = null;
     }
     if (Object.keys(set).length === 0) return info();
-    set.check = null;
+    const current = rowOf(id);
+    if (
+      changesConnection &&
+      (row.model !== current.model || row.sealedKey !== current.sealedKey)
+    ) {
+      throw new ActionCallError("conflict");
+    }
+    const changed = { ...current, ...set };
     durably(db, () => {
       db.update(modelSources).set(set).where(eq(modelSources.id, id)).run();
       options.record({
@@ -387,13 +423,16 @@ export function createModels(
         ...by,
         subjectId: id,
         detail: {
-          ...named({ ...row, ...set }),
+          ...named(changed),
           ...(request.key !== undefined ? { key: true } : {}),
         },
       });
     });
-    down.delete(id);
-    void startCheck(id);
+    if (changesConnection) {
+      if (changed.inUse) downSince = undefined;
+      cancelCheck(id);
+      startCheck(changed);
+    }
     return info();
   }
 
@@ -410,20 +449,28 @@ export function createModels(
         detail: named(row),
       });
     });
-    down.delete(id);
+    cancelCheck(id);
+    if (row.inUse) {
+      cancelWatch();
+      downSince = undefined;
+    }
     return info();
   }
 
   /** Asks the source in use for its list, to know whether it answers. */
   async function watchInUse() {
-    const row = rows().find((each) => each.inUse);
-    if (!row || checking.has(row.id)) return;
+    const row = activeRow();
+    if (!row || watching || checking.has(row.id) || stopping.signal.aborted)
+      return;
+    const controller = new AbortController();
+    watching = controller;
     try {
-      await listModels(reachOf(row), options.fetchers, stopping.signal);
-      down.delete(row.id);
+      await listModels(reachOf(row), options.fetchers, controller.signal);
+      if (!controller.signal.aborted) downSince = undefined;
     } catch {
-      if (stopping.signal.aborted) return;
-      if (!down.has(row.id)) down.set(row.id, now());
+      if (!controller.signal.aborted) downSince ??= now();
+    } finally {
+      if (watching === controller) watching = undefined;
     }
   }
 
@@ -447,14 +494,12 @@ export function createModels(
     modelsOf,
     add,
     check(id: string) {
-      rowOf(id);
-      void startCheck(id);
+      startCheck(rowOf(id));
       return info();
     },
     use,
     change,
     remove,
-    count,
     /** A step of starting: begins watching the source in use. */
     start() {
       void watchInUse();
@@ -464,8 +509,9 @@ export function createModels(
     /** A step of stopping: ends the watch and any checks under way. */
     async stop() {
       clearInterval(watchTimer);
+      cancelWatch();
       stopping.abort();
-      await Promise.allSettled([...checking.values()]);
+      await Promise.allSettled([...checking.values()].map(({ run }) => run));
     },
   };
 }

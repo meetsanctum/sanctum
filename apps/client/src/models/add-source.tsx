@@ -15,6 +15,7 @@ import { Check } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
+import { productName } from "../brand";
 import {
   Dialog,
   DialogContent,
@@ -90,6 +91,7 @@ export function AddSource(props: {
   };
 
   const look = async () => {
+    if (looking || adding) return;
     const signal = start();
     setLooking(true);
     setProblem(undefined);
@@ -115,7 +117,7 @@ export function AddSource(props: {
       } else if (answer.models.length === 0) {
         setProblem(
           kind === "computer"
-            ? "Ollama answered, but has no models. Run ollama pull on that computer, then check again."
+            ? "Ollama answered, but has no local models. Run ollama pull on that computer, then check again."
             : `${providerNames[kind]} lists no models for this key.`,
         );
       } else {
@@ -184,6 +186,7 @@ export function AddSource(props: {
       <NativeSelect
         id={ids.model}
         value={model}
+        disabled={adding}
         onChange={(event) => setModel(event.target.value)}
         className="w-full"
       >
@@ -196,13 +199,19 @@ export function AddSource(props: {
       <p className={help}>
         {step === "computer"
           ? "For another model, run ollama pull on that computer, then check again."
-          : `The models your key can use at ${providerNames[provider]}, each from a company such as Anthropic, OpenAI or Google.`}
+          : `The models your key can use at ${providerNames[provider]}.`}
       </p>
     </div>
   );
 
+  const setOpen = (open: boolean) => {
+    if (adding) return;
+    if (!open) cancel();
+    props.onOpenChange(open);
+  };
+
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog open={props.open} onOpenChange={setOpen}>
       <DialogContent
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -239,7 +248,7 @@ export function AddSource(props: {
                     On a computer in your home
                   </span>
                   <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    A Mac or PC that runs Ollama. Nothing leaves your home.
+                    A Mac or PC that runs a local model with Ollama.
                   </span>
                 </span>
               </label>
@@ -266,7 +275,7 @@ export function AddSource(props: {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => props.onOpenChange(false)}
+                onClick={() => setOpen(false)}
               >
                 Cancel
               </Button>
@@ -295,6 +304,7 @@ export function AddSource(props: {
                   inputMode="url"
                   autoComplete="off"
                   maxLength={260}
+                  disabled={adding}
                   autoFocus
                   aria-describedby={`${ids.address}-help`}
                   aria-invalid={!!problem && !found}
@@ -312,7 +322,7 @@ export function AddSource(props: {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!address.trim() || looking}
+                  disabled={!address.trim() || looking || adding}
                   onClick={() => void look()}
                 >
                   {problem && !found ? "Check again" : "Check"}
@@ -334,6 +344,7 @@ export function AddSource(props: {
                   value={computer}
                   placeholder="Office Mac"
                   maxLength={64}
+                  disabled={adding}
                   onChange={(event) => setComputer(event.target.value)}
                   required
                 />
@@ -345,6 +356,7 @@ export function AddSource(props: {
               <Button
                 type="button"
                 variant="outline"
+                disabled={adding}
                 onClick={() => {
                   forget();
                   setStep("where");
@@ -367,7 +379,7 @@ export function AddSource(props: {
             <DialogHeader>
               <DialogTitle>An AI provider</DialogTitle>
               <DialogDescription>
-                Sanctum keeps the key sealed and never shows it again.
+                {productName} keeps the key sealed and never shows it again.
               </DialogDescription>
             </DialogHeader>
             <fieldset className="m-0 flex gap-1 border-0 p-0">
@@ -381,6 +393,7 @@ export function AddSource(props: {
                     type="radio"
                     name="provider"
                     checked={provider === each}
+                    disabled={adding}
                     onChange={() => {
                       setProvider(each);
                       forget();
@@ -402,6 +415,7 @@ export function AddSource(props: {
                   value={key}
                   autoComplete="off"
                   maxLength={512}
+                  disabled={adding}
                   autoFocus
                   aria-invalid={!!problem && !found}
                   onChange={(event) => {
@@ -418,7 +432,7 @@ export function AddSource(props: {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={key.trim().length < 8 || looking}
+                  disabled={key.trim().length < 8 || looking || adding}
                   onClick={() => void look()}
                 >
                   Check key
@@ -436,8 +450,7 @@ export function AddSource(props: {
                 What goes to {providerNames[provider]}
               </span>
               <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-                What's asked, as text, and what you allow under What AI agents
-                can use.
+                A short test question and the description of a test tool.
                 {provider === "openrouter" &&
                   " OpenRouter passes it to the company behind the model."}
               </p>
@@ -447,6 +460,7 @@ export function AddSource(props: {
               <Button
                 type="button"
                 variant="outline"
+                disabled={adding}
                 onClick={() => {
                   forget();
                   setStep("where");

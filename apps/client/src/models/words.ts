@@ -4,6 +4,8 @@ import type {
   ModelSourceInfo,
 } from "@meetsanctum/app-sdk";
 
+import { productName } from "../brand";
+
 // The words Settings uses for the home's AI models: each source by its
 // model and where it runs, how its last check went, and what to do when it
 // doesn't answer.
@@ -73,7 +75,7 @@ export function problemText(
         ? "That isn't an address on your home's network, such as 192.168.1.40."
         : `${provider} refused the question.`;
     case "answer":
-      return "Its answer didn't make sense to Sanctum.";
+      return `Its answer didn't make sense to ${productName}.`;
   }
 }
 
@@ -87,17 +89,20 @@ export function checkLine(
   if (source.checking) {
     return { text: "Checking: asking it a short question", tone: "plain" };
   }
-  if (source.downSince) {
+  const check = source.check;
+  if (
+    source.downSince &&
+    (check?.outcome !== "failed" || check.problem === "unreachable")
+  ) {
     const where =
       source.kind === "computer"
         ? `Check that ${source.computer ?? "the computer"} is awake and Ollama is running there.`
         : "Check your home's connection to the internet.";
     return {
-      text: `Not answering since ${timeText(source.downSince)}. Apps that ask get no answer until it's back or you use another source. ${where}`,
+      text: `Not answering since ${timeText(source.downSince)}. ${where}`,
       tone: "problem",
     };
   }
-  const check = source.check;
   if (!check) return undefined;
   const checked = `checked ${agoText(check.at, now)}`;
   switch (check.outcome) {
@@ -113,7 +118,10 @@ export function checkLine(
       };
     case "failed":
       return {
-        text: problemText(check.problem ?? "answer", source),
+        text:
+          check.problem === "refused" && source.kind === "computer"
+            ? "Ollama refused the check. The model may not support tools."
+            : problemText(check.problem ?? "answer", source),
         tone: "problem",
       };
   }

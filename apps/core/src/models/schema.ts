@@ -1,3 +1,4 @@
+import type { ModelCheck } from "@meetsanctum/app-sdk";
 import {
   integer,
   primaryKey,
@@ -26,8 +27,8 @@ export const modelSources = sqliteTable("model_sources", {
   keyEnd: text("key_end"),
   // At most one source is in use.
   inUse: integer("in_use", { mode: "boolean" }).notNull(),
-  // How the last check went, as JSON (ModelCheck).
-  check: text("check", { mode: "json" }),
+  // How the last check went.
+  check: text("check", { mode: "json" }).$type<ModelCheck>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
