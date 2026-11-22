@@ -1,5 +1,5 @@
 import type { DeviceInfo, MediaCommand } from "@meetsanctum/app-sdk";
-import { LevelSlider } from "@meetsanctum/ui-sdk";
+import { Button, LevelSlider } from "@meetsanctum/ui-sdk";
 import {
   createLucideIcon,
   Minus,
@@ -121,26 +121,6 @@ function Artwork(props: { square: boolean; nothing: boolean }) {
         </span>
       )}
     </div>
-  );
-}
-
-function RoundButton(props: {
-  label: string;
-  disabled?: boolean;
-  big?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={props.label}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      className={`grid shrink-0 place-items-center rounded-full text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40 ${props.big ? "size-18 bg-white/16" : "size-12"}`}
-    >
-      {props.children}
-    </button>
   );
 }
 
@@ -326,50 +306,39 @@ export function MediaPlaying(props: Props) {
             className={`flex items-center px-4 ${playback.includes("previous") || playback.includes("next") ? "justify-between" : "justify-center"}`}
           >
             {playback.includes("previous") && (
-              <RoundButton
-                label="Previous"
+              <Button
+                variant="ghost"
+                size="round"
+                aria-label="Previous"
                 disabled={!able}
                 onClick={() => onCommand({ playback: "previous" })}
               >
-                <SkipBack
-                  aria-hidden="true"
-                  className="size-6.5"
-                  fill="currentColor"
-                />
-              </RoundButton>
+                <SkipBack aria-hidden="true" fill="currentColor" />
+              </Button>
             )}
-            <RoundButton
-              big
-              label={`${playing ? "Pause" : "Play"} ${props.name}`}
+            <Button
+              variant="glass"
+              size="round-lg"
+              aria-label={`${playing ? "Pause" : "Play"} ${props.name}`}
               disabled={!canToggle}
               onClick={() => toggle.current?.()}
             >
               {playing ? (
-                <Pause
-                  aria-hidden="true"
-                  className="size-7.5"
-                  fill="currentColor"
-                />
+                <Pause aria-hidden="true" fill="currentColor" />
               ) : (
-                <Play
-                  aria-hidden="true"
-                  className="size-7.5"
-                  fill="currentColor"
-                />
+                <Play aria-hidden="true" fill="currentColor" />
               )}
-            </RoundButton>
+            </Button>
             {playback.includes("next") && (
-              <RoundButton
-                label="Next"
+              <Button
+                variant="ghost"
+                size="round"
+                aria-label="Next"
                 disabled={!able}
                 onClick={() => onCommand({ playback: "next" })}
               >
-                <SkipForward
-                  aria-hidden="true"
-                  className="size-6.5"
-                  fill="currentColor"
-                />
-              </RoundButton>
+                <SkipForward aria-hidden="true" fill="currentColor" />
+              </Button>
             )}
           </div>
         </div>
@@ -397,16 +366,16 @@ function Toggle(props: {
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="glass"
+      size="round"
       aria-label={props.label}
       aria-pressed={props.pressed}
       disabled={props.disabled}
       onClick={props.onClick}
-      className="grid size-12 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-40 aria-pressed:bg-white aria-pressed:text-(--carbon)"
     >
       {props.children}
-    </button>
+    </Button>
   );
 }
 
@@ -462,32 +431,30 @@ function VolumeSteps(props: {
   const endHold = (event: PointerEvent<HTMLButtonElement>) => {
     if (pointer.current === event.pointerId) stop();
   };
-  const half =
-    "grid flex-1 place-items-center text-white outline-none focus-visible:bg-white/10 disabled:opacity-40";
   return (
     <div
       role="group"
       aria-label={`${props.name} volume`}
-      className="flex h-72 w-24 flex-col overflow-hidden rounded-2xl bg-white/14"
+      className="flex flex-col"
     >
-      <button
-        type="button"
+      <Button
+        variant="glass"
+        size="step"
         aria-label="Turn the volume up"
         disabled={props.disabled}
         {...holding("up")}
-        className={half}
       >
-        <Plus aria-hidden="true" className="size-7" />
-      </button>
-      <button
-        type="button"
+        <Plus aria-hidden="true" />
+      </Button>
+      <Button
+        variant="glass"
+        size="step"
         aria-label="Turn the volume down"
         disabled={props.disabled}
         {...holding("down")}
-        className={half}
       >
-        <Minus aria-hidden="true" className="size-7" />
-      </button>
+        <Minus aria-hidden="true" />
+      </Button>
     </div>
   );
 }
@@ -506,7 +473,7 @@ export function MediaRemote(props: Props) {
           disabled={props.disabled}
           onClick={() => onCommand({ on: !on })}
         >
-          <Power aria-hidden="true" className="size-5.5" />
+          <Power aria-hidden="true" />
         </Toggle>
       )}
       {volume !== null && (
@@ -533,7 +500,7 @@ export function MediaVolume(props: Props) {
           disabled={props.disabled}
           onClick={() => onCommand({ muted: !muted })}
         >
-          <VolumeX aria-hidden="true" className="size-5.5" />
+          <VolumeX aria-hidden="true" />
         </Toggle>
       )}
       {capability.features.volume === "level" ? (
