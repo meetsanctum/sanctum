@@ -272,6 +272,28 @@ describe("an entry's words", () => {
     expect(offer.title).toBe("Stopped AI agents using “Run a mood”");
   });
 
+  it("says when an AI agent was held back for asking too much", () => {
+    const words = (reason: string) =>
+      activityWords(
+        entry({
+          action: "agents.limited",
+          outcome: "refused",
+          reason,
+          who: {
+            kind: "agent",
+            id: "agent-1",
+            name: "Codex on the office Mac",
+            addedBy: null,
+          },
+        }),
+      );
+
+    expect(words("per_minute").title).toBe("Held back for asking too often");
+    expect(words("at_once").title).toBe(
+      "Held back for asking too much at once",
+    );
+  });
+
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
       entry({
