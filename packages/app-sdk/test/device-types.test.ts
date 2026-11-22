@@ -72,6 +72,17 @@ describe("what a device with some kinds is", () => {
     expect(deviceTypeOf(["sensor", "sensor"])).toBe("sensor");
   });
 
+  it.each(["switch", "button", "motion", "contact"] as const)(
+    "infers media player for media and %s",
+    (kind) => {
+      expect(deviceTypeOf([kind, "media"])).toBe("media-player");
+    },
+  );
+
+  it("defaults to a light when it also plays media", () => {
+    expect(deviceTypeOf(["media", "light"])).toBe("light");
+  });
+
   it("is never a plug or a type the household chooses, for any kinds", () => {
     // Every set of the kinds there are.
     const sets = capabilityKinds.reduce<(typeof capabilityKinds)[number][][]>(
