@@ -404,8 +404,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // it was added with. The marker of a key Sanctum gave goes first, so a key
   // it was flashed with is never taken for one.
   async function keep(mac: string, psk: string | null, session: Session) {
-    // A plaintext or typed-key session can reach an unprovisioned device.
-    // The card must show that Add will give it a device key before we do so.
+    // A session in the clear, or under a typed key, can reach a device that
+    // waits to be given a key: it's given one only once its card says so.
     if (session.info.apiEncryptionProvisionable === true) {
       session.client.disconnect();
       finds.learn(mac, "waits");
