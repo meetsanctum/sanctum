@@ -65,6 +65,8 @@ type Owned = {
   telling?: ReturnType<typeof setTimeout>;
   // Its key coming off as it's removed, which ends its connection.
   removing: boolean;
+  // Who made it, as the core has it, for its card once it's removed.
+  maker: string | null;
 };
 
 // Keep the core's length limit without cutting a Unicode character in half.
@@ -312,6 +314,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
       removing: false,
+      maker: device.manufacturer,
       connection: undefined as unknown as Connection,
     };
     owned.connection = createConnection({
@@ -640,7 +643,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             address: () => addressOf(key),
             timings,
           });
-          finds.learn(key, answer);
+          finds.learn(key, answer, owned.maker);
         } catch (error) {
           owned.removing = false;
           throw error;

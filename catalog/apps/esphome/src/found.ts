@@ -207,16 +207,21 @@ export function createFound(options: {
     }
   }
 
-  /** What Sanctum's own connection showed of a device, as it added or removed it. */
-  function learn(mac: string, said: Said) {
+  /**
+   * What Sanctum's own connection showed of a device, as it added or removed
+   * it, and who made it, where that connection said so.
+   */
+  function learn(mac: string, said: Said, maker?: string | null) {
     const found = announced.get(mac);
     if (!found) return;
     const observation = observationOf(found);
     observation.request = undefined;
     running.get(mac)?.controller.abort();
     finishAsk(observation, said === "closed");
-    const maker = observation.learned?.maker ?? null;
-    observation.learned = { said, maker };
+    observation.learned = {
+      said,
+      maker: maker ?? observation.learned?.maker ?? null,
+    };
   }
 
   function discoveryChanged() {
