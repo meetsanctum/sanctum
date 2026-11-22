@@ -66,6 +66,7 @@ let container: HTMLDivElement;
 let root: Root;
 let clients: ClientInfo[];
 let agents: unknown[];
+let models: unknown[];
 let opened: [string, PageParams | undefined][];
 let wentBack: number;
 const live = createLiveFeed();
@@ -74,11 +75,23 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   clients = [maya.client, tablet, { ...tablet, id: "phone", name: "Phone" }];
   agents = [{ id: "codex" }, { id: "claude" }];
+  models = [
+    {
+      id: "mac",
+      kind: "computer",
+      model: "qwen3:8b",
+      modelName: "Qwen3 8B",
+      computer: "Office Mac",
+      inUse: true,
+      tokens: { today: 0, month: 0 },
+    },
+  ];
   opened = [];
   wentBack = 0;
   vi.mocked(coreJson).mockImplementation(async (path: string) => {
     if (path === "/api/auth/clients") return clients as never;
     if (path === "/api/auth/agents") return agents as never;
+    if (path === "/api/models") return { sources: models } as never;
     throw new Error(`unexpected ${path}`);
   });
   container = document.createElement("div");
@@ -154,6 +167,7 @@ describe("Settings' first page", () => {
       "ActivityWho did what in the home",
       "Apps2 apps · 1 update waiting",
       "AI agents2 agents",
+      "AI modelsQwen3 8B on Office Mac",
       "ClientsThis device and 2 others",
       "SystemCan't check right now",
     ]);
@@ -165,6 +179,7 @@ describe("Settings' first page", () => {
   it("says what a new home doesn't have yet", async () => {
     clients = [maya.client];
     agents = [];
+    models = [];
     await show({
       apps: [zigbee],
       places: { ...home, floors: [], rooms: [] },
@@ -178,6 +193,7 @@ describe("Settings' first page", () => {
       "ActivityWho did what in the home",
       "Apps1 app",
       "AI agentsNone yet",
+      "AI modelsNone yet",
       "ClientsThis device",
       "SystemCan't check right now",
     ]);

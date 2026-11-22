@@ -1,3 +1,4 @@
+import type { ModelFetchers } from "../src/models/endpoints.js";
 import {
   keyStretching,
   passwordChangeBinding,
@@ -138,6 +139,9 @@ export async function testCore(
     startsAt?: string;
     // The internet as the core sees it; by default there is none.
     fetch?: typeof fetch;
+    // How the core reaches AI models in the home and on the internet; by
+    // default neither answers.
+    modelFetchers?: ModelFetchers;
     // Whether the household allowed every optional permission the apps
     // ask for before the test, as each app's page would have asked; tests
     // of the core's own first answers say false.
@@ -245,6 +249,10 @@ export async function testCore(
               : () => options.timeZone ?? "UTC",
           sun: options.sun,
           fetch: options.fetch ?? noInternet,
+          modelFetchers: options.modelFetchers ?? {
+            home: noInternet,
+            internet: noInternet,
+          },
         },
       },
     },

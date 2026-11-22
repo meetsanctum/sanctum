@@ -97,10 +97,48 @@ function keyIn(dataDir: string) {
   return published ? key : read();
 }
 
-// What each secret is sealed with names its app and name, so a sealed value
-// moved to another row doesn't open.
-const boundTo = (appId: string, name: string) =>
-  Buffer.from(`${appId}\0${name}`, "utf8");
+/**
+ * Seals values with the core's key, each bound to what it belongs to, so a
+ * sealed value moved to another row doesn't open. Apps' secrets and the
+ * core's own, such as AI providers' keys, share the key.
+ */
+export function createSealer(dataDir: string) {
+  const key = keyIn(dataDir);
+  return {
+    seal(boundTo: string, value: string) {
+      const nonce = randomBytes(nonceBytes);
+      const cipher = createCipheriv("aes-256-gcm", key, nonce) as CipherGCM;
+      cipher.setAAD(Buffer.from(boundTo, "utf8"));
+      const sealed = Buffer.concat([
+        cipher.update(value, "utf8"),
+        cipher.final(),
+      ]);
+      return Buffer.concat([nonce, cipher.getAuthTag(), sealed]).toString(
+        "base64",
+      );
+    },
+    /** The value, or an error when it doesn't open with this core's key. */
+    open(boundTo: string, sealed: string) {
+      const bytes = Buffer.from(sealed, "base64");
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        key,
+        bytes.subarray(0, nonceBytes),
+      ) as DecipherGCM;
+      decipher.setAAD(Buffer.from(boundTo, "utf8"));
+      decipher.setAuthTag(bytes.subarray(nonceBytes, nonceBytes + tagBytes));
+      return Buffer.concat([
+        decipher.update(bytes.subarray(nonceBytes + tagBytes)),
+        decipher.final(),
+      ]).toString("utf8");
+    },
+  };
+}
+
+export type Sealer = ReturnType<typeof createSealer>;
+
+// What each secret is sealed with names its app and name.
+const boundTo = (appId: string, name: string) => `${appId}\0${name}`;
 
 export type AppSecrets = ReturnType<typeof createAppSecrets>;
 
@@ -112,36 +150,12 @@ export function createAppSecrets(
     now?: () => Date;
   },
 ) {
-  const key = keyIn(options.dataDir);
+  const sealer = createSealer(options.dataDir);
   const now = options.now ?? (() => new Date());
-
-  function seal(appId: string, name: string, value: string) {
-    const nonce = randomBytes(nonceBytes);
-    const cipher = createCipheriv("aes-256-gcm", key, nonce) as CipherGCM;
-    cipher.setAAD(boundTo(appId, name));
-    const sealed = Buffer.concat([
-      cipher.update(value, "utf8"),
-      cipher.final(),
-    ]);
-    return Buffer.concat([nonce, cipher.getAuthTag(), sealed]).toString(
-      "base64",
-    );
-  }
-
-  function open(appId: string, name: string, sealed: string) {
-    const bytes = Buffer.from(sealed, "base64");
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      key,
-      bytes.subarray(0, nonceBytes),
-    ) as DecipherGCM;
-    decipher.setAAD(boundTo(appId, name));
-    decipher.setAuthTag(bytes.subarray(nonceBytes, nonceBytes + tagBytes));
-    return Buffer.concat([
-      decipher.update(bytes.subarray(nonceBytes + tagBytes)),
-      decipher.final(),
-    ]).toString("utf8");
-  }
+  const seal = (appId: string, name: string, value: string) =>
+    sealer.seal(boundTo(appId, name), value);
+  const open = (appId: string, name: string, sealed: string) =>
+    sealer.open(boundTo(appId, name), sealed);
 
   const row = (appId: string, name: string) =>
     and(eq(appSecrets.appId, appId), eq(appSecrets.name, name));

@@ -31,7 +31,7 @@ import { createRoomWaits, updateRoom } from "./app-host/room-waits.js";
 import { createWaitingUpdates } from "./app-host/waiting.js";
 import { createAppUpdates, type AppUpdateManager } from "./app-host/updates.js";
 import { createAppVersions } from "./app-host/versions.js";
-import { createAppSecrets } from "./app-host/secrets.js";
+import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
 import type { Limits } from "./auth/limits.js";
@@ -54,6 +54,8 @@ import { createEntities, type Entities } from "./entities/entities.js";
 import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
+import { createModels } from "./models/models.js";
+import type { ModelFetchers } from "./models/endpoints.js";
 import { createLiveUpdates } from "./live-updates.js";
 import type { ManagerClient } from "./manager.js";
 import { createPages } from "./pages/pages.js";
@@ -163,6 +165,9 @@ export async function createModules(
     // from Places and from the app that provides the sun.
     timeZone?: () => string | null;
     sun?: () => SunDays | null;
+    // For tests: how the core reaches AI models in the home and on the
+    // internet.
+    modelFetchers?: ModelFetchers;
   },
 ) {
   const { now, log } = options;
@@ -581,6 +586,18 @@ export async function createModules(
     timeZone: options.timeZone ?? (() => places.timeZone()),
     sun: options.sun ?? (() => sunDays(entities)),
   });
+  // The home's AI models, which the household adds in Settings.
+  const models = createModels(db, {
+    sealer: createSealer(options.dataDir),
+    fetchers: options.modelFetchers ?? {
+      home: fetch,
+      internet: publicInternet(),
+    },
+    record: activity.for("models"),
+    timeZone: options.timeZone ?? (() => places.timeZone()),
+    log,
+    now,
+  });
   const activityViews = createActivityViews(activity, {
     person: (id) => people.get(id) ?? null,
     client: auth.clients.name,
@@ -688,6 +705,7 @@ export async function createModules(
     ["stop holds", () => holds.close()],
     ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
+    ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
     ["close the bus", () => eventBus.close()],
@@ -704,6 +722,7 @@ export async function createModules(
     activityViews,
     agentsCanUse,
     logAgentLimited,
+    models,
     managerAudit,
     people,
     auth,

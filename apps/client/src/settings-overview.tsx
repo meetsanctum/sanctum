@@ -3,6 +3,7 @@ import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
 import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   Bot,
+  Sparkles,
   ChevronRight,
   Gauge,
   House,
@@ -19,6 +20,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Row } from "./components";
 import { useAgents } from "./agents/data";
 import { agentsTitle } from "./agents/words";
+import { useModels } from "./models/data";
+import { modelsTitle, sourceName } from "./models/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
 import { SummaryLine, summarySpoken } from "./settings-status";
@@ -41,6 +44,7 @@ type SettingsArea =
   | "activity"
   | "apps"
   | "agents"
+  | "ai-models"
   | "clients"
   | "system";
 
@@ -83,6 +87,8 @@ export function SettingsOverview(props: {
   const others = useOtherClients(props.live);
   const { agents } = useAgents(props.live);
   const agentCount = agents?.length;
+  const models = useModels(props.live).info?.sources;
+  const modelInUse = models?.find((source) => source.inUse);
   const updates = props.apps.filter((app) => app.waiting).length;
   const row = (
     area: SettingsArea,
@@ -159,6 +165,18 @@ export function SettingsOverview(props: {
             : agentCount === 0
               ? "None yet"
               : counted(agentCount, "agent"),
+        )}
+        {row(
+          "ai-models",
+          Sparkles,
+          modelsTitle,
+          models === undefined
+            ? ""
+            : modelInUse
+              ? sourceName(modelInUse)
+              : models.length === 0
+                ? "None yet"
+                : "None in use",
         )}
       </AreaGroup>
       <AreaGroup>
