@@ -243,6 +243,32 @@ describe("removing a device", () => {
     expect(home.core.problems.has(key)).toBe(false);
   });
 
+  it("is listed by who made it again, though it announced itself anew since it was added", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = await add(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online",
+    );
+    // Restarted with its key, its record is new, and what was learned as it
+    // was added goes with the old one.
+    const greeted = device.greeted;
+    device.reboot();
+    await announce(home.core, device);
+    await home.core.until(
+      () => device.greeted > greeted && device.activeConnections > 0,
+      "connected again",
+    );
+
+    await home.core.remove(key);
+    await home.core.until(() => device.waiting, "its key applied");
+    expect(home.core.found.find((each) => each.key === key)).toMatchObject({
+      description: "Espressif",
+      asks: [],
+    });
+  });
+
   it.each([false, true])(
     "finds the key off after a lost answer (window closed: %s)",
     async (isWindowClosed) => {

@@ -246,9 +246,8 @@ describe("a record from before a key was given or taken off", () => {
 
     expect(device.sighting().txt.api_encryption).toBeDefined();
     await home.core.until(() => device.psk === null, "its key off");
-    expect(
-      await listedAs(key, "Gets an encryption key of its own"),
-    ).toMatchObject({ asks: [] });
+    // Listed by who made it, as its connection said before it was removed.
+    expect(await listedAs(key, "Espressif")).toMatchObject({ asks: [] });
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toHaveLength(3);

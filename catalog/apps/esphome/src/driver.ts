@@ -374,7 +374,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       session.client.disconnect();
       throw error;
     }
-    finds.learn(mac, session.encrypted ? "key" : "clear");
+    finds.learn(
+      mac,
+      session.encrypted ? "key" : "clear",
+      makerOf(session.info).manufacturer,
+    );
     await finds.list();
   }
 
@@ -635,7 +639,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             address: () => addressOf(key),
             timings,
           });
-          finds.learn(key, answer);
+          // Listed again by who made it, as before it was added.
+          finds.learn(
+            key,
+            answer,
+            session && makerOf(session.info).manufacturer,
+          );
         } catch (error) {
           owned.removing = false;
           throw error;
