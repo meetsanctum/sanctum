@@ -126,10 +126,11 @@ What is under which licence, and what neither covers, is in
 - Electric blue only for what you can press (buttons, links, active states),
   never for anything else.
 - Inter; sentence case everywhere, never all caps (acronyms such as OS keep
-  their capitals), except in the names Sanctum gives devices, where each
-  word starts with a capital ("Office Light"); no dividing lines; corners
-  from the `--radius` scale, nothing pill-shaped but a count's badge ("3
-  found").
+  their capitals), except in names, where each word starts with a capital:
+  the names Sanctum gives devices ("Office Light"), apps' names ("Natural
+  Light") and the types summary tiles count ("Contact Sensors"); no dividing
+  lines; corners from the `--radius` scale, nothing pill-shaped but a
+  count's badge ("3 found").
 - Widget titles in the app's colour, but room sections' headings neutral like
   the shell's own; one primary action per widget or card at most, and an
   overlay's Back and Done are outlined, except that Done is the primary

@@ -27,6 +27,7 @@ import {
   historyStatistics,
 } from "./schema.js";
 import { createRollups } from "./compile.js";
+import { recordedState } from "./sources.js";
 import { isRecorded, type Recorded } from "./statistics.js";
 import { historyTimes as times } from "./time.js";
 
@@ -154,7 +155,10 @@ export function createHistory(
     if (!isRecorded(kind) || notKept.has(device)) return;
     const current: Recorded = {
       availability,
-      state: (capability.observed as Record<string, unknown> | null) ?? null,
+      state: recordedState(
+        kind,
+        (capability.observed as Record<string, unknown> | null) ?? null,
+      ),
     };
     const was = lastRecorded(device, capability.id, kind);
     // A capability starts once something is known of it, as a new device

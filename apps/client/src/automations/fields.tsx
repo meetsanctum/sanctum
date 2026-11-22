@@ -17,6 +17,7 @@ import {
   formatDays,
   formatLux,
   formatMinutes,
+  matchesCapability,
   weekOrder,
   weekdaysOnly,
   weekendsOnly,
@@ -537,7 +538,7 @@ export function FieldControl(props: {
           (device) =>
             !kinds ||
             device.capabilities.some((capability) =>
-              kinds.includes(capability.kind),
+              matchesCapability(capability, kinds, props.context.config.field),
             ),
         );
         const roomName = (id: string | null) =>

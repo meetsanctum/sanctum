@@ -29,8 +29,9 @@ export type Recorded = {
 // What each kind's values are in one recorded state: nothing is known of a
 // device that does not answer, and a light's brightness counts only while
 // it is on. A button has no state, so it records nothing; a sensor records
-// its reading, a motion sensor whether it saw someone, and a contact
-// sensor whether it was open.
+// its reading, a motion sensor whether it saw someone, a contact
+// sensor whether it was open, and a media player whether it was playing
+// and, where it has power, whether it was on.
 const values: {
   [K in CapabilityKind]:
     | ((recorded: Recorded) => Partial<Record<HistoryField, number | null>>)
@@ -61,6 +62,19 @@ const values: {
   }),
   contact: ({ availability, state }) => ({
     open: known(availability, state) ? (state.open === true ? 1 : 0) : null,
+  }),
+  media: ({ availability, state }) => ({
+    playing: known(availability, state)
+      ? state.activity === "playing"
+        ? 1
+        : 0
+      : null,
+    on:
+      known(availability, state) && typeof state.on === "boolean"
+        ? state.on
+          ? 1
+          : 0
+        : null,
   }),
 };
 

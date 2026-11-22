@@ -5,7 +5,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-// Natural light's own database: the lights that follow the curve, the
+// Natural Light's own database: the lights that follow the curve, the
 // lights the household left out, and each room's button as last published. Every light that takes a colour
 // temperature follows unless it is left out (choices.ts). A light has a row
 // in followed_lights while it follows, and whether it is paused is mostly
@@ -45,7 +45,7 @@ export const leftOutLights = sqliteTable(
   (table) => [primaryKey({ columns: [table.deviceId, table.capabilityId] })],
 );
 
-// Each room's Natural light button, and its rule for turning the room on, as
+// Each room's Natural Light button, and its rule for turning the room on, as
 // they were last published, so each is published again only when it
 // changes, and taken out of the home once its room has no light that
 // follows, even one removed while natural light was stopped. A row is

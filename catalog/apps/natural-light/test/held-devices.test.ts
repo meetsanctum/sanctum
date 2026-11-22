@@ -5,7 +5,7 @@ import { publishButtons } from "../src/rooms.js";
 import { moods, off, on, running } from "./running.js";
 
 // A room's lights each change several times as the room is switched, and
-// nearly every such change leaves the room's button as it is. Natural light
+// nearly every such change leaves the room's button as it is. Natural Light
 // holds the devices as their events leave them and asks the core for a
 // room's lights only where those say its button may have changed; what it
 // publishes is always what the core then says.

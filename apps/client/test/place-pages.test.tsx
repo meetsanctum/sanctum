@@ -613,7 +613,7 @@ describe("contact sensors", () => {
       devices = [unknown];
       await show("room", "office");
 
-      expect(readingsLine()?.textContent).toBe("Contact sensors No readings");
+      expect(readingsLine()?.textContent).toBe("Contact Sensors No readings");
       expect(
         readingsLine()?.querySelector("svg")?.getAttribute("stroke-dasharray"),
       ).toBe("3 3");
@@ -624,7 +624,7 @@ describe("contact sensors", () => {
           live.refresh();
         });
         expect(readingsLine()?.textContent).toBe(
-          `Contact sensors ${open ? "1 open" : "1 closed"}`,
+          `Contact Sensors ${open ? "1 open" : "1 closed"}`,
         );
         const icon = readingsLine()?.querySelector("svg");
         expect(icon?.hasAttribute("stroke-dasharray")).toBe(false);
@@ -645,7 +645,7 @@ describe("contact sensors", () => {
     ];
     await show("room", "office");
 
-    expect(readingsLine()?.textContent).toBe("Contact sensors 1 open");
+    expect(readingsLine()?.textContent).toBe("Contact Sensors 1 open");
     expect(headings()).toEqual(["Lights", "Security"]);
     expect(tile("Front door")?.textContent).toBe("Front doorOpen");
     // Its tile switches nothing: one button, which opens its detail.

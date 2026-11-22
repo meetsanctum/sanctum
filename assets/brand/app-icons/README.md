@@ -16,7 +16,7 @@ colour; other pairs keep the standard line icon.
 | Moods         | `swatch-book` | Ember    | <img src="moods.png" width="64" height="64" alt="">         |
 | Automations   | `sparkles`    | Blossom  | <img src="automations.png" width="64" height="64" alt="">   |
 | Weather       | `cloud-sun`   | Sky      | <img src="weather.png" width="64" height="64" alt="">       |
-| Natural light | `sun`         | Sun      | <img src="natural-light.png" width="64" height="64" alt=""> |
+| Natural Light | `sun`         | Sun      | <img src="natural-light.png" width="64" height="64" alt=""> |
 | Zigbee        | `radio-tower` | Graphite | <img src="zigbee.png" width="64" height="64" alt="">        |
 
 Moods owns the colour swatches, Automations the two sparkles.

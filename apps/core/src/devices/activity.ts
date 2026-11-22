@@ -28,6 +28,9 @@ export type Sent = {
   capability: string;
   kind: CapabilityKind;
   asked: Record<string, unknown>;
+  // A command that asks for no state, as a media player's next track: what
+  // it was, since what it asked says nothing.
+  command?: Record<string, unknown>;
   app: string | null;
 };
 
@@ -89,6 +92,7 @@ export function createDeviceLog(options: {
           capability: sent.capability,
           capabilityKind: sent.kind,
           asked: sent.asked,
+          ...(sent.command && { command: sent.command }),
           ...(failed.hasResent && { resent: true }),
         },
       },

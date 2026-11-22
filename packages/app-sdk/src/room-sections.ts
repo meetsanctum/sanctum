@@ -2,19 +2,16 @@ import { z } from "zod";
 
 import type { ActionDefinition, AppDefinition } from "./index.js";
 
-// Room sections: what an app adds to a room's row, the tiles under the
-// room's name on its page and on Home that switch its lights and set their
-// look. The shell draws each from the app's entities of one type in that
-// room, after the room's own switch: first every section's buttons, square
-// tiles with only their icon, such as Natural light's sun, then every
-// section's tiles with their names, such as Moods' moods. The row has no
-// headings. No app code runs to draw it, so a section looks native whoever
-// brings it.
+// Room sections: what an app adds to a room's row, the buttons and tiles
+// under the room's name on its page and on Home that set its lights' look.
+// The shell draws each from the app's entities of one type in that room.
+// Buttons such as Natural Light sit beside the room's own switch. Tiles
+// such as Moods' moods sit below. The row has no headings. The shell draws
+// every section the same way, regardless of which app provides it.
 
 /**
- * How a section shows in the room's row: as buttons, square tiles with
- * only their icon, which say their name to a screen reader and on hover,
- * or as tiles with their icon and name.
+ * How a section shows in the room's row: as buttons beside the room's
+ * switch or as tiles below it. Both show an icon and a name.
  */
 export const roomSectionKinds = ["tiles", "buttons"] as const;
 export type RoomSectionKind = (typeof roomSectionKinds)[number];
@@ -94,7 +91,7 @@ export const sampleTilesMax = 6;
 /**
  * Where a room's sections go in its row, buttons and tiles each by these
  * weights. Sanctum keeps those below `appSectionOrderFrom` for its own, such
- * as 200 for Moods and Natural light; any app takes one from 300 to 799, 500
+ * as 200 for Moods and Natural Light; any app takes one from 300 to 799, 500
  * unless it says, and ties go by app id.
  */
 export const sectionOrderFrom = 100;
@@ -109,7 +106,7 @@ export interface RoomSectionDefinition {
   readonly title: string;
   /** One of the types the app provides, whose state has the tile shape. */
   readonly entityType: string;
-  /** Buttons with only their icon, or tiles with their names. */
+  /** How the section shows in the room's row. */
   readonly kind: RoomSectionKind;
   /**
    * Its weight among the room's sections, from 300 to 799, 500 when it

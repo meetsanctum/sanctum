@@ -3,7 +3,6 @@ import {
   capabilityOf,
   deviceRegistration,
   deviceReport,
-  historyFields,
   type CapabilityKind,
 } from "@meetsanctum/app-sdk";
 import { and, eq } from "drizzle-orm";
@@ -12,6 +11,7 @@ import { z } from "zod";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
+import { historySourcesOf } from "../history/sources.js";
 import type { createDeviceLog } from "./activity.js";
 import type { createCommandTracking } from "./commands.js";
 import { unknownFirmware } from "./firmware.js";
@@ -27,8 +27,8 @@ import { observe, reconcile } from "./sync.js";
 
 type CapabilityRow = typeof deviceCapabilities.$inferSelect;
 
-// Whether a report changes what a capability says, by its kind's history
-// fields (CapabilityInfo.changedAt): its first report does.
+// Whether a report changes what a capability says, by the fields its kind's
+// history comes from (CapabilityInfo.changedAt): its first report does.
 function changedFields(
   capability: {
     kind: CapabilityKind;
@@ -38,7 +38,7 @@ function changedFields(
 ) {
   return (
     capability.observed === null ||
-    historyFields[capability.kind].some(
+    historySourcesOf(capability.kind).some(
       (field: string) => capability.observed![field] !== observed[field],
     )
   );

@@ -29,7 +29,7 @@ export const weather: AppInfo = {
 // An app whose own page opens its preferences.
 export const naturalLight: AppInfo = {
   id: "sanctum.natural-light",
-  name: "Natural light",
+  name: "Natural Light",
   version: "0.1.0",
   icon: { glyph: "sun", color: "sun" },
   pages: ["main"],

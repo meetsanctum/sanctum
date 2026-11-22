@@ -14,12 +14,12 @@ sensors. You add only the apps your home needs.
 | App           | What it does                                                          |
 | ------------- | --------------------------------------------------------------------- |
 | Moods         | Moods for each room, and what remotes and motion do with its lights   |
-| Natural light | Lights that follow the colour of daylight through the day             |
+| Natural Light | Lights that follow the colour of daylight through the day             |
 | Weather       | The forecast and sun times for where your home is                     |
 | Zigbee        | Brings your Zigbee lights, plugs, remotes and sensors into your home  |
 | ESPHome       | Brings your ESPHome lights, plugs, sensors and buttons into your home |
 
-A new home starts with Moods, Natural light and Weather. Zigbee and ESPHome
+A new home starts with Moods, Natural Light and Weather. Zigbee and ESPHome
 bring devices in, so Sanctum offers each of them once it sees something to
 use it for, as
 [Adding and removing apps](/apps/adding-and-removing/#zigbee-and-esphome)

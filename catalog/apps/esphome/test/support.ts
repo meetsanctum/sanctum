@@ -138,6 +138,9 @@ function fixtureOf(kind: CapabilityKind): {
         ],
         states: {},
       };
+    case "media":
+      // The driver brings no media player, so no test asks for one.
+      throw new Error("ESPHome brings no media player");
   }
 }
 

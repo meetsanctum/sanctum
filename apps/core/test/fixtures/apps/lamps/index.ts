@@ -2,11 +2,13 @@ import {
   ActionError,
   defineApp,
   deviceTypeOf,
+  mediaCommand,
   type Actor,
   type DeclaredType,
   type AppContext,
   type DeviceJoining,
   type DeviceRegistration,
+  type MediaFeatures,
   type DriverAdd,
   type DriverAddResult,
   type DriverCommand,
@@ -20,8 +22,8 @@ import {
 
 // A driver app for the tests, loaded from its package like a catalog app. It
 // brings lamps, plugs, remotes, climate sensors, motion sensors (motion,
-// light level and temperature, with their settings) and contact sensors
-// from a pretend radio, the
+// light level and temperature, with their settings), contact sensors and
+// media players from a pretend radio, the
 // way the Zigbee app brings them from Zigbee2MQTT: it registers them when it
 // starts and says those are all it has, carries out the commands the core hands
 // it, and reports what the devices say back, remotes' presses and releases, and
@@ -43,6 +45,7 @@ type Gadget = {
     | "sensor"
     | "motion"
     | "contact"
+    | "media"
     | "purifier";
   name: string;
   // What the driver says it is, if it says.
@@ -56,6 +59,7 @@ const capabilityIds = {
   light: "light",
   switch: "power",
   button: "button",
+  media: "media",
 } as const;
 // What a remote's button can do, and which of that is a hold.
 export const remoteActions = ["single", "double", "hold"];
@@ -81,6 +85,7 @@ const models = {
   sensor: "Climate sensor",
   motion: "Motion sensor",
   contact: "Contact sensor",
+  media: "Media box",
   purifier: "Air purifier",
 };
 // A climate sensor's two readings and its battery, as it first says them.
@@ -183,7 +188,9 @@ class Radio {
               ? { ...motion }
               : kind === "contact"
                 ? { open: false, battery: 95 }
-                : { on: false },
+                : kind === "media"
+                  ? { on: true, activity: "idle", volume: 30, muted: false }
+                  : { on: false },
       answers: true,
     });
     if (this.ctx) {
@@ -437,6 +444,7 @@ class Radio {
   }
 
   async carryOut(command: DriverCommand, actor: Actor) {
+    if (command.kind === "media") mediaCommand.parse(command.command);
     const gadget = this.gadgets.get(command.key);
     if (!gadget) {
       throw new ActionError("not_found", `No gadget ${command.key}`);
@@ -450,7 +458,11 @@ class Radio {
       string,
       unknown
     >;
-    Object.assign(gadget.state, fields);
+    if (gadget.kind === "media") {
+      playMedia(gadget.state, fields);
+    } else {
+      Object.assign(gadget.state, fields);
+    }
     if ("colorTemperature" in fields) {
       gadget.state.colorMode = "temperature";
       delete gadget.state.hue;
@@ -519,28 +531,36 @@ class Radio {
               ? motionCapabilities
               : gadget.kind === "contact"
                 ? [{ id: "contact", kind: "contact" }]
-                : [
-                    gadget.kind === "light"
-                      ? {
-                          id: capabilityIds.light,
-                          kind: "light",
-                          features: {
-                            brightness: true,
-                            colorTemperature: { min: 153, max: 500 },
-                            color: true,
-                          },
-                        }
-                      : gadget.kind === "button"
+                : gadget.kind === "media"
+                  ? [
+                      {
+                        id: capabilityIds.media,
+                        kind: "media",
+                        features: mediaFeatures,
+                      },
+                    ]
+                  : [
+                      gadget.kind === "light"
                         ? {
-                            id: capabilityIds.button,
-                            kind: "button",
+                            id: capabilityIds.light,
+                            kind: "light",
                             features: {
-                              actions: remoteActions,
-                              holds: remoteHolds,
+                              brightness: true,
+                              colorTemperature: { min: 153, max: 500 },
+                              color: true,
                             },
                           }
-                        : { id: capabilityIds.switch, kind: "switch" },
-                  ],
+                        : gadget.kind === "button"
+                          ? {
+                              id: capabilityIds.button,
+                              kind: "button",
+                              features: {
+                                actions: remoteActions,
+                                holds: remoteHolds,
+                              },
+                            }
+                          : { id: capabilityIds.switch, kind: "switch" },
+                    ],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)
@@ -585,6 +605,38 @@ const motionCapabilities: DeviceRegistration["capabilities"] = [
   { id: "illuminance", kind: "sensor", features: { measures: "illuminance" } },
   { id: "temperature", kind: "sensor", features: { measures: "temperature" } },
 ];
+
+// A media player that does all a media player can: power, every step of
+// playback, a volume it can be set to, and mute.
+const mediaFeatures: MediaFeatures = {
+  power: true,
+  playback: ["play", "pause", "stop", "next", "previous", "seek"],
+  volume: "level",
+  mute: true,
+};
+
+// What a media player does with a command: a step of the volume moves it by
+// 5, stop leaves it idle, a place in what's playing is where it is now, and
+// next and previous change nothing it says; the rest is the state asked for.
+function playMedia(
+  state: Record<string, unknown>,
+  command: Record<string, unknown>,
+) {
+  if ("volumeStep" in command) {
+    const step = command.volumeStep === "up" ? 5 : -5;
+    state.volume = Math.max(0, Math.min(100, (state.volume as number) + step));
+  } else if ("playback" in command) {
+    if (command.playback === "stop") state.activity = "idle";
+  } else if ("position" in command) {
+    state.media = {
+      ...(state.media as object | undefined),
+      position: command.position,
+      positionAt: new Date().toISOString(),
+    };
+  } else {
+    Object.assign(state, command);
+  }
+}
 
 // A sensor's readings, each a capability.
 const sensorCapabilities: DeviceRegistration["capabilities"] = [

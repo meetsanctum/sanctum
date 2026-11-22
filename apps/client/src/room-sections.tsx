@@ -51,7 +51,7 @@ type AppSection = { app: AppInfo; section: RoomSectionInfo };
 
 /**
  * A room's sections of one kind in their order: by the weight each
- * declares, Sanctum's own first (Moods and Natural light at 200), then other
+ * declares, Sanctum's own first (Moods and Natural Light at 200), then other
  * apps' from 300, ties by app id.
  */
 function sectionsInOrder(
@@ -196,10 +196,10 @@ export const isRowEmpty = (row: RoomRowParts) =>
  * A room's row, under its name on its page and on Home: on its first line
  * its lights button, a chip that says what it does ("Turn off lights") and
  * is White while any light is on (lights-button.tsx), and apps' buttons,
- * chips with their icon and name, such as Natural light; then apps' tiles
+ * chips with their icon and name, such as Natural Light; then apps' tiles
  * with their names, such as the room's moods. The lights button says
  * whether the lights are on, the rest which look they have. At most one
- * look is lit: Natural light before a mood that matches the curve, and a
+ * look is lit: Natural Light before a mood that matches the curve, and a
  * running app's look before the last one a paused app said.
  * Each is named with the room, since several rooms' are in reach on Home.
  * While every light is offline the core can reach none, so the whole row

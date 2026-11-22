@@ -138,6 +138,7 @@ describe("a contact sensor's tile", () => {
       ["Environment", ["21° · 48%"]],
       ["Presence", []],
       ["Security", ["Closed"]],
+      ["Media", []],
       ["Buttons", []],
     ]);
     expect(
@@ -312,14 +313,14 @@ describe("contact sensors shown as doors and windows", () => {
     expect(line([sensor("letterbox", true)])).toEqual([
       "1 open",
       undefined,
-      "Contact sensors",
+      "Contact Sensors",
     ]);
     expect(
       line([shown("front", "door", true), shown("kitchen", "window", true)]),
-    ).toEqual(["2 open", undefined, "Contact sensors"]);
+    ).toEqual(["2 open", undefined, "Contact Sensors"]);
     expect(
       line([shown("front", "door", true), sensor("letterbox", true)]),
-    ).toEqual(["2 open", undefined, "Contact sensors"]);
+    ).toEqual(["2 open", undefined, "Contact Sensors"]);
   });
 
   it("say closed as before, by the door's or the window's glyph where every sensor there is one", () => {
@@ -333,7 +334,7 @@ describe("contact sensors shown as doors and windows", () => {
     ]);
     expect(
       line([shown("front", "door", false), shown("kitchen", "window", false)]),
-    ).toEqual(["All closed", undefined, "Contact sensors"]);
+    ).toEqual(["All closed", undefined, "Contact Sensors"]);
     expect(line([shown("front", "door", null)])).toEqual([
       "No readings",
       "door",
