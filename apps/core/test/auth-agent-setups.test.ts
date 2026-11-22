@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
 import { createCoreCertificates } from "../src/certificate.js";
+import { connect } from "./agents-support.js";
 import { testCa } from "./certificates.js";
 import {
   claimed,
@@ -165,6 +166,16 @@ describe("adding an AI agent", () => {
       name: "Codex on the office Mac",
       gone: false,
     });
+
+    core.advance(60_000);
+    const client = await connect(core, token);
+    await client.listTools();
+    expect(await agents(core, maya.token)).toMatchObject([
+      { lastSeenAt: "2026-10-26T12:01:30.000Z" },
+    ]);
+    expect(await status(core, maya.token, setup.setupId)).toMatchObject({
+      connectedAt: "2026-10-26T12:00:30.000Z",
+    });
   });
 
   it("carries the pin of the host CA the core serves", async () => {
@@ -222,6 +233,37 @@ describe("adding an AI agent", () => {
     const again = await collect(core, setup);
     expect(again.statusCode).toBe(409);
     expect(again.json()).toEqual({ error: "expired" });
+  });
+
+  it("keeps a collected setup's state when its code is entered incorrectly", async () => {
+    const core = await testCore();
+    const maya = await claimed(core);
+    const setup = await start(core, maya.token);
+    const { token } = (await collect(core, setup)).json<AgentTokenCollected>();
+
+    for (let tries = 0; tries < 5; tries += 1) {
+      expect((await collect(core, { ...setup, secret: wrong })).json()).toEqual(
+        {
+          error: "expired",
+        },
+      );
+    }
+    expect((await status(core, maya.token, setup.setupId)).status).toBe(
+      "waiting",
+    );
+    expect(
+      entries(core, "agents.add").filter(
+        (entry) => entry.reason === "wrong_secret",
+      ),
+    ).toHaveLength(5);
+
+    await post(
+      core,
+      "/api/auth/agents/setup/cancel",
+      { setupId: setup.setupId },
+      { token: maya.token },
+    );
+    expect((await firstCall(core, token)).statusCode).toBe(401);
   });
 
   it("fails after too many wrong secrets, and logs them", async () => {
@@ -288,8 +330,9 @@ describe("adding an AI agent", () => {
   it("caps the setups waiting at once", async () => {
     const core = await testCore({ limits: { agentSetupsOpen: 2 } });
     const maya = await claimed(core);
+    const setup = await start(core, maya.token);
     await start(core, maya.token);
-    await start(core, maya.token);
+    const { token } = (await collect(core, setup)).json<AgentTokenCollected>();
 
     const third = await post(
       core,
@@ -300,8 +343,8 @@ describe("adding an AI agent", () => {
     expect(third.statusCode).toBe(429);
     expect(third.json()).toEqual({ error: "busy" });
 
-    // One that ran out makes room.
-    core.advance(10 * 60_000);
+    // A setup that connects makes room.
+    await firstCall(core, token);
     expect((await start(core, maya.token)).setupId).toBeTruthy();
   });
 
@@ -316,6 +359,8 @@ describe("adding an AI agent", () => {
 
     core.advance(10 * 60_000);
 
+    // The deadline applies even if nobody has checked the setup since.
+    expect((await firstCall(core, token)).statusCode).toBe(401);
     expect((await collect(core, unused)).statusCode).toBe(409);
     expect(await status(core, maya.token, unused.setupId)).toEqual({
       status: "expired",
@@ -324,7 +369,6 @@ describe("adding an AI agent", () => {
     expect((await status(core, maya.token, collectedOnly.setupId)).status).toBe(
       "expired",
     );
-    expect((await firstCall(core, token)).statusCode).toBe(401);
     expect(await agents(core, maya.token)).toEqual([]);
   });
 
@@ -385,6 +429,7 @@ describe("adding an AI agent", () => {
       await collect(core, setup)
     ).json<AgentTokenCollected>();
     await firstCall(core, token);
+    core.advance(10 * 60_000);
 
     await post(
       core,
@@ -409,6 +454,9 @@ describe("adding an AI agent", () => {
     });
     expect(tooNew.statusCode).toBe(409);
     expect(tooNew.json()).toEqual({ error: "connector_too_new" });
+    const newer = await collect(core, setup, { protocol: 1_001 });
+    expect(newer.statusCode).toBe(409);
+    expect(newer.json()).toEqual({ error: "connector_too_new" });
     const tooOld = await collect(core, setup, {
       protocol: agentConnectorProtocols.oldest - 1,
     });
@@ -419,7 +467,7 @@ describe("adding an AI agent", () => {
   });
 
   it("can't be collected once whoever started it has left", async () => {
-    const core = await testCore();
+    const core = await testCore({ limits: { agentSetupsOpen: 1 } });
     const maya = await claimed(core);
     const tablet = sharedClient(core);
     const setup = await start(core, tablet.token);
@@ -432,5 +480,9 @@ describe("adding an AI agent", () => {
     );
 
     expect((await collect(core, setup)).statusCode).toBe(409);
+    expect((await status(core, maya.token, setup.setupId)).status).toBe(
+      "cancelled",
+    );
+    expect((await start(core, maya.token)).setupId).toBeTruthy();
   });
 });

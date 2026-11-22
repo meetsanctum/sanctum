@@ -5,7 +5,7 @@ import { createActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { People } from "../people/people.js";
 import { createAgentSetups } from "./agent-setups.js";
-import { createClients } from "./clients.js";
+import { createClients, type AddedBy } from "./clients.js";
 import { createLimiter, type Limits } from "./limits.js";
 import { createConnections } from "./live.js";
 import {
@@ -106,9 +106,7 @@ export async function createAuth(
   });
 
   // The adder's name as it stands now, for the activity log and Settings.
-  function agentAdder(id: string) {
-    const addedBy = clients.addedBy(id);
-    if (!addedBy) return null;
+  function namedAdder(addedBy: AddedBy) {
     const name =
       addedBy.kind === "person"
         ? (options.people.get(addedBy.id)?.name ?? null)
@@ -118,25 +116,21 @@ export async function createAuth(
 
   return {
     isClaimed: () => isClaimed(db),
-    agentAdder,
+    agentAdder(id: string) {
+      const addedBy = clients.addedBy(id);
+      return addedBy ? namedAdder(addedBy) : null;
+    },
     // The home's AI agents, for Settings.
     agents(): AgentInfo[] {
       agentSetups.settle();
-      return clients.listAgents().flatMap((agent) => {
-        const addedBy = agentAdder(agent.id);
-        return addedBy
-          ? [
-              {
-                id: agent.id,
-                name: agent.name,
-                platform: agent.platform,
-                addedBy,
-                createdAt: agent.createdAt.toISOString(),
-                lastSeenAt: agent.lastSeenAt?.toISOString() ?? null,
-              },
-            ]
-          : [];
-      });
+      return clients.listAgents().map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        platform: agent.platform,
+        addedBy: namedAdder(agent.addedBy),
+        createdAt: agent.createdAt.toISOString(),
+        lastSeenAt: agent.lastSeenAt?.toISOString() ?? null,
+      }));
     },
     // Signs every device out after a restore from a backup: every client and
     // token is revoked and every pairing request dropped, inside the

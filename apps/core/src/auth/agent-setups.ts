@@ -7,7 +7,7 @@ import {
   type AgentTokenCollected,
   type CollectAgentToken,
 } from "@meetsanctum/auth-protocol";
-import { and, eq, gt, isNull, lte } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
@@ -15,8 +15,12 @@ import type { CoreDatabase } from "../database.js";
 import { changedBy } from "./callers.js";
 import type { AddedBy, Clients, Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
-import { defaultLimits, type Limiter, type Limits } from "./limits.js";
-import { shownAddress } from "./pairing.js";
+import {
+  defaultLimits,
+  shownAddress,
+  type Limiter,
+  type Limits,
+} from "./limits.js";
 import { authAgentSetups, authClients } from "./schema.js";
 import { hashToken } from "./tokens.js";
 
@@ -45,6 +49,10 @@ function addedByOf(principal: Principal): AddedBy {
     : { kind: "client", id: principal.client.id };
 }
 
+function setupAdder(setup: Setup): AddedBy {
+  return { kind: setup.addedByKind, id: setup.addedById };
+}
+
 export function createAgentSetups(
   db: CoreDatabase,
   options: {
@@ -61,56 +69,60 @@ export function createAgentSetups(
   const { clients, record, limiter, now } = options;
   const limits = options.limits ?? defaultLimits;
 
-  // Removes setups that ended a day ago, and the agents of setups that ran
-  // out before the agent's first call: nobody was told they connected.
-  function settle() {
-    const at = now();
+  // Removes old setups and revokes unused tokens from setups that ended.
+  function settle(at: Date) {
     const unseen = db
-      .select({ setupId: setups.id, clientId: authClients.id })
+      .select({ clientId: authClients.id })
       .from(setups)
       .innerJoin(authClients, eq(authClients.id, setups.clientId))
       .where(
         and(
-          lte(setups.expiresAt, at),
-          isNull(setups.cancelledAt),
+          or(lte(setups.expiresAt, at), isNotNull(setups.cancelledAt)),
           isNull(authClients.lastSeenAt),
           isNull(authClients.revokedAt),
         ),
       )
       .all();
     for (const { clientId } of unseen) {
-      clients.revokeAgent(clientId);
+      clients.revokeUnconnectedAgent(clientId);
     }
     db.delete(setups)
       .where(lte(setups.expiresAt, new Date(at.getTime() - keptMs)))
       .run();
   }
 
-  function status(setup: Setup): AgentSetupStatus {
+  function status(setup: Setup, at: Date): AgentSetupStatus {
     const { name } = setup;
     if (setup.cancelledAt) return { status: "cancelled", name };
-    if (setup.failedAt) return { status: "failed", name };
-    const agent = setup.clientId
-      ? db
-          .select()
-          .from(authClients)
-          .where(eq(authClients.id, setup.clientId))
-          .get()
-      : undefined;
-    if (agent?.lastSeenAt && !agent.revokedAt) {
-      return {
-        status: "connected",
-        agent: { id: agent.id, name: agent.name },
-        address: shownAddress(setup.collectedFrom ?? ""),
-        connectedAt: agent.lastSeenAt.toISOString(),
-      };
+    if (setup.clientId) {
+      const agent = db
+        .select()
+        .from(authClients)
+        .where(eq(authClients.id, setup.clientId))
+        .get();
+      // A linked agent can disappear with the person who added it.
+      if (!agent) return { status: "cancelled", name };
+      if (agent.lastSeenAt) {
+        if (agent.revokedAt) return { status: "cancelled", name };
+        return {
+          status: "connected",
+          agent: { id: agent.id, name: agent.name },
+          address: shownAddress(setup.collectedFrom ?? ""),
+          connectedAt: (setup.connectedAt ?? agent.lastSeenAt).toISOString(),
+        };
+      }
+      if (agent.revokedAt && agent.revokedAt < setup.expiresAt) {
+        return { status: "cancelled", name };
+      }
+    } else {
+      if (setup.failedAt) return { status: "failed", name };
+      if (!clients.canAddAgent(setupAdder(setup))) {
+        return { status: "cancelled", name };
+      }
     }
-    // Ran out first: the token it gave out is taken back with it.
-    if (setup.expiresAt.getTime() <= now().getTime()) {
+    if (setup.expiresAt <= at) {
       return { status: "expired", name };
     }
-    // Signed out with the shared device that started it.
-    if (agent?.revokedAt) return { status: "cancelled", name };
     return {
       status: "waiting",
       name,
@@ -130,25 +142,25 @@ export function createAgentSetups(
     ): AgentSetupStarted {
       const addedBy = addedByOf(principal);
       const started = db.transaction(() => {
-        settle();
+        const createdAt = now();
+        settle(createdAt);
         const open = db
-          .select({ id: setups.id })
+          .select()
           .from(setups)
           .where(
             and(
-              isNull(setups.clientId),
+              isNull(setups.connectedAt),
               isNull(setups.cancelledAt),
-              isNull(setups.failedAt),
-              gt(setups.expiresAt, now()),
+              gt(setups.expiresAt, createdAt),
             ),
           )
-          .all();
+          .all()
+          .filter((setup) => status(setup, createdAt).status === "waiting");
         if (open.length >= limits.agentSetupsOpen) {
-          throw new AuthError("busy");
+          return undefined;
         }
         const id = randomUUID();
         const secret = randomBytes(32).toString("base64url");
-        const createdAt = now();
         const expiresAt = new Date(createdAt.getTime() + agentSetupMs);
         db.insert(setups)
           .values({
@@ -170,6 +182,7 @@ export function createAgentSetups(
         });
         return { id, secret, expiresAt };
       });
+      if (!started) throw new AuthError("busy");
       return {
         setupId: started.id,
         code: agentSetupCodeText({
@@ -184,27 +197,31 @@ export function createAgentSetups(
     },
 
     status(id: string): AgentSetupStatus {
-      return db.transaction(() => {
-        settle();
+      const current = db.transaction(() => {
+        const at = now();
+        settle(at);
         const setup = db.select().from(setups).where(eq(setups.id, id)).get();
-        if (!setup) throw new AuthError("not_found");
-        return status(setup);
+        return setup && status(setup, at);
       });
+      if (!current) throw new AuthError("not_found");
+      return current;
     },
 
     // Stops a setup that hasn't connected, and removes the agent it gave a
     // token to. One that connected stays: removing its agent is Settings'.
     cancel(principal: Principal, id: string) {
-      addedByOf(principal);
-      const collected = db.transaction(() => {
-        settle();
+      if (principal.scope === "agent") throw new AuthError("forbidden");
+      const found = db.transaction(() => {
+        const at = now();
+        settle(at);
         const setup = db.select().from(setups).where(eq(setups.id, id)).get();
-        if (!setup) throw new AuthError("not_found");
-        if (status(setup).status !== "waiting") return undefined;
+        if (!setup) return false;
+        if (status(setup, at).status !== "waiting") return true;
         db.update(setups)
-          .set({ cancelledAt: now() })
+          .set({ cancelledAt: at })
           .where(eq(setups.id, id))
           .run();
+        if (setup.clientId) clients.revokeUnconnectedAgent(setup.clientId);
         record({
           action: "agents.setup-cancel",
           outcome: "ok",
@@ -212,9 +229,9 @@ export function createAgentSetups(
           subjectId: id,
           detail: { name: setup.name },
         });
-        return setup.clientId ?? undefined;
+        return true;
       });
-      if (collected) clients.revokeAgent(collected);
+      if (!found) throw new AuthError("not_found");
     },
 
     /**
@@ -230,81 +247,76 @@ export function createAgentSetups(
         throw new AuthError("connector_too_old");
       }
       limiter.attempt(address);
-      const collected = db.transaction(
-        (): AgentTokenCollected | "wrong" | "unusable" => {
-          settle();
-          const setup = db
-            .select()
-            .from(setups)
-            .where(eq(setups.id, input.setupId))
-            .get();
-          if (!setup) return "unusable";
-          if (setup.secretHash !== hashToken(input.secret)) {
+      const collected = db.transaction((): AgentTokenCollected | undefined => {
+        const at = now();
+        settle(at);
+        const setup = db
+          .select()
+          .from(setups)
+          .where(eq(setups.id, input.setupId))
+          .get();
+        if (!setup) return undefined;
+        const isOpen =
+          !setup.clientId &&
+          !setup.cancelledAt &&
+          !setup.failedAt &&
+          setup.expiresAt > at;
+        const addedBy = setupAdder(setup);
+        if (setup.secretHash !== hashToken(input.secret)) {
+          if (isOpen && clients.canAddAgent(addedBy)) {
             const wrongSecrets = setup.wrongSecrets + 1;
             db.update(setups)
               .set({
                 wrongSecrets,
-                ...(wrongSecrets >= wrongSecretsPerSetup &&
-                  !setup.failedAt && { failedAt: now() }),
+                failedAt: wrongSecrets >= wrongSecretsPerSetup ? at : null,
               })
               .where(eq(setups.id, setup.id))
               .run();
-            return "wrong";
           }
-          if (
-            setup.clientId ||
-            setup.cancelledAt ||
-            setup.failedAt ||
-            setup.expiresAt.getTime() <= now().getTime()
-          ) {
-            return "unusable";
-          }
-          const addedBy: AddedBy = {
-            kind: setup.addedByKind,
-            id: setup.addedById,
-          };
-          let made: ReturnType<Clients["createAgent"]>;
-          try {
-            made = clients.createAgent({
-              name: setup.name,
-              platform: input.platform,
-              addedBy,
-            });
-          } catch (error) {
-            // Whoever started it has left, or their device was signed out.
-            if (error instanceof AuthError) return "unusable";
-            throw error;
-          }
-          db.update(setups)
-            .set({ clientId: made.client.id, collectedFrom: address })
-            .where(eq(setups.id, setup.id))
-            .run();
           record({
             action: "agents.add",
-            outcome: "ok",
-            ...(addedBy.kind === "person"
-              ? { personId: addedBy.id }
-              : { clientId: addedBy.id }),
-            subjectId: made.client.id,
+            outcome: "refused",
+            reason: "wrong_secret",
             address,
-            detail: { kind: "agent", name: made.client.name },
           });
-          return {
-            token: made.token,
-            agent: { id: made.client.id, name: made.client.name },
-          };
-        },
-      );
-      if (collected === "wrong") {
-        // Outside the transaction, which would take the entry back with it.
+          return undefined;
+        }
+        if (!isOpen) return undefined;
+        let made: ReturnType<Clients["createAgent"]>;
+        try {
+          made = clients.createAgent({
+            name: setup.name,
+            platform: input.platform,
+            addedBy,
+          });
+        } catch (error) {
+          // Whoever started it has left, or their device was signed out.
+          if (error instanceof AuthError && error.code === "forbidden") {
+            return undefined;
+          }
+          throw error;
+        }
+        db.update(setups)
+          .set({ clientId: made.client.id, collectedFrom: address })
+          .where(eq(setups.id, setup.id))
+          .run();
         record({
           action: "agents.add",
-          outcome: "refused",
-          reason: "wrong_secret",
+          outcome: "ok",
+          ...(addedBy.kind === "person"
+            ? { personId: addedBy.id }
+            : { clientId: addedBy.id }),
+          subjectId: made.client.id,
           address,
+          detail: { kind: "agent", name: made.client.name },
         });
-      }
-      if (typeof collected === "string") throw new AuthError("expired");
+        return {
+          token: made.token,
+          agent: { id: made.client.id, name: made.client.name },
+        };
+      });
+      // Throw only after the attempt and its activity entry are recorded.
+      if (!collected) throw new AuthError("expired");
       limiter.succeeded(address);
       return collected;
     },
@@ -315,9 +327,7 @@ export function createAgentSetups(
       db.delete(setups).run();
     },
 
-    // Before the agents are listed, so an agent whose setup ran out isn't.
-    settle: () => db.transaction(() => settle()),
+    // Listing agents also cleans up abandoned setups.
+    settle: () => db.transaction(() => settle(now())),
   };
 }
-
-export type AgentSetups = ReturnType<typeof createAgentSetups>;

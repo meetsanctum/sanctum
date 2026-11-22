@@ -7,8 +7,8 @@ import {
   type AgentTokenCollected,
   type CancelAgentSetup,
   type ClaimFinish,
-  type CollectAgentToken,
   type ClaimStart,
+  type CollectAgentToken,
   type Me,
   type PairApprove,
   type PairLookup,
@@ -133,7 +133,7 @@ const schemas = {
       .regex(/^[A-Za-z0-9_-]+$/)
       .max(128),
     platform: z.enum(platforms),
-    protocol: z.number().int().min(0).max(1_000),
+    protocol: z.number().int().min(0),
   }) satisfies z.ZodType<CollectAgentToken>,
   passwordFinish: z.object({
     changeId: id,
