@@ -1,16 +1,13 @@
 import { defineAction, defineApp } from "@meetsanctum/app-sdk";
-import {
-  Client,
-  StreamableHTTPClientTransport,
-} from "@modelcontextprotocol/client";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { agentLimits, createAgentLimiter } from "../src/agents/limits.js";
 import { toolListTtlMs } from "../src/agents/mcp.js";
+import { connect, names } from "./agents-support.js";
 import { lampsCore } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
-import { get, post, type TestCore } from "./support.js";
+import { get, post } from "./support.js";
 
 // The MCP endpoint AI agents reach the home through, driven with the
 // official SDK's own client on the 2026-07-28 revision: the tools follow what
@@ -130,49 +127,6 @@ async function household() {
   return { ...home, agent };
 }
 
-// The client's requests go to the core's own server.
-function injected(core: TestCore, headers: Record<string, string> = {}) {
-  return async (url: string | URL, init?: RequestInit) => {
-    const target = new URL(url);
-    const response = await core.server.inject({
-      method: (init?.method ?? "GET") as "POST",
-      url: target.pathname + target.search,
-      headers: {
-        ...Object.fromEntries(new Headers(init?.headers)),
-        ...headers,
-      },
-      payload: init?.body as string | undefined,
-    });
-    return new Response(response.rawPayload, {
-      status: response.statusCode,
-      headers: response.headers as Record<string, string>,
-    });
-  };
-}
-
-async function connect(
-  core: TestCore,
-  token: string,
-  headers: Record<string, string> = {},
-) {
-  const client = new Client(
-    { name: "test", version: "0.0.0" },
-    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
-  );
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL("https://sanctum.test/api/mcp"), {
-      requestInit: { headers: { authorization: `Bearer ${token}` } },
-      fetch: injected(core, headers),
-    }),
-  );
-  return client;
-}
-
-const names = async (client: Client) =>
-  (await client.listTools(undefined, { cacheMode: "bypass" })).tools.map(
-    (tool) => tool.name,
-  );
-
 describe("the MCP endpoint", () => {
   it("speaks 2026-07-28 and lists the overview and what's on", async () => {
     const { core, agent } = await household();
@@ -182,10 +136,12 @@ describe("the MCP endpoint", () => {
     const listed = await client.listTools(undefined, { cacheMode: "bypass" });
     expect(listed.tools.map((tool) => tool.name)).toEqual([
       "home_overview",
+      "lights",
+      "device_command",
       "sanctum_example_tidy",
       "sanctum_example_wait",
     ]);
-    const tool = listed.tools[1]!;
+    const tool = listed.tools[3]!;
     expect(tool).toMatchObject({
       title: "Tidy up",
       inputSchema: {
@@ -329,6 +285,8 @@ describe("the MCP endpoint", () => {
     expect(refused.structuredContent).toMatchObject({ error: "not_allowed" });
     expect(await names(client)).toEqual([
       "home_overview",
+      "lights",
+      "device_command",
       "sanctum_example_wait",
     ]);
 

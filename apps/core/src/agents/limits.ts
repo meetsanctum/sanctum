@@ -1,7 +1,11 @@
+import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
+
 // How much AI agents may ask of the home: requests a minute and calls at
-// once, for each agent and for the whole home together, so one agent left
-// in a loop, or several at once, can't crowd out the household. Reads count
-// too. A request over a limit is refused before anything runs.
+// once, and the device commands they send a minute, those an app's action
+// sends for them included, for each agent and for the whole home together,
+// so one agent left in a loop, or several at once, can't crowd out the
+// household. Reads count too. A request over a limit is refused before
+// anything runs, and a command over one before it goes to the device.
 
 export type AgentLimits = {
   /** Requests in any minute, each agent's. */
@@ -21,51 +25,80 @@ export const agentLimits: AgentLimits = {
   homeAtOnce: 8,
 };
 
+export type AgentCommandLimits = {
+  /** Device commands in any minute, each agent's. */
+  agentPerMinute: number;
+  /** Device commands in any minute, every agent's together. */
+  homePerMinute: number;
+};
+
+// Enough for turning off every light of a large home at once, and a few
+// rooms more, but not for a loop that keeps switching them.
+export const agentCommandLimits: AgentCommandLimits = {
+  agentPerMinute: 120,
+  homePerMinute: 240,
+};
+
 const minuteMs = 60_000;
 
 export type LimitRefusal = {
-  limited: "per_minute" | "at_once";
+  limited: "per_minute" | "at_once" | "commands";
   retryAfter: number;
 };
 
-export function createAgentLimiter(
-  limits: AgentLimits = agentLimits,
-  now: () => number = () => performance.now(),
+// Counts in the last minute, each agent's and the home's: an agent's
+// next one waits until both have room, the later of the two.
+function minuteWindows(
+  limits: { agentPerMinute: number; homePerMinute: number },
+  now: () => number,
 ) {
-  // Each agent's requests in the last minute, oldest first, and the home's.
+  // Each agent's in the last minute, oldest first, and the home's.
   const recent = new Map<string, number[]>();
   const home: number[] = [];
-  const underWay = new Map<string, number>();
-  let homeUnderWay = 0;
 
   const prune = (times: number[], at: number) => {
     while (times.length && times[0]! <= at - minuteMs) times.shift();
   };
 
+  /** Counts one, or answers how many seconds until there's room. */
+  return function take(agentId: string): number | undefined {
+    const at = now();
+    for (const [id, times] of recent) {
+      if (times.at(-1)! > at - minuteMs) break;
+      recent.delete(id);
+    }
+    const times = recent.get(agentId) ?? [];
+    prune(times, at);
+    prune(home, at);
+    const agentWait =
+      times.length >= limits.agentPerMinute ? times[0]! + minuteMs - at : 0;
+    const homeWait =
+      home.length >= limits.homePerMinute ? home[0]! + minuteMs - at : 0;
+    const wait = Math.max(agentWait, homeWait);
+    if (wait > 0) return Math.ceil(wait / 1_000);
+    times.push(at);
+    // Keep agents in order of their latest, so idle ones expire.
+    recent.delete(agentId);
+    recent.set(agentId, times);
+    home.push(at);
+  };
+}
+
+export function createAgentLimiter(
+  limits: AgentLimits = agentLimits,
+  now: () => number = () => performance.now(),
+) {
+  const take = minuteWindows(limits, now);
+  const underWay = new Map<string, number>();
+  let homeUnderWay = 0;
+
   return {
     /** Counts a request before the body is read. */
     takeRequest(agentId: string): LimitRefusal | undefined {
-      const at = now();
-      for (const [id, times] of recent) {
-        if (times.at(-1)! > at - minuteMs) break;
-        recent.delete(id);
+      const retryAfter = take(agentId);
+      if (retryAfter !== undefined) {
+        return { limited: "per_minute", retryAfter };
       }
-      const times = recent.get(agentId) ?? [];
-      prune(times, at);
-      prune(home, at);
-      const agentWait =
-        times.length >= limits.agentPerMinute ? times[0]! + minuteMs - at : 0;
-      const homeWait =
-        home.length >= limits.homePerMinute ? home[0]! + minuteMs - at : 0;
-      const wait = Math.max(agentWait, homeWait);
-      if (wait > 0) {
-        return { limited: "per_minute", retryAfter: Math.ceil(wait / 1_000) };
-      }
-      times.push(at);
-      // Keep agents in order of their latest request, so idle ones expire.
-      recent.delete(agentId);
-      recent.set(agentId, times);
-      home.push(at);
     },
 
     /** Holds a slot while a request is being handled. */
@@ -92,3 +125,51 @@ export function createAgentLimiter(
 }
 
 export type AgentLimiter = ReturnType<typeof createAgentLimiter>;
+
+/** Device commands a minute, counted as each goes to its device. */
+export function createAgentCommandLimiter(
+  limits: AgentCommandLimits = agentCommandLimits,
+  now: () => number = () => performance.now(),
+) {
+  const take = minuteWindows(limits, now);
+  return {
+    takeCommand(agentId: string): LimitRefusal | undefined {
+      const retryAfter = take(agentId);
+      if (retryAfter !== undefined) return { limited: "commands", retryAfter };
+    },
+  };
+}
+
+export type AgentCommandLimiter = ReturnType<typeof createAgentCommandLimiter>;
+
+/**
+ * Logs an agent held back by a limit, at most once a minute for each agent
+ * and limit, so an agent in a loop doesn't fill the activity log.
+ */
+export function createLimitedLog(options: {
+  record: (entry: NewActivityEntry) => string;
+  agentWho: (id: string) => ActivityAuthor;
+  now?: () => number;
+}) {
+  const now = options.now ?? (() => performance.now());
+  const lastLogged = new Map<string, number>();
+  return function logLimited(
+    agentId: string,
+    limited: LimitRefusal["limited"],
+  ) {
+    const at = now();
+    for (const [key, last] of lastLogged) {
+      if (at - last < minuteMs) break;
+      lastLogged.delete(key);
+    }
+    const key = `${agentId} ${limited}`;
+    if (lastLogged.has(key)) return;
+    lastLogged.set(key, at);
+    options.record({
+      action: "agents.limited",
+      outcome: "refused",
+      reason: limited,
+      ...options.agentWho(agentId),
+    });
+  };
+}

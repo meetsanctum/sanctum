@@ -52,6 +52,9 @@ export const activity = sqliteTable(
     // The entry behind it: the press that started a run, the run that
     // called an app's action, the action that sent a command.
     causeId: text("cause_id"),
+    // The AI agent's tool call it came of, the same on every entry the call
+    // led to, so one call's commands and refusals read together.
+    callId: text("call_id"),
     // What it was about, such as the client revoked or the login set.
     subjectId: text("subject_id"),
     // A few words of what it was: what a command asked for, a press's

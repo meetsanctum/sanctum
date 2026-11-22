@@ -64,6 +64,8 @@ export type Joining = {
 // runs, so it holds a box it fills then.
 type Cause = { id?: string };
 const causes = new AsyncLocalStorage<Cause>();
+// The AI agent's tool call behind what runs now.
+const calls = new AsyncLocalStorage<string>();
 
 export type ActivityQuery = {
   subjectId?: string;
@@ -236,6 +238,7 @@ export function createActivity(
   function write(source: string, entry: NewActivityEntry, joining?: Joining) {
     const at = entry.at ?? now();
     const causeId = entry.causeId ?? causes.getStore()?.id ?? null;
+    const callId = entry.callId ?? calls.getStore() ?? null;
     if (joining && entry.outcome === "ok") {
       const previous = entry.subjectId
         ? latestAbout(entry.subjectId)
@@ -251,6 +254,7 @@ export function createActivity(
         same(previous.actor, entry.actor) &&
         same(previous.app, entry.app) &&
         same(previous.causeId, causeId) &&
+        same(previous.callId, callId) &&
         at.getTime() - previous.at.getTime() <= joining.withinMs &&
         joining.matches(previous)
       ) {
@@ -284,6 +288,7 @@ export function createActivity(
         source,
         kind: kindOf({ source, ...entry }),
         causeId,
+        callId,
         clientName,
       })
       .run();
@@ -318,6 +323,11 @@ export function createActivity(
         typeof cause === "string" ? { id: cause } : cause,
         work,
       );
+    },
+
+    /** Runs an AI agent's tool call, whose id every entry it leads to carries. */
+    duringCall<T>(callId: string, work: () => T): T {
+      return calls.run(callId, work);
     },
 
     /** The entry behind what runs now, if any. */

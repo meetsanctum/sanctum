@@ -849,12 +849,27 @@ function setupEntry(entry: ActivityInfo): Words | null {
           : `Stopped AI agents using “${title}”`,
       );
     }
+    // One of the core's tools an AI agent called while what it needs is off.
+    case "agents.refused": {
+      const items = Array.isArray(entry.detail?.items)
+        ? entry.detail.items.map(
+            (item) => `“${permissionWords(String(item)).title}”`,
+          )
+        : [];
+      return said(
+        items.length > 0
+          ? `Not allowed: ${items.join(" and ")}`
+          : "Not allowed to read what apps bring",
+      );
+    }
     // An AI agent over one of the endpoint's limits, at most once a minute.
     case "agents.limited":
       return said(
         entry.reason === "at_once"
           ? "Held back for asking too much at once"
-          : "Held back for asking too often",
+          : entry.reason === "commands"
+            ? "Held back for changing devices too often"
+            : "Held back for asking too often",
       );
     case "pairing.open":
       return said("Let devices join");

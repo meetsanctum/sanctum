@@ -1,0 +1,1 @@
+ALTER TABLE `activity` ADD `call_id` text;

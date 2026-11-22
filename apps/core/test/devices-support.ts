@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 
+import type { AgentCommandLimits } from "../src/agents/limits.js";
 import type { Origin } from "../src/app-host/loader.js";
 import type { AppPackage } from "./runner-apps.js";
 import { loadAppPackage } from "./runner-apps.js";
@@ -29,6 +30,7 @@ export async function lampsCore(
     probeWaitMs?: number;
     holdLimitMs?: number;
     holdSettleMs?: number;
+    agentCommandLimits?: AgentCommandLimits;
     apps?: readonly AppPackage[];
   } = {},
 ) {
@@ -48,6 +50,7 @@ export async function lampsCore(
     probeWaitMs: options.probeWaitMs,
     holdLimitMs: options.holdLimitMs,
     holdSettleMs: options.holdSettleMs,
+    agentCommandLimits: options.agentCommandLimits,
   });
   radio.clock = core.now;
   const maya = await claimed(core);

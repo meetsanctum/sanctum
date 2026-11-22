@@ -93,6 +93,10 @@ export function createDevices(
       device: string,
       capability: string,
     ) => Promise<void> | undefined;
+    // Counts an AI agent's command as it goes to its device, the commands
+    // an app's action sends for it included, and throws `limited` past the
+    // agents' limit (agents/limits.ts), which logs it itself.
+    agentCommand?: (agentId: string) => void;
     confirmMs?: number;
     now?: () => Date;
   },
@@ -331,6 +335,7 @@ export function createDevices(
     if (whileOn !== undefined && shownState(row)?.on !== whileOn) {
       throw new ActionCallError("conflict");
     }
+    if (actor.kind === "assistant-run") options.agentCommand?.(actor.id);
     const prepared = prepare(row, parsed.data as Record<string, unknown>);
     const setBy: StoredSetBy = {
       app,

@@ -292,6 +292,32 @@ describe("an entry's words", () => {
     expect(words("at_once").title).toBe(
       "Held back for asking too much at once",
     );
+    expect(words("commands").title).toBe(
+      "Held back for changing devices too often",
+    );
+  });
+
+  it("names what an AI agent wasn't allowed, by its switch's words", () => {
+    const words = (items: string[]) =>
+      activityWords(
+        entry({
+          action: "agents.refused",
+          outcome: "refused",
+          reason: "forbidden",
+          detail: { tool: "lights", items },
+          who: {
+            kind: "agent",
+            id: "agent-1",
+            name: "Codex on the office Mac",
+            addedBy: null,
+          },
+        }),
+      );
+
+    expect(words(["devices.control:light"]).title).toBe(
+      "Not allowed: “Control your lights”",
+    );
+    expect(words([]).title).toBe("Not allowed to read what apps bring");
   });
 
   it("joins a morning of adjustments into one", () => {
