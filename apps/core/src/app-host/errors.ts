@@ -6,6 +6,8 @@ const statuses = {
   needs_approval: 403,
   not_found: 404,
   conflict: 409,
+  // An AI agent sent more device commands in the last minute than it may.
+  limited: 429,
   app_failed: 500,
   // The app, or a device's driver app, is not running: paused or stopped. Or
   // the core can't say yet, as which apps the home has before they install.

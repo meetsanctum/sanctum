@@ -7,9 +7,15 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createAgentsCanUse } from "./agents/can-use.js";
+import {
+  createAgentCommandLimiter,
+  createLimitedLog,
+  type AgentCommandLimits,
+} from "./agents/limits.js";
 import { createRemovedApps } from "./app-host/removed.js";
 import { createAddedApps } from "./app-host/added.js";
 import { createAppList } from "./app-host/app-list.js";
+import { ActionCallError } from "./app-host/errors.js";
 import { createGate } from "./app-host/gate.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-host/app-work.js";
 import { createAppHost } from "./app-host/host.js";
@@ -151,6 +157,8 @@ export async function createModules(
     // long a light it stopped has to say where it got to (holds.ts).
     holdLimitMs?: number;
     holdSettleMs?: number;
+    // For tests: how many device commands AI agents may send a minute.
+    agentCommandLimits?: AgentCommandLimits;
     // For tests: the home's time zone and sun times, which otherwise come
     // from Places and from the app that provides the sun.
     timeZone?: () => string | null;
@@ -223,6 +231,24 @@ export async function createModules(
     apps: () => apps.offers(),
     now,
   });
+  // The device commands AI agents send, held to a limit a minute: by the
+  // test's clock where a test moves the core's.
+  const ticks = now && (() => now().getTime());
+  const agentCommands = createAgentCommandLimiter(
+    options.agentCommandLimits,
+    ticks,
+  );
+  const logAgentLimited = createLimitedLog({
+    record: activity.for("agents"),
+    agentWho: activity.agentWho,
+    now: ticks,
+  });
+  function checkAgentCommand(agentId: string, shouldCount = true) {
+    const refusal = agentCommands.takeCommand(agentId, shouldCount);
+    if (!refusal) return;
+    logAgentLimited(agentId, refusal.limited);
+    throw new ActionCallError("limited");
+  }
   const gate = createGate(
     people,
     auth.clients.isActiveAgent,
@@ -266,7 +292,17 @@ export async function createModules(
     removeFromDriver: (driver, removal, actor, hold) =>
       apps.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
-    beforeCommand: (device, capability) => holds.interrupt(device, capability),
+    beforeCommand(device, capability, actor) {
+      // A command already over the limit must leave a remote's hold alone.
+      if (
+        actor.kind === "assistant-run" &&
+        holds.isMoving(device, capability)
+      ) {
+        checkAgentCommand(actor.id, false);
+      }
+      return holds.interrupt(device, capability);
+    },
+    agentCommand: checkAgentCommand,
     onChange: (change) =>
       eventBus.publish({ name: "device.changed", ...change }),
     confirmMs: options.confirmMs,
@@ -667,6 +703,7 @@ export async function createModules(
     activity,
     activityViews,
     agentsCanUse,
+    logAgentLimited,
     managerAudit,
     people,
     auth,

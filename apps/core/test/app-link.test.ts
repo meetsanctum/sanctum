@@ -1,4 +1,4 @@
-import type { CoreCalls } from "@meetsanctum/app-sdk";
+import { ActionError, type CoreCalls } from "@meetsanctum/app-sdk";
 import {
   maxMessageBytes,
   oldestProtocolVersion,
@@ -189,6 +189,34 @@ describe("the core's end of an app's socket", () => {
       await expect(call).rejects.toMatchObject({ code: "unavailable" });
     });
   });
+
+  it.each([11, 12])(
+    "answers a command limit on protocol %i",
+    async (protocol) => {
+      await listening();
+      const app = await readyApp(protocol);
+      const running = link.call(
+        calls({
+          command: async () => {
+            throw new ActionError("limited");
+          },
+        }),
+        person,
+        action,
+        5_000,
+      );
+      const { id } = await app.hearing("call");
+      const reply = await app.ask(1, id, "command", [{}]);
+      expect(reply.outcome).toEqual({
+        ok: false,
+        message: "limited",
+        ...(protocol === 12 && { code: "limited" }),
+      });
+      app.say({ type: "answer", call: id, outcome: { ok: true } });
+      await running;
+      expect(link.isReady()).toBe(true);
+    },
+  );
 
   describe("forged calls", () => {
     it("refuses what names a call the core never issued, and goes on", async () => {

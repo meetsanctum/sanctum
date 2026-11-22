@@ -4,11 +4,11 @@ import {
   ProtocolErrorCode,
   Server,
 } from "@modelcontextprotocol/server";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
-import type { AgentLimiter, LimitRefusal } from "./limits.js";
+import type { AgentLimiter, LimitedLog, LimitRefusal } from "./limits.js";
 import type { AgentTools } from "./tools.js";
 
 // The MCP endpoint AI agents reach the home through, `POST /api/mcp`, on the
@@ -19,9 +19,12 @@ import type { AgentTools } from "./tools.js";
 //
 // The agent's connector speaks to it over pinned HTTPS. A browser never
 // does, so any request carrying an `Origin` is refused: a page an agent
-// reads can't make a browser call the home. Requests a minute and calls at once are held to limits (limits.ts),
-// and an agent over one is logged once a minute. The tool list is short-lived
-// and private, since it follows the household's switches.
+// reads can't make a browser call the home. Requests a minute and calls at
+// once are held to limits (limits.ts), and an agent over one is logged once a
+// minute. Each tool call has an id of its own, which every activity entry it
+// leads to carries, the device commands an app's action sends included. The
+// tool list is short-lived and private, since it follows the household's
+// switches.
 
 type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
 
@@ -39,8 +42,10 @@ export function registerMcpRoute(
   options: {
     tools: AgentTools;
     limiter: AgentLimiter;
-    record: (entry: NewActivityEntry) => string;
-    agentWho: (id: string) => ActivityAuthor;
+    /** Logs an agent over a limit, once a minute (limits.ts). */
+    logLimited: LimitedLog;
+    /** Runs one tool call with its id behind every entry it writes. */
+    duringCall: <T>(callId: string, work: () => T) => T;
     isActiveAgent: (id: string) => boolean;
     version: string;
   },
@@ -60,7 +65,9 @@ export function registerMcpRoute(
     server.setRequestHandler("tools/list", () => ({ tools: tools.list() }));
     server.setRequestHandler("tools/call", async (request) => {
       const { name, arguments: input } = request.params;
-      const result = await tools.call(principal, name, input);
+      const result = await options.duringCall(randomUUID(), () =>
+        tools.call(principal, name, input),
+      );
       if (!result) {
         throw new ProtocolError(
           ProtocolErrorCode.InvalidParams,
@@ -79,33 +86,12 @@ export function registerMcpRoute(
     { legacy: "reject" },
   );
 
-  // An agent over a limit is logged at most once a minute.
-  const lastLogged = new Map<string, number>();
-  function logLimited(
-    principal: AgentPrincipal,
-    limited: LimitRefusal["limited"],
-  ) {
-    const at = performance.now();
-    for (const [id, last] of lastLogged) {
-      if (at - last < 60_000) break;
-      lastLogged.delete(id);
-    }
-    if (lastLogged.has(principal.client.id)) return;
-    lastLogged.set(principal.client.id, at);
-    options.record({
-      action: "agents.limited",
-      outcome: "refused",
-      reason: limited,
-      ...options.agentWho(principal.client.id),
-    });
-  }
-
   function refuseLimit(
     reply: FastifyReply,
     principal: AgentPrincipal,
     refusal: LimitRefusal,
   ) {
-    logLimited(principal, refusal.limited);
+    options.logLimited(principal.client.id, refusal.limited);
     return jsonRpcError(
       reply.header("retry-after", String(refusal.retryAfter)),
       429,

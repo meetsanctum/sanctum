@@ -171,6 +171,8 @@ export const actionErrorCodes = [
   // The permission gate's refusal, which reaches an app when the core
   // refuses one of its calls for the actor behind it.
   "needs_approval",
+  // An AI agent used its device-command allowance for the last minute.
+  "limited",
 ] as const;
 export type ActionErrorCode = (typeof actionErrorCodes)[number];
 

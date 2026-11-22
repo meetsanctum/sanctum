@@ -92,7 +92,12 @@ export function createDevices(
     beforeCommand?: (
       device: string,
       capability: string,
+      actor: Actor,
     ) => Promise<void> | undefined;
+    // Counts an AI agent's command as it goes to its device, the commands
+    // an app's action sends for it included, and throws `limited` past the
+    // agents' limit (agents/limits.ts), which logs it itself.
+    agentCommand?: (agentId: string) => void;
     confirmMs?: number;
     now?: () => Date;
   },
@@ -282,10 +287,11 @@ export function createDevices(
     whileOn?: boolean,
   ): Promise<CapabilityInfo> {
     const { device, capability } = target;
+    const addressed = { capability: capability.id, kind: capability.kind, app };
     // The core is stopping: nothing goes to a device again, also after a wait.
     const refuseWhileStopping = () => {
       if (!isStopping) return;
-      deviceLog.command(who, device.id, "refused", "unavailable");
+      deviceLog.command(who, device.id, "refused", "unavailable", addressed);
       throw new ActionCallError("unavailable");
     };
     refuseWhileStopping();
@@ -295,7 +301,13 @@ export function createDevices(
       !parsed.success ||
       !definition.supports(capability.features, parsed.data)
     ) {
-      deviceLog.command(who, device.id, "refused", "invalid_request");
+      deviceLog.command(
+        who,
+        device.id,
+        "refused",
+        "invalid_request",
+        addressed,
+      );
       throw new ActionCallError("invalid_request");
     }
     // A command whose condition already fails must leave a hold alone.
@@ -310,7 +322,7 @@ export function createDevices(
     // Finish a hold before preparing or tracking its replacement. Otherwise
     // the move can overwrite who set the light, and its final report can
     // confirm a command that has not gone out yet.
-    const ending = options.beforeCommand?.(device.id, capability.id);
+    const ending = options.beforeCommand?.(device.id, capability.id, actor);
     if (ending) {
       await ending;
       if (actor.kind === "assistant-run") {
@@ -332,6 +344,9 @@ export function createDevices(
       throw new ActionCallError("conflict");
     }
     const prepared = prepare(row, parsed.data as Record<string, unknown>);
+    if (prepared.send && actor.kind === "assistant-run") {
+      options.agentCommand?.(actor.id);
+    }
     const setBy: StoredSetBy = {
       app,
       actor,
@@ -339,10 +354,8 @@ export function createDevices(
       at: now().toISOString(),
     };
     const sent = {
-      capability: capability.id,
-      kind: capability.kind,
+      ...addressed,
       asked: setBy.asked,
-      app,
     };
     const { driver, key } = reads.address(device.id)!;
     // Sending it again, if the device does not confirm it in time, goes the

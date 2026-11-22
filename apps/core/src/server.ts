@@ -8,6 +8,7 @@ import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
 
 import { registerActivityRoutes } from "./activity/routes.js";
+import { createCoreTools } from "./agents/core-tools.js";
 import { createAgentLimiter } from "./agents/limits.js";
 import { registerMcpRoute } from "./agents/mcp.js";
 import { registerAgentRoutes } from "./agents/routes.js";
@@ -62,6 +63,7 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "agentsCanUse"
+    | "logAgentLimited"
     | "apps"
     | "availableApps"
     | "appAdding"
@@ -74,6 +76,7 @@ export function createServer(
     // The core's phase and readiness (lifecycle.ts): only the health check
     // answers while an update is on trial, until the manager commits it.
     lifecycle: Pick<CoreLifecycle, "phase" | "readiness">;
+    now?: () => Date;
     // HTTPS and WSS on the host; none only for `pnpm dev` and tests.
     https?: CoreHttps;
   },
@@ -207,6 +210,20 @@ export function createServer(
       registerMcpRoute(core, {
         tools: createAgentTools({
           canUse: () => options.agentsCanUse.list(),
+          core: createCoreTools({
+            readableDeviceKinds: () =>
+              options.agentsCanUse.readableDeviceKinds(),
+            appName: (appId) => options.apps.manifest(appId)?.name,
+            devices,
+            lights,
+            entities: options.entities,
+            activity,
+            activityViews: options.activityViews,
+            history: options.history,
+            now: options.now,
+            record: activity.for("agents"),
+            agentWho: (id) => activity.agentWho(id),
+          }),
           readableDeviceKinds: () => options.agentsCanUse.readableDeviceKinds(),
           places: () => places.list(),
           devices,
@@ -217,8 +234,8 @@ export function createServer(
           },
         }),
         limiter: createAgentLimiter(),
-        record: activity.for("agents"),
-        agentWho: (id) => activity.agentWho(id),
+        logLimited: options.logAgentLimited,
+        duringCall: (callId, work) => activity.duringCall(callId, work),
         isActiveAgent: (id) => auth.clients.isActiveAgent(id),
         version: config.version,
       });

@@ -113,8 +113,8 @@ type Light = {
 };
 
 // Refusals for whoever is behind the call, which refuse the whole call
-// rather than fail one light.
-const refusals = new Set(["forbidden", "needs_approval"]);
+// rather than fail one light: an AI agent past its limit of commands too.
+const refusals = new Set(["forbidden", "needs_approval", "limited"]);
 
 const isOn = (light: Light) => light.capability.state?.on === true;
 

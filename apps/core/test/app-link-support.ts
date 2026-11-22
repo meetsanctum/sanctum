@@ -111,9 +111,9 @@ export async function appOnSocket() {
   return app;
 }
 
-export async function readyApp() {
+export async function readyApp(protocol = protocolVersion) {
   const app = await appOnSocket();
-  app.say(welcomeHello);
+  app.say({ ...welcomeHello, protocol });
   await app.hearing("welcome");
   const before = ready;
   app.say({ type: "ready" });

@@ -69,11 +69,13 @@ export function createDeviceLog(options: {
     deviceId: string,
     outcome: Outcome,
     reason?: string,
-    sent?: Sent,
-    failed: { hasResent?: boolean } = {},
+    sent?: Omit<Sent, "asked"> & { asked?: Sent["asked"] },
+    failed: { hasResent?: boolean; callId?: string | null } = {},
   ) {
     const adjusts =
-      sent !== undefined && sent.kind === "light" && !("on" in sent.asked);
+      sent?.kind === "light" &&
+      sent.asked !== undefined &&
+      !("on" in sent.asked);
     return record(
       {
         action: "device.command",
@@ -82,8 +84,10 @@ export function createDeviceLog(options: {
         ...who,
         app: sent?.app ?? null,
         subjectId: deviceId,
+        callId: failed.callId,
         detail: sent && {
           capability: sent.capability,
+          capabilityKind: sent.kind,
           asked: sent.asked,
           ...(failed.hasResent && { resent: true }),
         },
@@ -117,6 +121,7 @@ export function createDeviceLog(options: {
         activity.within(entry.causeId ?? {}, () =>
           command(who, deviceId, "failed", failure.reason, sent, {
             hasResent: failure.hasResent,
+            callId: entry.callId,
           }),
         );
       }
@@ -158,7 +163,11 @@ export function createDeviceLog(options: {
         outcome: "ok",
         actor: "device",
         subjectId: deviceId,
-        detail: { capability: capability.id, on: observed.on },
+        detail: {
+          capability: capability.id,
+          capabilityKind: capability.kind,
+          on: observed.on,
+        },
       });
     },
 

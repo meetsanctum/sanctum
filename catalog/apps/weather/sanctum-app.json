@@ -3,7 +3,7 @@
   "name": "Weather",
   "version": "0.4.0",
   "core": "^2.0.0",
-  "protocol": 11,
+  "protocol": 12,
   "summary": "The forecast and sun times for where your home is.",
   "runtime": {
     "memory": 128,

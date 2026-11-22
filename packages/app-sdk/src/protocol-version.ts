@@ -19,6 +19,8 @@
 // whether it can.
 // 11 has a driver say every device's type as it registers it, and the core
 // takes it, so a driver built before is refused.
-export const protocolVersion = 11;
+// 12 tells an app when an AI agent's device command is held back by its
+// limit a minute, as `limited`.
+export const protocolVersion = 12;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;
