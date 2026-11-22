@@ -16,6 +16,20 @@ export const agentSetupMs = 10 * 60_000;
  */
 export const agentConnectorProtocols = { oldest: 1, newest: 1 } as const;
 
+/**
+ * The connector a setup's prompt runs, at the version the prompt pins: the
+ * connector's own package version, which its tests hold to this.
+ */
+export const agentConnector = {
+  name: "@meetsanctum/mcp",
+  version: "0.1.0",
+} as const;
+
+/** The command a setup's prompt runs, which Set it up by hand shows too. */
+export function agentSetupCommand(code: string) {
+  return `npx -y ${agentConnector.name}@${agentConnector.version} connect ${code}`;
+}
+
 /** What a setup's code carries. Nobody types it, so it can be long. */
 export type AgentSetupCode = {
   /** The home the connector must find, whatever address it answers on. */

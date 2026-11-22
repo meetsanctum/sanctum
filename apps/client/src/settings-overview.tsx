@@ -1,7 +1,8 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
-import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
+import type { AgentInfo, ClientInfo, Me } from "@meetsanctum/auth-protocol";
 import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
+  Bot,
   ChevronRight,
   Gauge,
   House,
@@ -26,8 +27,8 @@ import { useMinuteClock } from "./device-firmware";
 // row for each of its areas, each opening that area's page. A row says in a
 // few words how its area stands, in counts and states that change seldom,
 // so the page stays calm on a shared tablet. The areas come in groups:
-// the home, what's due and what happened, the apps, and the devices that
-// open Sanctum with Sanctum itself.
+// the home, what's due and what happened, the apps with the AI agents, and
+// the devices that open Sanctum with Sanctum itself.
 
 /** One of Settings' areas, by the page it opens. */
 type SettingsArea =
@@ -37,6 +38,7 @@ type SettingsArea =
   | "maintenance"
   | "activity"
   | "apps"
+  | "agents"
   | "clients"
   | "system";
 
@@ -77,6 +79,7 @@ export function SettingsOverview(props: {
   const now = useMinuteClock();
   const unit = useTemperatureUnit() ?? "celsius";
   const others = useOtherClients(props.live);
+  const agents = useAgentCount(props.live);
   const updates = props.apps.filter((app) => app.waiting).length;
   const row = (
     area: SettingsArea,
@@ -144,6 +147,16 @@ export function SettingsOverview(props: {
             .filter(Boolean)
             .join(" · "),
         )}
+        {row(
+          "agents",
+          Bot,
+          "AI agents",
+          agents === undefined
+            ? ""
+            : agents === 0
+              ? "None yet"
+              : counted(agents, "agent"),
+        )}
       </AreaGroup>
       <AreaGroup>
         {row(
@@ -197,6 +210,30 @@ function useOtherClients(live: LiveFeed) {
     };
   }, [live]);
   return others;
+}
+
+// How many AI agents the home has, once the core has said.
+function useAgentCount(live: LiveFeed) {
+  const [count, setCount] = useState<number>();
+  useEffect(() => {
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const agents = await coreJson<AgentInfo[]>("/api/auth/agents");
+        if (current === request) setCount(agents.length);
+      } catch {
+        // The next shell refresh can ask again.
+      }
+    };
+    void refresh();
+    const stop = live.subscribe({ refresh: () => void refresh() });
+    return () => {
+      request++;
+      stop();
+    };
+  }, [live]);
+  return count;
 }
 
 // A card of areas that belong together, set apart from the next by space
