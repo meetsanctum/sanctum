@@ -703,6 +703,7 @@ export async function createModules(
     activity,
     activityViews,
     agentsCanUse,
+    logAgentLimited,
     managerAudit,
     people,
     auth,

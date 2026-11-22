@@ -63,6 +63,7 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "agentsCanUse"
+    | "logAgentLimited"
     | "apps"
     | "availableApps"
     | "appAdding"
@@ -233,8 +234,7 @@ export function createServer(
           },
         }),
         limiter: createAgentLimiter(),
-        record: activity.for("agents"),
-        agentWho: (id) => activity.agentWho(id),
+        logLimited: options.logAgentLimited,
         duringCall: (callId, work) => activity.duringCall(callId, work),
         isActiveAgent: (id) => auth.clients.isActiveAgent(id),
         version: config.version,

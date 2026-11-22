@@ -146,7 +146,9 @@ export function createAgentCommandLimiter(
 
 /**
  * Logs an agent held back by a limit, at most once a minute for each agent
- * and limit, so an agent in a loop doesn't fill the activity log.
+ * and limit, so an agent in a loop doesn't fill the activity log, and each
+ * limit it reaches is named. The endpoint's limits and the device commands'
+ * share one.
  */
 export function createLimitedLog(options: {
   record: (entry: NewActivityEntry) => string;
@@ -175,3 +177,5 @@ export function createLimitedLog(options: {
     });
   };
 }
+
+export type LimitedLog = ReturnType<typeof createLimitedLog>;

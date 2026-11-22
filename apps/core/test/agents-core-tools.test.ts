@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { createDeviceLog } from "../src/devices/activity.js";
+import { createLimitedLog } from "../src/agents/limits.js";
 import { connect, names } from "./agents-support.js";
 import { command, lampsCore, radio, settled } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
@@ -639,5 +640,32 @@ describe("the core's tools for AI agents", () => {
       isError: false,
       content: { from, to, states: [{ at: to, state: { on: true } }] },
     });
+  });
+
+  it("logs each limit an agent reaches once a minute, wherever it's reached", () => {
+    const logged: unknown[] = [];
+    let at = 0;
+    const log = createLimitedLog({
+      record: (entry) => {
+        logged.push([entry.reason, entry.actor]);
+        return "";
+      },
+      agentWho: (id) => ({ actor: `assistant-run:${id}` }),
+      now: () => at,
+    });
+
+    log("agent-1", "commands");
+    log("agent-1", "commands");
+    log("agent-1", "per_minute");
+    log("agent-2", "commands");
+    at = 61_000;
+    log("agent-1", "commands");
+
+    expect(logged).toEqual([
+      ["commands", "assistant-run:agent-1"],
+      ["per_minute", "assistant-run:agent-1"],
+      ["commands", "assistant-run:agent-2"],
+      ["commands", "assistant-run:agent-1"],
+    ]);
   });
 });

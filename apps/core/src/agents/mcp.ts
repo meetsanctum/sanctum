@@ -7,13 +7,8 @@ import {
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
-import {
-  createLimitedLog,
-  type AgentLimiter,
-  type LimitRefusal,
-} from "./limits.js";
+import type { AgentLimiter, LimitedLog, LimitRefusal } from "./limits.js";
 import type { AgentTools } from "./tools.js";
 
 // The MCP endpoint AI agents reach the home through, `POST /api/mcp`, on the
@@ -47,8 +42,8 @@ export function registerMcpRoute(
   options: {
     tools: AgentTools;
     limiter: AgentLimiter;
-    record: (entry: NewActivityEntry) => string;
-    agentWho: (id: string) => ActivityAuthor;
+    /** Logs an agent over a limit, once a minute (limits.ts). */
+    logLimited: LimitedLog;
     /** Runs one tool call with its id behind every entry it writes. */
     duringCall: <T>(callId: string, work: () => T) => T;
     isActiveAgent: (id: string) => boolean;
@@ -91,14 +86,12 @@ export function registerMcpRoute(
     { legacy: "reject" },
   );
 
-  const logLimited = createLimitedLog(options);
-
   function refuseLimit(
     reply: FastifyReply,
     principal: AgentPrincipal,
     refusal: LimitRefusal,
   ) {
-    logLimited(principal.client.id, refusal.limited);
+    options.logLimited(principal.client.id, refusal.limited);
     return jsonRpcError(
       reply.header("retry-after", String(refusal.retryAfter)),
       429,
