@@ -67,6 +67,7 @@ export * from "./firmware.js";
 export * from "./history.js";
 export * from "./lights.js";
 export * from "./live.js";
+export * from "./media.js";
 export * from "./net.js";
 export * from "./pairing.js";
 export * from "./people.js";

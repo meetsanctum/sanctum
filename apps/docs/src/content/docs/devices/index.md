@@ -12,7 +12,7 @@ a room's page.
 
 ## Parts
 
-Each part of a device does one thing. Sanctum knows six:
+Each part of a device does one thing. Sanctum knows seven:
 
 | Part    | What it does                                             |
 | ------- | -------------------------------------------------------- |
@@ -21,6 +21,7 @@ Each part of a device does one thing. Sanctum knows six:
 | Sensor  | Measures one thing: temperature, humidity or light level |
 | Motion  | Says whether something is moving                         |
 | Contact | Says whether something is open or closed                 |
+| Media   | Plays, and says what it is playing and how loud          |
 | Button  | Is pressed                                               |
 
 A device can have several parts, and several of the same part. A ceiling
@@ -34,7 +35,8 @@ that measures temperature and humidity is two sensors, one for each.
 A device's type is what the whole device is: a light, a motion sensor, a
 door. The app that brings the device in chooses it, usually from the
 device's main part, so a light that also measures temperature is a light.
-The household can show a contact sensor as a door or a window.
+The household can show a contact sensor as a door or a window, and a media
+player as a TV or a speaker.
 
 [Device types](/devices/types/) lists every type, what it needs and what
 it is called.

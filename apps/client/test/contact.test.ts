@@ -138,6 +138,7 @@ describe("a contact sensor's tile", () => {
       ["Environment", ["21° · 48%"]],
       ["Presence", []],
       ["Security", ["Closed"]],
+      ["Media", []],
       ["Buttons", []],
     ]);
     expect(

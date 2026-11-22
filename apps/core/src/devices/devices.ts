@@ -287,11 +287,32 @@ export function createDevices(
     return { device: shown, capability };
   }
 
-  // A command that passed the gate: it asks for state, and goes to the
-  // driver unless it has to wait for the light to turn on. The capability
-  // then says who set it: the app whose code sent it, if any, and the actor
-  // behind it. A command that fails leaves the last one standing, as it
-  // leaves the last target.
+  // Writes who set a capability last, after a command or a remote's hold
+  // that asked for no state: what it shows stays as it was.
+  function writeSetBy(
+    deviceId: string,
+    capabilityId: string,
+    setBy: StoredSetBy,
+  ) {
+    changing(deviceId, () =>
+      db
+        .update(deviceCapabilities)
+        .set({ setBy, updatedAt: now() })
+        .where(
+          and(
+            eq(deviceCapabilities.deviceId, deviceId),
+            eq(deviceCapabilities.id, capabilityId),
+          ),
+        )
+        .run(),
+    );
+  }
+
+  // A command that passed the gate: it goes to the driver unless it has to
+  // wait for the light to turn on, and one that asks for state waits for
+  // the device's report. The capability then says who set it: the app
+  // whose code sent it, if any, and the actor behind it. A command that
+  // fails leaves the last one standing, as it leaves the last target.
   async function run(
     actor: Actor,
     app: string | null,
@@ -368,20 +389,23 @@ export function createDevices(
     if (hooks?.check) {
       hooks.check(ending ? visible(device.id, capability.id, view) : target);
     }
-    const prepared = prepare(row, parsed.data as Record<string, unknown>);
-    if (prepared.send && actor.kind === "assistant-run") {
+    const parsedCommand = parsed.data as Record<string, unknown>;
+    const asked = definition.desired(parsed.data) as Record<string, unknown>;
+    // A command that asks for no state, such as a media player's next track
+    // or a step of its volume, is done once its driver takes it: no report
+    // can confirm it, so nothing waits for one or sends it again.
+    const asksNothing = Object.keys(asked).length === 0;
+    const prepared = asksNothing ? null : prepare(row, parsedCommand);
+    const toSend = prepared ? prepared.send : parsedCommand;
+    if (toSend && actor.kind === "assistant-run") {
       options.agentCommand?.(actor.id);
     }
     const at = now();
-    const setBy: StoredSetBy = {
-      app,
-      actor,
-      asked: definition.desired(parsed.data) as Record<string, unknown>,
-      at: at.toISOString(),
-    };
+    const setBy: StoredSetBy = { app, actor, asked, at: at.toISOString() };
     const sent = {
       ...addressed,
-      asked: setBy.asked,
+      asked,
+      ...(asksNothing && { command: parsedCommand }),
     };
     const { driver, key } = reads.address(device.id)!;
     // Sending it again, if the device does not confirm it in time, goes the
@@ -412,23 +436,21 @@ export function createDevices(
         actor,
       );
     };
-    const delivery = commands.begin(
-      device.id,
-      capability.id,
-      row,
-      prepared,
-      setBy,
-      send,
-    );
-    if (prepared.send) {
+    const recordDelivery = prepared
+      ? null
+      : commands.beginWithoutTarget(device.id, capability.id, row, setBy);
+    const delivery = prepared
+      ? commands.begin(device.id, capability.id, row, prepared, setBy, send)
+      : null;
+    if (toSend) {
       try {
-        await send(prepared.send);
+        await send(toSend);
       } catch (error) {
         const failure =
           error instanceof ActionCallError
             ? error
             : new ActionCallError("app_failed");
-        delivery.failed(failure.code);
+        delivery?.failed(failure.code);
         deviceLog.command(
           who,
           device.id,
@@ -440,7 +462,8 @@ export function createDevices(
       }
     }
     const entryId = deviceLog.command(who, device.id, "ok", undefined, sent);
-    delivery.sent({
+    if (recordDelivery?.()) writeSetBy(device.id, capability.id, setBy);
+    delivery?.sent({
       unanswered: (reason, hasResent) =>
         deviceLog.unanswered(entryId, who, device.id, sent, {
           reason,
@@ -449,11 +472,13 @@ export function createDevices(
       resent: () => deviceLog.resent(entryId),
     });
     const after = visible(device.id, capability.id, view).capability;
-    if (hooks?.accepted && prepared.desired) {
+    if (hooks?.accepted && prepared?.desired) {
       const isConfirmed =
         (after.sync === "synced" || after.sync === "held") &&
         after.state !== null &&
-        confirms(after.state, prepared.desired);
+        confirms(after.state, prepared.desired, {
+          reported: row.kind === "media",
+        });
       hooks.accepted(
         { asked: prepared.desired, before: shownState(row), at },
         isConfirmed,
@@ -697,18 +722,7 @@ export function createDevices(
     // state, so its target stays as it was, and it says who set it last.
     moved(deviceId: string, capabilityId: string, setBy: StoredSetBy) {
       commands.moved(deviceId, capabilityId, setBy);
-      changing(deviceId, () =>
-        db
-          .update(deviceCapabilities)
-          .set({ setBy, updatedAt: now() })
-          .where(
-            and(
-              eq(deviceCapabilities.deviceId, deviceId),
-              eq(deviceCapabilities.id, capabilityId),
-            ),
-          )
-          .run(),
-      );
+      writeSetBy(deviceId, capabilityId, setBy);
     },
 
     // A device as the core keeps it, with its driver and key.

@@ -297,7 +297,13 @@ export function reconcile(
       observed,
     );
   }
-  if (desired && sync === "pending" && !confirms(observed, desired)) {
+  // A media report can leave out power, volume and mute while it says
+  // what is playing. Those fields must be present to confirm a command.
+  if (
+    desired &&
+    sync === "pending" &&
+    !confirms(observed, desired, { reported: capability.kind === "media" })
+  ) {
     return { desired, sync, awaiting };
   }
   // Held while the light stays off, until it reports the colour itself (a

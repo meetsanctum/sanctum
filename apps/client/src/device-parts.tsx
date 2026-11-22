@@ -14,7 +14,10 @@ import {
   Lightbulb,
   Power,
   Radio,
+  Speaker,
   Thermometer,
+  Tv,
+  TvMinimalPlay,
   type LucideIcon,
 } from "lucide-react";
 import type { Ref } from "react";
@@ -43,13 +46,18 @@ const typeIcons: Record<DeviceType, LucideIcon> = {
   contact: ContactClosed,
   door: DoorClosed,
   window: WindowClosed,
+  "smart-speaker": Speaker,
+  "media-player": TvMinimalPlay,
+  tv: Tv,
+  speaker: Speaker,
   sensor: Thermometer,
   unknown: Radio,
 };
 
 /**
  * A light, a switch, a remote, a motion sensor, a contact sensor or the
- * door or window it is shown as, a sensor, or something else, in the round
+ * door or window it is shown as, a media player or the TV or speaker it is
+ * shown as, a smart speaker, a sensor, or something else, in the round
  * a row starts with: its type's icon, and the general
  * one for a type this client has none for, as a core may serve.
  */

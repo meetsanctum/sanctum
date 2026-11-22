@@ -1,9 +1,11 @@
 import {
   capabilityOf,
+  mediaFeatures,
   permissionIds,
   registerPermission,
   type AppDefinition,
   type CapabilityKind,
+  type MediaPlayback,
   type ServiceConnection,
 } from "@meetsanctum/app-sdk";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -57,6 +59,27 @@ export function sampleCommands(
   }
   if (kind === "switch") {
     return [{ on: true }, { on: false }];
+  }
+  if (kind === "media") {
+    // Each thing it can do, and back again where that has a way back.
+    const player = mediaFeatures.parse(features);
+    const supportsPlayback = (command: MediaPlayback) =>
+      player.playback.includes(command);
+    return [
+      ...(player.power ? [{ on: false }, { on: true }] : []),
+      ...(supportsPlayback("play") ? [{ activity: "playing" }] : []),
+      ...(supportsPlayback("seek") ? [{ position: 0 }] : []),
+      ...(supportsPlayback("pause") ? [{ activity: "paused" }] : []),
+      ...(["next", "previous"] as const)
+        .filter(supportsPlayback)
+        .map((playback) => ({ playback })),
+      ...(player.volume === "level" ? [{ volume: 40 }, { volume: 20 }] : []),
+      ...(player.volume !== null
+        ? [{ volumeStep: "up" }, { volumeStep: "down" }]
+        : []),
+      ...(player.mute ? [{ muted: true }, { muted: false }] : []),
+      ...(supportsPlayback("stop") ? [{ playback: "stop" }] : []),
+    ];
   }
   if (kind === "motion") {
     // Each setting it has, changed and back again.
@@ -207,15 +230,28 @@ export function describeDriver(harness: DriverHarness) {
             );
           });
 
-          it("carries out commands and reports them done", async () => {
+          it("accepts commands and confirms those that ask for state", async () => {
             const { key, capability } = await bring();
-            for (const command of sampleCommands(kind, capability.features)) {
+            const commands = sampleCommands(kind, capability.features);
+            const [first] = commands;
+            if (first) {
+              await expect(
+                core.command("not-a-device", capability.id, kind, first),
+              ).rejects.toMatchObject({
+                name: "ActionError",
+                code: "not_found",
+              });
+            }
+            for (const command of commands) {
               const from = core.reports.length;
               await core.command(key, capability.id, kind, command);
               const desired = capabilityOf(kind).desired(command) as Record<
                 string,
                 unknown
               >;
+              // A command that asks for no state, such as a media player's
+              // next track, is done once the driver takes it.
+              if (Object.keys(desired).length === 0) continue;
               await core.until(
                 () =>
                   core.reports
@@ -247,13 +283,5 @@ export function describeDriver(harness: DriverHarness) {
         });
       });
     }
-
-    it("refuses a command for a device it does not know", async () => {
-      const kind = harness.kinds[0]!;
-      const [command] = sampleCommands(kind, {});
-      await expect(
-        core.command("not-a-device", kind, kind, command!),
-      ).rejects.toMatchObject({ name: "ActionError", code: "not_found" });
-    });
   });
 }

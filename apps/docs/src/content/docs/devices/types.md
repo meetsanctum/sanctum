@@ -10,37 +10,44 @@ and no others. A device that fits none of them is an unknown device.
 
 ## Every type
 
-| Type           | Id        | What it is                                   | Needs   | Example name in the Office | On a room's page |
-| -------------- | --------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
-| Light          | `light`   | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
-| Plug           | `plug`    | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
-| Switch         | `switch`  | A relay or wall switch                       | Switch  | Office Switch              | Switches         |
-| Button         | `button`  | A remote or wall button                      | Button  | Office Button              | Buttons          |
-| Motion sensor  | `motion`  | A sensor that sees movement                  | Motion  | Office Motion Sensor       | Presence         |
-| Contact sensor | `contact` | A sensor that says whether something is open | Contact | Office Contact Sensor      | Security         |
-| Door           | `door`    | A contact sensor on a door                   | Contact | Office Door                | Security         |
-| Window         | `window`  | A contact sensor on a window                 | Contact | Office Window              | Security         |
-| Sensor         | `sensor`  | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
-| Unknown device | `unknown` | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
+| Type           | Id              | What it is                                   | Needs   | Example name in the Office | On a room's page |
+| -------------- | --------------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
+| Light          | `light`         | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
+| Plug           | `plug`          | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
+| Switch         | `switch`        | A relay or wall switch                       | Switch  | Office Switch              | Switches         |
+| Button         | `button`        | A remote or wall button                      | Button  | Office Button              | Buttons          |
+| Motion sensor  | `motion`        | A sensor that sees movement                  | Motion  | Office Motion Sensor       | Presence         |
+| Contact sensor | `contact`       | A sensor that says whether something is open | Contact | Office Contact Sensor      | Security         |
+| Door           | `door`          | A contact sensor on a door                   | Contact | Office Door                | Security         |
+| Window         | `window`        | A contact sensor on a window                 | Contact | Office Window              | Security         |
+| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
+| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
+| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
+| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
+| Sensor         | `sensor`        | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
+| Unknown device | `unknown`       | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
 
 **Needs** is the part a device must have to be of that type. A driver can
 declare a device with a light part as a light even if it also has a button
 or a temperature sensor.
+
+Devices with only a media part use a generic tile. A device with other
+parts can appear in their sections.
 
 ## How a device gets its type
 
 The driver that brings the device in says what it is. When the driver
 knows no more than the device's parts, the type is the first of these that
 the device has a part for: light, switch, button, motion sensor, contact
-sensor, sensor. A device with no parts is unknown. That order is why:
+sensor, media player, sensor. A device with no parts is unknown. That order is why:
 
 - a light that also has a button or a sensor is a **light**;
 - a relay that also has a button is a **switch**;
 - a motion sensor that also measures is a **motion sensor**;
 - a contact sensor that also measures is a **contact sensor**.
 
-A plug comes only from a driver that can tell it apart from a switch, and
-a door or window only from the household's choice.
+Only the driver can identify a plug or a smart speaker. The household
+chooses whether to show a device as a door, window, TV or speaker.
 
 ## Plug or switch
 
@@ -58,6 +65,17 @@ named "Office Door" and shows as open or closed like any contact sensor.
 Only the household chooses Door or Window; a driver never says them. The
 choice can be changed back at any time, and the device stays a contact
 sensor underneath.
+
+## TV and speaker
+
+A media player can be shown as a TV or a speaker, as a contact sensor can
+be shown as a door: in **Settings → Devices**, open the device's menu and
+choose **Show as**. A TV box in the Living Room shown as a TV is the
+"Living Room TV"; a speaker shown as a speaker is the "Living Room
+Speaker".
+
+Only the driver can identify a voice-enabled speaker as a smart speaker.
+Its name ends in "Speaker" too, as in "Office Speaker".
 
 ## Sensors are named by what they measure
 

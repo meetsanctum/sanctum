@@ -245,7 +245,7 @@ describe("lifecycle hooks", () => {
 // playing its pretend radio's side.
 describeDriver({
   app: lampsDriver,
-  kinds: ["light", "switch", "button", "sensor", "motion", "contact"],
+  kinds: ["light", "switch", "button", "sensor", "motion", "contact", "media"],
   async setUp() {
     radio.reset();
   },

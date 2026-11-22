@@ -16,6 +16,7 @@ import {
   SquarePlus,
   Thermometer,
   ToggleRight,
+  Tv,
   Users,
   Workflow,
   type LucideIcon,
@@ -41,4 +42,5 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   shield: Shield,
   list: List,
   history: History,
+  tv: Tv,
 };

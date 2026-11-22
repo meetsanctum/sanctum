@@ -1,17 +1,7 @@
 import { afterEach, vi } from "vitest";
 
 import { createDevices, type Deliver } from "../src/devices/devices.js";
-import { testCore } from "./support.js";
-
-function deferredDelivery() {
-  let resolve!: () => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<void>((accept, refuse) => {
-    resolve = accept;
-    reject = refuse;
-  });
-  return { promise, resolve, reject };
-}
+import { deferredDelivery, testCore } from "./support.js";
 
 const opened: ReturnType<typeof createDevices>[] = [];
 afterEach(() => {

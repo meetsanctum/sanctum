@@ -26,6 +26,7 @@ import {
   compareGroups,
   fieldKind,
   fieldsOf,
+  matchesCapability,
   plain,
   sentenceParts,
   type Names,
@@ -130,7 +131,7 @@ export function withDevice(
   if (!field) return config;
   const kinds = deviceKindsFor(piece, config);
   const capability = device.capabilities.find((each) =>
-    kinds.includes(each.kind),
+    matchesCapability(each, kinds, config.field),
   );
   return {
     ...config,
@@ -188,7 +189,7 @@ function sectionsFor(
             (each) =>
               each.roomId === room.id &&
               each.capabilities.some((capability) =>
-                kinds.includes(capability.kind),
+                matchesCapability(capability, kinds, base.field),
               ),
           )) {
             const config = withDevice(piece, base, device);
