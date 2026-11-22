@@ -43,6 +43,34 @@ type DeviceTypeDefinition = {
 
 const types = [
   { id: "light", title: "Light", noun: "light", needs: ["light"] },
+  // A voice-enabled speaker. Its media part alone cannot distinguish it
+  // from any other media player, so its driver says what it is.
+  {
+    id: "smart-speaker",
+    title: "Smart speaker",
+    noun: "speaker",
+    needs: ["media"],
+    declaredOnly: true,
+  },
+  // A TV box or speaker defaults to a media player even if it has a button
+  // or a settings switch.
+  {
+    id: "media-player",
+    title: "Media player",
+    noun: "media player",
+    needs: ["media"],
+    showAs: ["tv", "speaker"],
+  },
+  // What a media player is, where the household says so: the TV a box
+  // plays on, or a speaker that only plays.
+  { id: "tv", title: "TV", noun: "TV", needs: ["media"], chosenOnly: true },
+  {
+    id: "speaker",
+    title: "Speaker",
+    noun: "speaker",
+    needs: ["media"],
+    chosenOnly: true,
+  },
   {
     id: "plug",
     title: "Plug",
@@ -51,7 +79,6 @@ const types = [
     declaredOnly: true,
   },
   { id: "switch", title: "Switch", noun: "switch", needs: ["switch"] },
-  // A remote, whatever else it has.
   { id: "button", title: "Button", noun: "button", needs: ["button"] },
   // A motion sensor, which may measure too.
   {
@@ -82,34 +109,6 @@ const types = [
     title: "Window",
     noun: "window",
     needs: ["contact"],
-    chosenOnly: true,
-  },
-  // A voice-enabled speaker. Its media part alone cannot distinguish it
-  // from any other media player, so its driver says what it is.
-  {
-    id: "smart-speaker",
-    title: "Smart speaker",
-    noun: "speaker",
-    needs: ["media"],
-    declaredOnly: true,
-  },
-  // Whatever plays that isn't a smart speaker: a TV box, a speaker that
-  // only plays.
-  {
-    id: "media-player",
-    title: "Media player",
-    noun: "media player",
-    needs: ["media"],
-    showAs: ["tv", "speaker"],
-  },
-  // What a media player is, where the household says so: the TV a box
-  // plays on, or a speaker that only plays.
-  { id: "tv", title: "TV", noun: "TV", needs: ["media"], chosenOnly: true },
-  {
-    id: "speaker",
-    title: "Speaker",
-    noun: "speaker",
-    needs: ["media"],
     chosenOnly: true,
   },
   { id: "sensor", title: "Sensor", noun: "sensor", needs: ["sensor"] },

@@ -13,6 +13,10 @@ and no others. A device that fits none of them is an unknown device.
 | Type           | Id              | What it is                                   | Needs   | Example name in the Office | On a room's page |
 | -------------- | --------------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
 | Light          | `light`         | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
+| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
+| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
+| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
+| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
 | Plug           | `plug`          | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
 | Switch         | `switch`        | A relay or wall switch                       | Switch  | Office Switch              | Switches         |
 | Button         | `button`        | A remote or wall button                      | Button  | Office Button              | Buttons          |
@@ -20,10 +24,6 @@ and no others. A device that fits none of them is an unknown device.
 | Contact sensor | `contact`       | A sensor that says whether something is open | Contact | Office Contact Sensor      | Security         |
 | Door           | `door`          | A contact sensor on a door                   | Contact | Office Door                | Security         |
 | Window         | `window`        | A contact sensor on a window                 | Contact | Office Window              | Security         |
-| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
-| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
-| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
-| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
 | Sensor         | `sensor`        | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
 | Unknown device | `unknown`       | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
 
@@ -38,10 +38,11 @@ parts can appear in their sections.
 
 The driver that brings the device in says what it is. When the driver
 knows no more than the device's parts, the type is the first of these that
-the device has a part for: light, switch, button, motion sensor, contact
-sensor, media player, sensor. A device with no parts is unknown. That order is why:
+the device has a part for: light, media player, switch, button, motion
+sensor, contact sensor, sensor. A device with no parts is unknown. For example:
 
-- a light that also has a button or a sensor is a **light**;
+- a light that also plays media is a **light**;
+- a media player that also has a button or a switch is a **media player**;
 - a relay that also has a button is a **switch**;
 - a motion sensor that also measures is a **motion sensor**;
 - a contact sensor that also measures is a **contact sensor**.
