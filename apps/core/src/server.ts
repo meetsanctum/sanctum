@@ -219,6 +219,7 @@ export function createServer(
         limiter: createAgentLimiter(),
         record: activity.for("agents"),
         agentWho: (id) => activity.agentWho(id),
+        isActiveAgent: (id) => auth.clients.isActiveAgent(id),
         version: config.version,
       });
       registerAppRoutes(core, {

@@ -23,13 +23,14 @@ export const agentLimits: AgentLimits = {
 
 const minuteMs = 60_000;
 
-// Why a request is refused: too many in the last minute, or too many under
-// way.
-export type Limited = "per_minute" | "at_once";
+export type LimitRefusal = {
+  limited: "per_minute" | "at_once";
+  retryAfter: number;
+};
 
 export function createAgentLimiter(
   limits: AgentLimits = agentLimits,
-  now: () => number = Date.now,
+  now: () => number = () => performance.now(),
 ) {
   // Each agent's requests in the last minute, oldest first, and the home's.
   const recent = new Map<string, number[]>();
@@ -42,28 +43,37 @@ export function createAgentLimiter(
   };
 
   return {
-    /**
-     * Admits one request from an agent, or says which limit it's over. An
-     * admitted request counts as under way until `done` is called.
-     */
-    begin(agentId: string): { done: () => void } | { limited: Limited } {
+    /** Counts a request before the body is read. */
+    takeRequest(agentId: string): LimitRefusal | undefined {
       const at = now();
+      for (const [id, times] of recent) {
+        if (times.at(-1)! > at - minuteMs) break;
+        recent.delete(id);
+      }
       const times = recent.get(agentId) ?? [];
       prune(times, at);
       prune(home, at);
-      if (
-        times.length >= limits.agentPerMinute ||
-        home.length >= limits.homePerMinute
-      ) {
-        return { limited: "per_minute" };
-      }
-      const running = underWay.get(agentId) ?? 0;
-      if (running >= limits.agentAtOnce || homeUnderWay >= limits.homeAtOnce) {
-        return { limited: "at_once" };
+      const agentWait =
+        times.length >= limits.agentPerMinute ? times[0]! + minuteMs - at : 0;
+      const homeWait =
+        home.length >= limits.homePerMinute ? home[0]! + minuteMs - at : 0;
+      const wait = Math.max(agentWait, homeWait);
+      if (wait > 0) {
+        return { limited: "per_minute", retryAfter: Math.ceil(wait / 1_000) };
       }
       times.push(at);
+      // Keep agents in order of their latest request, so idle ones expire.
+      recent.delete(agentId);
       recent.set(agentId, times);
       home.push(at);
+    },
+
+    /** Holds a slot while a request is being handled. */
+    begin(agentId: string): { done: () => void } | LimitRefusal {
+      const running = underWay.get(agentId) ?? 0;
+      if (running >= limits.agentAtOnce || homeUnderWay >= limits.homeAtOnce) {
+        return { limited: "at_once", retryAfter: 1 };
+      }
       underWay.set(agentId, running + 1);
       homeUnderWay += 1;
       let finished = false;

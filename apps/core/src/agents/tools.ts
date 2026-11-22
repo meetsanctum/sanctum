@@ -1,18 +1,21 @@
-import type {
-  AiCanUse,
-  AiOfferInfo,
-  CapabilityKind,
-  Places,
+import {
+  appManifestSchema,
+  type AiCanUse,
+  type AiOfferInfo,
+  type CapabilityKind,
+  type Places,
 } from "@meetsanctum/app-sdk";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
 
 import type { DeclaredAction } from "../app-host/contract.js";
-import { ActionCallError } from "../app-host/errors.js";
+import {
+  ActionCallError,
+  type ActionCallErrorCode,
+} from "../app-host/errors.js";
 import type { Principal } from "../auth/clients.js";
 import type { Devices } from "../devices/devices.js";
 import {
-  areasPage,
-  needTitles,
+  blockedNeeds,
   notAllowedOf,
   notForAgents,
   overviewDevice,
@@ -64,30 +67,31 @@ const overviewTool: Tool = {
   annotations: { readOnlyHint: true },
 };
 
-// An action's tool: the app's id and the action's own name, with dots as
-// underscores, so a second app never renames the first one's tools. Two of
-// one app's actions that would share a name each take their whole id.
-function toolNames(offers: readonly AiOfferInfo[]) {
-  const names = new Map<string, { app: string; id: string }>();
-  const actions = offers.filter((offer) => offer.kind === "action");
-  const own = (id: string) => id.slice(id.lastIndexOf(".") + 1);
-  for (const offer of actions) {
-    const shared = actions.some(
-      (other) =>
-        other.app === offer.app &&
-        other.id !== offer.id &&
-        own(other.id) === own(offer.id),
-    );
-    const name = `${offer.app}.${shared ? offer.id : own(offer.id)}`.replace(
-      /\./g,
-      "_",
-    );
-    names.set(name, { app: offer.app, id: offer.id });
+// Short names belong to actions in the app's own namespace, such as
+// moods.runMood. A separate namespace keeps its full id after a double
+// underscore, so installing an app or adding an action can't rename a tool.
+function namedActions(offers: readonly AiOfferInfo[]) {
+  const actions = new Map<string, AiOfferInfo>();
+  for (const offer of offers) {
+    if (offer.kind !== "action") continue;
+    if (!appManifestSchema.shape.id.safeParse(offer.app).success) continue;
+    if (!/^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/.test(offer.id)) continue;
+
+    const namespace = offer.app
+      .slice(offer.app.lastIndexOf(".") + 1)
+      .replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    const app = offer.app.replaceAll(".", "_");
+    const [prefix, action, nested] = offer.id.split(".");
+    const name =
+      prefix === namespace && nested === undefined
+        ? `${app}_${action}`
+        : `${app}__${offer.id.replaceAll(".", "_")}`;
+    actions.set(name, offer);
   }
-  return names;
+  return actions;
 }
 
-const usable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
+const isUsable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
 
 // A refusal or failure, as the agent reads it: a code and one sentence.
 function toolError(code: string, message: string): CallToolResult {
@@ -99,17 +103,14 @@ function toolError(code: string, message: string): CallToolResult {
 }
 
 function answer(value: unknown): CallToolResult {
-  const structured =
-    typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : { result: value ?? null };
+  const result = value ?? null;
   return {
-    content: [{ type: "text", text: JSON.stringify(value ?? null) }],
-    structuredContent: structured,
+    content: [{ type: "text", text: JSON.stringify(result) }],
+    structuredContent: result,
   };
 }
 
-const refusals: Partial<Record<string, [string, string]>> = {
+const refusals: Record<ActionCallErrorCode, [string, string]> = {
   forbidden: [
     "not_allowed",
     "Something this needs is switched off for AI agents.",
@@ -137,19 +138,16 @@ function notAllowed(canUse: AiCanUse, offer: AiOfferInfo, appName: string) {
       `“${offer.title}” is switched off for AI agents in ${where}.`,
     );
   }
-  const needs = needTitles(canUse, offer)
-    .map((title) => `“${title}”`)
-    .join(" and ");
-  const wheres = new Set(
-    offer.missing.map((need) =>
-      canUse.offers.some(
-        (other) => other.app === offer.app && other.id === need,
-      )
-        ? where
-        : areasPage,
-    ),
-  );
-  const are = offer.missing.length > 1 ? "are" : "is";
+  const blocked = blockedNeeds(canUse, offer, where);
+  if (blocked.length === 0) {
+    return toolError(
+      "not_allowed",
+      `“${offer.title}” has requirements that aren't available for AI agents in ${where}.`,
+    );
+  }
+  const needs = blocked.map(({ title }) => `“${title}”`).join(" and ");
+  const wheres = new Set(blocked.map((need) => need.where));
+  const are = blocked.length > 1 ? "are" : "is";
   return toolError(
     "not_allowed",
     `“${offer.title}” needs ${needs}, which ${are} switched off for AI agents in ${[...wheres].join(" and ")}.`,
@@ -159,17 +157,21 @@ function notAllowed(canUse: AiCanUse, offer: AiOfferInfo, appName: string) {
 export function createAgentTools(options: AgentToolsOptions) {
   const { apps } = options;
 
-  // An offer by its tool's name, among what's offered now.
-  function offerOf(canUse: AiCanUse, name: string) {
-    const found = toolNames(canUse.offers).get(name);
-    return found
-      ? canUse.offers.find(
-          (offer) =>
-            offer.kind === "action" &&
-            offer.app === found.app &&
-            offer.id === found.id,
-        )
-      : undefined;
+  function inputSchemaOf(offer: AiOfferInfo): Tool["inputSchema"] | undefined {
+    const schema = apps.action(offer.app, offer.id)?.schema;
+    if (!schema) return undefined;
+    if (schema.type === "object") return { ...schema, type: "object" };
+    // The manifest can describe several object shapes with a union. MCP
+    // also requires an explicit object type on the schema's root.
+    const variants = schema.oneOf ?? schema.anyOf;
+    if (
+      schema.type === undefined &&
+      Array.isArray(variants) &&
+      variants.length > 0 &&
+      variants.every((variant) => variant?.type === "object")
+    ) {
+      return { ...schema, type: "object" };
+    }
   }
 
   function overview(principal: AgentPrincipal): HomeOverview {
@@ -191,19 +193,15 @@ export function createAgentTools(options: AgentToolsOptions) {
     list(): Tool[] {
       const canUse = options.canUse();
       const tools = [overviewTool];
-      for (const [name, { app, id }] of toolNames(canUse.offers)) {
-        const offer = canUse.offers.find(
-          (each) => each.app === app && each.id === id,
-        )!;
-        const action = apps.action(app, id);
-        if (!usable(offer) || !action || action.schema.type !== "object") {
-          continue;
-        }
+      for (const [name, offer] of namedActions(canUse.offers)) {
+        if (!isUsable(offer)) continue;
+        const inputSchema = inputSchemaOf(offer);
+        if (!inputSchema) continue;
         tools.push({
           name,
           title: offer.title,
           description: `${offer.description} ${notInstructions}`,
-          inputSchema: action.schema as Tool["inputSchema"],
+          inputSchema,
           // A write such as running a mood can turn lights off, so none
           // says it isn't destructive.
           annotations: offer.tier === "read" ? { readOnlyHint: true } : {},
@@ -219,12 +217,16 @@ export function createAgentTools(options: AgentToolsOptions) {
     async call(
       principal: AgentPrincipal,
       name: string,
-      input: unknown,
+      input: Record<string, unknown> | undefined,
     ): Promise<CallToolResult | undefined> {
-      if (name === overviewTool.name) return answer(overview(principal));
+      if (name === overviewTool.name) {
+        return input !== undefined && Object.keys(input).length > 0
+          ? toolError("invalid_input", "The home overview takes no input.")
+          : answer(overview(principal));
+      }
       const canUse = options.canUse();
-      const offer = offerOf(canUse, name);
-      if (!offer) return undefined;
+      const offer = namedActions(canUse.offers).get(name);
+      if (!offer || !inputSchemaOf(offer)) return undefined;
       try {
         return answer(
           await apps.call({
@@ -237,13 +239,30 @@ export function createAgentTools(options: AgentToolsOptions) {
       } catch (error) {
         // The app host refuses what's off, and logs it under the agent's
         // name; the agent hears where it's decided.
-        if (!usable(offer)) {
+        if (!isUsable(offer)) {
           return notAllowed(canUse, offer, apps.name(offer.app) ?? offer.app);
+        }
+        // The app host may wait for an app to start and check access again.
+        // Use the current switches if it refused the call after that wait.
+        if (error instanceof ActionCallError && error.code === "forbidden") {
+          const current = options.canUse();
+          const latest = current.offers.find(
+            (each) => each.app === offer.app && each.id === offer.id,
+          );
+          if (latest && !isUsable(latest)) {
+            return notAllowed(
+              current,
+              latest,
+              apps.name(offer.app) ?? offer.app,
+            );
+          }
         }
         // Only the code reaches the agent: what went wrong inside is in the
         // activity log.
-        const [code, message] = (error instanceof ActionCallError &&
-          refusals[error.code]) || ["failed", "It didn't work."];
+        const [code, message] =
+          error instanceof ActionCallError
+            ? refusals[error.code]
+            : ["failed", "It didn't work."];
         return toolError(code, message);
       }
     },

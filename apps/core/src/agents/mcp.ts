@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
-import type { AgentLimiter, Limited } from "./limits.js";
+import type { AgentLimiter, LimitRefusal } from "./limits.js";
 import type { AgentTools } from "./tools.js";
 
 // The MCP endpoint AI agents reach the home through, `POST /api/mcp`, on the
@@ -17,12 +17,10 @@ import type { AgentTools } from "./tools.js";
 // (400 and -32020 otherwise, as the SDK checks). Only an AI agent's token
 // opens it, and nothing else opens with that token (auth/routes.ts).
 //
-// The agent's connector speaks to it over pinned HTTPS. A browser never
-// does, so any request carrying an `Origin` is refused: a page an agent
-// reads can't make the agent's browser call the home. Requests a minute and
-// calls at once are held to limits (limits.ts), and an agent over one is
-// logged once a minute. The tool list is short-lived and private, since it
-// follows the household's switches.
+// Requests with an `Origin` are refused so a browser page cannot call the
+// home. Requests a minute and calls at once are held to limits (limits.ts),
+// and an agent over one is logged once a minute. The tool list is short-lived
+// and private, since it follows the household's switches.
 
 type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
 
@@ -42,12 +40,11 @@ export function registerMcpRoute(
     limiter: AgentLimiter;
     record: (entry: NewActivityEntry) => string;
     agentWho: (id: string) => ActivityAuthor;
+    isActiveAgent: (id: string) => boolean;
     version: string;
-    now?: () => number;
   },
 ) {
   const { tools, limiter } = options;
-  const now = options.now ?? Date.now;
 
   function serverFor(principal: AgentPrincipal) {
     const server = new Server(
@@ -69,7 +66,7 @@ export function registerMcpRoute(
           `Unknown tool: ${name}`,
         );
       }
-      return server.projectCallToolResult(result, undefined);
+      return result;
     });
     return server;
   }
@@ -77,16 +74,21 @@ export function registerMcpRoute(
   const handler = createMcpHandler(
     (context) =>
       serverFor(context.authInfo?.extra?.principal as AgentPrincipal),
-    // Only 2026-07-28: the connector translates for agents on older ones.
-    { legacy: "reject", responseMode: "json" },
+    { legacy: "reject" },
   );
 
   // An agent over a limit is logged at most once a minute.
   const lastLogged = new Map<string, number>();
-  function logLimited(principal: AgentPrincipal, limited: Limited) {
-    const at = now();
-    const last = lastLogged.get(principal.client.id);
-    if (last !== undefined && at - last < 60_000) return;
+  function logLimited(
+    principal: AgentPrincipal,
+    limited: LimitRefusal["limited"],
+  ) {
+    const at = performance.now();
+    for (const [id, last] of lastLogged) {
+      if (at - last < 60_000) break;
+      lastLogged.delete(id);
+    }
+    if (lastLogged.has(principal.client.id)) return;
     lastLogged.set(principal.client.id, at);
     options.record({
       action: "agents.limited",
@@ -96,27 +98,46 @@ export function registerMcpRoute(
     });
   }
 
-  const route = { config: { agent: true } };
+  function refuseLimit(
+    reply: FastifyReply,
+    principal: AgentPrincipal,
+    refusal: LimitRefusal,
+  ) {
+    logLimited(principal, refusal.limited);
+    return jsonRpcError(
+      reply.header("retry-after", String(refusal.retryAfter)),
+      429,
+      refusal.limited === "per_minute"
+        ? "Too many requests in the last minute"
+        : "Too many requests at once",
+    );
+  }
+
+  const route = {
+    config: { agent: true },
+    async onRequest(request: FastifyRequest, reply: FastifyReply) {
+      const principal = request.principal;
+      if (principal?.scope !== "agent") {
+        return jsonRpcError(reply, 403, "Only an AI agent's token opens this");
+      }
+      if (request.headers.origin !== undefined) {
+        return jsonRpcError(reply, 403, "Origin not allowed");
+      }
+      if (request.method === "POST") {
+        const refusal = limiter.takeRequest(principal.client.id);
+        if (refusal) return refuseLimit(reply, principal, refusal);
+      }
+    },
+  };
 
   app.post("/api/mcp", route, async (request, reply) => {
-    const principal = request.principal!;
-    if (principal.scope !== "agent") {
-      return jsonRpcError(reply, 403, "Only an AI agent's token opens this");
-    }
-    if (request.headers.origin !== undefined) {
-      return jsonRpcError(reply, 403, "Origin not allowed");
+    const principal = request.principal as AgentPrincipal;
+    // An agent may have been removed while Fastify was reading its body.
+    if (!options.isActiveAgent(principal.client.id)) {
+      return reply.code(401).send({ error: "invalid_client_token" });
     }
     const admitted = limiter.begin(principal.client.id);
-    if ("limited" in admitted) {
-      logLimited(principal, admitted.limited);
-      return jsonRpcError(
-        reply.header("retry-after", "60"),
-        429,
-        admitted.limited === "per_minute"
-          ? "Too many requests in the last minute"
-          : "Too many requests at once",
-      );
-    }
+    if ("limited" in admitted) return refuseLimit(reply, principal, admitted);
     try {
       const response = await handler.fetch(webRequest(request), {
         authInfo: {
@@ -152,6 +173,5 @@ function webRequest(request: FastifyRequest) {
   return new Request(`http://${request.hostname}${request.url}`, {
     method: "POST",
     headers,
-    body: JSON.stringify(request.body ?? null),
   });
 }

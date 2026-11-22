@@ -51,7 +51,7 @@ export type HomeOverview = {
 };
 
 /** Where the core's own areas are decided. */
-export const areasPage = "Settings, What AI agents can use";
+const areasPage = "Settings, What AI agents can use";
 
 // What Sanctum keeps for people, whatever is switched on.
 export const notForAgents: HomeOverview["notForAgents"] = [
@@ -97,21 +97,43 @@ export function notAllowedOf(
     const name = appName(offer.app);
     if (name === undefined) return [];
     const item: NotAllowed = { title: offer.title, where: settingsOf(name) };
-    if (offer.on) item.needs = needTitles(canUse, offer);
+    if (offer.on) {
+      item.needs = blockedNeeds(canUse, offer, item.where).map(
+        ({ title }) => title,
+      );
+    }
     return [item];
   });
   return [...areas, ...offers];
 }
 
-// What an offer needs that's off, by title: an area by its permission's
-// words, or another of the app's offers by its own.
-export function needTitles(canUse: AiCanUse, offer: AiOfferInfo) {
-  return offer.missing.map(
-    (need) =>
-      canUse.offers.find(
-        (other) => other.app === offer.app && other.id === need,
-      )?.title ?? titleOf(need),
-  );
+// Follow unavailable offers to the switches that actually hold them back.
+export function blockedNeeds(
+  canUse: AiCanUse,
+  offer: AiOfferInfo,
+  where: string,
+) {
+  const seen = new Set<string>();
+  const blockers: Pick<NotAllowed, "title" | "where">[] = [];
+
+  function visit(id: string) {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const item = canUse.offers.find(
+      (other) => other.app === offer.app && other.id === id,
+    );
+    if (item?.on) {
+      item.missing.forEach(visit);
+      return;
+    }
+    if (item) blockers.push({ title: item.title, where });
+    else if (canUse.areas.some((area) => area.id === id && !area.on)) {
+      blockers.push({ title: titleOf(id), where: areasPage });
+    }
+  }
+
+  offer.missing.forEach(visit);
+  return blockers;
 }
 
 export function overviewDevice(device: DeviceInfo): OverviewDevice {

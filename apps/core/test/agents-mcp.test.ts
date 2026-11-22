@@ -6,16 +6,16 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { agentLimits } from "../src/agents/limits.js";
+import { agentLimits, createAgentLimiter } from "../src/agents/limits.js";
 import { toolListTtlMs } from "../src/agents/mcp.js";
 import { lampsCore } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
 import { get, post, type TestCore } from "./support.js";
 
 // The MCP endpoint AI agents reach the home through, driven with the
-// official SDK's own client on the 2026-07-28 revision: the tools follow
-// what AI agents can use, every call is checked again, and only an agent's
-// connector, never a browser, gets in.
+// official SDK's own client on the 2026-07-28 revision: the tools follow what
+// AI agents can use, each call is checked again, and the endpoint requires
+// an agent's token and refuses requests from browser pages.
 
 const ran: string[] = [];
 
@@ -56,6 +56,33 @@ const sweep = defineAction({
   run: async () => ({}),
 });
 
+const summarize = defineAction({
+  id: "summary.tidy",
+  title: "Summarize tidying",
+  tier: "read",
+  input: z.union([
+    z.object({ room: z.string() }),
+    z.object({ floor: z.string() }),
+  ]),
+  output: z.array(z.string()),
+  assistant: { starts: "off", description: "Summarize what's tidy." },
+  run: async (_ctx, input) => ["room" in input ? input.room : input.floor],
+});
+
+const inspect = defineAction({
+  id: "example.inspect",
+  title: "Inspect the floors",
+  tier: "read",
+  input: z.object({}),
+  output: z.object({}),
+  assistant: {
+    starts: "on",
+    description: "Look at the floors.",
+    needs: ["example.sweep"],
+  },
+  run: async () => ({}),
+});
+
 // Holds each call until the test lets it go.
 const waiting: (() => void)[] = [];
 const wait = defineAction({
@@ -87,7 +114,7 @@ const examplePackage: AppPackage = {
     version: "0.1.0",
     core: "^2.0.0",
     permissions: [],
-    actions: [tidy, peek, sweep, wait, reset],
+    actions: [tidy, peek, sweep, summarize, inspect, wait, reset],
     events: [],
   }),
   origin: "official",
@@ -200,6 +227,41 @@ describe("the MCP endpoint", () => {
     });
   });
 
+  it("keeps actions in different namespaces distinct and preserves their declared data", async () => {
+    const { core, maya, agent } = await household();
+    const client = await connect(core, agent.token);
+    const main = "sanctum_example_tidy";
+    const summary = "sanctum_example__summary_tidy";
+
+    expect(await names(client)).toContain(main);
+    expect(await names(client)).not.toContain(summary);
+    await post(
+      core,
+      "/api/agents/can-use/offer",
+      { app: "sanctum.example", id: "summary.tidy", on: true },
+      maya,
+    );
+    const { tools } = await client.listTools(undefined, {
+      cacheMode: "bypass",
+    });
+    expect(tools.find((tool) => tool.name === main)?.title).toBe("Tidy up");
+    expect(
+      tools.find((tool) => tool.name === summary)?.inputSchema,
+    ).toMatchObject({
+      type: "object",
+      anyOf: [
+        { type: "object", required: ["room"] },
+        { type: "object", required: ["floor"] },
+      ],
+    });
+    const result = await client.callTool({
+      name: summary,
+      arguments: { floor: "Upstairs" },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual(["Upstairs"]);
+  });
+
   it("answers bad input as the tool's error", async () => {
     const { core, agent } = await household();
     const client = await connect(core, agent.token);
@@ -211,6 +273,15 @@ describe("the MCP endpoint", () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ error: "invalid_input" });
+
+    const overview = await client.callTool({
+      name: "home_overview",
+      arguments: { room: "Kitchen" },
+    });
+    expect(overview.isError).toBe(true);
+    expect(overview.structuredContent).toMatchObject({
+      error: "invalid_input",
+    });
   });
 
   it("answers what's switched off with where it's decided, and hides what's never offered", async () => {
@@ -235,6 +306,12 @@ describe("the MCP endpoint", () => {
       error: "not_allowed",
       message:
         "“Sweep” needs “See who lives here”, which is switched off for AI agents in Settings, What AI agents can use.",
+    });
+    const indirect = await client.callTool({ name: "sanctum_example_inspect" });
+    expect(indirect.structuredContent).toEqual({
+      error: "not_allowed",
+      message:
+        "“Inspect the floors” needs “See who lives here”, which is switched off for AI agents in Settings, What AI agents can use.",
     });
 
     // Switched off after the agent listed it: refused all the same.
@@ -295,6 +372,11 @@ describe("the MCP endpoint", () => {
       where: "Example's settings",
       needs: ["See who lives here"],
     });
+    expect(first.notAllowed).toContainEqual({
+      title: "Inspect the floors",
+      where: "Example's settings",
+      needs: ["See who lives here"],
+    });
     expect(first.notAllowed.map((each) => each.title)).not.toContain("Tidy up");
     expect(first.notForAgents.map((each) => each.where)).toContain("Apps");
 
@@ -338,6 +420,15 @@ describe("the MCP endpoint", () => {
     expect(nobody.statusCode).toBe(401);
     const opened = await get(core, "/api/mcp", { token: agent.token });
     expect(opened.statusCode).toBe(405);
+    expect(opened.headers.allow).toBe("POST");
+    const closing = await core.server.inject({
+      method: "DELETE",
+      url: "/api/mcp",
+      headers: { authorization: `Bearer ${agent.token}` },
+    });
+    expect(closing.statusCode).toBe(405);
+    const personOpening = await get(core, "/api/mcp", maya);
+    expect(personOpening.statusCode).toBe(403);
   });
 
   it("refuses the 2025 handshake and headers that disagree with the body", async () => {
@@ -413,13 +504,27 @@ describe("the MCP endpoint", () => {
   it("holds each agent to its requests a minute, and logs it once", async () => {
     const { core, agent } = await household();
     const client = await connect(core, agent.token);
-    // Connecting took one request.
-    for (let sent = 1; sent < agentLimits.agentPerMinute; sent += 1) {
+    const plainText = () =>
+      core.server.inject({
+        method: "POST",
+        url: "/api/mcp",
+        headers: {
+          authorization: `Bearer ${agent.token}`,
+          "content-type": "text/plain",
+        },
+        payload: "hello",
+      });
+    expect((await plainText()).statusCode).toBe(415);
+    // Connecting and the unsupported request both count.
+    for (let sent = 2; sent < agentLimits.agentPerMinute; sent += 1) {
       await names(client);
     }
 
     await expect(names(client)).rejects.toThrow();
-    await expect(names(client)).rejects.toThrow();
+    const refused = await plainText();
+    expect(refused.statusCode).toBe(429);
+    expect(Number(refused.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    expect(Number(refused.headers["retry-after"])).toBeLessThanOrEqual(60);
 
     const entries = core.activity
       .recent()
@@ -431,5 +536,61 @@ describe("the MCP endpoint", () => {
         actor: `assistant-run:${agent.client.id}`,
       }),
     ]);
+  });
+});
+
+describe("MCP limits", () => {
+  const limits = {
+    agentPerMinute: 2,
+    homePerMinute: 3,
+    agentAtOnce: 1,
+    homeAtOnce: 2,
+  };
+
+  it("uses the later of the agent and home windows when telling an agent to retry", () => {
+    let now = 0;
+    const limiter = createAgentLimiter(limits, () => now);
+    expect(limiter.takeRequest("first")).toBeUndefined();
+    now = 10_000;
+    expect(limiter.takeRequest("second")).toBeUndefined();
+    now = 20_000;
+    expect(limiter.takeRequest("second")).toBeUndefined();
+    now = 50_000;
+    expect(limiter.takeRequest("second")).toEqual({
+      limited: "per_minute",
+      retryAfter: 20,
+    });
+    expect(limiter.takeRequest("third")).toEqual({
+      limited: "per_minute",
+      retryAfter: 10,
+    });
+    now = 60_000;
+    expect(limiter.takeRequest("third")).toBeUndefined();
+    now = 70_000;
+    expect(limiter.takeRequest("second")).toBeUndefined();
+  });
+
+  it("shares concurrent slots across the home and returns a slot when work ends", () => {
+    const limiter = createAgentLimiter(limits);
+    const first = limiter.begin("first");
+    const second = limiter.begin("second");
+    if (!("done" in first) || !("done" in second)) {
+      throw new Error("The first two agents should have a slot");
+    }
+    expect(limiter.begin("third")).toEqual({
+      limited: "at_once",
+      retryAfter: 1,
+    });
+    first.done();
+    first.done();
+    expect(limiter.begin("second")).toEqual({
+      limited: "at_once",
+      retryAfter: 1,
+    });
+    expect(limiter.begin("third")).toHaveProperty("done");
+    expect(limiter.begin("first")).toEqual({
+      limited: "at_once",
+      retryAfter: 1,
+    });
   });
 });
