@@ -368,16 +368,16 @@ describe("an entry's words", () => {
         who: {
           kind: "app",
           id: "sanctum.natural-light",
-          name: "Natural light",
+          name: "Natural Light",
         },
-        app: { id: "sanctum.natural-light", name: "Natural light" },
+        app: { id: "sanctum.natural-light", name: "Natural Light" },
         detail: { asked: { brightness: 55 }, from: { brightness: 30 } },
       }),
       "device",
     );
     expect(words).toEqual({
       title: "Adjusted 12 times, 30% to 55%",
-      detail: "Natural light · 07:05–08:10",
+      detail: "Natural Light · 07:05–08:10",
       problem: false,
     });
   });

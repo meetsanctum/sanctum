@@ -21,9 +21,14 @@ import type {
   NewActivityEntry,
 } from "../activity/activity.js";
 import type { ActivityViews } from "../activity/views.js";
+import { ActionCallError } from "../app-host/errors.js";
 import type { Principal } from "../auth/clients.js";
-import type { Devices } from "../devices/devices.js";
-import { lightsPlace, type Lights } from "../devices/lights.js";
+import type { CommandChange, Devices } from "../devices/devices.js";
+import {
+  lightsPlace,
+  type LightOutcome,
+  type Lights,
+} from "../devices/lights.js";
 import { commandRequest } from "../devices/requests.js";
 import type { View } from "../devices/views.js";
 import type { Entities } from "../entities/entities.js";
@@ -40,11 +45,14 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
+import type { AgentChanges } from "./changes.js";
 import { areasPage } from "./overview.js";
+import { createRestoreCapability } from "./restore.js";
 
 // The core's own tools, each listed while what it needs is switched on in
 // What AI agents can use: `lights` and `device_command` for the kinds AI
-// agents may control, `entities` for what apps bring that's switched on,
+// agents may control, with `restore`, which puts an agent's own change of
+// either back, `entities` for what apps bring that's switched on,
 // `activity` and `history` for their areas. Each answers with what AI agents
 // may see only: devices of the kinds they may read, and the names of people
 // and their phones and computers only while "See who lives here" is on. A
@@ -57,7 +65,8 @@ type CoreToolsOptions = {
   readableDeviceKinds: () => ReadonlySet<CapabilityKind>;
   appName: (appId: string) => string | undefined;
   devices: Pick<Devices, "get" | "list" | "commandFor">;
-  lights: Pick<Lights, "switchFor">;
+  lights: Pick<Lights, "changeFor">;
+  changes: AgentChanges;
   entities: Pick<Entities, "list">;
   activity: Pick<Activity, "page">;
   activityViews: Pick<ActivityViews, "info">;
@@ -132,23 +141,63 @@ const deviceCommandAreas = capabilityKinds
   .map(controlPermission)
   .filter((area) => aiAreas.includes(area));
 
+function batchAnswer(
+  result: Record<string, unknown>,
+  outcomes: readonly { why?: string }[],
+  limitedMessage?: string,
+): CallToolResult {
+  if (outcomes.some(({ why }) => why === "forbidden")) {
+    throw new ActionCallError("forbidden");
+  }
+  if (outcomes.some(({ why }) => why === "needs_approval")) {
+    throw new ActionCallError("needs_approval");
+  }
+  if (outcomes.some(({ why }) => why === "limited")) {
+    const refusal = limitedMessage
+      ? toolError("limited", limitedMessage)
+      : errorAnswer(new ActionCallError("limited"));
+    return {
+      ...answer(Object.assign({}, refusal.structuredContent, result)),
+      isError: true,
+    };
+  }
+  return answer(result);
+}
+
 export function createCoreTools(options: CoreToolsOptions) {
   const now = options.now ?? (() => new Date());
   const view = (): View => ({ kinds: options.readableDeviceKinds() });
 
-  const lightsInput = z.strictObject({
-    place: lightsPlace,
-    to: z.enum(["on", "off"]),
-  });
+  const brightness = z.number().int().min(1).max(100);
+  const colorTemperature = z.number().int().min(50).max(1000);
+  const lightsInput = z.union([
+    z.strictObject({
+      place: lightsPlace,
+      to: z.enum(["on", "off", "brighter", "dimmer"]),
+    }),
+    z.strictObject({
+      place: lightsPlace,
+      set: z.union([
+        z.strictObject({
+          brightness,
+          colorTemperature: colorTemperature.optional(),
+        }),
+        z.strictObject({ brightness: brightness.optional(), colorTemperature }),
+      ]),
+    }),
+  ]);
 
   const lights: CoreTool = {
     tool: () => ({
       name: "lights",
       title: "Lights",
       description: [
-        "Turn lights on or off: a room's, a floor's, a zone's, the whole home's, or chosen lights by device and capability, with the ids home_overview gives.",
-        "Turning on goes by the room's own rule, as its lights button does, such as a mood's look or natural light's. Lights that aren't answering are left alone.",
-        "Ask which room when the person names none or two match, and switch the whole home only when the person said so. Then say what changed.",
+        "Change lights: a room's, a floor's, a zone's, the whole home's, or chosen lights by device and capability, with the ids home_overview gives.",
+        "`to` turns them on or off, or steps them brighter or dimmer by a fifth of their range, as a dimmer's press does; dimmer leaves lights that are off alone.",
+        "`set` sets a brightness from 1 to 100 and a colour temperature in mireds (1,000,000 divided by kelvin: 370 is warm white, 250 is neutral), each kept within what a light can do. Lights that are on get only what was asked; lights that are off come on as turning on does, with what was asked.",
+        "Turning on goes by the room's own rule, as its lights button does, such as a mood's look or natural light's.",
+        "The answer lists every light: sent, confirmed, skipped with why, or offline, and a `change` that restore puts back.",
+        "Ask which room when the person names none or two match, and change the whole home only when the person said so. Then say what changed.",
         notInstructions,
       ].join(" "),
       inputSchema: inputSchemaOf(lightsInput),
@@ -159,17 +208,30 @@ export function createCoreTools(options: CoreToolsOptions) {
     async run(principal, input) {
       const parsed = lightsInput.safeParse(input);
       if (!parsed.success) return invalidInput();
-      const result = await options.lights.switchFor(principal, parsed.data);
-      return answer({
-        on: result.on,
-        switched: result.switched,
-        failed: result.failed.map((light) => ({
-          ...light,
-          name: options.devices.get(light.device)?.name ?? null,
-        })),
-      });
+      const { place, ...ask } = parsed.data;
+      const outcomes = await options.lights.changeFor(
+        principal,
+        place,
+        ask,
+        view(),
+      );
+      const change = options.changes.record(
+        principal.client.id,
+        outcomes.flatMap(({ device, capability, change }) =>
+          change ? [{ device, capability, kind: "light", ...change }] : [],
+        ),
+      );
+      return batchAnswer(
+        { change, lights: outcomes.map(lightAnswer) },
+        outcomes,
+      );
     },
   };
+
+  // One light as the agent hears of it: without how it was before, which
+  // only restore goes by.
+  const lightAnswer = ({ change: _change, ...outcome }: LightOutcome) =>
+    outcome;
 
   const commandInput = z.strictObject({
     device: commandRequest.shape.device,
@@ -227,12 +289,26 @@ export function createCoreTools(options: CoreToolsOptions) {
         );
       }
       if (!isOn(canUse, area)) throw areasOff([area]);
-      const after = await options.devices.commandFor(principal, {
-        device: device.id,
-        capability: capability.id,
-        command,
-      });
+      const address = { device: device.id, capability: capability.id };
+      let accepted: CommandChange | undefined;
+      const after = await options.devices.commandFor(
+        principal,
+        { ...address, command },
+        {
+          accepted: (change) => {
+            accepted = change;
+          },
+        },
+      );
+      const { kind } = capability;
+      const change =
+        accepted && (kind === "light" || kind === "switch")
+          ? options.changes.record(principal.client.id, [
+              { ...address, kind, ...accepted },
+            ])
+          : null;
       return answer({
+        change,
         device: device.id,
         capability: after.id,
         kind: after.kind,
@@ -240,6 +316,73 @@ export function createCoreTools(options: CoreToolsOptions) {
         // What the device has yet to confirm.
         waitingFor: after.sync === "pending" ? after.desired : null,
       });
+    },
+  };
+
+  const restoreInput = z.strictObject({ change: z.string().min(1).max(64) });
+
+  const putBack = createRestoreCapability({
+    devices: options.devices,
+    appName: options.appName,
+    view,
+  });
+
+  const restore: CoreTool = {
+    tool: () => ({
+      name: "restore",
+      title: "Put back",
+      description: [
+        "Put back one of your own changes: the `change` a lights or device_command call answered with.",
+        "Each light or switch that still shows what you set goes back to how it was. One changed since, by a person, a switch or an app, is left as it is and named, with the app where one changed it; one whose command is still on its way is uncertain.",
+        "Only your last 5 changes are kept, for an hour. Putting back a change twice answers the same. A mood's run can't be put back this way.",
+        notInstructions,
+      ].join(" "),
+      inputSchema: inputSchemaOf(restoreInput),
+      annotations: {},
+    }),
+    usable: (canUse) => controlKinds(canUse).length > 0,
+    refusal: () => areasOff(deviceCommandAreas),
+    async run(principal, input, canUse) {
+      const parsed = restoreInput.safeParse(input);
+      if (!parsed.success) return invalidInput();
+      const change = options.changes.find(
+        principal.client.id,
+        parsed.data.change,
+      );
+      if (!change) {
+        return toolError(
+          "change_gone",
+          "That change can't be put back: only your last 5 changes are kept, for an hour.",
+        );
+      }
+      const off = [
+        ...new Set(change.changed.map((item) => controlPermission(item.kind))),
+      ].filter((area) => !isOn(canUse, area));
+      if (off.length > 0) throw areasOff(off);
+      change.restored ??= Promise.all(
+        change.changed.map((item) => putBack(principal, item)),
+      )
+        .then((changed) => {
+          // A wholly refused restore can be tried again after the limit resets.
+          if (
+            changed.some(({ why }) => why === "limited") &&
+            !changed.some(
+              ({ result }) => result === "sent" || result === "confirmed",
+            )
+          ) {
+            throw new ActionCallError("limited");
+          }
+          return batchAnswer(
+            { change: change.id, changed },
+            changed,
+            "The device command limit stopped some lights or switches from being put back.",
+          );
+        })
+        .catch((error: unknown) => {
+          delete change.restored;
+          throw error;
+        });
+      return change.restored;
     },
   };
 
@@ -475,6 +618,7 @@ export function createCoreTools(options: CoreToolsOptions) {
   const tools: Record<string, CoreTool> = {
     lights,
     device_command: deviceCommand,
+    restore,
     entities,
     activity,
     history,

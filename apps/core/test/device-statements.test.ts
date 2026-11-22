@@ -152,7 +152,7 @@ describe("a press of a room's six lights", () => {
   });
 
   it("compiles none for the apps that follow the lights", async () => {
-    // Natural light reads the core's test clock once the core has one.
+    // Natural Light reads the core's test clock once the core has one.
     let clock = () => new Date();
     const { core, maya, live, press } = await sixLights({
       apps: [
@@ -191,7 +191,7 @@ describe("a press of a room's six lights", () => {
     core.advance(6 * 60 * 60_000);
     live.messages.length = 0;
 
-    // What the client heard that Natural light did, by the app's name.
+    // What the client heard that Natural Light did, by the app's name.
     const byNaturalLight = () =>
       live.messages
         .filter((message) => message.type === "activity")
@@ -199,7 +199,7 @@ describe("a press of a room's six lights", () => {
         .filter(
           ({ who, action, outcome }) =>
             who.kind === "app" &&
-            who.name === "Natural light" &&
+            who.name === "Natural Light" &&
             action === "device.command" &&
             outcome === "ok",
         );

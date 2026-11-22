@@ -6,7 +6,7 @@ import type { AppPackage } from "./runner-apps.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { get, post, type TestCore } from "./support.js";
 
-// Natural light on the core's own lights, end to end: every light that takes
+// Natural Light on the core's own lights, end to end: every light that takes
 // a colour temperature follows it by default, it reads who last set a light,
 // its check runs as its job, and a light that is off holds the curve's look
 // in Devices until anyone switches it on. The panel test app stands in for
@@ -79,7 +79,7 @@ async function tick(core: TestCore) {
   await settled();
 }
 
-// Natural light takes the lamp in as it sees it, and its first check sets it,
+// Natural Light takes the lamp in as it sees it, and its first check sets it,
 // whichever comes first.
 async function takenIn(core: TestCore) {
   core.advance(minutes(5));

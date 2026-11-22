@@ -408,7 +408,7 @@ describe("Security's card", () => {
     ];
     await show("security");
 
-    expect(heard(card()!)).toBe("Contact sensors, 1 open, 1 not known");
+    expect(heard(card()!)).toBe("Contact Sensors, 1 open, 1 not known");
     expect(white(card()!)).toBe(false);
     expect(iconColour(card()!)).toBe("var(--iris-text)");
     // It only tells: it is no button and holds none.
@@ -435,7 +435,7 @@ describe("Security's card", () => {
     expect(cards().map((each) => each.textContent)).toEqual([
       "Doors, 1 open",
       "Windows, All closed",
-      "Contact sensors, No readings",
+      "Contact Sensors, No readings",
     ]);
     // None is White, and each has its own glyph, open or closed.
     expect(cards().some(white)).toBe(false);
@@ -460,7 +460,7 @@ describe("Security's card", () => {
     ];
     await show("security");
 
-    expect(card()!.textContent).toBe("Contact sensors, All closed");
+    expect(card()!.textContent).toBe("Contact Sensors, All closed");
     expect(white(card()!)).toBe(false);
     expect(
       card()!.querySelector("svg")?.classList.contains("lucide-contact-closed"),
@@ -470,7 +470,7 @@ describe("Security's card", () => {
   it("follows the sensors live", async () => {
     devices = [contactSensor("front", "Front door", "hall", false)];
     await show("security");
-    expect(card()!.textContent).toBe("Contact sensors, All closed");
+    expect(card()!.textContent).toBe("Contact Sensors, All closed");
 
     await act(async () => {
       live.publish({
@@ -479,7 +479,7 @@ describe("Security's card", () => {
         device: contactSensor("front", "Front door", "hall", true),
       });
     });
-    expect(card()!.textContent).toBe("Contact sensors, 1 open");
+    expect(card()!.textContent).toBe("Contact Sensors, 1 open");
     expect(
       card()!.querySelector("svg")?.classList.contains("lucide-contact-open"),
     ).toBe(true);

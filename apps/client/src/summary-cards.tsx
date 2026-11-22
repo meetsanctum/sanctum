@@ -16,7 +16,7 @@ import { statusRow, statusTile, StatusTileWords } from "./status-tile";
 export type Summary = {
   id: string;
   icon: LucideIcon;
-  /** The type it sums up, such as "Contact sensors". */
+  /** The type it sums up, such as "Contact Sensors". */
   title: string;
   /** What it says now, such as "2 open" or "All closed". */
   status: string;

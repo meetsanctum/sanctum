@@ -33,6 +33,7 @@ import { createTurns } from "./turns.js";
 import { deviceCapabilities, devices, type StoredSetBy } from "./schema.js";
 import {
   confirmMs as defaultConfirmMs,
+  confirms,
   prepare,
   settle,
   shownState,
@@ -69,6 +70,19 @@ export type Deliver = (
 
 type CapabilityRow = typeof deviceCapabilities.$inferSelect;
 
+/** The fields an accepted command set and the state it replaced. */
+export type CommandChange = {
+  asked: Record<string, unknown>;
+  before: Record<string, unknown> | null;
+  at: Date;
+};
+
+type CommandHooks = {
+  check?: (target: { device: DeviceInfo; capability: CapabilityInfo }) => void;
+  shouldLeaveMoving?: boolean;
+  accepted?: (change: CommandChange, isConfirmed: boolean) => void;
+};
+
 export function createDevices(
   db: CoreDatabase,
   options: {
@@ -93,6 +107,7 @@ export function createDevices(
       device: string,
       capability: string,
       actor: Actor,
+      shouldLeaveMoving?: boolean,
     ) => Promise<void> | undefined;
     // Counts an AI agent's command as it goes to its device, the commands
     // an app's action sends for it included, and throws `limited` past the
@@ -305,6 +320,7 @@ export function createDevices(
     target: { device: DeviceInfo; capability: CapabilityInfo },
     command: unknown,
     whileOn?: boolean,
+    hooks?: CommandHooks,
   ): Promise<CapabilityInfo> {
     const { device, capability } = target;
     const addressed = { capability: capability.id, kind: capability.kind, app };
@@ -342,7 +358,12 @@ export function createDevices(
     // Finish a hold before preparing or tracking its replacement. Otherwise
     // the move can overwrite who set the light, and its final report can
     // confirm a command that has not gone out yet.
-    const ending = options.beforeCommand?.(device.id, capability.id, actor);
+    const ending = options.beforeCommand?.(
+      device.id,
+      capability.id,
+      actor,
+      hooks?.shouldLeaveMoving,
+    );
     if (ending) {
       await ending;
       if (actor.kind === "assistant-run") {
@@ -363,25 +384,26 @@ export function createDevices(
     if (whileOn !== undefined && shownState(row)?.on !== whileOn) {
       throw new ActionCallError("conflict");
     }
+    // A restore only applies while the state it intends to replace is current.
+    if (hooks?.check) {
+      hooks.check(ending ? visible(device.id, capability.id, view) : target);
+    }
     const parsedCommand = parsed.data as Record<string, unknown>;
-    const setBy: StoredSetBy = {
-      app,
-      actor,
-      asked: definition.desired(parsed.data) as Record<string, unknown>,
-      at: now().toISOString(),
-    };
+    const asked = definition.desired(parsed.data) as Record<string, unknown>;
     // A command that asks for no state, such as a media player's next track
     // or a step of its volume, is done once its driver takes it: no report
     // can confirm it, so nothing waits for one or sends it again.
-    const asksNothing = Object.keys(setBy.asked).length === 0;
+    const asksNothing = Object.keys(asked).length === 0;
     const prepared = asksNothing ? null : prepare(row, parsedCommand);
     const toSend = prepared ? prepared.send : parsedCommand;
     if (toSend && actor.kind === "assistant-run") {
       options.agentCommand?.(actor.id);
     }
+    const at = now();
+    const setBy: StoredSetBy = { app, actor, asked, at: at.toISOString() };
     const sent = {
       ...addressed,
-      asked: setBy.asked,
+      asked,
       ...(asksNothing && { command: parsedCommand }),
     };
     const { driver, key } = reads.address(device.id)!;
@@ -448,7 +470,20 @@ export function createDevices(
         }),
       resent: () => deviceLog.resent(entryId),
     });
-    return visible(device.id, capability.id, view).capability;
+    const after = visible(device.id, capability.id, view).capability;
+    if (hooks?.accepted && prepared?.desired) {
+      const isConfirmed =
+        (after.sync === "synced" || after.sync === "held") &&
+        after.state !== null &&
+        confirms(after.state, prepared.desired, {
+          reported: row.kind === "media",
+        });
+      hooks.accepted(
+        { asked: prepared.desired, before: shownState(row), at },
+        isConfirmed,
+      );
+    }
+    return after;
   }
 
   function admitted<T>(
@@ -485,6 +520,7 @@ export function createDevices(
     async commandFor(
       principal: Principal,
       input: unknown,
+      hooks?: CommandHooks,
     ): Promise<CapabilityInfo> {
       const request = commandRequest.safeParse(input);
       if (!request.success) {
@@ -509,6 +545,7 @@ export function createDevices(
         target,
         request.data.command,
         request.data.whileOn,
+        hooks,
       );
     },
 

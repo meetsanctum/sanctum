@@ -28,11 +28,11 @@ import { bringRoom as bringToNaturalLight, publishRooms } from "./rooms.js";
 import { followedLights } from "./schema.js";
 import { targetState, type TargetState } from "./target.js";
 
-// Natural light's actions: leaving a light or a room's lights out of the
+// Natural Light's actions: leaving a light or a room's lights out of the
 // curve or having them follow again, pausing and resuming one, bringing a
-// room to natural light, which its tile does, and today's curve. Whatever
+// room to natural light, which its button does, and today's curve. Whatever
 // changes which lights follow, or whether one is paused, publishes the
-// rooms' tiles again (rooms.ts). Lights are
+// rooms' buttons again (rooms.ts). Lights are
 // household things, so every client may use them all, shared ones too.
 // Following, pausing and resuming are workflow steps too, and the check is
 // the app's job. A workflow whose light's device is removed is broken.
@@ -151,7 +151,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
   });
 
   // Every light in a room that follows on at the curve and the others off:
-  // a press of the room's Natural light tile (index.ts' room section), and
+  // a press of the room's Natural Light button (index.ts' room section), and
   // a step for automations.
   const bringRoom = defineAction({
     id: "naturalLight.bringRoom",
@@ -166,7 +166,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     assistant: {
       starts: "on",
       description:
-        "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
+        "Requires Natural Light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {

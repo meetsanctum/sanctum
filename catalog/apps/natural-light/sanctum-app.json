@@ -1,7 +1,7 @@
 {
   "id": "sanctum.natural-light",
-  "name": "Natural light",
-  "version": "0.4.0",
+  "name": "Natural Light",
+  "version": "0.4.1",
   "core": "^2.0.0",
   "protocol": 13,
   "summary": "Lights that follow the colour of daylight through the day.",
@@ -47,7 +47,7 @@
     "properties": {
       "on": {
         "default": true,
-        "title": "Natural light",
+        "title": "Natural Light",
         "description": "Lights that follow it change with the day. Off, each keeps the look it has.",
         "type": "boolean"
       },
@@ -337,7 +337,7 @@
       },
       "assistant": {
         "starts": "on",
-        "description": "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
+        "description": "Requires Natural Light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
         "needs": [
           "devices.control:light"
         ]
@@ -803,7 +803,7 @@
       },
       {
         "id": "naturalLight.room",
-        "title": "Natural light in a room",
+        "title": "Natural Light in a room",
         "standard": false,
         "state": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -976,7 +976,7 @@
     "roomSections": [
       {
         "id": "naturalLight.room",
-        "title": "Natural light",
+        "title": "Natural Light",
         "entityType": "naturalLight.room",
         "kind": "buttons",
         "order": 200,
@@ -986,7 +986,7 @@
         "preview": [
           {
             "icon": "sun",
-            "name": "Natural light",
+            "name": "Natural Light",
             "active": true
           }
         ]

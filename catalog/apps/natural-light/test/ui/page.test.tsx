@@ -23,7 +23,7 @@ import { sunToday } from "../../src/sun.js";
 import type { TargetState } from "../../src/target.js";
 import ui from "../../src/ui/index";
 
-// Natural light's page: today's curve, and the lights that take a colour
+// Natural Light's page: today's curve, and the lights that take a colour
 // temperature with where each stands, as both states show it, by room once
 // it may read the home's rooms.
 
@@ -106,7 +106,7 @@ function fakeClient(options: {
   const listeners = new Set<LiveListener>();
   const app: AppInfo = {
     id: "sanctum.natural-light",
-    name: "Natural light",
+    name: "Natural Light",
     version: "0.1.0",
     icon: { glyph: "sun", color: "sun" },
     pages: ["main"],
@@ -213,7 +213,7 @@ describe("natural light's page", () => {
     );
 
     expect(text).toContain(
-      "Natural light follows the sun once the home’s location is set in Settings.",
+      "Natural Light follows the sun once the home’s location is set in Settings.",
     );
     expect(text).toContain("No lights that change colour temperature yet.");
   });
@@ -270,7 +270,7 @@ describe("natural light's page", () => {
       }).client,
     );
 
-    expect(rows()).toEqual(["Office lightNatural light is off"]);
+    expect(rows()).toEqual(["Office lightNatural Light is off"]);
     expect(
       container
         .querySelector('[aria-label="Office light follows natural light"]')
@@ -356,7 +356,7 @@ describe("natural light's page", () => {
     expect(line()).not.toBe(drawn);
     // Its settings are opened by the shell's button, not one of its own.
     expect(
-      container.querySelector('[aria-label="Natural light settings"]'),
+      container.querySelector('[aria-label="Natural Light settings"]'),
     ).toBeNull();
 
     options.preview = earlyRiser;
@@ -544,7 +544,7 @@ describe("natural light's page", () => {
     );
 
     expect(container.textContent).toContain(
-      "Natural light is offLights keep the look they have and don’t change with the day.",
+      "Natural Light is offLights keep the look they have and don’t change with the day.",
     );
     const link = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Open settings",

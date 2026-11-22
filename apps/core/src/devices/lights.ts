@@ -9,6 +9,7 @@ import {
   type CapabilityInfo,
   type DeviceInfo,
   type LightCommand,
+  type LightState,
   type LightsChange,
   type LightsPlace,
   type LightsResult,
@@ -18,11 +19,11 @@ import {
 import { z } from "zod";
 
 import { ActionCallError } from "../app-host/errors.js";
-import type { Gate } from "../app-host/gate.js";
+import { deviceCommandRule, type Gate } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { Entities } from "../entities/entities.js";
 import { roomsOfPlace, type PlacesModule } from "../places/places.js";
-import type { Devices } from "./devices.js";
+import type { CommandChange, Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
 import type { View } from "./views.js";
 
@@ -45,7 +46,11 @@ import type { View } from "./views.js";
 // workflow with one of them removed is broken too. The step also makes
 // lights brighter or dimmer by a fifth of their range, and brightens or
 // dims them while the remote's button that ran it is held (holds.ts);
-// lights that cannot dim are left alone by both.
+// lights that cannot dim are left alone by both. An AI agent turns a
+// place's lights on or off, steps them, or sets a brightness and colour
+// temperature within each light's range, and hears of every light it may
+// see there, offline ones too, with how each sent one was before, so its
+// change can be put back.
 
 // A place's schema says `place`, so Automations' editor offers one picker
 // for the room, the floor, the zone or the home rather than a field for
@@ -112,6 +117,39 @@ type Light = {
   capability: Extract<CapabilityInfo, { kind: "light" }>;
 };
 
+/** What an AI agent asks of a place's lights. */
+type LightsAsk =
+  | { to: "on" | "off" | "brighter" | "dimmer"; set?: undefined }
+  | {
+      to?: undefined;
+      set: { brightness?: number; colorTemperature?: number };
+    };
+
+type SetField = "brightness" | "colorTemperature";
+
+/** What an AI agent's ask did to one light. */
+export type LightOutcome = {
+  device: string;
+  capability: string;
+  name: string;
+  // Sent and on its way, confirmed by the light, left alone, offline, or
+  // refused on the way.
+  result: "sent" | "confirmed" | "skipped" | "offline" | "failed";
+  // Why it was left alone or failed: already there, kept off by its room's
+  // rule, off (dimmer leaves those), without what was asked, or the code.
+  why?: string;
+  // What was asked that the light can't do, while the rest was sent.
+  ignored?: SetField[];
+  // For a light sent a command: the fields it asked for, and how the light
+  // was before, which putting the change back goes by.
+  change?: CommandChange;
+  state: LightState | null;
+};
+
+type Planned = { light: Light; ignored?: SetField[] } & (
+  { command: LightCommand; why?: never } | { command?: never; why: string }
+);
+
 // Refusals for whoever is behind the call, which refuse the whole call
 // rather than fail one light: an AI agent past its limit of commands too.
 const refusals = new Set(["forbidden", "needs_approval", "limited"]);
@@ -147,7 +185,8 @@ export function createLights(options: {
   places: Pick<PlacesModule, "list">;
   gate: Gate;
   entities: Pick<Entities, "list">;
-  holds: Pick<Holds, "start" | "settle">;
+  holds: Pick<Holds, "start" | "settle" | "isMoving">;
+  checkAgentCommand: (id: string, shouldCount: boolean) => void;
   now?: () => Date;
 }) {
   const { devices, gate } = options;
@@ -251,8 +290,13 @@ export function createLights(options: {
     return new Set(rooms);
   }
 
-  // The lights in a place that the view sees and a command can reach.
-  function lightsIn(place: LightsPlace, view: View): Light[] {
+  // The lights in a place that the view sees and a command can reach, or
+  // every one the view sees there, offline too.
+  function lightsIn(
+    place: LightsPlace,
+    view: View,
+    withOffline = false,
+  ): Light[] {
     const rooms = roomsOf(place);
     const chosen =
       place.kind === "lights"
@@ -262,7 +306,7 @@ export function createLights(options: {
         : null;
     return devices
       .list(view)
-      .filter((device) => device.availability !== "offline")
+      .filter((device) => withOffline || device.availability !== "offline")
       .filter(
         (device) =>
           !rooms || (device.roomId !== null && rooms.has(device.roomId)),
@@ -352,7 +396,181 @@ export function createLights(options: {
     return { on, ...result };
   }
 
+  // What an AI agent's ask does to each light in the place that answers: a
+  // command, or why it's left alone.
+  function planFor(lights: readonly Light[], ask: LightsAsk): Planned[] {
+    if (ask.to === "off") {
+      return lights.map((light) =>
+        isOn(light)
+          ? { light, command: { on: false } }
+          : { light, why: "already" },
+      );
+    }
+    if (ask.to === "brighter" || ask.to === "dimmer") {
+      const to = ask.to;
+      return lights.map((light) => {
+        if (!canDim(light)) return { light, why: "no_brightness" };
+        const command = stepOf(light, to);
+        if (command) return { light, command };
+        return {
+          light,
+          why: to === "dimmer" && !isOn(light) ? "off" : "already",
+        };
+      });
+    }
+    // Turning on and setting go by each room's rule for the lights that are
+    // off, as its lights button does; one the rule keeps off stays off.
+    const comingOn = new Map(
+      turningOn(lights).map(({ light, command }) => [
+        keyOf(light.device.id, light.capability.id),
+        command,
+      ]),
+    );
+    const ruleFor = (light: Light) =>
+      comingOn.get(keyOf(light.device.id, light.capability.id));
+    if (ask.to === "on") {
+      return lights.map((light) => {
+        if (isOn(light)) return { light, why: "already" };
+        const command = ruleFor(light);
+        return command ? { light, command } : { light, why: "kept_off" };
+      });
+    }
+    const set = ask.set!;
+    return lights.map((light) => {
+      const { features } = light.capability;
+      const fields: LightCommand = {};
+      const ignored: SetField[] = [];
+      if (set.brightness !== undefined) {
+        if (features.brightness) fields.brightness = set.brightness;
+        else ignored.push("brightness");
+      }
+      if (set.colorTemperature !== undefined) {
+        const range = features.colorTemperature;
+        if (range) {
+          fields.colorTemperature = Math.min(
+            range.max,
+            Math.max(range.min, set.colorTemperature),
+          );
+        } else ignored.push("colorTemperature");
+      }
+      if (Object.keys(fields).length === 0) {
+        return { light, why: "unsupported", ignored };
+      }
+      const partly = ignored.length > 0 ? { ignored } : {};
+      // A light that's on gets only what was asked, so a mood's colour
+      // stays when only its brightness was.
+      if (isOn(light)) return { light, command: fields, ...partly };
+      const rule = ruleFor(light);
+      if (!rule) return { light, why: "kept_off" };
+      const command: LightCommand = { ...rule, ...fields };
+      if (fields.colorTemperature !== undefined) {
+        delete command.hue;
+        delete command.saturation;
+      }
+      return { light, command, ...partly };
+    });
+  }
+
   return {
+    // An AI agent's ask of a place's lights: on, off, brighter, dimmer, or a
+    // brightness and colour temperature set within each light's range. The
+    // gate admits the agent as for any household write, and again for each
+    // light's command. Every light the agent may see there is answered for:
+    // as sent or confirmed, with what it asked and how the light was before,
+    // so the agent's change can be put back; or left alone, and why; or
+    // offline.
+    async changeFor(
+      principal: Principal,
+      place: LightsPlace,
+      ask: LightsAsk,
+      view: View,
+    ): Promise<LightOutcome[]> {
+      const rule = deviceCommandRule("light");
+      const actor = gate.admit(principal, rule);
+      if (ask.to === "brighter" || ask.to === "dimmer") {
+        const lights = lightsIn(place, view);
+        if (
+          actor.kind === "assistant-run" &&
+          lights.some(({ device, capability }) =>
+            options.holds.isMoving(device.id, capability.id),
+          )
+        ) {
+          options.checkAgentCommand(actor.id, false);
+        }
+        await options.holds.settle(lights);
+        gate.permit(actor, rule);
+      }
+      const every = lightsIn(place, view, true);
+      const offline = every.filter(
+        (light) => light.device.availability === "offline",
+      );
+      const planned = planFor(
+        every.filter((light) => light.device.availability !== "offline"),
+        ask,
+      );
+      const outcomes = await Promise.all(
+        planned.map(
+          async ({ light, command, why, ignored }): Promise<LightOutcome> => {
+            const address = {
+              device: light.device.id,
+              capability: light.capability.id,
+              name: light.device.name,
+              ...(ignored ? { ignored } : {}),
+            };
+            if (!command) {
+              return {
+                ...address,
+                result: "skipped",
+                why,
+                state: light.capability.state,
+              };
+            }
+            let change: CommandChange | undefined;
+            let isConfirmed = false;
+            try {
+              const after = await devices.commandFor(
+                principal,
+                {
+                  device: address.device,
+                  capability: address.capability,
+                  command,
+                },
+                {
+                  accepted: (commandChange, confirmed) => {
+                    change = commandChange;
+                    isConfirmed = confirmed;
+                  },
+                },
+              );
+              return {
+                ...address,
+                result: isConfirmed ? "confirmed" : "sent",
+                change,
+                state: after.kind === "light" ? after.state : null,
+              };
+            } catch (error) {
+              return {
+                ...address,
+                result: "failed",
+                why: error instanceof ActionCallError ? error.code : "failed",
+                state: light.capability.state,
+              };
+            }
+          },
+        ),
+      );
+      for (const light of offline) {
+        outcomes.push({
+          device: light.device.id,
+          capability: light.capability.id,
+          name: light.device.name,
+          result: "offline",
+          state: light.capability.state,
+        });
+      }
+      return outcomes;
+    },
+
     // A client's button: the gate admits the principal behind it as for
     // any household write, and again for each light's command.
     async switchFor(principal: Principal, input: unknown) {

@@ -10,7 +10,7 @@ import { followedLights, leftOutLights } from "./schema.js";
 
 // Which lights follow natural light: every light that takes a colour
 // temperature, wherever it is and however new, unless the household left
-// it out. Natural light keeps the lights left out, and takes in the others
+// it out. Natural Light keeps the lights left out, and takes in the others
 // as it sees them: as it starts, at each check and as a light is added.
 //
 // A light taken in this way counts whatever was set before as someone

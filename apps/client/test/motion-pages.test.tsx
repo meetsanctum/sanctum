@@ -283,7 +283,7 @@ describe("a room's line", () => {
     await show("room", "office");
 
     expect(readingsLine()).toBe(
-      "Temperature 21–21.5°Humidity 48%Light level 320 lxContact sensors 1 openMotion now",
+      "Temperature 21–21.5°Humidity 48%Light level 320 lxContact Sensors 1 openMotion now",
     );
     // Its motion sensor under Environment and under Presence, after it.
     expect(headings()).toEqual(["Environment", "Presence", "Security"]);

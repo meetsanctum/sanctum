@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import { curveShapes, type CurveSettings } from "./curve.js";
 
-// Natural light's settings: whether it is on, and the curve, which Settings
-// → Apps → Natural light shows and the app's page opens. Switched off, no
+// Natural Light's settings: whether it is on, and the curve, which Settings
+// → Apps → Natural Light shows and the app's page opens. Switched off, no
 // light changes with the day and each keeps the look it has; the lights
 // left out stay as they were chosen.
 // Colour temperature runs from 2,000 to 6,500 K in steps of 100, brightness
@@ -17,7 +17,7 @@ const offset = z.number().int().min(-120).max(120).multipleOf(15);
 
 export const naturalLightSettings = z.object({
   on: z.boolean().default(true).meta({
-    title: "Natural light",
+    title: "Natural Light",
     description:
       "Lights that follow it change with the day. Off, each keeps the look it has.",
   }),

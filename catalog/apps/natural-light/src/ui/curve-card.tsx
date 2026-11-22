@@ -26,7 +26,7 @@ export function CurveCard(props: { preview: Preview | null | undefined }) {
       </h2>
       {preview === null && (
         <p className={`m-0 ${muted}`}>
-          Natural light follows the sun once the home’s location is set in
+          Natural Light follows the sun once the home’s location is set in
           Settings.
         </p>
       )}

@@ -64,7 +64,7 @@ import type { Devices } from "./use-devices";
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, what its sensors
 // read, whether its contact sensors are open and its motion, then its
-// row: its lights button, Natural light and its moods (room-sections.tsx),
+// row: its lights button, Natural Light and its moods (room-sections.tsx),
 // then its devices in a section for each category, and last the devices Sanctum
 // cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards

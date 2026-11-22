@@ -302,11 +302,11 @@ describe("an app's preferences", () => {
   it("open from the app's own page, and Done returns to it", async () => {
     homeData.installed = [moods, naturalLight];
     await refresh();
-    await openFromOverview("Natural light");
+    await openFromOverview("Natural Light");
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>(
-          'button[aria-label="Natural light settings"]',
+          'button[aria-label="Natural Light settings"]',
         )!
         .click();
     });
@@ -319,7 +319,7 @@ describe("an app's preferences", () => {
     );
     await done();
     expect(
-      container.querySelector('button[aria-label="Natural light settings"]'),
+      container.querySelector('button[aria-label="Natural Light settings"]'),
     ).not.toBeNull();
   });
 

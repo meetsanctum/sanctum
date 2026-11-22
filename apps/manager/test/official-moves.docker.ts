@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { realStack } from "./real-stack.js";
 
-// The official apps' moves, for real: Weather, Natural light, Moods and Zigbee
+// The official apps' moves, for real: Weather, Natural Light, Moods and Zigbee
 // from the real image, each with what it was given, then the host as a release
 // whose core ran them in its own process leaves it, and each moves to its own
 // image with what it had. Then the same again with a first version that fails
