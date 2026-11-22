@@ -4,6 +4,9 @@ import { PageBar, type LiveFeed, type PageParams } from "@meetsanctum/ui-sdk";
 import { useEffect } from "react";
 
 import { ActivityPage, activitySettingsPage } from "./activity/page";
+import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
+import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
+import { agentsTitle, canUseTitle } from "./agents/words";
 import { AppPage } from "./app-settings";
 import { BackButton, Section } from "./components";
 import type { CoreStatus } from "./core-status";
@@ -34,12 +37,13 @@ import type { Devices } from "./use-devices";
 // dashboard's Batteries tile opens too, the activity log, which a device's
 // detail opens too, the apps the home has installed, each with a page of its
 // preferences and what it brings, which its own pages open too, with those
-// it can add, the clients, this device among them, and System: Status, with
-// a page of how the machine Sanctum runs on is doing, the version, updates
-// and the last restore. Each page leads with Back, named for the page under
-// it. It is the same on every device, a shared one too. Opened from the
-// dashboard's setup guide, it opens the step's page over its first and
-// starts it once: Add room, Add devices, or the home's location.
+// it can add, the AI agents with what they can use, the clients, this
+// device among them, and System: Status, with a page of how the machine
+// Sanctum runs on is doing, the version, updates and the last restore. Each
+// page leads with Back, named for the page under it. It is the same on every
+// device, a shared one too. Opened from the dashboard's setup guide, it opens
+// the step's page over its first and starts it once: Add room, Add devices,
+// or the home's location.
 
 const householdSettingsPage = "household";
 const roomsSettingsPage = "rooms";
@@ -63,6 +67,8 @@ const pageTitles: Record<string, string> = {
   [maintenanceSettingsPage]: "Maintenance",
   [activitySettingsPage]: "Activity",
   [appsSettingsPage]: "Apps",
+  [agentsSettingsPage]: agentsTitle,
+  [canUseSettingsPage]: canUseTitle,
   [clientsSettingsPage]: "Clients",
   [systemSettingsPage]: "System",
   [statusSettingsPage]: "Status",
@@ -134,6 +140,8 @@ export function SettingsPage(props: {
   const rooms = props.devices.places?.rooms ?? [];
   const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
   const openStatus = () => props.open(statusSettingsPage);
+  const openCanUse = () => props.open(canUseSettingsPage);
+  const openApp = (id: string) => props.open(appSettingsPage, { id });
   switch (props.page) {
     case activitySettingsPage:
       return (
@@ -178,6 +186,7 @@ export function SettingsPage(props: {
           background={props.homeBackground ?? dashboardBackground.mocha}
           onChanged={props.onAppChanged ?? (() => undefined)}
           openStatus={openStatus}
+          openCanUse={openCanUse}
           onDone={props.back}
           backTo={backTo}
         />
@@ -206,11 +215,7 @@ export function SettingsPage(props: {
     case appsSettingsPage:
       return (
         <>
-          <AppsSection
-            apps={props.apps}
-            onOpen={(id) => props.open(appSettingsPage, { id })}
-            page={back}
-          />
+          <AppsSection apps={props.apps} onOpen={openApp} page={back} />
           <AddAppsSection
             apps={props.apps}
             onAdded={(app) => {
@@ -219,6 +224,25 @@ export function SettingsPage(props: {
             }}
           />
         </>
+      );
+    case agentsSettingsPage:
+      return (
+        <AgentsPage
+          apps={props.apps}
+          live={props.live}
+          onOpenCanUse={openCanUse}
+          page={back}
+        />
+      );
+    case canUseSettingsPage:
+      return (
+        <CanUsePage
+          apps={props.apps}
+          live={props.live}
+          onOpenApp={openApp}
+          onDone={props.back}
+          backTo={backTo}
+        />
       );
     case clientsSettingsPage:
       return <ClientsSection page={back} />;
@@ -244,7 +268,7 @@ export function SettingsPage(props: {
         apps={props.apps}
         status={props.status}
         onOpenStatus={openStatus}
-        onOpenApp={(id) => props.open(appSettingsPage, { id })}
+        onOpenApp={openApp}
       />
       <SettingsOverview
         apps={props.apps}

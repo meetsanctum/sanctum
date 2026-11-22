@@ -2,6 +2,7 @@ import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
 import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
+  Bot,
   ChevronRight,
   Gauge,
   House,
@@ -16,6 +17,8 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Row } from "./components";
+import { useAgents } from "./agents/data";
+import { agentsTitle } from "./agents/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
 import { SummaryLine, summarySpoken } from "./settings-status";
@@ -26,8 +29,8 @@ import { useMinuteClock } from "./device-firmware";
 // row for each of its areas, each opening that area's page. A row says in a
 // few words how its area stands, in counts and states that change seldom,
 // so the page stays calm on a shared tablet. The areas come in groups:
-// the home, what's due and what happened, the apps, and the devices that
-// open Sanctum with Sanctum itself.
+// the home, what's due and what happened, the apps with the AI agents, and
+// the devices that open Sanctum with Sanctum itself.
 
 /** One of Settings' areas, by the page it opens. */
 type SettingsArea =
@@ -37,6 +40,7 @@ type SettingsArea =
   | "maintenance"
   | "activity"
   | "apps"
+  | "agents"
   | "clients"
   | "system";
 
@@ -77,6 +81,8 @@ export function SettingsOverview(props: {
   const now = useMinuteClock();
   const unit = useTemperatureUnit() ?? "celsius";
   const others = useOtherClients(props.live);
+  const { agents } = useAgents(props.live);
+  const agentCount = agents?.length;
   const updates = props.apps.filter((app) => app.waiting).length;
   const row = (
     area: SettingsArea,
@@ -143,6 +149,16 @@ export function SettingsOverview(props: {
           ]
             .filter(Boolean)
             .join(" · "),
+        )}
+        {row(
+          "agents",
+          Bot,
+          agentsTitle,
+          agentCount === undefined
+            ? ""
+            : agentCount === 0
+              ? "None yet"
+              : counted(agentCount, "agent"),
         )}
       </AreaGroup>
       <AreaGroup>

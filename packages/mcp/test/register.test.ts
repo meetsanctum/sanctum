@@ -1,3 +1,4 @@
+import { agentConnector } from "@meetsanctum/auth-protocol";
 import { describe, expect, it } from "vitest";
 import manifest from "../package.json" with { type: "json" };
 
@@ -27,6 +28,13 @@ describe("registering with the agent", () => {
     expect(serverName("  ")).toBe("sanctum");
     expect(serverName(undefined)).toBe("sanctum");
     expect(serverName("x".repeat(60))).toBe(`sanctum-${"x".repeat(32)}`);
+  });
+
+  it("is the package and version a setup's prompt runs", () => {
+    expect(agentConnector).toEqual({
+      name: manifest.name,
+      version: manifest.version,
+    });
   });
 
   it("starts the published version, or this script for one built from source", () => {
