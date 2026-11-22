@@ -1,4 +1,3 @@
-import { naturalLightName } from "../name.js";
 import type { Preview } from "../preview.js";
 import { kelvinLabel, timeOfDay } from "./use-natural-light";
 
@@ -27,7 +26,7 @@ export function CurveCard(props: { preview: Preview | null | undefined }) {
       </h2>
       {preview === null && (
         <p className={`m-0 ${muted}`}>
-          {naturalLightName} follows the sun once the home’s location is set in
+          Natural Light follows the sun once the home’s location is set in
           Settings.
         </p>
       )}

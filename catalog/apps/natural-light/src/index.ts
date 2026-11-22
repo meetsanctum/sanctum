@@ -10,7 +10,6 @@ import {
 import { naturalLightActions } from "./actions.js";
 import { createFollower } from "./follower.js";
 import { createRunForLight, type Timing } from "./lights.js";
-import { naturalLightName } from "./name.js";
 import { roomType } from "./rooms.js";
 import { naturalLightSettings } from "./settings.js";
 import { targetType } from "./target.js";
@@ -55,7 +54,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
 
   return defineApp({
     id: "sanctum.natural-light",
-    name: naturalLightName,
+    name: "Natural Light",
     version: "0.4.1",
     core: "^2.0.0",
     summary: "Lights that follow the colour of daylight through the day.",
@@ -86,13 +85,13 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       roomSections: [
         defineRoomSection({
           id: "naturalLight.room",
-          title: naturalLightName,
+          title: "Natural Light",
           entityType: roomType.id,
           kind: "buttons",
           // Sanctum's own, as Moods' tiles are.
           order: 200,
           press: bringRoom,
-          preview: [{ icon: "sun", name: naturalLightName, active: true }],
+          preview: [{ icon: "sun", name: "Natural Light", active: true }],
         }),
       ],
     },

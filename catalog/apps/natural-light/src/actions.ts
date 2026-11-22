@@ -23,7 +23,6 @@ import {
   type RunForLight,
   type Timing,
 } from "./lights.js";
-import { naturalLightName } from "./name.js";
 import { preview, previewOf } from "./preview.js";
 import { bringRoom as bringToNaturalLight, publishRooms } from "./rooms.js";
 import { followedLights } from "./schema.js";
@@ -166,7 +165,8 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
     },
     assistant: {
       starts: "on",
-      description: `Requires ${naturalLightName} to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.`,
+      description:
+        "Requires Natural Light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
       needs: ["devices.control:light"],
     },
     async run(ctx, input) {

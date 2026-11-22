@@ -24,7 +24,6 @@ import {
   type FollowOptions,
   type RunForLight,
 } from "./lights.js";
-import { naturalLightName } from "./name.js";
 import { followedLights, roomButtons } from "./schema.js";
 import { targetKey } from "./target.js";
 
@@ -61,7 +60,7 @@ export type RoomState = z.infer<typeof roomState>;
 
 export const roomType = defineEntityType({
   id: "naturalLight.room",
-  title: `${naturalLightName} in a room`,
+  title: "Natural Light in a room",
   state: roomState,
 });
 
@@ -121,7 +120,7 @@ export function roomStateOf(
   return {
     placeId,
     icon: "sun",
-    name: naturalLightName,
+    name: "Natural Light",
     order: 0,
     active,
     input: { placeId },
@@ -264,7 +263,7 @@ async function publishNow(
       await ctx.entities.publish({
         type: turnOnType.id,
         key: turnOnKey(placeId),
-        name: naturalLightName,
+        name: "Natural Light",
         state: turnOn,
       });
       await db
@@ -280,7 +279,7 @@ async function publishButton(ctx: AppContext, state: RoomState) {
   await ctx.entities.publish({
     type: roomType.id,
     key: roomKey(state.placeId),
-    name: state.name,
+    name: "Natural Light",
     state,
   });
   await ctx.storage.db
@@ -395,13 +394,13 @@ async function requireRoomSun(
   now: Date,
 ) {
   if (!options.isOn) {
-    throw new ActionError("conflict", `${naturalLightName} is switched off`);
+    throw new ActionError("conflict", "Natural Light is switched off");
   }
   const sun = await homeSun(ctx, now);
   if (!sun) {
     throw new ActionError(
       "conflict",
-      `${naturalLightName} waits for the home's location`,
+      "Natural Light waits for the home's location",
     );
   }
   return sun;

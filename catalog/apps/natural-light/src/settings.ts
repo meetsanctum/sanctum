@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { curveShapes, type CurveSettings } from "./curve.js";
-import { naturalLightName } from "./name.js";
 
 // Natural Light's settings: whether it is on, and the curve, which Settings
 // → Apps → Natural Light shows and the app's page opens. Switched off, no
@@ -18,7 +17,7 @@ const offset = z.number().int().min(-120).max(120).multipleOf(15);
 
 export const naturalLightSettings = z.object({
   on: z.boolean().default(true).meta({
-    title: naturalLightName,
+    title: "Natural Light",
     description:
       "Lights that follow it change with the day. Off, each keeps the look it has.",
   }),
