@@ -26,7 +26,15 @@ describe("a device waiting for a key", () => {
   it("gets one of its own, sent encrypted and kept before it's sent", async () => {
     home = await startHome();
     const device = await waitingDevice();
-    const key = await add(home.core, device);
+    const key = keyOf(device.options.mac);
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "Espressif",
+      "who made it",
+    );
+    const greeted = device.greeted;
+    await home.core.add(key, {});
 
     const given = home.core.secrets.get(secretOf(key));
     expect(given).toMatch(/^[A-Za-z0-9+/]{43}=$/);
@@ -34,6 +42,7 @@ describe("a device waiting for a key", () => {
     expect(device.keysSent).toEqual([{ key: given, encrypted: true }]);
     expect(device.psk).toBe(given);
     expect(device.waiting).toBe(false);
+    expect(device.greeted - greeted).toBe(2);
     await home.core.until(
       () => home.core.availability.get(key) === "online",
       "online under its key",
@@ -41,6 +50,25 @@ describe("a device waiting for a key", () => {
     expect(
       await home.core.call("esphome.device", { device: `device:${key}` }),
     ).toMatchObject({ encrypted: true });
+  });
+
+  it("keeps a configured zero key when the device doesn't offer provisioning", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: zeroKey });
+    const key = keyOf(device.options.mac);
+    await home.core.until(() => device.greeted > 0, "the background probe");
+    await home.core.until(
+      () => device.activeConnections === 0,
+      "the probe finished",
+    );
+
+    expect(home.core.found.find((each) => each.key === key)).toMatchObject({
+      asks: [{ id: "key" }],
+    });
+    await home.core.add(key, { key: zeroKey });
+    expect(device.keysSent).toEqual([]);
+    expect(device.psk).toBe(zeroKey);
+    expect(home.core.secrets.has(givenOf(key))).toBe(false);
   });
 
   it("is given the same key again after its answer was lost, tried first", async () => {
@@ -136,12 +164,19 @@ describe("a device waiting for a key", () => {
         "Espressif",
       "who made it",
     );
+    // It closes after Add's greeting, before Add sends the key.
     device.closesWindowAfterHello = true;
 
     await expect(home.core.add(key, {})).rejects.toThrow();
     expect(device.keysSent).toHaveLength(1);
     expect(device.waiting).toBe(true);
     expect(device.psk).toBeNull();
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "Turn it off and on again to add it",
+      "the closed window",
+    );
 
     expect(await home.core.add(key, {})).toEqual({
       refused: { refusal: "notWaiting" },
@@ -152,7 +187,7 @@ describe("a device waiting for a key", () => {
     {
       reply: "completes its greeting",
       isWindowClosed: false,
-      error: "It can't be given a key",
+      error: "It didn't answer",
     },
     {
       reply: "reports a closed window",
@@ -209,25 +244,34 @@ describe("removing a device", () => {
     expect(home.core.problems.has(key)).toBe(false);
   });
 
-  it("finds the key off already when removed again after a lost answer", async () => {
-    home = await startHome();
-    const device = await waitingDevice();
-    const key = await add(home.core, device);
-    await home.core.until(
-      () => home.core.availability.get(key) === "online",
-      "online",
-    );
-    device.losesNextAnswer = true;
+  it.each([false, true])(
+    "finds the key off after a lost answer (window closed: %s)",
+    async (isWindowClosed) => {
+      home = await startHome();
+      const device = await waitingDevice();
+      const key = await add(home.core, device);
+      await home.core.until(
+        () => home.core.availability.get(key) === "online",
+        "online",
+      );
+      device.losesNextAnswer = true;
 
-    await expect(home.core.remove(key)).rejects.toThrow();
-    expect(home.core.registered.has(key)).toBe(true);
-    await announce(home.core, device);
-    await home.core.remove(key);
+      await expect(home.core.remove(key)).rejects.toThrow();
+      expect(home.core.registered.has(key)).toBe(true);
+      device.windowClosed = isWindowClosed;
+      await announce(home.core, device);
+      await home.core.remove(key);
 
-    expect(home.core.registered.has(key)).toBe(false);
-    expect(device.waiting).toBe(true);
-    expect(home.core.secrets.size).toBe(0);
-  });
+      expect(home.core.registered.has(key)).toBe(false);
+      expect(device.waiting).toBe(true);
+      expect(home.core.secrets.size).toBe(0);
+      if (isWindowClosed) {
+        expect(
+          home.core.found.find((each) => each.key === key)?.description,
+        ).toBe("Turn it off and on again to add it");
+      }
+    },
+  );
 
   it("anyway, out of reach, leaves its key on it and kept, and adds it as it was", async () => {
     home = await startHome();

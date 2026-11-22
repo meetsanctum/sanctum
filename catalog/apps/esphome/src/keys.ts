@@ -38,6 +38,57 @@ function stoppedWaiting(error: unknown) {
   );
 }
 
+/**
+ * What a device says of its key under the zero key: it waits for one, with
+ * what it says of itself; it has one; its window to be given one closed; it
+ * answers only in the clear, with what it says of itself there; or nothing
+ * that can be acted on, as when it's busy, restarting or out of reach.
+ */
+export type Answer =
+  | { says: "waits"; info: Session["info"]; session?: Session }
+  | { says: "key" }
+  | { says: "closed" }
+  | { says: "clear"; info: Session["info"] }
+  | { says: "unclear" };
+
+/**
+ * Asks a device what it says of its key, over one connection under the zero
+ * key, which carries nothing secret whatever answers. A device with a key
+ * refuses the zero key's handshake. One built without Noise, or older
+ * firmware, ends it, and the library then greets it in the clear; but so
+ * does a device that is busy or restarting, so an answer in the clear says
+ * only what the device said of itself there.
+ */
+export async function askUnderZeroKey(reach: {
+  mac: string;
+  address: Address;
+  timings: Timings;
+  signal?: AbortSignal;
+  keepSession?: boolean;
+}): Promise<Answer> {
+  const { keepSession, ...target } = reach;
+  const result = await connectOnce({ ...target, key: zeroKey });
+  if ("session" in result) {
+    const { session } = result;
+    const { info } = session;
+    if (info.apiEncryptionProvisionable !== true) {
+      session.client.disconnect();
+      return { says: "key" };
+    }
+    if (keepSession) return { says: "waits", info, session };
+    session.client.disconnect();
+    return { says: "waits", info };
+  }
+  if ("halt" in result) {
+    return result.clear
+      ? { says: "clear", info: result.clear }
+      : { says: "key" };
+  }
+  return stoppedWaiting(result.error)
+    ? { says: "closed" }
+    : { says: "unclear" };
+}
+
 type Reach = { mac: string; address: () => Address | null; timings: Timings };
 
 function addressOf(reach: Reach) {
@@ -63,27 +114,18 @@ async function backWith(reach: Reach, key: string) {
 }
 
 /**
- * Gives a device waiting for a key this one, which `keep` keeps first, and
- * connects again under it: the session, checked as any, or that the device
- * no longer waits for a key. Otherwise it throws, and the key it kept is
- * tried first next time, as after an answer that was lost.
+ * Gives a device its key over the session that showed it was waiting for
+ * one. `keep` saves the key first so a lost answer can be retried with it.
+ * Returns a checked session under the new key.
  */
 export async function giveKey(
-  reach: Reach & { key: string; keep: (key: string) => Promise<void> },
-): Promise<{ session: Session } | { notWaiting: true }> {
-  const zero = await connectOnce({
-    mac: reach.mac,
-    key: zeroKey,
-    address: addressOf(reach),
-    timings: reach.timings,
-  });
-  if ("error" in zero) {
-    if (stoppedWaiting(zero.error)) return { notWaiting: true };
-    throw new Error("It didn't answer");
-  }
-  // A device that answers in the clear is never sent a key.
-  if (!("session" in zero)) throw new Error("It can't be given a key");
-  const { client } = zero.session;
+  reach: Reach & {
+    session: Session;
+    key: string;
+    keep: (key: string) => Promise<void>;
+  },
+): Promise<Session> {
+  const { client } = reach.session;
   try {
     if (!client.capabilities().noiseKeyRotation) {
       throw new Error("Its firmware can't be given a key");
@@ -96,7 +138,7 @@ export async function giveKey(
   } finally {
     client.disconnect();
   }
-  return { session: await backWith(reach, reach.key) };
+  return backWith(reach, reach.key);
 }
 
 /**
@@ -118,19 +160,12 @@ export async function takeKeyOff(
     });
     if ("session" in keyed) session = keyed.session;
     else {
-      const zero = await connectOnce({
+      const zero = await askUnderZeroKey({
         mac: reach.mac,
-        key: zeroKey,
         address: addressOf(reach),
         timings: reach.timings,
       });
-      if ("session" in zero) zero.session.client.disconnect();
-      if (
-        "session" in zero ||
-        ("error" in zero && stoppedWaiting(zero.error))
-      ) {
-        return;
-      }
+      if (zero.says === "waits" || zero.says === "closed") return zero.says;
       throw new Error("It isn't reachable");
     }
   }
@@ -142,4 +177,5 @@ export async function takeKeyOff(
   } finally {
     if (own) session.client.disconnect();
   }
+  return "waits";
 }

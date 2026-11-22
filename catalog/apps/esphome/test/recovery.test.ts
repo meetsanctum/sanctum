@@ -88,7 +88,7 @@ it("retries a failed facts write before forwarding the device's state", async ()
     .poll(() => core.latest(key, "switch-relay"))
     .toEqual({ on: false });
 
-  expect(device.connections).toBe(2);
+  expect(device.greeted).toBe(2);
   expect(writes.save).toHaveBeenCalledTimes(2);
   await expect(
     core.call("esphome.device", { device: `device:${key}` }),
@@ -151,7 +151,7 @@ it("accepts a light's valid state when its initial numeric readings are invalid"
 
   await expect.poll(() => core.latest(key, "light-bulb")).toEqual({ on: true });
 
-  expect(device.connections).toBe(1);
+  expect(device.greeted).toBe(1);
   expect(core.refused).toEqual([]);
   await core.command(key, "light-bulb", "light", { brightness: 40 });
   await core.until(() => device.commands.length === 1, "the command");

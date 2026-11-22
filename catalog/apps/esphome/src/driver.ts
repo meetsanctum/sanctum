@@ -27,7 +27,8 @@ import {
 } from "./connection.js";
 import { mapEntities, signalOf, type Mapping } from "./entities.js";
 import { createFacts, type Facts } from "./facts.js";
-import { giveKey, givenOf, newKey, takeKeyOff, zeroKey } from "./keys.js";
+import { createFound } from "./found.js";
+import { giveKey, givenOf, newKey, takeKeyOff } from "./keys.js";
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { lightCommandOf, stateOf } from "./states.js";
 
@@ -46,6 +47,7 @@ export const secretOf = (mac: string) => `key:${mac}`;
 const isKey = (text: string) => /^[A-Za-z0-9+/]{43}=$/.test(text);
 
 const wrongKey = { refused: { question: "key", refusal: "wrongKey" } };
+const refused = (refusal: string) => ({ refused: { refusal } });
 
 type Owned = {
   id: string;
@@ -163,14 +165,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const announced = new Map<string, Announced>();
   const devices = new Map<string, Owned>();
   let stopped = false;
-  // Found devices go to the core one list at a time, in order.
-  let listing = Promise.resolve();
-  // Who made each device waiting for a key, as its zero-key connection said.
-  const described = new Map<
-    string,
-    Pick<Announced, "version" | "projectName"> & { maker: string | null }
-  >();
-  const describing = new Map<AbortController, Promise<void>>();
   // Devices removed with the key Sanctum gave them still on them, as when
   // they couldn't be reached, whose keys it keeps.
   const kept = new Set<string>();
@@ -187,48 +181,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return found && host ? { host, port: found.port } : null;
   }
 
-  function listFound() {
-    listing = listing
-      .then(async () => {
-        if (stopped) return;
-        const listed = [...announced.values()]
-          .filter((each) => !devices.has(each.mac))
-          .slice(0, 64);
-        const found = [];
-        for (const each of listed) {
-          const row = { key: each.mac, name: each.name.slice(0, 120) };
-          if (each.encryption === "waiting") {
-            const maker = described.get(each.mac)?.maker;
-            found.push({
-              ...row,
-              description: maker ?? "Gets an encryption key of its own",
-              asks: [],
-            });
-          } else if (each.encryption === "none") {
-            found.push({ ...row, description: "Not encrypted", asks: [] });
-          } else if (await givenKey(each.mac)) {
-            // Removed with the key it was given still on it, it's added
-            // with that key again.
-            found.push({
-              ...row,
-              description: "Has the key it was given before",
-              asks: [],
-            });
-          } else {
-            found.push({
-              ...row,
-              description: "Needs its encryption key",
-              asks: ["key"],
-            });
-          }
-        }
-        await ctx.devices.found(found);
-      })
-      .catch((error: unknown) => {
-        ctx.log(`could not list found devices (${String(error)})`);
-      });
-    return listing;
-  }
+  const finds = createFound({
+    ctx,
+    timings,
+    announced,
+    added: (mac) => devices.has(mac),
+    givenKey,
+    makerOf: (info) => makerOf(info).manufacturer,
+  });
 
   function connected(owned: Owned, session: Session, hear: () => void) {
     // A new socket must not take commands using the previous firmware's map.
@@ -432,48 +392,35 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return connectOnce({ mac, key, address, timings });
   }
 
-  // Who made a device waiting for a key, over a connection under the zero
-  // key: once for each version and project it announces, since a device
-  // reflashed with another project may run the same ESPHome version.
-  function describe(found: Announced): Promise<void> {
-    const before = described.get(found.mac);
-    if (
-      stopped ||
-      (before &&
-        before.version === found.version &&
-        before.projectName === found.projectName)
-    ) {
-      return Promise.resolve();
+  // A key Sanctum gave a device that no longer takes it, forgotten, the
+  // marker first, so a key it was flashed with is never taken for one.
+  async function forgetGiven(mac: string) {
+    await ctx.secrets.delete(givenOf(mac));
+    await ctx.secrets.delete(secretOf(mac));
+  }
+
+  // Keeps the key a device was added with, or that it has none, before the
+  // core has the device, so no device of Sanctum's is ever without the key
+  // it was added with. The marker of a key Sanctum gave goes first, so a key
+  // it was flashed with is never taken for one.
+  async function keep(mac: string, psk: string | null, session: Session) {
+    // A session in the clear, or under a typed key, can reach a device that
+    // waits to be given a key: it's given one only once its card says so.
+    if (session.info.apiEncryptionProvisionable === true) {
+      session.client.disconnect();
+      finds.learn(mac, "waits");
+      await finds.list();
+      return refused("changed");
     }
-    const description = {
-      version: found.version,
-      projectName: found.projectName,
-      maker: null as string | null,
-    };
-    described.set(found.mac, description);
-    const address = addressOf(found.mac);
-    if (!address) return Promise.resolve();
-    const controller = new AbortController();
-    const work = (async () => {
-      try {
-        const result = await connectOnce({
-          mac: found.mac,
-          key: zeroKey,
-          address,
-          timings,
-          signal: controller.signal,
-        });
-        if (!("session" in result)) return;
-        result.session.client.disconnect();
-        if (stopped || described.get(found.mac) !== description) return;
-        description.maker = makerOf(result.session.info).manufacturer;
-        await listFound();
-      } finally {
-        describing.delete(controller);
-      }
-    })();
-    describing.set(controller, work);
-    return work;
+    try {
+      await ctx.secrets.delete(givenOf(mac));
+      if (psk !== null) await ctx.secrets.set(secretOf(mac), psk);
+      else await ctx.secrets.delete(secretOf(mac));
+    } catch (error) {
+      session.client.disconnect();
+      throw error;
+    }
+    return take(mac, session);
   }
 
   // A device from a session checked under its key, or under none: the
@@ -493,7 +440,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       session.client.disconnect();
       throw error;
     }
-    await listFound();
+    finds.learn(mac, session.encrypted ? "key" : "clear");
+    await finds.list();
   }
 
   return {
@@ -513,7 +461,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           await ctx.secrets.delete(givenOf(mac));
         }
         await facts.remove(mac);
-        await listFound();
+        await finds.list();
+        finds.schedule();
       });
       const mine = (await ctx.devices.list()).filter(
         (device): device is DeviceInfo & { key: string } =>
@@ -528,17 +477,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (!removed.has(device.key)) own(device);
       }
       loading = false;
-      await listFound();
+      await finds.list();
+      finds.schedule();
     },
 
     async stop() {
       stopped = true;
-      const descriptions = [...describing];
-      for (const [controller] of descriptions) controller.abort();
-      await Promise.all([
-        ...[...devices.keys()].map(forget),
-        ...descriptions.map(([, work]) => work.catch(() => undefined)),
-      ]);
+      await Promise.all([...[...devices.keys()].map(forget), finds.stop()]);
     },
 
     async discovered({ found, lost }: DriverDiscovery) {
@@ -570,77 +515,94 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           before.encryption !== now.encryption ||
           before.version !== now.version;
         devices.get(now.mac)?.connection.seen(anew);
-        if (now.encryption === "waiting" && !devices.has(now.mac)) {
-          void describe(now).catch(() => undefined);
-        }
       }
-      await listFound();
+      finds.discoveryChanged();
+      await finds.list();
+      finds.schedule();
     },
 
     async add({ key, answers }: DriverAdd): Promise<DriverAddResult> {
       if (devices.has(key)) return;
-      const found = announced.get(key);
-      if (!found) {
+      const listed = finds.said(key);
+      if (!listed) {
         throw new ActionError("not_found", "It isn't on the home's network");
       }
       // A key Sanctum gave it, as before an answer was lost or as it was
-      // removed while out of reach, is tried first.
-      let given = await givenKey(key);
+      // removed while out of reach, is tried first, and only ever encrypted.
+      const given = await givenKey(key);
       if (given) {
         const kept = await check(key, given);
         if ("session" in kept) return take(key, kept.session);
         if ("error" in kept) throw new Error("It didn't answer");
-        if (found.encryption !== "waiting") {
-          // It no longer takes that key, as after it was flashed again:
-          // the key is forgotten, the marker first, and it's added as it
-          // is now, asking the key it was flashed with where it has one.
-          await ctx.secrets.delete(givenOf(key));
-          await ctx.secrets.delete(secretOf(key));
-          given = null;
-          await listFound();
-          if (found.encryption === "key") {
-            return { refused: { refusal: "keyChanged" } };
-          }
+      }
+      // The key someone typed decides; where it doesn't match, what the
+      // device says now does, as its record may be from before it was given
+      // a key or had one taken off.
+      if (answers.key !== undefined) {
+        const psk = answers.key.trim();
+        if (!isKey(psk)) return wrongKey;
+        const result = await check(key, psk);
+        if ("error" in result) throw new Error("It didn't answer");
+        if ("halt" in result) {
+          const now = await finds.ask(key);
+          return now.says === "key" || now.says === "unclear"
+            ? wrongKey
+            : refused("changed");
         }
+        return keep(key, psk, result.session);
       }
-      if (found.encryption === "waiting") {
-        const gave = await giveKey({
-          mac: key,
-          key: given ?? newKey(),
-          address: () => addressOf(key),
-          timings,
-          // Kept before it's sent, so a device that took it while the
-          // answer was lost isn't locked out.
-          keep: async (psk) => {
-            await ctx.secrets.set(secretOf(key), psk);
-            await ctx.secrets.set(givenOf(key), "yes");
-          },
-        });
-        if ("notWaiting" in gave) return { refused: { refusal: "notWaiting" } };
-        return take(key, gave.session);
+      const current = finds.said(key);
+      if ((listed === "clear") !== (current === "clear")) {
+        return refused("changed");
       }
-      const psk =
-        found.encryption === "key" ? (answers.key ?? "").trim() : null;
-      if (psk !== null && !isKey(psk)) return wrongKey;
-      const result = await check(key, psk);
-      if ("halt" in result) {
-        if (psk !== null) return wrongKey;
-        throw new Error("It has an encryption key now");
+      if (current === "clear") {
+        // It booted without advertising encryption. Check it as listed;
+        // some firmware can take a key without ever advertising provisioning.
+        const result = await check(key, null);
+        if ("halt" in result) {
+          if (given) await forgetGiven(key);
+          finds.learn(key, "key");
+          await finds.list();
+          return refused(given ? "keyChanged" : "hasKey");
+        }
+        if ("error" in result) throw new Error("It didn't answer");
+        return keep(key, null, result.session);
       }
-      if ("error" in result) throw new Error("It didn't answer");
-      // Its key is kept before the core has the device, so no device of
-      // Sanctum's is ever without the key it was added with. The marker of a
-      // key Sanctum gave goes first, so a key it was flashed with is never
-      // taken for one.
-      try {
-        await ctx.secrets.delete(givenOf(key));
-        if (psk !== null) await ctx.secrets.set(secretOf(key), psk);
-        else await ctx.secrets.delete(secretOf(key));
-      } catch (error) {
-        result.session.client.disconnect();
+      // Asked first every time, so nothing happens that its card didn't say.
+      const now = await finds.ask(key, { keepSession: true });
+      if (now.says === "closed") return refused("notWaiting");
+      if (now.says === "key") {
+        // It no longer takes the key Sanctum gave it, as after it was
+        // flashed again or keyed by another app: that key is forgotten.
+        if (given) {
+          await forgetGiven(key);
+          await finds.list();
+          return refused("keyChanged");
+        }
+        return refused("hasKey");
+      }
+      // An answer in the clear, from a device whose record says it takes a
+      // key, says only that it was busy or restarting, or that something
+      // else answered: nothing is sent, and it's asked again.
+      if (now.says !== "waits" || !now.session)
+        throw new Error("It didn't answer");
+      const session = await giveKey({
+        mac: key,
+        key: given ?? newKey(),
+        session: now.session,
+        address: () => addressOf(key),
+        timings,
+        // Kept before it's sent, so a device that took it while the
+        // answer was lost isn't locked out.
+        keep: async (psk) => {
+          await ctx.secrets.set(secretOf(key), psk);
+          await ctx.secrets.set(givenOf(key), "yes");
+        },
+      }).catch((error: unknown) => {
+        finds.retry(key);
         throw error;
-      }
-      return take(key, result.session);
+      });
+      return take(key, session);
     },
 
     async repair({ key, answers }: DriverRepair): Promise<DriverRepairResult> {
@@ -671,19 +633,21 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (given && !force) {
         owned.removing = true;
         try {
-          await takeKeyOff({
+          const answer = await takeKeyOff({
             mac: key,
             key: given,
             session: owned.connection.session,
             address: () => addressOf(key),
             timings,
           });
+          finds.learn(key, answer);
         } catch (error) {
           owned.removing = false;
           throw error;
         }
       } else if (given) {
         kept.add(key);
+        finds.learn(key, "key");
       }
       owned.connection.stop();
       await owned.setup;
