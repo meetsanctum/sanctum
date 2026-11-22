@@ -231,8 +231,10 @@ export function createFound(options: {
       if (probe.says === "waits" || probe.says === "clear") {
         session = probe.session;
       }
-      const answer = answerOf(found, probe);
+      // An answer to an announcement since replaced says nothing, not even
+      // that the device once took the zero key.
       if (!isCurrent()) return { says: "unclear" };
+      const answer = answerOf(found, probe);
       finishAsk(
         observation,
         answer.says === "unclear" || answer.says === "closed",
