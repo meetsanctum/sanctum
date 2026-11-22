@@ -4,7 +4,7 @@ import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
 import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
-// Natural Light's tile is White while every light that's on follows the
+// Natural Light's button is White while every light that's on follows the
 // curve. A press brings the room to natural light and switches off the
 // other lights.
 

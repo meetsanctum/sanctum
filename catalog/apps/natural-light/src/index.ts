@@ -10,6 +10,7 @@ import {
 import { naturalLightActions } from "./actions.js";
 import { createFollower } from "./follower.js";
 import { createRunForLight, type Timing } from "./lights.js";
+import { naturalLightName } from "./name.js";
 import { roomType } from "./rooms.js";
 import { naturalLightSettings } from "./settings.js";
 import { targetType } from "./target.js";
@@ -19,7 +20,7 @@ import { targetType } from "./target.js";
 // from where the home is, so it needs no other app. Every light that takes
 // a colour temperature follows it unless the household leaves it out, new
 // ones too (choices.ts), and it brings a `naturalLight.target` entity for
-// each, and a Natural Light tile in each room's row, after its switch, where
+// each, and a Natural Light button beside the room's lights switch where
 // a light follows (rooms.ts). A switch in its settings turns it off
 // altogether. Workflows can have a light follow it, pause or resume, or
 // bring a room to natural light. Its UI is in ./ui, which opens in frames
@@ -54,7 +55,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
 
   return defineApp({
     id: "sanctum.natural-light",
-    name: "Natural Light",
+    name: naturalLightName,
     version: "0.4.1",
     core: "^2.0.0",
     summary: "Lights that follow the colour of daylight through the day.",
@@ -85,13 +86,13 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
       roomSections: [
         defineRoomSection({
           id: "naturalLight.room",
-          title: "Natural Light",
+          title: naturalLightName,
           entityType: roomType.id,
           kind: "buttons",
           // Sanctum's own, as Moods' tiles are.
           order: 200,
           press: bringRoom,
-          preview: [{ icon: "sun", name: "Natural Light", active: true }],
+          preview: [{ icon: "sun", name: naturalLightName, active: true }],
         }),
       ],
     },

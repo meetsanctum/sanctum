@@ -6,6 +6,7 @@ import {
   type PageProps,
 } from "@meetsanctum/ui-sdk";
 
+import { naturalLightName } from "../name.js";
 import { CurveCard } from "./curve-card";
 import { LightList } from "./light-list";
 import { useNaturalLight } from "./use-natural-light";
@@ -24,11 +25,11 @@ function MainPage(props: PageProps) {
   const view = useNaturalLight();
   return (
     <>
-      <PageBar title="Natural Light" />
+      <PageBar title={naturalLightName} />
       {view.loaded && !view.isOn && (
         <Card className="max-w-md shrink-0">
           <div className="flex flex-col gap-1 px-2.5 py-2">
-            <p className="m-0 text-sm font-medium">Natural Light is off</p>
+            <p className="m-0 text-sm font-medium">{naturalLightName} is off</p>
             <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
               Lights keep the look they have and don’t change with the day.
             </p>

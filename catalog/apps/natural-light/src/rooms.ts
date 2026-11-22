@@ -24,14 +24,14 @@ import {
   type FollowOptions,
   type RunForLight,
 } from "./lights.js";
+import { naturalLightName } from "./name.js";
 import { followedLights, roomButtons } from "./schema.js";
 import { targetKey } from "./target.js";
 
-// Natural Light's tile for each room, in the room's row after its switch,
-// on its page and on Home: a room section of buttons, a square tile with the
-// sun, drawn by the shell from a `naturalLight.room` entity for each room
-// where a light follows. It shows only while natural light is on and the
-// home has a location.
+// Natural Light's button sits beside the room's lights switch on its page
+// and on Home. The shell draws its sun icon and name from a
+// `naturalLight.room` entity for each room where a light follows. It shows
+// only while the app is on and the home has a location.
 //
 // It is White while every light in the room that is on follows the curve,
 // neither paused nor dimmed, and at least one is on; lights that are off
@@ -61,7 +61,7 @@ export type RoomState = z.infer<typeof roomState>;
 
 export const roomType = defineEntityType({
   id: "naturalLight.room",
-  title: "Natural Light in a room",
+  title: `${naturalLightName} in a room`,
   state: roomState,
 });
 
@@ -121,7 +121,7 @@ export function roomStateOf(
   return {
     placeId,
     icon: "sun",
-    name: "Natural Light",
+    name: naturalLightName,
     order: 0,
     active,
     input: { placeId },
@@ -264,7 +264,7 @@ async function publishNow(
       await ctx.entities.publish({
         type: turnOnType.id,
         key: turnOnKey(placeId),
-        name: "Natural Light",
+        name: naturalLightName,
         state: turnOn,
       });
       await db
@@ -280,7 +280,7 @@ async function publishButton(ctx: AppContext, state: RoomState) {
   await ctx.entities.publish({
     type: roomType.id,
     key: roomKey(state.placeId),
-    name: "Natural Light",
+    name: state.name,
     state,
   });
   await ctx.storage.db
@@ -395,13 +395,13 @@ async function requireRoomSun(
   now: Date,
 ) {
   if (!options.isOn) {
-    throw new ActionError("conflict", "Natural Light is switched off");
+    throw new ActionError("conflict", `${naturalLightName} is switched off`);
   }
   const sun = await homeSun(ctx, now);
   if (!sun) {
     throw new ActionError(
       "conflict",
-      "Natural Light waits for the home's location",
+      `${naturalLightName} waits for the home's location`,
     );
   }
   return sun;

@@ -1,6 +1,7 @@
 import { Button, PageSection, Switch } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
+import { naturalLightName } from "../name.js";
 import {
   kelvin,
   type LightRow,
@@ -25,7 +26,7 @@ function status(light: LightRow) {
     return "Not following";
   }
   if (target.status === "off") {
-    return "Natural Light is off";
+    return `${naturalLightName} is off`;
   }
   if (target.status === "waiting" || target.colorTemperature === null) {
     return "Waiting for the home’s location";

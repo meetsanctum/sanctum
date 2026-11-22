@@ -337,7 +337,7 @@
       },
       "assistant": {
         "starts": "on",
-        "description": "Requires natural light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
+        "description": "Requires Natural Light to be on, today's curve to be available and at least one reachable light in the room already following it. Turns those lights on at the current colour and brightness and turns other reachable lights off. Returns the lights it could not set.",
         "needs": [
           "devices.control:light"
         ]
