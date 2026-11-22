@@ -90,7 +90,7 @@ describe("ESPHome's device page", () => {
     });
 
     expect(host.textContent).toContain(
-      "Its firmware takes a first key only without encryption: it got a setup key that way, then its own key encrypted.",
+      "When it was set up, its firmware took a first key only without encryption. It got a setup key that way, then its own key encrypted.",
     );
   });
 

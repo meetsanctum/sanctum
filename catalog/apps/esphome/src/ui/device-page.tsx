@@ -58,7 +58,7 @@ export function DevicePage(props: DevicePageProps) {
     return () => {
       current = false;
     };
-  }, [client, device.id, device.availability]);
+  }, [client, device.id, device.availability, device.problem?.id]);
 
   if (problem && !facts) {
     return (
@@ -89,8 +89,8 @@ export function DevicePage(props: DevicePageProps) {
       </Card>
       {facts.encrypted && facts.firstKey === "setup" && (
         <p className="m-0 px-1 text-[15px] leading-5 text-muted-foreground">
-          Its firmware takes a first key only without encryption: it got a setup
-          key that way, then its own key encrypted.
+          When it was set up, its firmware took a first key only without
+          encryption. It got a setup key that way, then its own key encrypted.
         </p>
       )}
       {facts.unused.length > 0 && (

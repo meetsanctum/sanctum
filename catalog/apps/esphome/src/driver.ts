@@ -52,6 +52,8 @@ const isKey = (text: string) => /^[A-Za-z0-9+/]{43}=$/.test(text);
 
 const wrongKey = { refused: { question: "key", refusal: "wrongKey" } };
 const refused = (refusal: string) => ({ refused: { refusal } });
+const needsEncryption = (session: Session) =>
+  !session.encrypted && session.info.apiEncryptionSupported === true;
 
 type Owned = {
   id: string;
@@ -71,6 +73,7 @@ type Owned = {
   removing: boolean;
   // Its key being given anew by Repair, which ends its connections too.
   rekeying: boolean;
+  haltReport?: object;
 };
 
 // How long a light flashes to show itself (Blink), at full brightness, before
@@ -106,7 +109,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     timings,
     announced,
     added: (mac) => devices.has(mac),
-    givenKey,
+    hasKeptKey: async (mac) =>
+      Boolean((await givenKey(mac)) ?? (await ctx.secrets.get(setupOf(mac)))),
     makerOf: (info) => makerOf(info).manufacturer,
   });
 
@@ -114,16 +118,16 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     ctx,
     timings,
     finds,
-    facts,
     addressOf,
     givenKey,
-    check: (mac, key) => check(mac, key),
+    check,
   });
-  const { keepGiven, giveOlderKey } = keying;
+  const { keepZero, giveOlderKey, giveOwnKey } = keying;
 
   function connected(owned: Owned, session: Session, hear: () => void) {
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
+    owned.haltReport = undefined;
     // Its latest session, open or closed since with nothing in its place.
     const current = () =>
       devices.get(owned.mac) === owned &&
@@ -136,21 +140,23 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       const sleeps = session.info.hasDeepSleep === true;
       await ctx.devices.register(registrationOf(owned.mac, session, mapping));
       if (!current()) return;
-      await facts.save(owned.mac, factsOf(session, mapping));
+      if (!(await finishSetup(owned.mac, session, mapping))) {
+        await facts.save(owned.mac, {
+          ...factsOf(session, mapping),
+          firstKey: null,
+        });
+      }
       if (!current()) return;
       // A device that could take a key and has none isn't encrypted, which
       // Repair sets right; any other problem is gone once it's back.
-      const problem =
-        !session.encrypted && session.info.apiEncryptionSupported === true
-          ? "notEncrypted"
-          : null;
+      const problem = needsEncryption(session) ? "notEncrypted" : null;
       if (owned.problem !== problem) {
         // Said as it stands now, so no retry of the problem it had can
         // follow, even one that fails while the core is answering this.
         owned.problem = problem;
         tell(owned);
       }
-      owned.mapping = mapping;
+      if (!problem) owned.mapping = mapping;
       owned.sleeps = sleeps;
     };
     const setup = owned.setup.then(async () => {
@@ -172,6 +178,23 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       unused: mapping.unused,
       sleeps: session.info.hasDeepSleep === true,
     };
+  }
+
+  // A verified connection under the given key completes setup even if
+  // the response to setting that key was lost. The marker stays with the
+  // key if someone removes the device without clearing it.
+  async function finishSetup(mac: string, session: Session, mapping: Mapping) {
+    if (!session.encrypted) return false;
+    const given = await ctx.secrets.get(givenOf(mac));
+    if (!given) return false;
+    const pending = await ctx.secrets.get(setupOf(mac));
+    if (!pending && given !== "setup") return false;
+    await facts.save(mac, { ...factsOf(session, mapping), firstKey: "setup" });
+    if (pending) {
+      await ctx.secrets.set(givenOf(mac), "setup");
+      await ctx.secrets.delete(setupOf(mac));
+    }
+    return true;
   }
 
   // Each session's parts, by its own entities, so what an older session
@@ -215,8 +238,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             ctx.log(`could not take in ${mac} (${String(error)})`);
             throw error;
           }),
-        state: (event, session) =>
-          report(ctx, facts, mac, mappingOf(session), event, session),
+        state: (event, session) => {
+          if (!needsEncryption(session)) {
+            report(ctx, facts, mac, mappingOf(session), event, session);
+          }
+        },
         reachable: (reachable) => {
           const availability = reachable
             ? "online"
@@ -229,11 +255,23 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           // Its key coming off, or being given anew, ends its connection,
           // which is no problem.
           if (owned.removing || owned.rekeying) return;
-          void keying.problemOf(mac, halt).then((problem) => {
-            if (devices.get(mac) !== owned || owned.rekeying) return;
-            owned.problem = problem;
-            tell(owned);
-          });
+          const report = {};
+          owned.haltReport = report;
+          void keying
+            .problemOf(mac, halt)
+            .catch(() => halt)
+            .then((problem) => {
+              if (
+                devices.get(mac) !== owned ||
+                owned.haltReport !== report ||
+                owned.rekeying ||
+                owned.removing
+              ) {
+                return;
+              }
+              owned.problem = problem;
+              tell(owned);
+            });
         },
       },
     });
@@ -292,6 +330,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   async function forgetGiven(mac: string) {
     await ctx.secrets.delete(givenOf(mac));
     await ctx.secrets.delete(secretOf(mac));
+    await ctx.secrets.delete(setupOf(mac));
   }
 
   // Keeps the key a device was added with, or that it has none, before the
@@ -309,6 +348,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     }
     try {
       await ctx.secrets.delete(givenOf(mac));
+      await ctx.secrets.delete(setupOf(mac));
       if (psk !== null) await ctx.secrets.set(secretOf(mac), psk);
       else await ctx.secrets.delete(secretOf(mac));
     } catch (error) {
@@ -321,13 +361,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // A device from a session checked under its key, or under none: the
   // core's from now on, and its connection that session. Its page says how
   // its first key reached it where that's worth saying.
-  async function take(
-    mac: string,
-    session: Session,
-    firstKey: "setup" | null = null,
-  ) {
+  async function take(mac: string, session: Session) {
     try {
       const mapping = mapEntities(session.entities);
+      await finishSetup(mac, session, mapping);
       const { id } = await ctx.devices
         .register(registrationOf(mac, session, mapping))
         .catch((error: unknown) => {
@@ -335,9 +372,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           ctx.log(`could not register ${mac} (${String(error)})`);
           throw error;
         });
-      if (firstKey) {
-        await facts.save(mac, { ...factsOf(session, mapping), firstKey });
-      }
       own({ ...(await ctx.devices.state(id)), key: mac }, session);
     } catch (error) {
       session.client.disconnect();
@@ -352,12 +386,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // problem.
   async function rekey(owned: Owned) {
     owned.rekeying = true;
+    owned.haltReport = undefined;
+    owned.connection.pause();
     try {
       await keying.keyAnew(owned.mac);
     } finally {
       owned.rekeying = false;
+      owned.connection.renew();
     }
-    owned.connection.renew();
   }
 
   return {
@@ -375,8 +411,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (!kept.delete(mac)) {
           await ctx.secrets.delete(secretOf(mac));
           await ctx.secrets.delete(givenOf(mac));
+          await ctx.secrets.delete(setupOf(mac));
         }
-        await ctx.secrets.delete(setupOf(mac));
         await facts.remove(mac);
         await finds.list();
         finds.schedule();
@@ -459,18 +495,15 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         const half = await check(key, setup);
         if ("error" in half) throw new Error("It didn't answer");
         if ("session" in half) {
-          const session = await giveKey({
-            mac: key,
-            key: given ?? newKey(),
-            session: half.session,
-            address: () => addressOf(key),
-            timings,
-            keep: keepGiven(key),
-          });
-          await ctx.secrets.delete(setupOf(key));
-          return take(key, session, "setup");
+          const session = await giveOwnKey(
+            key,
+            half.session,
+            given ?? newKey(),
+          );
+          return take(key, session);
         }
       }
+      const hasKeptKey = Boolean(given || setup);
       // The key someone typed decides; where it doesn't match, what the
       // device says now does, as its record may be from before it was given
       // a key or had one taken off.
@@ -495,39 +528,28 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         return refused("changed");
       }
       if (current === "older") {
-        // Asked again first, every sign agreeing, as its card said.
-        const now = await finds.ask(key);
+        // Give the setup key on the same connection that confirmed the card.
+        const now = await finds.ask(key, { keepClearSession: true });
         if (now.says === "unclear") throw new Error("It didn't answer");
-        if (now.says !== "older") return refused("changed");
-        const result = await giveOlderKey(key, given ?? newKey()).catch(
-          (error: unknown) => {
-            finds.retry(key);
-            throw error;
-          },
-        );
-        if ("session" in result) return take(key, result.session, "setup");
-        if (result.has === "key") {
-          if (given) await forgetGiven(key);
-          finds.learn(key, "key");
-        } else finds.retry(key);
-        await finds.list();
-        return refused(
-          result.has === "changed"
-            ? "changed"
-            : given
-              ? "keyChanged"
-              : "hasKey",
-        );
+        if (now.says !== "older" || !now.session) {
+          if (now.says === "key" && hasKeptKey) {
+            await forgetGiven(key);
+            await finds.list();
+          }
+          return refused("changed");
+        }
+        const session = await giveOlderKey(key, now.session, given ?? newKey());
+        return take(key, session);
       }
       if (current === "clear") {
         // It booted without advertising encryption. Check it as listed;
         // some firmware can take a key without ever advertising provisioning.
         const result = await check(key, null);
         if ("halt" in result) {
-          if (given) await forgetGiven(key);
+          if (hasKeptKey) await forgetGiven(key);
           finds.learn(key, "key");
           await finds.list();
-          return refused(given ? "keyChanged" : "hasKey");
+          return refused(hasKeptKey ? "keyChanged" : "hasKey");
         }
         if ("error" in result) throw new Error("It didn't answer");
         return keep(key, null, result.session);
@@ -538,7 +560,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (now.says === "key") {
         // It no longer takes the key Sanctum gave it, as after it was
         // flashed again or keyed by another app: that key is forgotten.
-        if (given) {
+        if (hasKeptKey) {
           await forgetGiven(key);
           await finds.list();
           return refused("keyChanged");
@@ -561,7 +583,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         timings,
         // Kept before it's sent, so a device that took it while the
         // answer was lost isn't locked out.
-        keep: keepGiven(key),
+        keep: keepZero(key),
       }).catch((error: unknown) => {
         finds.retry(key);
         throw error;
@@ -588,6 +610,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       // The key someone typed is the one it was flashed with, never taken
       // for one Sanctum gave: the marker goes first.
       await ctx.secrets.delete(givenOf(key));
+      await ctx.secrets.delete(setupOf(key));
       await ctx.secrets.set(secretOf(key), psk);
       // Its connection clears the problem once it's back with the new key.
       owned.connection.renew();
@@ -601,13 +624,17 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       const owned = devices.get(key);
       if (!owned) return;
       const given = await givenKey(key);
-      if (given && !force) {
+      const setup = await ctx.secrets.get(setupOf(key));
+      const keys = [given, setup].filter((key) => key !== null);
+      if (keys.length && !force) {
         owned.removing = true;
+        owned.haltReport = undefined;
         try {
+          const session = owned.connection.session;
           const answer = await takeKeyOff({
             mac: key,
-            key: given,
-            session: owned.connection.session,
+            keys,
+            session: given && session?.encrypted ? session : null,
             address: () => addressOf(key),
             timings,
           });
@@ -616,7 +643,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           owned.removing = false;
           throw error;
         }
-      } else if (given) {
+      } else if (keys.length) {
         kept.add(key);
         finds.learn(key, "key");
       }

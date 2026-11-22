@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { givenOf, isOlderFirmware, secretOf, setupOf } from "../src/keys.js";
 import type { Announced } from "../src/sightings.js";
+import type { EmulatedOptions } from "./emulated-device.js";
 import { announce, keyOf, startHome } from "./support.js";
 
 // Firmware from before ESPHome 2026.7 built with encryption can't wait for
@@ -18,7 +19,11 @@ afterEach(async () => {
   await home?.stop();
 });
 
-const olderDevice = (options: { clears?: boolean } = {}) =>
+type OlderOptions = Pick<EmulatedOptions, "clears" | "maxConnections"> & {
+  kind?: "button" | "switch";
+};
+
+const olderDevice = (options: OlderOptions = {}) =>
   home.plugIn({
     name: "voice",
     project: "Nabu Casa.Home Assistant Voice PE",
@@ -34,8 +39,8 @@ const card = (key: string) => home.core.found.find((each) => each.key === key);
 const older =
   "Gets a setup key without encryption, as its firmware needs, then its own key encrypted";
 
-async function addOlder() {
-  const device = await olderDevice();
+async function addOlder(options?: OlderOptions) {
+  const device = await olderDevice(options);
   const key = keyOf(device.options.mac);
   await home.core.until(() => card(key) !== undefined, "listed");
   await home.core.add(key, {});
@@ -57,13 +62,31 @@ describe("older firmware", () => {
     expect(device.connections).toBe(0);
   });
 
+  it("never sends a setup key after seeing the same device wait under the zero key", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: null, waiting: true });
+    const key = keyOf(device.options.mac);
+    await home.core.until(
+      () => card(key)?.description === "Espressif",
+      "seen under the zero key",
+    );
+    device.waiting = false;
+    device.options.older = true;
+    device.options.version = "2026.6.0";
+    device.reboot();
+    await announce(home.core, device);
+
+    await expect(home.core.add(key, {})).rejects.toThrow("It didn't answer");
+    expect(device.keysSent).toEqual([]);
+  });
+
   it("gets a setup key in the clear, then its own encrypted, and is never in the clear again", async () => {
     home = await startHome();
     const { device, key } = await addOlder();
 
     const own = home.core.secrets.get(secretOf(key));
     expect(own).toMatch(/^[A-Za-z0-9+/]{43}=$/);
-    expect(home.core.secrets.get(givenOf(key))).toBe("yes");
+    expect(home.core.secrets.get(givenOf(key))).toBe("setup");
     expect(home.core.secrets.has(setupOf(key))).toBe(false);
     expect(device.keysSent).toHaveLength(2);
     const [setup, mine] = device.keysSent;
@@ -123,6 +146,10 @@ describe("older firmware", () => {
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toHaveLength(2);
+    expect(home.core.secrets.has(setupOf(key))).toBe(false);
+    expect(
+      await home.core.call("esphome.device", { device: `device:${key}` }),
+    ).toMatchObject({ encrypted: true, firstKey: "setup" });
   });
 
   it("is sent a new setup key on another Add after refusing one, never the kept one again", async () => {
@@ -175,6 +202,18 @@ describe("older firmware", () => {
     ).not.toContain(kept);
   });
 
+  it("keeps how the device got its key when it is removed anyway and re-added", async () => {
+    home = await startHome();
+    const { device, key } = await addOlder();
+    await home.core.remove(key, true);
+    await home.core.add(key, {});
+
+    expect(device.keysSent).toHaveLength(2);
+    expect(
+      await home.core.call("esphome.device", { device: `device:${key}` }),
+    ).toMatchObject({ encrypted: true, firstKey: "setup" });
+  });
+
   it("has its key taken off when it's removed, and is older firmware again", async () => {
     home = await startHome();
     const { device, key } = await addOlder();
@@ -188,6 +227,24 @@ describe("older firmware", () => {
       () => card(key)?.description === older,
       "listed as older firmware",
     );
+  });
+
+  it("finishes removing a key it cleared while the answer was lost", async () => {
+    home = await startHome();
+    const { device, key } = await addOlder({ maxConnections: 1 });
+    // The discovery record still says it has a key after clearing it.
+    await announce(home.core, device);
+    device.losesNextAnswer = true;
+
+    await expect(home.core.remove(key)).rejects.toThrow();
+    expect(device.psk).toBeNull();
+    const sent = device.keysSent.length;
+
+    await home.core.remove(key);
+    expect(home.core.registered.has(key)).toBe(false);
+    expect(home.core.secrets.size).toBe(0);
+    expect(device.keysSent).toHaveLength(sent);
+    expect(card(key)?.description).toBe(older);
   });
 
   it("keeps its key when its firmware can't clear one, unless removed anyway", async () => {
@@ -206,9 +263,12 @@ describe("older firmware", () => {
 });
 
 describe("repairs that ask nothing", () => {
-  it("encrypts older firmware that was added without encryption", async () => {
+  it("withholds commands until Repair encrypts a device with one connection slot", async () => {
     home = await startHome();
-    const { device, key } = await addOlder();
+    const { device, key } = await addOlder({
+      kind: "switch",
+      maxConnections: 1,
+    });
     // As a device added before it could be given a key: no key on either side.
     device.psk = null;
     home.core.secrets.delete(secretOf(key));
@@ -220,6 +280,11 @@ describe("repairs that ask nothing", () => {
       "not encrypted",
     );
 
+    await expect(
+      home.core.command(key, "switch-relay", "switch", { on: true }),
+    ).rejects.toThrow();
+    expect(device.commands).toHaveLength(0);
+
     expect(await home.core.repair(key, {})).toBeUndefined();
     await home.core.until(
       () => !home.core.problems.has(key),
@@ -227,6 +292,8 @@ describe("repairs that ask nothing", () => {
     );
     expect(device.psk).toBe(home.core.secrets.get(secretOf(key)));
     expect(device.keysSent.at(-1)).toMatchObject({ encrypted: true });
+    await home.core.command(key, "switch-relay", "switch", { on: true });
+    await home.core.until(() => device.commands.length === 1, "the command");
   });
 
   it("finishes a repair whose answer was lost, sending nothing in the clear again", async () => {
@@ -254,11 +321,49 @@ describe("repairs that ask nothing", () => {
     const repairs = device.keysSent.slice(sent);
     expect(repairs.filter((each) => !each.encrypted)).toHaveLength(1);
     expect(device.psk).toBe(home.core.secrets.get(secretOf(key)));
+    expect(home.core.secrets.has(setupOf(key))).toBe(false);
   });
+
+  it.each([false, true])(
+    "can remove after a repair left the setup key on the device (Remove anyway: %s)",
+    async (force) => {
+      home = await startHome();
+      const { device, key } = await addOlder();
+      device.psk = null;
+      device.reboot();
+      await announce(home.core, device);
+      await home.core.until(
+        () => home.core.problems.get(key)?.id === "keyLost",
+        "lost its key",
+      );
+      device.losesNextAnswer = true;
+
+      await expect(home.core.repair(key, {})).rejects.toThrow();
+      const setup = home.core.secrets.get(setupOf(key));
+      expect(device.psk).toBe(setup);
+
+      await home.core.remove(key, force);
+      if (force) {
+        expect(home.core.secrets.get(setupOf(key))).toBe(setup);
+        const sent = device.keysSent.length;
+        device.reboot();
+        await announce(home.core, device);
+        await home.core.add(key, {});
+        expect(device.keysSent.slice(sent)).toEqual([
+          { key: home.core.secrets.get(secretOf(key)), encrypted: true },
+        ]);
+        expect(home.core.secrets.has(setupOf(key))).toBe(false);
+      } else {
+        await home.core.until(() => device.psk === null, "its setup key off");
+        expect(device.keysSent.at(-1)).toEqual({ key: "", encrypted: true });
+        expect(home.core.secrets.size).toBe(0);
+      }
+    },
+  );
 
   it("gives older firmware that lost its key a new one", async () => {
     home = await startHome();
-    const { device, key } = await addOlder();
+    const { device, key } = await addOlder({ maxConnections: 1 });
     const before = home.core.secrets.get(secretOf(key));
     // Reset, it lost the key Sanctum gave it.
     device.psk = null;
@@ -281,33 +386,38 @@ describe("repairs that ask nothing", () => {
     expect(device.psk).toBe(after);
   });
 
-  it("gives a device that waits for a key again a new one over the zero key", async () => {
-    home = await startHome();
-    const device = await home.plugIn({ psk: null, waiting: true });
-    const key = keyOf(device.options.mac);
-    await home.core.until(() => card(key) !== undefined, "listed");
-    await home.core.add(key, {});
-    await home.core.until(
-      () => home.core.availability.get(key) === "online",
-      "online",
-    );
-    device.psk = null;
-    device.waiting = true;
-    device.reboot();
-    await announce(home.core, device);
-    await home.core.until(
-      () => home.core.problems.get(key)?.id === "keyLost",
-      "lost its key",
-    );
+  it.each([false, true])(
+    "gives a reset device a new key over the zero key (its window closed: %s)",
+    async (isWindowClosed) => {
+      home = await startHome();
+      const device = await home.plugIn({ psk: null, waiting: true });
+      const key = keyOf(device.options.mac);
+      await home.core.until(() => card(key) !== undefined, "listed");
+      await home.core.add(key, {});
+      await home.core.until(
+        () => home.core.availability.get(key) === "online",
+        "online",
+      );
+      device.psk = null;
+      device.waiting = true;
+      device.windowClosed = isWindowClosed;
+      device.reboot();
+      await announce(home.core, device);
+      await home.core.until(
+        () => home.core.problems.get(key)?.id === "keyLost",
+        "lost its key",
+      );
 
-    await home.core.repair(key, {});
-    await home.core.until(
-      () => !home.core.problems.has(key),
-      "back under a new key",
-    );
-    expect(device.keysSent.every((each) => each.encrypted)).toBe(true);
-    expect(device.psk).toBe(home.core.secrets.get(secretOf(key)));
-  });
+      device.windowClosed = false;
+      await home.core.repair(key, {});
+      await home.core.until(
+        () => !home.core.problems.has(key),
+        "back under a new key",
+      );
+      expect(device.keysSent.every((each) => each.encrypted)).toBe(true);
+      expect(device.psk).toBe(home.core.secrets.get(secretOf(key)));
+    },
+  );
 });
 
 describe("telling older firmware apart", () => {
@@ -328,6 +438,9 @@ describe("telling older firmware apart", () => {
 
   it("takes every sign agreeing", () => {
     expect(isOlderFirmware(record, info, false)).toBe(true);
+    expect(
+      isOlderFirmware(record, { ...info, esphomeVersion: "2026.6.0b1" }, false),
+    ).toBe(true);
   });
 
   it("refuses when any one sign disagrees", () => {
@@ -352,6 +465,13 @@ describe("telling older firmware apart", () => {
     ).toBe(false);
     expect(
       isOlderFirmware(record, { ...info, esphomeVersion: "2026.10.2" }, false),
+    ).toBe(false);
+    expect(
+      isOlderFirmware(
+        record,
+        { ...info, esphomeVersion: "2026.6broken" },
+        false,
+      ),
     ).toBe(false);
     expect(
       isOlderFirmware(

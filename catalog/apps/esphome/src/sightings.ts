@@ -23,7 +23,9 @@ export type Encryption = "key" | "waiting" | "older" | "none";
  * for a key under the zero key; null for one that says no version.
  */
 export function beforeProvisioning(version: string | null | undefined) {
-  const parts = /^(\d+)\.(\d+)/.exec(version?.trim() ?? "");
+  const parts = /^(\d+)\.(\d+)(?:\.\d+(?:b\d+|[-+][\w.+-]+)?)?$/.exec(
+    version?.trim() ?? "",
+  );
   if (!parts) return null;
   const year = Number(parts[1]);
   const month = Number(parts[2]);

@@ -31,6 +31,8 @@ export type EmulatedOptions = {
   mac: string;
   /** Its encryption key, in base64, or null for a device built without one. */
   psk: string | null;
+  /** How many API connections the firmware accepts at once. */
+  maxConnections?: number;
   /** Built to be given its key later: with no key, it waits for one. */
   waiting?: boolean;
   /**
@@ -320,6 +322,10 @@ export class EmulatedDevice {
     this.connections += 1;
     socket.on("close", () => this.sockets.delete(socket));
     socket.on("error", () => undefined);
+    if (this.sockets.size > (this.options.maxConnections ?? Infinity)) {
+      socket.destroy();
+      return;
+    }
     if (this.closesNext > 0) {
       this.closesNext -= 1;
       socket.destroy();

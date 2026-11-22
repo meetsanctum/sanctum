@@ -1,7 +1,12 @@
 import type { AppContext } from "@meetsanctum/app-sdk";
 
-import type { Address, Halt, Session, Timings } from "./connection.js";
-import type { Facts } from "./facts.js";
+import type {
+  Address,
+  connectOnce,
+  Halt,
+  Session,
+  Timings,
+} from "./connection.js";
 import type { Found } from "./found.js";
 import {
   askUnderZeroKey,
@@ -17,39 +22,40 @@ import {
 // anew by Repair to a device that lost its own or never had one; and what a
 // halt means when the key that stopped matching is one Sanctum gave.
 
-type Check = (
-  mac: string,
-  key: string | null,
-) => Promise<
-  | { session: Session }
-  | { halt: Halt; clear?: Session["info"] }
-  | { error: unknown }
->;
-
 export function createKeying(options: {
   ctx: AppContext;
   timings: Timings;
   finds: Found;
-  facts: Facts;
   addressOf: (mac: string) => Address | null;
   givenKey: (mac: string) => Promise<string | null>;
-  check: Check;
+  check: (mac: string, key: string) => ReturnType<typeof connectOnce>;
 }) {
-  const { ctx, timings, finds, facts, addressOf, givenKey, check } = options;
+  const { ctx, timings, finds, addressOf, givenKey, check } = options;
 
   // Why a device's connection halted: a key Sanctum gave that the device
   // lost, as when it's reset, if it waits for a key again or is older
   // firmware with none; otherwise the halt as it is.
-  async function problemOf(mac: string, halt: string) {
+  async function problemOf(mac: string, halt: Halt) {
     const address = addressOf(mac);
-    if (halt !== "keyMismatch" || !address || !(await givenKey(mac))) {
-      return halt;
+    if (!address) return halt;
+    const given = await givenKey(mac);
+    const setup = await ctx.secrets.get(setupOf(mac));
+    if (setup) {
+      const half = await check(mac, setup);
+      if ("session" in half) {
+        half.session.client.disconnect();
+        return given ? "keyLost" : "notEncrypted";
+      }
     }
+    if (halt !== "keyMismatch" || !given) return halt;
     const answer = await askUnderZeroKey({ mac, address, timings }).catch(
       () => ({ says: "unclear" }) as const,
     );
-    return answer.says === "waits" ||
-      (answer.says === "clear" && finds.isOlder(mac, answer.info))
+    if (answer.says === "waits" || answer.says === "closed") {
+      finds.learn(mac, answer.says);
+      return "keyLost";
+    }
+    return answer.says === "clear" && finds.isOlder(mac, answer.info)
       ? "keyLost"
       : halt;
   }
@@ -60,40 +66,54 @@ export function createKeying(options: {
     await ctx.secrets.set(givenOf(mac), "yes");
   };
 
+  // A device waiting under the zero key no longer has a setup key.
+  const keepZero = (mac: string) => async (psk: string) => {
+    await ctx.secrets.delete(setupOf(mac));
+    await keepGiven(mac)(psk);
+  };
+
+  // Finishes older firmware's setup on the connection its setup key opens.
+  function giveOwnKey(mac: string, session: Session, key: string) {
+    return giveKey({
+      mac,
+      session,
+      key,
+      address: () => addressOf(mac),
+      timings,
+      keep: keepGiven(mac),
+    });
+  }
+
   /**
    * Gives older firmware its key: a setup key over a connection in the
    * clear, every sign checked again there, then its own key over the
    * connection the setup key encrypts. A key Sanctum kept is never sent in
    * the clear, and each setup key is a fresh one. Returns a session under
-   * its own key, or what holds instead: it has a key, or isn't older
-   * firmware after all.
+   * its own key.
    */
   async function giveOlderKey(
     mac: string,
+    plain: Session,
     own: string,
-  ): Promise<{ session: Session } | { has: "key" | "changed" }> {
-    const plain = await check(mac, null);
-    if ("halt" in plain) return { has: "key" };
-    if ("error" in plain) throw new Error("It didn't answer");
-    if (!finds.isOlder(mac, plain.session.info)) {
-      plain.session.client.disconnect();
-      return { has: "changed" };
+  ): Promise<Session> {
+    const address = addressOf(mac);
+    if (
+      plain.encrypted ||
+      address?.host !== plain.address.host ||
+      address.port !== plain.address.port ||
+      !finds.isOlder(mac, plain.info)
+    ) {
+      plain.client.disconnect();
+      throw new Error("It answered differently");
     }
     const reach = { mac, address: () => addressOf(mac), timings };
     const setup = await giveKey({
       ...reach,
-      session: plain.session,
+      session: plain,
       key: newKey(),
       keep: (psk) => ctx.secrets.set(setupOf(mac), psk),
     });
-    const session = await giveKey({
-      ...reach,
-      session: setup,
-      key: own,
-      keep: keepGiven(mac),
-    });
-    await ctx.secrets.delete(setupOf(mac));
-    return { session };
+    return giveOwnKey(mac, setup, own);
   }
 
   // A key of Sanctum's for a device: one a Repair whose answer was lost left
@@ -114,15 +134,8 @@ export function createKeying(options: {
     if (setup) {
       const half = await check(mac, setup);
       if ("session" in half) {
-        const session = await giveKey({
-          ...reach,
-          key: newKey(),
-          session: half.session,
-          keep: keepGiven(mac),
-        });
+        const session = await giveOwnKey(mac, half.session, newKey());
         session.client.disconnect();
-        await ctx.secrets.delete(setupOf(mac));
-        await facts.firstKey(mac, "setup");
         return;
       }
     }
@@ -133,23 +146,22 @@ export function createKeying(options: {
       address,
       timings,
       keepSession: true,
+      keepClearSession: true,
     });
     if (answer.says === "waits" && answer.session) {
+      finds.learn(mac, "waits");
       const session = await giveKey({
         ...reach,
         key: newKey(),
         session: answer.session,
-        keep: keepGiven(mac),
+        keep: keepZero(mac),
       });
       session.client.disconnect();
-      await facts.firstKey(mac, null);
       return;
     }
-    if (answer.says === "clear" && finds.isOlder(mac, answer.info)) {
-      const result = await giveOlderKey(mac, newKey());
-      if (!("session" in result)) throw new Error("It answered differently");
-      result.session.client.disconnect();
-      await facts.firstKey(mac, "setup");
+    if (answer.says === "clear" && answer.session) {
+      const session = await giveOlderKey(mac, answer.session, newKey());
+      session.client.disconnect();
       return;
     }
     throw new Error(
@@ -159,5 +171,5 @@ export function createKeying(options: {
     );
   }
 
-  return { problemOf, keepGiven, giveOlderKey, keyAnew };
+  return { problemOf, keepZero, giveOlderKey, giveOwnKey, keyAnew };
 }

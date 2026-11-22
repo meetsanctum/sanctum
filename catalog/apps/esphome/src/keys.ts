@@ -29,7 +29,7 @@ export const zeroKey = Buffer.alloc(32).toString("base64");
 /** A device's key's name among the app's secrets. */
 export const secretOf = (mac: string) => `key:${mac}`;
 
-/** The name of the secret that says a device's key is one Sanctum gave. */
+/** The marker for a key Sanctum gave and whether it used a setup key. */
 export const givenOf = (mac: string) => `given:${mac}`;
 
 /**
@@ -60,13 +60,22 @@ function stoppedWaiting(error: unknown) {
  * answers only in the clear, with what it says of itself there; or nothing
  * that can be acted on, as when it's busy, restarting or out of reach.
  */
-export type Answer =
+type ProbeAnswer =
   | { says: "waits"; info: Session["info"]; session?: Session }
-  | { says: "key" }
+  | { says: "key"; tookZeroKey?: true }
   | { says: "closed" }
-  | { says: "clear"; info: Session["info"] }
-  | { says: "older"; info: Session["info"] }
+  | { says: "clear"; info: Session["info"]; session?: Session }
   | { says: "unclear" };
+
+export type Answer = ProbeAnswer | { says: "older"; session?: Session };
+
+function reportsOlderFirmware(info: DeviceInfo) {
+  return (
+    info.apiEncryptionSupported === true &&
+    info.apiEncryptionProvisionable !== true &&
+    beforeProvisioning(info.esphomeVersion) === true
+  );
+}
 
 /**
  * Whether a device is firmware from before ESPHome 2026.7 that takes a
@@ -85,9 +94,7 @@ export function isOlderFirmware(
   return (
     record.encryption === "older" &&
     !tookZeroKey &&
-    info.apiEncryptionSupported === true &&
-    info.apiEncryptionProvisionable !== true &&
-    beforeProvisioning(info.esphomeVersion) === true &&
+    reportsOlderFirmware(info) &&
     beforeProvisioning(record.version) !== false
   );
 }
@@ -106,7 +113,8 @@ export async function askUnderZeroKey(reach: {
   timings: Timings;
   signal?: AbortSignal;
   keepSession?: boolean;
-}): Promise<Answer> {
+  keepClearSession?: boolean;
+}): Promise<ProbeAnswer> {
   const { keepSession, ...target } = reach;
   const result = await connectOnce({ ...target, key: zeroKey });
   if ("session" in result) {
@@ -114,7 +122,7 @@ export async function askUnderZeroKey(reach: {
     const { info } = session;
     if (info.apiEncryptionProvisionable !== true) {
       session.client.disconnect();
-      return { says: "key" };
+      return { says: "key", tookZeroKey: true };
     }
     if (keepSession) return { says: "waits", info, session };
     session.client.disconnect();
@@ -122,7 +130,7 @@ export async function askUnderZeroKey(reach: {
   }
   if ("halt" in result) {
     return result.clear
-      ? { says: "clear", info: result.clear }
+      ? { says: "clear", info: result.clear, session: result.clearSession }
       : { says: "key" };
   }
   return stoppedWaiting(result.error)
@@ -190,27 +198,38 @@ export async function giveKey(
  * has it off already.
  */
 export async function takeKeyOff(
-  reach: Reach & { key: string; session: Session | null },
+  reach: Reach & { keys: readonly string[]; session: Session | null },
 ) {
   let session = reach.session;
   const own = !session;
-  if (!session) {
+  for (const key of reach.keys) {
+    if (session) break;
     const keyed = await connectOnce({
       mac: reach.mac,
-      key: reach.key,
+      key,
       address: addressOf(reach),
       timings: reach.timings,
     });
     if ("session" in keyed) session = keyed.session;
-    else {
-      const zero = await askUnderZeroKey({
-        mac: reach.mac,
-        address: addressOf(reach),
-        timings: reach.timings,
-      });
-      if (zero.says === "waits" || zero.says === "closed") return zero.says;
-      throw new Error("It isn't reachable");
-    }
+    // Clearing a key need not update the boot-time record.
+    else if (
+      "halt" in keyed &&
+      keyed.clear &&
+      reportsOlderFirmware(keyed.clear)
+    )
+      return "older";
+  }
+  if (!session) {
+    const zero = await askUnderZeroKey({
+      mac: reach.mac,
+      address: addressOf(reach),
+      timings: reach.timings,
+    });
+    if (zero.says === "waits" || zero.says === "closed") return zero.says;
+    // A successful clear need not update the boot-time record.
+    if (zero.says === "clear" && reportsOlderFirmware(zero.info))
+      return "older";
+    throw new Error("It isn't reachable");
   }
   try {
     const took = await session.client.setNoiseEncryptionKey("", {

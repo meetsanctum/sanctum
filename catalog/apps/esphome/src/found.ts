@@ -2,7 +2,7 @@ import type { AppContext, FoundReport } from "@meetsanctum/app-sdk";
 
 import type { Address, Session, Timings } from "./connection.js";
 import { askUnderZeroKey, isOlderFirmware, type Answer } from "./keys.js";
-import { beforeProvisioning, type Announced } from "./sightings.js";
+import type { Announced } from "./sightings.js";
 
 // The devices ESPHome found and hasn't added, and what each says of its key.
 // A device writes its record once, as it boots, so the record goes stale the
@@ -47,15 +47,15 @@ export function createFound(options: {
   announced: ReadonlyMap<string, Announced>;
   /** Whether a device is one the core has, which isn't listed. */
   added: (mac: string) => boolean;
-  /** The key Sanctum gave a device, if it gave one and kept it. */
-  givenKey: (mac: string) => Promise<string | null>;
+  /** Whether Sanctum kept a key it gave to the device. */
+  hasKeptKey: (mac: string) => Promise<boolean>;
   /** Who made a device, from what it says of itself. */
   makerOf: (info: Session["info"]) => string | null;
 }) {
   const { ctx, timings, announced } = options;
   const observations = new Map<string, Observation>();
   // Devices seen taking the zero key or saying they could, by MAC, kept
-  // across announcements until one says a version from before 2026.7.
+  // across announcements.
   const tookZeroKey = new Set<string>();
   const running = new Map<
     string,
@@ -126,7 +126,7 @@ export function createFound(options: {
             });
           } else if (said === "clear") {
             found.push({ ...row, description: "Not encrypted", asks: [] });
-          } else if (await options.givenKey(each.mac)) {
+          } else if (await options.hasKeptKey(each.mac)) {
             // Removed with the key it was given still on it, it's added
             // with that key again.
             found.push({
@@ -165,22 +165,28 @@ export function createFound(options: {
   }
 
   /** Interprets a probe in light of the announcement under which it ran. */
-  function answerOf(found: Announced, answer: Answer): Answer {
+  function answerOf(
+    found: Announced,
+    answer: Awaited<ReturnType<typeof askUnderZeroKey>>,
+  ): Answer {
     if (
       answer.says === "waits" ||
       answer.says === "closed" ||
-      ((answer.says === "clear" || answer.says === "older") &&
+      (answer.says === "key" && answer.tookZeroKey) ||
+      (answer.says === "clear" &&
         answer.info.apiEncryptionProvisionable === true)
     ) {
       tookZeroKey.add(found.mac);
     }
-    if (answer.says !== "clear" || found.encryption === "none") return answer;
+    if (answer.says !== "clear") return answer;
+    if (found.encryption === "none")
+      return { says: "clear", info: answer.info };
     // Older firmware only with every sign agreeing. Otherwise an answer in
     // the clear from a device whose record says it takes a key says only
     // that it was busy or restarting as it was asked, as the library greets
     // one in the clear once it ends a zero-key handshake.
     return isOlderFirmware(found, answer.info, tookZeroKey.has(found.mac))
-      ? { says: "older", info: answer.info }
+      ? { says: "older", session: answer.session }
       : { says: "unclear" };
   }
 
@@ -193,7 +199,12 @@ export function createFound(options: {
     {
       signal,
       keepSession,
-    }: { signal?: AbortSignal; keepSession?: boolean } = {},
+      keepClearSession,
+    }: {
+      signal?: AbortSignal;
+      keepSession?: boolean;
+      keepClearSession?: boolean;
+    } = {},
   ): Promise<Answer> {
     const found = announced.get(mac);
     const address = found && addressOf(found);
@@ -208,11 +219,18 @@ export function createFound(options: {
     if (!signal) running.get(mac)?.controller.abort();
     let session: Session | undefined;
     try {
-      const answer = answerOf(
-        found,
-        await askUnderZeroKey({ mac, address, timings, signal, keepSession }),
-      );
-      if (answer.says === "waits") session = answer.session;
+      const probe = await askUnderZeroKey({
+        mac,
+        address,
+        timings,
+        signal,
+        keepSession,
+        keepClearSession,
+      });
+      if (probe.says === "waits" || probe.says === "clear") {
+        session = probe.session;
+      }
+      const answer = answerOf(found, probe);
       if (!isCurrent()) return { says: "unclear" };
       finishAsk(
         observation,
@@ -226,7 +244,9 @@ export function createFound(options: {
       }
       await list();
       if (!isCurrent()) return { says: "unclear" };
-      session = undefined;
+      if (answer.says === "waits" || answer.says === "older") {
+        session = undefined;
+      }
       return answer;
     } finally {
       session?.client.disconnect();
@@ -248,12 +268,6 @@ export function createFound(options: {
   }
 
   function discoveryChanged() {
-    for (const mac of tookZeroKey) {
-      const found = announced.get(mac);
-      if (found && beforeProvisioning(found.version) === true) {
-        tookZeroKey.delete(mac);
-      }
-    }
     for (const [mac, observation] of observations) {
       const found = announced.get(mac);
       if (found && sightingOf(found) === observation.sighting) continue;
@@ -315,6 +329,7 @@ export function createFound(options: {
      * says of itself now, its record and whether it ever took the zero key.
      */
     isOlder(mac: string, info: Session["info"]) {
+      if (info.apiEncryptionProvisionable === true) tookZeroKey.add(mac);
       const found = announced.get(mac);
       return (
         found !== undefined &&
