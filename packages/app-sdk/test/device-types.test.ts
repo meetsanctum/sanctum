@@ -69,6 +69,11 @@ describe("what a device with some kinds is", () => {
     expect(deviceTypeOf(["sensor", "switch"])).toBe("switch");
     expect(deviceTypeOf(["sensor", "button"])).toBe("button");
     expect(deviceTypeOf(["sensor", "motion"])).toBe("motion");
+    // What plays is a media player, whatever button or switch it has, and a
+    // light that plays is a light.
+    expect(deviceTypeOf(["media", "button"])).toBe("media-player");
+    expect(deviceTypeOf(["media", "switch", "button"])).toBe("media-player");
+    expect(deviceTypeOf(["light", "media"])).toBe("light");
     expect(deviceTypeOf(["sensor", "sensor"])).toBe("sensor");
   });
 
