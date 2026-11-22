@@ -6,6 +6,12 @@ import type { Devices } from "../devices/devices.js";
 import type { View } from "../devices/views.js";
 import type { ChangedCapability } from "./changes.js";
 
+// Putting back one light or switch an AI agent changed: only while it still
+// shows what the agent asked, checked again as the command goes out, so a
+// person's, a switch's or an app's change since is left as it is and named,
+// and a remote's dimming under way is left alone. What goes back is how the
+// capability was when the agent's command was accepted.
+
 class RestoreSkipped extends Error {
   constructor(readonly outcome: RestoreOutcome) {
     super("restore skipped");
