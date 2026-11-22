@@ -1,0 +1,10 @@
+{
+  "extends": "@meetsanctum/typescript-config/base.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "outDir": "dist/types",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

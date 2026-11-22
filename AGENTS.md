@@ -23,7 +23,11 @@ setup, the commands and the layout; these notes are the rules.
 - `packages/ui-sdk` — what apps' pages import: `defineAppUi`, the typed app
   client, the design components they share with the shell.
 - `packages/auth-protocol` — what the core's Auth and the clients share: its
-  routes' shapes, the sign-in binding, username and password rules.
+  routes' shapes, the sign-in binding, username and password rules, AI
+  agents' setup codes, and the host CA's pin check (`./host-chain`, Node).
+- `packages/mcp` — `@meetsanctum/mcp`, the connector an AI agent on a
+  computer at home runs: it adds the agent with a setup's code and serves
+  MCP on stdio, passing calls on to the core's `/api/mcp` over pinned HTTPS.
 - `packages/typescript-config` — shared TypeScript settings.
 - `catalog/apps/*` — Sanctum apps, driver apps included, one workspace
   package each: `esphome`, `moods`, `natural-light`, `weather` and `zigbee`.

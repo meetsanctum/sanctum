@@ -18,7 +18,7 @@ own origin, `app://sanctum`, and, like every client, talks only to the core.
   changes (below).
 - **Checking the host:** the page runs in a session of its own, in memory,
   whose `setCertificateVerifyProc` checks every HTTPS request and WebSocket
-  against the stored pin (`src/trust.ts`, `src/host-chain.ts`). At first
+  against the stored pin (`src/trust.ts`, and `host-chain.ts` in `@meetsanctum/auth-protocol`). At first
   contact it holds the first CA it sees as the only candidate and lets no
   `Authorization` header through until a claim, sign-in or pairing saves it.
   Chromium keeps every decision for the life of a session, so starting or

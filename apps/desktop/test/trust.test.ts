@@ -1,7 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
-import { pinOf } from "../src/host-chain.js";
+import { pinOf } from "@meetsanctum/auth-protocol/host-chain";
 import type { KeptHost, StoredHost } from "../src/shell.js";
 import { accept, createHostTrust, refuse } from "../src/trust.js";
 import { testCa, type TestCa } from "./certificates.js";

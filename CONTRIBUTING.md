@@ -133,6 +133,7 @@ apps/docs                  the documentation site, built by Starlight
 packages/app-sdk           defineApp, defineAction, defineEvent, schemas
 packages/ui-sdk            what apps' pages import: components, the app client
 packages/auth-protocol     Auth's routes, sign-in binding and rules
+packages/mcp               @meetsanctum/mcp, the connector AI agents reach a home through
 packages/typescript-config shared TypeScript settings
 catalog/apps/*             Sanctum's apps, driver apps included
 assets/brand               the brand's files, under their own licence
