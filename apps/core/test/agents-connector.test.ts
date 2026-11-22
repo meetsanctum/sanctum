@@ -1,6 +1,7 @@
 import {
   agentSetupCodeText,
   parseAgentSetupCode,
+  type AgentInfo,
   type AgentSetupStarted,
   type AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
@@ -47,9 +48,12 @@ async function homeOverHttps(
     failToolList?: () => boolean;
     // Runs once a token is collected, before the connector's first call.
     onCollected?: (core: TestCore) => Promise<void>;
+    // Drops the answer to any MCP request, after the home checked its token.
+    dropMcpReply?: () => boolean;
   } = {},
 ) {
-  const { dropToolReply, failToolList, onCollected } = hooks;
+  const { dropToolReply, failToolList, onCollected, dropMcpReply } = hooks;
+
   const certificates = createCoreCertificates({
     sign: (await testCa()).sign,
     log: () => undefined,
@@ -59,6 +63,14 @@ async function homeOverHttps(
   if (dropToolReply) {
     core.server.addHook("onSend", async (request, reply) => {
       if (request.headers["mcp-method"] === "tools/call" && dropToolReply()) {
+        reply.hijack();
+        reply.raw.destroy();
+      }
+    });
+  }
+  if (dropMcpReply) {
+    core.server.addHook("onSend", async (request, reply) => {
+      if (request.url.startsWith("/api/mcp") && dropMcpReply()) {
         reply.hijack();
         reply.raw.destroy();
       }
@@ -406,6 +418,60 @@ describe("the AI agents' connector", () => {
     expect(await status(core, maya.token, again.setupId)).toMatchObject({
       status: "cancelled",
     });
+  });
+
+  it("keeps a working connection when the answer to the new token is lost, and the new agent can be removed", async () => {
+    let dropping = false;
+    const { core, maya, url } = await homeOverHttps({
+      dropMcpReply: () => dropping,
+    });
+    const connecting = await options(url);
+    const first = await connect(
+      (await startSetup(core, maya.token)).code,
+      connecting,
+    );
+
+    dropping = true;
+    const again = await startSetup(core, maya.token);
+    const connected = await connect(again.code, connecting);
+
+    // The home checked the new token, so the new agent shows as connected,
+    // but the connector heard nothing and kept the earlier connection.
+    expect(connected.keptPrevious).toBe(true);
+    expect(await listConnections(connecting.dir)).toEqual([first.connection]);
+    const added = await status(core, maya.token, again.setupId);
+    expect(added).toMatchObject({ status: "connected" });
+
+    // The agents list for Settings names it, and removing it revokes it.
+    const listed = (
+      await get(core, "/api/auth/agents", { token: maya.token })
+    ).json<AgentInfo[]>();
+    expect(listed.map((agent) => agent.id)).toEqual([
+      first.connection.clientId,
+      added.status === "connected" ? added.agent.id : "",
+    ]);
+    const removed = await post(
+      core,
+      "/api/auth/clients/revoke",
+      { id: listed[1]!.id },
+      { token: maya.token },
+    );
+    expect(removed.statusCode).toBe(204);
+    expect(
+      (await get(core, "/api/auth/agents", { token: maya.token })).json(),
+    ).toMatchObject([{ id: first.connection.clientId }]);
+
+    dropping = false;
+    const link = homeLink({
+      dir: connecting.dir,
+      clientId: first.connection.clientId,
+      tokens: connecting.tokens,
+      discover: async () => [],
+    });
+    const agent = await agentOn(link, "2026-07-28");
+    expect(
+      (await agent.callTool({ name: "home_overview" })).isError,
+    ).toBeFalsy();
   });
 
   it("sends nothing to a computer that isn't the home", async () => {
