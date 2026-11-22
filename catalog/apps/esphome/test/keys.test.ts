@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { connectOnce } from "../src/connection.js";
 import { secretOf } from "../src/driver.js";
-import { givenOf } from "../src/keys.js";
+import { givenOf, zeroKey } from "../src/keys.js";
 import { newKey } from "./emulated-device.js";
-import { add, announce, keyOf, startHome } from "./support.js";
+import { add, announce, keyOf, startHome, timings } from "./support.js";
 
 // Keys Sanctum gives: a device built to be given its key later gets 32
 // random bytes of its own, only ever over a connection encrypted with the
@@ -75,6 +76,52 @@ describe("a device waiting for a key", () => {
     });
     expect(home.core.secrets.size).toBe(0);
     expect(device.keysSent).toEqual([]);
+  });
+
+  it("isn't taken as no longer waiting when it parts for no reason", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = keyOf(device.options.mac);
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "Espressif",
+      "who made it",
+    );
+    // As while it applies a key or shuts down: it asks to part, saying no why.
+    device.partsWithoutReason = true;
+
+    await expect(home.core.add(key, {})).rejects.toThrow("It didn't answer");
+    expect(device.keysSent).toEqual([]);
+    expect(home.core.secrets.size).toBe(0);
+
+    await home.core.add(key, {});
+    expect(home.core.registered.has(key)).toBe(true);
+  });
+
+  it("says, under the zero key, that it can be given a key", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const keyed = await home.plugIn({
+      name: "lamp",
+      psk: newKey(),
+      kind: "light",
+    });
+    const reach = (each: typeof device) => ({
+      mac: keyOf(each.options.mac),
+      address: { host: each.host, port: each.port },
+      timings,
+    });
+
+    const waiting = await connectOnce({ ...reach(device), key: zeroKey });
+    if (!("session" in waiting)) throw new Error("no session");
+    waiting.session.client.disconnect();
+    expect(waiting.session.info.apiEncryptionProvisionable).toBe(true);
+
+    const own = await connectOnce({ ...reach(keyed), key: keyed.psk });
+    if (!("session" in own)) throw new Error("no session");
+    own.session.client.disconnect();
+    expect(own.session.info.apiEncryptionProvisionable).not.toBe(true);
   });
 
   it("doesn't take one when its window closes as it's given it", async () => {

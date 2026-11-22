@@ -36,7 +36,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // 0.2.0: a device waiting for a key gets one of its own, and removing
     // it takes the key off. 0.3.1: a device's maker and product come from
     // its project's name, and one waiting for a key is listed by its maker.
-    version: "0.4.0",
+    version: "0.4.1",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
