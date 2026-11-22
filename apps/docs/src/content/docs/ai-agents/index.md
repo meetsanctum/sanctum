@@ -5,6 +5,12 @@ sidebar:
   order: 1
 ---
 
+:::caution
+Sanctum's connector, `@meetsanctum/mcp`, isn't on npm yet, so the command
+in the prompt fails for now. This page describes how adding an agent works
+once it's published.
+:::
+
 An AI agent is an AI program that runs on a computer, such as Claude Code or
 Codex. Once you add one, you can ask it in your own words to dim the living
 room, turn the office lights up so you can see, or run the Evening mood.
