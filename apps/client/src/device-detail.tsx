@@ -23,14 +23,21 @@ import {
   Thermometer,
   Volume2,
 } from "lucide-react";
-import { useEffect, useId, useRef, type ComponentProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
+import { useArtwork } from "./artwork";
 import { contactPageName } from "./contact";
 import { DeviceFrame } from "./frames/device-frame";
-import { useArtwork } from "./artwork";
 import { isMedia, mediaText } from "./media";
 import {
   MediaPlaying,
@@ -148,6 +155,14 @@ export function DeviceDetail(props: {
   onOpenStatus: () => void;
 }) {
   const { devices, onClose } = props;
+  const [isCovering, setIsCovering] = useState(false);
+  const onCovering = useCallback(
+    (covering: boolean) => {
+      setIsCovering(covering);
+      props.onCovering(covering);
+    },
+    [props.onCovering],
+  );
   const now = new Date(useMinuteClock());
   const tile = devices.tiles.find((each) => each.key === props.tileKey);
   const device = devices.devices.find((each) => each.id === tile?.deviceId);
@@ -264,7 +279,8 @@ export function DeviceDetail(props: {
   // The picture of what it plays, and its colour on the veil, while
   // something does.
   const artwork = useArtwork(
-    player?.state &&
+    (props.open || isCovering) &&
+      player?.state &&
       player.state.on !== false &&
       player.state.activity !== "idle"
       ? player.state.media?.artwork
@@ -395,15 +411,28 @@ export function DeviceDetail(props: {
           : "activity"
         : pageOf[capability.kind];
   const detailKey = `${props.openFirstPage ? "room" : "part"}/${tile?.key}`;
+  const [selection, setSelection] = useState<{
+    detailKey: string;
+    page: string;
+    tint: string | null;
+  } | null>(null);
+  const selected = selection?.detailKey === detailKey ? selection : null;
+  const page =
+    selected?.page ?? initial ?? (controlTile ? undefined : after[0]?.id);
+  const tint =
+    page === "playing" ? (artwork?.colour ?? null) : (selected?.tint ?? null);
+  // The other pages keep the colour they had when they came into view.
+  const onPageChange = (page: string) =>
+    setSelection({ detailKey, page, tint });
 
   return (
     <Overlay
       container={props.container}
       open={props.open && hasDetail}
       onClose={onClose}
-      onCovering={props.onCovering}
+      onCovering={onCovering}
       title={name}
-      tint={artwork?.colour ?? null}
+      tint={tint}
       subtitle={tile && `${room?.name ?? noRoomName} · ${status}`}
       leading={
         device &&
@@ -434,6 +463,7 @@ export function DeviceDetail(props: {
             }
             pages={after}
             initial={initial}
+            onPageChange={onPageChange}
           />
         ) : (
           <SwipePages
@@ -441,6 +471,7 @@ export function DeviceDetail(props: {
             label={name}
             pages={after}
             initial={initial}
+            onPageChange={onPageChange}
           />
         ))}
     </Overlay>

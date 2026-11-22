@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
 
 import type { CoreDatabase } from "../database.js";
-import { deviceCapabilities } from "../devices/schema.js";
+import { deviceCapabilities, devices } from "../devices/schema.js";
 
 // Blobs: bytes drivers hand the core, such as a picture of what a media
 // player plays, kept by their SHA-256 so a device's state names one by its
@@ -22,19 +22,22 @@ import { deviceCapabilities } from "../devices/schema.js";
 // How often the sweep runs, in ms.
 const sweepEveryMs = 60_000;
 
+type Owner = {
+  usedAt: number;
+  wasNamed: boolean;
+};
+
 type Kept = {
-  app: string;
   type: BlobType;
   bytes: Uint8Array;
-  // When a device's state last named it, or it was put.
-  namedAt: number;
+  owners: Map<string, Owner>;
 };
 
 export type Blobs = ReturnType<typeof createBlobs>;
 
 export function createBlobs(options: {
-  /** The hashes the devices' reported states name now. */
-  named: () => ReadonlySet<string>;
+  /** The hashes each driver's devices' reported states name now. */
+  named: () => ReadonlyMap<string, ReadonlySet<string>>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
@@ -42,54 +45,73 @@ export function createBlobs(options: {
   const kept = new Map<string, Kept>();
   let timer: NodeJS.Timeout | undefined;
 
-  const sizeOf = (app: string) =>
-    [...kept.values()]
-      .filter((each) => each.app === app)
-      .reduce((total, each) => total + each.bytes.length, 0);
+  function forget(hash: string, blob: Kept, app: string) {
+    blob.owners.delete(app);
+    if (blob.owners.size === 0) kept.delete(hash);
+  }
 
   function sweep() {
+    if (kept.size === 0) return;
     const named = options.named();
     const at = now();
     for (const [hash, blob] of kept) {
-      if (named.has(hash)) blob.namedAt = at;
-      else if (at - blob.namedAt > blobKeptMs) kept.delete(hash);
+      for (const [app, owner] of blob.owners) {
+        const isNamed = named.get(app)?.has(hash) ?? false;
+        // Start the grace period on the first sweep that sees it go unnamed.
+        if (isNamed || owner.wasNamed) owner.usedAt = at;
+        owner.wasNamed = isNamed;
+        if (at - owner.usedAt >= blobKeptMs) forget(hash, blob, app);
+      }
     }
   }
 
   return {
     /**
      * Keeps an app's blob, already checked (blobOf), and answers its hash.
-     * The same bytes give the same hash, kept once, by the app that first
-     * put them. Past an app's 16 MB, its oldest blobs that nothing names
-     * go; if those don't make room, the put is refused.
+     * The same bytes give the same hash and share storage, but count for
+     * each app that put them. Past an app's 16 MB, its oldest blobs that
+     * none of its devices name go if that makes room for the new one.
      */
     put(app: string, type: BlobType, bytes: Uint8Array): string {
       const hash = createHash("sha256").update(bytes).digest("hex");
       const at = now();
       const known = kept.get(hash);
-      if (known) {
-        known.namedAt = at;
+      const owner = known?.owners.get(app);
+      if (owner) {
+        owner.usedAt = at;
         return hash;
       }
-      let size = sizeOf(app) + bytes.length;
+      const own = [...kept].flatMap(([hash, blob]) => {
+        const owner = blob.owners.get(app);
+        return owner ? [{ hash, blob, usedAt: owner.usedAt }] : [];
+      });
+      let size = own.reduce(
+        (total, { blob }) => total + blob.bytes.length,
+        bytes.length,
+      );
       if (size > maxAppBlobBytes) {
-        const named = options.named();
-        const unnamed = [...kept]
-          .filter(([each, blob]) => blob.app === app && !named.has(each))
-          .sort(([, a], [, b]) => a.namedAt - b.namedAt);
-        for (const [each, blob] of unnamed) {
-          if (size <= maxAppBlobBytes) break;
-          kept.delete(each);
-          size -= blob.bytes.length;
-        }
-        if (size > maxAppBlobBytes) {
+        const named = options.named().get(app);
+        const unnamed = own.filter(({ hash }) => !named?.has(hash));
+        const reclaimable = unnamed.reduce(
+          (total, { blob }) => total + blob.bytes.length,
+          0,
+        );
+        if (size - reclaimable > maxAppBlobBytes) {
           throw new ActionError(
             "conflict",
-            "The core keeps 16 MB of an app's pictures, and its devices name them all",
+            "The core keeps 16 MB of an app's pictures, and its devices name too many to make room",
           );
         }
+        unnamed.sort((a, b) => a.usedAt - b.usedAt);
+        for (const { hash, blob } of unnamed) {
+          forget(hash, blob, app);
+          size -= blob.bytes.length;
+          if (size <= maxAppBlobBytes) break;
+        }
       }
-      kept.set(hash, { app, type, bytes, namedAt: at });
+      const blob = known ?? { type, bytes, owners: new Map<string, Owner>() };
+      blob.owners.set(app, { usedAt: at, wasNamed: false });
+      kept.set(hash, blob);
       return hash;
     },
 
@@ -102,7 +124,7 @@ export function createBlobs(options: {
     /** An app was removed: what it put goes with it. */
     removeApp(app: string) {
       for (const [hash, blob] of kept) {
-        if (blob.app === app) kept.delete(hash);
+        forget(hash, blob, app);
       }
     },
 
@@ -135,17 +157,21 @@ export function createBlobs(options: {
  * `media.artwork`.
  */
 export function namedArtwork(db: CoreDatabase) {
-  return (): ReadonlySet<string> => {
-    const named = new Set<string>();
+  return () => {
+    const named = new Map<string, Set<string>>();
     const rows = db
-      .select({ observed: deviceCapabilities.observed })
+      .select({ driver: devices.driver, observed: deviceCapabilities.observed })
       .from(deviceCapabilities)
+      .innerJoin(devices, eq(devices.id, deviceCapabilities.deviceId))
       .where(eq(deviceCapabilities.kind, "media"))
       .all();
-    for (const { observed } of rows) {
+    for (const { driver, observed } of rows) {
       const artwork = (observed as { media?: { artwork?: unknown } } | null)
         ?.media?.artwork;
-      if (typeof artwork === "string") named.add(artwork);
+      if (typeof artwork !== "string") continue;
+      const hashes = named.get(driver) ?? new Set<string>();
+      hashes.add(artwork);
+      named.set(driver, hashes);
     }
     return named;
   };

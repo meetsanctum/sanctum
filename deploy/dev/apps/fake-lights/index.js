@@ -4,7 +4,7 @@ import {
   media as mediaKind,
   switchCapability,
 } from "@meetsanctum/app-sdk";
-import { deflateSync } from "node:zlib";
+import { crc32, deflateSync } from "node:zlib";
 
 // Pretend lights, contact sensors and media players for a development
 // stack, since a Mac has no Zigbee stick: a driver app like Zigbee, whose
@@ -98,20 +98,27 @@ const players = new Map([
 // A player says what it plays with a picture of it, as a driver hands one
 // over: the TV box draws one for each episode, in a colour of its own, so
 // the detail's picture and the veil's colour change as it skips.
-async function reportPlayer(ctx, key) {
+async function reportPlayer(ctx, key, refreshArtwork = false) {
   const player = players.get(key);
-  const { media } = player.state;
-  if (media?.episode !== undefined) {
+  const state = player.state;
+  const { media } = state;
+  if (
+    media?.episode !== undefined &&
+    (refreshArtwork || !media.artwork) &&
+    ctx.actor.kind !== "assistant-run"
+  ) {
     const { hash } = await ctx.blobs.put({
       type: "image/png",
       data: episodePicture(media.episode),
     });
-    player.state = { ...player.state, media: { ...media, artwork: hash } };
+    state.media = { ...media, artwork: hash };
   }
+  // Another command may have reported a newer state while the upload ran.
+  if (player.state !== state) return;
   await ctx.devices.report({
     key,
     availability: "online",
-    states: { player: player.state },
+    states: { player: state },
   });
 }
 
@@ -164,17 +171,6 @@ function rgbOf(hue, saturation, lightness) {
   return [f(0), f(8), f(4)].map((each) => Math.round(each * 255));
 }
 
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
 // What a player does with a command: set what it asked for, seek or change
 // episodes, step the volume by 5, or go idle once it stops or turns off.
 function play(player, command) {
@@ -191,7 +187,9 @@ function play(player, command) {
     ["next", "previous"].includes(command.playback)
   ) {
     const step = command.playback === "next" ? 1 : -1;
-    media.episode = Math.max(1, Math.min(100_000, media.episode + step));
+    const episode = Math.max(1, Math.min(100_000, media.episode + step));
+    if (episode !== media.episode) delete media.artwork;
+    media.episode = episode;
     media.position = 0;
   }
   if ("volumeStep" in command && state.volume !== undefined) {
@@ -437,7 +435,7 @@ export default defineApp({
         type,
         capabilities: [{ id: "player", kind: "media", features }],
       });
-      await reportPlayer(ctx, key);
+      await reportPlayer(ctx, key, true);
     }
     const previouslyAdded = new Set(
       (await ctx.devices.list())

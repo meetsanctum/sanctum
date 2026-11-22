@@ -94,7 +94,7 @@ export function createAppHost(options: {
   // Apps' own secrets, sealed by the core.
   secrets: AppSecrets;
   // The pictures drivers hand over, in the core's memory.
-  blobs?: Blobs;
+  blobs: Blobs;
   // What the manager found on the home's network (discovery/sightings.ts).
   sightings?: () => readonly Sighting[];
   grants: AppGrants;
@@ -172,6 +172,7 @@ export function createAppHost(options: {
     ...options,
     entities: options.entities,
     now,
+    isInstalled: (entry) => installed.get(entry.app.id) === entry,
     isOff: (appId) => installed.get(appId)?.off === true,
   });
   const { settingsOf, contextFor, deliver } = contexts;
@@ -449,6 +450,7 @@ export function createAppHost(options: {
       }
       installed.delete(appId);
       kept.delete(appId);
+      options.blobs.removeApp(appId);
       const ended = entry && supervisor.end(entry);
       // Before it yields, so an app installed again waits for its release.
       const release = entry && appServices.removing(appId, entry.services);

@@ -1,8 +1,12 @@
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { z } from "zod";
 
-import type { AppBlob, BlobOnTheWire, PutBlob } from "./blobs.js";
-
+import {
+  maxBlobBytes,
+  type AppBlob,
+  type BlobOnTheWire,
+  type PutBlob,
+} from "./blobs.js";
 import type {
   CoreEventHandler,
   CoreEventHandlers,
@@ -519,8 +523,15 @@ export function createAppContext(options: {
       delete: (name) => core.removeSecret(name),
     },
     blobs: {
-      put: ({ type, data }) =>
-        core.putBlob({ type, data: Buffer.from(data).toString("base64") }),
+      async put({ type, data }) {
+        if (data.byteLength > maxBlobBytes) {
+          throw new Error("A blob cannot exceed 700 KB");
+        }
+        return core.putBlob({
+          type,
+          data: Buffer.from(data).toString("base64"),
+        });
+      },
     },
     log: (message) => core.log(message),
   };

@@ -60,7 +60,8 @@ export function createAppContexts(options: {
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
-  blobs?: Blobs;
+  blobs: Blobs;
+  isInstalled: (entry: InstalledApp) => boolean;
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
   now: () => Date;
@@ -209,7 +210,7 @@ export function createAppContexts(options: {
       watch: (permission) => entry.requests.watch(permission),
       pairing: options.pairing,
       secrets: options.secrets,
-      blobs: options.blobs,
+      blobs: () => (options.isInstalled(entry) ? options.blobs : undefined),
       agents: options.agents,
       log: (text) => log(`${appId}: ${text}`),
     });

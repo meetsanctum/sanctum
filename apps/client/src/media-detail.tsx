@@ -116,7 +116,8 @@ function Artwork(props: {
   url?: string | null;
 }) {
   const [ratio, setRatio] = useState<number | null>(null);
-  if (props.url && !props.nothing) {
+  const [failed, setFailed] = useState(false);
+  if (props.url && !props.nothing && !failed) {
     // The player's own picture in its own shape: as wide as the page beside
     // it allows, 300 px, or 264 px tall where it's taller than that.
     const shape = ratio ?? (props.square ? 1 : 16 / 9);
@@ -124,6 +125,7 @@ function Artwork(props: {
       <img
         src={props.url}
         alt=""
+        onError={() => setFailed(true)}
         onLoad={(event) => {
           const { naturalWidth, naturalHeight } = event.currentTarget;
           if (naturalWidth > 0 && naturalHeight > 0) {
@@ -376,7 +378,12 @@ export function MediaPlaying(props: Props) {
           </div>
         </div>
         <div className="order-first grid place-items-center self-stretch @min-[560px]:order-none">
-          <Artwork square={square} nothing={nothing} url={props.artwork} />
+          <Artwork
+            key={props.artwork}
+            square={square}
+            nothing={nothing}
+            url={props.artwork}
+          />
         </div>
       </div>
     </div>

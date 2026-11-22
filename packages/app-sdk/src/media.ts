@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { blobHashPattern } from "./blobs.js";
+
 import type { CapabilityDefinition } from "./devices.js";
 
 // A media player: a TV box, a speaker that plays, a smart speaker. Whatever
@@ -66,7 +68,7 @@ const mediaInfo = z.strictObject({
   // A picture of what is playing, as the core keeps it, by its SHA-256.
   artwork: z
     .string()
-    .regex(/^[0-9a-f]{64}$/, "a picture's SHA-256 in hex")
+    .regex(blobHashPattern, "a picture's SHA-256 in hex")
     .optional(),
 });
 

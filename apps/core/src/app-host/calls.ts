@@ -183,7 +183,7 @@ export function createCoreCalls(options: {
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
   // The pictures drivers hand over (blobs/blobs.ts).
-  blobs?: Blobs;
+  blobs?: () => Blobs | undefined;
   // What AI agents can use, which an AI agent's call holds to.
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
@@ -556,11 +556,12 @@ export function createCoreCalls(options: {
     async putBlob(blob) {
       need(registerPermission);
       notForAgents();
+      const blobs = options.blobs?.();
       const kept = blobOf(blob);
-      if (!kept || !options.blobs) {
+      if (!kept || !blobs) {
         throw new Error(`${appId} handed over a blob the core cannot keep`);
       }
-      return { hash: options.blobs.put(appId, kept.type, kept.bytes) };
+      return { hash: blobs.put(appId, kept.type, kept.bytes) };
     },
 
     log: options.log,

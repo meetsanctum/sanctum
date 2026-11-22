@@ -71,6 +71,9 @@ describe("the client's files", () => {
     expect(contentSecurityPolicy(false)).toContain("connect-src https: wss:;");
     // The fonts ship with the page: no public host is allowed.
     expect(contentSecurityPolicy(false)).toContain("font-src 'self';");
+    expect(contentSecurityPolicy(false)).toContain(
+      "img-src 'self' data: blob:;",
+    );
     expect(contentSecurityPolicy(false)).not.toMatch(/google|gstatic/);
     expect(contentSecurityPolicy(true)).toContain(
       "connect-src https: wss: http: ws:;",

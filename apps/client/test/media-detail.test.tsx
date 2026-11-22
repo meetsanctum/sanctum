@@ -42,7 +42,12 @@ afterEach(async () => {
 
 type Page = typeof MediaPlaying;
 
-async function render(Page: Page, device: DeviceInfo, disabled = false) {
+async function render(
+  Page: Page,
+  device: DeviceInfo,
+  disabled = false,
+  artwork?: string,
+) {
   await act(async () => {
     root.render(
       <Page
@@ -50,6 +55,7 @@ async function render(Page: Page, device: DeviceInfo, disabled = false) {
         device={device}
         capability={device.capabilities[0] as Media}
         disabled={disabled}
+        artwork={artwork}
         onCommand={(command) => sent.push(command)}
       />,
     );
@@ -83,6 +89,35 @@ async function press(label: string) {
 }
 
 describe("Playing", () => {
+  it("falls back after an image error and sizes each replacement independently", async () => {
+    const device = mediaPlayer("box", "Living Room TV", "office", {
+      on: true,
+      activity: "paused",
+      media: show,
+    });
+    const image = () => container.querySelector("img");
+    await render(MediaPlaying, device, false, "blob:portrait");
+    const portrait = image()!;
+    Object.defineProperties(portrait, {
+      naturalWidth: { value: 100 },
+      naturalHeight: { value: 200 },
+    });
+    await act(async () => portrait.dispatchEvent(new Event("load")));
+    expect(portrait.style.getPropertyValue("--artwork-width")).toBe(
+      "min(300px, 132px)",
+    );
+
+    await render(MediaPlaying, device, false, "blob:broken");
+    expect(image()!.style.getPropertyValue("--artwork-width")).toBe(
+      "min(300px, 469px)",
+    );
+    await act(async () => image()!.dispatchEvent(new Event("error")));
+    expect(image()).toBeNull();
+
+    await render(MediaPlaying, device, false, "blob:replacement");
+    expect(image()!.getAttribute("src")).toBe("blob:replacement");
+  });
+
   it("shows what plays, where it is, and pauses it", async () => {
     await render(
       MediaPlaying,

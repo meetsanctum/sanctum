@@ -40,14 +40,14 @@ describe("a picture's colour on the veil", () => {
 
   it("averages in linear light, and leaves out what is see-through", () => {
     const half = new Uint8ClampedArray([
-      ...[255, 255, 255, 255],
+      ...[90, 90, 90, 255],
       ...[0, 0, 0, 255],
       ...[0, 255, 0, 0],
     ]);
-    // Half white and half black is lighter than mid grey in linear light,
-    // and the transparent green counts for nothing.
+    // These two greys average to a lighter grey in linear light. Averaging
+    // the encoded channels would hit the lower lightness limit instead.
     const [lightness, chroma] = parts(artworkColour(half));
-    expect(lightness).toBe(0.45);
+    expect(lightness).toBeCloseTo(0.371, 2);
     expect(chroma).toBeLessThan(0.001);
     expect(artworkColour(filled([10, 200, 30, 0]))).toBeNull();
   });

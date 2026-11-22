@@ -30,12 +30,62 @@ test("brings its lights and contact sensors as what they are", () => {
 
 test("reports a new episode when the TV box skips forwards or backwards", async () => {
   assert.equal(typeOf("tv-box"), "media-player");
-  const episode = core.latest("tv-box", "player").media.episode;
+  const { episode, artwork } = core.latest("tv-box", "player").media;
+  assert.equal(core.blobs.get(artwork)?.type, "image/png");
   await core.command("tv-box", "player", "media", { playback: "next" });
   assert.equal(core.latest("tv-box", "player").media.episode, episode + 1);
   assert.equal(core.latest("tv-box", "player").media.position, 0);
+  assert.notEqual(core.latest("tv-box", "player").media.artwork, artwork);
   await core.command("tv-box", "player", "media", { playback: "previous" });
   assert.equal(core.latest("tv-box", "player").media.episode, episode);
+  assert.equal(core.latest("tv-box", "player").media.artwork, artwork);
+});
+
+test("reports the next episode when the actor cannot upload artwork", async () => {
+  const { episode } = core.latest("tv-box", "player").media;
+  const reports = [];
+  await app.driver.command(
+    {
+      actor: { kind: "assistant-run", id: "agent", onBehalfOf: "resident" },
+      devices: { report: async (report) => reports.push(report) },
+      blobs: { put: async () => assert.fail("an agent cannot put artwork") },
+    },
+    {
+      key: "tv-box",
+      kind: "media",
+      command: { playback: "next" },
+    },
+  );
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].states.player.media.episode, episode + 1);
+  assert.equal(reports[0].states.player.media.artwork, undefined);
+});
+
+test("a slow artwork upload cannot report an episode that was skipped", async () => {
+  const reports = [];
+  const slow = Promise.withResolvers();
+  const command = {
+    key: "tv-box",
+    kind: "media",
+    command: { playback: "next" },
+  };
+  const context = {
+    actor: { kind: "user", id: "resident" },
+    devices: { report: async (report) => reports.push(report) },
+    blobs: { put: () => slow.promise },
+  };
+  const first = app.driver.command(context, command);
+  const next = "a".repeat(64);
+  await app.driver.command(
+    { ...context, blobs: { put: async () => ({ hash: next }) } },
+    command,
+  );
+  slow.resolve({ hash: "b".repeat(64) });
+  await first;
+  assert.deepEqual(
+    reports.map(({ states }) => states.player.media.artwork),
+    [next],
+  );
 });
 
 test("lists what it found as what each is", () => {

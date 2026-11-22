@@ -566,8 +566,6 @@ export async function createModules(
     workflows: () => workflows.forApps,
     activity,
     entities,
-    // What a removed app handed over goes with it.
-    onRemoved: (appId) => blobs.removeApp(appId),
     now,
     log,
   });

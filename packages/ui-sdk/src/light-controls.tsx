@@ -34,6 +34,8 @@ export function LightControls(props: {
   pages?: readonly SwipePage[];
   /** The page it opens on, by its id: the first unless said. */
   initial?: string;
+  /** The page on show, including when it first opens. */
+  onPageChange?: (id: string) => void;
 }) {
   const { name, features, state, failures } = props;
   const disabled = props.disabled ?? false;
@@ -101,7 +103,12 @@ export function LightControls(props: {
 
   return (
     <div ref={box} className="flex min-h-0 flex-1 flex-col">
-      <SwipePages label={name} pages={pages} initial={props.initial} />
+      <SwipePages
+        label={name}
+        pages={pages}
+        initial={props.initial}
+        onPageChange={props.onPageChange}
+      />
     </div>
   );
 }

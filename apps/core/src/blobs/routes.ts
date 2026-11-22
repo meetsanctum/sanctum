@@ -20,10 +20,16 @@ export function registerBlobRoutes(
       options.gate.admit(request.principal!, { tier: "read" });
       const { hash } = request.params;
       const blob = blobHashPattern.test(hash) ? options.blobs.get(hash) : null;
-      if (!blob) throw new ActionCallError("not_found");
+      if (!blob) {
+        // The driver may upload these bytes again.
+        reply.header("cache-control", "no-store");
+        throw new ActionCallError("not_found");
+      }
+      const vary = reply.getHeader("vary");
       return reply
         .header("content-type", blob.type)
         .header("cache-control", "private, max-age=31536000, immutable")
+        .header("vary", vary ? `${vary}, Authorization` : "Authorization")
         .header("x-content-type-options", "nosniff")
         .send(Buffer.from(blob.bytes));
     },

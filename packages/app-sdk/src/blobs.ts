@@ -61,11 +61,13 @@ export function blobOf(
   if (typeof blob !== "object" || blob === null) return null;
   const { type, data } = blob as Record<string, unknown>;
   if (!blobTypes.includes(type as BlobType)) return null;
-  if (typeof data !== "string" || data.length === 0 || !base64.test(data)) {
+  if (
+    typeof data !== "string" ||
+    data.length === 0 ||
+    data.length > Math.ceil(maxBlobBytes / 3) * 4 ||
+    !base64.test(data)
+  )
     return null;
-  }
-  // Before decoding, so an oversized blob costs nothing.
-  if ((data.length / 4) * 3 > maxBlobBytes + 2) return null;
   const bytes = Uint8Array.from(Buffer.from(data, "base64"));
   if (bytes.length === 0 || bytes.length > maxBlobBytes) return null;
   return startsAs[type as BlobType](bytes)

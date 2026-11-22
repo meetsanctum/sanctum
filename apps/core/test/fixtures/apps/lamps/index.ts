@@ -112,6 +112,7 @@ class Radio {
   confirms = true;
   started = 0;
   stopped = 0;
+  onStop?: (ctx: AppContext) => Promise<void>;
   // Until when gadgets may join, and every time the core opened or closed
   // the radio for them, with the actor behind it.
   openUntil: Date | null = null;
@@ -498,6 +499,7 @@ class Radio {
     this.confirms = true;
     this.started = 0;
     this.stopped = 0;
+    this.onStop = undefined;
     this.openUntil = null;
     this.pairing.length = 0;
     this.windowMs = undefined;
@@ -705,8 +707,12 @@ export default defineApp({
   async start(ctx) {
     await radio.attach(ctx);
   },
-  async stop() {
-    radio.detach();
+  async stop(ctx) {
+    try {
+      await radio.onStop?.(ctx);
+    } finally {
+      radio.detach();
+    }
   },
   driver: {
     async command(ctx, command) {

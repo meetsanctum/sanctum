@@ -55,12 +55,12 @@ function VeilTint(props: { tint: string | null }) {
   const [layers, setLayers] = useState<{ id: number; colour: string }[]>([]);
   const counter = useRef(0);
   useEffect(() => {
+    const id = ++counter.current;
     setLayers((current) => {
       if ((current.at(-1)?.colour ?? null) === props.tint) return current;
       const kept = current.slice(-1);
       if (props.tint === null) return kept.length > 0 ? kept : current;
-      counter.current += 1;
-      return [...kept, { id: counter.current, colour: props.tint }];
+      return [...kept, { id, colour: props.tint }];
     });
     const timer = setTimeout(
       () =>

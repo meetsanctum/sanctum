@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   ActionError,
   blobOf,
+  type BlobType,
   capabilityOf,
   createAppContext,
   deviceFirmware,
@@ -110,7 +111,7 @@ export function createDriverCore(
   const presented: string[][] = [];
   const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
   // The blobs the driver handed over, by their hash.
-  const blobs = new Map<string, { type: string; bytes: Uint8Array }>();
+  const blobs = new Map<string, { type: BlobType; bytes: Uint8Array }>();
   // What the driver says is wrong with each of its devices, as the core
   // shows it.
   const problems = new Map<string, DeviceProblem>();
@@ -416,7 +417,7 @@ export function createDriverCore(
       });
     },
     ...secretCalls,
-    // Keeps a driver's blobs as the core does, refusing what it refuses.
+    // Checks the bytes and assigns the same hash as the core.
     async putBlob(blob) {
       const kept = blobOf(blob);
       if (!kept)

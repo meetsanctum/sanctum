@@ -10,6 +10,7 @@ beforeEach(async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
   reports = [];
   context = {
+    actor: { kind: "app", id: app.id },
     devices: {
       list: async () => [],
       register: async ({ key }) => ({ id: key }),
