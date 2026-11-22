@@ -105,7 +105,8 @@ function haltOf(error: unknown, hasKey: boolean): Halt | null {
  * it: the session, or the halt it calls for, or the error when it can't be
  * used now. A device with another MAC is dropped before anything is asked of
  * it, as is one that answers without encryption under a key, which halts
- * with what it said of itself in the clear.
+ * with what it said of itself in the clear. A provisioning probe can hold
+ * that clear session while it decides whether the firmware needs a setup key.
  */
 export async function connectOnce(options: {
   mac: string;
@@ -113,8 +114,11 @@ export async function connectOnce(options: {
   address: Address;
   timings: Timings;
   signal?: AbortSignal;
+  keepClearSession?: boolean;
 }): Promise<
-  { session: Session } | { halt: Halt; clear?: DeviceInfo } | { error: unknown }
+  | { session: Session }
+  | { halt: Halt; clear?: DeviceInfo; clearSession?: Session }
+  | { error: unknown }
 > {
   const { mac, key, address, timings } = options;
   let checked = false;
@@ -155,7 +159,7 @@ export async function connectOnce(options: {
   }
   // The library falls back to no encryption when a device answers without
   // it, which a device with a key never does.
-  if (key !== null && !encrypted) {
+  if (key !== null && !encrypted && !options.keepClearSession) {
     client.disconnect();
     return { halt: "keyMismatch", clear: info };
   }
@@ -165,19 +169,20 @@ export async function connectOnce(options: {
   for (const event of client.snapshot().values()) {
     if (event.type !== "event") held.push(event);
   }
-  return {
-    session: {
-      client,
-      info,
-      entities: client.entitiesByDevice(undefined),
-      encrypted,
-      address,
-      listen(next) {
-        listener = next;
-        for (const event of held.splice(0)) next(event);
-      },
+  const session: Session = {
+    client,
+    info,
+    entities: client.entitiesByDevice(undefined),
+    encrypted,
+    address,
+    listen(next) {
+      listener = next;
+      for (const event of held.splice(0)) next(event);
     },
   };
+  return key !== null && !encrypted
+    ? { halt: "keyMismatch", clear: info, clearSession: session }
+    : { session };
 }
 
 /** A device's connection, as long as Sanctum has the device. */
@@ -191,6 +196,7 @@ export function createConnection(options: {
   const { mac, timings, events } = options;
   let session: Session | null = null;
   let stopped = false;
+  let paused = false;
   let halted = false;
   let attempt: Promise<void> | null = null;
   let connecting: AbortController | null = null;
@@ -218,7 +224,7 @@ export function createConnection(options: {
   }
 
   function later() {
-    if (stopped || halted || retry) return;
+    if (stopped || paused || halted || retry) return;
     retry = setTimeout(() => {
       retry = undefined;
       start();
@@ -270,7 +276,7 @@ export function createConnection(options: {
   }
 
   function start() {
-    if (stopped || halted || session || attempt) return;
+    if (stopped || paused || halted || session || attempt) return;
     const address = options.address();
     if (!address) {
       // Not announced: it's tried again once it is.
@@ -319,6 +325,16 @@ export function createConnection(options: {
       });
   }
 
+  function reset() {
+    generation += 1;
+    connecting?.abort();
+    const old = session;
+    session = null;
+    old?.client.disconnect();
+    clearTimeout(retry);
+    retry = undefined;
+  }
+
   return {
     /** The checked connection, while there is one. */
     get session() {
@@ -352,28 +368,23 @@ export function createConnection(options: {
       pause = timings.firstPauseMs;
       start();
     },
+    /** Releases the device's connection slot during an explicit key change. */
+    pause() {
+      paused = true;
+      reset();
+    },
     /** Its key changed, as after Repair: the old connection goes, and it connects again. */
     renew() {
+      paused = false;
       halted = false;
-      generation += 1;
-      connecting?.abort();
-      const old = session;
-      session = null;
-      old?.client.disconnect();
-      clearTimeout(retry);
-      retry = undefined;
+      reset();
       pause = timings.firstPauseMs;
       start();
     },
     stop() {
       stopped = true;
-      generation += 1;
-      connecting?.abort();
-      clearTimeout(retry);
+      reset();
       clearTimeout(gone);
-      const old = session;
-      session = null;
-      old?.client.disconnect();
     },
   };
 }

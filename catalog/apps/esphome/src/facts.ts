@@ -14,6 +14,8 @@ export type DeviceFacts = {
   signal: number | null;
   unused: string[];
   sleeps: boolean;
+  /** How its first key from Sanctum reached it, where that's worth saying. */
+  firstKey: "setup" | null;
 };
 
 export function createFacts(db: SqliteRemoteDatabase) {

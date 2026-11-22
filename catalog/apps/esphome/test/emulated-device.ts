@@ -31,8 +31,21 @@ export type EmulatedOptions = {
   mac: string;
   /** Its encryption key, in base64, or null for a device built without one. */
   psk: string | null;
+  /** How many API connections the firmware accepts at once. */
+  maxConnections?: number;
   /** Built to be given its key later: with no key, it waits for one. */
   waiting?: boolean;
+  /**
+   * Firmware from before ESPHome 2026.7 built with encryption: with no key
+   * it can't wait for one, so it greets only in the clear and takes a first
+   * key that way, its record saying it supports encryption and no more.
+   */
+  older?: boolean;
+  /**
+   * Whether an empty key clears its own, as from ESPHome 2025.11; true
+   * unless said.
+   */
+  clears?: boolean;
   /**
    * Its record says what held as it last booted, as ESPHome writes it once:
    * a key given or taken off since doesn't change it until it restarts.
@@ -169,6 +182,12 @@ export class EmulatedDevice {
   partsWithoutReason = false;
   /** It takes the next key it's sent, or has its own cleared, but its answer is lost. */
   losesNextAnswer = false;
+  /** It takes the key it's sent as this one in all (1 for the first), its answer lost. */
+  losesAnswerToKey = 0;
+  /** It refuses every key it's sent, as when it can't store one. */
+  refusesKeys = false;
+  /** How many sessions it greeted in the clear. */
+  plainGreetings = 0;
   /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
   readonly keysSent: { key: string; encrypted: boolean }[] = [];
   // What held as it last booted, for a record kept from then.
@@ -240,6 +259,8 @@ export class EmulatedDevice {
     else if (waiting) {
       txt.api_encryption_supported = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
       txt.api_provisioning = "zero_psk";
+    } else if (this.options.older) {
+      txt.api_encryption_supported = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
     }
     return {
       service: "_esphomelib._tcp",
@@ -301,6 +322,10 @@ export class EmulatedDevice {
     this.connections += 1;
     socket.on("close", () => this.sockets.delete(socket));
     socket.on("error", () => undefined);
+    if (this.sockets.size > (this.options.maxConnections ?? Infinity)) {
+      socket.destroy();
+      return;
+    }
     if (this.closesNext > 0) {
       this.closesNext -= 1;
       socket.destroy();
@@ -469,18 +494,23 @@ export class EmulatedDevice {
       // A window that closed since its greeting refuses the key too, as
       // the firmware checks it again here.
       const valid =
+        !this.refusesKeys &&
         !(this.waiting && this.windowClosed) &&
-        (text === "" ||
+        ((text === "" && this.options.clears !== false) ||
           (/^[A-Za-z0-9+/]{43}=$/.test(text) &&
             key.length === 32 &&
             key.some(Boolean)));
       const apply = () => {
-        // An empty key clears its own, so it waits for one again.
+        // An empty key clears its own, so it waits for one again, or older
+        // firmware greets in the clear again.
         this.psk = text === "" ? null : text;
-        this.waiting = this.psk === null;
+        this.waiting = this.psk === null && this.options.older !== true;
         for (const each of this.sockets) each.destroy();
       };
-      if (this.losesNextAnswer) {
+      if (
+        this.losesNextAnswer ||
+        this.losesAnswerToKey === this.keysSent.length
+      ) {
         this.losesNextAnswer = false;
         if (valid) apply();
         else socket.destroy();
@@ -491,6 +521,7 @@ export class EmulatedDevice {
       if (valid) setTimeout(apply, 10);
     } else if (type === message.helloRequest) {
       this.greeted += 1;
+      if (!encrypted) this.plainGreetings += 1;
       if (this.closesWindowAfterHello) {
         this.closesWindowAfterHello = false;
         this.windowClosed = true;
@@ -518,7 +549,10 @@ export class EmulatedDevice {
           ...(this.options.friendlyName
             ? [text(13, this.options.friendlyName)]
             : []),
-          flag(19, this.psk !== null || this.waiting),
+          flag(
+            19,
+            this.psk !== null || this.waiting || this.options.older === true,
+          ),
           // Whether it can be given a key under the zero key, as firmware from
           // 2026.7 says.
           ...(this.waiting ? [flag(26, true)] : []),

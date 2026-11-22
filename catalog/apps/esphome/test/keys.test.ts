@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { connectOnce } from "../src/connection.js";
-import { secretOf } from "../src/driver.js";
-import { givenOf, zeroKey } from "../src/keys.js";
+import { givenOf, secretOf, zeroKey } from "../src/keys.js";
 import { newKey } from "./emulated-device.js";
 import { add, announce, keyOf, startHome, timings } from "./support.js";
 
@@ -242,6 +241,34 @@ describe("removing a device", () => {
     await announce(home.core, device);
     expect(home.core.found.map((each) => each.key)).toEqual([key]);
     expect(home.core.problems.has(key)).toBe(false);
+  });
+
+  it("is listed by who made it again, though it announced itself anew since it was added", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = await add(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online",
+    );
+    // Restarted with its key, its record is new, and what was learned as it
+    // was added goes with the old one.
+    const greeted = device.greeted;
+    device.reboot();
+    await announce(home.core, device);
+    await home.core.until(
+      () => device.greeted > greeted && device.activeConnections > 0,
+      "connected again",
+    );
+
+    await home.core.remove(key);
+    await home.core.until(() => device.waiting, "its key applied");
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "Espressif",
+      "listed by who made it",
+    );
   });
 
   it.each([false, true])(

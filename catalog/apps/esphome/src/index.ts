@@ -14,8 +14,10 @@ import { esphomeService } from "./sightings.js";
 // each device. The manager finds them on mDNS and lets the app reach the
 // devices it found, on the API's port, and nothing else. A device with an
 // encryption key is added with it, and never talked to without it; one
-// waiting for a key gets one of its own, which removing it takes off. Its
-// UI, a page in each of its devices' detail, is in ./ui.
+// waiting for a key gets one of its own, and older firmware that takes a
+// first key only in the clear gets a setup key that way, then its own
+// encrypted. Removing a device takes a key Sanctum gave off it. Its UI, a
+// page in each of its devices' detail, is in ./ui.
 
 export type { DriverOptions } from "./driver.js";
 
@@ -36,7 +38,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // 0.2.0: a device waiting for a key gets one of its own, and removing
     // it takes the key off. 0.3.1: a device's maker and product come from
     // its project's name, and one waiting for a key is listed by its maker.
-    version: "0.4.2",
+    // 0.5.0: older firmware gets a setup key, then its own; a device left
+    // without encryption, or that lost the key it was given, is repaired.
+    version: "0.5.0",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
@@ -117,6 +121,20 @@ export function createEsphomeApp(options: DriverOptions = {}) {
           repair: {
             help: "It was flashed with a configuration that has one. Enter the key from that configuration, under api: encryption: key.",
             asks: ["key"],
+          },
+        },
+        notEncrypted: {
+          words: "It isn't encrypted",
+          repair: {
+            help: "Give it a setup key without encryption, then its own key encrypted.",
+            asks: [],
+          },
+        },
+        keyLost: {
+          words: "It lost its key, as when it's reset",
+          repair: {
+            help: "Give it a new key, as when it was added.",
+            asks: [],
           },
         },
       },

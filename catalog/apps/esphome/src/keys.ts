@@ -1,4 +1,5 @@
 import { ConnectionClosedByPeerError } from "esphome-client";
+import type { DeviceInfo } from "esphome-client";
 import { randomBytes } from "node:crypto";
 
 import {
@@ -7,20 +8,35 @@ import {
   type Session,
   type Timings,
 } from "./connection.js";
+import { beforeProvisioning, type Announced } from "./sightings.js";
 
 // Keys Sanctum gives. A device built to be given its key later waits for
 // one, taking connections encrypted with a key of all zeros: that keeps
 // listeners out, though it authenticates nobody. Sanctum gives it 32 random
-// bytes of its own over such a connection, never in the clear, keeping the
-// key before sending it, and only once the device is back under that key,
-// which only it can pass, is its MAC trusted. Removing the device takes the
-// key off again. A key a device was flashed with is never touched.
+// bytes of its own over such a connection, keeping the key before sending
+// it, and adds the device once it's back under that key. Firmware from
+// before ESPHome 2026.7 can't wait for a key: it takes a first one only in
+// the clear, so it gets a throwaway setup key that way, then at once its own
+// over the connection the setup key encrypts, so its own key never crosses
+// the network in the clear. Nothing here proves a device is the household's:
+// a MAC, or coming back under a key just sent, says only that whoever
+// answers holds that key. Removing the device takes the key off again. A
+// key a device was flashed with is never touched.
 
 /** The key a device waiting for one takes connections under. */
 export const zeroKey = Buffer.alloc(32).toString("base64");
 
-/** The name of the secret that says a device's key is one Sanctum gave. */
+/** A device's key's name among the app's secrets. */
+export const secretOf = (mac: string) => `key:${mac}`;
+
+/** The marker for a key Sanctum gave and whether it used a setup key. */
 export const givenOf = (mac: string) => `given:${mac}`;
+
+/**
+ * The name of the secret that holds the setup key sent to older firmware in
+ * the clear, kept only until the device has its own.
+ */
+export const setupOf = (mac: string) => `setup:${mac}`;
 
 /** A key of a device's own, as ESPHome's dashboard makes one. */
 export const newKey = () => randomBytes(32).toString("base64");
@@ -44,12 +60,44 @@ function stoppedWaiting(error: unknown) {
  * answers only in the clear, with what it says of itself there; or nothing
  * that can be acted on, as when it's busy, restarting or out of reach.
  */
-export type Answer =
+type ProbeAnswer =
   | { says: "waits"; info: Session["info"]; session?: Session }
-  | { says: "key" }
+  | { says: "key"; tookZeroKey?: true }
   | { says: "closed" }
-  | { says: "clear"; info: Session["info"] }
+  | { says: "clear"; info: Session["info"]; session?: Session }
   | { says: "unclear" };
+
+export type Answer = ProbeAnswer | { says: "older"; session?: Session };
+
+function reportsOlderFirmware(info: DeviceInfo) {
+  return (
+    info.apiEncryptionSupported === true &&
+    info.apiEncryptionProvisionable !== true &&
+    beforeProvisioning(info.esphomeVersion) === true
+  );
+}
+
+/**
+ * Whether a device is firmware from before ESPHome 2026.7 that takes a
+ * first key only in the clear, every sign agreeing: its record says it
+ * supports encryption with no way to wait for a key, and in the clear it
+ * says the same, with a version from before 2026.7. A device that ever took
+ * the zero key, or said it could, never is. Anything less is taken as a
+ * device too busy to say, as a 2026.7 device with its connections full is
+ * answered in the clear too: then nothing is sent.
+ */
+export function isOlderFirmware(
+  record: Announced,
+  info: DeviceInfo,
+  tookZeroKey: boolean,
+) {
+  return (
+    record.encryption === "older" &&
+    !tookZeroKey &&
+    reportsOlderFirmware(info) &&
+    beforeProvisioning(record.version) !== false
+  );
+}
 
 /**
  * Asks a device what it says of its key, over one connection under the zero
@@ -65,7 +113,8 @@ export async function askUnderZeroKey(reach: {
   timings: Timings;
   signal?: AbortSignal;
   keepSession?: boolean;
-}): Promise<Answer> {
+  keepClearSession?: boolean;
+}): Promise<ProbeAnswer> {
   const { keepSession, ...target } = reach;
   const result = await connectOnce({ ...target, key: zeroKey });
   if ("session" in result) {
@@ -73,7 +122,7 @@ export async function askUnderZeroKey(reach: {
     const { info } = session;
     if (info.apiEncryptionProvisionable !== true) {
       session.client.disconnect();
-      return { says: "key" };
+      return { says: "key", tookZeroKey: true };
     }
     if (keepSession) return { says: "waits", info, session };
     session.client.disconnect();
@@ -81,7 +130,7 @@ export async function askUnderZeroKey(reach: {
   }
   if ("halt" in result) {
     return result.clear
-      ? { says: "clear", info: result.clear }
+      ? { says: "clear", info: result.clear, session: result.clearSession }
       : { says: "key" };
   }
   return stoppedWaiting(result.error)
@@ -98,9 +147,13 @@ function addressOf(reach: Reach) {
 }
 
 // Connects with a key until the device takes it, as it does once it has
-// applied a key it was given, which ends its connections.
+// applied a key it was given, which ends its connections. Each try waits a
+// pause first: firmware switches the key on a moment after it answers, and
+// a try before then would be greeted in the clear, as the library falls
+// back to it when a device ends the encrypted greeting.
 async function backWith(reach: Reach, key: string) {
   for (let tries = 0; tries < 10; tries += 1) {
+    await new Promise((done) => setTimeout(done, reach.timings.firstPauseMs));
     const result = await connectOnce({
       mac: reach.mac,
       key,
@@ -108,15 +161,15 @@ async function backWith(reach: Reach, key: string) {
       timings: reach.timings,
     });
     if ("session" in result) return result.session;
-    await new Promise((done) => setTimeout(done, reach.timings.firstPauseMs));
   }
   throw new Error("It didn't come back with its key");
 }
 
 /**
- * Gives a device its key over the session that showed it was waiting for
- * one. `keep` saves the key first so a lost answer can be retried with it.
- * Returns a checked session under the new key.
+ * Gives a device a key over a session: its own over one under the zero key
+ * or under its setup key, or older firmware its setup key over one in the
+ * clear. `keep` saves the key first so a lost answer can be retried with
+ * it. Returns a checked session under the new key.
  */
 export async function giveKey(
   reach: Reach & {
@@ -143,31 +196,43 @@ export async function giveKey(
 
 /**
  * Takes the key Sanctum gave a device off it, over its session or one made
- * for it, so it waits for a key again. A device already waiting, as after an
- * answer that was lost, has it off already.
+ * for it, so it waits for a key again, or, as older firmware, greets in the
+ * clear again. A device already waiting, as after an answer that was lost,
+ * has it off already.
  */
 export async function takeKeyOff(
-  reach: Reach & { key: string; session: Session | null },
+  reach: Reach & { keys: readonly string[]; session: Session | null },
 ) {
   let session = reach.session;
   const own = !session;
-  if (!session) {
+  for (const key of reach.keys) {
+    if (session) break;
     const keyed = await connectOnce({
       mac: reach.mac,
-      key: reach.key,
+      key,
       address: addressOf(reach),
       timings: reach.timings,
     });
     if ("session" in keyed) session = keyed.session;
-    else {
-      const zero = await askUnderZeroKey({
-        mac: reach.mac,
-        address: addressOf(reach),
-        timings: reach.timings,
-      });
-      if (zero.says === "waits" || zero.says === "closed") return zero.says;
-      throw new Error("It isn't reachable");
-    }
+    // Clearing a key need not update the boot-time record.
+    else if (
+      "halt" in keyed &&
+      keyed.clear &&
+      reportsOlderFirmware(keyed.clear)
+    )
+      return "older";
+  }
+  if (!session) {
+    const zero = await askUnderZeroKey({
+      mac: reach.mac,
+      address: addressOf(reach),
+      timings: reach.timings,
+    });
+    if (zero.says === "waits" || zero.says === "closed") return zero.says;
+    // A successful clear need not update the boot-time record.
+    if (zero.says === "clear" && reportsOlderFirmware(zero.info))
+      return "older";
+    throw new Error("It isn't reachable");
   }
   try {
     const took = await session.client.setNoiseEncryptionKey("", {
@@ -177,5 +242,8 @@ export async function takeKeyOff(
   } finally {
     if (own) session.client.disconnect();
   }
-  return "waits";
+  // Firmware from 2026.7 waits for a key once its own is off.
+  return beforeProvisioning(session.info.esphomeVersion) === true
+    ? "older"
+    : "waits";
 }

@@ -18,4 +18,8 @@ export const deviceFacts = sqliteTable("device_facts", {
   unused: text("unused", { mode: "json" }).$type<string[]>().notNull(),
   // Whether it's built to sleep, so it's never offline while it does.
   sleeps: integer("sleeps", { mode: "boolean" }).notNull(),
+  // How the key Sanctum gave it reached it, as its last key was given:
+  // "setup" for older firmware, which took a setup key in the clear, then
+  // its own encrypted.
+  firstKey: text("first_key", { enum: ["setup"] }),
 });

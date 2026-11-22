@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "core": "^2.0.0",
   "protocol": 13,
   "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
@@ -36,6 +36,20 @@
           "asks": [
             "key"
           ]
+        }
+      },
+      "notEncrypted": {
+        "words": "It isn't encrypted",
+        "repair": {
+          "help": "Give it a setup key without encryption, then its own key encrypted.",
+          "asks": []
+        }
+      },
+      "keyLost": {
+        "words": "It lost its key, as when it's reset",
+        "repair": {
+          "help": "Give it a new key, as when it was added.",
+          "asks": []
         }
       }
     },
@@ -132,6 +146,19 @@
           },
           "sleeps": {
             "type": "boolean"
+          },
+          "firstKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "setup"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -140,7 +167,8 @@
           "version",
           "signal",
           "unused",
-          "sleeps"
+          "sleeps",
+          "firstKey"
         ],
         "additionalProperties": false
       },

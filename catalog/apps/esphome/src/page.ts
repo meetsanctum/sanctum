@@ -13,6 +13,7 @@ const deviceFacts = z.object({
   signal: z.number().nullable(),
   unused: z.array(z.string()),
   sleeps: z.boolean(),
+  firstKey: z.enum(["setup"]).nullable(),
 });
 
 export function deviceAction(

@@ -64,6 +64,7 @@ describe("ESPHome's device page", () => {
       signal: -58,
       unused: ["Display brightness", "Restart"],
       sleeps: false,
+      firstKey: null,
     });
 
     expect(rows()).toEqual([
@@ -77,6 +78,22 @@ describe("ESPHome's device page", () => {
     );
   });
 
+  it("says how older firmware got its first key", async () => {
+    await show({
+      address: "192.168.1.42:6053",
+      encrypted: true,
+      version: "2026.6.0",
+      signal: -60,
+      unused: [],
+      sleeps: false,
+      firstKey: "setup",
+    });
+
+    expect(host.textContent).toContain(
+      "Its firmware takes a first key only without encryption: it got a setup key that way, then its own key encrypted.",
+    );
+  });
+
   it("says in red when a device's connection isn't encrypted", async () => {
     await show({
       address: "192.168.1.41:6053",
@@ -85,6 +102,7 @@ describe("ESPHome's device page", () => {
       signal: -80,
       unused: [],
       sleeps: false,
+      firstKey: null,
     });
 
     const connection = [...host.querySelectorAll("dd")].find(
