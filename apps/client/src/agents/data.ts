@@ -5,13 +5,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
 
-// What Settings reads of AI agents: the agents themselves, which it asks
-// for again while a page is open, and the permissions everyone shares.
+// What Settings reads of AI agents: the agents themselves, and what they can
+// use, which every client may change. The agents page asks for the agents
+// every few seconds, so a new one shows and last-seen times move on; other
+// pages ask again on the shell's refresh.
 
 const agentsEvery = 5_000;
 const requestTimeoutMs = 10_000;
 
-/** Use the shell's refresh outside the agent list, which updates faster. */
+/**
+ * The home's AI agents, once the core has said: asked for every few seconds,
+ * or on the shell's refresh when given its live feed.
+ */
 export function useAgents(live?: LiveFeed) {
   const [agents, setAgents] = useState<AgentInfo[]>();
   const request = useRef(0);
