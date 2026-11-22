@@ -1,6 +1,14 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // What the connector keeps on this computer: one file per connection, and
 // each agent's token in the system's secure storage, or a file readable only
@@ -16,6 +24,9 @@ export type Connection = {
   /** The name the agent registered the server as, such as `sanctum-office`. */
   name: string;
   agent: AgentKind | null;
+  /** The command last registered with a known agent. */
+  registeredCommand?: string[];
+  tokenStorage?: TokenStore["kind"];
   homeId: string;
   /** The home's host CA; none for a development core on this computer. */
   anchor: { pin: string; caCertificate: string } | null;
@@ -40,12 +51,24 @@ function connectionPath(dir: string, clientId: string) {
 }
 
 export async function saveConnection(dir: string, connection: Connection) {
-  await mkdir(join(dir, "connections"), { recursive: true, mode: 0o700 });
-  await writeFile(
+  await writePrivateFile(
     connectionPath(dir, connection.clientId),
     `${JSON.stringify(connection, null, 2)}\n`,
-    { mode: 0o600 },
   );
+}
+
+async function writePrivateFile(path: string, value: string) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, value, {
+      mode: 0o600,
+    });
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function loadConnection(
@@ -96,22 +119,20 @@ const service = "Sanctum MCP";
 async function keychain(): Promise<TokenStore | undefined> {
   try {
     const { Entry } = await import("@napi-rs/keyring");
-    // Reading proves the service answers before a token is trusted to it.
-    new Entry(service, "probe").getPassword();
+    const entry = (clientId: string) =>
+      new Entry(service, clientId, { linux: { store: "secret-service" } });
+    // Use a store that persists across the connector and the agent's sessions.
+    entry("probe").getPassword();
     return {
       kind: "keychain",
       async get(clientId) {
-        return new Entry(service, clientId).getPassword() ?? undefined;
+        return entry(clientId).getPassword() ?? undefined;
       },
       async set(clientId, token) {
-        new Entry(service, clientId).setPassword(token);
+        entry(clientId).setPassword(token);
       },
       async delete(clientId) {
-        try {
-          new Entry(service, clientId).deletePassword();
-        } catch {
-          // Already gone.
-        }
+        entry(clientId).deletePassword();
       },
     };
   } catch {
@@ -130,13 +151,14 @@ export function fileTokens(dir: string): TokenStore {
     async get(clientId) {
       try {
         return (await readFile(path(clientId), "utf8")).trim() || undefined;
-      } catch {
-        return undefined;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          return undefined;
+        throw error;
       }
     },
     async set(clientId, token) {
-      await mkdir(join(dir, "tokens"), { recursive: true, mode: 0o700 });
-      await writeFile(path(clientId), token, { mode: 0o600 });
+      await writePrivateFile(path(clientId), token);
     },
     async delete(clientId) {
       await rm(path(clientId), { force: true });
@@ -144,7 +166,18 @@ export function fileTokens(dir: string): TokenStore {
   };
 }
 
-/** The system's secure storage where there's one, else files. */
-export async function tokenStore(dir: string): Promise<TokenStore> {
-  return (await keychain()) ?? fileTokens(dir);
+/** Reopen the store the connection used, or choose one for a new connection. */
+export async function tokenStore(
+  dir: string,
+  kind?: TokenStore["kind"],
+): Promise<TokenStore> {
+  if (kind === "file") return fileTokens(dir);
+  const secure = await keychain();
+  if (secure) return secure;
+  if (kind === "keychain") {
+    throw new Error(
+      "Couldn't open this agent's secure storage. Unlock it and try again.",
+    );
+  }
+  return fileTokens(dir);
 }

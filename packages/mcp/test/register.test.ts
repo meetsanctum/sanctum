@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import manifest from "../package.json" with { type: "json" };
 
 import {
   agentFromEnv,
@@ -29,10 +30,10 @@ describe("registering with the agent", () => {
   });
 
   it("starts the published version, or this script for one built from source", () => {
-    expect(serveCommand("agent-1")).toEqual([
+    expect(serveCommand("agent-1", undefined, "linux")).toEqual([
       "npx",
       "-y",
-      "@meetsanctum/mcp@0.1.0",
+      `@meetsanctum/mcp@${manifest.version}`,
       "serve",
       "--connection",
       "agent-1",
@@ -44,17 +45,27 @@ describe("registering with the agent", () => {
       "--connection",
       "agent-1",
     ]);
+    expect(serveCommand("agent-1", undefined, "win32").slice(0, 4)).toEqual([
+      "cmd.exe",
+      "/d",
+      "/c",
+      "npx",
+    ]);
   });
 
   it("replaces a server of the same name, with the agent's own commands", async () => {
     const ran: string[][] = [];
     const command = serveCommand("agent-1");
 
-    await register("claude", "sanctum-office", command, async (each) => {
-      ran.push(each);
-      if (each[2] === "remove")
-        throw new Error("No MCP server named sanctum-office");
-    });
+    await register(
+      "claude",
+      "sanctum-office",
+      command,
+      async (each) => {
+        ran.push(each);
+      },
+      ["node", "old"],
+    );
 
     expect(ran).toEqual([
       ["claude", "mcp", "remove", "--scope", "user", "sanctum-office"],
@@ -75,6 +86,27 @@ describe("registering with the agent", () => {
     });
   });
 
+  it("restores a Claude registration if its replacement fails", async () => {
+    const ran: string[][] = [];
+    await expect(
+      register(
+        "claude",
+        "sanctum-office",
+        ["node", "new"],
+        async (command) => {
+          ran.push(command);
+          if (command.at(-1) === "new") throw new Error("Couldn't add server");
+        },
+        ["node", "old"],
+      ),
+    ).rejects.toThrow("Couldn't add server");
+    expect(ran.map((command) => command.at(-1))).toEqual([
+      "sanctum-office",
+      "new",
+      "old",
+    ]);
+  });
+
   it("fails when the agent won't add it", async () => {
     await expect(
       register("codex", "sanctum", ["npx"], async (each) => {
@@ -85,7 +117,29 @@ describe("registering with the agent", () => {
 
   it("shows a command as it would be typed", () => {
     expect(
-      shown(["claude", "mcp", "add", "sanctum", "--", "/Program Files/node"]),
+      shown(
+        ["claude", "mcp", "add", "sanctum", "--", "/Program Files/node"],
+        "linux",
+      ),
     ).toBe("claude mcp add sanctum -- '/Program Files/node'");
   });
+
+  it.each(["claude", "codex"] as const)(
+    "passes the store override to %s",
+    (agent) => {
+      const { add } = registration(
+        agent,
+        "sanctum",
+        ["node", "serve"],
+        "/a custom/store",
+      );
+      expect(add.slice(-5)).toEqual([
+        "--env",
+        "SANCTUM_MCP_DIR=/a custom/store",
+        "--",
+        "node",
+        "serve",
+      ]);
+    },
+  );
 });

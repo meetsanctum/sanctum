@@ -1,8 +1,8 @@
-import { agentConnectorProtocols } from "@meetsanctum/auth-protocol";
+import manifest from "../package.json" with { type: "json" };
 
 // The connector's version, which an agent's registration pins, and the
 // protocol it speaks with a home's setup (auth-protocol), fixed when it's
 // built.
 
-export const connectorVersion = "0.1.0";
-export const connectorProtocol: number = agentConnectorProtocols.newest;
+export const connectorVersion = manifest.version;
+export const connectorProtocol = 1;

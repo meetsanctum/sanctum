@@ -1,5 +1,7 @@
+import { once } from "node:events";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:https";
-import type { AddressInfo } from "node:net";
+import { createServer as createTcpServer, type AddressInfo } from "node:net";
 import { describe, expect, it, onTestFinished } from "vitest";
 
 import { PinMismatch, pinnedFetch } from "../src/pinned.js";
@@ -35,9 +37,9 @@ describe("a pinned request", () => {
     const ca = await testCa();
     const { url, received } = await home(ca);
     const anchors: unknown[] = [];
-    const fetchHome = pinnedFetch({ pin: ca.pin }, (anchor) =>
-      anchors.push(anchor),
-    );
+    const fetchHome = pinnedFetch({ pin: ca.pin }, (anchor) => {
+      anchors.push(anchor);
+    });
 
     const response = await fetchHome(`${url}/api/mcp?x=1`, {
       method: "POST",
@@ -89,5 +91,52 @@ describe("a pinned request", () => {
     await expect(
       pinnedFetch({ pin: "A".repeat(43) })("http://127.0.0.1:1/api/mcp"),
     ).rejects.toBeInstanceOf(PinMismatch);
+  });
+
+  it("doesn't forward a development request to a redirect target", async () => {
+    let redirected = false;
+    const server = createHttpServer((request, response) => {
+      if (request.url === "/redirected") redirected = true;
+      response.writeHead(307, { location: "/redirected" }).end();
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    );
+    const { port } = server.address() as AddressInfo;
+
+    await expect(
+      pinnedFetch({ pin: null })(`http://127.0.0.1:${port}/start`, {
+        method: "POST",
+        body: "setup data",
+      }),
+    ).rejects.toThrow();
+    expect(redirected).toBe(false);
+  });
+
+  it("aborts a probe when the TLS handshake stalls", async () => {
+    const server = createTcpServer();
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    onTestFinished(
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+    );
+    const { port } = server.address() as AddressInfo;
+    const connected = once(server, "connection");
+    const abort = new AbortController();
+    const response = pinnedFetch({ pin: "A".repeat(43) })(
+      `https://127.0.0.1:${port}`,
+      { signal: abort.signal },
+    );
+    const [socket] = await connected;
+    try {
+      abort.abort();
+      await expect(response).rejects.toMatchObject({ name: "AbortError" });
+    } finally {
+      socket.destroy();
+    }
   });
 });

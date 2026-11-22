@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPageStore } from "../src/page-store.js";
 import { createPages } from "../src/pages.js";
 import { accept, refuse, type HostTrust } from "../src/trust.js";
-import { testCa } from "./certificates.js";
+import { testCa } from "../../../packages/auth-protocol/test/certificates.js";
 
 afterEach(() => vi.restoreAllMocks());
 

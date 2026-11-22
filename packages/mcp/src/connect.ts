@@ -21,6 +21,7 @@ import {
   listConnections,
   removeConnection,
   saveConnection,
+  tokenStore,
   type AgentKind,
   type Connection,
   type TokenStore,
@@ -59,11 +60,12 @@ const refusals: Partial<Record<AuthErrorCode, string>> = {
   connector_too_new: connectWords.tooNew,
   connector_too_old: connectWords.tooOld,
   too_many_attempts: connectWords.tooManyAttempts,
-  busy: connectWords.tooManyAttempts,
+  busy: "Sanctum is busy handling setup requests. Wait a few minutes, then try again.",
 };
 
 export type ConnectOptions = {
   dir: string;
+  storeOverride?: string;
   tokens: TokenStore;
   agent: AgentKind | null;
   platform: Platform;
@@ -77,7 +79,12 @@ export type Connected = {
   connection: Connection;
   homeName: string | undefined;
   /** The agent's commands, run already when it's known. */
-  registration: { add: string[]; registered: boolean; problem?: string }[];
+  registration: {
+    add: string[];
+    remove?: string[];
+    registered: boolean;
+    problem?: string;
+  }[];
 };
 
 export async function connect(
@@ -92,20 +99,17 @@ export async function connect(
 
   let anchor: HostAnchor | null = null;
   const trust: Trust = code.pin ? { pin: code.pin } : { pin: null };
-  const fetchFor = () =>
-    pinnedFetch(trust, (seen) => {
-      anchor = seen;
-    });
+  const fetchHome = pinnedFetch(trust, (seen) => {
+    anchor = seen;
+  });
   let url: string;
   try {
-    ({ url } = await findHome(
+    url = await findHome(
       code.homeId,
-      [
-        ...(code.pin ? await (options.discover ?? discover)(code.homeId) : []),
-        code.url,
-      ],
-      fetchFor,
-    ));
+      fetchHome,
+      code.pin ? () => (options.discover ?? discover)(code.homeId) : [],
+      [code.url],
+    );
   } catch (error) {
     if (error instanceof HomeNotFound) {
       throw new ConnectError(
@@ -115,8 +119,9 @@ export async function connect(
     throw error;
   }
 
-  const response = await fetchFor()(new URL("/api/auth/agents/collect", url), {
+  const response = await fetchHome(new URL("/api/auth/agents/collect", url), {
     method: "POST",
+    signal: AbortSignal.timeout(5_000),
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       setupId: code.setupId,
@@ -125,10 +130,14 @@ export async function connect(
       protocol: connectorProtocol,
     }),
   });
-  const body = (await response.json().catch(() => ({}))) as
-    AgentTokenCollected | { error?: AuthErrorCode };
-  if (!response.ok || !("token" in body)) {
-    const refusal = "error" in body ? body.error : undefined;
+  const body = (await response.json().catch(() => null)) as
+    (Partial<AgentTokenCollected> & { error?: AuthErrorCode }) | null;
+  if (
+    !response.ok ||
+    typeof body?.token !== "string" ||
+    typeof body.agent?.id !== "string"
+  ) {
+    const refusal = body?.error;
     throw new ConnectError(
       (refusal && refusals[refusal]) ??
         `Sanctum refused the setup (${refusal ?? response.status}).`,
@@ -141,26 +150,38 @@ export async function connect(
     clientId,
     name: "sanctum",
     agent: options.agent,
+    tokenStorage: options.tokens.kind,
     homeId: code.homeId,
     anchor,
     url,
   };
-  await saveConnection(options.dir, connection);
+  try {
+    await saveConnection(options.dir, connection);
+  } catch (error) {
+    await options.tokens.delete(clientId);
+    throw error;
+  }
 
   // The agent's first call, which Settings waits for.
   const client = await connectHome({
     url,
     token: body.token,
-    fetch: fetchFor(),
+    fetch: fetchHome,
   });
-  await client.listTools();
-  const name = await homeName(client).catch(() => undefined);
-  await client.close();
+  let name: string | undefined;
+  try {
+    await client.listTools();
+    name = await homeName(client).catch(() => undefined);
+  } finally {
+    await client.close();
+  }
 
-  connection = {
-    ...connection,
-    name: await uniqueName(options, serverName(name), connection),
-  };
+  const choice = await chooseRegistration(
+    options.dir,
+    serverName(name),
+    connection,
+  );
+  connection = { ...connection, name: choice.name, anchor };
   await saveConnection(options.dir, connection);
 
   const command = serveCommand(clientId, options.local);
@@ -169,20 +190,46 @@ export async function connect(
     : ["claude", "codex"];
   const registered: Connected["registration"] = [];
   for (const agent of agents) {
-    const { add } = registration(agent, connection.name, command);
+    const { add, remove } = registration(
+      agent,
+      connection.name,
+      command,
+      options.storeOverride,
+    );
     if (!options.agent) {
       registered.push({ add, registered: false });
       continue;
     }
     try {
-      await register(agent, connection.name, command, options.run);
+      await register(
+        agent,
+        connection.name,
+        command,
+        options.run,
+        choice.previous?.registeredCommand,
+        options.storeOverride,
+      );
       registered.push({ add, registered: true });
     } catch (error) {
       registered.push({
         add,
+        remove: agent === "claude" && choice.previous ? remove : undefined,
         registered: false,
         problem: (error as Error).message,
       });
+    }
+  }
+  if (registered.some((each) => each.registered)) {
+    connection = { ...connection, registeredCommand: command };
+    await saveConnection(options.dir, connection);
+    if (choice.previous) {
+      const previousStore =
+        choice.previous.tokenStorage &&
+        choice.previous.tokenStorage !== options.tokens.kind
+          ? await tokenStore(options.dir, choice.previous.tokenStorage)
+          : options.tokens;
+      await previousStore.delete(choice.previous.clientId);
+      await removeConnection(options.dir, choice.previous.clientId);
     }
   }
   return { connection, homeName: name, registration: registered };
@@ -191,32 +238,34 @@ export async function connect(
 // A name of its own for each home, so adding a second one doesn't replace
 // the first; adding the same home to the same agent again replaces the
 // connection it had.
-async function uniqueName(
-  { dir, tokens }: Pick<ConnectOptions, "dir" | "tokens">,
+async function chooseRegistration(
+  dir: string,
   name: string,
   connection: Connection,
 ) {
   const others = (await listConnections(dir)).filter(
     (other) =>
       other.clientId !== connection.clientId &&
-      other.agent === connection.agent,
+      (other.agent === null ||
+        connection.agent === null ||
+        other.agent === connection.agent),
   );
-  for (const other of others) {
-    if (other.homeId === connection.homeId && other.name === name) {
-      await tokens.delete(other.clientId);
-      await removeConnection(dir, other.clientId);
-    }
+  const previous = others.find(
+    (other) =>
+      connection.agent !== null &&
+      other.agent === connection.agent &&
+      other.homeId === connection.homeId &&
+      other.registeredCommand,
+  );
+  if (previous) {
+    return { name: previous.name, previous };
   }
-  const taken = new Set(
-    others
-      .filter((other) => other.homeId !== connection.homeId)
-      .map((other) => other.name),
-  );
+  const taken = new Set(others.map((other) => other.name));
   let candidate = name;
   for (let count = 2; taken.has(candidate); count += 1) {
     candidate = `${name}-${count}`;
   }
-  return candidate;
+  return { name: candidate };
 }
 
 /** What `connect` prints, for the agent to act on and pass on. */
@@ -231,12 +280,14 @@ export function connectedWords(connected: Connected, tokens: TokenStore) {
       "Its tools are there from the agent's next session. Tell the person it's connected; what you can do is decided in Sanctum's Settings, under AI agents.",
     );
   } else {
+    const first = commands[0]!;
     lines.push(
       commands.length === 1
-        ? `Couldn't register it with the agent (${commands[0]!.problem ?? "unknown"}). Run this to register it:`
+        ? `Couldn't register it with the agent (${first.problem ?? "unknown"}). Use the following command${first.remove ? "s" : ""} to register it:`
         : "Register it with the agent that ran this. For Claude Code:",
     );
-    lines.push(`  ${shown(commands[0]!.add)}`);
+    if (first.remove) lines.push(`  ${shown(first.remove)}`);
+    lines.push(`  ${shown(first.add)}`);
     if (commands[1]) {
       lines.push("For Codex:", `  ${shown(commands[1].add)}`);
     }

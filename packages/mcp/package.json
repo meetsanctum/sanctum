@@ -17,11 +17,14 @@
     "dist/cli.js",
     "README.md"
   ],
+  "publishConfig": {
+    "exports": {}
+  },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && esbuild src/cli.ts src/index.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --external:@modelcontextprotocol/client --external:@modelcontextprotocol/server --external:@napi-rs/keyring --external:bonjour-service",
+    "build": "tsc -p tsconfig.build.json && esbuild src/cli.ts src/index.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --external:@modelcontextprotocol/client --external:@modelcontextprotocol/server --external:@napi-rs/keyring --external:bonjour-service --external:cross-spawn",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -31,12 +34,14 @@
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/server": "2.4.0",
     "@napi-rs/keyring": "2.1.2",
-    "bonjour-service": "^1.4.4"
+    "bonjour-service": "^1.4.4",
+    "cross-spawn": "7.0.6"
   },
   "devDependencies": {
     "@meetsanctum/auth-protocol": "workspace:*",
     "@meetsanctum/typescript-config": "workspace:*",
     "@peculiar/x509": "2.2.0",
+    "@types/cross-spawn": "6.0.6",
     "esbuild": "0.28.2",
     "reflect-metadata": "0.2.2",
     "vitest": "^4.1.5"

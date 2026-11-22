@@ -2,13 +2,14 @@
 import type { Platform } from "@meetsanctum/auth-protocol";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { connect, ConnectError, connectedWords } from "./connect.js";
 import { agentFromEnv } from "./register.js";
 import { connectorServer, homeLink } from "./serve.js";
-import { storeDir, tokenStore, type AgentKind } from "./store.js";
+import { storeDir, tokenStore } from "./store.js";
 import { connectorVersion } from "./version.js";
 
 // `sanctum-mcp connect <code>` adds the agent that runs it to a home, and
@@ -47,17 +48,26 @@ async function main(argv: string[]) {
     console.log(connectorVersion);
     return 0;
   }
-  const dir = storeDir();
+  if (values.help) {
+    console.log(usage);
+    return 0;
+  }
+  const storeOverride = process.env.SANCTUM_MCP_DIR
+    ? resolve(storeDir())
+    : undefined;
+  const dir = storeOverride ?? storeDir();
 
   if (command === "connect" && rest.length === 1) {
-    const agent =
-      values.agent === "claude" || values.agent === "codex"
-        ? (values.agent as AgentKind)
-        : agentFromEnv(process.env);
+    const agent = values.agent ?? agentFromEnv(process.env);
+    if (agent !== null && agent !== "claude" && agent !== "codex") {
+      console.error("Choose claude or codex for --agent.");
+      return 1;
+    }
     const tokens = await tokenStore(dir);
     try {
       const connected = await connect(rest[0]!, {
         dir,
+        storeOverride,
         tokens,
         agent,
         platform: platform(),
@@ -79,11 +89,10 @@ async function main(argv: string[]) {
     }
   }
 
-  if (command === "serve" && values.connection) {
+  if (command === "serve" && rest.length === 0 && values.connection) {
     const link = homeLink({
       dir,
       clientId: values.connection,
-      tokens: await tokenStore(dir),
       log: (message) => console.error(message),
     });
     serveStdio(() => connectorServer(link), {
@@ -94,7 +103,7 @@ async function main(argv: string[]) {
   }
 
   console.error(usage);
-  return values.help ? 0 : 1;
+  return 1;
 }
 
 main(process.argv.slice(2)).then(

@@ -1,4 +1,4 @@
-import type { Client } from "@modelcontextprotocol/client";
+import { SdkHttpError, type Client } from "@modelcontextprotocol/client";
 import {
   ProtocolError,
   ProtocolErrorCode,
@@ -12,6 +12,7 @@ import {
   loadConnection,
   removeConnection,
   saveConnection,
+  tokenStore,
   type Connection,
   type TokenStore,
 } from "./store.js";
@@ -33,12 +34,14 @@ export const words = {
     "Couldn't reach Sanctum. Check this computer is on the home's network, and that Sanctum is running.",
   notThisHome:
     "Found a computer on the network that isn't this home, so nothing was sent to it.",
+  unconfirmed:
+    "Couldn't confirm the result of this call. Check the home's state before trying again.",
 };
 
 export type ServeOptions = {
   dir: string;
   clientId: string;
-  tokens: TokenStore;
+  tokens?: TokenStore;
   /** Finds the home's addresses on the network; none in tests. */
   discover?: (homeId: string) => Promise<string[]>;
   log?: (message: string) => void;
@@ -48,10 +51,13 @@ export type ServeOptions = {
 export function homeLink(options: ServeOptions) {
   let client: Promise<Client> | undefined;
   let gone = false;
+  let tokens = options.tokens;
 
   async function open(): Promise<Client> {
     const connection = await loadConnection(options.dir, options.clientId);
-    const token = connection && (await options.tokens.get(connection.clientId));
+    if (connection)
+      tokens ??= await tokenStore(options.dir, connection.tokenStorage);
+    const token = await tokens?.get(options.clientId);
     if (!connection || !token) {
       gone = true;
       throw new Error(words.removed);
@@ -60,44 +66,68 @@ export function homeLink(options: ServeOptions) {
     const trust = current.anchor
       ? { pin: current.anchor.pin, anchor: current.anchor }
       : { pin: null };
-    const fetchFor = () =>
-      pinnedFetch(trust, (anchor) => {
-        // A reissued CA certificate, the same key with new dates.
-        current = { ...current, anchor };
-        void saveConnection(options.dir, current);
-      });
-    const found = await findHome(
+    let foundHome = false;
+    const fetchHome = pinnedFetch(trust, async (anchor) => {
+      // A reissued CA certificate, the same key with new dates.
+      current = { ...current, anchor };
+      if (foundHome && !gone) await saveConnection(options.dir, current);
+    });
+    const url = await findHome(
       current.homeId,
-      [
-        current.url,
-        ...(current.anchor
-          ? await (options.discover ?? discover)(current.homeId)
-          : []),
-      ],
-      fetchFor,
+      fetchHome,
+      [current.url],
+      current.anchor
+        ? () => (options.discover ?? discover)(current.homeId)
+        : [],
     );
-    if (found.url !== current.url) {
-      current = { ...current, url: found.url };
+    current = { ...current, url };
+    foundHome = true;
+    if (
+      !gone &&
+      (url !== connection.url || current.anchor !== connection.anchor)
+    ) {
       await saveConnection(options.dir, current);
     }
-    return connectHome({ url: found.url, token, fetch: fetchFor() });
+    if (gone) throw new Error(words.removed);
+    return connectHome({ url, token, fetch: fetchHome });
   }
 
   async function forget() {
     gone = true;
-    await options.tokens.delete(options.clientId);
-    await removeConnection(options.dir, options.clientId);
+    try {
+      await tokens?.delete(options.clientId);
+      await removeConnection(options.dir, options.clientId);
+    } catch (error) {
+      options.log?.(
+        `Couldn't clear the removed agent's connection: ${(error as Error).message}`,
+      );
+    }
   }
 
-  // Runs `work` on the connection, opening it again once if it dropped.
-  async function use<T>(work: (client: Client) => Promise<T>): Promise<T> {
-    if (gone) throw new Error(words.removed);
+  async function use<T>(
+    work: (client: Client) => Promise<T>,
+    retryRead = false,
+  ): Promise<T> {
     for (let attempt = 0; ; attempt += 1) {
-      client ??= open();
+      if (gone) throw new Error(words.removed);
+      const opening = (client ??= open());
+      let sent = false;
       try {
-        return await work(await client);
+        const connected = await opening;
+        if (gone) throw new Error(words.removed);
+        sent = true;
+        return await work(connected);
       } catch (error) {
-        client = undefined;
+        if (
+          sent &&
+          (error instanceof ProtocolError ||
+            (error instanceof SdkHttpError &&
+              error.status >= 400 &&
+              error.status < 500))
+        ) {
+          throw error;
+        }
+        if (client === opening) client = undefined;
         if (error instanceof TokenRefused) {
           await forget();
           throw new Error(words.removed);
@@ -107,7 +137,10 @@ export function homeLink(options: ServeOptions) {
             error.mismatched ? words.notThisHome : words.unreachable,
           );
         }
-        if (gone || attempt > 0 || error instanceof ProtocolError) throw error;
+        if (gone) throw new Error(words.removed);
+        // A dropped answer can mean the tool ran. Only retry reads.
+        if (sent && !retryRead) throw new Error(words.unconfirmed);
+        if (attempt > 0) throw error;
         options.log?.(`Connecting again: ${(error as Error).message}`);
       }
     }
@@ -129,8 +162,9 @@ export function connectorServer(link: ReturnType<typeof homeLink>) {
   );
   server.setRequestHandler("tools/list", async (request) => {
     try {
-      return await link.use((client) =>
-        client.listTools(request.params, { cacheMode: "bypass" }),
+      return await link.use(
+        (client) => client.listTools(request.params, { cacheMode: "bypass" }),
+        true,
       );
     } catch (error) {
       if (error instanceof ProtocolError) throw error;

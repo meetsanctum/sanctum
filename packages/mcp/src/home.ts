@@ -18,7 +18,10 @@ export class TokenRefused extends Error {
 function refusing(fetchHome: typeof fetch): typeof fetch {
   return async (input, init) => {
     const response = await fetchHome(input, init);
-    if (response.status === 401) throw new TokenRefused();
+    if (response.status === 401) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new TokenRefused();
+    }
     return response;
   };
 }

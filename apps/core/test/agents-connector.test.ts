@@ -32,13 +32,21 @@ import { claimed, get, post, testCore, type TestCore } from "./support.js";
 // HTTPS: adding an agent with a setup's code, then the agent's MCP server
 // passing its calls on, for agents on either revision of the protocol.
 
-async function homeOverHttps() {
+async function homeOverHttps(dropToolReply?: () => boolean) {
   const certificates = createCoreCertificates({
     sign: (await testCa()).sign,
     log: () => undefined,
   });
   await certificates.first();
   const core = await testCore({ certificates });
+  if (dropToolReply) {
+    core.server.addHook("onSend", async (request, reply) => {
+      if (request.headers["mcp-method"] === "tools/call" && dropToolReply()) {
+        reply.hijack();
+        reply.raw.destroy();
+      }
+    });
+  }
   const maya = await claimed(core);
   await core.server.listen({ host: "127.0.0.1", port: 0 });
   const { port } = core.server.server.address() as { port: number };
@@ -138,7 +146,6 @@ describe("the AI agents' connector", () => {
       agent: { id: connection.clientId },
     });
     expect(connecting.ran).toEqual([
-      ["claude", "mcp", "remove", "--scope", "user", "sanctum-home"],
       [
         "claude",
         "mcp",
@@ -147,9 +154,10 @@ describe("the AI agents' connector", () => {
         "user",
         "sanctum-home",
         "--",
+        ...(process.platform === "win32" ? ["cmd.exe", "/d", "/c"] : []),
         "npx",
         "-y",
-        "@meetsanctum/mcp@0.1.0",
+        expect.stringMatching(/^@meetsanctum\/mcp@\d+\.\d+\.\d+$/),
         "serve",
         "--connection",
         connection.clientId,
@@ -179,6 +187,39 @@ describe("the AI agents' connector", () => {
         agent: { name: "Claude Code on the office Mac" },
       });
     }
+  });
+
+  it("keeps a working registration when replacing it fails, and reuses its name", async () => {
+    const first = await homeOverHttps();
+    const second = await homeOverHttps();
+    const connecting = await options(first.url);
+    const add = async (home: typeof first, run = connecting.run) => {
+      const setup = await startSetup(home.core, home.maya.token);
+      return connect(setup.code, {
+        ...connecting,
+        discover: async () => [home.url],
+        run,
+      });
+    };
+    const { connection: firstConnection } = await add(first);
+    const { connection: previous } = await add(second);
+    expect(previous.name).toBe(`${firstConnection.name}-2`);
+
+    const failed = await add(second, async (command) => {
+      if (command[2] === "add" && command.at(-1) !== previous.clientId) {
+        throw new Error("Registration failed");
+      }
+    });
+    expect(failed.registration[0]?.registered).toBe(false);
+    expect(connectedWords(failed, connecting.tokens)).toContain(
+      `claude mcp remove --scope user ${previous.name}`,
+    );
+    expect(await connecting.tokens.get(previous.clientId)).toBeDefined();
+
+    const { connection: replacement } = await add(second);
+    expect(replacement.name).toBe(previous.name);
+    expect(await connecting.tokens.get(previous.clientId)).toBeUndefined();
+    expect(await connecting.tokens.get(firstConnection.clientId)).toBeDefined();
   });
 
   it("sends nothing to a computer that isn't the home", async () => {
@@ -222,7 +263,6 @@ describe("the AI agents' connector", () => {
     const link = homeLink({
       dir: connecting.dir,
       clientId: connection.clientId,
-      tokens: connecting.tokens,
       discover: async () => [url],
     });
     const agent = await agentOn(link, "2026-07-28");
@@ -249,5 +289,40 @@ describe("the AI agents' connector", () => {
     expect(
       await loadConnection(connecting.dir, connection.clientId),
     ).toBeUndefined();
+  });
+
+  it("doesn't replay a tool call whose reply was lost", async () => {
+    let dropNext = false;
+    let calls = 0;
+    const { core, maya, url } = await homeOverHttps(() => {
+      calls += 1;
+      const drop = dropNext;
+      dropNext = false;
+      return drop;
+    });
+    const setup = await startSetup(core, maya.token);
+    const connecting = await options(url);
+    const { connection } = await connect(setup.code, connecting);
+    calls = 0;
+    const discover = async () => {
+      throw new Error("Discovery is unavailable");
+    };
+    const link = homeLink({
+      dir: connecting.dir,
+      clientId: connection.clientId,
+      discover,
+    });
+    const agent = await agentOn(link, "2026-07-28");
+
+    dropNext = true;
+    expect(await agent.callTool({ name: "home_overview" })).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: words.unconfirmed }],
+    });
+    expect(calls).toBe(1);
+    expect(
+      (await agent.callTool({ name: "home_overview" })).isError,
+    ).toBeFalsy();
+    expect(calls).toBe(2);
   });
 });

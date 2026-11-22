@@ -3,6 +3,7 @@ import {
   presentedAnchor,
   type HostAnchor,
 } from "@meetsanctum/auth-protocol/host-chain";
+import { once } from "node:events";
 import { request } from "node:http";
 import { Readable } from "node:stream";
 import {
@@ -53,27 +54,13 @@ function presentedChain(socket: TLSSocket) {
   return chain;
 }
 
-function secureSocket(url: URL): Promise<TLSSocket> {
-  return new Promise((resolve, reject) => {
-    const socket = connect({
-      host: url.hostname.replace(/^\[|\]$/g, ""),
-      port: Number(url.port || 443),
-      // The pin decides, below; nothing is sent before it has.
-      rejectUnauthorized: false,
-      ALPNProtocols: ["http/1.1"],
-    });
-    socket.once("secureConnect", () => resolve(socket));
-    socket.once("error", reject);
-  });
-}
-
 /**
- * A fetch for one home. `onAnchor` hears the CA the home presented the
- * first time it passes the pin, for the connection to keep.
+ * A fetch for one home. `onAnchor` hears when a certificate matching the
+ * pin is first seen or reissued, for the connection to keep.
  */
 export function pinnedFetch(
   trust: Trust,
-  onAnchor?: (anchor: HostAnchor) => void,
+  onAnchor?: (anchor: HostAnchor) => void | Promise<void>,
 ): typeof fetch {
   let anchor = trust.anchor;
   return async (input, init) => {
@@ -81,73 +68,99 @@ export function pinnedFetch(
     const url = new URL(target.url);
     if (trust.pin === null) {
       if (!isLoopback(url)) throw new PinMismatch(url.origin);
-      return fetch(target);
+      return fetch(target, { redirect: "error" });
     }
     if (url.protocol !== "https:") throw new PinMismatch(url.origin);
-
-    const socket = await secureSocket(url);
-    const chain = presentedChain(socket);
-    let passed: string | undefined;
-    if (anchor) {
-      passed = await checkHostChain(chain, anchor);
-    } else {
-      const presented = await presentedAnchor(chain);
-      passed =
-        presented?.pin === trust.pin ? presented.caCertificate : undefined;
-    }
-    if (!passed) {
-      socket.destroy();
-      throw new PinMismatch(url.origin);
-    }
-    if (!anchor || anchor.caCertificate !== passed) {
-      anchor = { pin: trust.pin, caCertificate: passed };
-      onAnchor?.(anchor);
-    }
-
-    const body =
-      target.body === null
-        ? undefined
-        : Buffer.from(await target.arrayBuffer());
-    return new Promise<Response>((resolve, reject) => {
-      const outgoing = request(
-        {
-          method: target.method,
-          host: url.hostname,
-          port: url.port,
-          path: url.pathname + url.search,
-          headers: {
-            ...Object.fromEntries(target.headers),
-            host: url.host,
-            ...(body && { "content-length": String(body.length) }),
-          },
-          createConnection: () => socket,
-          signal: target.signal,
-        },
-        (incoming) => {
-          const headers = new Headers();
-          for (const [name, value] of Object.entries(incoming.headers)) {
-            for (const each of [value].flat()) {
-              if (each !== undefined) headers.append(name, each);
-            }
-          }
-          const status = incoming.statusCode ?? 502;
-          const empty = status === 204 || status === 304;
-          if (empty) incoming.resume();
-          resolve(
-            new Response(
-              empty
-                ? null
-                : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
-              { status, headers },
-            ),
-          );
-        },
-      );
-      outgoing.once("error", (error) => {
-        socket.destroy();
-        reject(error);
-      });
-      outgoing.end(body);
+    target.signal.throwIfAborted();
+    const socket = connect({
+      host: url.hostname.replace(/^\[|\]$/g, ""),
+      port: Number(url.port || 443),
+      // The pin decides, below; nothing is sent before it has.
+      rejectUnauthorized: false,
+      ALPNProtocols: ["http/1.1"],
     });
+    // Keep socket errors handled between the handshake and HTTP request.
+    const handleSocketError = () => undefined;
+    socket.on("error", handleSocketError);
+    try {
+      await once(socket, "secureConnect", {
+        signal: AbortSignal.any([target.signal, AbortSignal.timeout(5_000)]),
+      });
+      const chain = presentedChain(socket);
+      const passed = anchor
+        ? await checkHostChain(chain, anchor)
+        : await presentedAnchor(chain).then((presented) =>
+            presented?.pin === trust.pin ? presented.caCertificate : undefined,
+          );
+      if (!passed) throw new PinMismatch(url.origin);
+      if (!anchor || anchor.caCertificate !== passed) {
+        const seen = { pin: trust.pin, caCertificate: passed };
+        await onAnchor?.(seen);
+        anchor = seen;
+      }
+      return await send(target, url, socket);
+    } catch (error) {
+      socket.destroy();
+      throw error;
+    } finally {
+      socket.off("error", handleSocketError);
+    }
   };
+}
+
+async function send(target: Request, url: URL, socket: TLSSocket) {
+  const body =
+    target.body === null ? undefined : Buffer.from(await target.arrayBuffer());
+  return new Promise<Response>((resolve, reject) => {
+    const outgoing = request(
+      {
+        method: target.method,
+        host: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        headers: {
+          ...Object.fromEntries(target.headers),
+          host: url.host,
+          ...(body && { "content-length": String(body.length) }),
+        },
+        createConnection: () => socket,
+        signal: target.signal,
+      },
+      (incoming) => {
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(incoming.headers)) {
+          for (const each of [value].flat()) {
+            if (each !== undefined) headers.append(name, each);
+          }
+        }
+        const status = incoming.statusCode ?? 502;
+        if (status < 200 || status > 599) {
+          incoming.resume();
+          reject(new Error(`The home returned HTTP ${status}`));
+          return;
+        }
+        if (
+          [301, 302, 303, 307, 308].includes(status) &&
+          headers.has("location")
+        ) {
+          incoming.resume();
+          reject(new Error("The home redirected the request"));
+          return;
+        }
+        const empty =
+          target.method === "HEAD" || [204, 205, 304].includes(status);
+        if (empty) incoming.resume();
+        resolve(
+          new Response(
+            empty
+              ? null
+              : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
+            { status, headers },
+          ),
+        );
+      },
+    );
+    outgoing.once("error", reject);
+    outgoing.end(body);
+  });
 }

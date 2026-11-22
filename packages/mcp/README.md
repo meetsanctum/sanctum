@@ -26,6 +26,9 @@ for agents on the 2025-11-25 or the 2026-07-28 revision, which passes the
 agent's calls on to the home. What the agent can do is decided in Sanctum's
 Settings, under What AI agents can use.
 
+If a tool call loses its reply, check the home's state before trying again.
+The connector reconnects for the next call.
+
 Needs Node 22 or later. Its files are in `~/.config/sanctum-mcp`, or
 `%APPDATA%\Sanctum MCP` on Windows, or `SANCTUM_MCP_DIR`.
 
