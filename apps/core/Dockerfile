@@ -14,6 +14,7 @@ COPY packages/app-sdk/package.json packages/app-sdk/package.json
 COPY packages/app-sdk/bin packages/app-sdk/bin
 COPY packages/app-testkit/package.json packages/app-testkit/package.json
 COPY packages/auth-protocol/package.json packages/auth-protocol/package.json
+COPY packages/mcp/package.json packages/mcp/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 # Catalog apps' pages import it, and it builds them and the kit they import,
 # with the command shim pnpm links when it installs.
@@ -32,6 +33,7 @@ COPY packages/typescript-config packages/typescript-config
 COPY packages/app-sdk packages/app-sdk
 COPY packages/app-testkit packages/app-testkit
 COPY packages/auth-protocol packages/auth-protocol
+COPY packages/mcp packages/mcp
 COPY packages/ui-sdk packages/ui-sdk
 COPY apps/core apps/core
 COPY catalog/apps catalog/apps

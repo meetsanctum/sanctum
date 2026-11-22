@@ -1,7 +1,10 @@
-import { spkiPin } from "@meetsanctum/auth-protocol";
 import { X509Certificate } from "node:crypto";
 
-// The rule every connection to a host must pass: its certificate is a server
+import { spkiPin } from "./pin.js";
+
+// Node only, so it's its own export (`@meetsanctum/auth-protocol/host-chain`):
+// the desktop app's main process and the AI agents' connector check every
+// connection with it. The rule every connection to a host must pass: its certificate is a server
 // certificate signed directly by the host CA, both are valid now, and the
 // CA's public key matches the pin. Names are not checked, since the host CA
 // signs only that host's core, and the system's trusted roots play no part.

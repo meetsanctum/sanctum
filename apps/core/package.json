@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@meetsanctum/app-testkit": "workspace:*",
+    "@meetsanctum/mcp": "workspace:*",
     "@meetsanctum/moods": "workspace:*",
     "@meetsanctum/natural-light": "workspace:*",
     "@meetsanctum/typescript-config": "workspace:*",

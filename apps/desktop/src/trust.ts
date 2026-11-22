@@ -3,7 +3,7 @@ import {
   findSigningCa,
   presentedAnchor,
   type HostAnchor,
-} from "./host-chain.js";
+} from "@meetsanctum/auth-protocol/host-chain";
 import type { KeptHost, StoredHost, TrustFailure } from "./shell.js";
 
 // What the desktop app trusts, checked for every HTTPS request and WebSocket

@@ -156,6 +156,9 @@ importers:
       '@meetsanctum/app-testkit':
         specifier: workspace:*
         version: link:../../packages/app-testkit
+      '@meetsanctum/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@meetsanctum/moods':
         specifier: workspace:*
         version: link:../../catalog/apps/moods
@@ -605,9 +608,55 @@ importers:
       '@meetsanctum/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@peculiar/x509':
+        specifier: 2.2.0
+        version: 2.2.0
       '@serenity-kit/opaque':
         specifier: 1.1.0
         version: 1.1.0
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.12(@types/node@25.9.9)(jsdom@30.1.3(@noble/hashes@1.8.0))(vite@8.3.8(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/mcp:
+    dependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@modelcontextprotocol/server':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@napi-rs/keyring':
+        specifier: 2.1.2
+        version: 2.1.2
+      bonjour-service:
+        specifier: ^1.4.4
+        version: 1.4.4
+      cross-spawn:
+        specifier: 7.0.6
+        version: 7.0.6
+    devDependencies:
+      '@meetsanctum/auth-protocol':
+        specifier: workspace:*
+        version: link:../auth-protocol
+      '@meetsanctum/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@peculiar/x509':
+        specifier: 2.2.0
+        version: 2.2.0
+      '@types/cross-spawn':
+        specifier: 6.0.6
+        version: 6.0.6
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
       vitest:
         specifier: ^4.1.5
         version: 4.1.12(@types/node@25.9.9)(jsdom@30.1.3(@noble/hashes@1.8.0))(vite@8.3.8(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2015,6 +2064,87 @@ packages:
     resolution: {integrity: sha512-rgR9yxSaAJ+bcsi/XroT/S2AfPiIWloXAnrdfYSCms9ivVju0ishu/wW0J21Ho6+ZOR1r7RyeRbjiRuF87ix5Q==}
     engines: {node: '>=20'}
 
+  '@napi-rs/keyring-darwin-arm64@2.1.2':
+    resolution: {integrity: sha512-vsInUWUzWS6/WzR/TFNwmdtmwKWjnnR8TOpvZ/pjjxDAkJB/waz37PWzp2b8AFcw1aCcq2aQ7k2vvbLQy8pTrw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@napi-rs/keyring-darwin-x64@2.1.2':
+    resolution: {integrity: sha512-wQihYroaQ3r++R6u5c9Gj0TCw1l1F53LCb5aLOXfVvT4DsnDnpe7p7VGYo4/33bLe0iqVevtAj+ET3yKCtOlJQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@napi-rs/keyring-freebsd-x64@2.1.2':
+    resolution: {integrity: sha512-Ve5ha7MbJsq+4TYyXYiTy4IeZOnYxkBB05uH2+nIrEKBkHmyfHttF814EfWAfoJa63KqBhYRXdYJo0o1WVL2sg==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@napi-rs/keyring-linux-arm-gnueabihf@2.1.2':
+    resolution: {integrity: sha512-zxijTnVnTApEyJMjgnLdVQL1g1DAudku/5brrWNDRWj4J0q0nFhUZEtzUA+nY2FvgDjl4s+2YCZYXSTH4TFMUg==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+
+  '@napi-rs/keyring-linux-arm64-gnu@2.1.2':
+    resolution: {integrity: sha512-PM+SAcl/yGzgGbeeCsKrnlG4T5DBIDjmDqtKm5an1bJz0o0gwSzR3BMiXf04JenkcqascZpdcIReoEvLj0cvCw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/keyring-linux-arm64-musl@2.1.2':
+    resolution: {integrity: sha512-+ERS9oyInPCALN957cViBDbYJc724/Q+rZ8ZAz4rOHj4B4v0VR4OAWThdYZgZqD54sZVV0MdyX24qva97hYoAQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/keyring-linux-riscv64-gnu@2.1.2':
+    resolution: {integrity: sha512-pGADtqeT3U1SaFZGjkVsmZVjeNOQx0fr77S+NWszXjZboyaUOLlGKgqG6ssAWzcwxv8uPhKc9Ij17ujNZhSqLw==}
+    engines: {node: '>= 10'}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/keyring-linux-x64-gnu@2.1.2':
+    resolution: {integrity: sha512-Fj5TmTnl2oriuCT5DDEYlhgxYes20uGfgOg10LK9PyPVsI8/PQ1m8I4rq/4A5hkrMtY7wvFb70YmX/yPHDYWvQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/keyring-linux-x64-musl@2.1.2':
+    resolution: {integrity: sha512-C+KhAeU6x2A43FV3dOmMvUraJb8zsC9VZfsunjZ1cgtuAb208TALaUuAY0jThOphXqhyhBJOs2xTCQhOrRkJIw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/keyring-win32-arm64-msvc@2.1.2':
+    resolution: {integrity: sha512-kBq80ZZfjXoa5wHG9kgAVhYYjaPOLgHh5ngt7r1ftwFXPXDPXKH7oM2r2j2Q64cs0pVtmodVtn5Q9e6xCwzQUQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@napi-rs/keyring-win32-ia32-msvc@2.1.2':
+    resolution: {integrity: sha512-bhgKvVbWlZ6iR/tmvb2ht6/o0OzarUX9W7hjg+G+eVdGjR1prwtQ9lYo5ZESdn/+zyF1MIFvHkOCGja9YqDcww==}
+    engines: {node: '>= 10'}
+    cpu: [ia32]
+    os: [win32]
+
+  '@napi-rs/keyring-win32-x64-msvc@2.1.2':
+    resolution: {integrity: sha512-yQtFdfuwqM0ezKlYO6r2n44in2LGzd4MC679Ddhvojip3t1hn+q/4I+gJU+cIJQVd5FAZSKNrK4tGfew3UTpAQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  '@napi-rs/keyring@2.1.2':
+    resolution: {integrity: sha512-9i1SR6tYeQ3o1beLeVMxhN6Fq513m9TZlTs+46+4JgvSNkaFoW9S4WrpV5MjzE+0CzVoC+dZ4RfZDIgW6+afnQ==}
+    engines: {node: '>= 10'}
+
   '@napi-rs/wasm-runtime@1.2.4':
     resolution: {integrity: sha512-AJxoUD2/15ESHbvpcyjU274nsAPLuOtPHCk0vKJM5pj//Fg/B1FXNWjPnXTT9PymCYYiHo4zPj0ZomXBKhoy7g==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
@@ -3338,6 +3468,9 @@ packages:
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
+
+  '@types/cross-spawn@6.0.6':
+    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
 
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
@@ -8682,6 +8815,57 @@ snapshots:
       '@modelcontextprotocol/core': 2.4.0
       zod: 4.6.7
 
+  '@napi-rs/keyring-darwin-arm64@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-darwin-x64@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-freebsd-x64@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-arm-gnueabihf@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-arm64-gnu@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-arm64-musl@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-riscv64-gnu@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-x64-gnu@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-linux-x64-musl@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-win32-arm64-msvc@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-win32-ia32-msvc@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring-win32-x64-msvc@2.1.2':
+    optional: true
+
+  '@napi-rs/keyring@2.1.2':
+    optionalDependencies:
+      '@napi-rs/keyring-darwin-arm64': 2.1.2
+      '@napi-rs/keyring-darwin-x64': 2.1.2
+      '@napi-rs/keyring-freebsd-x64': 2.1.2
+      '@napi-rs/keyring-linux-arm-gnueabihf': 2.1.2
+      '@napi-rs/keyring-linux-arm64-gnu': 2.1.2
+      '@napi-rs/keyring-linux-arm64-musl': 2.1.2
+      '@napi-rs/keyring-linux-riscv64-gnu': 2.1.2
+      '@napi-rs/keyring-linux-x64-gnu': 2.1.2
+      '@napi-rs/keyring-linux-x64-musl': 2.1.2
+      '@napi-rs/keyring-win32-arm64-msvc': 2.1.2
+      '@napi-rs/keyring-win32-ia32-msvc': 2.1.2
+      '@napi-rs/keyring-win32-x64-msvc': 2.1.2
+
   '@napi-rs/wasm-runtime@1.2.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@emnapi/core': 1.11.3
@@ -9972,6 +10156,10 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
+
+  '@types/cross-spawn@6.0.6':
+    dependencies:
+      '@types/node': 25.9.9
 
   '@types/debug@4.1.13':
     dependencies:

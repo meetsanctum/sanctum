@@ -20,6 +20,7 @@ COPY packages/app-sdk/package.json packages/app-sdk/package.json
 COPY packages/app-sdk/bin packages/app-sdk/bin
 COPY packages/app-testkit/package.json packages/app-testkit/package.json
 COPY packages/auth-protocol/package.json packages/auth-protocol/package.json
+COPY packages/mcp/package.json packages/mcp/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
 # ui-sdk's command shim, which pnpm links when it installs.
