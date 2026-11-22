@@ -348,6 +348,15 @@ describe("an entry's words", () => {
       "Someone tried a wrong code for adding an AI agent",
     );
     expect(wrong.problem).toBe(true);
+    const held = words({
+      action: "agents.add",
+      outcome: "refused",
+      reason: "too_many_attempts",
+    });
+    expect(held.title).toBe(
+      "Held back a computer trying codes for adding an AI agent",
+    );
+    expect(held.problem).toBe(true);
   });
 
   it("joins a morning of adjustments into one", () => {

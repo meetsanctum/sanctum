@@ -848,13 +848,15 @@ function setupEntry(entry: ActivityInfo): Words | null {
     case "agents.setup-cancel":
       return said("Stopped adding an AI agent");
     case "agents.add":
-      return entry.outcome === "ok"
-        ? said(`Added ${name ?? "an AI agent"}`)
-        : {
-            title: "Someone tried a wrong code for adding an AI agent",
-            detail: by,
-            problem: true,
-          };
+      if (entry.outcome === "ok") return said(`Added ${name ?? "an AI agent"}`);
+      return {
+        title:
+          entry.reason === "too_many_attempts"
+            ? "Held back a computer trying codes for adding an AI agent"
+            : "Someone tried a wrong code for adding an AI agent",
+        detail: by,
+        problem: true,
+      };
     case "agents.can-use": {
       // An app's offer by the title it kept, one of the core's areas by its
       // permission's words.
