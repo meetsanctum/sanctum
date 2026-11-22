@@ -10,7 +10,9 @@ CREATE TABLE `auth_agent_setups` (
 	`failed_at` integer,
 	`cancelled_at` integer,
 	`client_id` text,
-	`collected_from` text
+	`collected_from` text,
+	`connected_at` integer
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `auth_agent_setups_secret_hash_unique` ON `auth_agent_setups` (`secret_hash`);
+CREATE UNIQUE INDEX `auth_agent_setups_secret_hash_unique` ON `auth_agent_setups` (`secret_hash`);--> statement-breakpoint
+CREATE UNIQUE INDEX `auth_agent_setups_client_id` ON `auth_agent_setups` (`client_id`);

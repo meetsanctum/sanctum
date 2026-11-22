@@ -348,15 +348,8 @@
     {
       "idx": 49,
       "version": "6",
-      "when": 1795355972217,
+      "when": 1795357083779,
       "tag": "0049_agent-setups",
-      "breakpoints": true
-    },
-    {
-      "idx": 50,
-      "version": "6",
-      "when": 1795356700756,
-      "tag": "0050_agent-setup-connection",
       "breakpoints": true
     }
   ]

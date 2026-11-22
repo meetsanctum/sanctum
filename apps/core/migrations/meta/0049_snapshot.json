@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c2f5633c-71b8-4ef6-8ace-01fd06180395",
+  "id": "92576f00-09b5-41f5-9437-23c07efe14e2",
   "prevId": "0e345d33-32f7-4b35-8fe6-c1f9c73fc80c",
   "tables": {
     "activity": {
@@ -877,6 +877,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "connected_at": {
+          "name": "connected_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -884,6 +891,13 @@
           "name": "auth_agent_setups_secret_hash_unique",
           "columns": [
             "secret_hash"
+          ],
+          "isUnique": true
+        },
+        "auth_agent_setups_client_id": {
+          "name": "auth_agent_setups_client_id",
+          "columns": [
+            "client_id"
           ],
           "isUnique": true
         }
