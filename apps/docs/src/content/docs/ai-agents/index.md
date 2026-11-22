@@ -7,8 +7,9 @@ sidebar:
 
 An AI agent is an AI program that runs on a computer, such as Claude Code or
 Codex. Once you add one, you can ask it in your own words to dim the living
-room, turn the office lights up so you can see, or run the Evening mood. It
-asks which room when you don't say, and tells you what it changed.
+room, turn the office lights up so you can see, or run the Evening mood.
+Sanctum tells the agent to ask which room when it's unclear and to report
+what it changed.
 
 Agents are optional, and you choose what they can use. Until you add one,
 nothing in Sanctum is open to them.
@@ -20,7 +21,8 @@ nothing in Sanctum is open to them.
   in the cloud, such as claude.ai, ChatGPT or Codex on the web, can't reach
   your home.
 - **Node.js 22 or newer** on that computer. The agent runs Sanctum's small
-  connector, `@meetsanctum/mcp`, with `npx`.
+  connector, `@meetsanctum/mcp`, with `npx`. Setup needs access to the
+  connector version named in the prompt on npm.
 
 ## Adding an agent
 
@@ -35,60 +37,63 @@ nothing in Sanctum is open to them.
    > Connect to my Sanctum home. Run `npx -y @meetsanctum/mcp@0.1.0 connect
 sanctum:…` and do what it says.
 
-   The prompt works once, and expires 10 minutes after you make it.
+   The prompt contains a one-time setup code that expires after 10 minutes.
+   Share it only with the agent you want to add.
 
 4. Choose **Copy prompt**, and paste it into the agent on that computer. The
    agent runs the command and tells you what happened.
 5. The sheet says the agent is connected once it has reached your home, with
    the address it connected from. Choose **Done**.
 
-Start a new session with the agent afterwards: Sanctum's tools are there
-from its next session. If the prompt runs out first, the sheet says so, and
-**Make a new prompt** gives you another.
+If the connector prints a registration command, run it for your agent.
+Once the connector is registered, start a new session with the agent to
+use Sanctum's tools. If the prompt runs out before the connector reaches
+your home, the sheet says so, and **Make a new prompt** gives you another.
 
 ### What the connector does
 
-The prompt runs the connector on the agent's computer. It's the only way an
-agent reaches your home, and it keeps you from handling certificates or
-passwords:
+The prompt runs the connector on the agent's computer. It handles the
+home's certificate and the agent's key for you.
 
-- **It checks it's your home** before it sends anything. The code in the
-  prompt carries your home's identity, and the connector refuses any computer
-  on the network that can't prove it's that home.
+- **It checks it's your home** before it sends the setup secret. The code in
+  the prompt carries your home's identity, and the connector refuses any
+  computer on the network that can't prove it's that home.
 - **It keeps the agent's key safe:** in the Keychain on a Mac, the Credential
   Manager on Windows, or the Secret Service on Linux. Where there's none, as
   over SSH, it keeps the key in a file only you can read, and says so. The key
   is never in the agent's settings, its chat or your shell's history.
-- **It adds itself to the agent** as an MCP server named after your home, such
-  as `sanctum-home`. Adding the same agent again replaces it.
+- **It registers with Claude Code or Codex** as an MCP server named after
+  your home, such as `sanctum-home`. When registration succeeds again for
+  the same agent and home on that computer, it replaces the previous local
+  connection. The earlier entry can still appear in Sanctum.
 
 ### Setting it up by hand
 
 For an agent that can't run commands itself, choose **Set it up by hand** on
-the sheet. It shows the same command to run yourself in a terminal on that
-computer. The connector sets itself up, then shows the lines that add it to
-your agent. Nothing secret is in them.
+the sheet. Choose **Copy command** and run it in a terminal on that computer.
+The connector sets up its connection to your home and prints the commands
+for Claude Code and Codex. Run the command for your agent, then start a new
+session. The registration commands contain no secret.
 
 ### When the agent asks before acting
 
 Claude Code and Codex can ask you before they use one of Sanctum's tools, as
 they do for their other tools. Answer as you would there.
 
-`codex exec`, which runs Codex without anyone at the keyboard, can't ask. It
-refuses any call that changes something, such as turning a light on, unless
-you allow Sanctum's tools in Codex's `config.toml`:
+`codex exec` runs without anyone at the keyboard and can refuse calls that
+require approval, such as turning on a light. To let Codex use the server's
+tools without asking, find the existing `[mcp_servers.sanctum-home]` section
+in `~/.codex/config.toml`, using the name the connector gave it. Add this
+line to that section.
 
 ```toml
-[mcp_servers.sanctum-home]
 default_tools_approval_mode = "approve"
 ```
 
-Use the name the connector gave the server.
-
 ## Your agents
 
-**Settings → AI agents** lists each agent with who added it, when, and when
-it was last seen, such as "Added by Maya on 20 Nov · Seen 5 minutes ago".
+**Settings → AI agents** lists who or what device added each agent, when it
+was added, and when it last reached Sanctum.
 Anyone in the household sees and manages every agent, from any device.
 
 What an agent does shows in **Settings → Activity** under its name, so you
@@ -102,13 +107,14 @@ so you can tell which one to keep.
 
 Choose **⋮** beside an agent:
 
-- **Rename** changes the name it goes by here and in the activity log.
+- **Rename** changes the name shown here and on new activity entries.
 - **Remove** stops it at once. A command it already sent, such as a light
   turning on, may still finish. To use the agent again, add it again.
 
-Removing an agent in Sanctum doesn't take the MCP server out of the agent.
-The next time the agent tries to use it, it hears that it was removed, and
-the connector forgets its key. To take the server out of the agent too:
+The next time the connector reaches Sanctum, it learns that the agent was
+removed and clears its stored key. To remove the MCP server from Claude Code
+or Codex too, run the corresponding command below on the agent's computer.
+Replace `sanctum-home` with the name the connector gave the server.
 
 ```sh
 claude mcp remove sanctum-home -s user
@@ -124,16 +130,21 @@ What an agent can use is set for every agent at once, on
 [What AI agents can use](/ai-agents/what-they-can-use/). With the defaults,
 an agent can:
 
-- **See your home:** its floors, rooms and the devices it may see, with what
-  they're doing now.
-- **Change your lights:** on or off, brighter or dimmer, or a brightness and
-  colour temperature, for a room, a floor, the whole home or chosen lights.
-  Turning lights on goes by the room's own rule, as its lights button does.
+- **See your home:** its floors, rooms, zones and the devices it may see,
+  with what they're doing now.
+- **Change your lights:** turn them on or off, make them brighter or dimmer,
+  or set their brightness, colour temperature or both. It can do this for
+  a room, a floor, a zone, the whole home or chosen lights. Turning lights
+  on goes by the room's own rule, as its lights button does.
 - **Use your apps:** run a mood, or have lights follow natural light, for
   example.
-- **Put its own change back:** each light it changed that still looks as it
-  left it goes back to how it was. A light someone changed since is left as
-  it is. An agent can put back any of its last 5 changes, for an hour.
+- **Put its own light commands back:** it can try to restore a light if it
+  still shows the state the agent set. Sanctum keeps the last five such
+  changes per agent for up to an hour. Restarting Sanctum clears that list.
+  Running a mood doesn't create a change that the agent can put back.
+
+With **Control your switches** on, an agent can also turn switches and
+plugs on or off and put those commands back under the same rules.
 
 Some things are never open to agents, whatever you switch on: adding,
 removing or renaming devices, rooms, floors and people; adding, updating or

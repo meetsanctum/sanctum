@@ -15,8 +15,8 @@ something, and where it's decided.
 
 ## Your home
 
-**Settings → AI agents → What AI agents can use** has a switch for each part
-of your home, in the same words as apps' [permissions](/apps/permissions/):
+**Settings → AI agents → What AI agents can use** lists each part of your
+home in the same words as apps' [permissions](/apps/permissions/).
 
 | What AI agents can use                                        | Starts                   |
 | ------------------------------------------------------------- | ------------------------ |
@@ -32,19 +32,20 @@ of your home, in the same words as apps' [permissions](/apps/permissions/):
 | See what your devices reported                                | Off, and asks to turn on |
 | See who lives here                                            | Off, and asks to turn on |
 
-- **See your rooms** is always on: without your rooms, an agent can do
-  nothing by room.
-- **Control your lights** includes seeing them, and **Control your
-  switches** includes plugs and whatever is plugged into them.
+- **See your rooms** stays on so an agent can work by room.
+- **Control your lights** includes seeing them. **See your switches**
+  includes plugs, and **Control your switches** also lets an agent see
+  and turn switches and plugs on or off.
 - **What tells who's home:** motion, doors and windows, remotes' presses,
   the activity log, what your devices reported, and the names of the people
   who live here can show when someone is home. Each asks before it turns on,
   since an agent may share what it reads with the company that runs it.
-- **See what happened at home** is the activity log, without people's names
-  unless **See who lives here** is on too. **See what your devices reported**
-  goes back up to 10 days.
+- **See what happened at home** covers activity for devices the agent can
+  see. It includes people's names only when **See who lives here** is on
+  too. **See what your devices reported** goes back up to 10 days for devices
+  the agent can see and whose history your home keeps.
 
-Turning anything off happens at once, and an agent's next call is refused.
+Turning a switch off applies immediately to new requests that need it.
 
 ## In your apps
 
@@ -62,20 +63,20 @@ An item that needs something switched off says so, such as "Needs Control
 your lights, which is off for AI agents". Where that's one of your home's
 switches, **Change it in Settings** takes you there.
 
-These are the items Sanctum's apps offer:
+These are the defaults when you add each app for the first time.
 
 | App           | Item                           | Starts |
 | ------------- | ------------------------------ | ------ |
 | Moods         | Run a mood                     | On     |
 | Moods         | Mood                           | On     |
 | Moods         | Create a mood                  | Off    |
-| Natural light | Follow natural light           | On     |
-| Natural light | Follow natural light in a room | On     |
-| Natural light | Bring a room to natural light  | On     |
-| Natural light | Pause natural light            | On     |
-| Natural light | Resume natural light           | On     |
-| Natural light | Light following the sun        | On     |
-| Natural light | Today's natural light          | Off    |
+| Natural Light | Follow natural light           | On     |
+| Natural Light | Follow natural light in a room | On     |
+| Natural Light | Bring a room to natural light  | On     |
+| Natural Light | Pause natural light            | On     |
+| Natural Light | Resume natural light           | On     |
+| Natural Light | Light following the sun        | On     |
+| Natural Light | Today's natural light          | Off    |
 | Weather       | Forecast                       | On     |
 | Weather       | Sun                            | Off    |
 
@@ -87,7 +88,6 @@ delete a mood, for example, and no app lets an agent add devices.
 
 ### Items from an update
 
-An item an app brings in an update starts off, whatever the app's default,
-so an update never widens what agents can use without you knowing. The
-same goes for an app your home already ran before it offered anything to
-agents.
+New items from an app update start off. This also applies when an app you
+already use first adds items for agents. If an update changes an item from
+reading information to taking an action, its switch goes back off.
