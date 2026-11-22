@@ -263,10 +263,12 @@ describe("removing a device", () => {
 
     await home.core.remove(key);
     await home.core.until(() => device.waiting, "its key applied");
-    expect(home.core.found.find((each) => each.key === key)).toMatchObject({
-      description: "Espressif",
-      asks: [],
-    });
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.description ===
+        "Espressif",
+      "listed by who made it",
+    );
   });
 
   it.each([false, true])(

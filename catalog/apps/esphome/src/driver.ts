@@ -73,6 +73,8 @@ type Owned = {
   removing: boolean;
   // Its key being given anew by Repair, which ends its connections too.
   rekeying: boolean;
+  // Who made it, as its connection last said, for its card once removed.
+  maker: string | null;
   haltReport?: object;
 };
 
@@ -127,6 +129,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   function connected(owned: Owned, session: Session, hear: () => void) {
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
+    owned.maker = makerOf(session.info).manufacturer ?? owned.maker;
     owned.haltReport = undefined;
     // Its latest session, open or closed since with nothing in its place.
     const current = () =>
@@ -225,6 +228,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       setup: Promise.resolve(),
       removing: false,
       rekeying: false,
+      maker: device.manufacturer ?? null,
       connection: undefined as unknown as Connection,
     };
     owned.connection = createConnection({
@@ -640,11 +644,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             timings,
           });
           // Listed again by who made it, as before it was added.
-          finds.learn(
-            key,
-            answer,
-            session && makerOf(session.info).manufacturer,
-          );
+          finds.learn(key, answer, owned.maker);
         } catch (error) {
           owned.removing = false;
           throw error;
