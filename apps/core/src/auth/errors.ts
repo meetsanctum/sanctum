@@ -15,6 +15,8 @@ const statuses: Record<AuthErrorCode, number> = {
   too_many_attempts: 429,
   busy: 429,
   host_starting: 503,
+  connector_too_new: 409,
+  connector_too_old: 409,
 };
 
 // A refusal Auth's routes answer with its status and `{ error: code }`.

@@ -35,7 +35,7 @@ type Request = typeof authPairingRequests.$inferSelect;
 const requests = authPairingRequests;
 
 // The address as it is shown: IPv4 without its IPv6 mapping.
-function shownAddress(address: string) {
+export function shownAddress(address: string) {
   return address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
 }
 

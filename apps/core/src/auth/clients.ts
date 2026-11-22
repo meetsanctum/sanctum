@@ -3,7 +3,17 @@ import type {
   ClientKind,
   Platform,
 } from "@meetsanctum/auth-protocol";
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
@@ -331,6 +341,45 @@ export function createClients(
               : undefined,
         });
         return clientInfo(renamed, principal.client.id);
+      });
+    },
+
+    // The home's agents that have reached it, oldest first: one whose setup
+    // hasn't connected yet isn't listed until it does.
+    listAgents(): Client[] {
+      return db
+        .select()
+        .from(authClients)
+        .where(
+          and(
+            isNull(authClients.revokedAt),
+            eq(authClients.kind, "agent"),
+            isNotNull(authClients.lastSeenAt),
+          ),
+        )
+        .orderBy(asc(authClients.createdAt))
+        .all();
+    },
+
+    // Takes back an agent's token without anyone asking, as when its setup
+    // runs out before it connects or is cancelled. Logged by the setup.
+    revokeAgent(id: string) {
+      const at = now();
+      db.transaction(() => {
+        db.update(authTokens)
+          .set({ revokedAt: at })
+          .where(and(eq(authTokens.clientId, id), isNull(authTokens.revokedAt)))
+          .run();
+        db.update(authClients)
+          .set({ revokedAt: at })
+          .where(
+            and(
+              eq(authClients.id, id),
+              eq(authClients.kind, "agent"),
+              isNull(authClients.revokedAt),
+            ),
+          )
+          .run();
       });
     },
 

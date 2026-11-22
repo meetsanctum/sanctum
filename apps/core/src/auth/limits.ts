@@ -25,6 +25,10 @@ export const defaultLimits = {
   // every shared device in the home asks at once.
   pairingPerAddress: 5,
   pairingTotal: 32,
+  // AI agents' setups waiting to be collected, across the host. Wrong
+  // secrets are counted per address like sign-ins, in a counter of their
+  // own.
+  agentSetupsOpen: 8,
 };
 
 export type Limits = typeof defaultLimits;

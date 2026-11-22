@@ -121,3 +121,25 @@ export const authPairingRequests = sqliteTable("auth_pairing_requests", {
   // The client collecting created, which used the request up.
   clientId: text("client_id"),
 });
+
+// AI agents' one-time setups. Only the secret's hash is kept. A setup stays
+// here a day after it runs out, so its sheet can still tell how it ended.
+export const authAgentSetups = sqliteTable("auth_agent_setups", {
+  id: text("id").primaryKey(),
+  secretHash: text("secret_hash").notNull().unique(),
+  // The name the agent will go by.
+  name: text("name").notNull(),
+  // Who started it, who the agent is added by: a person or a shared client.
+  // No reference: collecting checks they're still there (clients.ts).
+  addedByKind: text("added_by_kind", { enum: ["person", "client"] }).notNull(),
+  addedById: text("added_by_id").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  // Wrong secrets sent for it; too many and it fails.
+  wrongSecrets: integer("wrong_secrets").notNull().default(0),
+  failedAt: integer("failed_at", { mode: "timestamp_ms" }),
+  cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
+  // The agent collecting created, and the address it collected from.
+  clientId: text("client_id"),
+  collectedFrom: text("collected_from"),
+});

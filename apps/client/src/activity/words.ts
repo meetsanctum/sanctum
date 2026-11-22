@@ -835,6 +835,26 @@ function setupEntry(entry: ActivityInfo): Words | null {
       return entry.detail?.kind === "agent"
         ? said(`Removed ${name ?? "an AI agent"}`)
         : said(`Signed out ${name ?? "a device"}`);
+    // Adding an AI agent: its setup, and the agent's connector collecting
+    // its token with the setup's code.
+    case "agents.setup": {
+      const added = entry.detail?.name;
+      return said(
+        typeof added === "string"
+          ? `Started adding ${added}`
+          : "Started adding an AI agent",
+      );
+    }
+    case "agents.setup-cancel":
+      return said("Stopped adding an AI agent");
+    case "agents.add":
+      return entry.outcome === "ok"
+        ? said(`Added ${name ?? "an AI agent"}`)
+        : {
+            title: "Someone tried a wrong code for adding an AI agent",
+            detail: by,
+            problem: true,
+          };
     case "agents.can-use": {
       // An app's offer by the title it kept, one of the core's areas by its
       // permission's words.
