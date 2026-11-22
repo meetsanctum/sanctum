@@ -28,6 +28,16 @@ test("brings its lights and contact sensors as what they are", () => {
   assert.deepEqual(core.refused, []);
 });
 
+test("reports a new episode when the TV box skips forwards or backwards", async () => {
+  assert.equal(typeOf("tv-box"), "media-player");
+  const episode = core.latest("tv-box", "player").media.episode;
+  await core.command("tv-box", "player", "media", { playback: "next" });
+  assert.equal(core.latest("tv-box", "player").media.episode, episode + 1);
+  assert.equal(core.latest("tv-box", "player").media.position, 0);
+  await core.command("tv-box", "player", "media", { playback: "previous" });
+  assert.equal(core.latest("tv-box", "player").media.episode, episode);
+});
+
 test("lists what it found as what each is", () => {
   assert.deepEqual(
     core.found.map(({ key, type }) => [key, type]),

@@ -16,7 +16,7 @@ export const isMedia = (capability: CapabilityInfo): capability is Media =>
   capability.kind === "media";
 
 /** What is playing, as a tile names it: its title, or the app's name. */
-export function whatsPlaying(state: MediaState): string | null {
+function whatsPlaying(state: MediaState): string | null {
   return state.media?.title ?? state.app?.name ?? null;
 }
 
@@ -31,8 +31,8 @@ export function mediaText(
   options: { what?: boolean } = {},
 ): string {
   const { state } = capability;
-  if (!state) return "Not playing";
   if (capability.sync === "conflict") return "Not responding";
+  if (!state) return "Not playing";
   if (state.on === false) return "Off";
   const what = options.what === false ? null : whatsPlaying(state);
   const doing = {
@@ -43,6 +43,10 @@ export function mediaText(
   }[state.activity];
   if (doing) return what ? `${doing} · ${what}` : doing;
   return state.app ? `On · ${state.app.name}` : "Not playing";
+}
+
+export function isPlaying({ state }: Media): boolean {
+  return state?.on !== false && state?.activity === "playing";
 }
 
 /**
@@ -78,14 +82,24 @@ const summaryTypes: readonly { type: DeviceType; title: string }[] = [
 export function mediaSummary(
   tiles: readonly Tile[],
   devices: readonly DeviceInfo[],
-): { type: DeviceType; title: string; status: string; spoken: string }[] {
+): { type: DeviceType; title: string; status: string }[] {
   const typeOf = new Map(devices.map((device) => [device.id, device.type]));
-  const players = tiles.filter((tile) => tile.kind === "media");
+  const mediaTypes = new Set(summaryTypes.map(({ type }) => type));
+  const counts = new Map<DeviceType, { playing: number }>();
+  for (const tile of tiles) {
+    if (tile.kind !== "media") continue;
+    const deviceType = typeOf.get(tile.deviceId);
+    const type =
+      deviceType && mediaTypes.has(deviceType) ? deviceType : "media-player";
+    const count = counts.get(type) ?? { playing: 0 };
+    if (tile.media?.playing) count.playing += 1;
+    counts.set(type, count);
+  }
   return summaryTypes.flatMap(({ type, title }) => {
-    const own = players.filter((tile) => typeOf.get(tile.deviceId) === type);
-    if (own.length === 0) return [];
-    const playing = own.filter((tile) => tile.media?.playing).length;
+    const count = counts.get(type);
+    if (!count) return [];
+    const { playing } = count;
     const status = playing > 0 ? `${playing} playing` : "Not playing";
-    return [{ type, title, status, spoken: status }];
+    return [{ type, title, status }];
   });
 }

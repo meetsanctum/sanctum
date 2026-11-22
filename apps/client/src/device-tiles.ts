@@ -22,7 +22,13 @@ import {
 } from "@meetsanctum/ui-sdk";
 
 import { contactText } from "./contact";
-import { canPlayPause, isMedia, mediaText, type Media } from "./media";
+import {
+  canPlayPause,
+  isMedia,
+  isPlaying,
+  mediaText,
+  type Media,
+} from "./media";
 import { motionText } from "./motion";
 
 // The home's lights, switches, remotes and sensors as tiles: one tile for
@@ -315,7 +321,7 @@ function mediaTile(
       media: { playing: false, canPlayPause: false },
     };
   }
-  const playing = capability.state?.activity === "playing";
+  const playing = isPlaying(capability);
   return {
     ...base,
     status: mediaText(capability),
@@ -559,7 +565,8 @@ type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
  * light even where a switch comes before it, and otherwise its first light
  * or switch, with that tile's key, so a command waiting or failed shows on
  * it, and pressing it opens the detail on its first page. A further light
- * or switch keeps a tile of its own. A press
+ * or switch keeps a tile of its own. A media device keeps its first
+ * player's controls and any lights or switches get their own tiles. A press
  * flashes only a remote's: a light with a button goes on showing whether it
  * is on.
  */
@@ -579,11 +586,23 @@ function roomTilesOf(
     const kind = device && primaryKindOf(device.type);
     const ofKind = own.filter((tile) => tile.kind === kind);
     const first = ofKind[0] ?? own[0]!;
+    const controls = own.filter(isControlTile);
+    if (first.kind === "media") {
+      return [
+        {
+          tile: { ...first, name: device?.name ?? first.name },
+          category: "media",
+        },
+        ...controls.map((tile) => ({
+          tile,
+          category: deviceCategoryOf(tile.kind)?.id,
+        })),
+      ];
+    }
     // Keep the tile's key stable but open the part whose state it shows.
     const active = isControlTile(first)
       ? first
       : (ofKind.find((tile) => tile.on) ?? first);
-    const controls = own.filter(isControlTile);
     const control = isControlTile(active) ? active : controls[0];
     const one: Tile = control
       ? {

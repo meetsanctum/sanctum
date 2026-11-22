@@ -15,11 +15,12 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode,
 } from "react";
 
-import { canPlayPause, type Media } from "./media";
+import { canPlayPause, isPlaying, type Media } from "./media";
 
 // A media player's pages in its detail, on the veil's glass with no card:
 // Playing, what it plays with its controls; a TV's Remote, its power above
@@ -41,6 +42,7 @@ type Props = {
   capability: Media;
   /** Offline: shown, with nothing to press. */
   disabled: boolean;
+  failures?: number;
   onCommand: (command: MediaCommand) => void;
 };
 
@@ -57,18 +59,26 @@ const clock = (seconds: number) => {
 // Where it is in what plays, counted on from when the player said so while
 // it plays, each second.
 function usePosition(capability: Media): number | null {
-  const media = capability.state?.media;
-  const playing = capability.state?.activity === "playing";
+  // The reported position belongs to the reported activity, even while a
+  // command is still waiting for the player to switch between play and pause.
+  const { observed } = capability;
+  const media = observed?.media;
+  const isAdvancing =
+    observed?.on !== false &&
+    observed?.activity === "playing" &&
+    media?.position !== undefined;
+  const positionAt = media?.positionAt;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!playing || media?.position === undefined) return;
+    if (!isAdvancing || !positionAt) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [playing, media?.position]);
+  }, [isAdvancing, positionAt]);
   if (media?.position === undefined) return null;
   const since =
-    playing && media.positionAt
-      ? Math.max(0, (now - Date.parse(media.positionAt)) / 1000)
+    isAdvancing && positionAt
+      ? Math.max(0, (now - Date.parse(positionAt)) / 1000)
       : 0;
   const at = media.position + since;
   return media.duration === undefined ? at : Math.min(at, media.duration);
@@ -84,12 +94,13 @@ function aboutWhatPlays(capability: Media): string | null {
       ? `Season ${media.season}, episode ${media.episode}`
       : null;
   const parts = [
+    media?.series ?? null,
     episode,
     episode ? null : (media?.artist ?? null),
     episode ? null : (media?.album ?? null),
     state?.app?.name ?? null,
   ].filter((each): each is string => each !== null && each !== media?.title);
-  return parts.length > 0 ? parts.join(" · ") : null;
+  return parts.length > 0 ? [...new Set(parts)].join(" · ") : null;
 }
 
 // The picture of what plays. Until a player hands one over, it is a soft
@@ -138,15 +149,19 @@ export function MediaPlaying(props: Props) {
   const { capability, onCommand } = props;
   const state = capability.state;
   const { playback } = capability.features;
-  const playing = state?.activity === "playing";
-  const nothing =
-    !state || state.on === false || (state.activity === "idle" && !state.media);
+  const playing = isPlaying(capability);
+  const nothing = !state || state.on === false || state.activity === "idle";
   const able = !props.disabled && !nothing;
   const canToggle = !props.disabled && canPlayPause(capability);
   const position = usePosition(capability);
   const duration = state?.media?.duration;
+  const canSeek =
+    able && duration !== undefined && duration > 0 && playback.includes("seek");
   const [seeking, setSeeking] = useState<number | null>(null);
-  const shownAt = seeking ?? position;
+  const seekPointer = useRef<number | null>(null);
+  const seekTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const shownAt = canSeek ? (seeking ?? position) : position;
+  const page = useRef<HTMLDivElement>(null);
   const title = nothing ? null : (state?.media?.title ?? null);
   const about = nothing ? null : aboutWhatPlays(capability);
   const square =
@@ -155,19 +170,33 @@ export function MediaPlaying(props: Props) {
       (props.device.type === "speaker" ||
         props.device.type === "smart-speaker"));
 
-  // Space plays or pauses while the detail is open, as on any player.
-  const toggle = useRef<() => void>(() => undefined);
-  toggle.current = () => {
-    if (canToggle) onCommand({ activity: playing ? "paused" : "playing" });
-  };
+  // Space is a shortcut only while Playing is the visible page.
+  const toggle = useRef<(() => void) | null>(null);
+  toggle.current = canToggle
+    ? () => onCommand({ activity: playing ? "paused" : "playing" })
+    : null;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== " " || event.repeat) return;
-      // A field or a button takes its own Space.
+      if (
+        event.key !== " " ||
+        event.repeat ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        !toggle.current ||
+        !page.current ||
+        page.current.closest('[inert], [role="dialog"][data-state="closed"]')
+      )
+        return;
       const target = event.target;
       if (
         target instanceof Element &&
-        target.closest("input, textarea, button, [contenteditable]")
+        (target.closest('[role="dialog"]') !==
+          page.current.closest('[role="dialog"]') ||
+          target.closest(
+            'input, textarea, select, button, a[href], summary, [contenteditable], [role="button"], [role="slider"]',
+          ))
       )
         return;
       event.preventDefault();
@@ -177,13 +206,38 @@ export function MediaPlaying(props: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const seek = (to: number) => {
+  useEffect(() => {
+    if (canSeek) return;
+    seekPointer.current = null;
+    clearTimeout(seekTimeout.current);
     setSeeking(null);
-    onCommand({ position: Math.round(to) });
+  }, [canSeek]);
+  useEffect(() => {
+    if (seekPointer.current === null) setSeeking(null);
+  }, [
+    capability.observed?.media?.position,
+    capability.observed?.media?.positionAt,
+    props.failures,
+  ]);
+  useEffect(() => () => clearTimeout(seekTimeout.current), []);
+
+  const seek = (to: number) => {
+    setSeeking(to);
+    clearTimeout(seekTimeout.current);
+    seekTimeout.current = setTimeout(() => setSeeking(null), 3000);
+    onCommand({ position: to });
+  };
+  const cancelSeek = (event: PointerEvent<HTMLDivElement>) => {
+    if (seekPointer.current !== event.pointerId) return;
+    seekPointer.current = null;
+    setSeeking(null);
   };
 
   return (
-    <div className="@container flex w-[760px] max-w-full justify-center">
+    <div
+      ref={page}
+      className="@container flex w-[760px] max-w-full justify-center"
+    >
       <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[minmax(0,1fr)_auto] @min-[560px]:gap-10 @min-[560px]:pt-7">
         <div className="flex min-w-0 flex-col gap-5">
           {(title || about) && (
@@ -211,31 +265,56 @@ export function MediaPlaying(props: Props) {
                   style={{ width: `${(shownAt / (duration || 1)) * 100}%` }}
                 />
               )}
-              {playback.includes("seek") && duration !== undefined && able && (
-                <input
-                  type="range"
-                  min={0}
-                  max={duration}
-                  step={1}
-                  value={shownAt ?? 0}
-                  aria-label={`Where ${props.name} is`}
-                  aria-valuetext={`${clock(shownAt ?? 0)} of ${clock(duration)}`}
-                  onChange={(event) => setSeeking(Number(event.target.value))}
-                  onPointerUp={(event) =>
-                    seek(Number(event.currentTarget.value))
-                  }
-                  onKeyUp={(event) => seek(Number(event.currentTarget.value))}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  className="absolute inset-x-0 -top-2 h-6 w-full cursor-pointer opacity-0"
-                />
+              {canSeek && (
+                <div
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    if (
+                      event.button !== 0 ||
+                      event.isPrimary === false ||
+                      seekPointer.current !== null
+                    )
+                      return;
+                    // Use the visible rail's coordinates in every browser,
+                    // including when the drag begins away from the thumb.
+                    clearTimeout(seekTimeout.current);
+                    seekPointer.current = event.pointerId;
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    setSeeking(seekAt(event, duration));
+                  }}
+                  onPointerMove={(event) => {
+                    if (seekPointer.current !== event.pointerId) return;
+                    setSeeking(seekAt(event, duration));
+                  }}
+                  onPointerUp={(event) => {
+                    if (seekPointer.current !== event.pointerId) return;
+                    seekPointer.current = null;
+                    seek(seekAt(event, duration));
+                  }}
+                  onPointerCancel={cancelSeek}
+                  onLostPointerCapture={cancelSeek}
+                  className="absolute inset-x-0 -top-2 h-6 w-full cursor-pointer [touch-action:none]"
+                >
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration}
+                    step={1}
+                    value={shownAt ?? 0}
+                    aria-label={`Where ${props.name} is`}
+                    aria-valuetext={`${clock(shownAt ?? 0)} of ${clock(duration)}`}
+                    onChange={(event) => {
+                      if (seekPointer.current === null) {
+                        seek(event.currentTarget.valueAsNumber);
+                      }
+                    }}
+                    className="pointer-events-none absolute inset-0 size-full opacity-0"
+                  />
+                </div>
               )}
             </div>
             <div className="flex justify-between text-xs text-white/64 tabular-nums">
-              <span>
-                {duration !== undefined && shownAt !== null && able
-                  ? clock(shownAt)
-                  : "–:––"}
-              </span>
+              <span>{shownAt !== null && able ? clock(shownAt) : "–:––"}</span>
               <span>
                 {duration !== undefined && shownAt !== null && able
                   ? `−${clock(duration - shownAt)}`
@@ -263,7 +342,7 @@ export function MediaPlaying(props: Props) {
               big
               label={`${playing ? "Pause" : "Play"} ${props.name}`}
               disabled={!canToggle}
-              onClick={() => toggle.current()}
+              onClick={() => toggle.current?.()}
             >
               {playing ? (
                 <Pause
@@ -302,6 +381,12 @@ export function MediaPlaying(props: Props) {
   );
 }
 
+function seekAt(event: PointerEvent<HTMLDivElement>, duration: number) {
+  const { left, width } = event.currentTarget.getBoundingClientRect();
+  const position = ((event.clientX - left) / (width || 1)) * duration;
+  return Math.min(duration, Math.max(0, Math.round(position)));
+}
+
 // A small round toggle above a page's volume: a TV's power, a speaker's
 // mute, White while on or muted.
 function Toggle(props: {
@@ -333,29 +418,50 @@ function VolumeSteps(props: {
   onStep: (step: "up" | "down") => void;
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeated = useRef(false);
+  const pointer = useRef<number | null>(null);
   const stop = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    pointer.current = null;
   };
   useEffect(() => stop, []);
   const holding = (step: "up" | "down") => ({
-    onPointerDown: (event: PointerEvent) => {
+    onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
       // A hold is the button's own, never the pages' swipe.
       event.stopPropagation();
-      if (props.disabled || event.button !== 0) return;
-      stop();
+      if (props.disabled || event.button !== 0 || event.isPrimary === false)
+        return;
+      if (pointer.current !== null) return;
+      repeated.current = false;
+      pointer.current = event.pointerId;
+      const button = event.currentTarget;
       const again = (wait: number) => {
         timer.current = setTimeout(() => {
+          if (
+            button.disabled ||
+            button.closest('[inert], [role="dialog"][data-state="closed"]')
+          ) {
+            stop();
+            return;
+          }
+          repeated.current = true;
           props.onStep(step);
           again(300);
         }, wait);
       };
       again(400);
     },
-    onPointerUp: stop,
-    onPointerLeave: stop,
-    onPointerCancel: stop,
+    onPointerUp: endHold,
+    onPointerLeave: endHold,
+    onPointerCancel: endHold,
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      if (event.detail === 0 || !repeated.current) props.onStep(step);
+    },
   });
+  const endHold = (event: PointerEvent<HTMLButtonElement>) => {
+    if (pointer.current === event.pointerId) stop();
+  };
   const half =
     "grid flex-1 place-items-center text-white outline-none focus-visible:bg-white/10 disabled:opacity-40";
   return (
@@ -368,7 +474,6 @@ function VolumeSteps(props: {
         type="button"
         aria-label="Turn the volume up"
         disabled={props.disabled}
-        onClick={() => props.onStep("up")}
         {...holding("up")}
         className={half}
       >
@@ -378,7 +483,6 @@ function VolumeSteps(props: {
         type="button"
         aria-label="Turn the volume down"
         disabled={props.disabled}
-        onClick={() => props.onStep("down")}
         {...holding("down")}
         className={half}
       >
@@ -439,6 +543,7 @@ export function MediaVolume(props: Props) {
           fill="#ffffff"
           valueText={(level) => `${level}%`}
           disabled={props.disabled}
+          failures={props.failures}
           onLevel={(volume) => onCommand({ volume })}
         />
       ) : (

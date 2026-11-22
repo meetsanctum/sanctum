@@ -36,6 +36,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -57,6 +58,25 @@ async function render(Page: Page, device: DeviceInfo, disabled = false) {
 
 const button = (label: string) =>
   container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
+const seekBar = () =>
+  container.querySelector<HTMLInputElement>('input[type="range"]');
+
+const pointer = (type: string, clientX = 0) =>
+  new PointerEvent(type, {
+    bubbles: true,
+    pointerId: 1,
+    isPrimary: true,
+    clientX,
+  });
+
+function changeRange(slider: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )!.set!.call(slider, value);
+  slider.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 async function press(label: string) {
   await act(async () => button(label)!.click());
@@ -108,7 +128,89 @@ describe("Playing", () => {
     await space(document.body);
     // A button pressed with Space presses only itself.
     await space(button("Next")!);
+    container.setAttribute("inert", "");
+    await space(document.body);
     expect(sent).toEqual([{ activity: "paused" }]);
+  });
+
+  it("sends a seek only for a range edit or a completed drag", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "paused",
+        media: show,
+      }),
+    );
+    const slider = seekBar()!;
+    const rail = slider.parentElement!;
+    rail.getBoundingClientRect = () => new DOMRect(0, 0, 2700, 24);
+    await act(async () => {
+      slider.dispatchEvent(
+        new KeyboardEvent("keyup", { key: "Tab", bubbles: true }),
+      );
+    });
+    expect(sent).toEqual([]);
+    await act(async () => changeRange(slider, "1033"));
+    expect(sent).toEqual([{ position: 1033 }]);
+    await act(async () => {
+      rail.dispatchEvent(pointer("pointerdown", 1033));
+      rail.dispatchEvent(pointer("pointermove", 1500));
+    });
+    expect(slider.value).toBe("1500");
+    expect(sent).toHaveLength(1);
+    await act(async () => rail.dispatchEvent(pointer("pointercancel")));
+    expect(sent).toHaveLength(1);
+
+    await act(async () => rail.dispatchEvent(pointer("pointerdown", 1033)));
+    await act(async () => rail.dispatchEvent(pointer("pointerup", 1800)));
+    expect(sent).toEqual([{ position: 1033 }, { position: 1800 }]);
+  });
+
+  it("shows elapsed time for a stream without a duration", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "playing",
+        media: { title: "The News", position: 65 },
+      }),
+    );
+    expect(container.textContent).toContain("1:05");
+    expect(seekBar()).toBeNull();
+  });
+
+  it("uses the reported playback state for the timer while a pause is pending", async () => {
+    vi.useFakeTimers();
+    const device = mediaPlayer("box", "Living Room TV", "office", {
+      on: true,
+      activity: "playing",
+      media: {
+        ...show,
+        positionAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    });
+    const capability = device.capabilities[0] as Media;
+    capability.sync = "pending";
+    capability.state = { ...capability.state!, activity: "paused" };
+    await render(MediaPlaying, device);
+    expect(container.textContent).toContain("18:12");
+    expect(button("Play Living Room TV")).not.toBeNull();
+  });
+
+  it("ignores stale programme metadata when playback is idle", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "idle",
+        media: show,
+      }),
+    );
+    expect(container.textContent).toContain("Nothing playing");
+    expect(container.textContent).not.toContain(show.title);
+    expect(button("Next")!.disabled).toBe(true);
+    expect(seekBar()).toBeNull();
   });
 
   it("keeps its shape while off, dimmed and empty, with nothing to press", async () => {
@@ -149,6 +251,31 @@ describe("Playing", () => {
 });
 
 describe("Remote", () => {
+  it("repeats a held volume step while visible and skips the release click", async () => {
+    vi.useFakeTimers();
+    await render(
+      MediaRemote,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "paused",
+      }),
+    );
+    const up = button("Turn the volume up")!;
+    await act(async () => {
+      up.dispatchEvent(pointer("pointerdown"));
+      vi.advanceTimersByTime(700);
+      up.dispatchEvent(pointer("pointerup"));
+      up.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    });
+    expect(sent).toEqual([{ volumeStep: "up" }, { volumeStep: "up" }]);
+    await act(async () => {
+      up.dispatchEvent(pointer("pointerdown"));
+      container.setAttribute("inert", "");
+      vi.advanceTimersByTime(1000);
+    });
+    expect(sent).toHaveLength(2);
+  });
+
   it("turns the TV off and steps its volume", async () => {
     await render(
       MediaRemote,

@@ -9,7 +9,7 @@ import {
   playPauseCommand,
   type Media,
 } from "../src/media";
-import { mediaPlayer, places } from "./place-pages-fixtures";
+import { light, mediaPlayer, places } from "./place-pages-fixtures";
 
 // What media players say: on a tile, in the detail's header and in Media's
 // summary, and when a tile's round button can play or pause one.
@@ -135,6 +135,35 @@ describe("a media player's tile", () => {
       sectionsOfRoom(shown, devices).map((section) => section.title),
     ).toEqual(["Media"]);
   });
+
+  it("keeps the room tile's state and control on the same player", () => {
+    const device = mediaPlayer("box", "Box", "office", {
+      on: true,
+      activity: "paused",
+    });
+    device.capabilities.push({
+      ...playerOf(device),
+      id: "second",
+      state: { on: true, activity: "playing" },
+    });
+    device.capabilities.push(
+      ...light("light", "Light", "office", false).capabilities,
+    );
+    const sections = sectionsOfRoom(tiles([device]), [device]);
+    expect(
+      sections.find((section) => section.id === "media")?.tiles,
+    ).toMatchObject([
+      {
+        key: "box/player",
+        capabilityId: "player",
+        status: "Paused",
+        media: { playing: false },
+      },
+    ]);
+    expect(
+      sections.find((section) => section.id === "lights")?.tiles,
+    ).toHaveLength(1);
+  });
 });
 
 describe("Media's summary", () => {
@@ -170,6 +199,17 @@ describe("Media's summary", () => {
       ["TVs", "1 playing"],
       ["Smart Speakers", "Not playing"],
       ["Media Players", "Not playing"],
+    ]);
+  });
+
+  it("counts players on devices whose primary type belongs to another category", () => {
+    const device = mediaPlayer("box", "Box", "office", { activity: "playing" });
+    device.type = "light";
+    device.capabilities.push(
+      ...light("light", "Light", "office", false).capabilities,
+    );
+    expect(mediaSummary(tiles([device]), [device])).toEqual([
+      { type: "media-player", title: "Media Players", status: "1 playing" },
     ]);
   });
 });

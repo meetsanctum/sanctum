@@ -101,8 +101,8 @@ const reportPlayer = (ctx, key) =>
     states: { player: players.get(key).state },
   });
 
-// What a player does with a command: what it asked for, a position counted
-// from now, a step of 5, and nothing playing once it stops or turns off.
+// What a player does with a command: set what it asked for, seek or change
+// episodes, step the volume by 5, or go idle once it stops or turns off.
 function play(player, command) {
   const state = { ...player.state, ...mediaKind.desired(command) };
   const media = state.media && {
@@ -112,6 +112,14 @@ function play(player, command) {
   };
   if (media) state.media = media;
   if ("position" in command && media) media.position = command.position;
+  if (
+    media?.episode !== undefined &&
+    ["next", "previous"].includes(command.playback)
+  ) {
+    const step = command.playback === "next" ? 1 : -1;
+    media.episode = Math.max(1, Math.min(100_000, media.episode + step));
+    media.position = 0;
+  }
   if ("volumeStep" in command && state.volume !== undefined) {
     const by = command.volumeStep === "up" ? 5 : -5;
     state.volume = Math.max(0, Math.min(100, state.volume + by));
@@ -130,7 +138,8 @@ const playedTo = (media, playing) =>
   playing
     ? Math.min(
         media.duration,
-        media.position + (Date.now() - Date.parse(media.positionAt)) / 1000,
+        media.position +
+          Math.max(0, Date.now() - Date.parse(media.positionAt)) / 1000,
       )
     : media.position;
 

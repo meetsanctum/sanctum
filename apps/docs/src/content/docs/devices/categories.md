@@ -35,8 +35,9 @@ Environment for its light level. Environment shows a device's sensor
 readings together on one tile.
 
 Home also shows the parts of any device you add to it. The status at the
-top of Home summarises temperature or humidity, motion, contacts, lights
-and switches across the home, including devices you haven't added to Home.
+top of Home summarises temperature or humidity, motion, contacts, lights,
+switches and how many media players are playing across the home, including
+devices you haven't added to Home.
 
 ## A room's page groups tiles by device
 
@@ -72,10 +73,10 @@ gone quiet say "Not heard from". A light or switch that doesn't confirm a
 change says "Not responding".
 
 On a tile that can switch something on or off, press the round icon to
-toggle it. On a media player's tile, it plays or pauses, and is dimmed
-while there is nothing to play. Press the rest of the tile to open the device. Each extra light
-or switch has a tile named after its part, so a module with two relays has
-two tiles.
+toggle it. On a media player's tile, the icon plays or pauses where the
+player supports it. Press the rest of the tile to open the device. Each
+extra light or switch has a tile named after its part, so a module with two
+relays has two tiles.
 
 Only a button's tile lights up when it is pressed. A light that has a
 button goes on showing whether the light is on.
@@ -87,10 +88,10 @@ Opening a device shows the tabs that apply to it, in this order.
 1. Light or switch controls. A light can have **Colour** or **White**
    followed by **Brightness**, depending on its features. **Power** appears
    when neither control applies.
-2. **Playing**, what a media player plays, with play or pause, previous,
-   next and where it is, and then **Remote** for a player that turns on and
-   off, with its power above its volume's + and −, or **Volume** for one
-   that doesn't, with mute above its level.
+2. **Playing**, what a media player plays, with its playback controls and
+   position. Press Space on this tab to play or pause. A player with power
+   controls also has **Remote**, with power above any volume steps. Other
+   players with volume or mute controls have them under **Volume**.
 3. **Motion**.
 4. **Contact**, **Door** or **Window**, depending on how the device is shown.
 5. **Readings**, with all the device's sensor readings.

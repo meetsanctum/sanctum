@@ -1,6 +1,6 @@
 // `pnpm dev:seed` (deploy/dev/stack.sh): claims a new development home and
-// puts its fake lights, contact sensors and media players in rooms. It runs in the core's
-// container, where its dependencies are. The login is only ever for a
+// puts its fake lights, contact sensors and media players in rooms. It runs
+// in the core's container, where its dependencies are. The login is only ever for a
 // stack, which listens on this Mac alone unless `pnpm dev:display` puts it
 // on the network.
 import { keyStretching } from "@meetsanctum/auth-protocol";
@@ -73,13 +73,13 @@ for (let tries = 0; tries < 30; tries++) {
   await new Promise((done) => setTimeout(done, 500));
 }
 
-for (const [room, lights] of Object.entries(rooms)) {
+for (const [room, deviceNames] of Object.entries(rooms)) {
   const { id: roomId } = await call(
     "/api/places/rooms/add",
     { name: room },
     token,
   );
-  for (const name of lights) {
+  for (const name of deviceNames) {
     const device = devices.find((each) => each.driverName === name);
     if (!device)
       throw new Error(`${name} didn't appear: is Fake lights running?`);

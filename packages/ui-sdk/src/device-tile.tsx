@@ -219,6 +219,12 @@ export function DeviceTile(props: {
   const switches = tile.kind === "light" || tile.kind === "switch";
   // A media player's round icon plays or pauses it.
   const plays = tile.kind === "media";
+  const canToggle =
+    !tile.disabled &&
+    (switches || (plays && tile.media?.canPlayPause === true));
+  const playbackLabel = plays
+    ? `${tile.media?.playing ? "Pause" : "Play"} ${tile.name}`
+    : undefined;
   // The round icon switches it only where the rest opens the detail.
   const iconSwitches = onOpen !== undefined && (switches || plays);
   const Icon =
@@ -257,8 +263,8 @@ export function DeviceTile(props: {
         type="button"
         aria-pressed={onOpen || !switches ? undefined : on}
         aria-haspopup={onOpen ? "dialog" : undefined}
-        aria-label={onOpen ? `${tile.name}, ${status}` : undefined}
-        disabled={!onOpen && (tile.disabled || !switches)}
+        aria-label={onOpen ? `${tile.name}, ${status}` : playbackLabel}
+        disabled={!onOpen && !canToggle}
         data-look={look}
         data-dragging={dragging ? "" : undefined}
         data-offline={tile.disabled ? "" : undefined}
@@ -266,7 +272,7 @@ export function DeviceTile(props: {
         onClick={(event) => {
           if (!tapped(event.nativeEvent)) return;
           if (onOpen) onOpen(tile);
-          else if (switches) props.onToggle(tile);
+          else if (canToggle) props.onToggle(tile);
         }}
         style={
           tile.colour
@@ -309,13 +315,9 @@ export function DeviceTile(props: {
       {iconSwitches && (
         <button
           type="button"
-          aria-label={
-            plays
-              ? `${tile.media?.playing ? "Pause" : "Play"} ${tile.name}`
-              : tile.name
-          }
+          aria-label={playbackLabel ?? tile.name}
           aria-pressed={plays ? undefined : on}
-          disabled={tile.disabled || (plays && !tile.media?.canPlayPause)}
+          disabled={!canToggle}
           data-look={look}
           {...gestures}
           onClick={(event) => {

@@ -220,15 +220,18 @@ export function DeviceDetail(props: {
     if (gone) onClose();
   }, [gone, onClose]);
 
-  const name = controlTile?.name ?? device?.name ?? "";
+  const openedPlayer = capability?.kind === "media" ? capability : undefined;
+  const name = openedPlayer
+    ? ((props.openFirstPage ? device?.name : tile?.name) ?? "")
+    : (controlTile?.name ?? device?.name ?? "");
   const room = devices.places?.rooms.find((each) => each.id === tile?.roomId);
   const status =
     device?.availability === "offline"
       ? `Offline · ${seenText(device.lastSeenAt, now)}`
-      : controlTile
-        ? controlTile.status
-        : player && playerTile
-          ? mediaText(player, { what: false })
+      : openedPlayer
+        ? mediaText(openedPlayer, { what: false })
+        : controlTile
+          ? controlTile.status
           : (motion || contact || hasReadings) && device?.lastSeenAt
             ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
             : tile?.status;
@@ -264,6 +267,7 @@ export function DeviceDetail(props: {
       device,
       capability: player,
       disabled: playerTile.disabled,
+      failures: playerTile.failures,
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };

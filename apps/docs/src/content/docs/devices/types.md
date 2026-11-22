@@ -31,9 +31,6 @@ and no others. A device that fits none of them is an unknown device.
 declare a device with a light part as a light even if it also has a button
 or a temperature sensor.
 
-Devices with only a media part use a generic tile. A device with other
-parts can appear in their sections.
-
 ## How a device gets its type
 
 The driver that brings the device in says what it is. When the driver
