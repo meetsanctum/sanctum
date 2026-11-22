@@ -39,9 +39,9 @@ parts can appear in their sections.
 The driver that brings the device in says what it is. When the driver
 knows no more than the device's parts, the type is the first of these that
 the device has a part for: light, media player, switch, button, motion
-sensor, contact sensor, sensor. A device with no parts is unknown. That order is why:
+sensor, contact sensor, sensor. A device with no parts is unknown. For example:
 
-- a light that also has a button or a sensor is a **light**;
+- a light that also plays media is a **light**;
 - a media player that also has a button or a switch is a **media player**;
 - a relay that also has a button is a **switch**;
 - a motion sensor that also measures is a **motion sensor**;

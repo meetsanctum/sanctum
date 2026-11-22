@@ -43,9 +43,6 @@ type DeviceTypeDefinition = {
 
 const types = [
   { id: "light", title: "Light", noun: "light", needs: ["light"] },
-  // What plays comes before a switch or a button it has, as a light does: a
-  // speaker with a button or a settings switch is still a speaker.
-  //
   // A voice-enabled speaker. Its media part alone cannot distinguish it
   // from any other media player, so its driver says what it is.
   {
@@ -55,8 +52,8 @@ const types = [
     needs: ["media"],
     declaredOnly: true,
   },
-  // Whatever plays that isn't a smart speaker: a TV box, a speaker that
-  // only plays.
+  // A TV box or speaker defaults to a media player even if it has a button
+  // or a settings switch.
   {
     id: "media-player",
     title: "Media player",
@@ -82,7 +79,6 @@ const types = [
     declaredOnly: true,
   },
   { id: "switch", title: "Switch", noun: "switch", needs: ["switch"] },
-  // A remote, whatever else it has.
   { id: "button", title: "Button", noun: "button", needs: ["button"] },
   // A motion sensor, which may measure too.
   {
