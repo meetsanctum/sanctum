@@ -8,6 +8,7 @@ import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
 
 import { registerActivityRoutes } from "./activity/routes.js";
+import { createAgentChanges } from "./agents/changes.js";
 import { createCoreTools } from "./agents/core-tools.js";
 import { createAgentLimiter } from "./agents/limits.js";
 import { registerMcpRoute } from "./agents/mcp.js";
@@ -216,6 +217,10 @@ export function createServer(
             appName: (appId) => options.apps.manifest(appId)?.name,
             devices,
             lights,
+            changes: createAgentChanges({
+              isActiveAgent: (id) => auth.clients.isActiveAgent(id),
+              now: options.now,
+            }),
             entities: options.entities,
             activity,
             activityViews: options.activityViews,
