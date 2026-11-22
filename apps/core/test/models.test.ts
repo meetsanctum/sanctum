@@ -265,10 +265,11 @@ describe("AI models", () => {
     expect(removed.json<ModelsInfo>().sources).toMatchObject([
       { id: mac!.id, inUse: false },
     ]);
+    // One added while none is in use is the one in use.
     const added = await addOfficeMac(core, token, "llama3.2:3b");
     expect(
       added.json<ModelsInfo>().sources.map((source) => source.inUse),
-    ).toEqual([false, false]);
+    ).toEqual([false, true]);
   });
 
   it("replaces a key that no longer opens", async () => {

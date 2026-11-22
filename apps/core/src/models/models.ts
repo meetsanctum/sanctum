@@ -328,8 +328,9 @@ export function createModels(
       createdAt: now(),
     };
     durably(db, () => {
-      // The first source is the one in use.
-      row.inUse = !db.select({ id: modelSources.id }).from(modelSources).get();
+      // A source added while none is in use is the one the household
+      // wants: the first, or one added after the one in use was removed.
+      row.inUse = !activeRow();
       db.insert(modelSources).values(row).run();
       options.record({
         action: "models.add",
