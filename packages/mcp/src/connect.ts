@@ -51,6 +51,8 @@ export const connectWords = {
     "This connector is newer than Sanctum. Update Sanctum, then add the agent again.",
   tooOld:
     "This connector is too old for Sanctum. Add the agent again from Sanctum's Settings, which gives the current connector.",
+  keptPrevious: (name: string) =>
+    `Sanctum didn't answer the agent's first call, so the agent keeps its earlier connection to this home, “${name}”. To try again, start a new setup in Sanctum's Settings, under AI agents, Add an agent.`,
   firstCallFailed:
     "Sanctum didn't answer the agent's first call. If Settings doesn't show the agent connected, start a new setup there, under AI agents, Add an agent, and run this again with its code.",
   tooManyAttempts:
@@ -82,6 +84,8 @@ export type Connected = {
   homeName: string | undefined;
   /** Whether the agent's first call through the connector went through. */
   firstCall: boolean;
+  /** The home never saw the new token, so the earlier connection stays. */
+  keptPrevious?: boolean;
   /** The agent's commands, run already when it's known. */
   registration: {
     add: string[];
@@ -173,11 +177,19 @@ export async function connect(
   // the agent it was removed, so the person adds it again.
   let name: string | undefined;
   let firstCall = true;
+  // Whether the home answered a request with the token at all: any answer
+  // means the home checked it, which marks the agent seen.
+  let reached = false;
+  const answered: typeof fetch = async (input, init) => {
+    const response = await fetchHome(input, init);
+    reached = true;
+    return response;
+  };
   try {
     const client = await connectHome({
       url,
       token: body.token,
-      fetch: fetchHome,
+      fetch: answered,
     });
     try {
       await client.listTools();
@@ -194,6 +206,20 @@ export async function connect(
     serverName(name),
     connection,
   );
+  // A new token the home never saw runs out with its setup, so it doesn't
+  // replace a connection to this home that works: that one stays, and the
+  // new token is forgotten.
+  if (!reached && choice.previous) {
+    await options.tokens.delete(clientId).catch(() => undefined);
+    await removeConnection(options.dir, clientId).catch(() => undefined);
+    return {
+      connection: choice.previous,
+      homeName: name,
+      firstCall,
+      keptPrevious: true,
+      registration: [],
+    };
+  }
   connection = { ...connection, name: choice.name, anchor };
   await saveConnection(options.dir, connection);
 
@@ -284,6 +310,7 @@ async function chooseRegistration(
 /** What `connect` prints, for the agent to act on and pass on. */
 export function connectedWords(connected: Connected, tokens: TokenStore) {
   const { connection, homeName: home, registration: commands } = connected;
+  if (connected.keptPrevious) return connectWords.keptPrevious(connection.name);
   const lines = [
     connected.firstCall
       ? `Connected to ${home ?? "the home"} as the MCP server “${connection.name}”.`

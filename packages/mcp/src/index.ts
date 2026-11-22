@@ -8,4 +8,9 @@ export {
   type ConnectOptions,
 } from "./connect.js";
 export { connectorServer, homeLink, words } from "./serve.js";
-export { fileTokens, loadConnection, saveConnection } from "./store.js";
+export {
+  fileTokens,
+  listConnections,
+  loadConnection,
+  saveConnection,
+} from "./store.js";

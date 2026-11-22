@@ -12,6 +12,7 @@ import {
   connectWords,
   fileTokens,
   homeLink,
+  listConnections,
   loadConnection,
   saveConnection,
   words,
@@ -20,6 +21,12 @@ import {
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { mkdtemp, rm } from "node:fs/promises";
+import {
+  createServer as createNetServer,
+  connect as netConnect,
+  type AddressInfo,
+  type Socket,
+} from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
@@ -126,6 +133,44 @@ async function agentOn(
   );
   await client.connect(agentSide);
   return client;
+}
+
+// A way to the home that lets through only the connections it's told to,
+// and drops the rest before they reach it, as a network that fails does.
+async function gate(home: string) {
+  const target = new URL(home);
+  let allowed = Infinity;
+  const open = new Set<Socket>();
+  const server = createNetServer((incoming) => {
+    if (allowed <= 0) {
+      incoming.destroy();
+      return;
+    }
+    allowed -= 1;
+    const outgoing = netConnect(Number(target.port), target.hostname);
+    for (const socket of [incoming, outgoing]) {
+      open.add(socket);
+      socket.on("close", () => open.delete(socket));
+    }
+    incoming.pipe(outgoing).pipe(incoming);
+    incoming.on("error", () => outgoing.destroy());
+    outgoing.on("error", () => incoming.destroy());
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  onTestFinished(
+    () =>
+      new Promise<void>((resolve) => {
+        for (const socket of open) socket.destroy();
+        server.close(() => resolve());
+      }),
+  );
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `https://127.0.0.1:${port}`,
+    allow: (count: number) => {
+      allowed = count;
+    },
+  };
 }
 
 describe("the AI agents' connector", () => {
@@ -259,6 +304,49 @@ describe("the AI agents' connector", () => {
     const link = homeLink({
       dir: connecting.dir,
       clientId: connection.clientId,
+      tokens: connecting.tokens,
+      discover: async () => [],
+    });
+    const agent = await agentOn(link, "2026-07-28");
+    expect(
+      (await agent.callTool({ name: "home_overview" })).isError,
+    ).toBeFalsy();
+  });
+
+  it("keeps a working connection when the new token never reaches the home", async () => {
+    const { core, maya, url: home } = await homeOverHttps();
+    const { url, allow } = await gate(home);
+    const connecting = await options(url);
+    const first = await connect(
+      (await startSetup(core, maya.token)).code,
+      connecting,
+    );
+    const ranBefore = connecting.ran.length;
+
+    // The home's status and the collect get through, and nothing after.
+    allow(2);
+    const again = await startSetup(core, maya.token);
+    const connected = await connect(again.code, connecting);
+
+    expect(connected.keptPrevious).toBe(true);
+    expect(connected.connection.clientId).toBe(first.connection.clientId);
+    expect(connectedWords(connected, connecting.tokens)).toBe(
+      connectWords.keptPrevious(first.connection.name),
+    );
+    // Nothing was registered, and the earlier connection is as it was.
+    expect(connecting.ran).toHaveLength(ranBefore);
+    expect(await listConnections(connecting.dir)).toEqual([first.connection]);
+    expect(await connecting.tokens.get(first.connection.clientId)).toMatch(
+      /^client_/,
+    );
+    expect(await status(core, maya.token, again.setupId)).toMatchObject({
+      status: "waiting",
+    });
+
+    allow(Infinity);
+    const link = homeLink({
+      dir: connecting.dir,
+      clientId: first.connection.clientId,
       tokens: connecting.tokens,
       discover: async () => [],
     });
