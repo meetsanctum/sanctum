@@ -32,7 +32,10 @@ import { claimed, get, post, testCore, type TestCore } from "./support.js";
 // HTTPS: adding an agent with a setup's code, then the agent's MCP server
 // passing its calls on, for agents on either revision of the protocol.
 
-async function homeOverHttps(dropToolReply?: () => boolean) {
+async function homeOverHttps(
+  dropToolReply?: () => boolean,
+  failToolList?: () => boolean,
+) {
   const certificates = createCoreCertificates({
     sign: (await testCa()).sign,
     log: () => undefined,
@@ -44,6 +47,13 @@ async function homeOverHttps(dropToolReply?: () => boolean) {
       if (request.headers["mcp-method"] === "tools/call" && dropToolReply()) {
         reply.hijack();
         reply.raw.destroy();
+      }
+    });
+  }
+  if (failToolList) {
+    core.server.addHook("onRequest", async (request, reply) => {
+      if (request.headers["mcp-method"] === "tools/list" && failToolList()) {
+        return reply.code(503).send();
       }
     });
   }
@@ -220,6 +230,42 @@ describe("the AI agents' connector", () => {
     expect(replacement.name).toBe(previous.name);
     expect(await connecting.tokens.get(previous.clientId)).toBeUndefined();
     expect(await connecting.tokens.get(firstConnection.clientId)).toBeDefined();
+  });
+
+  it("keeps the token when the home saw the agent but its first listing failed", async () => {
+    let failing = true;
+    const { core, maya, url } = await homeOverHttps(undefined, () => failing);
+    const setup = await startSetup(core, maya.token);
+    const connecting = await options(url);
+
+    const connected = await connect(setup.code, connecting);
+
+    expect(connected.firstCall).toBe(false);
+    expect(connectedWords(connected, connecting.tokens)).toContain(
+      connectWords.firstCallFailed,
+    );
+    const { connection } = connected;
+    // The handshake reached the home with the token, so Settings shows it
+    // connected, and the connector kept what it needs and registered.
+    expect(await status(core, maya.token, setup.setupId)).toMatchObject({
+      status: "connected",
+    });
+    expect(await connecting.tokens.get(connection.clientId)).toMatch(
+      /^client_/,
+    );
+    expect(connecting.ran.at(-1)).toContain("add");
+
+    failing = false;
+    const link = homeLink({
+      dir: connecting.dir,
+      clientId: connection.clientId,
+      tokens: connecting.tokens,
+      discover: async () => [],
+    });
+    const agent = await agentOn(link, "2026-07-28");
+    expect(
+      (await agent.callTool({ name: "home_overview" })).isError,
+    ).toBeFalsy();
   });
 
   it("sends nothing to a computer that isn't the home", async () => {

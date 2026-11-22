@@ -52,7 +52,7 @@ export const connectWords = {
   tooOld:
     "This connector is too old for Sanctum. Add the agent again from Sanctum's Settings, which gives the current connector.",
   firstCallFailed:
-    "Got the agent's token, but Sanctum didn't answer the agent's first call with it. Start a new setup in Sanctum's Settings, under AI agents, Add an agent, and run this again with its code.",
+    "Sanctum didn't answer the agent's first call. If Settings doesn't show the agent connected, start a new setup there, under AI agents, Add an agent, and run this again with its code.",
   tooManyAttempts:
     "Sanctum is holding this computer back after too many wrong codes. Wait 15 minutes, then try again.",
 };
@@ -80,6 +80,8 @@ export type ConnectOptions = {
 export type Connected = {
   connection: Connection;
   homeName: string | undefined;
+  /** Whether the agent's first call through the connector went through. */
+  firstCall: boolean;
   /** The agent's commands, run already when it's known. */
   registration: {
     add: string[];
@@ -164,10 +166,13 @@ export async function connect(
     throw error;
   }
 
-  // The agent's first call, which Settings waits for. Without it the setup
-  // runs out and the home takes the token back, so a failed first call
-  // leaves nothing here either: the person starts a new setup.
+  // The agent's first call, which Settings waits for. Once the token is
+  // collected it's kept, whatever happens to this call: the home may have
+  // seen the agent already, so Settings shows it connected. If it didn't,
+  // the setup runs out, the home takes the token back, and `serve` tells
+  // the agent it was removed, so the person adds it again.
   let name: string | undefined;
+  let firstCall = true;
   try {
     const client = await connectHome({
       url,
@@ -181,9 +186,7 @@ export async function connect(
       await client.close().catch(() => undefined);
     }
   } catch {
-    await options.tokens.delete(clientId).catch(() => undefined);
-    await removeConnection(options.dir, clientId).catch(() => undefined);
-    throw new ConnectError(connectWords.firstCallFailed);
+    firstCall = false;
   }
 
   const choice = await chooseRegistration(
@@ -242,7 +245,7 @@ export async function connect(
       await removeConnection(options.dir, choice.previous.clientId);
     }
   }
-  return { connection, homeName: name, registration: registered };
+  return { connection, homeName: name, firstCall, registration: registered };
 }
 
 // A name of its own for each home, so adding a second one doesn't replace
@@ -282,7 +285,9 @@ async function chooseRegistration(
 export function connectedWords(connected: Connected, tokens: TokenStore) {
   const { connection, homeName: home, registration: commands } = connected;
   const lines = [
-    `Connected to ${home ?? "the home"} as the MCP server “${connection.name}”.`,
+    connected.firstCall
+      ? `Connected to ${home ?? "the home"} as the MCP server “${connection.name}”.`
+      : `Set up the MCP server “${connection.name}”. ${connectWords.firstCallFailed}`,
   ];
   const done = commands.find((each) => each.registered);
   if (done) {
