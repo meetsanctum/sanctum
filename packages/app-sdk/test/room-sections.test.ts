@@ -134,13 +134,13 @@ describe("a room section", () => {
     const buttons = app({
       kind: "buttons",
       order: 300,
-      preview: [{ icon: "sun", name: "Natural light", active: true }],
+      preview: [{ icon: "sun", name: "Natural Light", active: true }],
     });
     expect(toStaticManifest(defineApp(buttons)).provides.roomSections).toEqual([
       expect.objectContaining({
         kind: "buttons",
         order: 300,
-        preview: [{ icon: "sun", name: "Natural light", active: true }],
+        preview: [{ icon: "sun", name: "Natural Light", active: true }],
       }),
     ]);
   });

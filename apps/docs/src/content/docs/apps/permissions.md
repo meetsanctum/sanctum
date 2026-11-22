@@ -18,7 +18,7 @@ settings. The sheet shows them before you add the app. Adding it for the
 first time allows them.
 
 The sheet also lists any optional permissions that start on. For example,
-Natural light starts with **See your rooms**. You can switch it off in the
+Natural Light starts with **See your rooms**. You can switch it off in the
 app's settings.
 
 When a feature needs a permission that's off, the app can ask as you try
