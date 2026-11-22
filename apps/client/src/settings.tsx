@@ -4,16 +4,9 @@ import { PageBar, type LiveFeed, type PageParams } from "@meetsanctum/ui-sdk";
 import { useEffect } from "react";
 
 import { ActivityPage, activitySettingsPage } from "./activity/page";
-import {
-  AgentsPage,
-  agentsSettingsPage,
-  agentsTitle,
-} from "./agents/agents-page";
-import {
-  CanUsePage,
-  canUseSettingsPage,
-  canUseTitle,
-} from "./agents/can-use-page";
+import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
+import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
+import { agentsTitle, canUseTitle } from "./agents/words";
 import { AppPage } from "./app-settings";
 import { BackButton, Section } from "./components";
 import type { CoreStatus } from "./core-status";
@@ -222,11 +215,7 @@ export function SettingsPage(props: {
     case appsSettingsPage:
       return (
         <>
-          <AppsSection
-            apps={props.apps}
-            onOpen={(id) => props.open(appSettingsPage, { id })}
-            page={back}
-          />
+          <AppsSection apps={props.apps} onOpen={openApp} page={back} />
           <AddAppsSection
             apps={props.apps}
             onAdded={(app) => {
@@ -238,12 +227,18 @@ export function SettingsPage(props: {
       );
     case agentsSettingsPage:
       return (
-        <AgentsPage apps={props.apps} onOpenCanUse={openCanUse} page={back} />
+        <AgentsPage
+          apps={props.apps}
+          live={props.live}
+          onOpenCanUse={openCanUse}
+          page={back}
+        />
       );
     case canUseSettingsPage:
       return (
         <CanUsePage
           apps={props.apps}
+          live={props.live}
           onOpenApp={openApp}
           onDone={props.back}
           backTo={backTo}
@@ -273,7 +268,7 @@ export function SettingsPage(props: {
         apps={props.apps}
         status={props.status}
         onOpenStatus={openStatus}
-        onOpenApp={(id) => props.open(appSettingsPage, { id })}
+        onOpenApp={openApp}
       />
       <SettingsOverview
         apps={props.apps}

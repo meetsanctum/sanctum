@@ -1,5 +1,5 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
-import type { AgentInfo, ClientInfo, Me } from "@meetsanctum/auth-protocol";
+import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
 import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   Bot,
@@ -17,6 +17,8 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Row } from "./components";
+import { useAgents } from "./agents/data";
+import { agentsTitle } from "./agents/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
 import { SummaryLine, summarySpoken } from "./settings-status";
@@ -79,7 +81,8 @@ export function SettingsOverview(props: {
   const now = useMinuteClock();
   const unit = useTemperatureUnit() ?? "celsius";
   const others = useOtherClients(props.live);
-  const agents = useAgentCount(props.live);
+  const { agents } = useAgents(props.live);
+  const agentCount = agents?.length;
   const updates = props.apps.filter((app) => app.waiting).length;
   const row = (
     area: SettingsArea,
@@ -150,12 +153,12 @@ export function SettingsOverview(props: {
         {row(
           "agents",
           Bot,
-          "AI agents",
-          agents === undefined
+          agentsTitle,
+          agentCount === undefined
             ? ""
-            : agents === 0
+            : agentCount === 0
               ? "None yet"
-              : counted(agents, "agent"),
+              : counted(agentCount, "agent"),
         )}
       </AreaGroup>
       <AreaGroup>
@@ -210,30 +213,6 @@ function useOtherClients(live: LiveFeed) {
     };
   }, [live]);
   return others;
-}
-
-// How many AI agents the home has, once the core has said.
-function useAgentCount(live: LiveFeed) {
-  const [count, setCount] = useState<number>();
-  useEffect(() => {
-    let request = 0;
-    const refresh = async () => {
-      const current = ++request;
-      try {
-        const agents = await coreJson<AgentInfo[]>("/api/auth/agents");
-        if (current === request) setCount(agents.length);
-      } catch {
-        // The next shell refresh can ask again.
-      }
-    };
-    void refresh();
-    const stop = live.subscribe({ refresh: () => void refresh() });
-    return () => {
-      request++;
-      stop();
-    };
-  }, [live]);
-  return count;
 }
 
 // A card of areas that belong together, set apart from the next by space

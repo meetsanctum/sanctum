@@ -1,6 +1,6 @@
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 import type { AppInfo } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   Bot,
   ChevronRight,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
@@ -34,9 +35,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { coreJson } from "../core-fetch";
 import { AddAgent } from "./add-agent";
-import { canUseTitle } from "./can-use-page";
 import { useAgents, useAiCanUse } from "./data";
-import { agentDetail, onCount } from "./words";
+import { agentDetail, agentsTitle, canUseTitle, onCount } from "./words";
 
 // Settings → AI agents: the AI programs on computers at home that use the
 // home over MCP, each with who added it and when it was last seen, and a
@@ -45,22 +45,27 @@ import { agentDetail, onCount } from "./words";
 // and manages every agent.
 
 export const agentsSettingsPage = "agents";
-export const agentsTitle = "AI agents";
 
-type Editing = { action: "rename" | "remove"; agent: AgentInfo };
+type Editing = {
+  action: "rename" | "remove";
+  agent: AgentInfo;
+  trigger: HTMLButtonElement | null;
+};
 
 export function AgentsPage(props: {
   apps: readonly AppInfo[];
+  live: LiveFeed;
   // Opens What AI agents can use.
   onOpenCanUse: () => void;
   // The page's way back.
   page: ReactNode;
 }) {
   const { agents, refresh } = useAgents();
-  const { canUse } = useAiCanUse();
+  const { canUse, hasFailed, refresh: refreshCanUse } = useAiCanUse(props.live);
   const [editing, setEditing] = useState<Editing>();
   const [adding, setAdding] = useState(false);
-  const update = () => void refresh().catch(() => undefined);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const update = () => void refresh();
   const switchable = canUse?.areas.filter((area) => !area.always) ?? [];
 
   return (
@@ -68,7 +73,17 @@ export function AgentsPage(props: {
       <Section
         id="settings-agents"
         title={agentsTitle}
-        action={<Button onClick={() => setAdding(true)}>Add an agent</Button>}
+        action={
+          <Button
+            ref={addButton}
+            onClick={() => {
+              void refreshCanUse({ clear: true });
+              setAdding(true);
+            }}
+          >
+            Add an agent
+          </Button>
+        }
         page={props.page}
       >
         {agents?.length === 0 && (
@@ -81,28 +96,14 @@ export function AgentsPage(props: {
         {agents && agents.length > 0 && (
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {agents.map((agent) => (
-              <li key={agent.id} className="flex items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
-                >
-                  <Bot className="size-4" />
-                </span>
-                {/* Its line wraps rather than cut short, since when it was
-                    added tells two agents of the same name apart. */}
-                <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
-                  <span className="truncate text-sm font-medium">
-                    {agent.name}
-                  </span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    {agentDetail(agent, agents)}
-                  </span>
-                </span>
-                <AgentMenu
-                  agent={agent}
-                  onEdit={(action) => setEditing({ action, agent })}
-                />
-              </li>
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                detail={agentDetail(agent, agents)}
+                onEdit={(action, trigger) =>
+                  setEditing({ action, agent, trigger })
+                }
+              />
             ))}
           </ul>
         )}
@@ -128,6 +129,7 @@ export function AgentsPage(props: {
       </ul>
       <EditAgent
         editing={editing}
+        onFocusFallback={() => addButton.current?.focus()}
         onClose={() => setEditing(undefined)}
         onDone={update}
       />
@@ -135,43 +137,72 @@ export function AgentsPage(props: {
         open={adding}
         onOpenChange={setAdding}
         apps={props.apps}
-        canUse={canUse}
+        canUse={hasFailed ? undefined : canUse}
+        hasPermissionsFailed={hasFailed}
+        onCloseAutoFocus={() => addButton.current?.focus()}
         onConnected={update}
       />
     </>
   );
 }
 
-function AgentMenu(props: {
+function AgentRow(props: {
   agent: AgentInfo;
-  onEdit: (action: Editing["action"]) => void;
+  detail: string;
+  onEdit: (
+    action: Editing["action"],
+    trigger: HTMLButtonElement | null,
+  ) => void;
 }) {
+  const detailId = useId();
+  const menuButton = useRef<HTMLButtonElement>(null);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`${props.agent.name}: more`}
-          className="ms-auto"
+    <li className="flex items-center gap-3">
+      <span
+        aria-hidden="true"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
+      >
+        <Bot className="size-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
+        <span className="truncate text-sm font-medium">{props.agent.name}</span>
+        <span
+          id={detailId}
+          className="text-[13px] leading-[18px] font-medium text-muted-foreground"
         >
-          <EllipsisVertical />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onSelect={() => props.onEdit("rename")}>
-          <Pencil />
-          Rename
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          onSelect={() => props.onEdit("remove")}
-        >
-          <Trash2 />
-          Remove
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {props.detail}
+        </span>
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            ref={menuButton}
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`${props.agent.name}: more`}
+            aria-describedby={detailId}
+            className="ms-auto"
+          >
+            <EllipsisVertical />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem
+            onSelect={() => props.onEdit("rename", menuButton.current)}
+          >
+            <Pencil />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => props.onEdit("remove", menuButton.current)}
+          >
+            <Trash2 />
+            Remove
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
   );
 }
 
@@ -179,6 +210,7 @@ function AgentMenu(props: {
 // is a client of its own kind, so it's renamed and removed as clients are.
 function EditAgent(props: {
   editing?: Editing;
+  onFocusFallback: () => void;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -189,10 +221,12 @@ function EditAgent(props: {
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<string>();
   const [working, setWorking] = useState(false);
+  const wasRemoved = useRef(false);
   const { start, cancel } = useAuthAttempt();
 
   useEffect(() => {
     cancel();
+    if (props.editing) wasRemoved.current = false;
     setName(props.editing?.agent.name ?? "");
     setProblem(undefined);
     setWorking(false);
@@ -206,7 +240,7 @@ function EditAgent(props: {
   const renaming = editing?.action === "rename";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || working || (renaming && !name.trim())) return;
     const signal = start();
     setWorking(true);
     setProblem(undefined);
@@ -222,6 +256,7 @@ function EditAgent(props: {
         },
       );
       signal.throwIfAborted();
+      wasRemoved.current = !renaming;
       props.onDone();
       props.onClose();
     } catch {
@@ -238,7 +273,15 @@ function EditAgent(props: {
         if (!open) close();
       }}
     >
-      <DialogContent showCloseButton={renaming}>
+      <DialogContent
+        showCloseButton={renaming}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (!wasRemoved.current && editing?.trigger?.isConnected)
+            editing.trigger.focus();
+          else props.onFocusFallback();
+        }}
+      >
         <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>

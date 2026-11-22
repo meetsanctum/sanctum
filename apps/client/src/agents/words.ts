@@ -1,5 +1,6 @@
 import {
   activityReadPermission,
+  aiAreas,
   controlPermission,
   historyReadPermission,
   peopleReadPermission,
@@ -16,6 +17,9 @@ import { seenText } from "../settings-clients";
 // The words Settings uses for AI agents and what they can use. The core's
 // areas are permissions, so their titles are the permissions' own; a line
 // under each says what it covers.
+
+export const agentsTitle = "AI agents";
+export const canUseTitle = "What AI agents can use";
 
 /** What each of the core's areas covers, under its title. */
 export const areaDetail: Record<string, string> = {
@@ -49,7 +53,8 @@ const whosHomeReasons: Record<string, string> = {
     "It gives AI agents the names of the people who live here.",
 };
 
-export const tellsWhosHome = (area: string) => area in whosHomeReasons;
+export const tellsWhosHome = (area: string) =>
+  Object.hasOwn(whosHomeReasons, area);
 
 /** The question before an area that tells who's home turns on. */
 export function turnOnWords(area: string) {
@@ -74,18 +79,25 @@ export function missingWords(
   offers: readonly AiOfferInfo[],
 ) {
   if (offer.missing.length === 0) return undefined;
-  const own = offers.filter((other) => other.app === offer.app);
-  const titles = offer.missing.map(
-    (id) =>
-      own.find((other) => other.id === id)?.title ?? permissionWords(id).title,
-  );
+  const needs = offer.missing.map((id) => {
+    const own = offers.find(
+      (other) => other.app === offer.app && other.id === id,
+    );
+    const isArea = !own && aiAreas.includes(id);
+    return {
+      title: own?.title ?? permissionWords(id).title,
+      isArea,
+      isOff: isArea || own?.on === false,
+    };
+  });
+  const titles = needs.map((need) => need.title);
   const list =
     titles.length === 1
       ? titles[0]
       : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
   return {
-    text: `Needs ${list}, which ${titles.length === 1 ? "is" : "are"} off for AI agents`,
-    area: offer.missing.some((id) => !own.some((other) => other.id === id)),
+    text: `Needs ${list}, which ${titles.length === 1 ? "is" : "are"} ${needs.every((need) => need.isOff) ? "off for AI agents" : "unavailable to AI agents"}`,
+    area: needs.some((need) => need.isArea),
   };
 }
 
@@ -94,13 +106,27 @@ export function offersOf(canUse: AiCanUse | undefined, app: string) {
   return canUse?.offers.filter((offer) => offer.app === app) ?? [];
 }
 
+/** App settings show write actions before reads and entity types. */
+export function offersByGroup(offers: readonly AiOfferInfo[]) {
+  const actions: AiOfferInfo[] = [];
+  const information: AiOfferInfo[] = [];
+  for (const offer of offers) {
+    (offer.tier === "write" ? actions : information).push(offer);
+  }
+  return { actions, information };
+}
+
 export const onCount = (items: readonly { on: boolean }[]) =>
   `${items.filter((item) => item.on).length} of ${items.length} on`;
 
 const dateWords = (at: Date) =>
   at.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-const timeWords = (at: Date) =>
-  at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+const timeWords = (at: Date, withSeconds = false) =>
+  at.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: withSeconds ? "2-digit" : undefined,
+  });
 
 /**
  * Who added an agent and when, then when it was last seen. Where two
@@ -113,12 +139,18 @@ export function agentDetail(
   now?: Date,
 ) {
   const added = new Date(agent.createdAt);
-  const twin = agents.some(
+  const twins = agents.filter(
     (other) => other.id !== agent.id && other.name === agent.name,
   );
-  const when = twin
-    ? `${dateWords(added)} at ${timeWords(added)}`
-    : dateWords(added);
+  const date = dateWords(added);
+  const time = timeWords(added);
+  const sharesMinute = twins.some((other) => {
+    const otherAdded = new Date(other.createdAt);
+    return dateWords(otherAdded) === date && timeWords(otherAdded) === time;
+  });
+  const when = twins.length
+    ? `${date} at ${sharesMinute ? timeWords(added, true) : time}`
+    : date;
   const by = agent.addedBy.name
     ? agent.addedBy.kind === "person"
       ? ` by ${agent.addedBy.name}`

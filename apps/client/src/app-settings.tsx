@@ -272,7 +272,11 @@ export function AppPage(props: {
       {app.requests.length > 0 && (
         <PermissionsSection app={app} onChanged={props.onChanged} />
       )}
-      <AppCanUseSection app={app} onOpenCanUse={props.openCanUse} />
+      <AppCanUseSection
+        app={app}
+        live={props.live}
+        onOpenCanUse={props.openCanUse}
+      />
       <PreferencesSection app={app} live={props.live} />
       {manifest && (
         <AppAdds

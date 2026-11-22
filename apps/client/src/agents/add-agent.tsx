@@ -5,6 +5,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import {
   agentSetupCommand,
+  agentSetupMs,
   type AgentSetupStarted,
   type AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
@@ -12,6 +13,7 @@ import { Button, Input } from "@meetsanctum/ui-sdk";
 import { Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import {
   Dialog,
@@ -22,7 +24,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { CoreError, coreJson } from "../core-fetch";
-import { canUseTitle } from "./can-use-page";
+import { canUseTitle, missingWords, offersByGroup, offersOf } from "./words";
 
 // Adding an AI agent: a name, with everything AI agents can use named under
 // On and Off until you switch them on, then Continue starts a one-time setup
@@ -35,6 +37,8 @@ import { canUseTitle } from "./can-use-page";
 // before still connects and shows in the list.
 
 const watchEvery = 1_500;
+const watchTimeoutMs = 10_000;
+const setupMinutes = agentSetupMs / 60_000;
 
 type Step =
   | { kind: "name" }
@@ -57,7 +61,7 @@ const endedWords = {
   expired: {
     title: "The prompt has run out",
     description: (name: string) =>
-      `${name} didn't connect within 10 minutes. Make a new prompt and paste it in again.`,
+      `${name} didn't connect within ${setupMinutes} minutes. Make a new prompt and paste it in again.`,
   },
   failed: {
     title: "The prompt has stopped working",
@@ -82,6 +86,8 @@ export function AddAgent(props: {
   onOpenChange: (open: boolean) => void;
   apps: readonly AppInfo[];
   canUse: AiCanUse | undefined;
+  hasPermissionsFailed: boolean;
+  onCloseAutoFocus: () => void;
   // The agent connected, so the list can show it.
   onConnected: () => void;
 }) {
@@ -89,6 +95,7 @@ export function AddAgent(props: {
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const setupAttempt = useAuthAttempt();
   // The latest, so watching doesn't start again each time the list renders.
   const onConnected = useRef(props.onConnected);
   onConnected.current = props.onConnected;
@@ -103,13 +110,16 @@ export function AddAgent(props: {
   }, [props.open]);
 
   const start = async (agentName: string) => {
+    if (working) return;
+    const signal = setupAttempt.start();
     setWorking(true);
     setProblem(undefined);
     try {
       const started = await coreJson<AgentSetupStarted>(
         "/api/auth/agents/setup",
-        { method: "POST", json: { name: agentName } },
+        { method: "POST", signal, json: { name: agentName } },
       );
+      if (signal.aborted) return;
       setStep({
         kind: "prompt",
         name: agentName,
@@ -118,9 +128,9 @@ export function AddAgent(props: {
         byHand: false,
       });
     } catch (error) {
-      setProblem(startProblem(error));
+      if (!signal.aborted) setProblem(startProblem(error));
     } finally {
-      setWorking(false);
+      if (!signal.aborted) setWorking(false);
     }
   };
 
@@ -128,12 +138,21 @@ export function AddAgent(props: {
   const setupId = step.kind === "prompt" ? step.setupId : undefined;
   useEffect(() => {
     if (!props.open || !setupId) return;
-    let stopped = false;
+    const controller = new AbortController();
+    let isWatching = false;
     const watch = async () => {
+      if (isWatching) return;
+      isWatching = true;
       let status: AgentSetupStatus;
       try {
         status = await coreJson<AgentSetupStatus>(
           `/api/auth/agents/setup/${encodeURIComponent(setupId)}`,
+          {
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(watchTimeoutMs),
+            ]),
+          },
         );
       } catch (error) {
         // A setup the core no longer has has run out; anything else, the
@@ -143,8 +162,10 @@ export function AddAgent(props: {
         } else {
           return;
         }
+      } finally {
+        isWatching = false;
       }
-      if (stopped) return;
+      if (controller.signal.aborted) return;
       if (status.status === "connected") {
         setStep({
           kind: "connected",
@@ -163,21 +184,33 @@ export function AddAgent(props: {
     };
     const timer = window.setInterval(() => void watch(), watchEvery);
     return () => {
-      stopped = true;
+      controller.abort();
       window.clearInterval(timer);
     };
   }, [props.open, setupId]);
 
-  const close = () => props.onOpenChange(false);
+  const changeOpen = (open: boolean) => {
+    if (!open) setupAttempt.cancel();
+    props.onOpenChange(open);
+  };
+  const close = () => changeOpen(false);
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent showCloseButton={false} className="sm:max-w-lg">
+    <Dialog open={props.open} onOpenChange={changeOpen}>
+      <DialogContent
+        showCloseButton={false}
+        className="sm:max-w-lg"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          props.onCloseAutoFocus();
+        }}
+      >
         {step.kind === "name" && (
           <NameStep
             name={name}
             onName={setName}
             apps={props.apps}
             canUse={props.canUse}
+            hasPermissionsFailed={props.hasPermissionsFailed}
             working={working}
             problem={problem}
             onCancel={close}
@@ -186,8 +219,13 @@ export function AddAgent(props: {
         )}
         {step.kind === "prompt" && (
           <PromptStep
+            key={step.byHand ? "command" : "prompt"}
             step={step}
-            onByHand={(byHand) => setStep({ ...step, byHand })}
+            onByHand={(byHand) =>
+              setStep((current) =>
+                current.kind === "prompt" ? { ...current, byHand } : current,
+              )
+            }
             onDone={close}
           />
         )}
@@ -228,7 +266,11 @@ export function AddAgent(props: {
               <Button variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button disabled={working} onClick={() => void start(step.name)}>
+              <Button
+                autoFocus
+                disabled={working}
+                onClick={() => void start(step.name)}
+              >
                 Make a new prompt
               </Button>
             </DialogFooter>
@@ -245,14 +287,16 @@ function NameStep(props: {
   onName: (name: string) => void;
   apps: readonly AppInfo[];
   canUse: AiCanUse | undefined;
+  hasPermissionsFailed: boolean;
   working: boolean;
   problem?: string;
   onCancel: () => void;
   onContinue: () => void;
 }) {
+  const canContinue = !!props.canUse && !props.working && !!props.name.trim();
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (props.name.trim()) props.onContinue();
+    if (canContinue) props.onContinue();
   };
   return (
     <form onSubmit={submit} className="flex min-h-0 flex-col gap-5">
@@ -274,7 +318,7 @@ function NameStep(props: {
           autoFocus
         />
       </label>
-      {props.canUse && (
+      {props.canUse ? (
         <div className="flex min-h-0 flex-col gap-1.5">
           <span className="text-[13px] font-medium">{canUseTitle}</span>
           <CanUseList apps={props.apps} canUse={props.canUse} />
@@ -282,6 +326,14 @@ function NameStep(props: {
             Change any of these in Settings, under {canUseTitle}.
           </span>
         </div>
+      ) : props.hasPermissionsFailed ? (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          What AI agents can use didn&apos;t load. Close this and open it again.
+        </p>
+      ) : (
+        <p role="status" className="m-0 text-[13px] text-muted-foreground">
+          Loading what AI agents can use…
+        </p>
       )}
       {props.problem && (
         <p role="alert" className="m-0 text-sm text-destructive">
@@ -292,7 +344,7 @@ function NameStep(props: {
         <Button type="button" variant="outline" onClick={props.onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={props.working || !props.name.trim()}>
+        <Button type="submit" disabled={!canContinue}>
           Continue
         </Button>
       </DialogFooter>
@@ -303,36 +355,57 @@ function NameStep(props: {
 // What's on, then what's off, each the core's areas first and then each
 // app's items under its name. It scrolls, and the buttons stay in view.
 function CanUseList(props: { apps: readonly AppInfo[]; canUse: AiCanUse }) {
-  const group = (on: boolean) => {
+  const group = (isOn: boolean) => {
     const areas = props.canUse.areas
-      .filter((area) => area.on === on)
-      .map((area) => permissionWords(area.id).title);
+      .filter((area) => area.on === isOn)
+      .map((area) => ({ id: area.id, title: permissionWords(area.id).title }));
     const apps = props.apps.flatMap((app) => {
-      const titles = props.canUse.offers
-        .filter((offer) => offer.app === app.id && offer.on === on)
-        .map((offer) => offer.title);
-      return titles.length ? [{ app, titles }] : [];
+      const { actions, information } = offersByGroup(
+        offersOf(props.canUse, app.id),
+      );
+      const offers = [...actions, ...information].filter(
+        (offer) => offer.on === isOn,
+      );
+      return offers.length ? [{ app, offers }] : [];
     });
     if (areas.length === 0 && apps.length === 0) return null;
-    const items = (titles: string[]) => (
-      <ul
-        className={`m-0 flex list-none flex-col gap-1 p-0 text-sm font-medium ${on ? "" : "text-muted-foreground"}`}
-      >
-        {titles.map((title) => (
-          <li key={title}>{title}</li>
-        ))}
-      </ul>
-    );
+    const items = (
+      entries: readonly { id: string; title: string; detail?: string }[],
+    ) =>
+      entries.length > 0 && (
+        <ul
+          className={`m-0 flex list-none flex-col gap-1 p-0 text-sm font-medium ${isOn ? "" : "text-muted-foreground"}`}
+        >
+          {entries.map(({ id, title, detail }) => (
+            <li key={id}>
+              {title}
+              {detail && (
+                <span className="block text-[13px] text-muted-foreground">
+                  {detail}.
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      );
     return (
       <div className="flex flex-col gap-2">
         <h3 className="m-0 text-[13px] font-semibold text-muted-foreground">
-          {on ? "On" : "Off until you switch them on"}
+          {isOn ? "On" : "Off until you switch them on"}
         </h3>
         {items(areas)}
-        {apps.map(({ app, titles }) => (
+        {apps.map(({ app, offers }) => (
           <div key={app.id} className="flex flex-col gap-1">
             <h4 className="m-0 text-[13px] font-semibold">{app.name}</h4>
-            {items(titles)}
+            {items(
+              offers.map((offer) => ({
+                id: offer.id,
+                title: offer.title,
+                detail: isOn
+                  ? missingWords(offer, props.canUse.offers)?.text
+                  : undefined,
+              })),
+            )}
           </div>
         ))}
       </div>
@@ -341,6 +414,7 @@ function CanUseList(props: { apps: readonly AppInfo[]; canUse: AiCanUse }) {
   return (
     <div
       tabIndex={0}
+      role="region"
       aria-label={canUseTitle}
       className="flex max-h-[min(22rem,40vh)] flex-col gap-4 overflow-y-auto rounded-md bg-card px-3.5 py-3 text-card-foreground"
     >
@@ -365,10 +439,6 @@ function PromptStep(props: {
     ? agentSetupCommand(step.code)
     : promptText(step.code);
 
-  useEffect(() => {
-    setCopied(false);
-    setCopyFailed(false);
-  }, [step.byHand]);
   useEffect(() => {
     if (!copied) return;
     const timer = window.setTimeout(() => setCopied(false), 2_000);
@@ -413,8 +483,8 @@ function PromptStep(props: {
         </p>
         <span className="text-[13px] leading-[18px] text-muted-foreground">
           {step.byHand
-            ? "It works once, for the next 10 minutes. It sets up the connector and shows the commands that add it to your agent, with nothing secret in them."
-            : "The prompt works once, for the next 10 minutes."}
+            ? `It works once and expires ${setupMinutes} minutes after you make it. It sets up the connector and shows the commands that add it to your agent, with nothing secret in them.`
+            : `The prompt works once and expires ${setupMinutes} minutes after you make it.`}
         </span>
         {copyFailed && (
           <p role="alert" className="m-0 text-sm text-destructive">
@@ -452,7 +522,7 @@ function PromptStep(props: {
             </Button>
           </>
         )}
-        <Button onClick={() => void copy()}>
+        <Button autoFocus onClick={() => void copy()}>
           <Copy data-icon="inline-start" aria-hidden="true" />
           {copied ? "Copied" : copyLabel}
         </Button>

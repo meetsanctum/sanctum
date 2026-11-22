@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import type { AiCanUse, AppInfo } from "@meetsanctum/app-sdk";
-import type { AgentInfo, AgentSetupStatus } from "@meetsanctum/auth-protocol";
+import type {
+  AgentInfo,
+  AgentSetupStarted,
+  AgentSetupStatus,
+} from "@meetsanctum/auth-protocol";
+import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,6 +98,16 @@ function canUseWith(changes: Partial<Record<string, boolean>> = {}): AiCanUse {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((accept, refuse) => {
+    resolve = accept;
+    reject = refuse;
+  });
+  return { promise, resolve, reject };
+}
+
 let container: HTMLDivElement;
 let root: Root;
 let agents: AgentInfo[];
@@ -100,6 +115,10 @@ let canUse: AiCanUse;
 let posted: [string, unknown][];
 let setupStatus: AgentSetupStatus;
 let refuseSetup: CoreError | undefined;
+let setupStart: Promise<AgentSetupStarted> | undefined;
+let agentsRead: Promise<AgentInfo[]> | undefined;
+let permissionsRead: Promise<AiCanUse> | undefined;
+const live = createLiveFeed();
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -108,14 +127,17 @@ beforeEach(() => {
   posted = [];
   setupStatus = { status: "waiting", name: "Codex", expiresAt: "" };
   refuseSetup = undefined;
+  setupStart = undefined;
+  agentsRead = undefined;
+  permissionsRead = undefined;
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
     if (init.method === "POST") posted.push([path, init.json]);
     switch (path) {
       case "/api/auth/agents":
-        return agents as never;
+        return (agentsRead ?? agents) as never;
       case "/api/agents/can-use":
-        return canUse as never;
+        return (permissionsRead ?? canUse) as never;
       case "/api/agents/can-use/area": {
         const { id, on } = init.json as { id: string; on: boolean };
         canUse = canUseWith({ [id]: on });
@@ -128,6 +150,7 @@ beforeEach(() => {
       }
       case "/api/auth/agents/setup":
         if (refuseSetup) throw refuseSetup;
+        if (setupStart) return setupStart as never;
         return {
           setupId: `setup-${posted.length}`,
           code: "sanctum:abc",
@@ -206,16 +229,24 @@ describe("the words for AI agents", () => {
     );
   });
 
+  it("shows the seconds for agents added with the same name in the same minute", () => {
+    const again = { ...codex, id: "again", createdAt: "2026-11-20T09:15:20Z" };
+    expect(agentDetail(codex, [codex, again], now)).not.toEqual(
+      agentDetail(again, [codex, again], now),
+    );
+  });
+
   it("says what an item needs that's off", () => {
     const [, create] = canUseWith().offers;
     expect(missingWords(create!, canUseWith().offers)).toEqual({
       text: "Needs Control your switches, which is off for AI agents",
       area: true,
     });
+    const off = canUseWith({ "example.scene": false }).offers;
     expect(
       missingWords(
         { ...create!, missing: ["example.scene", "devices.control:switch"] },
-        canUseWith().offers,
+        off,
       ),
     ).toEqual({
       text: "Needs Scenes in each room and Control your switches, which are off for AI agents",
@@ -227,6 +258,19 @@ describe("the words for AI agents", () => {
         canUseWith().offers,
       )?.area,
     ).toBe(false);
+  });
+
+  it("says when an item needs an unavailable offer that is switched on", () => {
+    const [, create] = canUseWith().offers;
+    expect(
+      missingWords(
+        { ...create!, missing: ["example.scene"] },
+        canUseWith().offers,
+      ),
+    ).toEqual({
+      text: "Needs Scenes in each room, which is unavailable to AI agents",
+      area: false,
+    });
   });
 
   it("asks before letting AI agents read what tells who's home", () => {
@@ -253,6 +297,7 @@ describe("Settings → AI agents", () => {
       root.render(
         <AgentsPage
           apps={[moods]}
+          live={live}
           onOpenCanUse={() => openedCanUse++}
           page={null}
         />,
@@ -296,15 +341,23 @@ describe("Settings → AI agents", () => {
     expect(openedCanUse).toBe(1);
   });
 
-  it("removes an agent after saying what that does", async () => {
+  it("removes an agent and ignores a late poll from before the removal", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     await show();
+    const poll = deferred<AgentInfo[]>();
+    agentsRead = poll.promise;
+    await wait(5_000);
     await menu("Codex on the office Mac", "Remove");
     expect(dialog()!.textContent).toContain(
       "a command it already sent may still finish",
     );
 
+    agents = [kitchen];
+    agentsRead = undefined;
     await act(async () => button("Remove").click());
+    await act(async () => poll.resolve([codex, kitchen]));
     expect(posted).toEqual([["/api/auth/clients/revoke", { id: "codex" }]]);
+    expect(container.textContent).not.toContain(codex.name);
   });
 
   it("renames an agent", async () => {
@@ -345,6 +398,62 @@ describe("Settings → AI agents", () => {
       expect(posted).toEqual([]);
     });
 
+    it("requires the permission list to load when the sheet opens", async () => {
+      await show();
+      const read = deferred<AiCanUse>();
+      permissionsRead = read.promise;
+      await act(async () => button("Add an agent").click());
+      await type(dialog()!.querySelector("input")!, "Codex");
+      expect(button("Continue").disabled).toBe(true);
+      await act(async () => read.reject(new Error("Connection lost")));
+      expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
+        "didn't load",
+      );
+      expect(button("Continue").disabled).toBe(true);
+      expect(posted).toEqual([]);
+
+      await act(async () => button("Cancel").click());
+      permissionsRead = undefined;
+      canUse = canUseWith({ "devices.control:light": false });
+      await act(async () => button("Add an agent").click());
+      await type(dialog()!.querySelector("input")!, "Codex");
+      expect(dialog()!.textContent).toContain(
+        "Off until you switch them onControl your lights",
+      );
+      expect(button("Continue").disabled).toBe(false);
+    });
+
+    it("shows an unmet prerequisite for an offer that is switched on", async () => {
+      canUse = canUseWith({ "example.create": true });
+      await add("Codex");
+      expect(dialog()!.textContent).toContain(
+        "Create a sceneNeeds Control your switches, which is off for AI agents.",
+      );
+    });
+
+    it("keeps a late setup response from replacing a reopened sheet", async () => {
+      await add("First");
+      const oldStart = deferred<AgentSetupStarted>();
+      setupStart = oldStart.promise;
+      await act(async () => button("Continue").click());
+      await act(async () => button("Cancel").click());
+      await act(async () => button("Add an agent").click());
+      await type(dialog()!.querySelector("input")!, "Second");
+
+      await act(async () =>
+        oldStart.resolve({
+          setupId: "setup-1",
+          code: "sanctum:old",
+          expiresAt: "",
+        }),
+      );
+      expect(dialog()!.querySelector("input")!.value).toBe("Second");
+      expect(dialog()!.textContent).not.toContain("sanctum:old");
+      setupStart = undefined;
+      await act(async () => button("Continue").click());
+      expect(dialog()!.textContent).toContain("Connect Second");
+    });
+
     it("shows the prompt, waits, then names the agent once it has connected", async () => {
       await add("Codex");
       await act(async () => button("Continue").click());
@@ -380,6 +489,22 @@ describe("Settings → AI agents", () => {
       expect(dialog()!.textContent).not.toContain("Connect to my");
       await act(async () => button("Back").click());
       expect(dialog()!.textContent).toContain("Connect to my Sanctum home");
+    });
+
+    it("keeps a late clipboard result from changing the other view", async () => {
+      await add("Codex");
+      await act(async () => button("Continue").click());
+      const copy = deferred<void>();
+      const writeText = vi.fn(() => copy.promise);
+      vi.stubGlobal("navigator", {
+        userAgent: navigator.userAgent,
+        clipboard: { writeText },
+      });
+      await act(async () => button("Copy prompt").click());
+      expect(writeText).toHaveBeenCalledWith(promptText("sanctum:abc"));
+      await act(async () => button("Set it up by hand").click());
+      await act(async () => copy.resolve());
+      expect(button("Copy command")).toBeTruthy();
     });
 
     it("makes a new prompt once one has run out", async () => {
@@ -422,6 +547,7 @@ describe("What AI agents can use", () => {
       root.render(
         <CanUsePage
           apps={[moods]}
+          live={live}
           onOpenApp={(id) => openedApp.push(id)}
           onDone={() => undefined}
         />,
@@ -457,9 +583,28 @@ describe("What AI agents can use", () => {
     );
   });
 
+  it("refreshes shared permissions and rejects a read older than a local change", async () => {
+    await show();
+    canUse = canUseWith({ "people.read": true });
+    await act(async () => live.refresh());
+    expect(switchFor("See who lives here").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+
+    const read = deferred<AiCanUse>();
+    permissionsRead = read.promise;
+    await act(async () => live.refresh());
+    await act(async () => switchFor("Control your lights").click());
+    await act(async () => read.resolve(canUseWith()));
+    expect(switchFor("Control your lights").getAttribute("aria-checked")).toBe(
+      "false",
+    );
+  });
+
   it("asks before an area that tells who's home turns on", async () => {
     await show();
-    await act(async () => switchFor("Know when there's motion").click());
+    const motion = switchFor("Know when there's motion");
+    await act(async () => motion.click());
     expect(posted).toEqual([]);
     expect(dialog()!.textContent).toContain(
       "Let AI agents know when there's motion?",
@@ -469,6 +614,16 @@ describe("What AI agents can use", () => {
     expect(posted).toEqual([
       ["/api/agents/can-use/area", { id: "devices.read:motion", on: true }],
     ]);
+    expect(document.activeElement).toBe(motion);
+  });
+
+  it("returns focus to the switch when the privacy confirmation is cancelled", async () => {
+    await show();
+    const motion = switchFor("Know when there's motion");
+    await act(async () => motion.click());
+    await act(async () => button("Cancel").click());
+    expect(document.activeElement).toBe(motion);
+    expect(posted).toEqual([]);
   });
 
   it("leads to each app that offers something, with how much is on", async () => {
@@ -485,7 +640,11 @@ describe("an app's part of what AI agents can use", () => {
     openedCanUse = 0;
     await act(async () =>
       root.render(
-        <AppCanUseSection app={moods} onOpenCanUse={() => openedCanUse++} />,
+        <AppCanUseSection
+          app={moods}
+          live={live}
+          onOpenCanUse={() => openedCanUse++}
+        />,
       ),
     );
   }
@@ -494,6 +653,9 @@ describe("an app's part of what AI agents can use", () => {
     agents = [];
     await show();
     expect(container.textContent).toBe("");
+    agents = [codex];
+    await act(async () => live.refresh());
+    expect(container.textContent).toContain("What AI agents can use");
   });
 
   it("has what AI agents can do, then what they can know", async () => {

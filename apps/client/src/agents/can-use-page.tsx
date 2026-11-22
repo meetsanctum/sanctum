@@ -3,9 +3,9 @@ import {
   type AiAreaInfo,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppIcon } from "../app-icon";
 import { plainIcon } from "../app-settings";
@@ -23,6 +23,7 @@ import { switchArea, useAiCanUse } from "./data";
 import { CanUseNote, CanUseRow, CanUseRows, switchProblem } from "./rows";
 import {
   areaDetail,
+  canUseTitle,
   offersOf,
   onCount,
   tellsWhosHome,
@@ -38,26 +39,35 @@ import {
 // turning anything off never asks.
 
 export const canUseSettingsPage = "ai-can-use";
-export const canUseTitle = "What AI agents can use";
 
 export function CanUsePage(props: {
   apps: readonly AppInfo[];
+  live: LiveFeed;
   onOpenApp: (id: string) => void;
   onDone: () => void;
   backTo?: string;
 }) {
-  const { canUse, setCanUse, failed } = useAiCanUse();
+  const { canUse, acceptChange, hasFailed, refresh } = useAiCanUse(props.live);
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
   const [asking, setAsking] = useState<string>();
   const [problem, setProblem] = useState<string>();
+  const focusAfterConfirm = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (asking || pending || !focusAfterConfirm.current) return;
+    if (document.activeElement === document.body)
+      focusAfterConfirm.current.focus();
+    focusAfterConfirm.current = null;
+  }, [asking, pending]);
 
   const change = async (id: string, on: boolean) => {
     setPending({ id, on });
     setProblem(undefined);
     try {
-      setCanUse(await switchArea(id, on));
+      acceptChange(await switchArea(id, on));
     } catch {
       setProblem(switchProblem);
+      void refresh();
     } finally {
       setPending(undefined);
     }
@@ -74,9 +84,11 @@ export function CanUsePage(props: {
         always={area.always}
         on={pending?.id === area.id ? pending.on : area.on}
         disabled={pending !== undefined}
-        onSwitch={(on) => {
-          if (on && tellsWhosHome(area.id)) setAsking(area.id);
-          else void change(area.id, on);
+        onSwitch={(on, trigger) => {
+          if (on && tellsWhosHome(area.id)) {
+            focusAfterConfirm.current = trigger;
+            setAsking(area.id);
+          } else void change(area.id, on);
         }}
       />
     );
@@ -86,7 +98,7 @@ export function CanUsePage(props: {
   const offering = props.apps.filter(
     (app) => offersOf(canUse, app.id).length > 0,
   );
-  const asked = asking ? turnOnWords(asking) : undefined;
+  const asked = asking ? { id: asking, ...turnOnWords(asking) } : undefined;
   return (
     <>
       <SettingsPageBar
@@ -94,7 +106,7 @@ export function CanUsePage(props: {
         backTo={props.backTo}
         onBack={props.onDone}
       />
-      {failed && (
+      {hasFailed && !canUse && (
         <p role="alert" className="m-0 text-sm text-destructive">
           This didn't load. Go back and open it again.
         </p>
@@ -159,7 +171,10 @@ export function CanUsePage(props: {
         }}
       >
         {asked && (
-          <DialogContent showCloseButton={false}>
+          <DialogContent
+            showCloseButton={false}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>{asked.title}</DialogTitle>
               <DialogDescription>{asked.description}</DialogDescription>
@@ -175,7 +190,7 @@ export function CanUsePage(props: {
               <Button
                 onClick={() => {
                   setAsking(undefined);
-                  void change(asking!, true);
+                  void change(asked.id, true);
                 }}
               >
                 Turn on

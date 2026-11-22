@@ -1,6 +1,6 @@
 import { Switch } from "@meetsanctum/ui-sdk";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 
 // A line of what AI agents can use: what it is, a line under it, and its
 // switch, or the words that say it has none. The line under it wraps rather
@@ -14,9 +14,11 @@ export function CanUseRow(props: {
   always?: boolean;
   on: boolean;
   disabled?: boolean;
-  onSwitch: (on: boolean) => void;
+  onSwitch: (on: boolean, trigger: HTMLButtonElement | null) => void;
 }) {
   const Icon = props.icon;
+  const detailId = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
   return (
     <li className="flex min-w-0 items-center gap-3">
       {Icon && (
@@ -30,7 +32,10 @@ export function CanUseRow(props: {
       <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
         <span className="text-sm font-medium">{props.title}</span>
         {props.detail && (
-          <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
+          <span
+            id={detailId}
+            className="text-[13px] leading-[18px] font-medium text-muted-foreground"
+          >
             {props.detail}
           </span>
         )}
@@ -41,10 +46,12 @@ export function CanUseRow(props: {
         </span>
       ) : (
         <Switch
+          ref={trigger}
           aria-label={props.title}
+          aria-describedby={props.detail ? detailId : undefined}
           checked={props.on}
           disabled={props.disabled}
-          onCheckedChange={props.onSwitch}
+          onCheckedChange={(on) => props.onSwitch(on, trigger.current)}
         />
       )}
     </li>
