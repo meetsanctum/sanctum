@@ -229,6 +229,53 @@ describe("holding a remote's button", () => {
       isError: true,
       structuredContent: { error: "limited" },
     });
+    expect(
+      await client.callTool({
+        name: "lights",
+        arguments: { place: { kind: "room", id: home.room }, to: "dimmer" },
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { error: "limited" },
+    });
+    expect(core.holds.isMoving(desk, "light")).toBe(true);
+    expect(movesOf("desk-1")).toEqual([{ move: "down", percentPerSecond: 25 }]);
+    await release();
+  });
+
+  it("leaves a moving light alone when asked to restore it", async () => {
+    const home = await office();
+    const { core, maya, token, desk } = home;
+    await addWorkflow(core, token, {
+      graph: pressing(home, "hold", "dimWhileHeld"),
+    });
+    const agent = core.auth.clients.createAgent({
+      name: "Home agent",
+      platform: "macos",
+      addedBy: { kind: "person", id: maya.person.id },
+    });
+    const client = await connect(core, agent.token);
+    const result = await client.callTool({
+      name: "device_command",
+      arguments: {
+        device: desk,
+        capability: "light",
+        command: { brightness: 80 },
+      },
+    });
+    await settled();
+    await press(core, "hold");
+
+    expect(
+      await client.callTool({
+        name: "restore",
+        arguments: {
+          change: (result.structuredContent as { change: string }).change,
+        },
+      }),
+    ).toMatchObject({
+      structuredContent: { changed: [{ device: desk, result: "uncertain" }] },
+    });
     expect(core.holds.isMoving(desk, "light")).toBe(true);
     expect(movesOf("desk-1")).toEqual([{ move: "down", percentPerSecond: 25 }]);
     await release();

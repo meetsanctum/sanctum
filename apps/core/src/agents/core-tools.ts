@@ -21,8 +21,9 @@ import type {
   NewActivityEntry,
 } from "../activity/activity.js";
 import type { ActivityViews } from "../activity/views.js";
+import { ActionCallError } from "../app-host/errors.js";
 import type { Principal } from "../auth/clients.js";
-import type { Devices } from "../devices/devices.js";
+import type { CommandChange, Devices } from "../devices/devices.js";
 import {
   lightsPlace,
   type LightOutcome,
@@ -37,7 +38,6 @@ import {
   type History,
 } from "../history/history.js";
 import { historyTimes } from "../history/time.js";
-import { ActionCallError } from "../app-host/errors.js";
 import {
   answer,
   errorAnswer,
@@ -45,8 +45,9 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
-import type { AgentChanges, ChangedCapability } from "./changes.js";
+import type { AgentChanges } from "./changes.js";
 import { areasPage } from "./overview.js";
+import { createRestoreCapability } from "./restore.js";
 
 // The core's own tools, each listed while what it needs is switched on in
 // What AI agents can use: `lights` and `device_command` for the kinds AI
@@ -140,56 +141,51 @@ const deviceCommandAreas = capabilityKinds
   .map(controlPermission)
   .filter((area) => aiAreas.includes(area));
 
+function batchAnswer(
+  result: Record<string, unknown>,
+  outcomes: readonly { why?: string }[],
+  limitedMessage?: string,
+): CallToolResult {
+  if (outcomes.some(({ why }) => why === "forbidden")) {
+    throw new ActionCallError("forbidden");
+  }
+  if (outcomes.some(({ why }) => why === "needs_approval")) {
+    throw new ActionCallError("needs_approval");
+  }
+  if (outcomes.some(({ why }) => why === "limited")) {
+    const refusal = limitedMessage
+      ? toolError("limited", limitedMessage)
+      : errorAnswer(new ActionCallError("limited"));
+    return {
+      ...answer(Object.assign({}, refusal.structuredContent, result)),
+      isError: true,
+    };
+  }
+  return answer(result);
+}
+
 export function createCoreTools(options: CoreToolsOptions) {
   const now = options.now ?? (() => new Date());
   const view = (): View => ({ kinds: options.readableDeviceKinds() });
 
-  const lightsInput = z
-    .strictObject({
+  const brightness = z.number().int().min(1).max(100);
+  const colorTemperature = z.number().int().min(50).max(1000);
+  const lightsInput = z.union([
+    z.strictObject({
       place: lightsPlace,
-      to: z.enum(["on", "off", "brighter", "dimmer"]).optional(),
-      set: z
-        .strictObject({
-          brightness: z.number().int().min(1).max(100).optional(),
-          colorTemperature: z.number().int().min(50).max(1000).optional(),
-        })
-        .refine(
-          (set) =>
-            set.brightness !== undefined || set.colorTemperature !== undefined,
-          "set asks for something",
-        )
-        .optional(),
-    })
-    .refine(
-      (input) => (input.to === undefined) !== (input.set === undefined),
-      "either to or set",
-    );
-
-  // A change's lights and switches as sent, which restore puts back.
-  const changed = (
-    sent: readonly {
-      device: string;
-      capability: string;
-      kind: ChangedCapability["kind"];
-      asked?: object;
-      before?: object | null;
-    }[],
-  ): ChangedCapability[] =>
-    sent.flatMap(({ device, capability, kind, asked, before }) =>
-      asked
-        ? [
-            {
-              device,
-              capability,
-              kind,
-              asked: { ...asked },
-              before: before ? { ...before } : null,
-            },
-          ]
-        : [],
-    );
-
-  const named = (device: string) => options.devices.get(device)?.name ?? null;
+      to: z.enum(["on", "off", "brighter", "dimmer"]),
+    }),
+    z.strictObject({
+      place: lightsPlace,
+      set: z.union([
+        z.strictObject({
+          brightness,
+          colorTemperature: colorTemperature.optional(),
+        }),
+        z.strictObject({ brightness: brightness.optional(), colorTemperature }),
+      ]),
+    }),
+  ]);
 
   const lights: CoreTool = {
     tool: () => ({
@@ -212,38 +208,30 @@ export function createCoreTools(options: CoreToolsOptions) {
     async run(principal, input) {
       const parsed = lightsInput.safeParse(input);
       if (!parsed.success) return invalidInput();
-      const { place, to, set } = parsed.data;
+      const { place, ...ask } = parsed.data;
       const outcomes = await options.lights.changeFor(
         principal,
         place,
-        set ? { set } : { to: to! },
+        ask,
         view(),
       );
       const change = options.changes.record(
         principal.client.id,
-        changed(outcomes.map((outcome) => ({ ...outcome, kind: "light" }))),
+        outcomes.flatMap(({ device, capability, change }) =>
+          change ? [{ device, capability, kind: "light", ...change }] : [],
+        ),
       );
-      return answer({
-        change,
-        lights: outcomes.map(lightAnswer),
-      });
+      return batchAnswer(
+        { change, lights: outcomes.map(lightAnswer) },
+        outcomes,
+      );
     },
   };
 
   // One light as the agent hears of it: without how it was before, which
   // only restore goes by.
-  const lightAnswer = ({
-    device,
-    capability,
-    asked: _asked,
-    before: _before,
-    ...outcome
-  }: LightOutcome) => ({
-    device,
-    capability,
-    name: named(device),
-    ...outcome,
-  });
+  const lightAnswer = ({ change: _change, ...outcome }: LightOutcome) =>
+    outcome;
 
   const commandInput = z.strictObject({
     device: commandRequest.shape.device,
@@ -301,25 +289,24 @@ export function createCoreTools(options: CoreToolsOptions) {
         );
       }
       if (!isOn(canUse, area)) throw areasOff([area]);
-      const after = await options.devices.commandFor(principal, {
-        device: device.id,
-        capability: capability.id,
-        command,
-      });
-      const change = options.changes.record(
-        principal.client.id,
-        capability.kind === "light" || capability.kind === "switch"
-          ? changed([
-              {
-                device: device.id,
-                capability: capability.id,
-                kind: capability.kind,
-                asked: capabilityOf(capability.kind).desired(command as never),
-                before: capability.state,
-              },
-            ])
-          : [],
+      const address = { device: device.id, capability: capability.id };
+      let accepted: CommandChange | undefined;
+      const after = await options.devices.commandFor(
+        principal,
+        { ...address, command },
+        {
+          accepted: (change) => {
+            accepted = change;
+          },
+        },
       );
+      const { kind } = capability;
+      const change =
+        accepted && (kind === "light" || kind === "switch")
+          ? options.changes.record(principal.client.id, [
+              { ...address, kind, ...accepted },
+            ])
+          : null;
       return answer({
         change,
         device: device.id,
@@ -334,93 +321,11 @@ export function createCoreTools(options: CoreToolsOptions) {
 
   const restoreInput = z.strictObject({ change: z.string().min(1).max(64) });
 
-  // How a capability was, as a command: a light's on or off with its
-  // brightness and colour, which an off holds for when it comes back on.
-  function lookOf(
-    kind: ChangedCapability["kind"],
-    before: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const look: Record<string, unknown> = { on: before.on === true };
-    if (kind !== "light") return look;
-    if (typeof before.brightness === "number" && before.brightness > 0) {
-      look.brightness = before.brightness;
-    }
-    if (
-      before.colorMode === "color" &&
-      typeof before.hue === "number" &&
-      typeof before.saturation === "number"
-    ) {
-      look.hue = before.hue;
-      look.saturation = before.saturation;
-    } else if (typeof before.colorTemperature === "number") {
-      look.colorTemperature = before.colorTemperature;
-    }
-    return look;
-  }
-
-  // Puts one capability back where it still shows what the agent set; one
-  // changed since, by a person, a switch on the wall or an app, is left as
-  // it is, and one whose command is still on its way is uncertain.
-  async function putBack(
-    principal: AgentPrincipal,
-    at: Date,
-    item: ChangedCapability,
-  ) {
-    const device = options.devices.get(item.device, view());
-    const capability = device?.capabilities.find(
-      (each) => each.id === item.capability,
-    );
-    const base = {
-      device: item.device,
-      capability: item.capability,
-      name: device?.name ?? null,
-    };
-    if (!device || capability?.kind !== item.kind) {
-      return { ...base, result: "gone" };
-    }
-    if (device.availability === "offline")
-      return { ...base, result: "offline" };
-    if (capability.sync === "pending") return { ...base, result: "uncertain" };
-    const state = (capability.state ?? {}) as Record<string, unknown>;
-    const isAsSet = Object.entries(item.asked).every(
-      ([field, value]) => state[field] === value,
-    );
-    if (!isAsSet) {
-      const setBy = capability.setBy;
-      const app =
-        setBy?.app && Date.parse(setBy.at) >= at.getTime()
-          ? (options.appName(setBy.app) ?? setBy.app)
-          : null;
-      return { ...base, result: "changed", by: app, state: capability.state };
-    }
-    if (!item.before) {
-      return { ...base, result: "skipped", why: "unknown_before" };
-    }
-    try {
-      const after = await options.devices.commandFor(principal, {
-        device: item.device,
-        capability: item.capability,
-        command: lookOf(item.kind, item.before),
-      });
-      return {
-        ...base,
-        result: after.sync === "pending" ? "sent" : "confirmed",
-        state: after.state,
-      };
-    } catch (error) {
-      if (
-        error instanceof ActionCallError &&
-        ["forbidden", "needs_approval", "limited"].includes(error.code)
-      ) {
-        throw error;
-      }
-      return {
-        ...base,
-        result: "failed",
-        why: error instanceof ActionCallError ? error.code : "failed",
-      };
-    }
-  }
+  const putBack = createRestoreCapability({
+    devices: options.devices,
+    appName: options.appName,
+    view,
+  });
 
   const restore: CoreTool = {
     tool: () => ({
@@ -450,24 +355,34 @@ export function createCoreTools(options: CoreToolsOptions) {
           "That change can't be put back: only your last 5 changes are kept, for an hour.",
         );
       }
-      if (change.restored) return answer(change.restored);
       const off = [
         ...new Set(change.changed.map((item) => controlPermission(item.kind))),
       ].filter((area) => !isOn(canUse, area));
       if (off.length > 0) throw areasOff(off);
-      const settled = await Promise.allSettled(
-        change.changed.map((item) => putBack(principal, change.at, item)),
-      );
-      const refused = settled.find((each) => each.status === "rejected");
-      if (refused) throw refused.reason;
-      const result = {
-        change: change.id,
-        changed: settled.map(
-          (each) => (each as PromiseFulfilledResult<unknown>).value,
-        ),
-      };
-      change.restored = result;
-      return answer(result);
+      change.restored ??= Promise.all(
+        change.changed.map((item) => putBack(principal, item)),
+      )
+        .then((changed) => {
+          // A wholly refused restore can be tried again after the limit resets.
+          if (
+            changed.some(({ why }) => why === "limited") &&
+            !changed.some(
+              ({ result }) => result === "sent" || result === "confirmed",
+            )
+          ) {
+            throw new ActionCallError("limited");
+          }
+          return batchAnswer(
+            { change: change.id, changed },
+            changed,
+            "The device command limit stopped some lights or switches from being put back.",
+          );
+        })
+        .catch((error: unknown) => {
+          delete change.restored;
+          throw error;
+        });
+      return change.restored;
     },
   };
 

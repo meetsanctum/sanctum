@@ -3,7 +3,7 @@ import {
   defineAction,
   defineApp,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
 
 import { changesKept } from "../src/agents/changes.js";
@@ -27,7 +27,10 @@ const glow = defineAction({
   id: "example.glow",
   title: "Glow",
   tier: "write",
-  input: z.object({ device: z.string() }),
+  input: z.object({
+    device: z.string(),
+    brightness: z.number().optional(),
+  }),
   output: z.object({}),
   assistant: {
     starts: "on",
@@ -38,7 +41,7 @@ const glow = defineAction({
     await ctx.devices.command({
       device: input.device,
       capability: "light",
-      command: { on: true },
+      command: { on: true, brightness: input.brightness },
     });
     return {};
   },
@@ -63,8 +66,8 @@ const examplePackage: AppPackage = {
   origin: "official",
 };
 
-async function household() {
-  const home = await lampsCore({ apps: [examplePackage] });
+async function household(options?: Parameters<typeof lampsCore>[0]) {
+  const home = await lampsCore({ ...options, apps: [examplePackage] });
   const { core, maya, lamp, plug } = home;
   const token = maya.token;
   await radio.add("lamp-2", "light", "Reading lamp");
@@ -125,6 +128,51 @@ const results = (answer: Awaited<ReturnType<typeof call>>) =>
 const done = expect.stringMatching(/^(sent|confirmed)$/);
 
 describe("AI agents' lights", () => {
+  it("does not treat confirmation of a later command as confirmation of the first", async () => {
+    const { client, lamp } = await household();
+    let receive!: () => void;
+    const receiving = new Promise<void>((resolve) => {
+      receive = resolve;
+    });
+    let accept!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      accept = resolve;
+    });
+    const radioCommand = vi
+      .spyOn(radio, "carryOut")
+      .mockImplementationOnce(() => {
+        receive();
+        return accepted;
+      });
+    onTestFinished(() => {
+      radioCommand.mockRestore();
+    });
+
+    const first = call(client, "lights", {
+      place: {
+        kind: "lights",
+        lights: [{ device: lamp, capability: "light" }],
+      },
+      set: { brightness: 80 },
+    });
+    await receiving;
+    try {
+      await call(client, "device_command", {
+        device: lamp,
+        capability: "light",
+        command: { brightness: 20 },
+      });
+      await settled();
+    } finally {
+      accept();
+    }
+
+    expect(results(await first)[lamp]).toMatchObject({
+      result: "sent",
+      state: { brightness: 20 },
+    });
+  });
+
   it("dims the lights that are on and leaves those that are off", async () => {
     const { core, token, client, room, lamp, reading } = await household();
     await command(core, token, lamp, "light", { on: true, brightness: 50 });
@@ -216,6 +264,142 @@ describe("AI agents' lights", () => {
 });
 
 describe("putting an AI agent's change back", () => {
+  it("restores a temperature when the light reports it without a colour mode", async () => {
+    const { client, lamp } = await household();
+    const changed = await call(client, "lights", {
+      place: {
+        kind: "lights",
+        lights: [{ device: lamp, capability: "light" }],
+      },
+      set: { colorTemperature: 250 },
+    });
+    await settled();
+    await radio.press("lamp-1", { colorMode: undefined });
+
+    const restored = await call(client, "restore", {
+      change: changed.content.change,
+    });
+
+    expect(restored.content.changed).toMatchObject([
+      { result: done, state: { on: false, colorTemperature: 370 } },
+    ]);
+  });
+
+  it("sends one restore command when two calls ask for the same change", async () => {
+    const { client, lamp } = await household();
+    const changed = await call(client, "device_command", {
+      device: lamp,
+      capability: "light",
+      command: { on: true },
+    });
+    await settled();
+    const sent = radio.received.length;
+    const input = { change: changed.content.change };
+
+    const [first, second] = await Promise.all([
+      call(client, "restore", input),
+      call(client, "restore", input),
+    ]);
+
+    expect(first.content.changed).toMatchObject([{ result: done }]);
+    expect(second).toEqual(first);
+    expect(radio.received).toHaveLength(sent + 1);
+  });
+
+  it("restores a light dimmed to zero by a device command", async () => {
+    const { client, core, token, lamp } = await household();
+    await command(core, token, lamp, "light", { on: true, brightness: 40 });
+    await settled();
+
+    const changed = await call(client, "device_command", {
+      device: lamp,
+      capability: "light",
+      command: { brightness: 0 },
+    });
+    await settled();
+    const restored = await call(client, "restore", {
+      change: changed.content.change,
+    });
+
+    expect(restored.content.changed).toMatchObject([
+      { result: done, state: { on: true, brightness: 40 } },
+    ]);
+  });
+
+  it("leaves a light someone switched off after a brightness command", async () => {
+    const { client, core, token, lamp } = await household();
+    await command(core, token, lamp, "light", { on: true, brightness: 40 });
+    await settled();
+    const changed = await call(client, "device_command", {
+      device: lamp,
+      capability: "light",
+      command: { brightness: 60 },
+    });
+    await settled();
+    await radio.press("lamp-1", { on: false });
+
+    const restored = await call(client, "restore", {
+      change: changed.content.change,
+    });
+
+    expect(restored.content.changed).toMatchObject([
+      { result: "changed", by: null, state: { on: false, brightness: 60 } },
+    ]);
+  });
+
+  it("can restore the lights that changed before a command limit was reached", async () => {
+    const { client, core, room } = await household({
+      agentCommandLimits: { agentPerMinute: 1, homePerMinute: 10 },
+    });
+    const changed = await call(client, "lights", { place: room, to: "on" });
+    await settled();
+
+    expect(changed).toMatchObject({
+      isError: true,
+      content: {
+        error: "limited",
+        change: expect.any(String),
+        lights: expect.arrayContaining([
+          expect.objectContaining({ result: done }),
+          expect.objectContaining({ result: "failed", why: "limited" }),
+        ]),
+      },
+    });
+    core.advance(61_000);
+    const restored = await call(client, "restore", {
+      change: changed.content.change,
+    });
+    expect(restored.content.changed).toMatchObject([
+      { result: done, state: { on: false } },
+    ]);
+  });
+
+  it("returns the same partial restore results when asked again", async () => {
+    const { client, core, room } = await household({
+      agentCommandLimits: { agentPerMinute: 3, homePerMinute: 10 },
+    });
+    const changed = await call(client, "lights", { place: room, to: "on" });
+    await settled();
+    const input = { change: changed.content.change };
+    const first = await call(client, "restore", input);
+    await settled();
+    const sent = radio.received.length;
+
+    expect(first).toMatchObject({
+      isError: true,
+      content: {
+        error: "limited",
+        changed: expect.arrayContaining([
+          expect.objectContaining({ result: done }),
+          expect.objectContaining({ result: "failed", why: "limited" }),
+        ]),
+      },
+    });
+    core.advance(61_000);
+    expect(await call(client, "restore", input)).toEqual(first);
+    expect(radio.received).toHaveLength(sent);
+  });
+
   it("puts lights back as they were, and says the same when asked again", async () => {
     const { core, token, client, room, lamp, reading } = await household();
     await command(core, token, lamp, "light", { on: true, brightness: 40 });
@@ -278,8 +462,10 @@ describe("putting an AI agent's change back", () => {
       set: { brightness: 30 },
     });
     await settled();
-    await call(client, "sanctum_example_glow", { device: lamp });
-    await radio.press("lamp-1", { on: true, brightness: 80 });
+    await call(client, "sanctum_example_glow", {
+      device: lamp,
+      brightness: 80,
+    });
     await settled();
 
     const restored = await call(client, "restore", {
@@ -289,6 +475,26 @@ describe("putting an AI agent's change back", () => {
     expect(
       restored.content.changed!.find((item) => item.device === lamp),
     ).toMatchObject({ result: "changed", by: "Example" });
+  });
+
+  it("does not attribute a physical brightness change to an app that turned the light on", async () => {
+    const { client, room, lamp } = await household();
+    const changed = await call(client, "lights", {
+      place: room,
+      set: { brightness: 30 },
+    });
+    await settled();
+    await call(client, "sanctum_example_glow", { device: lamp });
+    await radio.press("lamp-1", { on: true, brightness: 80 });
+    await settled();
+
+    const restored = await call(client, "restore", {
+      change: changed.content.change,
+    });
+
+    expect(restored.content.changed).toContainEqual(
+      expect.objectContaining({ device: lamp, result: "changed", by: null }),
+    );
   });
 
   it("says a command still on its way is uncertain", async () => {
@@ -395,5 +601,22 @@ describe("putting an AI agent's change back", () => {
     expect(
       await call(client, "restore", { change: changed.content.change }),
     ).toMatchObject({ isError: true, content: { error: "not_allowed" } });
+  });
+
+  it("refuses a repeat restore after its area is switched off", async () => {
+    const { client, area, room } = await household();
+    const changed = await call(client, "lights", { place: room, to: "on" });
+    await settled();
+    const input = { change: changed.content.change };
+    expect(await call(client, "restore", input)).toMatchObject({
+      isError: false,
+    });
+
+    await area(controlPermission("switch"), true);
+    await area(controlPermission("light"), false);
+    expect(await call(client, "restore", input)).toMatchObject({
+      isError: true,
+      content: { error: "not_allowed" },
+    });
   });
 });

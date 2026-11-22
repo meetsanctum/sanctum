@@ -1,6 +1,5 @@
 import {
   choice,
-  light as lightCapability,
   names,
   partOf,
   turnOnRanks,
@@ -20,11 +19,11 @@ import {
 import { z } from "zod";
 
 import { ActionCallError } from "../app-host/errors.js";
-import type { Gate } from "../app-host/gate.js";
+import { deviceCommandRule, type Gate } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { Entities } from "../entities/entities.js";
 import { roomsOfPlace, type PlacesModule } from "../places/places.js";
-import type { Devices } from "./devices.js";
+import type { CommandChange, Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
 import type { View } from "./views.js";
 
@@ -119,7 +118,7 @@ type Light = {
 };
 
 /** What an AI agent asks of a place's lights. */
-export type LightsAsk =
+type LightsAsk =
   | { to: "on" | "off" | "brighter" | "dimmer"; set?: undefined }
   | {
       to?: undefined;
@@ -132,6 +131,7 @@ type SetField = "brightness" | "colorTemperature";
 export type LightOutcome = {
   device: string;
   capability: string;
+  name: string;
   // Sent and on its way, confirmed by the light, left alone, offline, or
   // refused on the way.
   result: "sent" | "confirmed" | "skipped" | "offline" | "failed";
@@ -142,17 +142,13 @@ export type LightOutcome = {
   ignored?: SetField[];
   // For a light sent a command: the fields it asked for, and how the light
   // was before, which putting the change back goes by.
-  asked?: Partial<LightState>;
-  before?: LightState | null;
+  change?: CommandChange;
   state: LightState | null;
 };
 
-type Planned = {
-  light: Light;
-  command?: LightCommand;
-  why?: string;
-  ignored?: SetField[];
-};
+type Planned = { light: Light; ignored?: SetField[] } & (
+  { command: LightCommand; why?: never } | { command?: never; why: string }
+);
 
 // Refusals for whoever is behind the call, which refuse the whole call
 // rather than fail one light: an AI agent past its limit of commands too.
@@ -189,7 +185,8 @@ export function createLights(options: {
   places: Pick<PlacesModule, "list">;
   gate: Gate;
   entities: Pick<Entities, "list">;
-  holds: Pick<Holds, "start" | "settle">;
+  holds: Pick<Holds, "start" | "settle" | "isMoving">;
+  checkAgentCommand: (id: string, shouldCount: boolean) => void;
   now?: () => Date;
 }) {
   const { devices, gate } = options;
@@ -488,9 +485,20 @@ export function createLights(options: {
       ask: LightsAsk,
       view: View,
     ): Promise<LightOutcome[]> {
-      gate.admit(principal, { tier: "write" });
+      const rule = deviceCommandRule("light");
+      const actor = gate.admit(principal, rule);
       if (ask.to === "brighter" || ask.to === "dimmer") {
-        await options.holds.settle(lightsIn(place, view));
+        const lights = lightsIn(place, view);
+        if (
+          actor.kind === "assistant-run" &&
+          lights.some(({ device, capability }) =>
+            options.holds.isMoving(device.id, capability.id),
+          )
+        ) {
+          options.checkAgentCommand(actor.id, false);
+        }
+        await options.holds.settle(lights);
+        gate.permit(actor, rule);
       }
       const every = lightsIn(place, view, true);
       const offline = every.filter(
@@ -500,59 +508,62 @@ export function createLights(options: {
         every.filter((light) => light.device.availability !== "offline"),
         ask,
       );
-      const results = await Promise.allSettled(
-        planned.map(({ light, command }) =>
-          command
-            ? devices.commandFor(principal, {
-                device: light.device.id,
-                capability: light.capability.id,
-                command,
-              })
-            : Promise.resolve(null),
+      const outcomes = await Promise.all(
+        planned.map(
+          async ({ light, command, why, ignored }): Promise<LightOutcome> => {
+            const address = {
+              device: light.device.id,
+              capability: light.capability.id,
+              name: light.device.name,
+              ...(ignored ? { ignored } : {}),
+            };
+            if (!command) {
+              return {
+                ...address,
+                result: "skipped",
+                why,
+                state: light.capability.state,
+              };
+            }
+            let change: CommandChange | undefined;
+            let isConfirmed = false;
+            try {
+              const after = await devices.commandFor(
+                principal,
+                {
+                  device: address.device,
+                  capability: address.capability,
+                  command,
+                },
+                {
+                  accepted: (commandChange, confirmed) => {
+                    change = commandChange;
+                    isConfirmed = confirmed;
+                  },
+                },
+              );
+              return {
+                ...address,
+                result: isConfirmed ? "confirmed" : "sent",
+                change,
+                state: after.kind === "light" ? after.state : null,
+              };
+            } catch (error) {
+              return {
+                ...address,
+                result: "failed",
+                why: error instanceof ActionCallError ? error.code : "failed",
+                state: light.capability.state,
+              };
+            }
+          },
         ),
       );
-      const outcomes: LightOutcome[] = [];
-      for (const [index, settled] of results.entries()) {
-        const { light, command, why, ignored } = planned[index]!;
-        const at = { device: light.device.id, capability: light.capability.id };
-        if (!command) {
-          outcomes.push({
-            ...at,
-            result: "skipped",
-            why: why!,
-            ...(ignored?.length ? { ignored } : {}),
-            state: light.capability.state,
-          });
-          continue;
-        }
-        if (settled.status === "rejected") {
-          const { reason } = settled;
-          if (reason instanceof ActionCallError) {
-            if (refusals.has(reason.code)) throw reason;
-            if (reason.code === "not_found") continue;
-          }
-          outcomes.push({
-            ...at,
-            result: "failed",
-            why: reason instanceof ActionCallError ? reason.code : "failed",
-            state: light.capability.state,
-          });
-          continue;
-        }
-        const after = settled.value as CapabilityInfo | null;
-        outcomes.push({
-          ...at,
-          result: after?.sync === "pending" ? "sent" : "confirmed",
-          ...(ignored ? { ignored } : {}),
-          asked: lightCapability.desired(command),
-          before: light.capability.state,
-          state: (after?.state as LightState | null | undefined) ?? null,
-        });
-      }
       for (const light of offline) {
         outcomes.push({
           device: light.device.id,
           capability: light.capability.id,
+          name: light.device.name,
           result: "offline",
           state: light.capability.state,
         });
