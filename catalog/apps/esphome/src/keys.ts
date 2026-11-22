@@ -147,9 +147,13 @@ function addressOf(reach: Reach) {
 }
 
 // Connects with a key until the device takes it, as it does once it has
-// applied a key it was given, which ends its connections.
+// applied a key it was given, which ends its connections. Each try waits a
+// pause first: firmware switches the key on a moment after it answers, and
+// a try before then would be greeted in the clear, as the library falls
+// back to it when a device ends the encrypted greeting.
 async function backWith(reach: Reach, key: string) {
   for (let tries = 0; tries < 10; tries += 1) {
+    await new Promise((done) => setTimeout(done, reach.timings.firstPauseMs));
     const result = await connectOnce({
       mac: reach.mac,
       key,
@@ -157,7 +161,6 @@ async function backWith(reach: Reach, key: string) {
       timings: reach.timings,
     });
     if ("session" in result) return result.session;
-    await new Promise((done) => setTimeout(done, reach.timings.firstPauseMs));
   }
   throw new Error("It didn't come back with its key");
 }

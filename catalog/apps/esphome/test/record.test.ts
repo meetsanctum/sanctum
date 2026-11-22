@@ -253,6 +253,26 @@ describe("a record from before a key was given or taken off", () => {
     expect(device.keysSent).toHaveLength(3);
   });
 
+  it("lists one with its maker again once it's removed, though Sanctum restarted since it was added", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = keyOf(device.options.mac);
+    await listedAs(key, "Espressif");
+    await home.core.add(key, {});
+    await home.core.stop();
+    await home.core.start();
+    await announce(home.core, device);
+    await home.core.until(
+      () => home.core.availability.get(key) === "online",
+      "online",
+    );
+
+    await home.core.remove(key);
+
+    await home.core.until(() => device.psk === null, "its key off");
+    expect(await listedAs(key, "Espressif")).toMatchObject({ asks: [] });
+  });
+
   it("isn't taken for one without encryption when it's too busy to answer", async () => {
     home = await startHome();
     const device = await EmulatedDevice.start({

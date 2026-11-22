@@ -92,6 +92,8 @@ describe("older firmware", () => {
     home = await startHome();
     const { device, key } = await addOlder();
 
+    // One connection in the clear, the one its setup key went over.
+    expect(device.plainGreetings).toBe(1);
     const own = home.core.secrets.get(secretOf(key));
     expect(own).toMatch(/^[A-Za-z0-9+/]{43}=$/);
     expect(home.core.secrets.get(givenOf(key))).toBe("setup");
