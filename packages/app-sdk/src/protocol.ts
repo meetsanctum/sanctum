@@ -69,6 +69,7 @@ export const coreCallMethods = [
   "secret",
   "putSecret",
   "removeSecret",
+  "putBlob",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 

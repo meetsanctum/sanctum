@@ -1,5 +1,11 @@
 import { cn } from "cn";
-import type { ComponentProps, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 
 import { WindowDragArea } from "./components";
 import { KnotLoader } from "./knot-loader";
@@ -15,8 +21,15 @@ import { KnotLoader } from "./knot-loader";
 // Its glass (VeilGlass) is the one look of whatever covers the whole
 // screen: a veil, and an overlay such as a device's detail or Add devices
 // (src/overlay.tsx), which renders it too. Over a White page it is deeper
-// (src/shell-frame.css).
-export function VeilGlass({ className, ...props }: ComponentProps<"div">) {
+// (src/shell-frame.css). It may take a colour (`tint`), such as what a media
+// player plays, laid over its Carbon so the glass turns towards it without
+// ceasing to be the veil.
+export function VeilGlass({
+  className,
+  tint,
+  children,
+  ...props
+}: ComponentProps<"div"> & { tint?: string | null }) {
   return (
     <div
       data-mode="evening"
@@ -25,8 +38,54 @@ export function VeilGlass({ className, ...props }: ComponentProps<"div">) {
         "veil-glass fixed inset-0 bg-(--carbon)/60 text-white backdrop-blur-[24px]",
         className,
       )}
-    />
+    >
+      <VeilTint tint={tint ?? null} />
+      {children}
+    </div>
   );
+}
+
+// How long a new tint takes to come in, as the old one goes, in ms.
+const tintFadeMs = 600;
+
+// The veil's tint at 45% over its Carbon, behind what it holds. A new one
+// fades in on a layer of its own as the last fades out, by opacity alone,
+// as the shell animates only transform and opacity.
+function VeilTint(props: { tint: string | null }) {
+  const [layers, setLayers] = useState<{ id: number; colour: string }[]>([]);
+  const counter = useRef(0);
+  useEffect(() => {
+    setLayers((current) => {
+      if ((current.at(-1)?.colour ?? null) === props.tint) return current;
+      const kept = current.slice(-1);
+      if (props.tint === null) return kept.length > 0 ? kept : current;
+      counter.current += 1;
+      return [...kept, { id: counter.current, colour: props.tint }];
+    });
+    const timer = setTimeout(
+      () =>
+        setLayers((current) => (props.tint === null ? [] : current.slice(-1))),
+      tintFadeMs + 100,
+    );
+    return () => clearTimeout(timer);
+  }, [props.tint]);
+  return layers.map((layer, index) => {
+    const isCurrent = index === layers.length - 1 && props.tint !== null;
+    return (
+      <span
+        key={layer.id}
+        aria-hidden="true"
+        data-tint={layer.colour}
+        className={cn(
+          "pointer-events-none absolute inset-0 -z-10 transition-opacity duration-600",
+          isCurrent ? "animate-in fade-in-0 duration-600" : "opacity-0",
+        )}
+        style={{
+          background: `color-mix(in oklab, ${layer.colour} 45%, transparent)`,
+        }}
+      />
+    );
+  });
 }
 
 export function Veil(props: {

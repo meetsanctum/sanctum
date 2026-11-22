@@ -28,6 +28,7 @@ import type { EmittedEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
+import type { Blobs } from "../blobs/blobs.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
 
@@ -59,6 +60,7 @@ export function createAppContexts(options: {
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
+  blobs?: Blobs;
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
   now: () => Date;
@@ -207,6 +209,7 @@ export function createAppContexts(options: {
       watch: (permission) => entry.requests.watch(permission),
       pairing: options.pairing,
       secrets: options.secrets,
+      blobs: options.blobs,
       agents: options.agents,
       log: (text) => log(`${appId}: ${text}`),
     });

@@ -6,6 +6,7 @@ import {
   type Actor,
   type DeclaredType,
   type AppContext,
+  type BlobType,
   type DeviceJoining,
   type DeviceRegistration,
   type MediaFeatures,
@@ -423,6 +424,19 @@ class Radio {
   }
 
   // Something other than the core changed it, such as its wall switch.
+  // A media player shows a picture of what it plays, as a driver hands
+  // one over: the bytes to the core, then their hash in its state.
+  async picture(key: string, type: BlobType, data: Uint8Array) {
+    const { hash } = await this.ctx!.blobs.put({ type, data });
+    const gadget = this.gadgets.get(key)!;
+    gadget.state.media = {
+      ...(gadget.state.media as object | undefined),
+      artwork: hash,
+    };
+    await this.say(key);
+    return hash;
+  }
+
   async press(key: string, state: Record<string, unknown>) {
     const gadget = this.gadgets.get(key)!;
     Object.assign(gadget.state, state);

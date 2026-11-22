@@ -45,6 +45,8 @@ export function createAppList(deps: {
   loadPackage: (appId: string, folder: string) => Promise<ApartPackage>;
   pages: Pages;
   live: ReturnType<typeof createLiveUpdates>;
+  // An app was removed, once that has committed.
+  onRemoved?: (appId: string) => void;
   sightings: Sightings | undefined;
   pairing: Pairing;
   devices: Devices;
@@ -176,6 +178,7 @@ export function createAppList(deps: {
     activity,
     manager: deps.manager,
     onRemoved(appId) {
+      deps.onRemoved?.(appId);
       live.appRemoved(appId);
       // Removed, it can be offered again.
       pairing.refresh();

@@ -17,6 +17,7 @@ import { createAgentTools } from "./agents/tools.js";
 import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
 import { registerAppRoutes } from "./app-host/routes.js";
+import { registerBlobRoutes } from "./blobs/routes.js";
 import { AuthError } from "./auth/errors.js";
 import { registerAuth } from "./auth/routes.js";
 import type { CoreConfig } from "./config.js";
@@ -73,6 +74,7 @@ export function createServer(
     | "hardwareOffers"
     | "pages"
     | "workflows"
+    | "blobs"
   > & {
     // The core's phase and readiness (lifecycle.ts): only the health check
     // answers while an update is on trial, until the manager commits it.
@@ -254,6 +256,7 @@ export function createServer(
         gate,
       });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
+      registerBlobRoutes(core, { blobs: options.blobs, gate });
       // Only the desktop app's shell, and those a development stack allows,
       // may show an app's page in a frame.
       registerPageRoutes(core, {

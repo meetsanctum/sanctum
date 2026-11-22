@@ -30,6 +30,7 @@ import { AppNotice, isShown, WhileNotRunning } from "./app-state";
 import type { HostedApp } from "./apps";
 import { contactPageName } from "./contact";
 import { DeviceFrame } from "./frames/device-frame";
+import { useArtwork } from "./artwork";
 import { isMedia, mediaText } from "./media";
 import {
   MediaPlaying,
@@ -260,6 +261,15 @@ export function DeviceDetail(props: {
           },
         ]
       : [];
+  // The picture of what it plays, and its colour on the veil, while
+  // something does.
+  const artwork = useArtwork(
+    player?.state &&
+      player.state.on !== false &&
+      player.state.activity !== "idle"
+      ? player.state.media?.artwork
+      : null,
+  );
   const mediaProps = player &&
     device &&
     playerTile && {
@@ -268,6 +278,7 @@ export function DeviceDetail(props: {
       capability: player,
       disabled: playerTile.disabled,
       failures: playerTile.failures,
+      artwork: artwork?.url ?? null,
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
@@ -392,6 +403,7 @@ export function DeviceDetail(props: {
       onClose={onClose}
       onCovering={props.onCovering}
       title={name}
+      tint={artwork?.colour ?? null}
       subtitle={tile && `${room?.name ?? noRoomName} · ${status}`}
       leading={
         device &&

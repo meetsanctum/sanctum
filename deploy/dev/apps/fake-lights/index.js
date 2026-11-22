@@ -4,6 +4,7 @@ import {
   media as mediaKind,
   switchCapability,
 } from "@meetsanctum/app-sdk";
+import { deflateSync } from "node:zlib";
 
 // Pretend lights, contact sensors and media players for a development
 // stack, since a Mac has no Zigbee stick: a driver app like Zigbee, whose
@@ -94,12 +95,85 @@ const players = new Map([
   ],
 ]);
 
-const reportPlayer = (ctx, key) =>
-  ctx.devices.report({
+// A player says what it plays with a picture of it, as a driver hands one
+// over: the TV box draws one for each episode, in a colour of its own, so
+// the detail's picture and the veil's colour change as it skips.
+async function reportPlayer(ctx, key) {
+  const player = players.get(key);
+  const { media } = player.state;
+  if (media?.episode !== undefined) {
+    const { hash } = await ctx.blobs.put({
+      type: "image/png",
+      data: episodePicture(media.episode),
+    });
+    player.state = { ...player.state, media: { ...media, artwork: hash } };
+  }
+  await ctx.devices.report({
     key,
     availability: "online",
-    states: { player: players.get(key).state },
+    states: { player: player.state },
   });
+}
+
+// A 16:9 picture with a soft gradient, its hue by the episode.
+function episodePicture(episode) {
+  const width = 160;
+  const height = 90;
+  const hue = (episode * 67) % 360;
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = [0];
+    for (let x = 0; x < width; x += 1) {
+      const [r, g, b] = rgbOf(
+        hue + (x / width) * 40,
+        0.55,
+        0.25 + (y / height) * 0.3,
+      );
+      row.push(r, g, b);
+    }
+    rows.push(...row);
+  }
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  return Uint8Array.from(
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", header),
+      chunk("IDAT", deflateSync(Buffer.from(rows))),
+      chunk("IEND", Buffer.alloc(0)),
+    ]),
+  );
+}
+
+// HSL to 8-bit RGB.
+function rgbOf(hue, saturation, lightness) {
+  const k = (n) => (n + hue / 30) % 12;
+  const a = saturation * Math.min(lightness, 1 - lightness);
+  const f = (n) =>
+    lightness - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0), f(8), f(4)].map((each) => Math.round(each * 255));
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 
 // What a player does with a command: set what it asked for, seek or change
 // episodes, step the volume by 5, or go idle once it stops or turns off.

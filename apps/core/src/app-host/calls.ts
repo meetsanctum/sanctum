@@ -1,4 +1,5 @@
 import {
+  blobOf,
   ActionError,
   actionErrorCodes,
   capabilityKinds,
@@ -38,6 +39,7 @@ import type { PlacesModule } from "../places/places.js";
 import { ActionCallError } from "./errors.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { NetFetch, NetHolds } from "./net.js";
+import type { Blobs } from "../blobs/blobs.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
 // The calls an app makes into the core, for one app and one actor. Two
@@ -180,6 +182,8 @@ export function createCoreCalls(options: {
   watch: NetHolds["watch"];
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
+  // The pictures drivers hand over (blobs/blobs.ts).
+  blobs?: Blobs;
   // What AI agents can use, which an AI agent's call holds to.
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   log: (message: string) => void;
@@ -544,6 +548,19 @@ export function createCoreCalls(options: {
     async removeSecret(name) {
       open();
       options.secrets.remove(appId, named(name));
+    },
+
+    // A picture a driver hands over, such as of what a player plays, which
+    // its devices' states then name by its hash. The socket is untrusted, so
+    // what isn't a picture of its declared type is refused (blobOf).
+    async putBlob(blob) {
+      need(registerPermission);
+      notForAgents();
+      const kept = blobOf(blob);
+      if (!kept || !options.blobs) {
+        throw new Error(`${appId} handed over a blob the core cannot keep`);
+      }
+      return { hash: options.blobs.put(appId, kept.type, kept.bytes) };
     },
 
     log: options.log,

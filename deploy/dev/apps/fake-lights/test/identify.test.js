@@ -17,6 +17,7 @@ beforeEach(async (t) => {
       present: async () => {},
       found: async () => {},
     },
+    blobs: { put: async () => ({ hash: "0".repeat(64) }) },
   };
   await app.start(context);
   t.after(() => app.stop());

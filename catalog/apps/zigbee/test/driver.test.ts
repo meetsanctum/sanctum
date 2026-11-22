@@ -593,6 +593,7 @@ describe("re-registering a device", () => {
           secret: absent,
           putSecret: absent,
           removeSecret: absent,
+          putBlob: absent,
           press: absent,
           release: absent,
           firmware: absent,

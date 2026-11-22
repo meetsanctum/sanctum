@@ -696,6 +696,7 @@ const noCore: CoreCalls = {
   secret: unused,
   putSecret: unused,
   removeSecret: unused,
+  putBlob: unused,
   log() {},
 };
 

@@ -65,6 +65,7 @@ export function fakeCore(app: AppDefinition) {
     secret: absent,
     putSecret: absent,
     removeSecret: absent,
+    putBlob: absent,
     entities: absent,
     emit: absent,
     follow: async () => undefined,

@@ -1,6 +1,8 @@
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { z } from "zod";
 
+import type { AppBlob, BlobOnTheWire, PutBlob } from "./blobs.js";
+
 import type {
   CoreEventHandler,
   CoreEventHandlers,
@@ -124,6 +126,8 @@ export interface CoreCalls {
   /** Keeps one of the app's own secrets, replacing what it kept by that name. */
   putSecret(secret: AppSecret): Promise<void>;
   removeSecret(name: string): Promise<void>;
+  /** Hands the core a blob, its bytes in base64 (blobs.ts). */
+  putBlob(blob: BlobOnTheWire): Promise<PutBlob>;
   log(message: string): void;
 }
 
@@ -344,6 +348,15 @@ export interface AppContext {
     set(name: string, value: string): Promise<void>;
     delete(name: string): Promise<void>;
   };
+  /**
+   * Bytes for the core to keep and give clients, such as a picture of what
+   * a media player plays (blobs.ts), for a driver holding devices.register:
+   * a JPEG, PNG or WebP of up to 700 KB. It answers the blob's hash, which
+   * a device's state names it by; the same bytes give the same hash.
+   */
+  readonly blobs: {
+    put(blob: AppBlob): Promise<PutBlob>;
+  };
   log(message: string): void;
 }
 
@@ -504,6 +517,10 @@ export function createAppContext(options: {
       get: (name) => core.secret(name),
       set: (name, value) => core.putSecret({ name, value }),
       delete: (name) => core.removeSecret(name),
+    },
+    blobs: {
+      put: ({ type, data }) =>
+        core.putBlob({ type, data: Buffer.from(data).toString("base64") }),
     },
     log: (message) => core.log(message),
   };

@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import {
   ActionError,
+  blobOf,
   capabilityOf,
   createAppContext,
   deviceFirmware,
@@ -106,6 +109,8 @@ export function createDriverCore(
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
   const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
+  // The blobs the driver handed over, by their hash.
+  const blobs = new Map<string, { type: string; bytes: Uint8Array }>();
   // What the driver says is wrong with each of its devices, as the core
   // shows it.
   const problems = new Map<string, DeviceProblem>();
@@ -411,6 +416,15 @@ export function createDriverCore(
       });
     },
     ...secretCalls,
+    // Keeps a driver's blobs as the core does, refusing what it refuses.
+    async putBlob(blob) {
+      const kept = blobOf(blob);
+      if (!kept)
+        refuse(new Error(`${app.id} handed over a blob the core cannot keep`));
+      const hash = createHash("sha256").update(kept.bytes).digest("hex");
+      blobs.set(hash, kept);
+      return { hash };
+    },
     log() {},
   };
   for (const name of options.unanswered ?? []) {
@@ -448,6 +462,8 @@ export function createDriverCore(
     refused,
     presented,
     secrets,
+    /** The blobs the driver handed over, by their hash. */
+    blobs,
     problems,
     /** The devices the driver last said it could add, but those it has registered. */
     get found() {
