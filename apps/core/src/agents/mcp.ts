@@ -17,8 +17,9 @@ import type { AgentTools } from "./tools.js";
 // (400 and -32020 otherwise, as the SDK checks). Only an AI agent's token
 // opens it, and nothing else opens with that token (auth/routes.ts).
 //
-// Requests with an `Origin` are refused so a browser page cannot call the
-// home. Requests a minute and calls at once are held to limits (limits.ts),
+// The agent's connector speaks to it over pinned HTTPS. A browser never
+// does, so any request carrying an `Origin` is refused: a page an agent
+// reads can't make a browser call the home. Requests a minute and calls at once are held to limits (limits.ts),
 // and an agent over one is logged once a minute. The tool list is short-lived
 // and private, since it follows the household's switches.
 
@@ -74,6 +75,7 @@ export function registerMcpRoute(
   const handler = createMcpHandler(
     (context) =>
       serverFor(context.authInfo?.extra?.principal as AgentPrincipal),
+    // Only 2026-07-28: the connector translates for agents on older ones.
     { legacy: "reject" },
   );
 
