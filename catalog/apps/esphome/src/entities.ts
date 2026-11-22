@@ -52,6 +52,7 @@ export function capabilityIdOf(entity: Entity) {
     sensor: "sensor",
     binary_sensor: "binary",
     event: "event",
+    media_player: "media",
   }[entity.type as string];
   const id = `${prefix ?? entity.type}-${entity.objectId}`
     .toLowerCase()
@@ -99,6 +100,38 @@ export function measureOf(entity: Entity): Measure | null {
   return (measures[measure] as Set<string>).has(unit) ? measure : null;
 }
 
+// A media player's features as ESPHome flags them, as Home Assistant's
+// media player features number them: turned on and off only with both.
+const turnOn = 128;
+const turnOff = 256;
+
+/**
+ * What a media player can do: play and stop, pause where it says so, a
+ * volume it's set to and mute, as every ESPHome media player has, and power
+ * where it says it can be turned on and off.
+ */
+function mediaCapability(
+  entity: Entity & { type: "media_player" },
+): Capability {
+  const flags = Number(entity.featureFlags ?? 0);
+  return {
+    id: capabilityIdOf(entity),
+    kind: "media",
+    features: {
+      power: (flags & turnOn) !== 0 && (flags & turnOff) !== 0,
+      playback: entity.supportsPause
+        ? ["play", "pause", "stop"]
+        : ["play", "stop"],
+      volume: "level",
+      mute: true,
+    },
+  };
+}
+
+// A press whose name says nobody sets it on purpose, as the Home Assistant
+// Voice PE's easter egg.
+const hiddenActions = new Set(["easter_egg_press"]);
+
 function capabilityOf(entity: Entity): Capability | null {
   const id = capabilityIdOf(entity);
   switch (entity.type) {
@@ -126,8 +159,10 @@ function capabilityOf(entity: Entity): Capability | null {
         : null;
     }
     case "event": {
-      const actions = [...new Set(entity.eventTypes ?? [])].filter((action) =>
-        /^[A-Za-z0-9][\w.:-]{0,63}$/.test(action),
+      const actions = [...new Set(entity.eventTypes ?? [])].filter(
+        (action) =>
+          /^[A-Za-z0-9][\w.:-]{0,63}$/.test(action) &&
+          !hiddenActions.has(action),
       );
       return actions.length > 0
         ? {
@@ -137,6 +172,8 @@ function capabilityOf(entity: Entity): Capability | null {
           }
         : null;
     }
+    case "media_player":
+      return mediaCapability(entity);
     default:
       return null;
   }

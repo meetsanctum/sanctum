@@ -53,6 +53,8 @@ export type EmulatedOptions = {
   recordAtBoot?: boolean;
   version?: string;
   sleeps?: boolean;
+  /** It has a voice assistant, which asks whoever follows it to listen. */
+  voiceAssistant?: boolean;
   entities: EmulatedEntity[];
   /** Each entity's state by its key, by the library's field names. */
   states?: Record<number, Record<string, FieldValue>>;
@@ -72,6 +74,9 @@ const message = {
   listEntitiesRequest: 11,
   listEntitiesDone: 19,
   subscribeStates: 20,
+  subscribeVoiceAssistant: 89,
+  voiceAssistantRequest: 90,
+  voiceAssistantResponse: 91,
 } as const;
 
 // Protocol buffers, as far as the API needs them.
@@ -188,6 +193,11 @@ export class EmulatedDevice {
   refusesKeys = false;
   /** How many sessions it greeted in the clear. */
   plainGreetings = 0;
+  /** Each answer to a voice request it made, and whether it was declined. */
+  readonly voiceAnswers: { declined: boolean }[] = [];
+  // Who follows its voice assistant's requests, as a session's send.
+  private voiceFollower: ((type: number, payload: Buffer) => void) | null =
+    null;
   /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
   readonly keysSent: { key: string; encrypted: boolean }[] = [];
   // What held as it last booted, for a record kept from then.
@@ -284,6 +294,21 @@ export class EmulatedDevice {
     while (this.subscribed.size === 0) {
       await new Promise((done) => setTimeout(done, 5));
     }
+  }
+
+  /** Whether a session follows its voice assistant's requests. */
+  get voiceFollowed() {
+    return this.voiceFollower !== null;
+  }
+
+  /** Hears its wake word, asking whoever follows it to listen. */
+  wake() {
+    if (!this.voiceFollower)
+      throw new Error("nobody follows its voice requests");
+    this.voiceFollower(
+      message.voiceAssistantRequest,
+      field({ fieldNumber: 1, valueType: "varint" }, 1),
+    );
   }
 
   /** One of its event entities firing, as a button's press does. */
@@ -549,6 +574,7 @@ export class EmulatedDevice {
           ...(this.options.friendlyName
             ? [text(13, this.options.friendlyName)]
             : []),
+          ...(this.options.voiceAssistant ? [flag(17, 1)] : []),
           flag(
             19,
             this.psk !== null || this.waiting || this.options.older === true,
@@ -589,6 +615,15 @@ export class EmulatedDevice {
       this.subscribed.add(send);
       socket.on("close", () => this.subscribed.delete(send));
       for (const entity of this.options.entities) this.sendState(send, entity);
+    } else if (type === message.subscribeVoiceAssistant) {
+      if (decode(payload).get(1)?.[0] === 1) {
+        this.voiceFollower = send;
+        socket.on("close", () => {
+          if (this.voiceFollower === send) this.voiceFollower = null;
+        });
+      } else if (this.voiceFollower === send) this.voiceFollower = null;
+    } else if (type === message.voiceAssistantResponse) {
+      this.voiceAnswers.push({ declined: decode(payload).get(2)?.[0] === 1 });
     } else if (type === message.pingRequest) {
       if (this.answersPings) send(message.pingResponse, Buffer.alloc(0));
     } else if (type === message.disconnectRequest) {
@@ -597,6 +632,53 @@ export class EmulatedDevice {
     } else {
       this.command(type, payload);
     }
+  }
+
+  // A media player's state after a command, as ESPHome's speaker player has
+  // it: a volume in steps of 0.05.
+  private playerAfter(key: number, said: Record<string, FieldValue>) {
+    const now: Record<string, FieldValue> = {
+      state: player.idle,
+      volume: 0,
+      muted: false,
+      ...this.states[key],
+    };
+    if (typeof said.volume === "number") now.volume = said.volume;
+    const step: Record<number, number> = {
+      [player.volumeUp]: 0.05,
+      [player.volumeDown]: -0.05,
+    };
+    switch (said.command) {
+      case player.play:
+        now.state = player.playing;
+        break;
+      case player.pause:
+        now.state = player.paused;
+        break;
+      case player.stop:
+        now.state = player.idle;
+        break;
+      case player.mute:
+        now.muted = true;
+        break;
+      case player.unmute:
+        now.muted = false;
+        break;
+      case player.turnOn:
+        now.state = player.on;
+        break;
+      case player.turnOff:
+        now.state = player.off;
+        break;
+      case player.volumeUp:
+      case player.volumeDown:
+        now.volume = Math.min(
+          1,
+          Math.max(0, Number(now.volume) + step[Number(said.command)]!),
+        );
+        break;
+    }
+    return now;
   }
 
   // A command for one of its entities, which it carries out and reports.
@@ -626,6 +708,10 @@ export class EmulatedDevice {
       if (value !== undefined) said[name] = value;
     }
     this.commands.push({ type: entry.type, key, fields: said });
+    if (entry.type === "media_player") {
+      this.setState(key, this.playerAfter(key, said));
+      return;
+    }
     const next: Record<string, FieldValue> = { ...said };
     if (said.hasRgb !== true) {
       delete next.red;
@@ -637,6 +723,24 @@ export class EmulatedDevice {
     this.setState(key, next);
   }
 }
+
+// ESPHome's media player commands and states, as api.proto numbers them.
+const player = {
+  play: 0,
+  pause: 1,
+  stop: 2,
+  mute: 3,
+  unmute: 4,
+  volumeUp: 6,
+  volumeDown: 7,
+  turnOn: 12,
+  turnOff: 13,
+  idle: 1,
+  playing: 2,
+  paused: 3,
+  off: 5,
+  on: 6,
+} as const;
 
 type StateSpec = {
   keyFieldNumber: number;

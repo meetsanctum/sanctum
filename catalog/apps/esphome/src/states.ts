@@ -1,11 +1,18 @@
 import type {
   LightCommand,
   LightState,
+  MediaCommand,
+  MediaState,
   MotionState,
   SensorState,
   SwitchState,
 } from "@meetsanctum/app-sdk";
-import type { Entity, TelemetryEvent } from "esphome-client";
+import {
+  MediaPlayerCommand,
+  MediaPlayerState,
+  type Entity,
+  type TelemetryEvent,
+} from "esphome-client";
 
 import { colorModesOf, measureOf, type Mapped } from "./entities.js";
 
@@ -155,6 +162,65 @@ export function lightCommandOf(entity: Entity, command: LightCommand) {
   return options;
 }
 
+/**
+ * A media player's state as Sanctum has it, from ESPHome's: what it's doing,
+ * its volume and whether it's muted, both said every time, and whether it's
+ * on where it can be turned on and off. An announcement it plays counts as
+ * playing.
+ */
+export function mediaStateOf(
+  mapped: Mapped,
+  event: TelemetryEvent & { type: "media_player" },
+): MediaState {
+  const { power } = mapped.capability.features as { power: boolean };
+  // Its defaults are left out, as a protocol buffer does: off, silent, unmuted.
+  const now = event.state ?? MediaPlayerState.NONE;
+  const volume =
+    typeof event.volume === "number" && Number.isFinite(event.volume)
+      ? clamp(Math.round(event.volume * 100), 0, 100)
+      : 0;
+  const state: MediaState = {
+    activity:
+      now === MediaPlayerState.PLAYING || now === MediaPlayerState.ANNOUNCING
+        ? "playing"
+        : now === MediaPlayerState.PAUSED
+          ? "paused"
+          : "idle",
+    volume,
+    muted: event.muted === true,
+  };
+  if (power) state.on = now !== MediaPlayerState.OFF;
+  return state;
+}
+
+/** ESPHome's media player command for Sanctum's. */
+export function mediaCommandOf(command: MediaCommand) {
+  if ("volume" in command) return { volume: command.volume / 100 };
+  const code =
+    "on" in command
+      ? command.on
+        ? MediaPlayerCommand.TURN_ON
+        : MediaPlayerCommand.TURN_OFF
+      : "activity" in command
+        ? command.activity === "playing"
+          ? MediaPlayerCommand.PLAY
+          : MediaPlayerCommand.PAUSE
+        : "playback" in command
+          ? command.playback === "stop"
+            ? MediaPlayerCommand.STOP
+            : null
+          : "volumeStep" in command
+            ? command.volumeStep === "up"
+              ? MediaPlayerCommand.VOLUME_UP
+              : MediaPlayerCommand.VOLUME_DOWN
+            : "muted" in command
+              ? command.muted
+                ? MediaPlayerCommand.MUTE
+                : MediaPlayerCommand.UNMUTE
+              : null;
+  return code === null ? null : { command: code };
+}
+
 // Kelvin and degrees Fahrenheit in degrees Celsius, to a tenth.
 function celsiusOf(value: number, unit: string) {
   const celsius =
@@ -178,10 +244,12 @@ export function stateOf(
   | SwitchState
   | SensorState
   | MotionState
+  | MediaState
   | { open: boolean }
   | null {
   const { capability, entity } = mapped;
   if (event.type === "light") return lightStateOf(mapped, event);
+  if (event.type === "media_player") return mediaStateOf(mapped, event);
   if (event.type === "switch") return { on: event.state === true };
   if (event.type === "sensor") {
     if (event.missingState) return null;

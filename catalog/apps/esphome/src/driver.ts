@@ -37,7 +37,8 @@ import {
 } from "./keys.js";
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { report } from "./reports.js";
-import { lightCommandOf } from "./states.js";
+import { lightCommandOf, mediaCommandOf } from "./states.js";
+import { declineRequests } from "./voice.js";
 
 // ESPHome's side of the Drivers contract. It keeps no list of its devices:
 // they are the core's record of what it added, read whole with the MAC
@@ -127,6 +128,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const { keepZero, giveOlderKey, giveOwnKey } = keying;
 
   function connected(owned: Owned, session: Session, hear: () => void) {
+    // A device with a voice assistant waits for one before it's ready.
+    declineRequests(session);
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
     owned.maker = makerOf(session.info).manufacturer ?? owned.maker;
@@ -678,6 +681,18 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         session.client.command(
           entityId("light", entity.objectId),
           lightCommandOf(entity, command.command) as never,
+        );
+      } else if (command.kind === "media" && entity.type === "media_player") {
+        const sent = mediaCommandOf(command.command);
+        if (!sent) {
+          throw new ActionError(
+            "not_found",
+            `${command.capability} takes no such command`,
+          );
+        }
+        session.client.command(
+          entityId("media_player", entity.objectId),
+          sent as never,
         );
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {
