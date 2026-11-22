@@ -51,6 +51,8 @@ export const connectWords = {
     "This connector is newer than Sanctum. Update Sanctum, then add the agent again.",
   tooOld:
     "This connector is too old for Sanctum. Add the agent again from Sanctum's Settings, which gives the current connector.",
+  firstCallFailed:
+    "Got the agent's token, but Sanctum didn't answer the agent's first call with it. Start a new setup in Sanctum's Settings, under AI agents, Add an agent, and run this again with its code.",
   tooManyAttempts:
     "Sanctum is holding this computer back after too many wrong codes. Wait 15 minutes, then try again.",
 };
@@ -162,18 +164,26 @@ export async function connect(
     throw error;
   }
 
-  // The agent's first call, which Settings waits for.
-  const client = await connectHome({
-    url,
-    token: body.token,
-    fetch: fetchHome,
-  });
+  // The agent's first call, which Settings waits for. Without it the setup
+  // runs out and the home takes the token back, so a failed first call
+  // leaves nothing here either: the person starts a new setup.
   let name: string | undefined;
   try {
-    await client.listTools();
-    name = await homeName(client).catch(() => undefined);
-  } finally {
-    await client.close();
+    const client = await connectHome({
+      url,
+      token: body.token,
+      fetch: fetchHome,
+    });
+    try {
+      await client.listTools();
+      name = await homeName(client).catch(() => undefined);
+    } finally {
+      await client.close().catch(() => undefined);
+    }
+  } catch {
+    await options.tokens.delete(clientId).catch(() => undefined);
+    await removeConnection(options.dir, clientId).catch(() => undefined);
+    throw new ConnectError(connectWords.firstCallFailed);
   }
 
   const choice = await chooseRegistration(

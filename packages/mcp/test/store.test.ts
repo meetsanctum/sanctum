@@ -37,7 +37,10 @@ describe("the connector's store", () => {
 
     expect(await loadConnection(dir, office.clientId)).toEqual(office);
     expect(await listConnections(dir)).toEqual([office]);
-    expect((await stat(join(dir, "connections"))).mode & 0o777).toBe(0o700);
+    // Windows keeps no owner, group and other bits.
+    if (process.platform !== "win32") {
+      expect((await stat(join(dir, "connections"))).mode & 0o777).toBe(0o700);
+    }
 
     await removeConnection(dir, office.clientId);
     expect(await listConnections(dir)).toEqual([]);
@@ -58,17 +61,21 @@ describe("the connector's store", () => {
     await tokens.set(office.clientId, "client_secret");
 
     expect(await tokens.get(office.clientId)).toBe("client_secret");
-    expect(
-      (await stat(join(dir, "tokens", office.clientId))).mode & 0o777,
-    ).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(
+        (await stat(join(dir, "tokens", office.clientId))).mode & 0o777,
+      ).toBe(0o600);
+    }
     await tokens.delete(office.clientId);
     expect(await tokens.get(office.clientId)).toBeUndefined();
   });
 
   it("lives where the system keeps settings, unless told", () => {
     expect(storeDir({ SANCTUM_MCP_DIR: "/tmp/here" })).toBe("/tmp/here");
-    expect(storeDir({ XDG_CONFIG_HOME: "/home/x/.config" })).toBe(
-      "/home/x/.config/sanctum-mcp",
-    );
+    if (process.platform !== "win32") {
+      expect(storeDir({ XDG_CONFIG_HOME: "/home/x/.config" })).toBe(
+        join("/home/x/.config", "sanctum-mcp"),
+      );
+    }
   });
 });

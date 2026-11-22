@@ -4,10 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { pinOf } from "@meetsanctum/auth-protocol/host-chain";
 import type { KeptHost, StoredHost } from "../src/shell.js";
 import { accept, createHostTrust, refuse } from "../src/trust.js";
-import {
-  testCa,
-  type TestCa,
-} from "../../../packages/auth-protocol/test/certificates.js";
+import { testCa, type TestCa } from "./certificates.js";
 
 const hostId = "6b0f6f4e-2a52-4f8e-9a51-1d1d1f6e6e73";
 const url = "https://192.168.1.20:4100";

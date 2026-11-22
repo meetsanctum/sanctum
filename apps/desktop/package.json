@@ -23,9 +23,11 @@
   },
   "devDependencies": {
     "@meetsanctum/typescript-config": "workspace:*",
+    "@peculiar/x509": "2.2.0",
     "electron": "45.2.1",
     "electron-builder": "26.17.0",
     "esbuild": "0.28.2",
+    "reflect-metadata": "0.2.2",
     "vitest": "^4.1.5"
   }
 }
