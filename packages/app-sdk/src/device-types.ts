@@ -84,9 +84,8 @@ const types = [
     needs: ["contact"],
     chosenOnly: true,
   },
-  // A speaker Sanctum can hear through, such as a voice assistant's, which
-  // plays too. Nothing in its kinds tells it from any other media player, so
-  // its driver says so.
+  // A voice-enabled speaker. Its media part alone cannot distinguish it
+  // from any other media player, so its driver says what it is.
   {
     id: "smart-speaker",
     title: "Smart speaker",

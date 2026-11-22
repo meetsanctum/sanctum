@@ -1,3 +1,4 @@
+import { mediaFeatures, type CapabilityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,7 +7,7 @@ import {
   isSimple,
   needsValue,
 } from "../src/automations/graph";
-import { deviceKindsFor } from "../src/automations/chooser";
+import { deviceKindsFor, withDevice } from "../src/automations/chooser";
 import { lightLevelIn } from "../src/automations/fields";
 import { dayWords, listStatus, runWords } from "../src/automations/when";
 import {
@@ -19,6 +20,7 @@ import {
   formatOffset,
   formatValue,
   groupOf,
+  matchesCapability,
   nodeParts,
   plain,
   presetOf,
@@ -316,6 +318,35 @@ describe("Automations' words for motion and light", () => {
     expect(deviceKindsFor(deviceTrigger, { kind: "motion" })).toEqual([
       "motion",
     ]);
+  });
+
+  it("uses a media part in power rules only if it has power controls", () => {
+    const speaker = {
+      id: "speaker",
+      kind: "media",
+      features: mediaFeatures.parse({}),
+      state: null,
+      observed: null,
+      desired: null,
+      sync: "synced",
+      setBy: null,
+      changedAt: null,
+    } satisfies CapabilityInfo;
+    const tv = {
+      ...speaker,
+      id: "tv",
+      features: { ...speaker.features, power: true },
+    };
+    const config = { field: "on", operator: "is_on" };
+    const kinds = deviceKindsFor(deviceCondition, config);
+    expect(matchesCapability(speaker, kinds, config.field)).toBe(false);
+    expect(matchesCapability(tv, kinds, config.field)).toBe(true);
+    expect(
+      withDevice(deviceCondition, config, {
+        ...devices[0]!,
+        capabilities: [speaker, tv],
+      }),
+    ).toMatchObject({ capability: "tv" });
   });
 
   it("offer a contact sensor's pieces to contact sensors, and list them under Security", () => {

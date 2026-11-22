@@ -151,6 +151,17 @@ describe("where a media player is", () => {
     });
   });
 
+  it("gives each registration its own default playback list", () => {
+    const register = () =>
+      capabilityRegistration.parse({ id: "player", kind: "media" });
+    const first = register();
+    const second = register();
+    if (first.kind !== "media" || second.kind !== "media") {
+      throw new Error("Expected media capabilities");
+    }
+    expect(first.features.playback).not.toBe(second.features.playback);
+  });
+
   it("is a media player, or a smart speaker where its driver says so", () => {
     expect(deviceTypeOf(["media"])).toBe("media-player");
     expect(deviceTypeOf(["media", "sensor"])).toBe("media-player");

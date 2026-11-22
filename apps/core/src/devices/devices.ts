@@ -272,15 +272,12 @@ export function createDevices(
     return { device: shown, capability };
   }
 
-  // A command that asked for no state went through: what the capability
-  // shows stays as it was, and it says who set it last, also where an
-  // earlier command still waiting for its report is restored.
-  function setByOnly(
+  // Writes who set a capability after a command that asked for no state.
+  function writeSetBy(
     deviceId: string,
     capabilityId: string,
     setBy: StoredSetBy,
   ) {
-    commands.moved(deviceId, capabilityId, setBy);
     changing(deviceId, () =>
       db
         .update(deviceCapabilities)
@@ -366,6 +363,7 @@ export function createDevices(
     if (whileOn !== undefined && shownState(row)?.on !== whileOn) {
       throw new ActionCallError("conflict");
     }
+    const parsedCommand = parsed.data as Record<string, unknown>;
     const setBy: StoredSetBy = {
       app,
       actor,
@@ -376,18 +374,15 @@ export function createDevices(
     // or a step of its volume, is done once its driver takes it: no report
     // can confirm it, so nothing waits for one or sends it again.
     const asksNothing = Object.keys(setBy.asked).length === 0;
-    const prepared = asksNothing
-      ? null
-      : prepare(row, parsed.data as Record<string, unknown>);
-    if ((asksNothing || prepared?.send) && actor.kind === "assistant-run") {
+    const prepared = asksNothing ? null : prepare(row, parsedCommand);
+    const toSend = prepared ? prepared.send : parsedCommand;
+    if (toSend && actor.kind === "assistant-run") {
       options.agentCommand?.(actor.id);
     }
     const sent = {
       ...addressed,
       asked: setBy.asked,
-      ...(asksNothing && {
-        command: parsed.data as Record<string, unknown>,
-      }),
+      ...(asksNothing && { command: parsedCommand }),
     };
     const { driver, key } = reads.address(device.id)!;
     // Sending it again, if the device does not confirm it in time, goes the
@@ -418,44 +413,21 @@ export function createDevices(
         actor,
       );
     };
-    if (!prepared) {
+    const recordDelivery = prepared
+      ? null
+      : commands.beginWithoutTarget(device.id, capability.id, row, setBy);
+    const delivery = prepared
+      ? commands.begin(device.id, capability.id, row, prepared, setBy, send)
+      : null;
+    if (toSend) {
       try {
-        await send(parsed.data as Record<string, unknown>);
+        await send(toSend);
       } catch (error) {
         const failure =
           error instanceof ActionCallError
             ? error
             : new ActionCallError("app_failed");
-        deviceLog.command(
-          who,
-          device.id,
-          failure.status >= 500 ? "failed" : "refused",
-          failure.code,
-          sent,
-        );
-        throw failure;
-      }
-      deviceLog.command(who, device.id, "ok", undefined, sent);
-      setByOnly(device.id, capability.id, setBy);
-      return visible(device.id, capability.id, view).capability;
-    }
-    const delivery = commands.begin(
-      device.id,
-      capability.id,
-      row,
-      prepared,
-      setBy,
-      send,
-    );
-    if (prepared.send) {
-      try {
-        await send(prepared.send);
-      } catch (error) {
-        const failure =
-          error instanceof ActionCallError
-            ? error
-            : new ActionCallError("app_failed");
-        delivery.failed(failure.code);
+        delivery?.failed(failure.code);
         deviceLog.command(
           who,
           device.id,
@@ -467,7 +439,8 @@ export function createDevices(
       }
     }
     const entryId = deviceLog.command(who, device.id, "ok", undefined, sent);
-    delivery.sent({
+    if (recordDelivery?.()) writeSetBy(device.id, capability.id, setBy);
+    delivery?.sent({
       unanswered: (reason, hasResent) =>
         deviceLog.unanswered(entryId, who, device.id, sent, {
           reason,
@@ -709,7 +682,10 @@ export function createDevices(
 
     // A light a remote's hold set moving (holds.ts): a move asks for no
     // state, so its target stays as it was, and it says who set it last.
-    moved: setByOnly,
+    moved(deviceId: string, capabilityId: string, setBy: StoredSetBy) {
+      commands.moved(deviceId, capabilityId, setBy);
+      writeSetBy(deviceId, capabilityId, setBy);
+    },
 
     // A device as the core keeps it, with its driver and key.
     row(id: string) {

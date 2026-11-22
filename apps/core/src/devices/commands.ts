@@ -29,10 +29,15 @@ type Retry = {
   resent?: () => void;
 };
 
+type Attribution = {
+  setBy: StoredSetBy | null;
+  order: number;
+};
+
 type Command = {
   state: Settled;
-  // Who set the capability with it, which goes with its target.
-  setBy: StoredSetBy | null;
+  // Who set the capability, including a later command that left its target alone.
+  attribution: Attribution;
   previous?: Command;
   hasFailed?: boolean;
   deadline?: number;
@@ -72,12 +77,39 @@ export function createCommandTracking(options: {
   now?: () => Date;
 }) {
   const now = options.now ?? (() => new Date());
-  const current = new Map<string, Command>();
+  const tracked = new Map<string, { current: Command }>();
   const timers = new Map<string, NodeJS.Timeout>();
+  let lastOrder = 0;
   // Set once the core starts stopping: nothing goes again from then on.
   let isClosing = false;
   const keyOf = (device: string, capability: string) =>
     `${device}/${capability}`;
+
+  function track(key: string, before: Settled & { setBy: StoredSetBy | null }) {
+    const existing = tracked.get(key);
+    if (existing) return existing;
+    const entry: { current: Command } = {
+      current: {
+        state: {
+          desired: before.desired,
+          sync: before.sync,
+          awaiting: before.awaiting,
+        },
+        attribution: { setBy: before.setBy, order: 0 },
+      },
+    };
+    tracked.set(key, entry);
+    return entry;
+  }
+
+  function attribute(command: Command | undefined, attribution: Attribution) {
+    while (command) {
+      if (command.attribution.order < attribution.order) {
+        command.attribution = attribution;
+      }
+      command = command.previous;
+    }
+  }
 
   function stop(key: string) {
     clearTimeout(timers.get(key));
@@ -93,7 +125,7 @@ export function createCommandTracking(options: {
     }
     const expire = () => {
       timers.delete(key);
-      if (current.get(key) !== command) {
+      if (tracked.get(key)?.current !== command) {
         return;
       }
       const row = options.read(device, capability);
@@ -170,7 +202,7 @@ export function createCommandTracking(options: {
     retry.deadline = retry.failure
       ? Date.now()
       : Date.now() + options.confirmMs;
-    const latest = current.get(key);
+    const latest = tracked.get(key)?.current;
     if (latest?.retry === retry) {
       wait(device, capability, latest);
     }
@@ -180,18 +212,35 @@ export function createCommandTracking(options: {
     // A delivered move changes who set the light without changing its
     // target. Restoring any earlier target must keep that newer attribution.
     moved(device: string, capability: string, setBy: StoredSetBy) {
-      let command = current.get(keyOf(device, capability));
-      while (command) {
-        command.setBy = setBy;
-        command = command.previous;
-      }
+      attribute(tracked.get(keyOf(device, capability))?.current, {
+        setBy,
+        order: ++lastOrder,
+      });
+    },
+
+    // Leave the target and its timer alone. A late delivery can still set
+    // the attribution of a target a newer command would restore on failure.
+    beginWithoutTarget(
+      device: string,
+      capability: string,
+      before: Settled & { setBy: StoredSetBy | null },
+      setBy: StoredSetBy,
+    ) {
+      const key = keyOf(device, capability);
+      const entry = track(key, before);
+      const attribution = { setBy, order: ++lastOrder };
+      return () => {
+        if (tracked.get(key) !== entry) return false;
+        attribute(entry.current, attribution);
+        return entry.current.attribution === attribution;
+      };
     },
 
     // A move on its way has the light: no command it overtakes, nor one a
     // failure could restore, goes again. Their targets still settle at
     // their deadlines.
     moving(device: string, capability: string) {
-      let command = current.get(keyOf(device, capability));
+      let command = tracked.get(keyOf(device, capability))?.current;
       while (command) {
         if (command.retry) command.retry.isCancelled = true;
         command = command.previous;
@@ -207,19 +256,20 @@ export function createCommandTracking(options: {
       deliver: Retry["deliver"],
     ) {
       const key = keyOf(device, capability);
-      const predecessor = current.get(key);
+      const entry = track(key, before);
+      const predecessor = entry.current;
       const own: Retry | undefined = state.send
         ? { send: state.send, deliver, hasResent: false }
         : undefined;
       const command: Command = {
         state,
-        setBy,
-        previous: predecessor ?? { state: before, setBy: before.setBy },
+        attribution: { setBy, order: ++lastOrder },
+        previous: predecessor,
         retry:
-          own ?? (state.sync === "pending" ? predecessor?.retry : undefined),
+          own ?? (state.sync === "pending" ? predecessor.retry : undefined),
       };
       stop(key);
-      current.set(key, command);
+      entry.current = command;
       command.state = options.write(device, capability, state, setBy);
       return {
         sent(delivered: Delivered = {}) {
@@ -232,7 +282,7 @@ export function createCommandTracking(options: {
             own.sentAt = command.sentAt;
             own.deadline = command.deadline;
           }
-          const latest = current.get(key);
+          const latest = tracked.get(key)?.current;
           if (latest && (latest === command || (own && latest.retry === own))) {
             wait(device, capability, latest);
           }
@@ -251,7 +301,7 @@ export function createCommandTracking(options: {
             own.failure = reason;
             own.deadline = Date.now();
           }
-          const latest = current.get(key);
+          const latest = tracked.get(key)?.current;
           if (latest !== command) {
             // A colour may have replaced this off without sending anything
             // itself. It cannot wait for an off the driver could not deliver.
@@ -264,12 +314,12 @@ export function createCommandTracking(options: {
           while (previous.hasFailed) {
             previous = previous.previous!;
           }
-          current.set(key, previous);
+          entry.current = previous;
           previous.state = options.write(
             device,
             capability,
             previous.state,
-            previous.setBy,
+            previous.attribution.setBy,
           );
           wait(device, capability, previous);
         },
@@ -283,27 +333,27 @@ export function createCommandTracking(options: {
       observed: Record<string, unknown>,
     ) {
       const key = keyOf(device, capability);
-      let command = current.get(key);
+      let command = tracked.get(key)?.current;
       // A report can also confirm a target we would restore on failure.
       while (command) {
         command.state = reconcile({ ...row, ...command.state }, observed);
         command = command.previous;
       }
-      if (current.get(key)?.state.sync !== "pending") {
+      if (tracked.get(key)?.current.state.sync !== "pending") {
         stop(key);
       }
     },
 
     /** When the capability's current command last went to its driver, by the core's clock. */
     sentAt(device: string, capability: string) {
-      const command = current.get(keyOf(device, capability));
+      const command = tracked.get(keyOf(device, capability))?.current;
       return command?.retry?.sentAt ?? command?.sentAt;
     },
 
     forget(device: string, capability: string) {
       const key = keyOf(device, capability);
       stop(key);
-      current.delete(key);
+      tracked.delete(key);
     },
 
     // The core is stopping: what has yet to be confirmed fails at its
@@ -317,7 +367,7 @@ export function createCommandTracking(options: {
       for (const key of timers.keys()) {
         stop(key);
       }
-      current.clear();
+      tracked.clear();
     },
   };
 }

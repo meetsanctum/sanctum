@@ -77,6 +77,16 @@ async function dataFolder() {
   return folder;
 }
 
+export function deferredDelivery() {
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((accept, refuse) => {
+    resolve = accept;
+    reject = refuse;
+  });
+  return { promise, resolve, reject };
+}
+
 // The fixture apps' packages (test/fixtures/apps), as a catalog folder.
 export const fixtureApps = fileURLToPath(
   new URL("./fixtures/apps", import.meta.url),

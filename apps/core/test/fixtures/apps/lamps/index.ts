@@ -2,6 +2,7 @@ import {
   ActionError,
   defineApp,
   deviceTypeOf,
+  mediaCommand,
   type Actor,
   type DeclaredType,
   type AppContext,
@@ -443,6 +444,7 @@ class Radio {
   }
 
   async carryOut(command: DriverCommand, actor: Actor) {
+    if (command.kind === "media") mediaCommand.parse(command.command);
     const gadget = this.gadgets.get(command.key);
     if (!gadget) {
       throw new ActionError("not_found", `No gadget ${command.key}`);

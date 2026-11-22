@@ -2,6 +2,7 @@ import {
   capabilityKinds,
   deviceCategoryOf,
   stateOperators,
+  type CapabilityInfo,
   type PieceInfo,
   type PiecePreset,
   type StateOperator,
@@ -11,6 +12,18 @@ import {
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { plural } from "../plural";
+
+/** Whether a capability fits a device field and the state it compares. */
+export function matchesCapability(
+  capability: CapabilityInfo,
+  kinds: readonly string[],
+  field: unknown,
+): boolean {
+  return (
+    kinds.includes(capability.kind) &&
+    (field !== "on" || capability.kind !== "media" || capability.features.power)
+  );
+}
 
 // How Automations reads a piece: its sentence or a trigger's card, with a
 // token for each field it names, worded from the markers the field's JSON

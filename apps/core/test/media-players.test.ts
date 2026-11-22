@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
+import { createDevices, type Deliver } from "../src/devices/devices.js";
 import { command, lampsCore, radio, settled } from "./devices-support.js";
-import { get, type TestCore } from "./support.js";
+import { deferredDelivery, get, type TestCore } from "./support.js";
 
 // Media players: what one plays and how loud is a `media` capability. A
 // command that asks for state, as a volume, waits for the player's report;
@@ -30,6 +31,27 @@ async function partOf(core: TestCore, token: string, id: string) {
   return devices
     .find((each: { id: string }) => each.id === id)
     .capabilities.find((each: { kind: string }) => each.kind === "media");
+}
+
+async function playerWithDelivery(deliver: Deliver) {
+  const { core, maya, player } = await mediaCore();
+  const devices = createDevices(core.db, {
+    gate: core.gate,
+    places: core.places,
+    activity: core.activity,
+    deliver,
+    now: core.now,
+  });
+  onTestFinished(() => devices.close());
+  const send = (command: object) =>
+    devices.command(
+      { kind: "user", id: maya.person.id },
+      { device: player, capability: "media", command },
+      {},
+      null,
+    );
+  const part = () => devices.get(player)?.capabilities[0];
+  return { devices, send, part };
 }
 
 describe("a media player", () => {
@@ -74,6 +96,14 @@ describe("a media player", () => {
       desired: { volume: 60 },
       state: { volume: 60 },
     });
+    core.devices.report("test.lamps", {
+      key: "box-1",
+      states: { media: { activity: "idle" } },
+    });
+    expect(await partOf(core, maya.token, player)).toMatchObject({
+      sync: "pending",
+      desired: { volume: 60 },
+    });
     await radio.press("box-1", {});
     await settled();
     expect(await partOf(core, maya.token, player)).toMatchObject({
@@ -81,6 +111,63 @@ describe("a media player", () => {
       desired: null,
       state: { volume: 60 },
     });
+  });
+
+  it("keeps the newer command's attribution when an older skip finishes late", async () => {
+    const skip = deferredDelivery();
+    const { send, part } = await playerWithDelivery(async (_, { command }) => {
+      if ("playback" in command) await skip.promise;
+    });
+
+    const older = send({ playback: "next" });
+    await send({ volume: 60 });
+    skip.resolve();
+    await older;
+
+    expect(part()).toMatchObject({
+      sync: "pending",
+      desired: { volume: 60 },
+      setBy: { asked: { volume: 60 } },
+    });
+  });
+
+  it("restores a successful skip's attribution when a newer command fails", async () => {
+    const skip = deferredDelivery();
+    const volume = deferredDelivery();
+    const { send, part } = await playerWithDelivery(async (_, { command }) => {
+      await ("playback" in command ? skip.promise : volume.promise);
+    });
+
+    const older = send({ playback: "next" });
+    const newer = send({ volume: 60 });
+    skip.resolve();
+    await older;
+    volume.reject(new Error("The player stopped answering"));
+    await expect(newer).rejects.toMatchObject({ code: "app_failed" });
+
+    expect(part()).toMatchObject({
+      sync: "synced",
+      desired: null,
+      setBy: { asked: {} },
+    });
+  });
+
+  it("leaves a replacement capability alone when a skip finishes late", async () => {
+    const skip = deferredDelivery();
+    const { devices, send, part } = await playerWithDelivery(
+      () => skip.promise,
+    );
+    const older = send({ playback: "next" });
+    devices.register("test.lamps", {
+      key: "box-1",
+      name: "Living room box",
+      type: "switch",
+      capabilities: [{ id: "media", kind: "switch" }],
+    });
+    skip.resolve();
+    await older;
+
+    expect(part()).toMatchObject({ kind: "switch", setBy: null });
   });
 
   it("is done with a step of the volume once its driver takes it, and never sends it again", async () => {

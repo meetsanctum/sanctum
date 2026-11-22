@@ -10,26 +10,29 @@ and no others. A device that fits none of them is an unknown device.
 
 ## Every type
 
-| Type           | Id              | What it is                                                      | Needs   | Example name in the Office | On a room's page |
-| -------------- | --------------- | --------------------------------------------------------------- | ------- | -------------------------- | ---------------- |
-| Light          | `light`         | A bulb, a strip, a lamp                                         | Light   | Office Light               | Lights           |
-| Plug           | `plug`          | A plug that switches what is plugged into it                    | Switch  | Office Plug                | Switches         |
-| Switch         | `switch`        | A relay or wall switch                                          | Switch  | Office Switch              | Switches         |
-| Button         | `button`        | A remote or wall button                                         | Button  | Office Button              | Buttons          |
-| Motion sensor  | `motion`        | A sensor that sees movement                                     | Motion  | Office Motion Sensor       | Presence         |
-| Contact sensor | `contact`       | A sensor that says whether something is open                    | Contact | Office Contact Sensor      | Security         |
-| Door           | `door`          | A contact sensor on a door                                      | Contact | Office Door                | Security         |
-| Window         | `window`        | A contact sensor on a window                                    | Contact | Office Window              | Security         |
-| Smart speaker  | `smart-speaker` | A speaker Sanctum can hear through, such as a voice assistant's | Media   | Office Speaker             | Media            |
-| Media player   | `media-player`  | A TV box, or anything else that plays                           | Media   | Office Media Player        | Media            |
-| TV             | `tv`            | A media player on a TV                                          | Media   | Office TV                  | Media            |
-| Speaker        | `speaker`       | A speaker that only plays, shown as one                         | Media   | Office Speaker             | Media            |
-| Sensor         | `sensor`        | A sensor that measures                                          | Sensor  | Office Temperature Sensor  | Environment      |
-| Unknown device | `unknown`       | A device with no part Sanctum can use                           | Nothing | Unknown Device             | Unknown devices  |
+| Type           | Id              | What it is                                   | Needs   | Example name in the Office | On a room's page |
+| -------------- | --------------- | -------------------------------------------- | ------- | -------------------------- | ---------------- |
+| Light          | `light`         | A bulb, a strip, a lamp                      | Light   | Office Light               | Lights           |
+| Plug           | `plug`          | A plug that switches what is plugged into it | Switch  | Office Plug                | Switches         |
+| Switch         | `switch`        | A relay or wall switch                       | Switch  | Office Switch              | Switches         |
+| Button         | `button`        | A remote or wall button                      | Button  | Office Button              | Buttons          |
+| Motion sensor  | `motion`        | A sensor that sees movement                  | Motion  | Office Motion Sensor       | Presence         |
+| Contact sensor | `contact`       | A sensor that says whether something is open | Contact | Office Contact Sensor      | Security         |
+| Door           | `door`          | A contact sensor on a door                   | Contact | Office Door                | Security         |
+| Window         | `window`        | A contact sensor on a window                 | Contact | Office Window              | Security         |
+| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
+| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
+| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
+| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
+| Sensor         | `sensor`        | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
+| Unknown device | `unknown`       | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
 
 **Needs** is the part a device must have to be of that type. A driver can
 declare a device with a light part as a light even if it also has a button
 or a temperature sensor.
+
+Devices with only a media part use a generic tile. A device with other
+parts can appear in their sections.
 
 ## How a device gets its type
 
@@ -43,9 +46,8 @@ sensor, media player, sensor. A device with no parts is unknown. That order is w
 - a motion sensor that also measures is a **motion sensor**;
 - a contact sensor that also measures is a **contact sensor**.
 
-A plug comes only from a driver that can tell it apart from a switch, a
-smart speaker only from a driver that knows Sanctum can hear through it,
-and a door, a window, a TV or a speaker only from the household's choice.
+Only the driver can identify a plug or a smart speaker. The household
+chooses whether to show a device as a door, window, TV or speaker.
 
 ## Plug or switch
 
@@ -72,8 +74,8 @@ choose **Show as**. A TV box in the Living Room shown as a TV is the
 "Living Room TV"; a speaker shown as a speaker is the "Living Room
 Speaker".
 
-A smart speaker is different: it is one Sanctum can hear through, and only
-its driver says so. Its name ends in "Speaker" too: "Office Speaker".
+Only the driver can identify a voice-enabled speaker as a smart speaker.
+Its name ends in "Speaker" too, as in "Office Speaker".
 
 ## Sensors are named by what they measure
 

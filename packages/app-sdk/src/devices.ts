@@ -706,7 +706,7 @@ export const capabilityRegistration = z.discriminatedUnion("kind", [
   z.strictObject({
     id: capabilityId,
     kind: z.literal("media"),
-    features: mediaFeatures.default(mediaFeatures.parse({})),
+    features: mediaFeatures.default(() => mediaFeatures.parse({})),
   }),
 ]);
 

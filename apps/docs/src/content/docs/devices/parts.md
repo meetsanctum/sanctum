@@ -80,8 +80,8 @@ can [show it as a door or a window](/devices/types/#door-and-window).
 
 ## Media
 
-A media part is something that plays: a TV box, a speaker, a smart speaker.
-It says what it can do when it joins, and only that is offered:
+A media part plays sound or video. The core accepts commands for the
+features the part declares when it joins.
 
 - **Power:** whether it turns on and off.
 - **Playback:** which of play, pause, stop, next, previous and seek it

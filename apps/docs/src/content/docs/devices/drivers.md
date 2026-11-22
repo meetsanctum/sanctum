@@ -50,9 +50,9 @@ the same words.
 For a contact sensor, declare `contact`. The household can
 [choose to show it as a door or window](/devices/types/#door-and-window).
 
-For something that plays, declare `media-player`, or `smart-speaker` for a
-speaker Sanctum can hear through, such as a voice assistant's. The
-household can [show a media player as a TV or a speaker](/devices/types/#tv-and-speaker).
+Declare `smart-speaker` for a voice-enabled speaker, or `media-player` for
+another playback device. The household can
+[show a media player as a TV or a speaker](/devices/types/#tv-and-speaker).
 
 ## What Sanctum checks
 
