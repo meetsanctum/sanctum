@@ -28,7 +28,7 @@ import { bringRoom as bringToNaturalLight, publishRooms } from "./rooms.js";
 import { followedLights } from "./schema.js";
 import { targetState, type TargetState } from "./target.js";
 
-// Natural light's actions: leaving a light or a room's lights out of the
+// Natural Light's actions: leaving a light or a room's lights out of the
 // curve or having them follow again, pausing and resuming one, bringing a
 // room to natural light, which its tile does, and today's curve. Whatever
 // changes which lights follow, or whether one is paused, publishes the
@@ -151,7 +151,7 @@ export function naturalLightActions(timing: Timing, runForLight: RunForLight) {
   });
 
   // Every light in a room that follows on at the curve and the others off:
-  // a press of the room's Natural light tile (index.ts' room section), and
+  // a press of the room's Natural Light tile (index.ts' room section), and
   // a step for automations.
   const bringRoom = defineAction({
     id: "naturalLight.bringRoom",

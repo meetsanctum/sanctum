@@ -122,11 +122,11 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
   }
 
   const absent = async (): Promise<never> => {
-    throw new Error("Natural light does not use this call");
+    throw new Error("Natural Light does not use this call");
   };
   const holds = (permission: string) => {
     if (!permissionIds(app.permissions).includes(permission)) {
-      throw new Error(`Natural light does not hold ${permission}`);
+      throw new Error(`Natural Light does not hold ${permission}`);
     }
   };
 
@@ -169,7 +169,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
             "device.removed",
           ].includes(name)
         ) {
-          throw new Error(`Natural light does not follow ${name}`);
+          throw new Error(`Natural Light does not follow ${name}`);
         }
       },
       async scheduleJob(job) {
@@ -228,7 +228,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       async publish(entity) {
         const type = entityTypeOf(app, entity.type);
         if (!type) {
-          throw new Error(`Natural light does not provide ${entity.type}`);
+          throw new Error(`Natural Light does not provide ${entity.type}`);
         }
         state.entities.set(entity.key, {
           type: entity.type,

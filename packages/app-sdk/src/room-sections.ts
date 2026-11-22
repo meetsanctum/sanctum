@@ -6,7 +6,7 @@ import type { ActionDefinition, AppDefinition } from "./index.js";
 // room's name on its page and on Home that switch its lights and set their
 // look. The shell draws each from the app's entities of one type in that
 // room, after the room's own switch: first every section's buttons, square
-// tiles with only their icon, such as Natural light's sun, then every
+// tiles with only their icon, such as Natural Light's sun, then every
 // section's tiles with their names, such as Moods' moods. The row has no
 // headings. No app code runs to draw it, so a section looks native whoever
 // brings it.
@@ -94,7 +94,7 @@ export const sampleTilesMax = 6;
 /**
  * Where a room's sections go in its row, buttons and tiles each by these
  * weights. Sanctum keeps those below `appSectionOrderFrom` for its own, such
- * as 200 for Moods and Natural light; any app takes one from 300 to 799, 500
+ * as 200 for Moods and Natural Light; any app takes one from 300 to 799, 500
  * unless it says, and ties go by app id.
  */
 export const sectionOrderFrom = 100;

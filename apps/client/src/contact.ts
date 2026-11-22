@@ -88,7 +88,7 @@ export const contactTypes: readonly {
   },
   {
     type: "contact",
-    title: "Contact sensors",
+    title: "Contact Sensors",
     page: "Contact",
     one: "Contact sensor",
     several: "contact sensors",

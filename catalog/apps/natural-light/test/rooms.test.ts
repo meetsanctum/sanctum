@@ -4,7 +4,7 @@ import { byHand, curveAt, minute, moods, off, on, running } from "./running.js";
 import { publishButtons } from "../src/rooms.js";
 import { zurich } from "./fake-core.js";
 
-// Natural light's tile is White while every light that's on follows the
+// Natural Light's tile is White while every light that's on follows the
 // curve. A press brings the room to natural light and switches off the
 // other lights.
 
@@ -48,7 +48,7 @@ describe("a room's button", () => {
     expect(button("office")).toEqual({
       placeId: "office",
       icon: "sun",
-      name: "Natural light",
+      name: "Natural Light",
       order: 0,
       active: true,
       input: { placeId: "office" },
@@ -137,8 +137,8 @@ describe("a room's button", () => {
         call("naturalLight.bringRoom", { placeId: "office" }),
       ).rejects.toThrow(
         reason === "off"
-          ? "Natural light is switched off"
-          : "Natural light waits for the home's location",
+          ? "Natural Light is switched off"
+          : "Natural Light waits for the home's location",
       );
 
       expect(core.state.sent).toHaveLength(sent);
@@ -541,7 +541,7 @@ describe("a room's button", () => {
     await vi.waitFor(() => expect(button("office")).toBeUndefined());
     await expect(
       call("naturalLight.bringRoom", { placeId: "office" }),
-    ).rejects.toThrow("Natural light is switched off");
+    ).rejects.toThrow("Natural Light is switched off");
 
     await core.changeSettings({ on: true });
     await vi.waitFor(() => expect(button("office")).toBeDefined());

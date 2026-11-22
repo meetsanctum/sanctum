@@ -30,7 +30,7 @@ Sanctum is in pre-alpha. [Join the waitlist](https://meetsanctum.com) or
 - Moods for every room, ready-made smart moods among them, previewed live as
   you edit them.
 - Schedules that bring on a room's moods at the times you choose.
-- Natural light: lights that follow the sun's colour and brightness through
+- Natural Light: lights that follow the sun's colour and brightness through
   the day, and step aside when someone sets them by hand.
 - A room's lights come back the way they were when it turns on again.
 

@@ -25,7 +25,7 @@ function status(light: LightRow) {
     return "Not following";
   }
   if (target.status === "off") {
-    return "Natural light is off";
+    return "Natural Light is off";
   }
   if (target.status === "waiting" || target.colorTemperature === null) {
     return "Waiting for the home’s location";

@@ -18,7 +18,7 @@ import type { Devices } from "./use-devices";
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
 // says what its motion and sensors say, as its page's header does; then its
-// row, its lights button, Natural light and its moods, as on its page; then its
+// row, its lights button, Natural Light and its moods, as on its page; then its
 // devices on Home, in the household's order. Devices on Home
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put

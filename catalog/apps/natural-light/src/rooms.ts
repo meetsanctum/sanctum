@@ -27,7 +27,7 @@ import {
 import { followedLights, roomButtons } from "./schema.js";
 import { targetKey } from "./target.js";
 
-// Natural light's tile for each room, in the room's row after its switch,
+// Natural Light's tile for each room, in the room's row after its switch,
 // on its page and on Home: a room section of buttons, a square tile with the
 // sun, drawn by the shell from a `naturalLight.room` entity for each room
 // where a light follows. It shows only while natural light is on and the
@@ -35,7 +35,7 @@ import { targetKey } from "./target.js";
 //
 // It is White while every light in the room that is on follows the curve,
 // neither paused nor dimmed, and at least one is on; lights that are off
-// don't count, but a light that is on and doesn't follow does. Natural light
+// don't count, but a light that is on and doesn't follow does. Natural Light
 // is a look, as a mood is, so a press never switches the room off: it brings
 // the room to natural light, every light that follows on at the curve, any
 // pause or dim ended, and every other light that is on off, so the room looks
@@ -61,7 +61,7 @@ export type RoomState = z.infer<typeof roomState>;
 
 export const roomType = defineEntityType({
   id: "naturalLight.room",
-  title: "Natural light in a room",
+  title: "Natural Light in a room",
   state: roomState,
 });
 
@@ -121,14 +121,14 @@ export function roomStateOf(
   return {
     placeId,
     icon: "sun",
-    name: "Natural light",
+    name: "Natural Light",
     order: 0,
     active,
     input: { placeId },
   };
 }
 
-/** Natural light's rule for turning a room with a button on. */
+/** Natural Light's rule for turning a room with a button on. */
 export function turnOnOf(
   placeId: string,
   devices: readonly DeviceInfo[],
@@ -264,7 +264,7 @@ async function publishNow(
       await ctx.entities.publish({
         type: turnOnType.id,
         key: turnOnKey(placeId),
-        name: "Natural light",
+        name: "Natural Light",
         state: turnOn,
       });
       await db
@@ -280,7 +280,7 @@ async function publishButton(ctx: AppContext, state: RoomState) {
   await ctx.entities.publish({
     type: roomType.id,
     key: roomKey(state.placeId),
-    name: "Natural light",
+    name: "Natural Light",
     state,
   });
   await ctx.storage.db
@@ -395,13 +395,13 @@ async function requireRoomSun(
   now: Date,
 ) {
   if (!options.isOn) {
-    throw new ActionError("conflict", "Natural light is switched off");
+    throw new ActionError("conflict", "Natural Light is switched off");
   }
   const sun = await homeSun(ctx, now);
   if (!sun) {
     throw new ActionError(
       "conflict",
-      "Natural light waits for the home's location",
+      "Natural Light waits for the home's location",
     );
   }
   return sun;
