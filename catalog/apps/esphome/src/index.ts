@@ -126,14 +126,14 @@ export function createEsphomeApp(options: DriverOptions = {}) {
         notEncrypted: {
           words: "It isn't encrypted",
           repair: {
-            help: "Encrypt its connection. Older firmware may need a setup key sent without encryption.",
+            help: "Give it a setup key without encryption, then its own key encrypted.",
             asks: [],
           },
         },
         keyLost: {
           words: "It lost its key, as when it's reset",
           repair: {
-            help: "Give it a new key, as when it was added. If it stopped waiting for one, turn it off and on again first.",
+            help: "Give it a new key, as when it was added.",
             asks: [],
           },
         },

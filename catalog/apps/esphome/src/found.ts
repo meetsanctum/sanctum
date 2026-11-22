@@ -2,7 +2,7 @@ import type { AppContext, FoundReport } from "@meetsanctum/app-sdk";
 
 import type { Address, Session, Timings } from "./connection.js";
 import { askUnderZeroKey, isOlderFirmware, type Answer } from "./keys.js";
-import type { Announced } from "./sightings.js";
+import { beforeProvisioning, type Announced } from "./sightings.js";
 
 // The devices ESPHome found and hasn't added, and what each says of its key.
 // A device writes its record once, as it boots, so the record goes stale the
@@ -55,7 +55,8 @@ export function createFound(options: {
   const { ctx, timings, announced } = options;
   const observations = new Map<string, Observation>();
   // Devices seen taking the zero key or saying they could, by MAC, kept
-  // across announcements.
+  // across announcements until one says a version from before 2026.7, as
+  // after it's flashed with older firmware.
   const tookZeroKey = new Set<string>();
   const running = new Map<
     string,
@@ -268,6 +269,12 @@ export function createFound(options: {
   }
 
   function discoveryChanged() {
+    for (const mac of tookZeroKey) {
+      const found = announced.get(mac);
+      if (found && beforeProvisioning(found.version) === true) {
+        tookZeroKey.delete(mac);
+      }
+    }
     for (const [mac, observation] of observations) {
       const found = announced.get(mac);
       if (found && sightingOf(found) === observation.sighting) continue;

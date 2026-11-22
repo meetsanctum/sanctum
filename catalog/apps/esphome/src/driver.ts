@@ -156,7 +156,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         owned.problem = problem;
         tell(owned);
       }
-      if (!problem) owned.mapping = mapping;
+      owned.mapping = mapping;
       owned.sleeps = sleeps;
     };
     const setup = owned.setup.then(async () => {
@@ -238,11 +238,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             ctx.log(`could not take in ${mac} (${String(error)})`);
             throw error;
           }),
-        state: (event, session) => {
-          if (!needsEncryption(session)) {
-            report(ctx, facts, mac, mappingOf(session), event, session);
-          }
-        },
+        state: (event, session) =>
+          report(ctx, facts, mac, mappingOf(session), event, session),
         reachable: (reachable) => {
           const availability = reachable
             ? "online"

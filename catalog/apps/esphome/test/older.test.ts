@@ -62,7 +62,7 @@ describe("older firmware", () => {
     expect(device.connections).toBe(0);
   });
 
-  it("never sends a setup key after seeing the same device wait under the zero key", async () => {
+  it("takes a device once seen waiting for a key as older firmware once it announces an older version", async () => {
     home = await startHome();
     const device = await home.plugIn({ psk: null, waiting: true });
     const key = keyOf(device.options.mac);
@@ -74,10 +74,18 @@ describe("older firmware", () => {
     device.options.older = true;
     device.options.version = "2026.6.0";
     device.reboot();
+    // Flashed with firmware from before 2026.7, as its record now says.
     await announce(home.core, device);
+    await home.core.until(
+      () => card(key)?.description === older,
+      "listed as older firmware",
+    );
 
-    await expect(home.core.add(key, {})).rejects.toThrow("It didn't answer");
-    expect(device.keysSent).toEqual([]);
+    await home.core.add(key, {});
+    expect(device.keysSent.map((each) => each.encrypted)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("gets a setup key in the clear, then its own encrypted, and is never in the clear again", async () => {
@@ -263,7 +271,7 @@ describe("older firmware", () => {
 });
 
 describe("repairs that ask nothing", () => {
-  it("withholds commands until Repair encrypts a device with one connection slot", async () => {
+  it("encrypts a device with one connection slot, which works meanwhile", async () => {
     home = await startHome();
     const { device, key } = await addOlder({
       kind: "switch",
@@ -280,10 +288,9 @@ describe("repairs that ask nothing", () => {
       "not encrypted",
     );
 
-    await expect(
-      home.core.command(key, "switch-relay", "switch", { on: true }),
-    ).rejects.toThrow();
-    expect(device.commands).toHaveLength(0);
+    // Not encrypted is a problem to repair, not a reason to stop using it.
+    await home.core.command(key, "switch-relay", "switch", { on: true });
+    await home.core.until(() => device.commands.length === 1, "the command");
 
     expect(await home.core.repair(key, {})).toBeUndefined();
     await home.core.until(
@@ -292,8 +299,8 @@ describe("repairs that ask nothing", () => {
     );
     expect(device.psk).toBe(home.core.secrets.get(secretOf(key)));
     expect(device.keysSent.at(-1)).toMatchObject({ encrypted: true });
-    await home.core.command(key, "switch-relay", "switch", { on: true });
-    await home.core.until(() => device.commands.length === 1, "the command");
+    await home.core.command(key, "switch-relay", "switch", { on: false });
+    await home.core.until(() => device.commands.length === 2, "the command");
   });
 
   it("finishes a repair whose answer was lost, sending nothing in the clear again", async () => {
