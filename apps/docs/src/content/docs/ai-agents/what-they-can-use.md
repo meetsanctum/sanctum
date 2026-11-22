@@ -32,7 +32,8 @@ home in the same words as apps' [permissions](/apps/permissions/).
 | See what your devices reported                                | Off, and asks to turn on |
 | See who lives here                                            | Off, and asks to turn on |
 
-- **See your rooms** stays on so an agent can work by room.
+- **See your rooms** is always on: without your rooms, an agent can do
+  nothing by room.
 - **Control your lights** includes seeing them. **See your switches**
   includes plugs, and **Control your switches** also lets an agent see
   and turn switches and plugs on or off.
@@ -45,7 +46,8 @@ home in the same words as apps' [permissions](/apps/permissions/).
   too. **See what your devices reported** goes back up to 10 days for devices
   the agent can see and whose history your home keeps.
 
-Turning a switch off applies immediately to new requests that need it.
+Turning something off works at once: an agent's next request that needs it
+is refused.
 
 ## In your apps
 
@@ -70,13 +72,13 @@ These are the defaults when you add each app for the first time.
 | Moods         | Run a mood                     | On     |
 | Moods         | Mood                           | On     |
 | Moods         | Create a mood                  | Off    |
-| Natural Light | Follow natural light           | On     |
-| Natural Light | Follow natural light in a room | On     |
-| Natural Light | Bring a room to natural light  | On     |
-| Natural Light | Pause natural light            | On     |
-| Natural Light | Resume natural light           | On     |
-| Natural Light | Light following the sun        | On     |
-| Natural Light | Today's natural light          | Off    |
+| Natural light | Follow natural light           | On     |
+| Natural light | Follow natural light in a room | On     |
+| Natural light | Bring a room to natural light  | On     |
+| Natural light | Pause natural light            | On     |
+| Natural light | Resume natural light           | On     |
+| Natural light | Light following the sun        | On     |
+| Natural light | Today's natural light          | Off    |
 | Weather       | Forecast                       | On     |
 | Weather       | Sun                            | Off    |
 

@@ -21,8 +21,7 @@ nothing in Sanctum is open to them.
   in the cloud, such as claude.ai, ChatGPT or Codex on the web, can't reach
   your home.
 - **Node.js 22 or newer** on that computer. The agent runs Sanctum's small
-  connector, `@meetsanctum/mcp`, with `npx`. Setup needs access to the
-  connector version named in the prompt on npm.
+  connector, `@meetsanctum/mcp`, with `npx`.
 
 ## Adding an agent
 
@@ -62,10 +61,10 @@ home's certificate and the agent's key for you.
   Manager on Windows, or the Secret Service on Linux. Where there's none, as
   over SSH, it keeps the key in a file only you can read, and says so. The key
   is never in the agent's settings, its chat or your shell's history.
-- **It registers with Claude Code or Codex** as an MCP server named after
-  your home, such as `sanctum-home`. When registration succeeds again for
-  the same agent and home on that computer, it replaces the previous local
-  connection. The earlier entry can still appear in Sanctum.
+- **It adds itself to Claude Code or Codex** as an MCP server named after
+  your home, such as `sanctum-home`. Adding the same agent again on that
+  computer replaces it there, though the earlier one can still be listed in
+  Sanctum until you remove it.
 
 ### Setting it up by hand
 
@@ -92,8 +91,9 @@ default_tools_approval_mode = "approve"
 
 ## Your agents
 
-**Settings → AI agents** lists who or what device added each agent, when it
-was added, and when it last reached Sanctum.
+**Settings → AI agents** lists each agent with who added it, when, and when
+it last reached Sanctum, such as "Added by Maya on 20 Nov · Seen 5 minutes
+ago".
 Anyone in the household sees and manages every agent, from any device.
 
 What an agent does shows in **Settings → Activity** under its name, so you
@@ -138,8 +138,8 @@ an agent can:
   on goes by the room's own rule, as its lights button does.
 - **Use your apps:** run a mood, or have lights follow natural light, for
   example.
-- **Put its own light commands back:** it can try to restore a light if it
-  still shows the state the agent set. Sanctum keeps the last five such
+- **Put its own change back:** a light it changed goes back to how it was,
+  as long as it still looks as the agent left it. Sanctum keeps the last five such
   changes per agent for up to an hour. Restarting Sanctum clears that list.
   Running a mood doesn't create a change that the agent can put back.
 
