@@ -40,6 +40,10 @@ export default defineConfig({
           label: "Apps",
           items: [{ autogenerate: { directory: "apps" } }],
         },
+        {
+          label: "AI agents",
+          items: [{ autogenerate: { directory: "ai-agents" } }],
+        },
       ],
       customCss: [
         "@fontsource/inter/400.css",

@@ -4,14 +4,13 @@ import type {
   LightState,
 } from "@meetsanctum/app-sdk";
 import { Palette, Power, Sun, SunDim, Thermometer } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef } from "react";
 
+import { LevelSlider } from "./level-slider";
 import { LightPicker } from "./light-picker";
 import { showFailed } from "./show-failed";
 import { SwipePages, type SwipePage } from "./swipe-pages";
 import { lightColour } from "./tiles";
-import { usePreview } from "./use-preview";
-import { useThrottledSend } from "./use-throttled-send";
 
 // A light's controls, as its detail shows them: pages for its colour or
 // white and for its brightness, each only where the light has it, swiped
@@ -134,9 +133,6 @@ export function PowerButton(props: {
   );
 }
 
-const clampLevel = (level: number) =>
-  Math.max(0, Math.min(100, Math.round(level)));
-
 /**
  * A light's brightness as a tall slider filled in its colour. A drag goes
  * out once it ends, a tap where it lands; keys step it at most every 300 ms.
@@ -152,110 +148,28 @@ export function BrightnessSlider(props: {
   const { state } = props;
   const disabled = props.disabled ?? false;
   const level = state.on && !disabled ? (state.brightness ?? 100) : 0;
-  const preview = usePreview<number>(String(level), props.failures);
-  const drag = useRef<{ pointerId: number; value: number } | null>(null);
-  const [isDragging, setDragging] = useState(false);
-  const keys = useThrottledSend(props.onBrightness, !disabled);
-  const shown = preview.value ?? level;
-
-  useEffect(() => {
-    if (!disabled) return;
-    drag.current = null;
-    setDragging(false);
-    preview.clear();
-  }, [disabled, preview.clear]);
-
-  const at = (event: PointerEvent<HTMLDivElement>) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    return clampLevel(
-      (1 - (event.clientY - box.top) / (box.height || 1)) * 100,
-    );
-  };
-  const end = (to: number) => {
-    drag.current = null;
-    setDragging(false);
-    // A previous command may still be in flight even when this matches
-    // the reported level, so the final choice must always go out.
-    props.onBrightness(to);
-    preview.hold(to);
-  };
-  const endAtLastMove = (event: PointerEvent<HTMLDivElement>) => {
-    // A release from the browser or its host may arrive before React renders
-    // the last move. Use the value tracked by the drag itself.
-    const active = drag.current;
-    if (active?.pointerId === event.pointerId) end(active.value);
-  };
-  const Icon = shown >= 34 ? Sun : SunDim;
-
+  const words = (shown: number) => (shown > 0 ? `${shown}%` : "Off");
   return (
-    <div className="flex flex-col items-center gap-4">
-      <Icon aria-hidden="true" className="size-7 text-white/65" />
-      <div
-        onPointerDown={(event) => {
-          // The slider's drags are its own, never the pages' swipes.
-          event.stopPropagation();
-          if (
-            disabled ||
-            event.button !== 0 ||
-            event.isPrimary === false ||
-            drag.current !== null
-          )
-            return;
-          keys.flush();
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          const value = at(event);
-          drag.current = { pointerId: event.pointerId, value };
-          setDragging(true);
-          preview.drag(value);
-        }}
-        onPointerMove={(event) => {
-          const active = drag.current;
-          if (active?.pointerId !== event.pointerId) return;
-          active.value = at(event);
-          preview.drag(active.value);
-        }}
-        onPointerUp={(event) => {
-          if (drag.current?.pointerId === event.pointerId) end(at(event));
-        }}
-        // The slider takes no touch gestures, so a cancel comes from around the
-        // page, such as a host app that reports a lifted finger as cancelled:
-        // the drag ends where it was.
-        onPointerCancel={endAtLastMove}
-        onLostPointerCapture={(event) => {
-          if (event.target === event.currentTarget) endAtLastMove(event);
-        }}
-        data-dragging={isDragging ? "" : undefined}
-        className="group relative h-72 w-24 overflow-hidden rounded-2xl bg-white/14 [touch-action:none] has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50"
-      >
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 origin-bottom transition-transform duration-150 group-data-dragging:transition-none motion-reduce:transition-none"
-          style={{
-            background: lightColour(state),
-            transform: `scaleY(${shown / 100})`,
-          }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={shown}
-          aria-label={`${props.name} brightness`}
-          aria-valuetext={shown > 0 ? `${shown}%` : "Off"}
-          disabled={disabled}
-          onChange={(event) => {
-            const brightness = Number(event.target.value);
-            keys.send(brightness);
-            preview.hold(brightness);
-          }}
-          onBlur={() => keys.flush()}
-          className="sr-only"
-        />
-      </div>
-      <span className="text-[13px] leading-[18px] font-medium text-(--silver)">
-        {shown > 0 ? `${shown}%` : "Off"}
-      </span>
-    </div>
+    <LevelSlider
+      label={`${props.name} brightness`}
+      level={level}
+      fill={lightColour(state)}
+      valueText={words}
+      disabled={disabled}
+      failures={props.failures}
+      onLevel={props.onBrightness}
+      frame={(slider, shown) => {
+        const Icon = shown >= 34 ? Sun : SunDim;
+        return (
+          <div className="flex flex-col items-center gap-4">
+            <Icon aria-hidden="true" className="size-7 text-white/65" />
+            {slider}
+            <span className="text-[13px] leading-[18px] font-medium text-(--silver)">
+              {words(shown)}
+            </span>
+          </div>
+        );
+      }}
+    />
   );
 }

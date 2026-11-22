@@ -25,3 +25,7 @@ the categories they show in, and what driver apps tell Sanctum about them.
 [adding and removing them](/apps/adding-and-removing/), what they're
 [allowed to do](/apps/permissions/), and
 [updates and problems](/apps/updates-and-problems/).
+
+[Use Sanctum from an AI agent](/ai-agents/) covers adding an agent such as
+Claude Code or Codex, and [what AI agents can use](/ai-agents/what-they-can-use/)
+in your home.

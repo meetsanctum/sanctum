@@ -22,10 +22,18 @@ import {
 } from "@meetsanctum/ui-sdk";
 
 import { contactText } from "./contact";
+import {
+  canPlayPause,
+  isMedia,
+  isPlaying,
+  mediaText,
+  type Media,
+} from "./media";
 import { motionText } from "./motion";
 
 // The home's lights, switches, remotes and sensors as tiles: one tile for
-// each light, switch, button, motion sensor or contact sensor a device has,
+// each light, switch, button, motion sensor, contact sensor or media player
+// a device has,
 // and one for each device with sensors, grouped in sections by room or by
 // category; a room's page joins a device's into one (roomTilesOf). Each
 // tile shows what the core shows: a command waiting for the device as it
@@ -34,7 +42,8 @@ import { motionText } from "./motion";
 // shows its latest press for a few seconds; a sensor's its readings, in the
 // unit the home shows temperatures in; a motion sensor's whether it sees
 // motion, or for how long it has not; a contact sensor's whether it is open,
-// and for how long. A remote or sensor on a battery gone quiet says "Not
+// and for how long; a media player's what it is playing, White while it
+// plays. A remote or sensor on a battery gone quiet says "Not
 // heard from" (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
@@ -283,6 +292,45 @@ function motionTile(
   };
 }
 
+// A media player's tile: what it is playing, White while it plays, and its
+// round button plays or pauses it where it can now.
+function mediaTile(
+  device: DeviceInfo,
+  capability: Media,
+  several: boolean,
+  roomId: string | null,
+): Tile {
+  const base = {
+    key: tileKey(device.id, capability.id),
+    deviceId: device.id,
+    capabilityId: capability.id,
+    kind: "media" as const,
+    roomId,
+    // A device with several players names each.
+    name: several ? `${device.name} ${capability.id}` : device.name,
+    look: "off" as const,
+    on: false,
+    dims: false,
+    disabled: false,
+  };
+  if (device.availability === "offline") {
+    return {
+      ...base,
+      status: offline(device),
+      disabled: true,
+      media: { playing: false, canPlayPause: false },
+    };
+  }
+  const playing = isPlaying(capability);
+  return {
+    ...base,
+    status: mediaText(capability),
+    on: playing,
+    look: playing ? "on" : "off",
+    media: { playing, canPlayPause: canPlayPause(capability) },
+  };
+}
+
 type Contact = Extract<CapabilityInfo, { kind: "contact" }>;
 
 const isContact = (capability: CapabilityInfo): capability is Contact =>
@@ -430,6 +478,7 @@ export function tilesOf(
     const sensors = device.capabilities.filter(isSensor);
     const motion = device.capabilities.filter(isMotion);
     const contacts = device.capabilities.filter(isContact);
+    const players = device.capabilities.filter(isMedia);
     const tiles = [
       ...controls.map((capability) =>
         tileOf(device, capability, controls.length > 1, roomId),
@@ -457,6 +506,9 @@ export function tilesOf(
           now,
           isQuiet,
         ),
+      ),
+      ...players.map((capability) =>
+        mediaTile(device, capability, players.length > 1, roomId),
       ),
       ...(sensors.length > 0
         ? [sensorTile(device, sensors, roomId, unit, isQuiet)]
@@ -513,7 +565,8 @@ type RoomTile = { tile: Tile; category: DeviceCategory | undefined };
  * light even where a switch comes before it, and otherwise its first light
  * or switch, with that tile's key, so a command waiting or failed shows on
  * it, and pressing it opens the detail on its first page. A further light
- * or switch keeps a tile of its own. A press
+ * or switch keeps a tile of its own. A media device keeps its first
+ * player's controls and any lights or switches get their own tiles. A press
  * flashes only a remote's: a light with a button goes on showing whether it
  * is on.
  */
@@ -533,11 +586,23 @@ function roomTilesOf(
     const kind = device && primaryKindOf(device.type);
     const ofKind = own.filter((tile) => tile.kind === kind);
     const first = ofKind[0] ?? own[0]!;
+    const controls = own.filter(isControlTile);
+    if (first.kind === "media") {
+      return [
+        {
+          tile: { ...first, name: device?.name ?? first.name },
+          category: "media",
+        },
+        ...controls.map((tile) => ({
+          tile,
+          category: deviceCategoryOf(tile.kind)?.id,
+        })),
+      ];
+    }
     // Keep the tile's key stable but open the part whose state it shows.
     const active = isControlTile(first)
       ? first
       : (ofKind.find((tile) => tile.on) ?? first);
-    const controls = own.filter(isControlTile);
     const control = isControlTile(active) ? active : controls[0];
     const one: Tile = control
       ? {

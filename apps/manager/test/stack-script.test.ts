@@ -117,7 +117,9 @@ if (args[0] === "inspect") {
   };
 }
 
-describe("development stack CLI", () => {
+// Each test runs the real script through bash, a second here and several on
+// a shared CI runner, so they have longer than vitest's 5 s.
+describe("development stack CLI", { timeout: 20_000 }, () => {
   it("keeps a core whose settings still match", async () => {
     const tree = await worktree();
 

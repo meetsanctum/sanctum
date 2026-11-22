@@ -121,6 +121,17 @@ const buttonVariants = cva(
           "-mx-1 -my-0.5 h-auto min-h-6 gap-0.5 rounded-xs px-1 py-0.5 text-[length:inherit] leading-[inherit]",
         // A person's avatar, round as avatars are.
         avatar: "size-10 rounded-full",
+        // A round control on a device's glass, such as a player's previous
+        // and next, or a TV's power above its volume: 48 px.
+        round: "size-12 rounded-full [&_svg:not([class*='size-'])]:size-5.5",
+        // The one big round control on a device's page, such as a player's
+        // play or pause: 72 px.
+        "round-lg":
+          "size-18 rounded-full [&_svg:not([class*='size-'])]:size-7.5",
+        // Half of two steps stacked as one shape the size of a level's
+        // slider, such as a volume's + over its −: 96 px wide, each half
+        // 144 px tall, rounded at its own end only.
+        step: "h-36 w-24 rounded-none border-0 first:rounded-t-2xl last:rounded-b-2xl [&_svg:not([class*='size-'])]:size-7",
         // A card of its own, its words centred over what it leads to.
         choice:
           "h-auto min-h-77 w-full flex-col justify-start gap-0 rounded-lg px-5.5 pt-8 pb-5.5 text-center font-normal whitespace-normal",

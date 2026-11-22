@@ -2,6 +2,7 @@ import {
   deviceCategories,
   type AppInfo,
   type DeviceCategory,
+  type DeviceType,
 } from "@meetsanctum/app-sdk";
 import {
   contactIcon,
@@ -46,6 +47,7 @@ import {
 } from "./lights-button";
 import { LightsCard, lightsStatus } from "./lights-card";
 import { batteriesTile } from "./maintenance";
+import { mediaSummary } from "./media";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
 import {
@@ -243,13 +245,15 @@ function Sections(props: {
 
 // The categories in the shell's order, Home's status row and the sidebar
 // alike: Lights first, the one with something to press, then Environment,
-// Security and Presence, as a room's line of readings has them.
+// Security and Presence, as a room's line of readings has them, and Media
+// before Buttons.
 const categoryOrder = [
   "lights",
   "environment",
   "security",
   "presence",
   "switches",
+  "media",
   "buttons",
 ] as const satisfies DeviceCategory[];
 
@@ -431,6 +435,10 @@ function categoryStatus(
     }
     case "switches":
       return said(onMeta(own));
+    case "media": {
+      const playing = own.filter((tile) => tile.media?.playing).length;
+      return said(playing > 0 ? `${playing} playing` : "Not playing");
+    }
     case "buttons":
       return undefined;
   }
@@ -564,6 +572,24 @@ function securityCards(tiles: readonly Tile[]): Summary[] {
   });
 }
 
+// What Media's page opens with: a card for each type the home's players are
+// shown as, how many of them are playing.
+const mediaIcons: Partial<Record<DeviceType, icons.LucideIcon>> = {
+  tv: icons.Tv,
+  speaker: icons.Speaker,
+  "smart-speaker": icons.Speaker,
+};
+
+function mediaCards(tiles: readonly Tile[], devices: Devices): Summary[] {
+  return mediaSummary(tiles, devices.devices).map((each) => ({
+    id: each.type,
+    icon: mediaIcons[each.type] ?? icons.TvMinimalPlay,
+    title: each.title,
+    status: each.status,
+    note: null,
+  }));
+}
+
 export function CategoryPage(props: {
   id: string;
   devices: Devices;
@@ -607,6 +633,13 @@ export function CategoryPage(props: {
           label={`${category.title} summary`}
           colour={categoryLooks.security.colour}
           cards={securityCards(own)}
+        />
+      )}
+      {category.id === "media" && (
+        <SummaryCards
+          label={`${category.title} summary`}
+          colour={categoryLooks.media.colour}
+          cards={mediaCards(own, devices)}
         />
       )}
       <CategorySections
