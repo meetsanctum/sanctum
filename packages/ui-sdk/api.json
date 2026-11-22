@@ -1,5 +1,5 @@
 {
-  "version": "0.1.18",
+  "version": "0.1.19",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -24,6 +24,7 @@
     "FromFrame",
     "HomeTimeZoneProvider",
     "Input",
+    "LevelSlider",
     "LightControls",
     "LightPicker",
     "LiveFeed",
@@ -2567,6 +2568,7 @@
       "export * from \"./contact-icons\";",
       "export * from \"./device-tile\";",
       "export { HomeTimeZoneProvider } from \"./home-time-zone\";",
+      "export * from \"./level-slider\";",
       "export * from \"./light-controls\";",
       "export * from \"./light-picker\";",
       "export * from \"./page-bar\";",
@@ -2591,6 +2593,19 @@
       "export { Switch } from \"./components/ui/switch\";",
       "export { startFrame } from \"./frame/runtime\";",
       "export * from \"./frame/protocol\";"
+    ],
+    "level-slider.d.ts": [
+      "import { type ReactNode } from \"react\";",
+      "export declare function LevelSlider(props: {",
+      "    label: string;",
+      "    level: number;",
+      "    fill: string;",
+      "    valueText: (level: number) => string;",
+      "    disabled?: boolean;",
+      "    failures?: number;",
+      "    onLevel: (level: number) => void;",
+      "    frame?: (slider: ReactNode, shown: number) => ReactNode;",
+      "}): string | number | bigint | boolean | Iterable<ReactNode> | Promise<string | number | bigint | boolean | import(\"react\").ReactPortal | import(\"react\").ReactElement<unknown, string | import(\"react\").JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | import(\"react\").JSX.Element | null | undefined;"
     ],
     "light-controls.d.ts": [
       "import type { LightCommand, LightFeatures, LightState } from \"@meetsanctum/app-sdk\";",
@@ -2791,7 +2806,7 @@
       "    key: string;",
       "    deviceId: string;",
       "    capabilityId: string;",
-      "    kind: \"light\" | \"switch\" | \"button\" | \"sensor\" | \"motion\" | \"contact\" | \"unknown\";",
+      "    kind: \"light\" | \"switch\" | \"button\" | \"sensor\" | \"motion\" | \"contact\" | \"media\" | \"unknown\";",
       "    roomId: string | null;",
       "    name: string;",
       "    status: string;",
@@ -2811,6 +2826,10 @@
       "    contact?: {",
       "        open: boolean;",
       "        changedAt: string | null;",
+      "    };",
+      "    media?: {",
+      "        playing: boolean;",
+      "        canPlayPause: boolean;",
       "    };",
       "    failures?: number;",
       "};",

@@ -22,10 +22,12 @@ import {
 } from "@meetsanctum/ui-sdk";
 
 import { contactText } from "./contact";
+import { canPlayPause, isMedia, mediaText, type Media } from "./media";
 import { motionText } from "./motion";
 
 // The home's lights, switches, remotes and sensors as tiles: one tile for
-// each light, switch, button, motion sensor or contact sensor a device has,
+// each light, switch, button, motion sensor, contact sensor or media player
+// a device has,
 // and one for each device with sensors, grouped in sections by room or by
 // category; a room's page joins a device's into one (roomTilesOf). Each
 // tile shows what the core shows: a command waiting for the device as it
@@ -34,7 +36,8 @@ import { motionText } from "./motion";
 // shows its latest press for a few seconds; a sensor's its readings, in the
 // unit the home shows temperatures in; a motion sensor's whether it sees
 // motion, or for how long it has not; a contact sensor's whether it is open,
-// and for how long. A remote or sensor on a battery gone quiet says "Not
+// and for how long; a media player's what it is playing, White while it
+// plays. A remote or sensor on a battery gone quiet says "Not
 // heard from" (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
@@ -283,6 +286,45 @@ function motionTile(
   };
 }
 
+// A media player's tile: what it is playing, White while it plays, and its
+// round button plays or pauses it where it can now.
+function mediaTile(
+  device: DeviceInfo,
+  capability: Media,
+  several: boolean,
+  roomId: string | null,
+): Tile {
+  const base = {
+    key: tileKey(device.id, capability.id),
+    deviceId: device.id,
+    capabilityId: capability.id,
+    kind: "media" as const,
+    roomId,
+    // A device with several players names each.
+    name: several ? `${device.name} ${capability.id}` : device.name,
+    look: "off" as const,
+    on: false,
+    dims: false,
+    disabled: false,
+  };
+  if (device.availability === "offline") {
+    return {
+      ...base,
+      status: offline(device),
+      disabled: true,
+      media: { playing: false, canPlayPause: false },
+    };
+  }
+  const playing = capability.state?.activity === "playing";
+  return {
+    ...base,
+    status: mediaText(capability),
+    on: playing,
+    look: playing ? "on" : "off",
+    media: { playing, canPlayPause: canPlayPause(capability) },
+  };
+}
+
 type Contact = Extract<CapabilityInfo, { kind: "contact" }>;
 
 const isContact = (capability: CapabilityInfo): capability is Contact =>
@@ -430,6 +472,7 @@ export function tilesOf(
     const sensors = device.capabilities.filter(isSensor);
     const motion = device.capabilities.filter(isMotion);
     const contacts = device.capabilities.filter(isContact);
+    const players = device.capabilities.filter(isMedia);
     const tiles = [
       ...controls.map((capability) =>
         tileOf(device, capability, controls.length > 1, roomId),
@@ -457,6 +500,9 @@ export function tilesOf(
           now,
           isQuiet,
         ),
+      ),
+      ...players.map((capability) =>
+        mediaTile(device, capability, players.length > 1, roomId),
       ),
       ...(sensors.length > 0
         ? [sensorTile(device, sensors, roomId, unit, isQuiet)]

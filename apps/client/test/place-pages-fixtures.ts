@@ -1,7 +1,10 @@
 import type {
   AppInfo,
   DeviceInfo,
+  DeviceType,
   EntityInfo,
+  MediaFeatures,
+  MediaState,
   Places,
   RoomSectionInfo,
 } from "@meetsanctum/app-sdk";
@@ -220,6 +223,40 @@ export function contactSensor(
         sync: "synced",
         setBy: null,
         changedAt,
+      },
+    ],
+  };
+}
+
+/** A media player with what it can do and what it is doing, as the core shows it. */
+export function mediaPlayer(
+  id: string,
+  name: string,
+  roomId: string | null,
+  state: MediaState | null,
+  features: Partial<MediaFeatures> = {},
+  type: DeviceType = "media-player",
+): DeviceInfo {
+  return {
+    ...light(id, name, roomId, false),
+    type,
+    capabilities: [
+      {
+        id: "player",
+        kind: "media",
+        features: {
+          power: true,
+          playback: ["play", "pause", "stop", "next", "previous", "seek"],
+          volume: "steps",
+          mute: false,
+          ...features,
+        },
+        state,
+        observed: state,
+        desired: null,
+        sync: "synced",
+        setBy: null,
+        changedAt: null,
       },
     ],
   };

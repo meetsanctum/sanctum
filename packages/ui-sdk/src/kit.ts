@@ -7,6 +7,7 @@ export * from "./client";
 export * from "./contact-icons";
 export * from "./device-tile";
 export { HomeTimeZoneProvider } from "./home-time-zone";
+export * from "./level-slider";
 export * from "./light-controls";
 export * from "./light-picker";
 export * from "./page-bar";

@@ -1,12 +1,14 @@
 import {
   defineApp,
   light as lightKind,
+  media as mediaKind,
   switchCapability,
 } from "@meetsanctum/app-sdk";
 
-// Pretend lights and contact sensors for a development stack, since a Mac
-// has no Zigbee stick: a driver app like Zigbee, whose lights do what they're
-// told at once and whose contact sensors open and close by themselves. Add
+// Pretend lights, contact sensors and media players for a development
+// stack, since a Mac has no Zigbee stick: a driver app like Zigbee, whose
+// lights and players do what they're told at once and whose contact sensors
+// open and close by themselves. Add
 // devices can try it out: while it lets devices join, a new light joins a few
 // seconds in and another a little later, and it has found a climate sensor
 // and a plug on the network, the plug asking for its key ("sanctum"). Only
@@ -46,6 +48,91 @@ const contacts = new Map([
     { name: "Bedroom window", every: 30 * minute, openFor: 10 * minute },
   ],
 ]);
+
+// A TV box playing a show, which turns on and off and steps the TV's volume,
+// and a smart speaker with nothing on, its volume a level it can mute.
+const players = new Map([
+  [
+    "tv-box",
+    {
+      name: "Living room box",
+      type: "media-player",
+      features: {
+        power: true,
+        playback: ["play", "pause", "stop", "next", "previous", "seek"],
+        volume: "steps",
+      },
+      state: {
+        on: true,
+        activity: "playing",
+        app: { id: "tv.example", name: "TV" },
+        media: {
+          title: "The Long Way Round",
+          series: "The Long Way Round",
+          season: 2,
+          episode: 4,
+          type: "episode",
+          duration: 2700,
+          position: 1032,
+          positionAt: new Date().toISOString(),
+        },
+      },
+    },
+  ],
+  [
+    "office-speaker",
+    {
+      name: "Office speaker",
+      type: "smart-speaker",
+      features: {
+        playback: ["play", "pause", "stop"],
+        volume: "level",
+        mute: true,
+      },
+      state: { activity: "idle", volume: 40, muted: false },
+    },
+  ],
+]);
+
+const reportPlayer = (ctx, key) =>
+  ctx.devices.report({
+    key,
+    availability: "online",
+    states: { player: players.get(key).state },
+  });
+
+// What a player does with a command: what it asked for, a position counted
+// from now, a step of 5, and nothing playing once it stops or turns off.
+function play(player, command) {
+  const state = { ...player.state, ...mediaKind.desired(command) };
+  const media = state.media && {
+    ...state.media,
+    position: playedTo(state.media, player.state.activity === "playing"),
+    positionAt: new Date().toISOString(),
+  };
+  if (media) state.media = media;
+  if ("position" in command && media) media.position = command.position;
+  if ("volumeStep" in command && state.volume !== undefined) {
+    const by = command.volumeStep === "up" ? 5 : -5;
+    state.volume = Math.max(0, Math.min(100, state.volume + by));
+  }
+  if (command.playback === "stop" || command.on === false) {
+    state.activity = "idle";
+  }
+  if (command.on === true && player.state.on === false) {
+    state.activity = "paused";
+  }
+  player.state = state;
+}
+
+// Where it has got to in what it plays.
+const playedTo = (media, playing) =>
+  playing
+    ? Math.min(
+        media.duration,
+        media.position + (Date.now() - Date.parse(media.positionAt)) / 1000,
+      )
+    : media.position;
 
 // Whether a contact is open now, by the clock: open at the start of each of
 // its periods.
@@ -258,6 +345,17 @@ export default defineApp({
       });
       await reportContact(ctx, key);
     }
+    for (const [key, { name, type, features }] of players) {
+      await ctx.devices.register({
+        key,
+        name,
+        manufacturer: "Sanctum",
+        model: "Fake media player",
+        type,
+        capabilities: [{ id: "player", kind: "media", features }],
+      });
+      await reportPlayer(ctx, key);
+    }
     const previouslyAdded = new Set(
       (await ctx.devices.list())
         .filter((device) => device.driver === ctx.appId)
@@ -268,7 +366,7 @@ export default defineApp({
       if (previouslyAdded.has(device.key)) await registerFound(ctx, device);
     }
     await ctx.devices.present({
-      keys: [...lights.keys(), ...contacts.keys(), ...added],
+      keys: [...lights.keys(), ...contacts.keys(), ...players.keys(), ...added],
     });
     await ctx.devices.found(listed());
     // The core takes a report that says the same again as no change.
@@ -294,6 +392,12 @@ export default defineApp({
           availability: "online",
           states: { power: switchCapability.desired(command.command) },
         });
+        return;
+      }
+      const player = players.get(command.key);
+      if (command.kind === "media" && player) {
+        play(player, command.command);
+        await reportPlayer(ctx, command.key);
         return;
       }
       const light = lights.get(command.key);

@@ -1,0 +1,217 @@
+// @vitest-environment jsdom
+import type { DeviceInfo, MediaCommand } from "@meetsanctum/app-sdk";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { Media } from "../src/media";
+import { MediaPlaying, MediaRemote, MediaVolume } from "../src/media-detail";
+import { mediaPlayer } from "./place-pages-fixtures";
+
+// A media player's pages in its detail: Playing with what plays and its
+// buttons, dimmed and empty while off; a TV's Remote with its power and
+// volume steps; a speaker's Volume with mute and its level.
+
+const show = {
+  title: "The Long Way Round",
+  series: "The Long Way Round",
+  season: 2,
+  episode: 4,
+  duration: 2700,
+  position: 1032,
+};
+
+let container: HTMLDivElement;
+let root: Root;
+let sent: MediaCommand[];
+
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  sent = [];
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.unstubAllGlobals();
+});
+
+type Page = typeof MediaPlaying;
+
+async function render(Page: Page, device: DeviceInfo, disabled = false) {
+  await act(async () => {
+    root.render(
+      <Page
+        name={device.name}
+        device={device}
+        capability={device.capabilities[0] as Media}
+        disabled={disabled}
+        onCommand={(command) => sent.push(command)}
+      />,
+    );
+  });
+}
+
+const button = (label: string) =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
+async function press(label: string) {
+  await act(async () => button(label)!.click());
+}
+
+describe("Playing", () => {
+  it("shows what plays, where it is, and pauses it", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "paused",
+        app: { id: "tv.example", name: "TV" },
+        media: show,
+      }),
+    );
+    const text = container.textContent ?? "";
+    expect(text).toContain("The Long Way Round");
+    expect(text).toContain("Season 2, episode 4 · TV");
+    expect(text).toContain("17:12");
+    expect(text).toContain("−27:48");
+    expect(text).not.toContain("Nothing playing");
+
+    await press("Play Living Room TV");
+    await press("Next");
+    await press("Previous");
+    expect(sent).toEqual([
+      { activity: "playing" },
+      { playback: "next" },
+      { playback: "previous" },
+    ]);
+  });
+
+  it("plays or pauses with Space, but not from a field or a button", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "playing",
+        media: show,
+      }),
+    );
+    const space = (on: EventTarget) =>
+      act(async () => {
+        on.dispatchEvent(
+          new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+        );
+      });
+    await space(document.body);
+    // A button pressed with Space presses only itself.
+    await space(button("Next")!);
+    expect(sent).toEqual([{ activity: "paused" }]);
+  });
+
+  it("keeps its shape while off, dimmed and empty, with nothing to press", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: false,
+        activity: "idle",
+        media: show,
+      }),
+    );
+    const text = container.textContent ?? "";
+    expect(text).toContain("Nothing playing");
+    expect(text).not.toContain("The Long Way Round");
+    expect(text).toContain("–:––");
+    expect(button("Play Living Room TV")!.disabled).toBe(true);
+    expect(button("Next")!.disabled).toBe(true);
+    // Power is on Remote, never here.
+    expect(button("Turn on Living Room TV")).toBeNull();
+  });
+
+  it("shows a speaker's play alone, since it takes no previous or next", async () => {
+    await render(
+      MediaPlaying,
+      mediaPlayer(
+        "speaker",
+        "Office Speaker",
+        "office",
+        { activity: "idle" },
+        { power: false, playback: ["play", "pause", "stop"], volume: "level" },
+        "smart-speaker",
+      ),
+    );
+    expect(button("Play Office Speaker")!.disabled).toBe(true);
+    expect(button("Next")).toBeNull();
+    expect(button("Previous")).toBeNull();
+  });
+});
+
+describe("Remote", () => {
+  it("turns the TV off and steps its volume", async () => {
+    await render(
+      MediaRemote,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "playing",
+      }),
+    );
+    expect(
+      button("Turn off Living Room TV")!.getAttribute("aria-pressed"),
+    ).toBe("true");
+    await press("Turn off Living Room TV");
+    await press("Turn the volume up");
+    await press("Turn the volume down");
+    expect(sent).toEqual([
+      { on: false },
+      { volumeStep: "up" },
+      { volumeStep: "down" },
+    ]);
+  });
+
+  it("turns it on while off, its volume dimmed", async () => {
+    await render(
+      MediaRemote,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: false,
+        activity: "idle",
+      }),
+    );
+    expect(button("Turn the volume up")!.disabled).toBe(true);
+    await press("Turn on Living Room TV");
+    expect(sent).toEqual([{ on: true }]);
+  });
+});
+
+describe("Volume", () => {
+  it("mutes a speaker above its level", async () => {
+    await render(
+      MediaVolume,
+      mediaPlayer(
+        "speaker",
+        "Office Speaker",
+        "office",
+        { activity: "idle", volume: 40, muted: false },
+        {
+          power: false,
+          playback: ["play", "pause", "stop"],
+          volume: "level",
+          mute: true,
+        },
+        "smart-speaker",
+      ),
+    );
+    const slider = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Office Speaker volume"]',
+    )!;
+    expect(slider.value).toBe("40");
+    // Mute comes first, above the level.
+    expect(
+      button("Mute Office Speaker")!.compareDocumentPosition(slider) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await press("Mute Office Speaker");
+    expect(sent).toEqual([{ muted: true }]);
+  });
+});

@@ -1,5 +1,5 @@
 // `pnpm dev:seed` (deploy/dev/stack.sh): claims a new development home and
-// puts its fake lights and contact sensors in rooms. It runs in the core's
+// puts its fake lights, contact sensors and media players in rooms. It runs in the core's
 // container, where its dependencies are. The login is only ever for a
 // stack, which listens on this Mac alone unless `pnpm dev:display` puts it
 // on the network.
@@ -9,8 +9,13 @@ import * as opaque from "@serenity-kit/opaque";
 const base = process.env.SEED_CORE_URL;
 const login = { username: "dev", password: "sanctum-dev-stack" };
 const rooms = {
-  "Living room": ["Floor lamp", "Shelf light", "Balcony door"],
-  Office: ["Desk lamp"],
+  "Living room": [
+    "Floor lamp",
+    "Shelf light",
+    "Balcony door",
+    "Living room box",
+  ],
+  Office: ["Desk lamp", "Office speaker"],
   Bedroom: ["Bedside lamp", "Bedroom window"],
 };
 

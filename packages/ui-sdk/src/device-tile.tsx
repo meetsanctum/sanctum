@@ -3,6 +3,8 @@ import {
   Footprints,
   Lightbulb,
   LightbulbOff,
+  Pause,
+  Play,
   Plug,
   Radio,
   Sun,
@@ -215,8 +217,10 @@ export function DeviceTile(props: {
   const status =
     preview === null ? tile.status : preview > 0 ? `${preview}%` : "Off";
   const switches = tile.kind === "light" || tile.kind === "switch";
+  // A media player's round icon plays or pauses it.
+  const plays = tile.kind === "media";
   // The round icon switches it only where the rest opens the detail.
-  const iconSwitches = onOpen !== undefined && switches;
+  const iconSwitches = onOpen !== undefined && (switches || plays);
   const Icon =
     tile.kind === "unknown"
       ? // The general icon, as an unknown device has in Settings.
@@ -233,11 +237,15 @@ export function DeviceTile(props: {
             ? Footprints
             : tile.kind === "contact"
               ? contactIcon(tile.shownAs, tile.contact?.open === true)
-              : tile.kind === "switch"
-                ? Plug
-                : on
-                  ? Lightbulb
-                  : LightbulbOff;
+              : tile.kind === "media"
+                ? tile.media?.playing
+                  ? Pause
+                  : Play
+                : tile.kind === "switch"
+                  ? Plug
+                  : on
+                    ? Lightbulb
+                    : LightbulbOff;
   const dashed = tile.kind === "contact" && !tile.contact ? "3 3" : undefined;
   const iconLook =
     "grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) data-[look=lit]:bg-white/55 data-[look=on]:bg-(--tile-on-ink)/8";
@@ -301,9 +309,13 @@ export function DeviceTile(props: {
       {iconSwitches && (
         <button
           type="button"
-          aria-label={tile.name}
-          aria-pressed={on}
-          disabled={tile.disabled}
+          aria-label={
+            plays
+              ? `${tile.media?.playing ? "Pause" : "Play"} ${tile.name}`
+              : tile.name
+          }
+          aria-pressed={plays ? undefined : on}
+          disabled={tile.disabled || (plays && !tile.media?.canPlayPause)}
           data-look={look}
           {...gestures}
           onClick={(event) => {
@@ -311,7 +323,12 @@ export function DeviceTile(props: {
           }}
           className={`absolute top-1/2 left-3.5 -translate-y-1/2 text-(--tile-ink) outline-none select-none hover:ring-2 hover:ring-current/35 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 disabled:hover:ring-0 data-[look=lit]:text-(--carbon) data-[look=on]:text-(--tile-on-ink) [touch-action:pan-y] ${iconLook}`}
         >
-          <Icon aria-hidden="true" className="size-[18px]" />
+          <Icon
+            aria-hidden="true"
+            className="size-[18px]"
+            // Play and pause read as solid shapes, as on any player.
+            fill={plays ? "currentColor" : "none"}
+          />
         </button>
       )}
       {canDim && (

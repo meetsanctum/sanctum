@@ -20,10 +20,10 @@ and no others. A device that fits none of them is an unknown device.
 | Contact sensor | `contact`       | A sensor that says whether something is open | Contact | Office Contact Sensor      | Security         |
 | Door           | `door`          | A contact sensor on a door                   | Contact | Office Door                | Security         |
 | Window         | `window`        | A contact sensor on a window                 | Contact | Office Window              | Security         |
-| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Unknown devices  |
-| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Unknown devices  |
-| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Unknown devices  |
-| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Unknown devices  |
+| Smart speaker  | `smart-speaker` | A voice-enabled speaker                      | Media   | Office Speaker             | Media            |
+| Media player   | `media-player`  | A TV box, or anything else that plays        | Media   | Office Media Player        | Media            |
+| TV             | `tv`            | A media player on a TV                       | Media   | Office TV                  | Media            |
+| Speaker        | `speaker`       | A speaker that only plays, shown as one      | Media   | Office Speaker             | Media            |
 | Sensor         | `sensor`        | A sensor that measures                       | Sensor  | Office Temperature Sensor  | Environment      |
 | Unknown device | `unknown`       | A device with no part Sanctum can use        | Nothing | Unknown Device             | Unknown devices  |
 
