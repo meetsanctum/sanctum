@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { agentSetupCodeText, parseAgentSetupCode } from "../src/index.js";
+import {
+  agentSetupCodeText,
+  agentSetupCommand,
+  parseAgentSetupCode,
+} from "../src/index.js";
 
 const code = {
   homeId: "3f6d1c2a-8e1b-4d6f-9a51-1d1d1f6e6e73",
@@ -24,6 +28,12 @@ describe("an AI agent's setup code", () => {
     expect(
       parseAgentSetupCode(agentSetupCodeText({ ...code, pin: null })),
     ).toEqual({ ...code, pin: null });
+  });
+
+  it("goes in the command that runs the connector at a pinned version", () => {
+    expect(agentSetupCommand("sanctum:abc")).toBe(
+      "npx -y @meetsanctum/mcp@0.1.0 connect sanctum:abc",
+    );
   });
 
   it("isn't read when it's something else", () => {

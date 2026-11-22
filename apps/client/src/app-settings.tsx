@@ -10,6 +10,7 @@ import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { AppCanUseSection } from "./agents/app-section";
 import { AppAdds } from "./app-adds";
 import { GoBack, useGoBackTo } from "./app-go-back";
 import { AppIcon } from "./app-icon";
@@ -41,10 +42,10 @@ import { PreferencesSection } from "./settings-preferences";
 // Settings → Apps → the app: the same page for every app, drawn by the shell
 // from the app's manifest and what the home knows now, so no app can hide,
 // restyle or misstate what it may do. Its state first, and what needs
-// someone, then its permissions with a switch each, its preferences, and
-// what it adds to the home. Settings or the app's own pages open it; with no
-// Back, Done beside its title returns there, since everything on it is saved
-// as it changes.
+// someone, then its permissions with a switch each, what AI agents can use
+// of it once the home has one, its preferences, and what it adds to the
+// home. Settings or the app's own pages open it; with no Back, Done beside
+// its title returns there, since everything on it is saved as it changes.
 
 // An app without an icon of its own, such as a driver, gets a plain one.
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
@@ -185,6 +186,9 @@ export function AppPage(props: {
   background: string;
   onChanged: (app: AppInfo) => void;
   openStatus: () => void;
+  // Opens What AI agents can use, which an item that needs one of its
+  // areas leads to.
+  openCanUse?: () => void;
   onDone: () => void;
   // The page under it in Settings, which Back returns to: without one it
   // was opened from elsewhere, and Done closes it.
@@ -268,6 +272,11 @@ export function AppPage(props: {
       {app.requests.length > 0 && (
         <PermissionsSection app={app} onChanged={props.onChanged} />
       )}
+      <AppCanUseSection
+        app={app}
+        live={props.live}
+        onOpenCanUse={props.openCanUse}
+      />
       <PreferencesSection app={app} live={props.live} />
       {manifest && (
         <AppAdds
