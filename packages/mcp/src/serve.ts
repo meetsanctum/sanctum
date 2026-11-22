@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { discover, findHome, HomeNotFound } from "./find.js";
-import { connectHome, TokenRefused } from "./home.js";
+import { connectHome, isTokenRefused } from "./home.js";
 import { pinnedFetch } from "./pinned.js";
 import {
   loadConnection,
@@ -128,7 +128,7 @@ export function homeLink(options: ServeOptions) {
           throw error;
         }
         if (client === opening) client = undefined;
-        if (error instanceof TokenRefused) {
+        if (isTokenRefused(error)) {
           await forget();
           throw new Error(words.removed);
         }

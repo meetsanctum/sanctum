@@ -14,6 +14,14 @@ export class TokenRefused extends Error {
   }
 }
 
+/** Whether `error`, or what the SDK wrapped in it, is the home's refusal. */
+export function isTokenRefused(error: unknown): boolean {
+  for (let each = error; each instanceof Error; each = each.cause) {
+    if (each instanceof TokenRefused) return true;
+  }
+  return false;
+}
+
 /** A fetch that turns the home's 401 into TokenRefused. */
 function refusing(fetchHome: typeof fetch): typeof fetch {
   return async (input, init) => {

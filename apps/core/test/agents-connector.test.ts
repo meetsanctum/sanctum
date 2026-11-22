@@ -40,9 +40,16 @@ import { claimed, get, post, testCore, type TestCore } from "./support.js";
 // passing its calls on, for agents on either revision of the protocol.
 
 async function homeOverHttps(
-  dropToolReply?: () => boolean,
-  failToolList?: () => boolean,
+  hooks: {
+    // Drops a tool call's reply after the home ran it.
+    dropToolReply?: () => boolean;
+    // Fails a tool listing before it runs.
+    failToolList?: () => boolean;
+    // Runs once a token is collected, before the connector's first call.
+    onCollected?: (core: TestCore) => Promise<void>;
+  } = {},
 ) {
+  const { dropToolReply, failToolList, onCollected } = hooks;
   const certificates = createCoreCertificates({
     sign: (await testCa()).sign,
     log: () => undefined,
@@ -62,6 +69,12 @@ async function homeOverHttps(
       if (request.headers["mcp-method"] === "tools/list" && failToolList()) {
         return reply.code(503).send();
       }
+    });
+  }
+  if (onCollected) {
+    // Before the answer goes, so it's done by the connector's next request.
+    core.server.addHook("onSend", async (request) => {
+      if (request.url === "/api/auth/agents/collect") await onCollected(core);
     });
   }
   const maya = await claimed(core);
@@ -279,7 +292,9 @@ describe("the AI agents' connector", () => {
 
   it("keeps the token when the home saw the agent but its first listing failed", async () => {
     let failing = true;
-    const { core, maya, url } = await homeOverHttps(undefined, () => failing);
+    const { core, maya, url } = await homeOverHttps({
+      failToolList: () => failing,
+    });
     const setup = await startSetup(core, maya.token);
     const connecting = await options(url);
 
@@ -356,6 +371,43 @@ describe("the AI agents' connector", () => {
     ).toBeFalsy();
   });
 
+  it("keeps a working connection when the new setup is gone before the first call", async () => {
+    let cancel: string | undefined;
+    const { core, maya, url } = await homeOverHttps({
+      onCollected: async (home) => {
+        if (!cancel) return;
+        await post(
+          home,
+          "/api/auth/agents/setup/cancel",
+          { setupId: cancel },
+          { token: maya.token },
+        );
+      },
+    });
+    const connecting = await options(url);
+    const first = await connect(
+      (await startSetup(core, maya.token)).code,
+      connecting,
+    );
+    const ranBefore = connecting.ran.length;
+
+    // Cancelled in Settings between the collect and the first call.
+    const again = await startSetup(core, maya.token);
+    cancel = again.setupId;
+    await expect(connect(again.code, connecting)).rejects.toThrow(
+      new ConnectError(connectWords.expired),
+    );
+
+    expect(connecting.ran).toHaveLength(ranBefore);
+    expect(await listConnections(connecting.dir)).toEqual([first.connection]);
+    expect(await connecting.tokens.get(first.connection.clientId)).toMatch(
+      /^client_/,
+    );
+    expect(await status(core, maya.token, again.setupId)).toMatchObject({
+      status: "cancelled",
+    });
+  });
+
   it("sends nothing to a computer that isn't the home", async () => {
     const { core, maya, url } = await homeOverHttps();
     const setup = await startSetup(core, maya.token);
@@ -428,11 +480,13 @@ describe("the AI agents' connector", () => {
   it("doesn't replay a tool call whose reply was lost", async () => {
     let dropNext = false;
     let calls = 0;
-    const { core, maya, url } = await homeOverHttps(() => {
-      calls += 1;
-      const drop = dropNext;
-      dropNext = false;
-      return drop;
+    const { core, maya, url } = await homeOverHttps({
+      dropToolReply: () => {
+        calls += 1;
+        const drop = dropNext;
+        dropNext = false;
+        return drop;
+      },
     });
     const setup = await startSetup(core, maya.token);
     const connecting = await options(url);

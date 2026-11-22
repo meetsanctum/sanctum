@@ -7,7 +7,7 @@ import {
 import type { HostAnchor } from "@meetsanctum/auth-protocol/host-chain";
 
 import { discover, findHome, HomeNotFound } from "./find.js";
-import { connectHome, homeName } from "./home.js";
+import { connectHome, homeName, isTokenRefused } from "./home.js";
 import { isLoopback, pinnedFetch, type Trust } from "./pinned.js";
 import {
   register,
@@ -52,7 +52,7 @@ export const connectWords = {
   tooOld:
     "This connector is too old for Sanctum. Add the agent again from Sanctum's Settings, which gives the current connector.",
   keptPrevious: (name: string) =>
-    `Sanctum didn't answer the agent's first call, so the agent keeps its earlier connection to this home, “${name}”. To try again, start a new setup in Sanctum's Settings, under AI agents, Add an agent.`,
+    `Sanctum didn't answer the agent's first call, so the agent keeps its earlier connection to this home, “${name}”. If Settings lists the new agent too, remove it there, under AI agents. To try again, start a new setup there.`,
   firstCallFailed:
     "Sanctum didn't answer the agent's first call. If Settings doesn't show the agent connected, start a new setup there, under AI agents, Add an agent, and run this again with its code.",
   tooManyAttempts:
@@ -177,12 +177,14 @@ export async function connect(
   // the agent it was removed, so the person adds it again.
   let name: string | undefined;
   let firstCall = true;
-  // Whether the home answered a request with the token at all: any answer
-  // means the home checked it, which marks the agent seen.
+  // Whether the home took the token: any answer but a refusal means it
+  // checked it and saw the agent. A refusal means the setup ran out or was
+  // cancelled after the collect. An answer lost on the way back can't be
+  // told apart from none; the agent then shows in Settings, to remove there.
   let reached = false;
   const answered: typeof fetch = async (input, init) => {
     const response = await fetchHome(input, init);
-    reached = true;
+    if (response.status !== 401) reached = true;
     return response;
   };
   try {
@@ -197,8 +199,13 @@ export async function connect(
     } finally {
       await client.close().catch(() => undefined);
     }
-  } catch {
+  } catch (error) {
     firstCall = false;
+    if (isTokenRefused(error)) {
+      await options.tokens.delete(clientId).catch(() => undefined);
+      await removeConnection(options.dir, clientId).catch(() => undefined);
+      throw new ConnectError(connectWords.expired);
+    }
   }
 
   const choice = await chooseRegistration(
