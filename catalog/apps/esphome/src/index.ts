@@ -9,7 +9,8 @@ import { deviceAction } from "./page.js";
 import { esphomeService } from "./sightings.js";
 
 // The ESPHome driver app: brings the lights, switches, sensors, motion and
-// contact sensors and buttons of ESPHome's devices on the home's network
+// contact sensors, buttons and media players of ESPHome's devices on the
+// home's network
 // into the core's Devices, over ESPHome's native API, one connection to
 // each device. The manager finds them on mDNS and lets the app reach the
 // devices it found, on the API's port, and nothing else. A device with an
@@ -40,10 +41,12 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // its project's name, and one waiting for a key is listed by its maker.
     // 0.5.0: older firmware gets a setup key, then its own; a device left
     // without encryption, or that lost the key it was given, is repaired.
-    version: "0.5.0",
+    // 0.6.0: media players, and smart speakers, whose voice requests are
+    // followed and declined.
+    version: "0.6.0",
     core: "^2.0.0",
     summary:
-      "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
+      "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
     icon: { glyph: "cpu", color: "graphite" },
     permissions: [
       {
