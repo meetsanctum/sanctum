@@ -138,10 +138,11 @@ describe("the MCP endpoint", () => {
       "home_overview",
       "lights",
       "device_command",
+      "restore",
       "sanctum_example_tidy",
       "sanctum_example_wait",
     ]);
-    const tool = listed.tools[3]!;
+    const tool = listed.tools[4]!;
     expect(tool).toMatchObject({
       title: "Tidy up",
       inputSchema: {
@@ -287,6 +288,7 @@ describe("the MCP endpoint", () => {
       "home_overview",
       "lights",
       "device_command",
+      "restore",
       "sanctum_example_wait",
     ]);
 

@@ -292,13 +292,12 @@ export async function createModules(
     removeFromDriver: (driver, removal, actor, hold) =>
       apps.removeDevice(driver, removal, actor, hold),
     onReport: (id) => firmware.reported(id),
-    beforeCommand(device, capability, actor) {
-      // A command already over the limit must leave a remote's hold alone.
-      if (
-        actor.kind === "assistant-run" &&
-        holds.isMoving(device, capability)
-      ) {
-        checkAgentCommand(actor.id, false);
+    beforeCommand(device, capability, actor, shouldLeaveMoving) {
+      if (holds.isMoving(device, capability)) {
+        // Restoring must leave a remote's ongoing changes alone, as must a
+        // command already over the agent's limit.
+        if (shouldLeaveMoving) throw new ActionCallError("conflict");
+        if (actor.kind === "assistant-run") checkAgentCommand(actor.id, false);
       }
       return holds.interrupt(device, capability);
     },
@@ -332,6 +331,7 @@ export async function createModules(
     gate,
     entities,
     holds,
+    checkAgentCommand,
     now,
   });
   // Each place's motion, kept as it changes.

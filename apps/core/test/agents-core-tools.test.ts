@@ -159,6 +159,7 @@ describe("the core's tools for AI agents", () => {
       "home_overview",
       "lights",
       "device_command",
+      "restore",
       "entities",
       "sanctum_example_glow",
     ]);
@@ -185,7 +186,18 @@ describe("the core's tools for AI agents", () => {
 
     expect(result).toEqual({
       isError: false,
-      content: { on: true, switched: 1, failed: [] },
+      content: {
+        change: expect.any(String),
+        lights: [
+          {
+            device: lamp,
+            capability: "light",
+            name: expect.any(String),
+            result: expect.stringMatching(/^(sent|confirmed)$/),
+            state: expect.objectContaining({ on: true }),
+          },
+        ],
+      },
     });
     const [entry] = entries(core, "device.command");
     expect(entry).toMatchObject({
@@ -322,7 +334,12 @@ describe("the core's tools for AI agents", () => {
         place: { kind: "room", id: living },
         to: "off",
       }),
-    ).toMatchObject({ isError: false, content: { switched: 1 } });
+    ).toMatchObject({
+      isError: false,
+      content: {
+        lights: [{ result: expect.stringMatching(/^(sent|confirmed)$/) }],
+      },
+    });
     await settled();
 
     const refused = await call(client, "lights", {
@@ -348,7 +365,12 @@ describe("the core's tools for AI agents", () => {
         place: { kind: "room", id: living },
         to: "on",
       }),
-    ).toMatchObject({ isError: false, content: { switched: 1 } });
+    ).toMatchObject({
+      isError: false,
+      content: {
+        lights: [{ result: expect.stringMatching(/^(sent|confirmed)$/) }],
+      },
+    });
   });
 
   it("reports a device-command limit through an app's action", async () => {
