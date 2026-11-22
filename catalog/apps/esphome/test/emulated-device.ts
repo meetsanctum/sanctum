@@ -33,6 +33,11 @@ export type EmulatedOptions = {
   psk: string | null;
   /** Built to be given its key later: with no key, it waits for one. */
   waiting?: boolean;
+  /**
+   * Its record says what held as it last booted, as ESPHome writes it once:
+   * a key given or taken off since doesn't change it until it restarts.
+   */
+  recordAtBoot?: boolean;
   version?: string;
   sleeps?: boolean;
   entities: EmulatedEntity[];
@@ -146,6 +151,8 @@ export class EmulatedDevice {
   }[] = [];
   /** How many connections it has had, encrypted or not. */
   connections = 0;
+  /** How many of them it greeted, as sessions: not those refused at the handshake. */
+  greeted = 0;
   /** Whether it answers pings, so a test can model a silent connection. */
   answersPings = true;
   /** Whether it finishes a connection's greeting. */
@@ -154,14 +161,18 @@ export class EmulatedDevice {
   waiting: boolean;
   /** Its window for being given a key closed, as a device that waited too long. */
   windowClosed = false;
-  /** Its window closes once it has greeted the next connection. */
-  closesWindowAfterHello = false;
+  /** Its window closes once it has greeted this many more connections. */
+  closesWindowAfterHellos = 0;
+  /** The next connections it closes at once, as one whose connection slots are full does. */
+  closesNext = 0;
   /** It asks the next greeting to part with no reason, as one applying a key or shutting down does. */
   partsWithoutReason = false;
   /** It takes the next key it's sent, or has its own cleared, but its answer is lost. */
   losesNextAnswer = false;
   /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
   readonly keysSent: { key: string; encrypted: boolean }[] = [];
+  // What held as it last booted, for a record kept from then.
+  private booted: { psk: string | null; waiting: boolean };
   private readonly server: Server;
   private readonly sockets = new Set<Socket>();
   private readonly subscribed = new Set<
@@ -176,6 +187,7 @@ export class EmulatedDevice {
   private constructor(readonly options: EmulatedOptions) {
     this.psk = options.psk;
     this.waiting = options.waiting === true && options.psk === null;
+    this.booted = { psk: this.psk, waiting: this.waiting };
     this.states = structuredClone(options.states ?? {});
     this.server = createServer((socket) => this.serve(socket));
   }
@@ -193,6 +205,12 @@ export class EmulatedDevice {
     });
     const address = this.server.address();
     if (address && typeof address === "object") this.port = address.port;
+  }
+
+  /** Restarts, as after it's unplugged and plugged back in: its record says what holds now. */
+  reboot() {
+    for (const socket of this.sockets) socket.destroy();
+    this.booted = { psk: this.psk, waiting: this.waiting };
   }
 
   /** Stops answering, as when it's unplugged, closing every connection. */
@@ -217,8 +235,9 @@ export class EmulatedDevice {
     if (this.options.friendlyName)
       txt.friendly_name = this.options.friendlyName;
     if (this.options.project) txt.project_name = this.options.project;
-    if (this.psk) txt.api_encryption = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
-    else if (this.waiting) {
+    const { psk, waiting } = this.options.recordAtBoot ? this.booted : this;
+    if (psk) txt.api_encryption = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
+    else if (waiting) {
       txt.api_encryption_supported = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
       txt.api_provisioning = "zero_psk";
     }
@@ -282,6 +301,11 @@ export class EmulatedDevice {
     this.connections += 1;
     socket.on("close", () => this.sockets.delete(socket));
     socket.on("error", () => undefined);
+    if (this.closesNext > 0) {
+      this.closesNext -= 1;
+      socket.destroy();
+      return;
+    }
     let buffer = Buffer.alloc(0);
     let noise: ReturnType<typeof createESPHomeHandshake> | null = null;
     let stage: "first" | "plain" | "hello" | "handshake" | "data" = "first";
@@ -466,9 +490,10 @@ export class EmulatedDevice {
       // It applies its key by ending every connection, as ESPHome does.
       if (valid) setTimeout(apply, 10);
     } else if (type === message.helloRequest) {
-      if (this.closesWindowAfterHello) {
-        this.closesWindowAfterHello = false;
-        this.windowClosed = true;
+      this.greeted += 1;
+      if (this.closesWindowAfterHellos > 0) {
+        this.closesWindowAfterHellos -= 1;
+        if (this.closesWindowAfterHellos === 0) this.windowClosed = true;
       }
       send(
         message.helloResponse,

@@ -136,7 +136,8 @@ describe("a device waiting for a key", () => {
         "Espressif",
       "who made it",
     );
-    device.closesWindowAfterHello = true;
+    // Add asks it first, then greets it to give it its key.
+    device.closesWindowAfterHellos = 2;
 
     await expect(home.core.add(key, {})).rejects.toThrow();
     expect(device.keysSent).toHaveLength(1);
@@ -152,7 +153,7 @@ describe("a device waiting for a key", () => {
     {
       reply: "completes its greeting",
       isWindowClosed: false,
-      error: "It can't be given a key",
+      error: "It didn't answer",
     },
     {
       reply: "reports a closed window",

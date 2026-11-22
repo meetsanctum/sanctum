@@ -263,7 +263,7 @@ describe("adding a device", () => {
       "online",
     );
     // One connection checked the key and goes on as its own.
-    expect(device.connections).toBe(1);
+    expect(device.greeted).toBe(1);
   });
 
   it("names its maker and product from its project", async () => {
@@ -352,7 +352,7 @@ describe("adding a device", () => {
     const key = await add(home.core, device);
 
     expect(await home.core.add(key, { key: device.psk! })).toBeUndefined();
-    expect(device.connections).toBe(1);
+    expect(device.greeted).toBe(1);
   });
 });
 
@@ -580,7 +580,7 @@ describe("its connection", () => {
       )
       .toBe(true);
     await home.core.until(() => device.commands.length === 1, "the command");
-    expect(device.connections).toBe(2);
+    expect(device.greeted).toBe(2);
   });
 });
 
@@ -629,7 +629,7 @@ describe("removing a device", () => {
     expect(home.core.secrets.has(secretOf(key))).toBe(false);
     expect(home.core.found.map((each) => each.key)).toEqual([key]);
     await home.core.until(
-      () => device.connections === 1 && openSessions(device) === 0,
+      () => device.greeted === 1 && openSessions(device) === 0,
       "closed",
     );
   });

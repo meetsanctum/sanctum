@@ -25,6 +25,7 @@ export const timings = {
   firstPauseMs: 20,
   longestPauseMs: 100,
   connectMs: 1_000,
+  askAgainMs: 150,
 };
 
 export const app = () => createEsphomeApp({ timings });

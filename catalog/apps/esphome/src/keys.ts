@@ -38,6 +38,48 @@ function stoppedWaiting(error: unknown) {
   );
 }
 
+/**
+ * What a device says of its key under the zero key: it waits for one, with
+ * what it says of itself; it has one; its window to be given one closed; it
+ * answers only in the clear, with what it says of itself there; or nothing
+ * that can be acted on, as when it's busy, restarting or out of reach.
+ */
+export type Answer =
+  | { says: "waits"; info: Session["info"] }
+  | { says: "key" }
+  | { says: "closed" }
+  | { says: "clear"; info: Session["info"] }
+  | { says: "unclear" };
+
+/**
+ * Asks a device what it says of its key, over one connection under the zero
+ * key, which carries nothing secret whatever answers. A device with a key
+ * refuses the zero key's handshake. One built without Noise, or older
+ * firmware, ends it, and the library then greets it in the clear; but so
+ * does a device that is busy or restarting, so an answer in the clear says
+ * only what the device said of itself there.
+ */
+export async function askUnderZeroKey(reach: {
+  mac: string;
+  address: Address;
+  timings: Timings;
+  signal?: AbortSignal;
+}): Promise<Answer> {
+  const result = await connectOnce({ ...reach, key: zeroKey });
+  if ("session" in result) {
+    result.session.client.disconnect();
+    return { says: "waits", info: result.session.info };
+  }
+  if ("halt" in result) {
+    return result.clear
+      ? { says: "clear", info: result.clear }
+      : { says: "key" };
+  }
+  return stoppedWaiting(result.error)
+    ? { says: "closed" }
+    : { says: "unclear" };
+}
+
 type Reach = { mac: string; address: () => Address | null; timings: Timings };
 
 function addressOf(reach: Reach) {

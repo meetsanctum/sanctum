@@ -28,6 +28,8 @@ export type Timings = {
   firstPauseMs: number;
   longestPauseMs: number;
   connectMs: number;
+  /** How soon a found device whose answer was unclear, or whose window closed, is asked again. */
+  askAgainMs: number;
 };
 
 export const defaultTimings: Timings = {
@@ -36,6 +38,7 @@ export const defaultTimings: Timings = {
   firstPauseMs: 1_000,
   longestPauseMs: 60_000,
   connectMs: 10_000,
+  askAgainMs: 120_000,
 };
 
 /** Where a device is, as its latest record says. */
@@ -100,8 +103,9 @@ function haltOf(error: unknown, hasKey: boolean): Halt | null {
 /**
  * Connects once to a device at an address, with its key or none, and checks
  * it: the session, or the halt it calls for, or the error when it can't be
- * used now. A device Sanctum has a key for that answers without encryption
- * is dropped before anything is asked of it, as is one with another MAC.
+ * used now. A device with another MAC is dropped before anything is asked of
+ * it, as is one that answers without encryption under a key, which halts
+ * with what it said of itself in the clear.
  */
 export async function connectOnce(options: {
   mac: string;
@@ -109,7 +113,9 @@ export async function connectOnce(options: {
   address: Address;
   timings: Timings;
   signal?: AbortSignal;
-}): Promise<{ session: Session } | { halt: Halt } | { error: unknown }> {
+}): Promise<
+  { session: Session } | { halt: Halt; clear?: DeviceInfo } | { error: unknown }
+> {
   const { mac, key, address, timings } = options;
   let checked = false;
   let listener: ((event: TelemetryEvent) => void) | null = null;
@@ -143,15 +149,15 @@ export async function connectOnce(options: {
   }
   const encrypted = client.health().encrypted;
   const info = client.deviceInfo();
+  if (!info || macOf(info.macAddress) !== mac) {
+    client.disconnect();
+    return { error: new Error("another device answers there") };
+  }
   // The library falls back to no encryption when a device answers without
   // it, which a device with a key never does.
   if (key !== null && !encrypted) {
     client.disconnect();
-    return { halt: "keyMismatch" };
-  }
-  if (!info || macOf(info.macAddress) !== mac) {
-    client.disconnect();
-    return { error: new Error("another device answers there") };
+    return { halt: "keyMismatch", clear: info };
   }
   checked = true;
   // States it sent while it was checked, which the client kept, but not
