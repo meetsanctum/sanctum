@@ -121,7 +121,8 @@ describe("a device waiting for a key", () => {
     const own = await connectOnce({ ...reach(keyed), key: keyed.psk });
     if (!("session" in own)) throw new Error("no session");
     own.session.client.disconnect();
-    expect(own.session.info.apiEncryptionProvisionable).not.toBe(true);
+    expect(own.session.info.apiEncryptionSupported).toBe(true);
+    expect(own.session.info.apiEncryptionProvisionable).toBeUndefined();
   });
 
   it("doesn't take one when its window closes as it's given it", async () => {
@@ -147,32 +148,45 @@ describe("a device waiting for a key", () => {
     });
   });
 
-  it("is never sent a key when it answers in the clear", async () => {
-    home = await startHome();
-    // It announces it waits for a key but takes only plaintext, as a
-    // device on the network pretending to be one might.
-    const device = await home.plugIn({ name: "sensor", psk: null });
-    const record = device.sighting();
-    await home.core.discovered({
-      found: [
-        {
-          ...record,
-          txt: {
-            ...record.txt,
-            api_encryption_supported: "Noise_NNpsk0_25519_ChaChaPoly_SHA256",
-            api_provisioning: "zero_psk",
+  it.each([
+    {
+      reply: "completes its greeting",
+      isWindowClosed: false,
+      error: "It can't be given a key",
+    },
+    {
+      reply: "reports a closed window",
+      isWindowClosed: true,
+      error: "It didn't answer",
+    },
+  ])(
+    "rejects a plaintext provisioning connection when the device $reply",
+    async ({ isWindowClosed, error }) => {
+      home = await startHome();
+      const device = await home.plugIn({ name: "sensor", psk: null });
+      device.windowClosed = isWindowClosed;
+      const record = device.sighting();
+      await home.core.discovered({
+        found: [
+          {
+            ...record,
+            txt: {
+              ...record.txt,
+              api_encryption_supported: "Noise_NNpsk0_25519_ChaChaPoly_SHA256",
+              api_provisioning: "zero_psk",
+            },
           },
-        },
-      ],
-      lost: [],
-    });
+        ],
+        lost: [],
+      });
 
-    await expect(
-      home.core.add(keyOf(device.options.mac), {}),
-    ).rejects.toThrow();
-    expect(device.keysSent).toEqual([]);
-    expect(home.core.secrets.size).toBe(0);
-  });
+      await expect(
+        home.core.add(keyOf(device.options.mac), {}),
+      ).rejects.toThrow(error);
+      expect(device.keysSent).toEqual([]);
+      expect(home.core.secrets.size).toBe(0);
+    },
+  );
 });
 
 describe("removing a device", () => {

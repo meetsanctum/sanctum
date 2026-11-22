@@ -31,7 +31,7 @@ export const newKey = () => randomBytes(32).toString("base64");
  * that parts for no reason, as while it applies a key or shuts down, may
  * still wait.
  */
-export function stoppedWaiting(error: unknown) {
+function stoppedWaiting(error: unknown) {
   return (
     error instanceof ConnectionClosedByPeerError &&
     error.code === "PEER_DISCONNECT_PROVISIONING_CLOSED"
@@ -77,11 +77,10 @@ export async function giveKey(
     address: addressOf(reach),
     timings: reach.timings,
   });
-  if ("error" in zero && stoppedWaiting(zero.error)) {
-    return { notWaiting: true };
+  if ("error" in zero) {
+    if (stoppedWaiting(zero.error)) return { notWaiting: true };
+    throw new Error("It didn't answer");
   }
-  // One that parted for no reason, or didn't answer, is tried again later.
-  if ("error" in zero) throw new Error("It didn't answer");
   // A device that answers in the clear is never sent a key.
   if (!("session" in zero)) throw new Error("It can't be given a key");
   const { client } = zero.session;

@@ -19,7 +19,7 @@ index 59ec92ab2b2f7c355e45e31838bae7afe59c5d83..24513d0e52c36efc9b258d3e4d245ac6
      readonly zwaveHomeId?: number;
      readonly serialProxies?: readonly SerialProxyInfo[];
 diff --git a/dist/esphome-client.js b/dist/esphome-client.js
-index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..dc7609ab0013e1b97c18f86423bdb64021cc587f 100644
+index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..4c02f0c7cf2ce937d822f10b6eaafb49272b8488 100644
 --- a/dist/esphome-client.js
 +++ b/dist/esphome-client.js
 @@ -902,8 +902,10 @@ export class EspHomeClient {
@@ -29,9 +29,9 @@ index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..dc7609ab0013e1b97c18f86423bdb640
 -        const discHandler = receiver.onInterleave(MessageType.DISCONNECT_REQUEST, () => {
 -            throw new ConnectionClosedByPeerError("Device requested disconnect during handshake.", "PEER_DISCONNECT_DURING_HANDSHAKE");
 +        const discHandler = receiver.onInterleave(MessageType.DISCONNECT_REQUEST, (message) => {
-+            // The request's reason (field 1) tells a device whose window to be given a key closed (DISCONNECT_REASON_PROVISIONING_CLOSED) from any other.
-+            const reason = extractNumberField(this.decodeProtobuf(message.payload), 1);
-+            throw new ConnectionClosedByPeerError("Device requested disconnect during handshake.", (reason === 1) ? "PEER_DISCONNECT_PROVISIONING_CLOSED" : "PEER_DISCONNECT_DURING_HANDSHAKE");
++            // Only read DISCONNECT_REASON_PROVISIONING_CLOSED from an encrypted connection. A plaintext fallback can't confirm the result of a zero-key probe.
++            const isProvisioningClosed = transport.isEncrypted && (extractNumberField(this.decodeProtobuf(message.payload), 1) === 1);
++            throw new ConnectionClosedByPeerError("Device requested disconnect during handshake.", isProvisioningClosed ? "PEER_DISCONNECT_PROVISIONING_CLOSED" : "PEER_DISCONNECT_DURING_HANDSHAKE");
          });
          return { discHandler, pingHandler, receiver, transport };
      }

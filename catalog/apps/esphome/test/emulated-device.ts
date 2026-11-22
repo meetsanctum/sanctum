@@ -427,7 +427,7 @@ export class EmulatedDevice {
       socket.end();
       return;
     }
-    if (type === message.helloRequest && this.waiting && this.windowClosed) {
+    if (type === message.helloRequest && this.windowClosed) {
       // Too late to be given a key: it says who it is, then asks to part,
       // saying why (DISCONNECT_REASON_PROVISIONING_CLOSED).
       send(
@@ -496,7 +496,7 @@ export class EmulatedDevice {
           flag(19, this.psk !== null || this.waiting),
           // Whether it can be given a key under the zero key, as firmware from
           // 2026.7 says.
-          flag(26, this.waiting),
+          ...(this.waiting ? [flag(26, true)] : []),
         ]),
       );
     } else if (type === message.listEntitiesRequest) {

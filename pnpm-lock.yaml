@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   esphome-client@2.1.0:
-    hash: cfd66be9be75f381cfc75bdf9fba1adc4992cd4306483755a80ce8ed83085d66
+    hash: 3a5a6c6b043fb644cad3157993914250963f33e16da54b45b42959133da21725
     path: patches/esphome-client@2.1.0.patch
 
 importers:
@@ -347,7 +347,7 @@ importers:
         version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
       esphome-client:
         specifier: 2.1.0
-        version: 2.1.0(patch_hash=cfd66be9be75f381cfc75bdf9fba1adc4992cd4306483755a80ce8ed83085d66)
+        version: 2.1.0(patch_hash=3a5a6c6b043fb644cad3157993914250963f33e16da54b45b42959133da21725)
       zod:
         specifier: ^4.3.6
         version: 4.6.7
@@ -11490,7 +11490,7 @@ snapshots:
       esrecurse: 4.3.0
       estraverse: 5.3.0
 
-  esphome-client@2.1.0(patch_hash=cfd66be9be75f381cfc75bdf9fba1adc4992cd4306483755a80ce8ed83085d66): {}
+  esphome-client@2.1.0(patch_hash=3a5a6c6b043fb644cad3157993914250963f33e16da54b45b42959133da21725): {}
 
   esprima@4.0.1: {}
 
