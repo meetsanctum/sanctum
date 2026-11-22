@@ -161,8 +161,8 @@ export class EmulatedDevice {
   waiting: boolean;
   /** Its window for being given a key closed, as a device that waited too long. */
   windowClosed = false;
-  /** Its window closes once it has greeted this many more connections. */
-  closesWindowAfterHellos = 0;
+  /** Its window closes once it has greeted the next connection. */
+  closesWindowAfterHello = false;
   /** The next connections it closes at once, as one whose connection slots are full does. */
   closesNext = 0;
   /** It asks the next greeting to part with no reason, as one applying a key or shutting down does. */
@@ -491,9 +491,9 @@ export class EmulatedDevice {
       if (valid) setTimeout(apply, 10);
     } else if (type === message.helloRequest) {
       this.greeted += 1;
-      if (this.closesWindowAfterHellos > 0) {
-        this.closesWindowAfterHellos -= 1;
-        if (this.closesWindowAfterHellos === 0) this.windowClosed = true;
+      if (this.closesWindowAfterHello) {
+        this.closesWindowAfterHello = false;
+        this.windowClosed = true;
       }
       send(
         message.helloResponse,

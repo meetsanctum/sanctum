@@ -13,12 +13,18 @@ import type { Announced } from "./sightings.js";
 // announces itself anew, as after a restart, is asked again.
 
 /** What a found device's key is, as Sanctum last learned it. */
-export type Said = "waits" | "key" | "closed" | "clear";
+type Said = "waits" | "key" | "closed" | "clear";
 
-type Learned = { said: Said; maker: string | null; sighting: string };
+type Observation = {
+  sighting: string;
+  learned?: { said: Said; maker: string | null };
+  needsAsk: boolean;
+  request?: object;
+  retry?: ReturnType<typeof setTimeout>;
+};
 
 /** What a record says that sets one announcement of a device apart from the next. */
-export const sightingOf = (found: Announced) =>
+const sightingOf = (found: Announced) =>
   JSON.stringify([
     found.addresses[0],
     found.port,
@@ -42,32 +48,27 @@ export function createFound(options: {
   makerOf: (info: Session["info"]) => string | null;
 }) {
   const { ctx, timings, announced } = options;
-  const learned = new Map<string, Learned>();
-  // Each device's latest learning, so an answer to an older ask never
-  // overwrites what Add or Remove learned since.
-  const epochs = new Map<string, number>();
-  const queue: string[] = [];
+  const observations = new Map<string, Observation>();
   const running = new Map<
     string,
     { controller: AbortController; work: Promise<unknown> }
   >();
-  const again = new Map<string, ReturnType<typeof setTimeout>>();
   let stopped = false;
   // Found devices go to the core one list at a time, in order.
   let listing = Promise.resolve();
 
-  const epochOf = (mac: string) => epochs.get(mac) ?? 0;
-
-  /** What Sanctum learned of a device under its current announcement. */
-  function current(mac: string) {
-    const found = announced.get(mac);
-    const known = learned.get(mac);
-    return found && known?.sighting === sightingOf(found) ? known : null;
+  function observationOf(found: Announced) {
+    let observation = observations.get(found.mac);
+    if (!observation) {
+      observation = { sighting: sightingOf(found), needsAsk: true };
+      observations.set(found.mac, observation);
+    }
+    return observation;
   }
 
   /** What a device's key is: what was learned, else what its record says. */
   function saidOf(found: Announced): Said {
-    const known = current(found.mac);
+    const known = observations.get(found.mac)?.learned;
     if (known) return known.said;
     return found.encryption === "waiting"
       ? "waits"
@@ -96,7 +97,8 @@ export function createFound(options: {
             found.push({
               ...row,
               description:
-                current(each.mac)?.maker ?? "Gets an encryption key of its own",
+                observations.get(each.mac)?.learned?.maker ??
+                "Gets an encryption key of its own",
               asks: [],
             });
           } else if (said === "closed") {
@@ -133,70 +135,98 @@ export function createFound(options: {
 
   // A device asked again in a while: turning one off and on again announces
   // the same record, and one that was busy may answer next time.
-  function askAgainLater(mac: string) {
-    clearTimeout(again.get(mac));
-    again.set(
-      mac,
-      setTimeout(() => {
-        again.delete(mac);
-        learned.delete(mac);
-        schedule();
-      }, timings.askAgainMs),
-    );
+  function finishAsk(observation: Observation, shouldRetry: boolean) {
+    clearTimeout(observation.retry);
+    observation.needsAsk = false;
+    observation.retry = shouldRetry
+      ? setTimeout(() => {
+          observation.retry = undefined;
+          observation.needsAsk = true;
+          schedule();
+        }, timings.askAgainMs)
+      : undefined;
   }
 
-  /** Keeps what a device said, under the announcement it said it under. */
-  function keep(found: Announced, said: Answer) {
+  /** Interprets a probe in light of the announcement under which it ran. */
+  function answerOf(found: Announced, answer: Answer): Answer {
     // An answer in the clear from a device whose record says it takes a key
     // says only that it was busy or restarting as it was asked, as the
     // library greets one in the clear once it ends a zero-key handshake.
-    const answer: Answer =
-      said.says === "clear" && found.encryption !== "none"
-        ? { says: "unclear" }
-        : said;
-    clearTimeout(again.get(found.mac));
-    again.delete(found.mac);
-    if (answer.says === "unclear" || answer.says === "closed") {
-      askAgainLater(found.mac);
-    }
-    if (answer.says === "unclear") return;
-    learned.set(found.mac, {
-      said: answer.says,
-      maker: answer.says === "waits" ? options.makerOf(answer.info) : null,
-      sighting: sightingOf(found),
-    });
+    return answer.says === "clear" && found.encryption !== "none"
+      ? { says: "unclear" }
+      : answer;
   }
 
   /**
    * Asks a device now, as Add does before it acts: what it says, kept
    * unless something learned since overrides it.
    */
-  async function ask(mac: string, signal?: AbortSignal): Promise<Answer> {
+  async function ask(
+    mac: string,
+    {
+      signal,
+      keepSession,
+    }: { signal?: AbortSignal; keepSession?: boolean } = {},
+  ): Promise<Answer> {
     const found = announced.get(mac);
     const address = found && addressOf(found);
-    if (!found || !address) return { says: "unclear" };
-    const epoch = epochOf(mac);
-    const answer = await askUnderZeroKey({ mac, address, timings, signal });
-    if (!stopped && epochOf(mac) === epoch && announced.get(mac) === found) {
-      keep(found, answer);
+    if (stopped || !found || !address) return { says: "unclear" };
+    const observation = observationOf(found);
+    const request = {};
+    const isCurrent = () =>
+      !stopped &&
+      observations.get(mac) === observation &&
+      observation.request === request;
+    observation.request = request;
+    if (!signal) running.get(mac)?.controller.abort();
+    let session: Session | undefined;
+    try {
+      const answer = answerOf(
+        found,
+        await askUnderZeroKey({ mac, address, timings, signal, keepSession }),
+      );
+      if (answer.says === "waits") session = answer.session;
+      if (!isCurrent()) return { says: "unclear" };
+      finishAsk(
+        observation,
+        answer.says === "unclear" || answer.says === "closed",
+      );
+      if (answer.says !== "unclear") {
+        observation.learned = {
+          said: answer.says,
+          maker: answer.says === "waits" ? options.makerOf(answer.info) : null,
+        };
+      }
       await list();
+      if (!isCurrent()) return { says: "unclear" };
+      session = undefined;
+      return answer;
+    } finally {
+      session?.client.disconnect();
+      if (observation.request === request) observation.request = undefined;
     }
-    return answer;
   }
 
   /** What Sanctum's own connection showed of a device, as it added or removed it. */
   function learn(mac: string, said: Said) {
-    epochs.set(mac, epochOf(mac) + 1);
-    running.get(mac)?.controller.abort();
     const found = announced.get(mac);
     if (!found) return;
-    clearTimeout(again.get(mac));
-    again.delete(mac);
-    learned.set(mac, {
-      said,
-      maker: current(mac)?.maker ?? null,
-      sighting: sightingOf(found),
-    });
+    const observation = observationOf(found);
+    observation.request = undefined;
+    running.get(mac)?.controller.abort();
+    finishAsk(observation, said === "closed");
+    const maker = observation.learned?.maker ?? null;
+    observation.learned = { said, maker };
+  }
+
+  function discoveryChanged() {
+    for (const [mac, observation] of observations) {
+      const found = announced.get(mac);
+      if (found && sightingOf(found) === observation.sighting) continue;
+      clearTimeout(observation.retry);
+      observations.delete(mac);
+      running.get(mac)?.controller.abort();
+    }
   }
 
   // Asks, two at a time, each found device whose record says it waits for a
@@ -207,27 +237,23 @@ export function createFound(options: {
   function schedule() {
     if (stopped) return;
     for (const found of announced.values()) {
+      if (running.size >= asking) break;
       const mac = found.mac;
       if (
         found.encryption === "none" ||
+        !addressOf(found) ||
         options.added(mac) ||
-        current(mac) ||
-        again.has(mac) ||
-        running.has(mac) ||
-        queue.includes(mac)
+        running.has(mac)
       ) {
         continue;
       }
-      queue.push(mac);
-    }
-    while (running.size < asking && queue.length > 0) {
-      const mac = queue.shift()!;
-      if (!announced.has(mac) || options.added(mac) || current(mac)) continue;
+      const observation = observationOf(found);
+      if (!observation.needsAsk || observation.request) continue;
       const controller = new AbortController();
-      const work = ask(mac, controller.signal)
+      const work = ask(mac, { signal: controller.signal })
         .catch(() => undefined)
         .finally(() => {
-          if (running.get(mac)?.controller === controller) running.delete(mac);
+          running.delete(mac);
           schedule();
         });
       running.set(mac, { controller, work });
@@ -238,7 +264,16 @@ export function createFound(options: {
     list,
     ask,
     learn,
+    discoveryChanged,
     schedule,
+    retry(mac: string) {
+      const observation = observations.get(mac);
+      if (!observation) return;
+      clearTimeout(observation.retry);
+      observation.retry = undefined;
+      observation.needsAsk = true;
+      schedule();
+    },
     /** What a device's key is: what was learned, else its record's guess. */
     said(mac: string): Said | null {
       const found = announced.get(mac);
@@ -246,9 +281,9 @@ export function createFound(options: {
     },
     async stop() {
       stopped = true;
-      for (const timer of again.values()) clearTimeout(timer);
-      again.clear();
-      queue.length = 0;
+      for (const observation of observations.values())
+        clearTimeout(observation.retry);
+      observations.clear();
       const asks = [...running.values()];
       for (const each of asks) each.controller.abort();
       await Promise.all(asks.map((each) => each.work));
@@ -256,5 +291,3 @@ export function createFound(options: {
     },
   };
 }
-
-export type Found = ReturnType<typeof createFound>;

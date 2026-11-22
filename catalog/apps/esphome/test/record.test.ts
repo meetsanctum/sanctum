@@ -1,15 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { secretOf } from "../src/driver.js";
+import { zeroKey } from "../src/keys.js";
 import { EmulatedDevice, newKey } from "./emulated-device.js";
-import {
-  announce,
-  entitiesOf,
-  keyOf,
-  nextMac,
-  startHome,
-  timings,
-} from "./support.js";
+import { announce, entitiesOf, keyOf, nextMac, startHome } from "./support.js";
 
 // A device's record says what held as it booted: a key given to it or taken
 // off since leaves the record as it was until it restarts. What the device
@@ -89,6 +83,125 @@ describe("a record from before a key was given or taken off", () => {
     expect(home.core.secrets.get(secretOf(key))).toBe(theirs);
   });
 
+  it("asks for a key received since an unencrypted announcement", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: null, recordAtBoot: true });
+    const key = keyOf(device.options.mac);
+    expect(listed(key)?.description).toBe("Not encrypted");
+    const theirs = newKey();
+    device.psk = theirs;
+
+    expect(await home.core.add(key, {})).toEqual({
+      refused: { refusal: "hasKey" },
+    });
+    expect(device.sighting().txt.api_encryption).toBeUndefined();
+    expect(listed(key)).toMatchObject({ asks: [{ id: "key" }] });
+    await home.core.add(key, { key: theirs });
+    expect(home.core.registered.has(key)).toBe(true);
+  });
+
+  it("asks for another Add before provisioning a device listed as unencrypted", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const record = device.sighting();
+    const txt = { ...record.txt };
+    delete txt.api_encryption_supported;
+    delete txt.api_provisioning;
+    await home.core.discovered({ found: [{ ...record, txt }], lost: [] });
+    const key = keyOf(device.options.mac);
+    expect(listed(key)?.description).toBe("Not encrypted");
+
+    expect(await home.core.add(key, {})).toEqual({
+      refused: { refusal: "changed" },
+    });
+    expect(home.core.registered.has(key)).toBe(false);
+    expect(device.keysSent).toEqual([]);
+    expect(listed(key)?.description).toBe("Gets an encryption key of its own");
+    await home.core.add(key, {});
+    expect(home.core.registered.has(key)).toBe(true);
+    expect(device.keysSent).toEqual([
+      { key: home.core.secrets.get(secretOf(key)), encrypted: true },
+    ]);
+  });
+
+  it("does not add without encryption when the announcement changes during Add", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: null, waiting: true });
+    const key = keyOf(device.options.mac);
+    await listedAs(key, "Espressif");
+
+    const adding = home.core.add(key, {});
+    device.waiting = false;
+    await announce(home.core, device);
+
+    expect(await adding).toEqual({ refused: { refusal: "changed" } });
+    expect(listed(key)?.description).toBe("Not encrypted");
+    expect(home.core.registered.has(key)).toBe(false);
+    await home.core.add(key, {});
+    expect(home.core.registered.has(key)).toBe(true);
+  });
+
+  it("checks an identical record again after the device was lost", async () => {
+    home = await startHome();
+    const device = await waitingDevice();
+    const key = keyOf(device.options.mac);
+    await listedAs(key, "Espressif");
+    const { service, name } = device.sighting();
+    await home.core.discovered({ found: [], lost: [{ service, name }] });
+    expect(listed(key)).toBeUndefined();
+    device.psk = newKey();
+    device.waiting = false;
+
+    await announce(home.core, device);
+
+    expect(await listedAs(key, "Needs its encryption key")).toMatchObject({
+      asks: [{ id: "key" }],
+    });
+  });
+
+  it("skips a background probe if a device starts advertising no encryption", async () => {
+    home = await startHome();
+    const busy = await Promise.all(
+      [nextMac(), nextMac()].map(async (mac, index) => {
+        const device = await EmulatedDevice.start({
+          name: `busy-${index}`,
+          mac,
+          psk: null,
+          waiting: true,
+          ...entitiesOf("switch"),
+        });
+        home.devices.push(device);
+        device.answersHello = false;
+        return device;
+      }),
+    );
+    await home.core.discovered({
+      found: busy.map((device) => device.sighting()),
+      lost: [],
+    });
+    await home.core.until(
+      () => busy.every((device) => device.activeConnections === 1),
+      "both probe slots occupied",
+    );
+    const device = await home.plugIn({ psk: null, waiting: true });
+    device.waiting = false;
+    await announce(home.core, device);
+    await home.core.discovered({
+      found: [],
+      lost: busy.map((device) => {
+        const { service, name } = device.sighting();
+        return { service, name };
+      }),
+    });
+    const next = await waitingDevice();
+    await listedAs(keyOf(next.options.mac), "Espressif");
+
+    expect(listed(keyOf(device.options.mac))?.description).toBe(
+      "Not encrypted",
+    );
+    expect(device.connections).toBe(0);
+  });
+
   it("gives a key to one whose key another app took off, its record still saying it has one", async () => {
     home = await startHome();
     const device = await EmulatedDevice.start({
@@ -160,11 +273,42 @@ describe("a record from before a key was given or taken off", () => {
 
     // Asked again once it may answer.
     expect(await listedAs(key, "Espressif")).toMatchObject({ asks: [] });
-    expect(listed(key)?.description).not.toBe("Not encrypted");
     await home.core.add(key, {});
     expect(device.keysSent).toEqual([
       { key: home.core.secrets.get(secretOf(key)), encrypted: true },
     ]);
+  });
+
+  it("keeps a key prompt when a plaintext reply is inconclusive", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ recordAtBoot: true });
+    const key = keyOf(device.options.mac);
+    await listedAs(key, "Needs its encryption key");
+    device.psk = null;
+    device.waiting = false;
+
+    expect(await home.core.add(key, { key: newKey() })).toEqual({
+      refused: { question: "key", refusal: "wrongKey" },
+    });
+    expect(listed(key)).toMatchObject({ asks: [{ id: "key" }] });
+    expect(device.keysSent).toEqual([]);
+  });
+
+  it("treats a typed zero key as a changed answer when the device is waiting", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ recordAtBoot: true });
+    const key = keyOf(device.options.mac);
+    await listedAs(key, "Needs its encryption key");
+    device.psk = null;
+    device.waiting = true;
+
+    expect(await home.core.add(key, { key: zeroKey })).toEqual({
+      refused: { refusal: "changed" },
+    });
+    expect(listed(key)?.asks).toEqual([]);
+    expect(home.core.registered.has(key)).toBe(false);
+    expect(home.core.secrets.size).toBe(0);
+    expect(device.keysSent).toEqual([]);
   });
 
   it("asks one whose window closed again, as turning it off and on announces the same record", async () => {
@@ -175,12 +319,21 @@ describe("a record from before a key was given or taken off", () => {
     const key = keyOf(device.options.mac);
     await listedAs(key, "Turn it off and on again to add it");
 
+    // An inconclusive check leaves the last confirmed answer on the card.
+    const connections = device.connections;
+    device.partsWithoutReason = true;
+    await home.core.until(
+      () => device.connections > connections && device.activeConnections === 0,
+      "a probe without a clear answer",
+    );
+    await announce(home.core, device);
+    expect(listed(key)?.description).toBe("Turn it off and on again to add it");
+
     // Turned off and on again: its window opens, its record the same.
     device.windowClosed = false;
     device.reboot();
 
     expect(await listedAs(key, "Espressif")).toMatchObject({ asks: [] });
-    expect(timings.askAgainMs).toBeLessThan(1_000);
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
   });

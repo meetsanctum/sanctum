@@ -404,6 +404,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // it was added with. The marker of a key Sanctum gave goes first, so a key
   // it was flashed with is never taken for one.
   async function keep(mac: string, psk: string | null, session: Session) {
+    // A plaintext or typed-key session can reach an unprovisioned device.
+    // The card must show that Add will give it a device key before we do so.
+    if (session.info.apiEncryptionProvisionable === true) {
+      session.client.disconnect();
+      finds.learn(mac, "waits");
+      await finds.list();
+      return refused("changed");
+    }
     try {
       await ctx.secrets.delete(givenOf(mac));
       if (psk !== null) await ctx.secrets.set(secretOf(mac), psk);
@@ -432,6 +440,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       session.client.disconnect();
       throw error;
     }
+    finds.learn(mac, session.encrypted ? "key" : "clear");
     await finds.list();
   }
 
@@ -507,14 +516,15 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           before.version !== now.version;
         devices.get(now.mac)?.connection.seen(anew);
       }
+      finds.discoveryChanged();
       await finds.list();
       finds.schedule();
     },
 
     async add({ key, answers }: DriverAdd): Promise<DriverAddResult> {
       if (devices.has(key)) return;
-      const record = announced.get(key);
-      if (!record) {
+      const listed = finds.said(key);
+      if (!listed) {
         throw new ActionError("not_found", "It isn't on the home's network");
       }
       // A key Sanctum gave it, as before an answer was lost or as it was
@@ -541,17 +551,25 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         }
         return keep(key, psk, result.session);
       }
-      if (record.encryption === "none") {
-        // Built without encryption, as its record says from the moment it
-        // boots: added as it is, and a key it no longer takes is forgotten.
-        if (given) await forgetGiven(key);
+      const current = finds.said(key);
+      if ((listed === "clear") !== (current === "clear")) {
+        return refused("changed");
+      }
+      if (current === "clear") {
+        // It booted without advertising encryption. Check it as listed;
+        // some firmware can take a key without ever advertising provisioning.
         const result = await check(key, null);
-        if ("halt" in result) throw new Error("It has an encryption key now");
+        if ("halt" in result) {
+          if (given) await forgetGiven(key);
+          finds.learn(key, "key");
+          await finds.list();
+          return refused(given ? "keyChanged" : "hasKey");
+        }
         if ("error" in result) throw new Error("It didn't answer");
         return keep(key, null, result.session);
       }
       // Asked first every time, so nothing happens that its card didn't say.
-      const now = await finds.ask(key);
+      const now = await finds.ask(key, { keepSession: true });
       if (now.says === "closed") return refused("notWaiting");
       if (now.says === "key") {
         // It no longer takes the key Sanctum gave it, as after it was
@@ -566,10 +584,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       // An answer in the clear, from a device whose record says it takes a
       // key, says only that it was busy or restarting, or that something
       // else answered: nothing is sent, and it's asked again.
-      if (now.says !== "waits") throw new Error("It didn't answer");
-      const gave = await giveKey({
+      if (now.says !== "waits" || !now.session)
+        throw new Error("It didn't answer");
+      const session = await giveKey({
         mac: key,
         key: given ?? newKey(),
+        session: now.session,
         address: () => addressOf(key),
         timings,
         // Kept before it's sent, so a device that took it while the
@@ -578,9 +598,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           await ctx.secrets.set(secretOf(key), psk);
           await ctx.secrets.set(givenOf(key), "yes");
         },
+      }).catch((error: unknown) => {
+        finds.retry(key);
+        throw error;
       });
-      if ("notWaiting" in gave) return refused("notWaiting");
-      return take(key, gave.session);
+      return take(key, session);
     },
 
     async repair({ key, answers }: DriverRepair): Promise<DriverRepairResult> {
@@ -611,18 +633,18 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (given && !force) {
         owned.removing = true;
         try {
-          await takeKeyOff({
+          const answer = await takeKeyOff({
             mac: key,
             key: given,
             session: owned.connection.session,
             address: () => addressOf(key),
             timings,
           });
+          finds.learn(key, answer);
         } catch (error) {
           owned.removing = false;
           throw error;
         }
-        finds.learn(key, "waits");
       } else if (given) {
         kept.add(key);
         finds.learn(key, "key");
