@@ -257,7 +257,7 @@ export function MediaPlaying(props: Props) {
           <div
             className={`flex flex-col gap-1 ${duration === undefined || !able ? "opacity-45" : ""}`}
           >
-            <div className="relative h-1.5 rounded-full bg-white/22">
+            <div className="relative h-1.5 rounded-full bg-white/22 has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50">
               {duration !== undefined && shownAt !== null && able && (
                 <span
                   aria-hidden="true"
