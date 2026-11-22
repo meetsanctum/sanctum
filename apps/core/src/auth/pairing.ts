@@ -18,7 +18,12 @@ import type { CoreDatabase } from "../database.js";
 import { changedBy } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
-import { addressKey, defaultLimits, type Limits } from "./limits.js";
+import {
+  addressKey,
+  defaultLimits,
+  shownAddress,
+  type Limits,
+} from "./limits.js";
 import { authPairingRequests } from "./schema.js";
 import { hashToken } from "./tokens.js";
 
@@ -33,11 +38,6 @@ import { hashToken } from "./tokens.js";
 type Request = typeof authPairingRequests.$inferSelect;
 
 const requests = authPairingRequests;
-
-// The address as it is shown: IPv4 without its IPv6 mapping.
-function shownAddress(address: string) {
-  return address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
-}
 
 export function createPairing(
   db: CoreDatabase,

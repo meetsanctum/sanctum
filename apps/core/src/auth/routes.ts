@@ -1,8 +1,14 @@
 import {
   keyStretching,
   platforms,
+  type AgentInfo,
+  type AgentSetupStarted,
+  type AgentSetupStatus,
+  type AgentTokenCollected,
+  type CancelAgentSetup,
   type ClaimFinish,
   type ClaimStart,
+  type CollectAgentToken,
   type Me,
   type PairApprove,
   type PairLookup,
@@ -17,6 +23,7 @@ import {
   type SetLoginStart,
   type SignInFinish,
   type SignInStart,
+  type StartAgentSetup,
 } from "@meetsanctum/auth-protocol";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -113,6 +120,21 @@ const schemas = {
       .regex(/^[A-Za-z0-9_-]+$/)
       .max(128),
   }) satisfies z.ZodType<PairPoll>,
+  agentSetup: z.object({
+    name: clientName,
+  }) satisfies z.ZodType<StartAgentSetup>,
+  cancelAgentSetup: z.object({
+    setupId: id,
+  }) satisfies z.ZodType<CancelAgentSetup>,
+  collectAgent: z.object({
+    setupId: id,
+    secret: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .max(128),
+    platform: z.enum(platforms),
+    protocol: z.number().int().min(0),
+  }) satisfies z.ZodType<CollectAgentToken>,
   passwordFinish: z.object({
     changeId: id,
     finishLoginRequest: message,
@@ -138,7 +160,7 @@ export async function registerAuth(
   options: { auth: Auth; people: People },
 ) {
   const { auth, people } = options;
-  const { clients, logins, pairing } = auth;
+  const { clients, logins, pairing, agentSetups } = auth;
 
   app.decorateRequest("principal", null);
 
@@ -214,6 +236,44 @@ export async function registerAuth(
     );
     return reply.code(204).send();
   });
+
+  // Adding an AI agent: someone starts a setup on one of the home's clients
+  // and watches it; the agent's connector collects its token with the code's
+  // secret before a principal exists.
+  app.get("/api/auth/agents", async (): Promise<AgentInfo[]> => auth.agents());
+  app.post(
+    "/api/auth/agents/setup",
+    async (request): Promise<AgentSetupStarted> =>
+      agentSetups.start(
+        principal(request),
+        parse(schemas.agentSetup, request.body),
+        // The address this client reached the core at, which the connector
+        // tries when discovery doesn't find the home. Only a hint: the
+        // connector checks the home's pin before it sends anything.
+        `${request.protocol}://${request.host}`,
+      ),
+  );
+  app.get<{ Params: { id: string } }>(
+    "/api/auth/agents/setup/:id",
+    async (request): Promise<AgentSetupStatus> =>
+      agentSetups.status(request.params.id),
+  );
+  app.post("/api/auth/agents/setup/cancel", async (request, reply) => {
+    agentSetups.cancel(
+      principal(request),
+      parse(schemas.cancelAgentSetup, request.body).setupId,
+    );
+    return reply.code(204).send();
+  });
+  app.post(
+    "/api/auth/agents/collect",
+    open,
+    async (request): Promise<AgentTokenCollected> =>
+      agentSetups.collect(
+        address(request),
+        parse(schemas.collectAgent, request.body),
+      ),
+  );
 
   app.get("/api/auth/me", async (request): Promise<Me> => {
     const caller = principal(request);

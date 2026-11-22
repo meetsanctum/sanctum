@@ -320,6 +320,45 @@ describe("an entry's words", () => {
     expect(words([]).title).toBe("Not allowed to read what apps bring");
   });
 
+  it("says how an AI agent was added", () => {
+    const words = (fields: Partial<Parameters<typeof entry>[0]>) =>
+      activityWords(entry({ outcome: "ok", ...fields }));
+
+    expect(
+      words({
+        action: "agents.setup",
+        detail: { name: "Codex on the office Mac" },
+      }).title,
+    ).toBe("Started adding Codex on the office Mac");
+    expect(words({ action: "agents.setup-cancel" }).title).toBe(
+      "Stopped adding an AI agent",
+    );
+    expect(
+      words({
+        action: "agents.add",
+        subject: { type: "client", id: "agent-1", name: "Codex", gone: false },
+      }).title,
+    ).toBe("Added Codex");
+    const wrong = words({
+      action: "agents.add",
+      outcome: "refused",
+      reason: "wrong_secret",
+    });
+    expect(wrong.title).toBe(
+      "Someone tried a wrong code for adding an AI agent",
+    );
+    expect(wrong.problem).toBe(true);
+    const held = words({
+      action: "agents.add",
+      outcome: "refused",
+      reason: "too_many_attempts",
+    });
+    expect(held.title).toBe(
+      "Held back a computer trying codes for adding an AI agent",
+    );
+    expect(held.problem).toBe(true);
+  });
+
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
       entry({

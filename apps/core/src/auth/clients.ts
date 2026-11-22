@@ -3,14 +3,24 @@ import type {
   ClientKind,
   Platform,
 } from "@meetsanctum/auth-protocol";
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import { people } from "../people/schema.js";
 import { AuthError } from "./errors.js";
-import { authClients, authTokens } from "./schema.js";
+import { authAgentSetups, authClients, authTokens } from "./schema.js";
 import { hashToken, newClientToken } from "./tokens.js";
 
 // Paired clients and their tokens, and the principal each request's token
@@ -128,11 +138,26 @@ export function createClients(
     .from(people)
     .where(eq(people.id, sql.placeholder("id")))
     .prepare();
+  const setupOfAgent = db
+    .select({
+      id: authAgentSetups.id,
+      expiresAt: authAgentSetups.expiresAt,
+      cancelledAt: authAgentSetups.cancelledAt,
+    })
+    .from(authAgentSetups)
+    .where(eq(authAgentSetups.clientId, sql.placeholder("id")))
+    .prepare();
 
   // A client that is there, unrevoked. Prepared, since the gate asks it on
   // every call an agent sends.
   function active(id: string) {
     return activeById.get({ id });
+  }
+
+  function canAddAgent(addedBy: AddedBy): boolean {
+    return addedBy.kind === "client"
+      ? active(addedBy.id)?.kind === "shared"
+      : personById.get({ id: addedBy.id }) !== undefined;
   }
 
   // Every client manages every other, shared ones too.
@@ -163,8 +188,7 @@ export function createClients(
     return { client, token };
   }
 
-  function markSeen(client: Client) {
-    const at = now();
+  function markSeen(client: Client, at = now()) {
     if (
       !client.lastSeenAt ||
       at.getTime() - client.lastSeenAt.getTime() >= lastSeenEveryMs
@@ -177,6 +201,7 @@ export function createClients(
   }
 
   return {
+    canAddAgent,
     // Creates a personal client and its token. Called inside the claim's or
     // sign-in's transaction.
     createPersonal(input: {
@@ -219,11 +244,7 @@ export function createClients(
       const { addedBy } = input;
       return db.transaction(() => {
         // Added by someone in the household, or a shared device in use.
-        if (
-          addedBy.kind === "client"
-            ? active(addedBy.id)?.kind !== "shared"
-            : !personById.get({ id: addedBy.id })
-        ) {
+        if (!canAddAgent(addedBy)) {
           throw new AuthError("forbidden");
         }
         return create({
@@ -253,7 +274,27 @@ export function createClients(
       if (client.kind === "agent") {
         const addedBy = addedByOf(client);
         if (!addedBy) return undefined;
-        if (recordAgentSeen) markSeen(client);
+        const setup = client.lastSeenAt
+          ? undefined
+          : setupOfAgent.get({ id: client.id });
+        const at = now();
+        // The deadline holds even if nobody has checked the setup yet.
+        if (setup && (setup.cancelledAt || setup.expiresAt <= at)) {
+          return undefined;
+        }
+        if (recordAgentSeen) {
+          if (setup) {
+            db.transaction(() => {
+              db.update(authAgentSetups)
+                .set({ connectedAt: at })
+                .where(eq(authAgentSetups.id, setup.id))
+                .run();
+              markSeen(client, at);
+            });
+          } else {
+            markSeen(client, at);
+          }
+        }
         return { client: identity, addedBy, scope: "agent" };
       }
       markSeen(client);
@@ -331,6 +372,53 @@ export function createClients(
               : undefined,
         });
         return clientInfo(renamed, principal.client.id);
+      });
+    },
+
+    // The home's agents that have reached it, oldest first: one whose setup
+    // hasn't connected yet isn't listed until it does.
+    listAgents() {
+      return db
+        .select()
+        .from(authClients)
+        .where(
+          and(
+            isNull(authClients.revokedAt),
+            eq(authClients.kind, "agent"),
+            isNotNull(authClients.lastSeenAt),
+          ),
+        )
+        .orderBy(asc(authClients.createdAt))
+        .all()
+        .flatMap((agent) => {
+          const addedBy = addedByOf(agent);
+          return addedBy ? [{ ...agent, addedBy }] : [];
+        });
+    },
+
+    // Takes back an agent's token without anyone asking, as when its setup
+    // runs out before it connects or is cancelled. Logged by the setup.
+    revokeUnconnectedAgent(id: string) {
+      const at = now();
+      db.transaction(() => {
+        const revoked = db
+          .update(authClients)
+          .set({ revokedAt: at })
+          .where(
+            and(
+              eq(authClients.id, id),
+              eq(authClients.kind, "agent"),
+              isNull(authClients.lastSeenAt),
+              isNull(authClients.revokedAt),
+            ),
+          )
+          .returning({ id: authClients.id })
+          .get();
+        if (!revoked) return;
+        db.update(authTokens)
+          .set({ revokedAt: at })
+          .where(and(eq(authTokens.clientId, id), isNull(authTokens.revokedAt)))
+          .run();
       });
     },
 

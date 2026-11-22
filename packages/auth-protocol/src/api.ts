@@ -229,7 +229,11 @@ export type AuthErrorCode =
   | "last_login"
   | "too_many_attempts"
   | "busy"
-  | "host_starting";
+  | "host_starting"
+  // An AI agent's connector the home can't work with: one too new needs
+  // Sanctum updated, one too old needs the connector updated.
+  | "connector_too_new"
+  | "connector_too_old";
 
 export type AuthErrorBody = { error: AuthErrorCode };
 

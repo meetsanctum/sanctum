@@ -25,21 +25,27 @@ export const defaultLimits = {
   // every shared device in the home asks at once.
   pairingPerAddress: 5,
   pairingTotal: 32,
+  // AI agents' setups waiting to connect, across the host. Wrong
+  // secrets are counted per address like sign-ins, in a counter of their
+  // own.
+  agentSetupsOpen: 8,
 };
 
 export type Limits = typeof defaultLimits;
 
+// The address as it is shown: IPv4 without its IPv6 mapping.
+export function shownAddress(address: string) {
+  return address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
+}
+
 // The key an address is limited by. One host can use any address in its
 // IPv6 /64, so that is what counts there.
 export function addressKey(address: string) {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
-  if (mapped) {
-    return mapped[1]!;
+  const shown = shownAddress(address);
+  if (!isIPv6(shown)) {
+    return shown;
   }
-  if (!isIPv6(address)) {
-    return address;
-  }
-  const [head = "", tail] = address.split("%")[0]!.split("::");
+  const [head = "", tail] = shown.split("%")[0]!.split("::");
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
   const gap = tail === undefined ? 0 : 8 - left.length - right.length;

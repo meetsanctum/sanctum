@@ -1,9 +1,11 @@
+import type { AgentInfo } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
 import { createActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { People } from "../people/people.js";
-import { createClients } from "./clients.js";
+import { createAgentSetups } from "./agent-setups.js";
+import { createClients, type AddedBy } from "./clients.js";
 import { createLimiter, type Limits } from "./limits.js";
 import { createConnections } from "./live.js";
 import {
@@ -81,18 +83,54 @@ export async function createAuth(
     limits: options.limits,
     now,
   });
+  const agentSetups = createAgentSetups(db, {
+    clients,
+    record,
+    // Wrong secrets have a counter of their own, so a computer that sends
+    // them doesn't stop its household signing in.
+    limiter: createLimiter({
+      limits: options.limits,
+      now: () => now().getTime(),
+      onLimitReached: (address) =>
+        record({
+          action: "agents.add",
+          outcome: "refused",
+          reason: "too_many_attempts",
+          address,
+        }),
+    }),
+    homeId: options.homeId,
+    pin: options.pin ?? (() => null),
+    limits: options.limits,
+    now,
+  });
+
+  // The adder's name as it stands now, for the activity log and Settings.
+  function namedAdder(addedBy: AddedBy) {
+    const name =
+      addedBy.kind === "person"
+        ? (options.people.get(addedBy.id)?.name ?? null)
+        : clients.name(addedBy.id);
+    return { ...addedBy, name };
+  }
 
   return {
     isClaimed: () => isClaimed(db),
-    // The adder's name as it stands when an agent acts, for the activity log.
     agentAdder(id: string) {
       const addedBy = clients.addedBy(id);
-      if (!addedBy) return null;
-      const name =
-        addedBy.kind === "person"
-          ? (options.people.get(addedBy.id)?.name ?? null)
-          : clients.name(addedBy.id);
-      return { ...addedBy, name };
+      return addedBy ? namedAdder(addedBy) : null;
+    },
+    // The home's AI agents, for Settings.
+    agents(): AgentInfo[] {
+      agentSetups.settle();
+      return clients.listAgents().map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        platform: agent.platform,
+        addedBy: namedAdder(agent.addedBy),
+        createdAt: agent.createdAt.toISOString(),
+        lastSeenAt: agent.lastSeenAt?.toISOString() ?? null,
+      }));
     },
     // Signs every device out after a restore from a backup: every client and
     // token is revoked and every pairing request dropped, inside the
@@ -100,12 +138,14 @@ export async function createAuth(
     signOutEveryone(at: Date) {
       const count = clients.revokeAll(at);
       pairing.dropAll();
+      agentSetups.dropAll();
       return count;
     },
     authenticate: clients.authenticate,
     clients,
     logins,
     pairing,
+    agentSetups,
     connections,
   };
 }
