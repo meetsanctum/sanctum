@@ -1,8 +1,41 @@
+diff --git a/dist/esphome-client.d.ts b/dist/esphome-client.d.ts
+index 59ec92ab2b2f7c355e45e31838bae7afe59c5d83..24513d0e52c36efc9b258d3e4d245ac69c333abd 100644
+--- a/dist/esphome-client.d.ts
++++ b/dist/esphome-client.d.ts
+@@ -164,6 +164,7 @@ export interface VoiceAssistantRequest {
+  * @property voiceAssistantFeatureFlags - Voice assistant feature flags (field 17).
+  * @property bluetoothMacAddress - The Bluetooth MAC address of the device (format: "AA:BB:CC:DD:EE:FF") (field 18).
+  * @property apiEncryptionSupported - Whether the device supports API encryption (field 19).
++ * @property apiEncryptionProvisionable - Whether the device can be given a key over a connection under the zero key (field 26).
+  * @property zwaveProxyFeatureFlags - Z-Wave-proxy feature-flags bitmask (field 23). Nonzero indicates the device firmware was compiled with `USE_ZWAVE_PROXY` and is
+  * advertising the Z-Wave Serial-API byte-pipe surface; absent or zero indicates Z-Wave proxy is unavailable on this device. See {@link ZWaveProxyApi}.
+  * @property zwaveHomeId - Z-Wave home id reported by the device's Z-Wave radio (field 24). Zero indicates no Z-Wave network is currently joined; absent indicates the
+@@ -195,6 +196,7 @@ export interface DeviceInfo {
+     readonly voiceAssistantFeatureFlags?: number;
+     readonly bluetoothMacAddress?: string;
+     readonly apiEncryptionSupported?: boolean;
++    readonly apiEncryptionProvisionable?: boolean;
+     readonly zwaveProxyFeatureFlags?: number;
+     readonly zwaveHomeId?: number;
+     readonly serialProxies?: readonly SerialProxyInfo[];
 diff --git a/dist/esphome-client.js b/dist/esphome-client.js
-index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..ad5f6456ae217bd3ca6d89ce3607fa9bdc3b04a0 100644
+index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..4c02f0c7cf2ce937d822f10b6eaafb49272b8488 100644
 --- a/dist/esphome-client.js
 +++ b/dist/esphome-client.js
-@@ -1542,13 +1542,15 @@ export class EspHomeClient {
+@@ -902,8 +902,10 @@ export class EspHomeClient {
+             // Fire-and-forget; if the send fails the transport's iterator will throw separately and our awaiters will surface it.
+             void transport.send(MessageType.PING_RESPONSE, Buffer.alloc(0)).catch(() => { });
+         });
+-        const discHandler = receiver.onInterleave(MessageType.DISCONNECT_REQUEST, () => {
+-            throw new ConnectionClosedByPeerError("Device requested disconnect during handshake.", "PEER_DISCONNECT_DURING_HANDSHAKE");
++        const discHandler = receiver.onInterleave(MessageType.DISCONNECT_REQUEST, (message) => {
++            // Only read DISCONNECT_REASON_PROVISIONING_CLOSED from an encrypted connection. A plaintext fallback can't confirm the result of a zero-key probe.
++            const isProvisioningClosed = transport.isEncrypted && (extractNumberField(this.decodeProtobuf(message.payload), 1) === 1);
++            throw new ConnectionClosedByPeerError("Device requested disconnect during handshake.", isProvisioningClosed ? "PEER_DISCONNECT_PROVISIONING_CLOSED" : "PEER_DISCONNECT_DURING_HANDSHAKE");
+         });
+         return { discHandler, pingHandler, receiver, transport };
+     }
+@@ -1542,13 +1544,15 @@ export class EspHomeClient {
              // This validator stands beside the handshake's own because the key set validates a key it sends to the device, and no handshake state exists here to validate it.
              // It reports the fault in the connect flow's wording for the same fault.
              const keyBuffer = Buffer.from(key, "base64");
@@ -20,3 +53,20 @@ index 30fd7766f29c4dde3ddc8a44983ddf5b78388616..ad5f6456ae217bd3ca6d89ce3607fa9b
              ];
              // The wait follows the caller's signal and the connection, and the correlator holds its timeout, so a cancellation, a teardown, and a timeout each reject with
              // their own reason and only the device's reply resolves. The composite is bound ahead of the send, so a teardown the send itself triggers still ends the wait.
+@@ -1598,6 +1602,8 @@ export class EspHomeClient {
+         const usesPasswordValue = extractNumberField(fields, 1);
+         const hasDeepSleepValue = extractNumberField(fields, 7);
+         const apiEncryptionValue = extractNumberField(fields, 19);
++        // Whether the device can be given a key over a connection under the zero key (field 26, ESPHome 2026.7 and later).
++        const apiEncryptionProvisionableValue = extractNumberField(fields, 26);
+         const name = extractStringField(fields, 2);
+         const macAddress = extractStringField(fields, 3);
+         const esphomeVersion = extractStringField(fields, 4);
+@@ -1622,6 +1628,7 @@ export class EspHomeClient {
+         // Build the device info from a single object literal. Each conditional spread either contributes a property or contributes nothing - so absence is preserved.
+         const info = {
+             ...((apiEncryptionValue !== undefined) && { apiEncryptionSupported: apiEncryptionValue === 1 }),
++            ...((apiEncryptionProvisionableValue !== undefined) && { apiEncryptionProvisionable: apiEncryptionProvisionableValue === 1 }),
+             ...((bluetoothMacAddress !== undefined) && { bluetoothMacAddress }),
+             ...((bluetoothProxyFeatureFlags !== undefined) && { bluetoothProxyFeatureFlags }),
+             ...((compilationTime !== undefined) && { compilationTime }),

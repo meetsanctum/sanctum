@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "core": "^2.0.0",
   "protocol": 12,
   "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",

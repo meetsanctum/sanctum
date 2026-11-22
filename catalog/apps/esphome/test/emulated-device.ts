@@ -156,6 +156,8 @@ export class EmulatedDevice {
   windowClosed = false;
   /** Its window closes once it has greeted the next connection. */
   closesWindowAfterHello = false;
+  /** It asks the next greeting to part with no reason, as one applying a key or shutting down does. */
+  partsWithoutReason = false;
   /** It takes the next key it's sent, or has its own cleared, but its answer is lost. */
   losesNextAnswer = false;
   /** Every key it was sent, "" to clear its own, and whether it came encrypted. */
@@ -419,13 +421,20 @@ export class EmulatedDevice {
     const flag = (fieldNumber: number, value: number | boolean) =>
       field({ fieldNumber, valueType: "varint" }, Number(value));
     if (type === message.helloRequest && !this.answersHello) return;
-    if (type === message.helloRequest && this.waiting && this.windowClosed) {
-      // Too late to be given a key: it says who it is, then asks to part.
+    if (type === message.helloRequest && this.partsWithoutReason) {
+      this.partsWithoutReason = false;
+      send(message.disconnectRequest, Buffer.alloc(0));
+      socket.end();
+      return;
+    }
+    if (type === message.helloRequest && this.windowClosed) {
+      // Too late to be given a key: it says who it is, then asks to part,
+      // saying why (DISCONNECT_REASON_PROVISIONING_CLOSED).
       send(
         message.helloResponse,
         Buffer.concat([flag(1, 1), flag(2, 14), text(4, this.options.name)]),
       );
-      send(message.disconnectRequest, Buffer.alloc(0));
+      send(message.disconnectRequest, flag(1, 1));
       socket.end();
     } else if (type === message.noiseSetKeyRequest) {
       const raw = decode(payload).get(1)?.[0];
@@ -485,6 +494,9 @@ export class EmulatedDevice {
             ? [text(13, this.options.friendlyName)]
             : []),
           flag(19, this.psk !== null || this.waiting),
+          // Whether it can be given a key under the zero key, as firmware from
+          // 2026.7 says.
+          ...(this.waiting ? [flag(26, true)] : []),
         ]),
       );
     } else if (type === message.listEntitiesRequest) {
