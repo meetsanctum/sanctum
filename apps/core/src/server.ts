@@ -8,7 +8,10 @@ import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
 
 import { registerActivityRoutes } from "./activity/routes.js";
+import { createAgentLimiter } from "./agents/limits.js";
+import { registerMcpRoute } from "./agents/mcp.js";
 import { registerAgentRoutes } from "./agents/routes.js";
+import { createAgentTools } from "./agents/tools.js";
 import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
 import { registerAppRoutes } from "./app-host/routes.js";
@@ -201,6 +204,24 @@ export function createServer(
         gate,
       });
       registerAgentRoutes(core, { canUse: options.agentsCanUse, gate });
+      registerMcpRoute(core, {
+        tools: createAgentTools({
+          canUse: () => options.agentsCanUse.list(),
+          readableDeviceKinds: () => options.agentsCanUse.readableDeviceKinds(),
+          places: () => places.list(),
+          devices,
+          apps: {
+            name: (appId) => options.apps.manifest(appId)?.name,
+            action: (appId, actionId) => options.apps.action(appId, actionId),
+            call: (request) => options.apps.call(request),
+          },
+        }),
+        limiter: createAgentLimiter(),
+        record: activity.for("agents"),
+        agentWho: (id) => activity.agentWho(id),
+        isActiveAgent: (id) => auth.clients.isActiveAgent(id),
+        version: config.version,
+      });
       registerAppRoutes(core, {
         host: options.apps,
         available: options.availableApps,

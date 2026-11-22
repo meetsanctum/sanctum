@@ -849,6 +849,13 @@ function setupEntry(entry: ActivityInfo): Words | null {
           : `Stopped AI agents using “${title}”`,
       );
     }
+    // An AI agent over one of the endpoint's limits, at most once a minute.
+    case "agents.limited":
+      return said(
+        entry.reason === "at_once"
+          ? "Held back for asking too much at once"
+          : "Held back for asking too often",
+      );
     case "pairing.open":
       return said("Let devices join");
     case "pairing.close":
