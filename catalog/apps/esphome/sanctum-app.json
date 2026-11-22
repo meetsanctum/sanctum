@@ -1,10 +1,10 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "core": "^2.0.0",
   "protocol": 13,
-  "summary": "Brings your ESPHome lights, plugs, sensors and buttons into your home.",
+  "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
   "runtime": {
     "memory": 128,
     "data": 256
