@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { connectOnce } from "../src/connection.js";
-import { secretOf } from "../src/driver.js";
-import { givenOf, zeroKey } from "../src/keys.js";
+import { givenOf, secretOf, zeroKey } from "../src/keys.js";
 import { newKey } from "./emulated-device.js";
 import { add, announce, keyOf, startHome, timings } from "./support.js";
 

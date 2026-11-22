@@ -1,0 +1,1 @@
+ALTER TABLE `device_facts` ADD `first_key` text;

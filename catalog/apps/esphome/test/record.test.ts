@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { secretOf } from "../src/driver.js";
-import { zeroKey } from "../src/keys.js";
+import { secretOf, zeroKey } from "../src/keys.js";
 import { EmulatedDevice, newKey } from "./emulated-device.js";
 import { announce, entitiesOf, keyOf, nextMac, startHome } from "./support.js";
 

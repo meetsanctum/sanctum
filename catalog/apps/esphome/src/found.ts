@@ -1,8 +1,8 @@
 import type { AppContext, FoundReport } from "@meetsanctum/app-sdk";
 
 import type { Address, Session, Timings } from "./connection.js";
-import { askUnderZeroKey, type Answer } from "./keys.js";
-import type { Announced } from "./sightings.js";
+import { askUnderZeroKey, isOlderFirmware, type Answer } from "./keys.js";
+import { beforeProvisioning, type Announced } from "./sightings.js";
 
 // The devices ESPHome found and hasn't added, and what each says of its key.
 // A device writes its record once, as it boots, so the record goes stale the
@@ -11,9 +11,14 @@ import type { Announced } from "./sightings.js";
 // and so do Sanctum's own connections as it adds and removes devices. What
 // was learned holds for the announcement it was learned under: a device that
 // announces itself anew, as after a restart, is asked again.
+//
+// Firmware from before ESPHome 2026.7 gets a setup key in the clear, so it's
+// told apart with care: only as someone adds it, every sign agreeing, and
+// never a device once seen taking the zero key, which a busy one answered in
+// the clear would otherwise look like.
 
 /** What a found device's key is, as Sanctum last learned it. */
-type Said = "waits" | "key" | "closed" | "clear";
+type Said = "waits" | "key" | "closed" | "clear" | "older";
 
 type Observation = {
   sighting: string;
@@ -49,6 +54,9 @@ export function createFound(options: {
 }) {
   const { ctx, timings, announced } = options;
   const observations = new Map<string, Observation>();
+  // Devices seen taking the zero key or saying they could, by MAC, kept
+  // across announcements until one says a version from before 2026.7.
+  const tookZeroKey = new Set<string>();
   const running = new Map<
     string,
     { controller: AbortController; work: Promise<unknown> }
@@ -74,7 +82,9 @@ export function createFound(options: {
       ? "waits"
       : found.encryption === "key"
         ? "key"
-        : "clear";
+        : found.encryption === "older"
+          ? "older"
+          : "clear";
   }
 
   function addressOf(found: Announced): Address | null {
@@ -105,6 +115,13 @@ export function createFound(options: {
             found.push({
               ...row,
               description: "Turn it off and on again to add it",
+              asks: [],
+            });
+          } else if (said === "older") {
+            found.push({
+              ...row,
+              description:
+                "Gets a setup key without encryption, as its firmware needs, then its own key encrypted",
               asks: [],
             });
           } else if (said === "clear") {
@@ -149,12 +166,22 @@ export function createFound(options: {
 
   /** Interprets a probe in light of the announcement under which it ran. */
   function answerOf(found: Announced, answer: Answer): Answer {
-    // An answer in the clear from a device whose record says it takes a key
-    // says only that it was busy or restarting as it was asked, as the
-    // library greets one in the clear once it ends a zero-key handshake.
-    return answer.says === "clear" && found.encryption !== "none"
-      ? { says: "unclear" }
-      : answer;
+    if (
+      answer.says === "waits" ||
+      answer.says === "closed" ||
+      ((answer.says === "clear" || answer.says === "older") &&
+        answer.info.apiEncryptionProvisionable === true)
+    ) {
+      tookZeroKey.add(found.mac);
+    }
+    if (answer.says !== "clear" || found.encryption === "none") return answer;
+    // Older firmware only with every sign agreeing. Otherwise an answer in
+    // the clear from a device whose record says it takes a key says only
+    // that it was busy or restarting as it was asked, as the library greets
+    // one in the clear once it ends a zero-key handshake.
+    return isOlderFirmware(found, answer.info, tookZeroKey.has(found.mac))
+      ? { says: "older", info: answer.info }
+      : { says: "unclear" };
   }
 
   /**
@@ -214,12 +241,19 @@ export function createFound(options: {
     const observation = observationOf(found);
     observation.request = undefined;
     running.get(mac)?.controller.abort();
+    if (said === "waits" || said === "closed") tookZeroKey.add(mac);
     finishAsk(observation, said === "closed");
     const maker = observation.learned?.maker ?? null;
     observation.learned = { said, maker };
   }
 
   function discoveryChanged() {
+    for (const mac of tookZeroKey) {
+      const found = announced.get(mac);
+      if (found && beforeProvisioning(found.version) === true) {
+        tookZeroKey.delete(mac);
+      }
+    }
     for (const [mac, observation] of observations) {
       const found = announced.get(mac);
       if (found && sightingOf(found) === observation.sighting) continue;
@@ -233,7 +267,8 @@ export function createFound(options: {
   // key or has one and which hasn't said under its current announcement. A
   // record that says it takes none is asked only as someone adds it: under
   // the zero key, such a device is greeted in the clear, a whole session,
-  // which can set off what the device does when someone connects.
+  // which can set off what the device does when someone connects. Neither
+  // is older firmware, which is asked as someone adds it.
   function schedule() {
     if (stopped) return;
     for (const found of announced.values()) {
@@ -241,6 +276,7 @@ export function createFound(options: {
       const mac = found.mac;
       if (
         found.encryption === "none" ||
+        found.encryption === "older" ||
         !addressOf(found) ||
         options.added(mac) ||
         running.has(mac)
@@ -274,6 +310,17 @@ export function createFound(options: {
       observation.needsAsk = true;
       schedule();
     },
+    /**
+     * Whether a device is firmware from before ESPHome 2026.7, by what it
+     * says of itself now, its record and whether it ever took the zero key.
+     */
+    isOlder(mac: string, info: Session["info"]) {
+      const found = announced.get(mac);
+      return (
+        found !== undefined &&
+        isOlderFirmware(found, info, tookZeroKey.has(mac))
+      );
+    },
     /** What a device's key is: what was learned, else its record's guess. */
     said(mac: string): Said | null {
       const found = announced.get(mac);
@@ -291,3 +338,5 @@ export function createFound(options: {
     },
   };
 }
+
+export type Found = ReturnType<typeof createFound>;

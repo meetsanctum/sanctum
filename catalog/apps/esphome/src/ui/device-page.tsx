@@ -87,6 +87,12 @@ export function DevicePage(props: DevicePageProps) {
           )}
         </dl>
       </Card>
+      {facts.encrypted && facts.firstKey === "setup" && (
+        <p className="m-0 px-1 text-[15px] leading-5 text-muted-foreground">
+          Its firmware takes a first key only without encryption: it got a setup
+          key that way, then its own key encrypted.
+        </p>
+      )}
       {facts.unused.length > 0 && (
         <p className="m-0 px-1 text-[15px] leading-5 text-muted-foreground">
           It also has {listOf(facts.unused)}, which this app doesn't bring into

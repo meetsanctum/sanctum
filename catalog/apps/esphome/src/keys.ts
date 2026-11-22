@@ -1,4 +1,5 @@
 import { ConnectionClosedByPeerError } from "esphome-client";
+import type { DeviceInfo } from "esphome-client";
 import { randomBytes } from "node:crypto";
 
 import {
@@ -7,20 +8,35 @@ import {
   type Session,
   type Timings,
 } from "./connection.js";
+import { beforeProvisioning, type Announced } from "./sightings.js";
 
 // Keys Sanctum gives. A device built to be given its key later waits for
 // one, taking connections encrypted with a key of all zeros: that keeps
 // listeners out, though it authenticates nobody. Sanctum gives it 32 random
-// bytes of its own over such a connection, never in the clear, keeping the
-// key before sending it, and only once the device is back under that key,
-// which only it can pass, is its MAC trusted. Removing the device takes the
-// key off again. A key a device was flashed with is never touched.
+// bytes of its own over such a connection, keeping the key before sending
+// it, and adds the device once it's back under that key. Firmware from
+// before ESPHome 2026.7 can't wait for a key: it takes a first one only in
+// the clear, so it gets a throwaway setup key that way, then at once its own
+// over the connection the setup key encrypts, so its own key never crosses
+// the network in the clear. Nothing here proves a device is the household's:
+// a MAC, or coming back under a key just sent, says only that whoever
+// answers holds that key. Removing the device takes the key off again. A
+// key a device was flashed with is never touched.
 
 /** The key a device waiting for one takes connections under. */
 export const zeroKey = Buffer.alloc(32).toString("base64");
 
+/** A device's key's name among the app's secrets. */
+export const secretOf = (mac: string) => `key:${mac}`;
+
 /** The name of the secret that says a device's key is one Sanctum gave. */
 export const givenOf = (mac: string) => `given:${mac}`;
+
+/**
+ * The name of the secret that holds the setup key sent to older firmware in
+ * the clear, kept only until the device has its own.
+ */
+export const setupOf = (mac: string) => `setup:${mac}`;
 
 /** A key of a device's own, as ESPHome's dashboard makes one. */
 export const newKey = () => randomBytes(32).toString("base64");
@@ -49,7 +65,32 @@ export type Answer =
   | { says: "key" }
   | { says: "closed" }
   | { says: "clear"; info: Session["info"] }
+  | { says: "older"; info: Session["info"] }
   | { says: "unclear" };
+
+/**
+ * Whether a device is firmware from before ESPHome 2026.7 that takes a
+ * first key only in the clear, every sign agreeing: its record says it
+ * supports encryption with no way to wait for a key, and in the clear it
+ * says the same, with a version from before 2026.7. A device that ever took
+ * the zero key, or said it could, never is. Anything less is taken as a
+ * device too busy to say, as a 2026.7 device with its connections full is
+ * answered in the clear too: then nothing is sent.
+ */
+export function isOlderFirmware(
+  record: Announced,
+  info: DeviceInfo,
+  tookZeroKey: boolean,
+) {
+  return (
+    record.encryption === "older" &&
+    !tookZeroKey &&
+    info.apiEncryptionSupported === true &&
+    info.apiEncryptionProvisionable !== true &&
+    beforeProvisioning(info.esphomeVersion) === true &&
+    beforeProvisioning(record.version) !== false
+  );
+}
 
 /**
  * Asks a device what it says of its key, over one connection under the zero
@@ -114,9 +155,10 @@ async function backWith(reach: Reach, key: string) {
 }
 
 /**
- * Gives a device its key over the session that showed it was waiting for
- * one. `keep` saves the key first so a lost answer can be retried with it.
- * Returns a checked session under the new key.
+ * Gives a device a key over a session: its own over one under the zero key
+ * or under its setup key, or older firmware its setup key over one in the
+ * clear. `keep` saves the key first so a lost answer can be retried with
+ * it. Returns a checked session under the new key.
  */
 export async function giveKey(
   reach: Reach & {
@@ -143,8 +185,9 @@ export async function giveKey(
 
 /**
  * Takes the key Sanctum gave a device off it, over its session or one made
- * for it, so it waits for a key again. A device already waiting, as after an
- * answer that was lost, has it off already.
+ * for it, so it waits for a key again, or, as older firmware, greets in the
+ * clear again. A device already waiting, as after an answer that was lost,
+ * has it off already.
  */
 export async function takeKeyOff(
   reach: Reach & { key: string; session: Session | null },
@@ -177,5 +220,8 @@ export async function takeKeyOff(
   } finally {
     if (own) session.client.disconnect();
   }
-  return "waits";
+  // Firmware from 2026.7 waits for a key once its own is off.
+  return beforeProvisioning(session.info.esphomeVersion) === true
+    ? "older"
+    : "waits";
 }

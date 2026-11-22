@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { maxAppSecrets } from "@meetsanctum/app-sdk";
 import { ColorMode, type Entity } from "esphome-client";
 
-import { makerOf, secretOf, typeOf } from "../src/driver.js";
+import { makerOf, typeOf } from "../src/registration.js";
 import { mapEntities } from "../src/entities.js";
+import { secretOf } from "../src/keys.js";
 import { newKey, type EmulatedDevice } from "./emulated-device.js";
 import {
   add,

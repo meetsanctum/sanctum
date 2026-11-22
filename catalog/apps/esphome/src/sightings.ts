@@ -9,12 +9,26 @@ import type { Sighting } from "@meetsanctum/app-sdk";
 export const esphomeService = "_esphomelib._tcp";
 
 /**
- * How a device says it encrypts its connections: with a key it was flashed
- * with; waiting to be given one, over a connection encrypted with no key; or
- * not at all, as a device built without encryption, or one that takes its
- * key only in the clear, which Sanctum never sends one.
+ * How a device says it encrypts its connections, as it booted: with a key;
+ * waiting to be given one, over a connection encrypted with no key; able to
+ * take one with no way to wait for it, as firmware before ESPHome 2026.7,
+ * which takes a first key only in the clear; or not at all, as a device
+ * built without encryption. Only a first guess: a device writes its record
+ * as it boots, so a key given or taken off since leaves it stale.
  */
-export type Encryption = "key" | "waiting" | "none";
+export type Encryption = "key" | "waiting" | "older" | "none";
+
+/**
+ * Whether an ESPHome version is from before 2026.7, the first that waits
+ * for a key under the zero key; null for one that says no version.
+ */
+export function beforeProvisioning(version: string | null | undefined) {
+  const parts = /^(\d+)\.(\d+)/.exec(version?.trim() ?? "");
+  if (!parts) return null;
+  const year = Number(parts[1]);
+  const month = Number(parts[2]);
+  return year < 2026 || (year === 2026 && month < 7);
+}
 
 /** One of ESPHome's devices as its record announces it. */
 export type Announced = {
@@ -43,10 +57,11 @@ export function announcedOf(sighting: Sighting): Announced | null {
   const encryption: Encryption =
     txt.api_encryption !== undefined
       ? "key"
-      : txt.api_encryption_supported !== undefined &&
-          txt.api_provisioning !== undefined
-        ? "waiting"
-        : "none";
+      : txt.api_encryption_supported === undefined
+        ? "none"
+        : txt.api_provisioning !== undefined
+          ? "waiting"
+          : "older";
   return {
     mac,
     name: txt.friendly_name?.trim() || sighting.name,

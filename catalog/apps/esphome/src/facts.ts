@@ -14,16 +14,32 @@ export type DeviceFacts = {
   signal: number | null;
   unused: string[];
   sleeps: boolean;
+  /** How its first key from Sanctum reached it, where that's worth saying. */
+  firstKey: "setup" | null;
 };
 
 export function createFacts(db: SqliteRemoteDatabase) {
   return {
-    /** What a connection told, keeping the signal it said last. */
-    async save(mac: string, facts: Omit<DeviceFacts, "signal">) {
+    /**
+     * What a connection told, keeping the signal it said last, and how its
+     * first key reached it unless this says.
+     */
+    async save(
+      mac: string,
+      facts: Omit<DeviceFacts, "signal" | "firstKey"> &
+        Partial<Pick<DeviceFacts, "firstKey">>,
+    ) {
       await db
         .insert(deviceFacts)
         .values({ mac, ...facts })
         .onConflictDoUpdate({ target: deviceFacts.mac, set: facts });
+    },
+    /** How its first key from Sanctum reached it, as Repair gave it anew. */
+    async firstKey(mac: string, firstKey: "setup" | null) {
+      await db
+        .update(deviceFacts)
+        .set({ firstKey })
+        .where(eq(deviceFacts.mac, mac));
     },
     async signal(mac: string, signal: number) {
       await db
