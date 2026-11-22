@@ -1,4 +1,4 @@
-import type { DeviceRegistration } from "@meetsanctum/app-sdk";
+import type { DeviceRegistration, MediaPlayback } from "@meetsanctum/app-sdk";
 import { ColorMode, EntityCategory, type Entity } from "esphome-client";
 
 // What a device's entities are in Sanctum: the capabilities they map onto,
@@ -100,33 +100,10 @@ export function measureOf(entity: Entity): Measure | null {
   return (measures[measure] as Set<string>).has(unit) ? measure : null;
 }
 
-// A media player's features as ESPHome flags them, as Home Assistant's
-// media player features number them: turned on and off only with both.
-const turnOn = 128;
-const turnOff = 256;
-
-/**
- * What a media player can do: play and stop, pause where it says so, a
- * volume it's set to and mute, as every ESPHome media player has, and power
- * where it says it can be turned on and off.
- */
-function mediaCapability(
-  entity: Entity & { type: "media_player" },
-): Capability {
-  const flags = Number(entity.featureFlags ?? 0);
-  return {
-    id: capabilityIdOf(entity),
-    kind: "media",
-    features: {
-      power: (flags & turnOn) !== 0 && (flags & turnOff) !== 0,
-      playback: entity.supportsPause
-        ? ["play", "pause", "stop"]
-        : ["play", "stop"],
-      volume: "level",
-      mute: true,
-    },
-  };
-}
+// ESPHome's media player feature bits. Power requires both commands.
+const pause = 1 << 0;
+const power = (1 << 7) | (1 << 8);
+const play = 1 << 14;
 
 // A press whose name says nobody sets it on purpose, as the Home Assistant
 // Voice PE's easter egg.
@@ -172,8 +149,25 @@ function capabilityOf(entity: Entity): Capability | null {
           }
         : null;
     }
-    case "media_player":
-      return mediaCapability(entity);
+    case "media_player": {
+      // Older firmware reported Play and Pause together as supportsPause.
+      const flags =
+        entity.featureFlags ?? (entity.supportsPause ? play | pause : 0);
+      const playback: MediaPlayback[] = [];
+      if (flags & play) playback.push("play");
+      if (flags & pause) playback.push("pause");
+      playback.push("stop");
+      return {
+        id,
+        kind: "media",
+        features: {
+          power: (flags & power) === power,
+          playback,
+          volume: "level",
+          mute: true,
+        },
+      };
+    }
     default:
       return null;
   }

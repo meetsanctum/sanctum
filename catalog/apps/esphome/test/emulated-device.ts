@@ -2,6 +2,8 @@ import type { Sighting } from "@meetsanctum/app-sdk";
 import {
   createESPHomeHandshake,
   ENTITY_SCHEMAS,
+  MediaPlayerCommand,
+  MediaPlayerState,
   type CipherState,
 } from "esphome-client";
 import { createServer, type Server, type Socket } from "node:net";
@@ -239,6 +241,7 @@ export class EmulatedDevice {
   /** Restarts, as after it's unplugged and plugged back in: its record says what holds now. */
   reboot() {
     for (const socket of this.sockets) socket.destroy();
+    this.voiceFollower = null;
     this.booted = { psk: this.psk, waiting: this.waiting };
   }
 
@@ -638,44 +641,39 @@ export class EmulatedDevice {
   // it: a volume in steps of 0.05.
   private playerAfter(key: number, said: Record<string, FieldValue>) {
     const now: Record<string, FieldValue> = {
-      state: player.idle,
+      state: MediaPlayerState.IDLE,
       volume: 0,
       muted: false,
       ...this.states[key],
     };
     if (typeof said.volume === "number") now.volume = said.volume;
-    const step: Record<number, number> = {
-      [player.volumeUp]: 0.05,
-      [player.volumeDown]: -0.05,
-    };
     switch (said.command) {
-      case player.play:
-        now.state = player.playing;
+      case MediaPlayerCommand.PLAY:
+        now.state = MediaPlayerState.PLAYING;
         break;
-      case player.pause:
-        now.state = player.paused;
+      case MediaPlayerCommand.PAUSE:
+        now.state = MediaPlayerState.PAUSED;
         break;
-      case player.stop:
-        now.state = player.idle;
+      case MediaPlayerCommand.STOP:
+        now.state = MediaPlayerState.IDLE;
         break;
-      case player.mute:
+      case MediaPlayerCommand.MUTE:
         now.muted = true;
         break;
-      case player.unmute:
+      case MediaPlayerCommand.UNMUTE:
         now.muted = false;
         break;
-      case player.turnOn:
-        now.state = player.on;
+      case MediaPlayerCommand.TURN_ON:
+        now.state = MediaPlayerState.ON;
         break;
-      case player.turnOff:
-        now.state = player.off;
+      case MediaPlayerCommand.TURN_OFF:
+        now.state = MediaPlayerState.OFF;
         break;
-      case player.volumeUp:
-      case player.volumeDown:
-        now.volume = Math.min(
-          1,
-          Math.max(0, Number(now.volume) + step[Number(said.command)]!),
-        );
+      case MediaPlayerCommand.VOLUME_UP:
+        now.volume = Math.min(1, Number(now.volume) + 0.05);
+        break;
+      case MediaPlayerCommand.VOLUME_DOWN:
+        now.volume = Math.max(0, Number(now.volume) - 0.05);
         break;
     }
     return now;
@@ -723,24 +721,6 @@ export class EmulatedDevice {
     this.setState(key, next);
   }
 }
-
-// ESPHome's media player commands and states, as api.proto numbers them.
-const player = {
-  play: 0,
-  pause: 1,
-  stop: 2,
-  mute: 3,
-  unmute: 4,
-  volumeUp: 6,
-  volumeDown: 7,
-  turnOn: 12,
-  turnOff: 13,
-  idle: 1,
-  playing: 2,
-  paused: 3,
-  off: 5,
-  on: 6,
-} as const;
 
 type StateSpec = {
   keyFieldNumber: number;

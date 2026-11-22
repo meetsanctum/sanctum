@@ -15,23 +15,15 @@ import { hasVoiceAssistant } from "./registration.js";
 export function declineRequests(session: Session) {
   if (!hasVoiceAssistant(session.info)) return;
   const { client } = session;
-  const ended = new AbortController();
-  client.on("lifecycle", (event) => {
-    if (event.kind === "disconnect") ended.abort();
-  });
   const requests = client.voiceAssistant;
+  const listener = client.on("voiceAssistantRequest", (request) => {
+    if (request.start) requests.respondToRequest({ error: true });
+  });
+  const lifecycle = client.on("lifecycle", (event) => {
+    if (event.kind !== "disconnect") return;
+    listener[Symbol.dispose]();
+    lifecycle[Symbol.dispose]();
+  });
   // No audio is asked for: none is ever taken.
   requests.subscribe();
-  void (async () => {
-    try {
-      for await (const request of requests.requests({
-        signal: ended.signal,
-      })) {
-        if (!request.start) continue;
-        requests.respondToRequest({ error: true });
-      }
-    } catch {
-      // Ended with its session.
-    }
-  })();
 }

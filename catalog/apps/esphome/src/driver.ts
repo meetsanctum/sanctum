@@ -690,10 +690,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             `${command.capability} takes no such command`,
           );
         }
-        session.client.command(
-          entityId("media_player", entity.objectId),
-          sent as never,
-        );
+        session.client.command(entityId("media_player", entity.objectId), sent);
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {
           state: command.command.on,

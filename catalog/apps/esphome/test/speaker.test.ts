@@ -1,4 +1,4 @@
-import { EntityCategory } from "esphome-client";
+import { EntityCategory, MediaPlayerState } from "esphome-client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { EmulatedEntity } from "./emulated-device.js";
@@ -21,7 +21,10 @@ const player: EmulatedEntity = {
   key: 201,
   objectId: "media_player",
   name: "Media Player",
-  fields: { supportsPause: true },
+  // Volume set, mute and stop are standard. The speaker also supports Play and Pause.
+  fields: {
+    featureFlags: (1 << 0) | (1 << 2) | (1 << 3) | (1 << 12) | (1 << 14),
+  },
 };
 
 // The parts a Voice PE shows over its API, as its firmware names them.
@@ -64,7 +67,7 @@ const speaker = () =>
     project: "Nabu Casa.Home Assistant Voice PE",
     voiceAssistant: true,
     entities: voicePe,
-    states: { 201: { state: 1, volume: 0.6, muted: false } },
+    states: { 201: { state: MediaPlayerState.IDLE, volume: 0.6 } },
   });
 
 describe("a smart speaker", () => {
@@ -94,6 +97,14 @@ describe("a smart speaker", () => {
           holds: [],
         },
       },
+    ]);
+
+    await home.core.until(() => device.voiceFollowed, "its requests followed");
+    device.fire(202, "easter_egg_press");
+    device.fire(202, "long_press");
+    await home.core.until(() => home.core.presses.length > 0, "its long press");
+    expect(home.core.presses).toEqual([
+      { key, capability: "event-button_press", action: "long_press" },
     ]);
   });
 
@@ -138,17 +149,22 @@ describe("a smart speaker", () => {
     await home.core.command(key, capability, "media", { activity: "playing" });
     await home.core.command(key, capability, "media", { volume: 35 });
     await home.core.command(key, capability, "media", { muted: true });
+    await home.core.until(() => {
+      const state = home.core.latest(key, capability);
+      return (
+        state?.activity === "playing" &&
+        state.volume === 35 &&
+        state.muted === true
+      );
+    }, "playing, quieter and muted");
+    await home.core.command(key, capability, "media", { activity: "paused" });
     await home.core.until(
-      () =>
-        JSON.stringify(home.core.latest(key, capability)) ===
-        JSON.stringify({ activity: "playing", volume: 35, muted: true }),
-      "playing, quieter and muted",
+      () => home.core.latest(key, capability)?.activity === "paused",
+      "paused",
     );
     await home.core.command(key, capability, "media", { playback: "stop" });
     await home.core.until(
-      () =>
-        (home.core.latest(key, capability) as { activity: string }).activity ===
-        "idle",
+      () => home.core.latest(key, capability)?.activity === "idle",
       "stopped",
     );
   });
@@ -157,12 +173,71 @@ describe("a smart speaker", () => {
     home = await startHome();
     const device = await home.plugIn({
       name: "player",
-      entities: [player],
-      states: { 201: { state: 1, volume: 0.6, muted: false } },
+      entities: [{ ...player, fields: { supportsPause: true } }],
+      states: { 201: { state: MediaPlayerState.IDLE } },
     });
     const key = await add(home.core, device);
+    const capability = "media-media_player";
 
-    expect(home.core.registered.get(key)?.type).toBe("media-player");
+    const registered = home.core.registered.get(key);
+    expect(registered?.type).toBe("media-player");
+    expect(registered?.capabilities[0]?.features).toMatchObject({
+      playback: ["play", "pause", "stop"],
+    });
+    await home.core.until(
+      () => home.core.latest(key, capability) !== undefined,
+      "its state",
+    );
+    await home.core.command(key, capability, "media", { volume: 25 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 25,
+      "its volume changed",
+    );
     expect(device.voiceFollowed).toBe(false);
+  });
+
+  it("offers power and stop for a player that advertises neither play nor pause", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      name: "player",
+      entities: [
+        {
+          ...player,
+          fields: {
+            featureFlags: (1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 12),
+          },
+        },
+      ],
+      states: { 201: { state: MediaPlayerState.NONE } },
+    });
+    const key = await add(home.core, device);
+    const capability = "media-media_player";
+
+    expect(
+      home.core.registered.get(key)?.capabilities[0]?.features,
+    ).toMatchObject({
+      power: true,
+      playback: ["stop"],
+    });
+    await home.core.until(
+      () => home.core.latest(key, capability) !== undefined,
+      "its state",
+    );
+    expect(home.core.latest(key, capability)).toEqual({
+      activity: "idle",
+      volume: 0,
+      muted: false,
+    });
+
+    await home.core.command(key, capability, "media", { on: true });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.on === true,
+      "on",
+    );
+    await home.core.command(key, capability, "media", { on: false });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.on === false,
+      "off",
+    );
   });
 });

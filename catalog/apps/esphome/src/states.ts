@@ -168,12 +168,11 @@ export function lightCommandOf(entity: Entity, command: LightCommand) {
  * on where it can be turned on and off. An announcement it plays counts as
  * playing.
  */
-export function mediaStateOf(
-  mapped: Mapped,
+function mediaStateOf(
+  hasPower: boolean,
   event: TelemetryEvent & { type: "media_player" },
 ): MediaState {
-  const { power } = mapped.capability.features as { power: boolean };
-  // Its defaults are left out, as a protocol buffer does: off, silent, unmuted.
+  // Zero values can be absent on the wire: no state yet, silent, unmuted.
   const now = event.state ?? MediaPlayerState.NONE;
   const volume =
     typeof event.volume === "number" && Number.isFinite(event.volume)
@@ -189,36 +188,48 @@ export function mediaStateOf(
     volume,
     muted: event.muted === true,
   };
-  if (power) state.on = now !== MediaPlayerState.OFF;
+  if (hasPower && now !== MediaPlayerState.NONE) {
+    state.on = now !== MediaPlayerState.OFF;
+  }
   return state;
 }
 
 /** ESPHome's media player command for Sanctum's. */
 export function mediaCommandOf(command: MediaCommand) {
   if ("volume" in command) return { volume: command.volume / 100 };
-  const code =
-    "on" in command
-      ? command.on
+  if ("on" in command) {
+    return {
+      command: command.on
         ? MediaPlayerCommand.TURN_ON
-        : MediaPlayerCommand.TURN_OFF
-      : "activity" in command
-        ? command.activity === "playing"
+        : MediaPlayerCommand.TURN_OFF,
+    };
+  }
+  if ("activity" in command) {
+    return {
+      command:
+        command.activity === "playing"
           ? MediaPlayerCommand.PLAY
-          : MediaPlayerCommand.PAUSE
-        : "playback" in command
-          ? command.playback === "stop"
-            ? MediaPlayerCommand.STOP
-            : null
-          : "volumeStep" in command
-            ? command.volumeStep === "up"
-              ? MediaPlayerCommand.VOLUME_UP
-              : MediaPlayerCommand.VOLUME_DOWN
-            : "muted" in command
-              ? command.muted
-                ? MediaPlayerCommand.MUTE
-                : MediaPlayerCommand.UNMUTE
-              : null;
-  return code === null ? null : { command: code };
+          : MediaPlayerCommand.PAUSE,
+    };
+  }
+  if ("volumeStep" in command) {
+    return {
+      command:
+        command.volumeStep === "up"
+          ? MediaPlayerCommand.VOLUME_UP
+          : MediaPlayerCommand.VOLUME_DOWN,
+    };
+  }
+  if ("muted" in command) {
+    return {
+      command: command.muted
+        ? MediaPlayerCommand.MUTE
+        : MediaPlayerCommand.UNMUTE,
+    };
+  }
+  return "playback" in command && command.playback === "stop"
+    ? { command: MediaPlayerCommand.STOP }
+    : null;
 }
 
 // Kelvin and degrees Fahrenheit in degrees Celsius, to a tenth.
@@ -249,7 +260,9 @@ export function stateOf(
   | null {
   const { capability, entity } = mapped;
   if (event.type === "light") return lightStateOf(mapped, event);
-  if (event.type === "media_player") return mediaStateOf(mapped, event);
+  if (event.type === "media_player" && capability.kind === "media") {
+    return mediaStateOf(capability.features?.power === true, event);
+  }
   if (event.type === "switch") return { on: event.state === true };
   if (event.type === "sensor") {
     if (event.missingState) return null;
