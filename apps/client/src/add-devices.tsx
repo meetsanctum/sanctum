@@ -496,17 +496,15 @@ export function AddDevices(props: {
             kind: "closed",
             why: failed ? "failed" : stopped ? "stopped" : "time",
           };
-  // Closing is what is left to do once a way has added a device, more being
-  // up to the user, or once time is up on devices still joining. Failed
-  // joins tell the user to reset the device and start again.
+  // Done leads once a device is added. After looking stops, it also leads
+  // while a device finishes joining. Failed joins call for another try.
   const isDonePrimary =
     page.kind === "found"
       ? Object.keys(added).length > 0
-      : page.kind === "join" &&
-        joinedHere.some(
-          (each) =>
-            each.stage === "ready" ||
-            (joining.kind === "closed" && each.stage !== "failed"),
+      : joinedHere.some((device) =>
+          joining.kind === "closed"
+            ? device.stage !== "failed"
+            : device.stage === "ready",
         );
 
   const title =

@@ -64,6 +64,9 @@ describe("Add devices, letting a radio's devices join", () => {
     );
     expect(button("Stop looking").dataset.variant).toBe("outline");
     expect(button("Done").dataset.variant).toBe("default");
+    await act(async () => button("Done").click());
+    expect(core.requests.at(-1)?.path).toBe("/api/devices/pairing/close");
+    expect(core.adding.until).toBeNull();
   });
 
   it.each(["no joins", "a failed join"])(

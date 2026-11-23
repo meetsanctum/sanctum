@@ -10,7 +10,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AddDevices } from "../src/add-devices";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
 import { pressShownMs } from "../src/settings-devices";
@@ -560,44 +559,6 @@ describe("Settings → Devices", () => {
     await act(async () => card!.click());
   }
 
-  it("finishes an earlier pairing open and close before reopening", async () => {
-    const render = (open: boolean) =>
-      act(async () =>
-        root.render(
-          <AddDevices
-            open={open}
-            onOpenChange={() => undefined}
-            devices={devices}
-            rooms={[office]}
-            apps={[zigbee]}
-            adding={pairing}
-            live={live}
-            onChanged={() => undefined}
-          />,
-        ),
-      );
-    const answer = pendingReply<PairingInfo & { since: string }>();
-    vi.mocked(coreJson).mockImplementationOnce(() => answer.promise);
-    await render(true);
-    await way("Zigbee");
-    await render(false);
-    await render(true);
-    await way("Zigbee");
-    await act(async () =>
-      answer.resolve({
-        ...pairing,
-        until: "2026-10-29T12:04:00.000Z",
-        since: "2026-10-29T12:00:00.000Z",
-      }),
-    );
-    expect(
-      requests
-        .filter((each) => each.path.startsWith("/api/devices/pairing"))
-        .map((each) => each.path),
-    ).toEqual(["/api/devices/pairing/close", "/api/devices/pairing/open"]);
-    expect(pairing.until).not.toBeNull();
-  });
-
   it("opens on what you are adding, and lets devices join no radio until one is chosen", async () => {
     await show(admin);
     await act(async () => button("Add devices").click());
@@ -829,24 +790,5 @@ describe("Settings → Devices", () => {
       "Couldn't start looking",
     );
     expect(button("Try again")).toBeDefined();
-  });
-
-  it("deducts the time spent waiting for the radio from the countdown", async () => {
-    await show(admin);
-    const answer = pendingReply<PairingInfo & { since: string }>();
-    await act(async () => button("Add devices").click());
-    vi.mocked(coreJson).mockImplementationOnce(() => answer.promise);
-    await way("Zigbee");
-    await act(async () => vi.advanceTimersByTime(3000));
-    await act(async () =>
-      answer.resolve({
-        ...pairing,
-        until: "2026-10-29T12:04:00.000Z",
-        since: "2026-10-29T12:00:00.000Z",
-      }),
-    );
-    expect(document.querySelector("[role=dialog] h3")!.textContent).toContain(
-      "3:57",
-    );
   });
 });

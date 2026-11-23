@@ -78,21 +78,21 @@ describe("Add devices, adding what drivers found", () => {
 
   it("makes Done the primary action once one is added", async () => {
     core.answers.kitchen = () => ({ added: kitchenSensor() });
-    await show();
+    const dialog = await show();
     await way("Devices found");
-    const done = () =>
-      [...document.querySelectorAll<HTMLElement>("[role=dialog] button")].find(
-        (button) => button.textContent === "Done",
-      )!;
-    expect(done().dataset.variant).toBe("outline");
+    const doneVariant = () =>
+      [...dialog.querySelectorAll("header button")]
+        .find((button) => button.textContent === "Done")
+        ?.getAttribute("data-variant");
+    expect(doneVariant()).toBe("outline");
 
     await act(async () => named("Add Kitchen sensor").click());
-    expect(done().dataset.variant).toBe("default");
-    // Still so after going back and returning to what was found.
+    expect(doneVariant()).toBe("default");
+    expect(named("Add Living room plug").dataset.variant).toBe("default");
     await act(async () => named("Back to Add devices").click());
-    expect(done().dataset.variant).toBe("outline");
+    expect(doneVariant()).toBe("outline");
     await way("Devices found");
-    expect(done().dataset.variant).toBe("default");
+    expect(doneVariant()).toBe("default");
   });
 
   it("asks a key on its card, says why one is refused and keeps it to correct", async () => {
