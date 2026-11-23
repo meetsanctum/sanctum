@@ -249,6 +249,8 @@ if (config.supervise) {
     lan,
     exits: appExits,
     capacity,
+    // The service joins an app's network for it once the app holds it.
+    onServiceNetwork: () => void serviceReconciler?.reconcile(),
   });
   // An app whose network's holder stopped stops too, soon after.
   if (lan) {

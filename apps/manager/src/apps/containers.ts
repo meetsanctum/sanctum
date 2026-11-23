@@ -22,6 +22,12 @@ import {
   removeBrokerNetwork,
   usesBroker,
 } from "./broker.js";
+import {
+  httpServices,
+  removeServiceNetworks,
+  serviceNetworkFor,
+  serviceNetworkName,
+} from "./service-networks.js";
 import { createCapacity, type Capacity, type HeldApp } from "./capacity.js";
 import type { AppExits } from "./exits.js";
 import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
@@ -290,6 +296,9 @@ export function createAppContainers(options: {
   exits?: Pick<AppExits, "outOfMemory" | "stopping">;
   // What the manager has promised of memory and disk (capacity.ts).
   capacity?: Capacity;
+  // An app's network for a service it reaches over HTTP is there, for the
+  // service to join once the app holds it.
+  onServiceNetwork?: () => void;
 }) {
   const { docker, dataDir, log, images, prepareImage, lan, exits } = options;
   const capacity =
@@ -415,11 +424,14 @@ export function createAppContainers(options: {
     if (!existing?.State.Running) return undefined;
     const holder = policy ? await lan?.running(spec.app) : undefined;
     if (policy && !holder) return undefined;
+    const http = await httpServices(packageDir);
     const network = holder
       ? `container:${holder.Id}`
       : (await usesBroker(packageDir))
         ? brokerNetworkName(spec.app)
-        : undefined;
+        : http[0]
+          ? serviceNetworkName(spec.app, http[0])
+          : undefined;
     const desired = appContainerOptions(
       spec,
       imageVolumeName(spec.app),
@@ -507,9 +519,12 @@ export function createAppContainers(options: {
           );
         }
         const brokers = await usesBroker(packageDir);
-        if (policy && brokers) {
+        const http = await httpServices(packageDir);
+        // One network each: the device network's holder, the broker's, or one
+        // service's.
+        if ((policy ? 1 : 0) + (brokers ? 1 : 0) + http.length > 1) {
           throw new AppRefusal(
-            `${spec.app} can't both reach devices and use the broker`,
+            `${spec.app} can reach only one of devices, the broker and a service over HTTP`,
             409,
           );
         }
@@ -536,7 +551,11 @@ export function createAppContainers(options: {
           ? `container:${holder.id}`
           : brokers
             ? await brokerNetworkFor(docker, spec.app, log)
-            : undefined;
+            : http[0]
+              ? await serviceNetworkFor(docker, spec.app, http[0])
+              : undefined;
+        // The service joins it once the app holds it.
+        if (http[0]) options.onServiceNetwork?.();
 
         // The one it replaces keeps running until this one is sure to start.
         const desired = appContainerOptions(spec, dataVolume, network);
@@ -662,6 +681,7 @@ export function createAppContainers(options: {
         await removeNext(app);
         await remove(app);
         await removeBrokerNetwork(docker, app, log);
+        await removeServiceNetworks(docker, app, log);
         await lan?.remove(app);
         await capacity.gone(app);
       });

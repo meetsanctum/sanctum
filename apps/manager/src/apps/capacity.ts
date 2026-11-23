@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { totalmem } from "node:os";
 import { join } from "node:path";
 
-import { findService, withServiceDependencies } from "../services/registry.js";
+import {
+  serviceMemoryMb,
+  withServiceDependencies,
+} from "../services/registry.js";
 import { readJson, writeJson } from "../state.js";
 import type { AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
@@ -127,10 +130,11 @@ export function createCapacity(options: {
     const total = totalMemory();
     let free = (total - keptForTheHost(total)) / mebibyte;
     for (const mb of byApp.values()) free -= mb;
-    for (const name of counted) free -= findService(name)?.memoryMb ?? 0;
+    const totalMb = total / mebibyte;
+    for (const name of counted) free -= serviceMemoryMb(name, totalMb);
     let servicesMb = 0;
     for (const name of withServiceDependencies(services)) {
-      if (!counted.has(name)) servicesMb += findService(name)?.memoryMb ?? 0;
+      if (!counted.has(name)) servicesMb += serviceMemoryMb(name, totalMb);
     }
     return { memoryFreeMb: Math.max(0, Math.floor(free)), servicesMb };
   }

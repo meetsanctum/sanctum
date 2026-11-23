@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-
 import {
   assertManaged,
   ensureContainerNetwork,
@@ -16,12 +13,15 @@ import {
 } from "../docker.js";
 import { inspectService } from "../services/containers.js";
 import { findService } from "../services/registry.js";
+import { declaredServices } from "./service-networks.js";
 import { isOurs, stacked } from "../stack.js";
 
 // An app that uses a service through the broker reaches the broker, and
 // nothing else, on a network of its own: internal, so nothing on it reaches
-// beyond, and shared only with the broker. Every other app has no network at
-// all. Its broker account still limits it to its service's topics.
+// beyond, and shared only with the broker. An app that reaches a service over
+// HTTP has one of its own for it (service-networks.ts), and every other app
+// has no network at all. Its broker account still limits it to its service's
+// topics.
 
 const brokerLabel = "sanctum.app.broker";
 const broker = "mosquitto";
@@ -44,21 +44,8 @@ function inspectNetwork(docker: DockerClientLike, name: string) {
 // Whether the package staged in this folder asks for a service it reaches
 // through the broker, as its manifest says.
 export async function usesBroker(packageDir: string) {
-  const text = await readFile(
-    join(packageDir, "sanctum-app.json"),
-    "utf8",
-  ).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (text === null) return false;
-  const { permissions } = JSON.parse(text) as {
-    permissions?: { id: string }[];
-  };
-  return (permissions ?? []).some(
-    ({ id }) =>
-      id.startsWith("services:") &&
-      (findService(id.slice("services:".length))?.mqttTopics?.length ?? 0) > 0,
+  return (await declaredServices(packageDir)).some(
+    (name) => (findService(name)?.mqttTopics?.length ?? 0) > 0,
   );
 }
 

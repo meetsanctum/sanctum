@@ -73,6 +73,8 @@ export type ServiceConnection = {
     readonly password: string;
     readonly topics: readonly string[];
   };
+  /** Where a service answers over HTTP, as Ollama does, on a network the app shares only with it. */
+  readonly http?: { readonly url: string };
   readonly [detail: string]: unknown;
 };
 

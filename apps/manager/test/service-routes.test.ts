@@ -71,6 +71,7 @@ describe("the services API", () => {
     expect(list.json().services).toEqual([
       { name: "mosquitto", apps: [], state: "starting" },
       { name: "zigbee2mqtt", apps: ["sanctum.zigbee"], state: "starting" },
+      { name: "ollama", apps: [], state: "off" },
     ]);
     const one = await server.inject({ url: "/api/services/zigbee2mqtt" });
     expect(one.json()).toMatchObject({ service: { name: "zigbee2mqtt" } });

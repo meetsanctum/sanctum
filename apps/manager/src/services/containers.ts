@@ -30,7 +30,12 @@ export type ServiceSpec = {
   volumes?: Array<{ name: string; target: string }>;
   // Host devices, such as a Zigbee coordinator.
   devices?: Array<{ host: string; container: string }>;
+  // Caps on its memory, with no swap beyond it, and on its cores.
+  memoryMb?: number;
+  cpus?: number;
 };
+
+const mebibyte = 1024 * 1024;
 
 const definitionLabel = "sanctum.definition";
 
@@ -61,6 +66,13 @@ export function serviceContainerOptions(
             })),
           }
         : {}),
+      ...(spec.memoryMb
+        ? {
+            Memory: spec.memoryMb * mebibyte,
+            MemorySwap: spec.memoryMb * mebibyte,
+          }
+        : {}),
+      ...(spec.cpus ? { NanoCpus: Math.round(spec.cpus * 1e9) } : {}),
       RestartPolicy: restartPolicy,
       LogConfig: {
         Type: "json-file",

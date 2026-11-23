@@ -71,6 +71,7 @@ const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
 const serviceNames: Record<string, string> = {
   zigbee2mqtt: "Zigbee2MQTT",
   mosquitto: "Mosquitto",
+  ollama: "Ollama",
 };
 
 // The standard types other apps read, by what they hold.

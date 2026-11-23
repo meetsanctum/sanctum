@@ -184,8 +184,8 @@ export type SpacePlan = z.infer<typeof spacePlan>;
 export const spaceFreed = z.object({ freed: z.number().nullable() });
 
 // What an app gets for a service (apps/manager/src/services/services.ts):
-// its own broker account and anything else the service hands out, such as
-// Zigbee2MQTT's base topic.
+// its own broker account, or where the service answers over HTTP, and
+// anything else the service hands out, such as Zigbee2MQTT's base topic.
 export const serviceGrant = z.object({
   connection: z.looseObject({
     mqtt: z
@@ -196,6 +196,7 @@ export const serviceGrant = z.object({
         topics: z.array(z.string()),
       })
       .optional(),
+    http: z.object({ url: z.string() }).optional(),
   }),
 });
 
