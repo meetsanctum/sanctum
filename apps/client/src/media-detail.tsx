@@ -107,9 +107,10 @@ function aboutWhatPlays(capability: Media): string | null {
 }
 
 // The picture of what plays, in its own shape up to 300 by 264 px. Without
-// one, it is a soft grey gradient the shell draws, saying "Nothing playing"
-// while nothing does; a song's is square, a film's or a show's as wide as a
-// screen.
+// one, or while nothing plays, it is a soft grey gradient the shell draws in
+// the shape the picture would have, with no words on it: the detail's title
+// already says nothing plays. A song's is square, a film's or a show's as
+// wide as a screen.
 function Artwork(props: {
   square: boolean;
   nothing: boolean;
@@ -117,13 +118,21 @@ function Artwork(props: {
 }) {
   const [ratio, setRatio] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
-  if (props.url && !props.nothing && !failed) {
-    // The player's own picture in its own shape: as wide as the page beside
-    // it allows, 300 px, or 264 px tall where it's taller than that.
-    const shape = ratio ?? (props.square ? 1 : 16 / 9);
+  const picture = props.url && !props.nothing && !failed ? props.url : null;
+  // As wide as the page beside it allows, 300 px, or 264 px tall where it's
+  // taller than that: the player's own picture by its own shape.
+  const shape = (picture && ratio) || (props.square ? 1 : 16 / 9);
+  const frame = {
+    style: {
+      aspectRatio: shape,
+      "--artwork-width": `min(300px, ${Math.round(264 * shape)}px)`,
+    } as CSSProperties,
+    className: "w-full rounded-xl @min-[560px]:w-(--artwork-width)",
+  };
+  if (picture) {
     return (
       <img
-        src={props.url}
+        src={picture}
         alt=""
         onError={() => setFailed(true)}
         onLoad={(event) => {
@@ -132,50 +141,230 @@ function Artwork(props: {
             setRatio(naturalWidth / naturalHeight);
           }
         }}
-        style={
-          {
-            aspectRatio: shape,
-            "--artwork-width": `min(300px, ${Math.round(264 * shape)}px)`,
-          } as CSSProperties
-        }
-        className="block w-full rounded-xl object-cover @min-[560px]:w-(--artwork-width)"
+        style={frame.style}
+        className={`${frame.className} block object-cover`}
       />
     );
   }
   return (
     <div
-      className={`grid w-full place-items-center overflow-hidden rounded-xl px-4 text-center ${props.square ? "aspect-square @min-[560px]:w-66" : "aspect-video @min-[560px]:w-75"}`}
+      aria-hidden="true"
       style={{
+        ...frame.style,
         background:
           "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
       }}
-    >
-      {props.nothing && (
-        <span className="text-[26px] leading-8 font-medium tracking-[-0.01em] text-white/52">
-          Nothing playing
-        </span>
+      className={frame.className}
+    />
+  );
+}
+
+// What plays, by its title over what it is from.
+function Heading(props: { title: string | null; about: string | null }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      {props.title && (
+        <p className="m-0 text-[22px] leading-7 font-medium text-balance">
+          {props.title}
+        </p>
+      )}
+      {props.about && (
+        <p className="m-0 text-[15px] leading-5 text-white/64">{props.about}</p>
       )}
     </div>
   );
 }
 
-/** Playing: what plays and its controls, side by side where there is room. */
-export function MediaPlaying(props: Props) {
+// Where it is in what plays: a bar, the clock under it hanging below the
+// bar's own line, so what is laid out by the bar lines up with the bar
+// itself. Where the player seeks, the bar is a slider.
+function Timeline(
+  props: Pick<Props, "capability" | "failures" | "name" | "onCommand"> & {
+    canControl: boolean;
+  },
+) {
   const { capability, onCommand } = props;
-  const state = capability.state;
-  const { playback } = capability.features;
-  const playing = isPlaying(capability);
-  const nothing = !state || state.on === false || state.activity === "idle";
-  const able = !props.disabled && !nothing;
-  const canToggle = !props.disabled && canPlayPause(capability);
   const position = usePosition(capability);
-  const duration = state?.media?.duration;
+  const duration = capability.state?.media?.duration;
   const canSeek =
-    able && duration !== undefined && duration > 0 && playback.includes("seek");
+    props.canControl &&
+    duration !== undefined &&
+    duration > 0 &&
+    capability.features.playback.includes("seek");
   const [seeking, setSeeking] = useState<number | null>(null);
   const seekPointer = useRef<number | null>(null);
   const seekTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const shownAt = canSeek ? (seeking ?? position) : position;
+  const hasPosition = props.canControl && shownAt !== null;
+
+  useEffect(() => {
+    if (canSeek) return;
+    seekPointer.current = null;
+    clearTimeout(seekTimeout.current);
+    setSeeking(null);
+  }, [canSeek]);
+  useEffect(() => {
+    if (seekPointer.current === null) setSeeking(null);
+  }, [
+    capability.observed?.media?.position,
+    capability.observed?.media?.positionAt,
+    props.failures,
+  ]);
+  useEffect(() => () => clearTimeout(seekTimeout.current), []);
+
+  const seek = (to: number) => {
+    setSeeking(to);
+    clearTimeout(seekTimeout.current);
+    seekTimeout.current = setTimeout(() => setSeeking(null), 3000);
+    onCommand({ position: to });
+  };
+  const cancelSeek = (event: PointerEvent<HTMLDivElement>) => {
+    if (seekPointer.current !== event.pointerId) return;
+    seekPointer.current = null;
+    setSeeking(null);
+  };
+
+  return (
+    <div
+      className={`relative isolate h-1.5 rounded-full bg-white/22 has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50 ${duration === undefined || !props.canControl ? "opacity-45" : ""}`}
+    >
+      {duration !== undefined && hasPosition && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 rounded-full bg-white"
+          style={{ width: `${(shownAt / (duration || 1)) * 100}%` }}
+        />
+      )}
+      {canSeek && (
+        <div
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            if (
+              event.button !== 0 ||
+              event.isPrimary === false ||
+              seekPointer.current !== null
+            )
+              return;
+            // Use the visible rail's coordinates in every browser,
+            // including when the drag begins away from the thumb.
+            clearTimeout(seekTimeout.current);
+            seekPointer.current = event.pointerId;
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            setSeeking(seekAt(event, duration));
+          }}
+          onPointerMove={(event) => {
+            if (seekPointer.current !== event.pointerId) return;
+            setSeeking(seekAt(event, duration));
+          }}
+          onPointerUp={(event) => {
+            if (seekPointer.current !== event.pointerId) return;
+            seekPointer.current = null;
+            seek(seekAt(event, duration));
+          }}
+          onPointerCancel={cancelSeek}
+          onLostPointerCapture={cancelSeek}
+          className="absolute inset-x-0 -top-2 z-10 h-6 w-full cursor-pointer [touch-action:none]"
+        >
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            step={1}
+            value={shownAt ?? 0}
+            aria-label={`Where ${props.name} is`}
+            aria-valuetext={`${clock(shownAt ?? 0)} of ${clock(duration)}`}
+            onChange={(event) => {
+              if (seekPointer.current === null) {
+                seek(event.currentTarget.valueAsNumber);
+              }
+            }}
+            className="pointer-events-none absolute inset-0 size-full opacity-0"
+          />
+        </div>
+      )}
+      {/* The seek hit area sits above the clock where they overlap. */}
+      <div className="absolute inset-x-0 top-full mt-1 flex justify-between text-xs text-white/64 tabular-nums">
+        <span>{hasPosition ? clock(shownAt) : "–:––"}</span>
+        <span>
+          {duration !== undefined && hasPosition
+            ? `−${clock(duration - shownAt)}`
+            : "–:––"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function seekAt(event: PointerEvent<HTMLDivElement>, duration: number) {
+  const { left, width } = event.currentTarget.getBoundingClientRect();
+  const position = ((event.clientX - left) / (width || 1)) * duration;
+  return Math.min(duration, Math.max(0, Math.round(position)));
+}
+
+// Play or pause in the middle, between previous and next where the player
+// skips.
+function Transport(props: {
+  name: string;
+  playback: Readonly<Media["features"]["playback"]>;
+  isPlaying: boolean;
+  canControl: boolean;
+  canToggle: boolean;
+  onToggle: () => void;
+  onCommand: (command: MediaCommand) => void;
+}) {
+  const skip = (step: "previous" | "next") =>
+    props.playback.includes(step) && (
+      <Button
+        variant="ghost"
+        size="round"
+        aria-label={step === "previous" ? "Previous" : "Next"}
+        disabled={!props.canControl}
+        onClick={() => props.onCommand({ playback: step })}
+      >
+        {step === "previous" ? (
+          <SkipBack aria-hidden="true" fill="currentColor" />
+        ) : (
+          <SkipForward aria-hidden="true" fill="currentColor" />
+        )}
+      </Button>
+    );
+  const hasSkipButtons =
+    props.playback.includes("previous") || props.playback.includes("next");
+  return (
+    <div
+      className={`flex items-center px-4 ${hasSkipButtons ? "justify-between" : "justify-center"}`}
+    >
+      {skip("previous")}
+      <Button
+        variant="glass"
+        size="round-lg"
+        aria-label={`${props.isPlaying ? "Pause" : "Play"} ${props.name}`}
+        disabled={!props.canToggle}
+        onClick={props.onToggle}
+      >
+        {props.isPlaying ? (
+          <Pause aria-hidden="true" fill="currentColor" />
+        ) : (
+          <Play aria-hidden="true" fill="currentColor" />
+        )}
+      </Button>
+      {skip("next")}
+    </div>
+  );
+}
+
+/**
+ * Playing: what plays and its controls, side by side where there is room,
+ * one layout for every player and whatever it plays: a song, a show, a film
+ * or nothing.
+ */
+export function MediaPlaying(props: Props) {
+  const { capability, onCommand } = props;
+  const state = capability.state;
+  const playing = isPlaying(capability);
+  const nothing = !state || state.on === false || state.activity === "idle";
+  const canControl = !props.disabled && !nothing;
+  const canToggle = !props.disabled && canPlayPause(capability);
   const page = useRef<HTMLDivElement>(null);
   const title = nothing ? null : (state?.media?.title ?? null);
   const about = nothing ? null : aboutWhatPlays(capability);
@@ -221,160 +410,45 @@ export function MediaPlaying(props: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => {
-    if (canSeek) return;
-    seekPointer.current = null;
-    clearTimeout(seekTimeout.current);
-    setSeeking(null);
-  }, [canSeek]);
-  useEffect(() => {
-    if (seekPointer.current === null) setSeeking(null);
-  }, [
-    capability.observed?.media?.position,
-    capability.observed?.media?.positionAt,
-    props.failures,
-  ]);
-  useEffect(() => () => clearTimeout(seekTimeout.current), []);
-
-  const seek = (to: number) => {
-    setSeeking(to);
-    clearTimeout(seekTimeout.current);
-    seekTimeout.current = setTimeout(() => setSeeking(null), 3000);
-    onCommand({ position: to });
-  };
-  const cancelSeek = (event: PointerEvent<HTMLDivElement>) => {
-    if (seekPointer.current !== event.pointerId) return;
-    seekPointer.current = null;
-    setSeeking(null);
-  };
-
   return (
     <div
       ref={page}
       className="@container flex w-[760px] max-w-full justify-center"
     >
-      <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[minmax(0,1fr)_auto] @min-[560px]:gap-10 @min-[560px]:pt-7">
-        <div className="flex min-w-0 flex-col gap-5">
+      {/* Side by side, the bar's column is as wide as it is beside the
+          widest picture, 300 px, so the bar keeps one length whatever plays,
+          and the picture is centred in the column beside it. */}
+      <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[calc(100%_-_300px_-_--spacing(10))_1fr] @min-[560px]:gap-10 @min-[560px]:pt-7">
+        {/* The bar is on the picture's middle line whatever is above or
+            below it: the rows above and below the bar are as tall as each
+            other, and the column is as tall as the picture. What plays is
+            centred in the space above the bar, at least 20 px from it. */}
+        <div className="flex min-w-0 flex-col @min-[560px]:grid @min-[560px]:grid-rows-[1fr_auto_1fr] @min-[560px]:self-stretch">
           {(title || about) && (
-            <div className="flex flex-col gap-0.5">
-              {title && (
-                <p className="m-0 text-[22px] leading-7 font-medium text-balance">
-                  {title}
-                </p>
-              )}
-              {about && (
-                <p className="m-0 text-[15px] leading-5 text-white/64">
-                  {about}
-                </p>
-              )}
+            <div className="pb-5 @min-[560px]:self-center @min-[560px]:py-5">
+              <Heading title={title} about={about} />
             </div>
           )}
-          <div
-            className={`flex flex-col gap-1 ${duration === undefined || !able ? "opacity-45" : ""}`}
-          >
-            <div className="relative h-1.5 rounded-full bg-white/22 has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50">
-              {duration !== undefined && shownAt !== null && able && (
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-0 left-0 rounded-full bg-white"
-                  style={{ width: `${(shownAt / (duration || 1)) * 100}%` }}
-                />
-              )}
-              {canSeek && (
-                <div
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    if (
-                      event.button !== 0 ||
-                      event.isPrimary === false ||
-                      seekPointer.current !== null
-                    )
-                      return;
-                    // Use the visible rail's coordinates in every browser,
-                    // including when the drag begins away from the thumb.
-                    clearTimeout(seekTimeout.current);
-                    seekPointer.current = event.pointerId;
-                    event.currentTarget.setPointerCapture?.(event.pointerId);
-                    setSeeking(seekAt(event, duration));
-                  }}
-                  onPointerMove={(event) => {
-                    if (seekPointer.current !== event.pointerId) return;
-                    setSeeking(seekAt(event, duration));
-                  }}
-                  onPointerUp={(event) => {
-                    if (seekPointer.current !== event.pointerId) return;
-                    seekPointer.current = null;
-                    seek(seekAt(event, duration));
-                  }}
-                  onPointerCancel={cancelSeek}
-                  onLostPointerCapture={cancelSeek}
-                  className="absolute inset-x-0 -top-2 h-6 w-full cursor-pointer [touch-action:none]"
-                >
-                  <input
-                    type="range"
-                    min={0}
-                    max={duration}
-                    step={1}
-                    value={shownAt ?? 0}
-                    aria-label={`Where ${props.name} is`}
-                    aria-valuetext={`${clock(shownAt ?? 0)} of ${clock(duration)}`}
-                    onChange={(event) => {
-                      if (seekPointer.current === null) {
-                        seek(event.currentTarget.valueAsNumber);
-                      }
-                    }}
-                    className="pointer-events-none absolute inset-0 size-full opacity-0"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="flex justify-between text-xs text-white/64 tabular-nums">
-              <span>{shownAt !== null && able ? clock(shownAt) : "–:––"}</span>
-              <span>
-                {duration !== undefined && shownAt !== null && able
-                  ? `−${clock(duration - shownAt)}`
-                  : "–:––"}
-              </span>
-            </div>
+          <div className="@min-[560px]:row-start-2">
+            <Timeline
+              capability={capability}
+              canControl={canControl}
+              failures={props.failures}
+              name={props.name}
+              onCommand={onCommand}
+            />
           </div>
-          <div
-            className={`flex items-center px-4 ${playback.includes("previous") || playback.includes("next") ? "justify-between" : "justify-center"}`}
-          >
-            {playback.includes("previous") && (
-              <Button
-                variant="ghost"
-                size="round"
-                aria-label="Previous"
-                disabled={!able}
-                onClick={() => onCommand({ playback: "previous" })}
-              >
-                <SkipBack aria-hidden="true" fill="currentColor" />
-              </Button>
-            )}
-            <Button
-              variant="glass"
-              size="round-lg"
-              aria-label={`${playing ? "Pause" : "Play"} ${props.name}`}
-              disabled={!canToggle}
-              onClick={() => toggle.current?.()}
-            >
-              {playing ? (
-                <Pause aria-hidden="true" fill="currentColor" />
-              ) : (
-                <Play aria-hidden="true" fill="currentColor" />
-              )}
-            </Button>
-            {playback.includes("next") && (
-              <Button
-                variant="ghost"
-                size="round"
-                aria-label="Next"
-                disabled={!able}
-                onClick={() => onCommand({ playback: "next" })}
-              >
-                <SkipForward aria-hidden="true" fill="currentColor" />
-              </Button>
-            )}
+          {/* Below the bar's clock: 4 px, its 16 px line and 20 px. */}
+          <div className="mt-10 @min-[560px]:row-start-3 @min-[560px]:self-start">
+            <Transport
+              name={props.name}
+              playback={capability.features.playback}
+              isPlaying={playing}
+              canControl={canControl}
+              canToggle={canToggle}
+              onToggle={() => toggle.current?.()}
+              onCommand={onCommand}
+            />
           </div>
         </div>
         <div className="order-first grid place-items-center self-stretch @min-[560px]:order-none">
@@ -388,12 +462,6 @@ export function MediaPlaying(props: Props) {
       </div>
     </div>
   );
-}
-
-function seekAt(event: PointerEvent<HTMLDivElement>, duration: number) {
-  const { left, width } = event.currentTarget.getBoundingClientRect();
-  const position = ((event.clientX - left) / (width || 1)) * duration;
-  return Math.min(duration, Math.max(0, Math.round(position)));
 }
 
 // A small round toggle above a page's volume: a TV's power, a speaker's
