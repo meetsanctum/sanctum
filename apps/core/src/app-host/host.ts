@@ -266,7 +266,7 @@ export function createAppHost(options: {
     log,
   });
 
-  const { record, execute } = createActionRunner<InstalledApp>({
+  const { record, recordRefusal, execute } = createActionRunner<InstalledApp>({
     activity,
     timeoutMs,
     log,
@@ -278,6 +278,7 @@ export function createAppHost(options: {
         appName: entry.manifest.name,
         who,
       }),
+    deviceById: options.devices.row,
   });
   const { offChangeOf, ...runChoices } = createAppRunChoices({
     installed,
@@ -323,7 +324,7 @@ export function createAppHost(options: {
     agentWho: activity.agentWho,
     agentCanUse: (appId, actionId) =>
       options.agents.canUse(appId, actionId, "action"),
-    record,
+    recordRefusal,
     execute,
     track,
     timeoutMs,

@@ -5,7 +5,13 @@ import {
   lanPermission,
 } from "@meetsanctum/app-sdk";
 import { createDriver, type Driver, type DriverOptions } from "./driver.js";
-import { changeSpeakerAction, deviceAction, speakerAction } from "./page.js";
+import type { SpeakerChange } from "./speaker.js";
+import {
+  changeRingAction,
+  deviceAction,
+  microphonesActions,
+  speakerAction,
+} from "./page.js";
 import { esphomeService } from "./sightings.js";
 
 // The ESPHome driver app: brings the lights, switches, sensors, motion and
@@ -33,9 +39,10 @@ export function createEsphomeApp(options: DriverOptions = {}) {
 
   const device = deviceAction((deviceId) => running().page(deviceId));
   const speaker = speakerAction((deviceId) => running().speaker(deviceId));
-  const changeSpeaker = changeSpeakerAction((deviceId, change) =>
-    running().changeSpeaker(deviceId, change),
-  );
+  const changeSpeaker = (deviceId: string, change: SpeakerChange) =>
+    running().changeSpeaker(deviceId, change);
+  const microphones = microphonesActions(changeSpeaker);
+  const changeRing = changeRingAction(changeSpeaker);
 
   return defineApp({
     id: "sanctum.esphome",
@@ -47,8 +54,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // without encryption, or that lost the key it was given, is repaired.
     // 0.6.0: media players, and smart speakers, whose voice requests are
     // followed and declined. 0.7.0: a smart speaker's microphones, ring and
-    // wake word on its page.
-    version: "0.7.0",
+    // wake word on its page. 0.8.0: an action for each change there, about
+    // the speaker, so Activity names it.
+    version: "0.8.0",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -80,7 +88,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       ],
     },
     migrations: "migrations",
-    actions: [device, speaker, changeSpeaker],
+    actions: [device, speaker, ...microphones, changeRing],
     events: [],
     async start(ctx) {
       const started = createDriver(ctx, options);

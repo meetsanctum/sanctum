@@ -55,6 +55,10 @@ const subjectTypes: [string, ActivityThingType][] = [
 const deepest = 6;
 
 const isApp = (source: string) => source.includes(".");
+const isPress = (entry: ActivityEntry) =>
+  entry.source === "devices" && entry.action === "device.press";
+const isRun = (entry: ActivityEntry) =>
+  entry.source === "workflows" && entry.action === "workflow.run";
 
 function actorOf(actor: string | null) {
   if (!actor) return null;
@@ -94,11 +98,14 @@ export function createActivityViews(
       : { type, id, name, gone: false };
   }
 
-  function subjectOf(entry: ActivityEntry): ActivityThing | null {
+  function subjectOf(
+    entry: ActivityEntry,
+    isDeviceAction: boolean,
+  ): ActivityThing | null {
     if (!entry.subjectId) return null;
-    const type = subjectTypes.find(([prefix]) =>
-      entry.action.startsWith(prefix),
-    )?.[1];
+    const type = isDeviceAction
+      ? "device"
+      : subjectTypes.find(([prefix]) => entry.action.startsWith(prefix))?.[1];
     return type ? thing(type, entry.subjectId) : null;
   }
 
@@ -116,7 +123,7 @@ export function createActivityViews(
   }
 
   function whoOf(origin: ActivityEntry): ActivityWho {
-    if (origin.action === "device.press" && origin.subjectId) {
+    if (isPress(origin) && origin.subjectId) {
       return {
         kind: "press",
         device: origin.subjectId,
@@ -177,7 +184,7 @@ export function createActivityViews(
   }
 
   function runOf(chain: ActivityEntry[]): ActivityRun | null {
-    const run = chain.find((each) => each.action === "workflow.run");
+    const run = chain.find(isRun);
     if (!run?.subjectId) return null;
     const workflow = lookups.workflow(run.subjectId);
     return {
@@ -202,7 +209,7 @@ export function createActivityViews(
   // What a press or a run led to, through the runs and apps' actions it
   // caused.
   function causedOf(entry: ActivityEntry): ActivityCaused | null {
-    if (entry.action !== "device.press" && entry.action !== "workflow.run") {
+    if (!isPress(entry) && !isRun(entry)) {
       return null;
     }
     const runs = new Map<string, ActivityThing>();
@@ -214,7 +221,7 @@ export function createActivityViews(
       const next: string[] = [];
       for (const caused of activity.causedBy(level)) {
         next.push(caused.id);
-        if (caused.action === "workflow.run" && caused.subjectId) {
+        if (isRun(caused) && caused.subjectId) {
           const workflow = lookups.workflow(caused.subjectId);
           const keeper = caused.app ?? workflow?.app;
           if (keeper) apps.set(keeper, lookups.app(keeper));
@@ -241,6 +248,13 @@ export function createActivityViews(
     info(entry: ActivityEntry): ActivityInfo {
       const chain = chainOf(entry);
       let detail = entry.detail;
+      const { actionTitle, actionDone } = detail ?? {};
+      // Keep what the action said when it ran, even when its app changes.
+      const isDeviceAction =
+        isApp(entry.source) &&
+        typeof actionTitle === "string" &&
+        typeof actionDone === "string";
+      if (isDeviceAction) detail = null;
       // Keep the recorded kind for filtering when a device changes kinds.
       if (entry.kind === "devices" && detail && "capabilityKind" in detail) {
         const { capabilityKind: _capabilityKind, ...shown } = detail;
@@ -254,16 +268,19 @@ export function createActivityViews(
         kind: entry.kind ?? "setup",
         source: entry.source,
         action: entry.action,
-        title: isApp(entry.source)
-          ? lookups.action(entry.source, entry.action)
-          : null,
+        title: isDeviceAction
+          ? actionTitle
+          : isApp(entry.source)
+            ? lookups.action(entry.source, entry.action)
+            : null,
+        done: isDeviceAction ? actionDone : null,
         outcome: entry.outcome,
         reason: entry.reason,
         detail,
         who: whoOf(chain.at(-1)!),
         app: appOf(chain),
         run: runOf(chain),
-        subject: subjectOf(entry),
+        subject: subjectOf(entry, isDeviceAction),
         causeId: entry.causeId,
         caused: causedOf(entry),
       };

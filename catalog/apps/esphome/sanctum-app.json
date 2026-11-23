@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "core": "^2.0.0",
   "protocol": 16,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -247,8 +247,8 @@
       "assistant": null
     },
     {
-      "id": "esphome.changeSpeaker",
-      "title": "Change a smart speaker",
+      "id": "esphome.muteMicrophones",
+      "title": "Mute its microphones",
       "tier": "write",
       "input": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -256,26 +256,6 @@
         "properties": {
           "device": {
             "type": "string"
-          },
-          "microphones": {
-            "type": "boolean"
-          },
-          "ring": {
-            "type": "object",
-            "properties": {
-              "glow": {
-                "type": "boolean"
-              },
-              "colour": {
-                "type": "string",
-                "pattern": "^#[0-9a-f]{6}$"
-              },
-              "brightness": {
-                "type": "integer",
-                "minimum": 20,
-                "maximum": 100
-              }
-            }
           }
         },
         "required": [
@@ -288,7 +268,76 @@
         "properties": {},
         "additionalProperties": false
       },
-      "assistant": null
+      "assistant": null,
+      "aboutDevice": {
+        "done": "Muted its microphones"
+      }
+    },
+    {
+      "id": "esphome.unmuteMicrophones",
+      "title": "Turn on its microphones",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null,
+      "aboutDevice": {
+        "done": "Turned on its microphones"
+      }
+    },
+    {
+      "id": "esphome.changeRing",
+      "title": "Change its ring",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "glow": {
+            "type": "boolean"
+          },
+          "colour": {
+            "type": "string",
+            "pattern": "^#[0-9a-f]{6}$"
+          },
+          "brightness": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null,
+      "aboutDevice": {
+        "done": "Changed its ring"
+      }
     }
   ],
   "events": [],
@@ -307,5 +356,6 @@
     "triggers": [],
     "conditions": [],
     "steps": []
-  }
+  },
+  "oldestPage": "0.8.0"
 }

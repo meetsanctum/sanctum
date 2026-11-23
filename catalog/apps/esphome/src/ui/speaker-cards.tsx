@@ -16,7 +16,11 @@ import {
   type ReactNode,
 } from "react";
 
-import type { ChangeSpeakerAction, SpeakerAction } from "../page";
+import type {
+  ChangeRingAction,
+  MicrophonesAction,
+  SpeakerAction,
+} from "../page";
 import { ringColourDistance } from "../ring-colour";
 import type { Ring, SpeakerChange, SpeakerState } from "../speaker";
 
@@ -291,10 +295,20 @@ export function SpeakerCards(props: DevicePageProps) {
     // A read already on its way says what was before the change.
     reads.current += 1;
     try {
-      await client.call<ChangeSpeakerAction>("esphome.changeSpeaker", {
-        device: device.id,
-        ...next,
-      });
+      if (next.microphones !== undefined) {
+        await client.call<MicrophonesAction>(
+          next.microphones
+            ? "esphome.unmuteMicrophones"
+            : "esphome.muteMicrophones",
+          { device: device.id },
+        );
+      }
+      if (next.ring) {
+        await client.call<ChangeRingAction>("esphome.changeRing", {
+          device: device.id,
+          ...next.ring,
+        });
+      }
     } catch (error) {
       setSpeaker(speaker);
       if (

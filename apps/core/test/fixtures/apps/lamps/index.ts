@@ -1,5 +1,7 @@
+import { z } from "zod";
 import {
   ActionError,
+  defineAction,
   defineApp,
   deviceTypeOf,
   mediaCommand,
@@ -702,7 +704,28 @@ export default defineApp({
   permissions: [
     { id: "devices.register", reason: "For the test.", needed: true },
   ],
-  actions: [],
+  actions: [
+    // A setting of one of its devices, as a device's page changes it.
+    defineAction({
+      id: "lamps.nudge",
+      title: "Nudge it",
+      tier: "write",
+      aboutDevice: { done: "Nudged it" },
+      input: z.object({
+        device: z.string(),
+        effect: z.enum(["refused", "failed", "offline"]).optional(),
+      }),
+      output: z.object({}),
+      async run(ctx, { effect }) {
+        if (effect === "refused") throw new ActionError("conflict");
+        if (effect === "failed") throw new Error("It didn't answer");
+        if (effect === "offline") {
+          await ctx.devices.report({ key: "lamp-1", availability: "offline" });
+        }
+        return {};
+      },
+    }),
+  ],
   events: [],
   async start(ctx) {
     await radio.attach(ctx);

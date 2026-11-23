@@ -21,6 +21,7 @@ export function entry(fields: Partial<ActivityInfo> = {}): ActivityInfo {
     source: "devices",
     action: "device.command",
     title: null,
+    done: null,
     outcome: "ok",
     reason: null,
     detail: { capability: "light", asked: { on: true, brightness: 80 } },

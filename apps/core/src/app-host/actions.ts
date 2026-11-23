@@ -18,16 +18,17 @@ import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { EmittedEvent } from "./app-work.js";
 import { opensTurn, type Turn } from "../models/turns.js";
 
-// Runs apps' actions for the app host and writes them to the activity log. A
-// call that may change something has its entry as it starts, and what the
-// action does has it as its cause, so a light a mood turned on names whoever
-// ran the mood; how the call ended changes the entry after.
+// Runs apps' actions for the app host and writes them to the activity log.
+// What a call does points back to its entry, so a light a mood turned on
+// names whoever ran the mood.
 
 // An app's own call joins its last entry for the same action.
 const appSteps: Joining = {
   withinMs: activityTimes.adjustmentsJoinMs,
   matches: () => true,
 };
+
+type DeviceSubject = { id: string; name: string; title: string; done: string };
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -57,8 +58,14 @@ export function createActionRunner<
   // A turn for a person's or a shared device's call to an action that
   // declares one, in which the app may ask the home's AI model.
   turnFor: (entry: Entry, who: ActivityAuthor) => Turn;
+  deviceById: (id: string) => {
+    name: string | null;
+    driverName: string;
+    driver: string;
+  } | null;
 }) {
   const { activity, timeoutMs, log } = options;
+  const runningDeviceEntries = new Set<string>();
 
   // An activity entry for a call, with who is behind it.
   function record(
@@ -67,14 +74,72 @@ export function createActionRunner<
     who: ActivityAuthor,
     outcome: Outcome,
     reason?: string,
-    subjectId?: string,
+    subject?: string | DeviceSubject,
+    isRunning = false,
   ) {
+    const device = typeof subject === "object" ? subject : undefined;
+    const subjectId = typeof subject === "string" ? subject : device?.id;
+    let joining: Joining | undefined;
+    if (device && !isRunning) {
+      joining = {
+        ...appSteps,
+        matches: (previous) =>
+          !runningDeviceEntries.has(previous.id) &&
+          previous.detail?.actionTitle === device.title &&
+          previous.detail?.actionDone === device.done,
+      };
+    } else if (!device && who.actor?.startsWith("app:") && !activity.cause()) {
+      joining = appSteps;
+    }
     return activity.for(appId)(
-      { action: actionId, outcome, reason, subjectId, ...who },
-      // An app acting on its own, as on a job, joins its last entry for
-      // the same action, so natural light's steps are one entry.
-      who.actor?.startsWith("app:") && !activity.cause() ? appSteps : undefined,
+      {
+        action: actionId,
+        outcome,
+        reason,
+        subjectId,
+        detail: device && {
+          name: device.name,
+          actionTitle: device.title,
+          actionDone: device.done,
+        },
+        ...who,
+      },
+      joining,
     );
+  }
+
+  // The app's own device a call acts on, where its action says it acts on
+  // one: another app's device, or none, leaves the entry about nothing.
+  function deviceOf(
+    appId: string,
+    declared: DeclaredAction,
+    input: unknown,
+  ): DeviceSubject | undefined {
+    if (!declared.aboutDevice) return undefined;
+    const id = (input as { device?: unknown } | null)?.device;
+    if (typeof id !== "string") return undefined;
+    const device = options.deviceById(id);
+    if (device?.driver !== appId) return undefined;
+    return {
+      id,
+      name: device.name ?? device.driverName,
+      title: declared.title,
+      done: declared.aboutDevice.done,
+    };
+  }
+
+  function recordRefusal(
+    appId: string,
+    action: DeclaredAction,
+    who: ActivityAuthor,
+    reason: string,
+    rawInput: unknown,
+  ) {
+    const input = action.aboutDevice ? action.input(rawInput) : undefined;
+    const device = input?.success
+      ? deviceOf(appId, action, input.data)
+      : undefined;
+    record(appId, action.id, who, "refused", reason, device);
   }
 
   // Runs one action as an actor the gate has already admitted: the input is
@@ -95,27 +160,6 @@ export function createActionRunner<
     if (!action) {
       throw new ActionCallError("not_found");
     }
-    let logged: string | undefined;
-    const ended = (outcome: Outcome, reason: string) => {
-      const joined = logged && activity.get(logged);
-      if (joined && joined.count === 1) {
-        activity.update(logged!, { outcome, reason });
-      } else {
-        record(appId, action.id, who, outcome, reason);
-      }
-    };
-    const refuse = (error: ActionCallError) => {
-      ended("refused", error.code);
-      return error;
-    };
-    // Once the action has run, a call that may have changed something is
-    // logged even when it fails.
-    const fail = (code: "timeout" | "app_failed") => {
-      if (declared.tier !== "read") {
-        ended("failed", code);
-      }
-      return new ActionCallError(code);
-    };
     // What the app's own schemas make of a value, on its side of the call. A
     // schema's transform or refinement is app code too, and may throw instead
     // of returning a validation result; that answers nothing.
@@ -139,6 +183,51 @@ export function createActionRunner<
       throw new ActionCallError("invalid_request");
     }
 
+    const device = deviceOf(appId, declared, input.data);
+    const isWrite = declared.tier !== "read";
+    let logged: string | undefined;
+    let runningEntry: string | undefined;
+    // A device change can join once it succeeds. If it causes activity of
+    // its own first, give that activity a dedicated entry to point back to.
+    const parent = device && isWrite ? activity.cause() : undefined;
+    const cause = {
+      get id() {
+        // A child's transaction can roll back the entry it first needed.
+        if (!logged || (runningEntry && !activity.get(runningEntry))) {
+          if (runningEntry) runningDeviceEntries.delete(runningEntry);
+          logged = activity.within(parent ?? {}, () =>
+            record(appId, action.id, who, "ok", undefined, device, true),
+          );
+          runningEntry = logged;
+          runningDeviceEntries.add(runningEntry);
+        }
+        return logged;
+      },
+    };
+    const inAction = <T>(work: () => T): T => {
+      if (device && isWrite) return activity.within(cause, work);
+      return logged ? activity.within(logged, work) : work();
+    };
+    const ended = (outcome: Outcome, reason: string) => {
+      const existing = logged && activity.get(logged);
+      if (existing && existing.count === 1) {
+        activity.update(existing.id, { outcome, reason });
+      } else {
+        const id = record(appId, action.id, who, outcome, reason, device);
+        if (isWrite && device) logged = id;
+      }
+    };
+    const refuse = (error: ActionCallError) => {
+      ended("refused", error.code);
+      return error;
+    };
+    // Once the action has run, a call that may have changed something is
+    // logged even when it fails.
+    const fail = (code: "timeout" | "app_failed") => {
+      if (isWrite) ended("failed", code);
+      return new ActionCallError(code);
+    };
+
     const storage = entry.storage.call();
     const held: EmittedEvent[] = [];
     const turn = opensTurn(declared, actor)
@@ -149,7 +238,7 @@ export function createActionRunner<
       withinMs,
       ...(turn ? { turn } : {}),
     });
-    if (declared.tier !== "read") {
+    if (isWrite && !device) {
       logged = record(appId, action.id, who, "ok");
     }
     const running = () =>
@@ -159,7 +248,7 @@ export function createActionRunner<
       );
     let result: unknown;
     try {
-      result = await (logged ? activity.within(logged, running) : running());
+      result = await inAction(running);
     } catch (error) {
       if (isActionError(error)) {
         throw refuse(new ActionCallError(error.code));
@@ -168,7 +257,7 @@ export function createActionRunner<
       // went, which may have left the call half done.
       if (error instanceof ActionCallError) {
         if (error.code === "invalid_request") throw refuse(error);
-        if (declared.tier !== "read") ended("failed", error.code);
+        if (isWrite) ended("failed", error.code);
         throw error;
       }
       if (error instanceof TimedOut) {
@@ -180,9 +269,13 @@ export function createActionRunner<
     } finally {
       storage.end();
       // Its entry, if any, is the cause of the turn's.
-      if (turn) {
-        if (logged) activity.within(logged, () => turn.end());
-        else turn.end();
+      if (turn) inAction(() => turn.end());
+      if (runningEntry) {
+        runningDeviceEntries.delete(runningEntry);
+        if (logged === runningEntry && !activity.get(runningEntry)) {
+          logged = undefined;
+        }
+        runningEntry = undefined;
       }
     }
 
@@ -194,11 +287,12 @@ export function createActionRunner<
       }
       throw fail("app_failed");
     }
-    const deliver = () => options.deliver(held);
-    if (logged) activity.within(logged, deliver);
-    else deliver();
+    if (isWrite && device && !logged) {
+      logged = record(appId, action.id, who, "ok", undefined, device);
+    }
+    inAction(() => options.deliver(held));
     return checked.data;
   }
 
-  return { record, execute };
+  return { record, recordRefusal, execute };
 }
