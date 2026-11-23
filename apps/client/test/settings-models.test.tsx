@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import type { ModelSourceInfo, ModelsInfo } from "@meetsanctum/app-sdk";
+import type {
+  AppInfo,
+  ModelSourceInfo,
+  ModelsInfo,
+} from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -7,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import { ModelsPage } from "../src/models/models-page";
-import { checkLine, sourceName, tokensText } from "../src/models/words";
+import { checkLine, sourceDetail, sourceName } from "../src/models/words";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -37,10 +41,67 @@ const router: ModelSourceInfo = {
   tokens: { today: 0, month: 18_400 },
 };
 
+// Thirty days of tokens, the same each day, for each source and app.
+function usageOf(
+  bySource: Record<string, number>,
+  byApp: Record<string, number> = {},
+): ModelsInfo["usage"] {
+  const days = Array.from({ length: 30 }, (_, at) => {
+    const day = new Date(now);
+    day.setUTCDate(day.getUTCDate() - (29 - at));
+    return day.toISOString().slice(0, 10);
+  });
+  const each = (tokens: number) => days.map(() => tokens);
+  return {
+    days,
+    sources: Object.entries(bySource).map(([id, tokens]) => ({
+      id,
+      tokens: each(tokens),
+    })),
+    apps: Object.entries(byApp).map(([id, tokens]) => ({
+      id,
+      tokens: each(tokens),
+    })),
+    checks: each(0),
+  };
+}
+
+const ollamaApp = {
+  id: "sanctum.ollama",
+  name: "Ollama",
+  version: "0.1.0",
+  icon: { glyph: "cpu", color: "iris" },
+  pages: ["main"],
+  permissions: ["services:ollama"],
+  requests: [],
+  state: "running",
+  settings: null,
+} as unknown as AppInfo;
+const ollamaOffer = {
+  id: "sanctum.ollama",
+  name: "Ollama",
+  version: "0.1.0",
+  summary: "AI models on Sanctum itself, so what's asked stays in your home.",
+  icon: { glyph: "cpu", color: "iris" },
+  requests: [
+    {
+      id: "services:ollama",
+      reason: "To run AI models on Sanctum.",
+      needed: true,
+      asked: null,
+      startsOn: false,
+    },
+  ],
+  shortfalls: [],
+};
+let sanctumModels: { id: string; name: string; size?: number }[] = [];
+
 let container: HTMLDivElement;
 let root: Root;
 let sources: ModelSourceInfo[];
 let apps: ModelsInfo["apps"];
+let usage: ModelsInfo["usage"];
+let installed: AppInfo[];
 let requests: [string, string, unknown][];
 const live = createLiveFeed();
 
@@ -48,15 +109,27 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   sources = [mac, router];
   apps = [];
+  usage = usageOf({ mac: 100, router: 50 });
+  installed = [];
   requests = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
     const method = init.method ?? "GET";
     requests.push([method, path, init.json]);
-    const info = (): ModelsInfo => ({ sources, apps });
+    const info = (): ModelsInfo => ({ sources, apps, usage });
     if (path === "/api/models") return info() as never;
+    if (path === "/api/apps/available") return [ollamaOffer] as never;
+    if (path === "/api/apps/add") {
+      installed = [...installed, ollamaApp];
+      return ollamaApp as never;
+    }
     if (path === "/api/models/look") {
       const asked = init.json as { kind: string; address?: string };
+      if (asked.kind === "sanctum") {
+        return sanctumModels.length > 0
+          ? ({ found: true, models: sanctumModels } as never)
+          : ({ found: true, models: [] } as never);
+      }
       if (asked.kind === "computer" && asked.address === "192.168.1.9") {
         return {
           found: false,
@@ -112,9 +185,18 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+const openApp = vi.fn();
+
 async function show() {
   await act(async () => {
-    root.render(<ModelsPage live={live} page={null} />);
+    root.render(
+      <ModelsPage
+        live={live}
+        page={null}
+        apps={installed}
+        onOpenApp={openApp}
+      />,
+    );
   });
 }
 
@@ -161,9 +243,11 @@ describe("the words for AI models", () => {
   it("names a source by its model and where it runs", () => {
     expect(sourceName(mac)).toBe("Qwen3 8B on Office Mac");
     expect(sourceName(router)).toBe("OpenAI: GPT-5 Mini with OpenRouter");
-    expect(tokensText(router.tokens)).toBe(
-      `Today 0 · last 30 days ${(18_400).toLocaleString()}`,
-    );
+    const sanctum = { ...mac, kind: "sanctum" as const, computer: undefined };
+    expect(sourceName(sanctum)).toBe("Qwen3 8B on Sanctum");
+    expect(sourceDetail(sanctum)).toBe("Ollama");
+    expect(sourceDetail(mac)).toBe("Ollama at 192.168.1.40:11434");
+    expect(sourceDetail(router)).toBe("Key ending in 4f2a");
   });
 
   it("says how the last check went", () => {
@@ -172,7 +256,7 @@ describe("the words for AI models", () => {
       tone: "good",
     });
     expect(checkLine(router, now)?.text).toBe(
-      "Answered, but didn't use the tool: it may not handle your home's tools well",
+      "Answered, but may not use your home's AI tools well or act on your devices",
     );
     expect(
       checkLine(
@@ -212,12 +296,12 @@ describe("Settings → AI models", () => {
     await show();
     const text = container.textContent ?? "";
     expect(text).toContain("Qwen3 8B on Office Mac");
-    expect(text).toContain("Ollama at 192.168.1.40:11434 · in your home");
+    expect(text).toContain("Ollama at 192.168.1.40:11434");
+    expect(text).not.toContain("in your home");
     expect(text).toContain("Other sources");
-    expect(text).toContain(
-      "Key ending in 4f2a · what's asked leaves your home",
-    );
-    expect(text).toContain("Tokens used");
+    expect(text).toContain("Key ending in 4f2a");
+    expect(text).not.toContain("leaves your home");
+    expect(text).toContain("Tokens used4,500 tokens in the last 30 days");
     expect(text).not.toContain("sk-");
 
     await click(button("Use"));
@@ -230,24 +314,88 @@ describe("Settings → AI models", () => {
     expect(button("Use")).toBeDefined();
   });
 
-  it("lists the apps that may use it, with their tokens", async () => {
+  it("shows the tokens of the last 30 days by model, or by app", async () => {
     apps = [
       {
         id: "sanctum.example",
         name: "Example",
-        tokens: { today: 1_234, month: 5_678 },
+        tokens: { today: 0, month: 0 },
       },
+    ];
+    usage = usageOf({ mac: 100, router: 50 }, { "sanctum.example": 150 });
+    await show();
+    const sums = () =>
+      [
+        ...container.querySelectorAll(
+          '[aria-labelledby="settings-models-tokens"] li',
+        ),
+      ].map((each) => each.textContent);
+
+    expect(sums()).toEqual([
+      "Qwen3 8B on Office Mac3,000",
+      "OpenAI: GPT-5 Mini with OpenRouter1,500",
+    ]);
+    expect(
+      container.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    ).toContain("by model");
+
+    await click(
+      [...container.querySelectorAll("button")].find(
+        (each) => each.textContent === "Apps",
+      )!,
+    );
+    expect(sums()).toEqual(["Example4,500"]);
+  });
+
+  it("reads one day's tokens with the arrow keys", async () => {
+    await show();
+    const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+    await act(async () => {
+      chart.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+      );
+    });
+
+    expect(
+      [...container.querySelectorAll('[role="status"]')].map(
+        (each) => each.textContent,
+      ),
+    ).toContainEqual(expect.stringContaining("TodayQwen3 8B on Office Mac100"));
+  });
+
+  it("lists the apps that may use it, each opening its page", async () => {
+    apps = [
+      {
+        id: "sanctum.example",
+        name: "Example",
+        tokens: { today: 0, month: 0 },
+      },
+    ];
+    installed = [
+      { ...ollamaApp, id: "sanctum.example", name: "Example" } as AppInfo,
     ];
     await show();
     const text = container.textContent ?? "";
+
     expect(text).toContain("Apps that use it");
-    expect(text).toContain("Example");
-    expect(text).toContain("Today 1,234 · last 30 days 5,678");
+    expect(text).toContain("ExampleHasn't asked anything yet");
+    await click(button("Open"));
+    expect(openApp).toHaveBeenCalledWith("sanctum.example");
   });
 
-  it("leaves Apps that use it out while none may", async () => {
+  it("says when no app uses it, or nothing has used any tokens", async () => {
+    usage = usageOf({ mac: 0, router: 0 });
     await show();
-    expect(container.textContent).not.toContain("Apps that use it");
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("No app uses your home's AI model yet.");
+    expect(text).toContain("None in the last 30 days.");
+    expect(container.querySelector('[role="img"]')).toBeNull();
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (each) => each.textContent === "Apps",
+      ),
+    ).toBe(false);
   });
 
   it("says when the home has no model yet", async () => {
@@ -288,6 +436,11 @@ describe("Settings → AI models", () => {
   it("adds a computer once Sanctum has found Ollama there", async () => {
     await show();
     await click(button("Add a source"));
+    await click(
+      [...document.querySelectorAll("input[type=radio]")].at(
+        1,
+      ) as HTMLInputElement,
+    );
     await click(button("Continue"));
     expect(button("Add and check").disabled).toBe(true);
 
@@ -321,7 +474,7 @@ describe("Settings → AI models", () => {
     await show();
     await click(button("Add a source"));
     const provider = [...document.querySelectorAll("input[type=radio]")].at(
-      1,
+      2,
     ) as HTMLInputElement;
     await click(provider);
     await click(button("Continue"));
@@ -338,6 +491,53 @@ describe("Settings → AI models", () => {
         key: "sk-or-v1-test-key-4f2a",
         model: "llama3.2:3b",
       },
+    ]);
+  });
+
+  it("adds Ollama on Sanctum, then points to its page for a model", async () => {
+    sanctumModels = [];
+    await show();
+    await click(button("Add a source"));
+    await click(button("Continue"));
+
+    expect(document.body.textContent).toContain(
+      "Add the Ollama app, then download a model on its page.",
+    );
+    expect(document.body.textContent).toContain("Use Ollama");
+    await click(button("Add Ollama"));
+    expect(requests).toContainEqual([
+      "POST",
+      "/api/apps/add",
+      { id: "sanctum.ollama", version: "0.1.0" },
+    ]);
+    expect(document.body.textContent).toContain("Ollama is added to Sanctum");
+    expect(document.body.textContent).toContain(
+      "Go to the Ollama app to download a model.",
+    );
+
+    await click(button("Open Ollama"));
+    expect(openApp).toHaveBeenCalledWith("sanctum.ollama");
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("adds one of the models Ollama on Sanctum has", async () => {
+    installed = [ollamaApp];
+    sanctumModels = [
+      { id: "qwen3:4b", name: "Qwen3 4B", size: 2_500_000_000 },
+      { id: "qwen3:1.7b", name: "Qwen3 1.7B", size: 1_400_000_000 },
+    ];
+    await show();
+    await click(button("Add a source"));
+    await click(button("Continue"));
+
+    expect(document.body.textContent).toContain("Choose a model.");
+    expect(document.body.textContent).toContain("qwen3:4b · 2.5 GB");
+    await click(labelled("Qwen3 1.7Bqwen3:1.7b · 1.4 GB"));
+    await click(button("Add and check"));
+    expect(requests).toContainEqual([
+      "POST",
+      "/api/models/sources",
+      { kind: "sanctum", model: "qwen3:1.7b" },
     ]);
   });
 });

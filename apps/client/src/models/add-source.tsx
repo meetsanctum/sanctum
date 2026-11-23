@@ -3,6 +3,7 @@ import {
   type ModelChoice,
   type ModelProvider,
   type ModelSourceLook,
+  type AppInfo,
   type ModelsInfo,
 } from "@meetsanctum/app-sdk";
 import {
@@ -25,14 +26,15 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import { problemText, providerNames, sizeText } from "./words";
 
-// Adding a source of the home's AI model: first where it runs, then a
-// computer's address, which Sanctum looks at for Ollama and its models, or a
-// provider's key, which Sanctum checks and lists the models of. Adding it
-// runs a check, whose answer the page shows.
+// Adding a source of the home's AI model: first where it runs, then Ollama
+// on Sanctum (add-sanctum.tsx), a computer's address, which Sanctum looks at
+// for Ollama and its models, or a provider's key, which Sanctum checks and
+// lists the models of. Adding it runs a check, whose answer the page shows.
 
-type Where = "computer" | "provider";
+type Where = "sanctum" | "computer" | "provider";
 type Found = { models: ModelChoice[]; address?: string };
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
@@ -45,9 +47,14 @@ export function AddSource(props: {
   onOpenChange: (open: boolean) => void;
   onAdded: (info: ModelsInfo) => void;
   onCloseAutoFocus: () => void;
+  // The home's apps, as the shell has them, for whether Ollama is there.
+  apps: readonly AppInfo[];
+  onAppAdded?: (app: AppInfo) => void;
+  // Opens an app's page, as Ollama's.
+  onOpenApp?: (appId: string) => void;
 }) {
   const [step, setStep] = useState<"where" | Where>("where");
-  const [where, setWhere] = useState<Where>("computer");
+  const [where, setWhere] = useState<Where>("sanctum");
   const [address, setAddress] = useState("");
   const [computer, setComputer] = useState("");
   const [provider, setProvider] = useState<ModelProvider>("openrouter");
@@ -69,7 +76,7 @@ export function AddSource(props: {
     if (!props.open) return;
     cancel();
     setStep("where");
-    setWhere("computer");
+    setWhere("sanctum");
     setAddress("");
     setComputer("");
     setProvider("openrouter");
@@ -239,6 +246,21 @@ export function AddSource(props: {
                 <input
                   type="radio"
                   name="where"
+                  checked={where === "sanctum"}
+                  onChange={() => setWhere("sanctum")}
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
+                />
+                <span className="flex flex-col gap-0.5 leading-tight">
+                  <span className="text-sm font-medium">On {productName}</span>
+                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
+                    With the Ollama app. Your data never leaves your home.
+                  </span>
+                </span>
+              </label>
+              <label className={choice}>
+                <input
+                  type="radio"
+                  name="where"
                   checked={where === "computer"}
                   onChange={() => setWhere("computer")}
                   className="mt-0.5 size-4 shrink-0 accent-primary"
@@ -282,6 +304,23 @@ export function AddSource(props: {
               <Button type="submit">Continue</Button>
             </DialogFooter>
           </form>
+        )}
+
+        {step === "sanctum" && (
+          <AddSanctum
+            apps={props.apps}
+            onBack={() => setStep("where")}
+            onAdded={(info) => {
+              props.onAdded(info);
+              props.onOpenChange(false);
+            }}
+            onAppAdded={(app) => props.onAppAdded?.(app)}
+            onOpenOllama={() => {
+              props.onOpenChange(false);
+              props.onOpenApp?.(ollamaAppId);
+            }}
+            onBusy={setAdding}
+          />
         )}
 
         {step === "computer" && (

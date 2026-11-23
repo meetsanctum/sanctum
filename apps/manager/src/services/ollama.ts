@@ -35,6 +35,9 @@ export function ollamaSpec(host: {
       "OLLAMA_NUM_PARALLEL=1",
       "OLLAMA_MAX_QUEUE=4",
       "OLLAMA_MAX_LOADED_MODELS=1",
+      // The model in use stays loaded, so a question doesn't wait for it to
+      // load: its memory is Ollama's share of the host already.
+      "OLLAMA_KEEP_ALIVE=-1",
     ],
     volumes: [{ name: ollamaData, target: "/root/.ollama" }],
     memoryMb: ollamaMemoryMb(host.memoryMb),

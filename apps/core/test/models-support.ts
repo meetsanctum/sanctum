@@ -36,6 +36,8 @@ export type FakeSources = {
 };
 
 export const officeMac = "192.168.1.40";
+/** Where the manager's Ollama on Sanctum answers, as it gives the core. */
+export const sanctumOllama = "http://sanctum-ollama:11434";
 
 const encoder = new TextEncoder();
 
@@ -159,8 +161,13 @@ export function fakeSources(): FakeSources {
       async home(input, init) {
         const url = new URL(String(input));
         note(url, init);
-        if (url.host !== `${officeMac}:11434` || !sources.ollama.up) {
-          return unreachable();
+        // The same fake Ollama answers on a computer and on Sanctum.
+        const isOllama =
+          url.host === `${officeMac}:11434` || url.origin === sanctumOllama;
+        if (!isOllama || !sources.ollama.up) return unreachable();
+        if (url.pathname === "/api/generate") {
+          sources.chats.push(JSON.parse(String(init?.body)));
+          return json({ done: true });
         }
         if (url.pathname === "/api/tags") {
           return json({ models: sources.ollama.models });

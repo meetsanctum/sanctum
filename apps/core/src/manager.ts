@@ -14,6 +14,7 @@ import {
   hostHistory,
   hostResources,
   hostStatus,
+  serviceStatus,
   keptCopy,
   lanVersion,
   managerAudit,
@@ -455,6 +456,21 @@ export function createManagerClient(options: {
         undefined,
         60_000,
       );
+    },
+
+    // Where a service answers over HTTP while it runs, as Ollama does, or
+    // null while it doesn't.
+    async serviceUrl(service: string) {
+      const answer = parseBody(
+        serviceStatus,
+        await once(
+          "GET",
+          `/api/services/${encodeURIComponent(service)}`,
+          undefined,
+          5_000,
+        ),
+      );
+      return answer.service.url ?? null;
     },
 
     // Erases a service's own data, once no app needs it and it has stopped.

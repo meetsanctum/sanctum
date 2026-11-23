@@ -9,10 +9,11 @@ import {
   type ModelEndpoint,
 } from "./client.js";
 
-// Where each kind of source answers. A computer's Ollama is reached over
-// HTTP at the address it was added with, on the home's network only; a
-// provider only at its own fixed address, over HTTPS on the public internet.
-// Neither follows a redirect.
+// Where each kind of source answers. Ollama on Sanctum is reached at the
+// address the manager gives for its service, never one typed in; a
+// computer's Ollama over HTTP at the address it was added with, on the
+// home's network only; a provider only at its own fixed address, over HTTPS
+// on the public internet. None follows a redirect.
 
 /** The two ways out: to the home's network, and to the public internet. */
 export type ModelFetchers = {
@@ -37,8 +38,12 @@ const providers = {
   }
 >;
 
-/** What a source is reached by: a computer's address, or a provider's key. */
+/**
+ * What a source is reached by: the manager's address for Ollama on
+ * Sanctum, a computer's address, or a provider's key.
+ */
 export type SourceReach =
+  | { kind: "sanctum"; url: string }
   | { kind: "computer"; address: HomeAddress }
   | { kind: ModelProvider; key: string };
 
@@ -46,6 +51,13 @@ export function endpointOf(
   reach: SourceReach,
   fetchers: ModelFetchers,
 ): ModelEndpoint {
+  if (reach.kind === "sanctum") {
+    return {
+      baseUrl: `${reach.url}/v1`,
+      fetch: fetchers.home,
+      maxTokensField: "max_tokens",
+    };
+  }
   if (reach.kind === "computer") {
     // Checked again each time: the address was the household's to type.
     if (!isHomeAddress(reach.address.host)) {
@@ -132,6 +144,53 @@ const openAiChat = (id: string) =>
   /^(gpt-|o\d|chatgpt-)/.test(id) &&
   !/(audio|realtime|transcribe|tts|image|search|embedding|instruct)/.test(id);
 
+// Ollama's own models, leaving out its cloud models, which would not run in
+// the home.
+async function ollamaModels(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<ModelChoice[]> {
+  const found = ollamaTags.safeParse(
+    await getJson(fetcher, `${baseUrl}/api/tags`, undefined, signal),
+  );
+  if (!found.success) throw new ModelError("answer", "not Ollama's list");
+  return found.data.models
+    .filter(
+      (model) =>
+        !model.remote_host &&
+        !model.remote_model &&
+        !model.name.endsWith("-cloud"),
+    )
+    .map((model) => ({
+      id: model.name,
+      name: ollamaModelName(model.name),
+      ...(model.size === undefined ? {} : { size: model.size }),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Has Ollama load a model and keep it loaded, so the first question after
+ * a restart doesn't wait for it.
+ */
+export async function warmOllama(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  model: string,
+  signal: AbortSignal,
+) {
+  const response = await fetcher(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model, keep_alive: -1 }),
+    redirect: "error",
+    signal,
+  });
+  await response.body?.cancel().catch(() => {});
+  if (!response.ok) throw new ModelError(problemOfStatus(response.status));
+}
+
 /** The models a source offers, for the household to choose from. */
 export async function listModels(
   reach: SourceReach,
@@ -139,32 +198,17 @@ export async function listModels(
   signal?: AbortSignal,
 ): Promise<ModelChoice[]> {
   switch (reach.kind) {
+    case "sanctum":
+      return ollamaModels(fetchers.home, reach.url, signal);
     case "computer": {
       if (!isHomeAddress(reach.address.host)) {
         throw new ModelError("refused", "not an address in the home");
       }
-      const found = ollamaTags.safeParse(
-        await getJson(
-          fetchers.home,
-          `http://${addressText(reach.address)}/api/tags`,
-          undefined,
-          signal,
-        ),
+      return ollamaModels(
+        fetchers.home,
+        `http://${addressText(reach.address)}`,
+        signal,
       );
-      if (!found.success) throw new ModelError("answer", "not Ollama's list");
-      return found.data.models
-        .filter(
-          (model) =>
-            !model.remote_host &&
-            !model.remote_model &&
-            !model.name.endsWith("-cloud"),
-        )
-        .map((model) => ({
-          id: model.name,
-          name: ollamaModelName(model.name),
-          ...(model.size === undefined ? {} : { size: model.size }),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
     }
     case "openrouter": {
       // The key is checked on its own, since the list of models is public.

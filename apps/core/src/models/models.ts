@@ -8,6 +8,7 @@ import type {
   ModelSourceShown,
   ModelsInfo,
   ModelTokens,
+  ModelUsage,
 } from "@meetsanctum/app-sdk";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -26,6 +27,7 @@ import { ModelError, type ModelEndpoint } from "./client.js";
 import {
   endpointOf,
   listModels,
+  warmOllama,
   type ModelFetchers,
   type SourceReach,
 } from "./endpoints.js";
@@ -41,6 +43,8 @@ import { modelSources, modelTokens } from "./schema.js";
 
 /** How often the source in use is asked whether it answers. */
 const watchEveryMs = 60_000;
+/** How long Ollama on Sanctum may take to load a model, from its disk. */
+const warmWithinMs = 5 * 60_000;
 
 type SourceRow = typeof modelSources.$inferSelect;
 
@@ -84,6 +88,8 @@ export function createModels(
     timeZone: () => string | null;
     // The apps that may use the home's AI model, for what Settings shows.
     appsUsing: () => { id: string; name: string }[];
+    // Where the manager's Ollama answers while it runs, or null.
+    sanctumUrl?: () => Promise<string | null>;
     log: (message: string) => void;
     now?: () => Date;
   },
@@ -128,7 +134,26 @@ export function createModels(
     return row;
   }
 
+  // Ollama on Sanctum's address, as the manager last gave it: the same name
+  // for as long as the service runs.
+  let sanctumUrl: string | null = null;
+  async function sanctumReach(): Promise<SourceReach> {
+    sanctumUrl = (await options.sanctumUrl?.().catch(() => null)) ?? null;
+    if (!sanctumUrl)
+      throw new ModelError("unreachable", "Ollama isn't running");
+    return { kind: "sanctum", url: sanctumUrl };
+  }
+
+  // How a source is reached now, asking the manager for Ollama's address.
+  async function reachNow(row: SourceRow): Promise<SourceReach> {
+    return row.kind === "sanctum" ? sanctumReach() : reachOf(row);
+  }
+
   function reachOf(row: SourceRow): SourceReach {
+    if (row.kind === "sanctum") {
+      if (!sanctumUrl) throw new ModelError("unreachable");
+      return { kind: "sanctum", url: sanctumUrl };
+    }
     if (row.kind === "computer") {
       return {
         kind: "computer",
@@ -193,13 +218,55 @@ export function createModels(
     };
   }
 
+  // The last 30 days in the home's time zone, oldest first and today last.
+  function lastDays() {
+    const today = new Date(`${dayOf(now())}T00:00:00Z`);
+    return Array.from({ length: 30 }, (_, back) => {
+      const day = new Date(today);
+      day.setUTCDate(day.getUTCDate() - (29 - back));
+      return day.toISOString().slice(0, 10);
+    });
+  }
+
+  /** The tokens each day of the last 30, by source, by what asked. */
+  function usage(appIds: readonly string[]): ModelUsage {
+    const days = lastDays();
+    const counted = db
+      .select()
+      .from(modelTokens)
+      .where(
+        and(gte(modelTokens.day, days[0]!), lte(modelTokens.day, days.at(-1)!)),
+      )
+      .all();
+    const series = (matches: (row: (typeof counted)[number]) => boolean) =>
+      days.map((day) =>
+        counted
+          .filter((row) => row.day === day && matches(row))
+          .reduce((sum, row) => sum + row.tokens, 0),
+      );
+    return {
+      days,
+      sources: rows().map(({ id }) => ({
+        id,
+        tokens: series((row) => row.sourceId === id),
+      })),
+      apps: appIds.map((id) => ({
+        id,
+        tokens: series((row) => row.usedBy === id),
+      })),
+      checks: series((row) => row.usedBy === "check"),
+    };
+  }
+
   function info(): ModelsInfo {
+    const apps = options
+      .appsUsing()
+      .map(({ id, name }) => ({ id, name, tokens: tokensOf({ usedBy: id }) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     return {
       sources: rows().map(infoOf),
-      apps: options
-        .appsUsing()
-        .map(({ id, name }) => ({ id, name, tokens: tokensOf({ usedBy: id }) }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      apps,
+      usage: usage(apps.map((app) => app.id)),
     };
   }
 
@@ -212,11 +279,13 @@ export function createModels(
       model: row.model,
       shown: {
         name:
-          row.kind === "computer"
-            ? (row.computer ?? "Computer")
-            : providerNames[row.kind],
+          row.kind === "sanctum"
+            ? "Sanctum"
+            : row.kind === "computer"
+              ? (row.computer ?? "Computer")
+              : providerNames[row.kind],
         model: row.modelName,
-        inHome: row.kind === "computer",
+        inHome: row.kind === "computer" || row.kind === "sanctum",
       },
       detail: named(row),
       endpoint: () => endpointOf(reachOf(row), options.fetchers),
@@ -237,6 +306,7 @@ export function createModels(
   }
 
   async function reachFor(request: LookAtModelSource): Promise<SourceReach> {
+    if (request.kind === "sanctum") return sanctumReach();
     if (request.kind === "computer") {
       return {
         kind: "computer",
@@ -253,6 +323,9 @@ export function createModels(
     } catch (error) {
       if (error instanceof AddressProblem) {
         return { found: false, problem: error.problem };
+      }
+      if (error instanceof ModelError) {
+        return { found: false, problem: listProblem(error) };
       }
       throw error;
     }
@@ -299,8 +372,8 @@ export function createModels(
     const run = (async () => {
       let result: Awaited<ReturnType<typeof checkSource>>;
       try {
-        const reach = reachOf(row);
-        if (reach.kind === "computer") {
+        const reach = await reachNow(row);
+        if (reach.kind === "computer" || reach.kind === "sanctum") {
           // A tag can be removed or replaced by a remote model after setup.
           const available = await listModels(reach, options.fetchers, signal);
           if (!available.some((choice) => choice.id === row.model)) {
@@ -311,7 +384,7 @@ export function createModels(
         result = await checkSource({
           endpoint: endpointOf(reach, options.fetchers),
           model: row.model,
-          inHome: row.kind === "computer",
+          inHome: row.kind !== "openrouter" && row.kind !== "openai",
           now,
           signal,
         });
@@ -355,6 +428,7 @@ export function createModels(
       if (error instanceof AddressProblem) {
         throw new ActionCallError("invalid_request");
       }
+      if (error instanceof ModelError) throw new ActionCallError("unavailable");
       throw error;
     }
     const choices = await choicesForSave(reach);
@@ -370,10 +444,13 @@ export function createModels(
       host: reach.kind === "computer" ? reach.address.host : null,
       port: reach.kind === "computer" ? reach.address.port : null,
       sealedKey:
-        reach.kind === "computer"
+        reach.kind === "computer" || reach.kind === "sanctum"
           ? null
           : options.sealer.seal(keyBoundTo(id), reach.key),
-      keyEnd: reach.kind === "computer" ? null : reach.key.slice(-4),
+      keyEnd:
+        reach.kind === "computer" || reach.kind === "sanctum"
+          ? null
+          : reach.key.slice(-4),
       inUse: false,
       check: null,
       createdAt: now(),
@@ -433,15 +510,17 @@ export function createModels(
       let reach: SourceReach;
       if (request.key === undefined) {
         try {
-          reach = reachOf(row);
+          reach = await reachNow(row);
         } catch (error) {
-          if (error instanceof ModelError && error.problem === "key") {
-            throw new ActionCallError("forbidden");
+          if (error instanceof ModelError) {
+            throw new ActionCallError(
+              error.problem === "key" ? "forbidden" : "unavailable",
+            );
           }
           throw error;
         }
       } else {
-        if (row.kind === "computer")
+        if (row.kind === "computer" || row.kind === "sanctum")
           throw new ActionCallError("invalid_request");
         const key = request.key.trim();
         reach = { kind: row.kind, key };
@@ -521,12 +600,39 @@ export function createModels(
     const controller = new AbortController();
     watching = controller;
     try {
-      await listModels(reachOf(row), options.fetchers, controller.signal);
+      await listModels(
+        await reachNow(row),
+        options.fetchers,
+        controller.signal,
+      );
       if (!controller.signal.aborted) downSince = undefined;
     } catch {
       if (!controller.signal.aborted) downSince ??= now();
     } finally {
       if (watching === controller) watching = undefined;
+    }
+  }
+
+  // Ollama on Sanctum keeps the model in use loaded once it has it, so the
+  // first question after a restart doesn't wait for it to load. A model on
+  // a computer or with a provider isn't Sanctum's to keep.
+  async function warm() {
+    const row = activeRow();
+    if (row?.kind !== "sanctum") return;
+    try {
+      const reach = await sanctumReach();
+      if (reach.kind !== "sanctum") return;
+      await warmOllama(
+        options.fetchers.home,
+        reach.url,
+        row.model,
+        AbortSignal.any([stopping.signal, AbortSignal.timeout(warmWithinMs)]),
+      );
+    } catch (error) {
+      if (stopping.signal.aborted) return;
+      options.log(
+        `models: Ollama on Sanctum didn't load ${row.model} (${error instanceof Error ? error.message : String(error)})`,
+      );
     }
   }
 
@@ -536,7 +642,7 @@ export function createModels(
     try {
       return {
         found: true,
-        models: await listModels(reachOf(row), options.fetchers),
+        models: await listModels(await reachNow(row), options.fetchers),
       };
     } catch (error) {
       const problem = listProblem(error);
@@ -563,8 +669,12 @@ export function createModels(
     use,
     change,
     remove,
-    /** A step of starting: begins watching the source in use. */
+    /**
+     * A step of starting: has Ollama on Sanctum load the model in use, and
+     * begins watching the source in use.
+     */
     start() {
+      void warm();
       void watchInUse();
       watchTimer = setInterval(() => void watchInUse(), watchEveryMs);
       watchTimer.unref();

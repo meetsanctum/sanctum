@@ -1,8 +1,9 @@
 // The home's AI models, as Settings shows and changes them: the sources the
 // household added, one of them in use, each with how its last check went and
-// the tokens it used. A source is Ollama on a computer in the home, reached
-// at a private address, or a provider reached with an API key; the core
-// keeps the key and never hands it back.
+// the tokens it used. A source is Ollama on Sanctum itself, which the
+// manager runs for the Ollama app; Ollama on a computer in the home, reached
+// at a private address; or a provider reached with an API key, which the
+// core keeps and never hands back.
 //
 // Apps that hold `models.use` ask the source in use through the core, with
 // ctx.models, and only within a turn: a call from a person or a shared
@@ -11,7 +12,7 @@
 /** The providers a source can be, with Ollama on a computer in the home. */
 export const modelProviders = ["openrouter", "openai"] as const;
 export type ModelProvider = (typeof modelProviders)[number];
-export type ModelSourceKind = "computer" | ModelProvider;
+export type ModelSourceKind = "sanctum" | "computer" | ModelProvider;
 
 /** Ollama's port when nobody changed it. */
 export const ollamaPort = 11434;
@@ -71,17 +72,39 @@ export type ModelAppInfo = {
   tokens: { today: number; month: number };
 };
 
-export type ModelsInfo = { sources: ModelSourceInfo[]; apps: ModelAppInfo[] };
+/**
+ * The tokens used each day of the last 30, oldest first and today last, by
+ * source, by app, and by Settings' checks.
+ */
+export type ModelUsage = {
+  /** Each day, as YYYY-MM-DD in the home's time zone. */
+  days: string[];
+  sources: { id: string; tokens: number[] }[];
+  apps: { id: string; tokens: number[] }[];
+  checks: number[];
+};
 
-/** Looking at a source before adding it: a computer's address, or a key. */
+export type ModelsInfo = {
+  sources: ModelSourceInfo[];
+  apps: ModelAppInfo[];
+  usage: ModelUsage;
+};
+
+/**
+ * Looking at a source before adding it: Ollama on Sanctum, a computer's
+ * address, or a key.
+ */
 export type LookAtModelSource =
-  { kind: "computer"; address: string } | { kind: ModelProvider; key: string };
+  | { kind: "sanctum" }
+  | { kind: "computer"; address: string }
+  | { kind: ModelProvider; key: string };
 
 export type ModelSourceLook =
   | { found: true; address?: string; models: ModelChoice[] }
   | { found: false; problem: ModelProblem; address?: string };
 
 export type AddModelSource =
+  | { kind: "sanctum"; model: string }
   | { kind: "computer"; address: string; computer: string; model: string }
   | { kind: ModelProvider; key: string; model: string };
 

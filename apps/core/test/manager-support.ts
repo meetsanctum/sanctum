@@ -98,6 +98,7 @@ export type TestManager = ServiceManager &
     discovery?: SightingsManager["discovery"];
     deleteAppData?: (app: string) => Promise<void>;
     eraseServiceData?: (service: string) => Promise<void>;
+    serviceUrl?: (service: string) => Promise<string | null>;
   };
 
 // A manager that runs every service it is asked for, and remembers what it

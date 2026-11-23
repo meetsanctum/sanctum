@@ -112,7 +112,8 @@ export function shortfallWords(
   }
 }
 
-function problemOf(error: unknown, app: AvailableApp) {
+/** Why adding an app did not work, from the core's answer. */
+export function addProblemOf(error: unknown, app: AvailableApp) {
   const code = error instanceof CoreError ? error.code : null;
   switch (code) {
     case "conflict":
@@ -191,7 +192,7 @@ export function AddAppSheet(props: {
       });
       props.onAdded(added);
     } catch (error) {
-      setProblem(problemOf(error, app));
+      setProblem(addProblemOf(error, app));
     } finally {
       setPending(undefined);
     }
