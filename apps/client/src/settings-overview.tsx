@@ -24,6 +24,7 @@ import { useModels } from "./models/data";
 import { modelsTitle, sourceName } from "./models/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
+import { roomsTitle } from "./settings-rooms";
 import { SummaryLine, summarySpoken } from "./settings-status";
 import type { SystemStatus } from "./system-status";
 import { useMinuteClock } from "./device-firmware";
@@ -120,12 +121,7 @@ export function SettingsOverview(props: {
               ].join(" · ")
             : "",
         )}
-        {row(
-          "rooms",
-          Layers,
-          "Rooms and Floors",
-          describeRoomsAndFloors(places),
-        )}
+        {row("rooms", Layers, roomsTitle, describeRoomsAndFloors(places))}
         {row(
           "devices",
           Lightbulb,

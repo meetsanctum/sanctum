@@ -130,7 +130,7 @@ What is under which licence, and what neither covers, is in
   the names Sanctum gives devices ("Office Light"), apps' names ("Natural
   Light") and the types summary tiles count ("Contact Sensors"), and in
   Settings' titles: its areas' and pages' names and the headings over its
-  cards ("AI Models", "Needs Attention"), where "and", "a", "the" and short
+  cards ("AI Models", "Needs Attention"), where "and", articles and short
   prepositions inside a title stay small ("Rooms and Floors"); no dividing
   lines; corners from the `--radius` scale, nothing pill-shaped but a
   count's badge ("3 found").

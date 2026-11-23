@@ -7,7 +7,7 @@ import { ActivityPage, activitySettingsPage } from "./activity/page";
 import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
 import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
 import { agentsTitle, canUseTitle } from "./agents/words";
-import { AppPage } from "./app-settings";
+import { AppPage, formatAppSettingsTitle } from "./app-settings";
 import { ModelsPage, modelsSettingsPage } from "./models/models-page";
 import { modelsTitle } from "./models/words";
 import { BackButton, Section } from "./components";
@@ -23,7 +23,7 @@ import {
   maintenanceSettingsPage,
 } from "./settings-maintenance";
 import { SettingsOverview } from "./settings-overview";
-import { RoomsSection } from "./settings-rooms";
+import { RoomsSection, roomsTitle } from "./settings-rooms";
 import { StatusPage, statusSettingsPage } from "./settings-status";
 import type { PowerAction } from "./settings-status-power";
 import type { SetupTarget } from "./setup-guide";
@@ -65,7 +65,7 @@ export const setupPage: Record<SetupTarget, string> = {
 const pageTitles: Record<string, string> = {
   main: "Settings",
   [householdSettingsPage]: "Household",
-  [roomsSettingsPage]: "Rooms and Floors",
+  [roomsSettingsPage]: roomsTitle,
   [devicesSettingsPage]: "Devices",
   [maintenanceSettingsPage]: "Maintenance",
   [activitySettingsPage]: "Activity",
@@ -86,7 +86,7 @@ export function settingsPageTitle(
 ) {
   if (page === appSettingsPage) {
     const app = apps.find((each) => each.id === params.id);
-    return app ? `${app.name} Settings` : "Settings";
+    return app ? formatAppSettingsTitle(app.name) : "Settings";
   }
   return pageTitles[page] ?? "Settings";
 }
@@ -203,7 +203,7 @@ export function SettingsPage(props: {
     case roomsSettingsPage:
       return (
         <>
-          <PageBar title="Rooms and Floors" leading={back} />
+          <PageBar title={roomsTitle} leading={back} />
           <RoomsSection live={props.live} adding={start === "add-room"} />
         </>
       );

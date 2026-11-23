@@ -50,6 +50,10 @@ import { PreferencesSection } from "./settings-preferences";
 // An app without an icon of its own, such as a driver, gets a plain one.
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
 
+export function formatAppSettingsTitle(name: string) {
+  return `${name} Settings`;
+}
+
 function stateWords(app: AppInfo) {
   const update = app.run?.update;
   const canShowProgress =
@@ -216,7 +220,7 @@ export function AppPage(props: {
   return (
     <>
       <SettingsPageBar
-        title={`${app.name} Settings`}
+        title={formatAppSettingsTitle(app.name)}
         backTo={props.backTo}
         onBack={props.onDone}
       />

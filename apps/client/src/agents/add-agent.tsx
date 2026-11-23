@@ -39,6 +39,7 @@ import { canUseTitle, missingWords, offersByGroup, offersOf } from "./words";
 const watchEvery = 1_500;
 const watchTimeoutMs = 10_000;
 const setupMinutes = agentSetupMs / 60_000;
+const canUseListLabel = "What AI agents can use";
 
 type Step =
   | { kind: "name" }
@@ -320,7 +321,7 @@ function NameStep(props: {
       </label>
       {props.canUse ? (
         <div className="flex min-h-0 flex-col gap-1.5">
-          <span className="text-[13px] font-medium">{canUseTitle}</span>
+          <span className="text-[13px] font-medium">{canUseListLabel}</span>
           <CanUseList apps={props.apps} canUse={props.canUse} />
           <span className="text-[13px] leading-[18px] text-muted-foreground">
             Change any of these in Settings, under {canUseTitle}.
@@ -328,7 +329,7 @@ function NameStep(props: {
         </div>
       ) : props.hasPermissionsFailed ? (
         <p role="alert" className="m-0 text-sm text-destructive">
-          {canUseTitle} didn&apos;t load. Close this and open it again.
+          {canUseListLabel} didn&apos;t load. Close this and open it again.
         </p>
       ) : (
         <p role="status" className="m-0 text-[13px] text-muted-foreground">
@@ -415,7 +416,7 @@ function CanUseList(props: { apps: readonly AppInfo[]; canUse: AiCanUse }) {
     <div
       tabIndex={0}
       role="region"
-      aria-label={canUseTitle}
+      aria-label={canUseListLabel}
       className="flex max-h-[min(22rem,40vh)] flex-col gap-4 overflow-y-auto rounded-md bg-card px-3.5 py-3 text-card-foreground"
     >
       {group(true)}

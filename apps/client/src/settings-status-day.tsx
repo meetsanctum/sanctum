@@ -28,6 +28,7 @@ import {
 // can't be read, what each reads now still heads it.
 
 const chartHeight = 72;
+const lastDayTitle = "Last 24 Hours";
 
 // A line of what a reading says, in red with a sign where it's a problem.
 function Said(props: {
@@ -110,7 +111,7 @@ export function LastDaySection(props: {
       </div>
     );
     return (
-      <Section id="status-day" title="Last 24 Hours">
+      <Section id="status-day" title={lastDayTitle}>
         <div className={cn("flex flex-col", failed ? "gap-3" : "gap-6")}>
           <Reading {...heading.processor}>{shape}</Reading>
           {host.processor.celsius !== null && (
@@ -165,7 +166,7 @@ export function LastDaySection(props: {
       : "processor";
 
   return (
-    <Section id="status-day" title="Last 24 Hours">
+    <Section id="status-day" title={lastDayTitle}>
       <div className="flex flex-col gap-6">
         <Reading {...heading.processor} summary={processorSummary(usage)}>
           <DayLineChart

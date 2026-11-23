@@ -387,6 +387,13 @@ describe("Settings → AI agents", () => {
     it("names what AI agents can use, on and off, before anything is made", async () => {
       await add("Codex");
       const text = dialog()!.textContent!;
+      expect(text).toContain("What AI agents can useOn");
+      expect(text).toContain(
+        "Change any of these in Settings, under What AI Agents Can Use.",
+      );
+      expect(
+        dialog()!.querySelector('[role="region"]')?.getAttribute("aria-label"),
+      ).toBe("What AI agents can use");
       expect(text).toContain(
         "OnSee your roomsControl your lightsSee your switches",
       );
@@ -407,7 +414,7 @@ describe("Settings → AI agents", () => {
       expect(button("Continue").disabled).toBe(true);
       await act(async () => read.reject(new Error("Connection lost")));
       expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
-        "didn't load",
+        "What AI agents can use didn't load.",
       );
       expect(button("Continue").disabled).toBe(true);
       expect(posted).toEqual([]);
