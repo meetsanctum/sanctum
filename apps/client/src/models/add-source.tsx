@@ -433,7 +433,7 @@ export function AddSource(props: {
                 {productName} keeps the key sealed and never shows it again.
               </DialogDescription>
             </DialogHeader>
-            <fieldset className="m-0 flex gap-1 border-0 p-0">
+            <fieldset className="m-0 flex flex-wrap gap-1 border-0 p-0">
               <legend className="sr-only">Provider</legend>
               {modelProviders.map((each) => (
                 <label
