@@ -1,6 +1,7 @@
 import { activityReadPermission, historyReadPermission } from "./ai-agents.js";
 import type { CapabilityKind } from "./devices.js";
 import { lanPort } from "./lan.js";
+import { modelsUsePermission } from "./models.js";
 import { turnOnType } from "./lights.js";
 import { forecastType, sunType } from "./weather.js";
 
@@ -31,6 +32,7 @@ export const permissionIcons = [
   "list",
   "history",
   "tv",
+  "sparkles",
 ] as const;
 export type PermissionIcon = (typeof permissionIcons)[number];
 
@@ -106,6 +108,12 @@ const fixed: Record<string, PermissionWords> = {
     title: "Keep its own automations",
     detail: null,
     icon: "workflow",
+  },
+  [modelsUsePermission]: {
+    title: "Use your home's AI model",
+    detail:
+      "Lets this app send what it's asked to your home's AI model and read the answers. Your home's limits apply.",
+    icon: "sparkles",
   },
 };
 

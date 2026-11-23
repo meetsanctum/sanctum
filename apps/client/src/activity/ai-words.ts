@@ -9,8 +9,9 @@ import { byWords } from "./actor-words";
 import type { Words } from "./words";
 
 // How the activity log's entries of AI read: adding an AI agent and what AI
-// agents can use, what they were refused or held back from, and the home's
-// AI models as the household adds, chooses, changes and removes them.
+// agents can use, what they were refused or held back from, the home's AI
+// models as the household adds, chooses, changes and removes them, and apps'
+// turns with the one in use.
 
 // A source as the entry kept it, such as "Qwen3 8B on Office Mac".
 function sourceWords(detail: ActivityInfo["detail"]) {
@@ -101,6 +102,36 @@ export function aiEntry(entry: ActivityInfo): Words | null {
       );
     case "models.remove":
       return said(`Removed ${sourceWords(entry.detail)} from AI models`);
+    // One turn of an app's with the AI model: never what was said.
+    case "models.turn": {
+      const app =
+        typeof entry.detail?.appName === "string"
+          ? entry.detail.appName
+          : "An app";
+      const hasSeveralModels = Array.isArray(entry.detail?.models);
+      const source = hasSeveralModels
+        ? "multiple AI models"
+        : typeof entry.detail?.model === "string"
+          ? sourceWords(entry.detail)
+          : null;
+      if (!source) {
+        return said(`${app} asked the AI model, but none was in use`);
+      }
+      if (entry.outcome !== "ok") {
+        return said(
+          hasSeveralModels
+            ? `The AI models didn't answer ${app}`
+            : `${source} didn't answer ${app}`,
+        );
+      }
+      const tokens =
+        typeof entry.detail?.tokens === "number" ? entry.detail.tokens : 0;
+      const seconds =
+        typeof entry.detail?.ms === "number" ? entry.detail.ms / 1000 : 0;
+      return said(
+        `${app} asked ${source}: ${tokens.toLocaleString()} tokens in ${seconds.toFixed(1)} s`,
+      );
+    }
   }
   return null;
 }

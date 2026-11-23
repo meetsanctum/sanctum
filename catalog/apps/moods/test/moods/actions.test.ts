@@ -113,6 +113,10 @@ function home(
     secret: unused,
     putSecret: unused,
     removeSecret: unused,
+    modelSource: unused,
+    openModel: unused,
+    readModel: unused,
+    cancelModel: unused,
     log() {},
   };
   return {

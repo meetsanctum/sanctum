@@ -82,6 +82,7 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const sources = info?.sources ?? [];
+  const apps = info?.apps ?? [];
   const inUse = sources.find((source) => source.inUse);
   const others = sources.filter((source) => !source.inUse);
 
@@ -157,6 +158,17 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
           <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
             {productName} never switches to another source on its own.
           </p>
+        </Section>
+      )}
+      {apps.length > 0 && (
+        <Section id="settings-models-apps" title="Apps that use it">
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            {apps.map((app) => (
+              <li key={app.id}>
+                <Row title={app.name} detail={tokensText(app.tokens)} />
+              </li>
+            ))}
+          </ul>
         </Section>
       )}
       {sources.length > 0 && (

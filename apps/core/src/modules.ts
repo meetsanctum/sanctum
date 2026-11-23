@@ -1,4 +1,8 @@
-import { sunTimesSchema, sunType } from "@meetsanctum/app-sdk";
+import {
+  modelsUsePermission,
+  sunTimesSchema,
+  sunType,
+} from "@meetsanctum/app-sdk";
 
 import { createActivity } from "./activity/activity.js";
 import {
@@ -55,6 +59,7 @@ import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
 import type { CoreSteps } from "./lifecycle.js";
 import { createModels } from "./models/models.js";
+import { createTurns } from "./models/turns.js";
 import type { ModelFetchers } from "./models/endpoints.js";
 import { createLiveUpdates } from "./live-updates.js";
 import type { ManagerClient } from "./manager.js";
@@ -454,9 +459,32 @@ export async function createModules(
     log,
     now,
   });
+  // The home's AI models, which the household adds in Settings, and the
+  // turns in which apps ask the one in use.
+  const models = createModels(db, {
+    sealer: createSealer(options.dataDir),
+    fetchers: options.modelFetchers ?? {
+      home: fetch,
+      internet: publicInternet(),
+    },
+    record: activity.for("models"),
+    timeZone: options.timeZone ?? (() => places.timeZone()),
+    appsUsing: () =>
+      apps
+        .list()
+        .filter((app) => app.permissions.includes(modelsUsePermission)),
+    log,
+    now,
+  });
+  const turns = createTurns({
+    models,
+    record: activity.for("models"),
+    log,
+  });
   const apps = createAppHost({
     gate,
     activity,
+    turns,
     agents: agentsCanUse,
     manager: options.manager,
     people,
@@ -586,18 +614,6 @@ export async function createModules(
     timeZone: options.timeZone ?? (() => places.timeZone()),
     sun: options.sun ?? (() => sunDays(entities)),
   });
-  // The home's AI models, which the household adds in Settings.
-  const models = createModels(db, {
-    sealer: createSealer(options.dataDir),
-    fetchers: options.modelFetchers ?? {
-      home: fetch,
-      internet: publicInternet(),
-    },
-    record: activity.for("models"),
-    timeZone: options.timeZone ?? (() => places.timeZone()),
-    log,
-    now,
-  });
   const activityViews = createActivityViews(activity, {
     person: (id) => people.get(id) ?? null,
     client: auth.clients.name,
@@ -689,6 +705,7 @@ export async function createModules(
     ["look for sticks", () => hardwareOffers.interrupt()],
     ["check Add devices' offers", () => deviceOffers.interrupt()],
     ["try updates that wait for room", () => roomWaits.interrupt()],
+    ["take no more turns with the AI model", () => turns.close()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
   // firmware's deadlines are the last that change a device, so the bus closes
@@ -723,6 +740,7 @@ export async function createModules(
     agentsCanUse,
     logAgentLimited,
     models,
+    turns,
     managerAudit,
     people,
     auth,

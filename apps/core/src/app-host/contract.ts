@@ -279,6 +279,8 @@ export type DeclaredAction = {
   output: SchemaCheck;
   // Its input's JSON Schema, for a workflow piece's config.
   schema: JsonSchema;
+  // A person's or a shared device's call opens a turn (models/turns.ts).
+  turn: boolean;
 };
 
 /** A workflow trigger as its manifest declares it. */
@@ -407,6 +409,7 @@ export function contractOf(manifest: StaticManifest): AppContract {
         input: inputCheck(action.input),
         output: schemaCheck(action.output),
         schema: action.input as JsonSchema,
+        turn: action.turn === true,
       },
     ]),
   );
@@ -484,6 +487,7 @@ const manifestShape = z.looseObject({
       tier: tierSchema,
       input: schema,
       output: schema,
+      turn: z.boolean().optional(),
     }),
   ),
   events: z.array(named.extend({ payload: schema })),

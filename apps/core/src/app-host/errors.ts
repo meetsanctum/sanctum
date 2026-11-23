@@ -6,8 +6,12 @@ const statuses = {
   needs_approval: 403,
   not_found: 404,
   conflict: 409,
-  // An AI agent sent more device commands in the last minute than it may.
+  // An AI agent sent more device commands in the last minute than it may,
+  // or a turn asked the AI model for as many answers as it may.
   limited: 429,
+  // The home's AI model answers only within a turn, which a person's or a
+  // shared device's call opens.
+  no_turn: 403,
   app_failed: 500,
   // The app, or a device's driver app, is not running: paused or stopped. Or
   // the core can't say yet, as which apps the home has before they install.

@@ -220,6 +220,10 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     secret: unused,
     putSecret: unused,
     removeSecret: unused,
+    modelSource: unused,
+    openModel: unused,
+    readModel: unused,
+    cancelModel: unused,
     log() {},
   };
   const context = (actor: Actor) => {

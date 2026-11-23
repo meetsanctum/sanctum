@@ -6,6 +6,7 @@ import {
   type Actor,
   type AppContext,
   type CoreCalls,
+  type ModelSourceShown,
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 import { randomUUID } from "node:crypto";
@@ -30,6 +31,7 @@ import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
+import type { Turn } from "../models/turns.js";
 
 // What each call of an app's code gets from the core: a context acting as
 // `actor`, with the calls its permissions allow (calls.ts), and the checks on
@@ -60,6 +62,8 @@ export function createAppContexts(options: {
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
+  // The home's AI model in use, as apps see it.
+  modelSource: () => ModelSourceShown | null;
   log: (message: string) => void;
   now: () => Date;
   // Whether someone turned an app off: other apps don't read what it brought.
@@ -130,6 +134,7 @@ export function createAppContexts(options: {
   // wait in `held` when given, for an action call that has yet to succeed,
   // and go out at once otherwise. Only the start context is `following`
   // the core's events, and an app apart's reads from a `snapshot` meanwhile.
+  // An action's call that opened a `turn` may ask the home's AI model.
   function contextFor(
     entry: InstalledApp,
     actor: Actor,
@@ -139,11 +144,13 @@ export function createAppContexts(options: {
       following,
       snapshot,
       withinMs,
+      turn,
     }: {
       held?: EmittedEvent[];
       following?: Following;
       snapshot?: ReadSnapshot;
       withinMs?: number;
+      turn?: Turn;
     } = {},
   ) {
     const appId = entry.app.id;
@@ -208,6 +215,7 @@ export function createAppContexts(options: {
       pairing: options.pairing,
       secrets: options.secrets,
       agents: options.agents,
+      models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       log: (text) => log(`${appId}: ${text}`),
     });
     const ctx = createAppContext({

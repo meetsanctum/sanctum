@@ -5,7 +5,9 @@ import type {
   ModelChoice,
   ModelSourceInfo,
   ModelSourceLook,
+  ModelSourceShown,
   ModelsInfo,
+  ModelTokens,
 } from "@meetsanctum/app-sdk";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -20,7 +22,7 @@ import {
   resolveHomeAddress,
 } from "./addresses.js";
 import { checkSource } from "./check.js";
-import { ModelError, type ModelTokens } from "./client.js";
+import { ModelError, type ModelEndpoint } from "./client.js";
 import {
   endpointOf,
   listModels,
@@ -41,6 +43,19 @@ import { modelSources, modelTokens } from "./schema.js";
 const watchEveryMs = 60_000;
 
 type SourceRow = typeof modelSources.$inferSelect;
+
+/** The source in use, as a turn asks it. */
+export type SourceInUse = {
+  id: string;
+  model: string;
+  shown: ModelSourceShown;
+  // What the activity log says of it.
+  detail: ReturnType<typeof named>;
+  // Throws a ModelError when its key doesn't open.
+  endpoint: () => ModelEndpoint;
+};
+
+const providerNames = { openrouter: "OpenRouter", openai: "OpenAI" } as const;
 type RunningCheck = { controller: AbortController; run: Promise<void> };
 
 // Why a source's list didn't come: a list is small, so one that takes too
@@ -67,6 +82,8 @@ export function createModels(
     record: (entry: NewActivityEntry) => string;
     // The home's time zone, which its days of tokens follow.
     timeZone: () => string | null;
+    // The apps that may use the home's AI model, for what Settings shows.
+    appsUsing: () => { id: string; name: string }[];
     log: (message: string) => void;
     now?: () => Date;
   },
@@ -79,6 +96,12 @@ export function createModels(
   let downSince: Date | undefined;
   let watching: AbortController | undefined;
   let watchTimer: NodeJS.Timeout | undefined;
+  // Told of a source that no longer answers as it did: no longer in use,
+  // removed, or on another model or key.
+  const leaving = new Set<(sourceId: string) => void>();
+  const left = (sourceId: string) => {
+    for (const listener of leaving) listener(sourceId);
+  };
 
   function dayOf(date: Date) {
     return new Intl.DateTimeFormat("en-CA", {
@@ -122,7 +145,7 @@ export function createModels(
     return { kind: row.kind, key };
   }
 
-  function tokensOf(sourceId: string) {
+  function tokensOf(on: { sourceId: string } | { usedBy: string }) {
     const today = dayOf(now());
     // Shift a calendar date, so a change of the clocks can't move the window.
     const start = new Date(`${today}T00:00:00Z`);
@@ -136,7 +159,9 @@ export function createModels(
       .from(modelTokens)
       .where(
         and(
-          eq(modelTokens.sourceId, sourceId),
+          "sourceId" in on
+            ? eq(modelTokens.sourceId, on.sourceId)
+            : eq(modelTokens.usedBy, on.usedBy),
           gte(modelTokens.day, monthStart),
           lte(modelTokens.day, today),
         ),
@@ -164,12 +189,38 @@ export function createModels(
       ...(row.check ? { check: row.check } : {}),
       ...(checking.has(row.id) ? { checking: true } : {}),
       ...(row.inUse && downSince ? { downSince: downSince.toISOString() } : {}),
-      tokens: tokensOf(row.id),
+      tokens: tokensOf({ sourceId: row.id }),
     };
   }
 
   function info(): ModelsInfo {
-    return { sources: rows().map(infoOf) };
+    return {
+      sources: rows().map(infoOf),
+      apps: options
+        .appsUsing()
+        .map(({ id, name }) => ({ id, name, tokens: tokensOf({ usedBy: id }) }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  }
+
+  /** The source in use, or null when there's none. */
+  function inUse(): SourceInUse | null {
+    const row = activeRow();
+    if (!row) return null;
+    return {
+      id: row.id,
+      model: row.model,
+      shown: {
+        name:
+          row.kind === "computer"
+            ? (row.computer ?? "Computer")
+            : providerNames[row.kind],
+        model: row.modelName,
+        inHome: row.kind === "computer",
+      },
+      detail: named(row),
+      endpoint: () => endpointOf(reachOf(row), options.fetchers),
+    };
   }
 
   /** Counts the tokens a source read and wrote, for what asked. */
@@ -347,6 +398,7 @@ export function createModels(
   function use(id: string, by: ChangedBy) {
     const row = rowOf(id);
     if (row.inUse) return info();
+    const before = activeRow();
     durably(db, () => {
       db.update(modelSources).set({ inUse: false }).run();
       db.update(modelSources)
@@ -363,6 +415,7 @@ export function createModels(
     });
     cancelWatch();
     downSince = undefined;
+    if (before) left(before.id);
     startCheck({ ...row, inUse: true });
     return info();
   }
@@ -431,6 +484,7 @@ export function createModels(
     });
     if (changesConnection) {
       if (changed.inUse) downSince = undefined;
+      left(id);
       cancelCheck(id);
       startCheck(changed);
     }
@@ -451,6 +505,7 @@ export function createModels(
       });
     });
     cancelCheck(id);
+    left(id);
     if (row.inUse) {
       cancelWatch();
       downSince = undefined;
@@ -491,6 +546,13 @@ export function createModels(
 
   return {
     info,
+    inUse,
+    count,
+    /** Hears of each source that stops answering as it did. */
+    onLeaving(listener: (sourceId: string) => void) {
+      leaving.add(listener);
+      return () => void leaving.delete(listener);
+    },
     look,
     modelsOf,
     add,
