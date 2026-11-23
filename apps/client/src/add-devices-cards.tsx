@@ -4,7 +4,7 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
 import {
@@ -18,7 +18,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { Segments } from "./automations/fields";
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import {
@@ -326,23 +325,21 @@ function UnusableCardContent(props: { device: DeviceInfo; work: CardWork }) {
 // What a device is shown as, where its type may be shown as another: the
 // choices side by side under their label, the one in effect chosen.
 function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
-  const id = useId();
   const showAs = showAsOf(props.device);
   if (!showAs) return null;
   return (
     <div className="flex flex-col gap-1 text-start">
-      <span id={id} className="text-xs font-medium text-(--silver)">
-        Show as
-      </span>
-      <Segments
+      <span className="text-xs font-medium text-(--silver)">Show as</span>
+      <SegmentedControl
+        fill
         label={`${props.device.name}: show as`}
         options={showAs.options.map((option) => ({
           value: option.id,
           label: option.title,
         }))}
-        selected={showAs.current}
+        value={showAs.current}
         wraps
-        onSelect={(value) =>
+        onValueChange={(value) =>
           void props.work.onSave(props.device, {
             shownAs: showAs.choice(value),
           })

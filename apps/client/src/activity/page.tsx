@@ -4,13 +4,11 @@ import type {
   DeviceInfo,
   Places,
 } from "@meetsanctum/app-sdk";
-import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
-import { cn } from "cn";
+import { Button, SegmentedControl, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Section, SettingsPageBar } from "../components";
-import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { coreDevices } from "../core-devices";
 import { coreJson } from "../core-fetch";
 import { daysOf, foldCauses, useActivity, type Folded } from "./data";
@@ -38,9 +36,6 @@ const kindOptions: { value: ActivityKind | "all"; label: string }[] = [
   { value: "setup", label: "Setup" },
   { value: "system", label: "System" },
 ];
-
-const onLook =
-  "data-[state=on]:bg-foreground data-[state=on]:text-background data-[state=on]:hover:bg-foreground/90 data-[state=on]:hover:text-background";
 
 // Room names, for "Moved to Office", and device names for the token.
 function usePlacesAndDevices() {
@@ -122,29 +117,14 @@ export function ActivityPage(props: {
         onBack={props.onDone}
       />
       <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <ToggleGroup
-          type="single"
-          aria-label="Show"
+        <SegmentedControl
+          label="Show"
+          options={kindOptions}
           value={kind}
-          onValueChange={(value: string) =>
-            value && setKind(value as ActivityKind | "all")
-          }
-          spacing={1}
-          className="rounded-md bg-foreground/8 p-0.75"
-        >
-          {kindOptions.map((option) => (
-            <ToggleGroupItem
-              key={option.value}
-              value={option.value}
-              className={cn(
-                "h-7.5 rounded-sm px-3 text-[13px] hover:bg-foreground/5",
-                onLook,
-              )}
-            >
-              {option.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+          onValueChange={(value) => setKind(value)}
+          size="sm"
+          phoneMenu
+        />
         {device && (
           <span className="flex h-8 items-center gap-1 rounded-md bg-card ps-3 pe-1 text-sm font-medium">
             {deviceName}

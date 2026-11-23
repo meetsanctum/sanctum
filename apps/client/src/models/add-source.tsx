@@ -10,6 +10,7 @@ import {
   Input,
   NativeSelect,
   NativeSelectOption,
+  SegmentedControl,
 } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
@@ -433,28 +434,20 @@ export function AddSource(props: {
                 {productName} keeps the key sealed and never shows it again.
               </DialogDescription>
             </DialogHeader>
-            <fieldset className="m-0 flex gap-1 border-0 p-0">
-              <legend className="sr-only">Provider</legend>
-              {modelProviders.map((each) => (
-                <label
-                  key={each}
-                  className="flex h-9 cursor-pointer items-center rounded-md bg-foreground/8 px-3 text-sm font-medium has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background"
-                >
-                  <input
-                    type="radio"
-                    name="provider"
-                    checked={provider === each}
-                    disabled={adding}
-                    onChange={() => {
-                      setProvider(each);
-                      forget();
-                    }}
-                    className="sr-only"
-                  />
-                  {providerNames[each]}
-                </label>
-              ))}
-            </fieldset>
+            <SegmentedControl
+              label="Provider"
+              options={modelProviders.map((each) => ({
+                value: each,
+                label: providerNames[each],
+              }))}
+              value={provider}
+              onValueChange={(each) => {
+                setProvider(each);
+                forget();
+              }}
+              disabled={adding}
+              className="self-start"
+            />
             <div className="flex flex-col gap-1.5">
               <label htmlFor={ids.key} className={fieldLabel}>
                 API key
