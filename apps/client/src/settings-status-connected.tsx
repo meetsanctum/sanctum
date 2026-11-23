@@ -63,7 +63,7 @@ export function ConnectedSection() {
   return (
     <Section
       id="status-connected"
-      title="Connected now"
+      title="Connected Now"
       hint={`${connected.length} of ${clients.length} ${clients.length === 1 ? "client" : "clients"}`}
     >
       <ul className="m-0 flex list-none flex-col gap-3 p-0">

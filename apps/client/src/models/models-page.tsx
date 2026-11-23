@@ -171,7 +171,7 @@ export function ModelsPage(props: {
         )}
       </Section>
       {others.length > 0 && (
-        <Section id="settings-models-other" title="Other sources">
+        <Section id="settings-models-other" title="Other Sources">
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {others.map(row)}
           </ul>

@@ -335,9 +335,9 @@ describe("Settings → AI agents", () => {
       `Added by Maya on ${day(codex.createdAt)}`,
     );
     expect(container.textContent).toContain("Added from Kitchen tablet");
-    expect(button("What AI agents can use2 of 4 on")).toBeTruthy();
+    expect(button("What AI Agents Can Use2 of 4 on")).toBeTruthy();
 
-    await act(async () => button("What AI agents can use2 of 4 on").click());
+    await act(async () => button("What AI Agents Can Use2 of 4 on").click());
     expect(openedCanUse).toBe(1);
   });
 
@@ -387,6 +387,13 @@ describe("Settings → AI agents", () => {
     it("names what AI agents can use, on and off, before anything is made", async () => {
       await add("Codex");
       const text = dialog()!.textContent!;
+      expect(text).toContain("What AI agents can useOn");
+      expect(text).toContain(
+        "Change any of these in Settings, under What AI Agents Can Use.",
+      );
+      expect(
+        dialog()!.querySelector('[role="region"]')?.getAttribute("aria-label"),
+      ).toBe("What AI agents can use");
       expect(text).toContain(
         "OnSee your roomsControl your lightsSee your switches",
       );
@@ -407,7 +414,7 @@ describe("Settings → AI agents", () => {
       expect(button("Continue").disabled).toBe(true);
       await act(async () => read.reject(new Error("Connection lost")));
       expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
-        "didn't load",
+        "What AI agents can use didn't load.",
       );
       expect(button("Continue").disabled).toBe(true);
       expect(posted).toEqual([]);
@@ -655,13 +662,13 @@ describe("an app's part of what AI agents can use", () => {
     expect(container.textContent).toBe("");
     agents = [codex];
     await act(async () => live.refresh());
-    expect(container.textContent).toContain("What AI agents can use");
+    expect(container.textContent).toContain("What AI Agents Can Use");
   });
 
   it("has what AI agents can do, then what they can know", async () => {
     await show();
     const text = container.textContent!;
-    expect(text).toMatch(/^What AI agents can use.*Actions.*Run a scene/);
+    expect(text).toMatch(/^What AI Agents Can Use.*Actions.*Run a scene/);
     expect(text).toMatch(/Information.*Scenes in each room/);
     expect(text).not.toContain("Written for an AI agent");
     expect(text).toContain(

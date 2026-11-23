@@ -272,7 +272,7 @@ export function TokensUsed(props: {
   return (
     <Section
       id="settings-models-tokens"
-      title="Tokens used"
+      title="Tokens Used"
       hint={
         total > 0 ? `${count(total)} tokens in the last 30 days` : undefined
       }
@@ -353,7 +353,7 @@ export function AppsUsing(props: {
 }) {
   const { apps } = props;
   return (
-    <Section id="settings-models-apps" title="Apps that use it">
+    <Section id="settings-models-apps" title="Apps That Use It">
       {apps.length === 0 ? (
         <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
           No app uses your home's AI model yet. Apps that need it ask for

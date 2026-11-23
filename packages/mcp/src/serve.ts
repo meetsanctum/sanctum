@@ -29,7 +29,7 @@ const toolListTtlMs = 30_000;
 
 export const words = {
   removed:
-    "Sanctum no longer knows this agent: it was removed in Settings, under AI agents. Add it again there to connect.",
+    "Sanctum no longer knows this agent: it was removed in Settings, under AI Agents. Add it again there to connect.",
   unreachable:
     "Couldn't reach Sanctum. Check this computer is on the home's network, and that Sanctum is running.",
   notThisHome:

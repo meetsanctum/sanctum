@@ -18,8 +18,8 @@ import { seenText } from "../settings-clients";
 // areas are permissions, so their titles are the permissions' own; a line
 // under each says what it covers.
 
-export const agentsTitle = "AI agents";
-export const canUseTitle = "What AI agents can use";
+export const agentsTitle = "AI Agents";
+export const canUseTitle = "What AI Agents Can Use";
 
 /** What each of the core's areas covers, under its title. */
 export const areaDetail: Record<string, string> = {

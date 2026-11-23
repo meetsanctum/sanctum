@@ -19,7 +19,7 @@ import { connectorVersion } from "./version.js";
 const usage = `Connects an AI agent on this computer to Sanctum.
 
   sanctum-mcp connect <code> [--agent claude|codex] [--local]
-      Adds this agent with the code from Sanctum's Settings, under AI agents,
+      Adds this agent with the code from Sanctum's Settings, under AI Agents,
       Add an agent, and registers the connector with the agent.
   sanctum-mcp serve --connection <id>
       The MCP server the agent starts, on stdio.

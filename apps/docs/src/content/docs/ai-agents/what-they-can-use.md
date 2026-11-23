@@ -15,7 +15,7 @@ something, and where it's decided.
 
 ## Your home
 
-**Settings → AI agents → What AI agents can use** lists each part of your
+**Settings → AI Agents → What AI Agents Can Use** lists each part of your
 home in the same words as apps' [permissions](/apps/permissions/).
 
 | What AI agents can use                                        | Starts                   |
@@ -37,7 +37,7 @@ home in the same words as apps' [permissions](/apps/permissions/).
 - **Control your lights** includes seeing them. **See your switches**
   includes plugs, and **Control your switches** also lets an agent see
   and turn switches and plugs on or off.
-- **What tells who's home:** motion, doors and windows, remotes' presses,
+- **What Tells Who's Home:** motion, doors and windows, remotes' presses,
   the activity log, what your devices reported, and the names of the people
   who live here can show when someone is home. Each asks before it turns on,
   since an agent may share what it reads with the company that runs it.
@@ -51,12 +51,12 @@ is refused.
 
 ## In your apps
 
-Below your home's switches, **In your apps** lists each app that offers
+Below your home's switches, **In Your Apps** lists each app that offers
 something to AI agents, with how many of its items are on, such as "2 of 3
 on". Choose an app to open its settings page.
 
 Once your home has an agent, each of those apps' settings pages has a
-**What AI agents can use** section under its permissions:
+**What AI Agents Can Use** section under its permissions:
 
 - **Actions** are what an agent can do in the app, such as run a mood.
 - **Information** is what an agent can read from it, such as the forecast.

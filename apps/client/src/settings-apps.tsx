@@ -72,7 +72,7 @@ export function AddAppsSection(props: {
       {available.length > 0 && (
         <Section
           id="settings-add-apps"
-          title="Add apps"
+          title="Add Apps"
           hint={available.length === 1 ? "1 app" : `${available.length} apps`}
         >
           <ul className="m-0 flex list-none flex-col gap-1 p-0">

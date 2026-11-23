@@ -38,7 +38,7 @@ export class ConnectError extends Error {}
 
 export const connectWords = {
   notACode:
-    "That isn't a Sanctum setup code. Copy the prompt again from Sanctum's Settings, under AI agents, Add an agent.",
+    "That isn't a Sanctum setup code. Copy the prompt again from Sanctum's Settings, under AI Agents, Add an agent.",
   noPin:
     "This setup code is from a development home on another computer, which it can't check. Use one from a home on this network.",
   unreachable:
@@ -46,15 +46,15 @@ export const connectWords = {
   notThisHome:
     "Found a computer on the network that isn't this home, so nothing was sent to it.",
   expired:
-    "This setup has run out or was already used. Start a new one in Sanctum's Settings, under AI agents, Add an agent.",
+    "This setup has run out or was already used. Start a new one in Sanctum's Settings, under AI Agents, Add an agent.",
   tooNew:
     "This connector is newer than Sanctum. Update Sanctum, then add the agent again.",
   tooOld:
     "This connector is too old for Sanctum. Add the agent again from Sanctum's Settings, which gives the current connector.",
   keptPrevious: (name: string) =>
-    `Sanctum didn't answer the agent's first call, so the agent keeps its earlier connection to this home, “${name}”. If Settings lists the new agent too, remove it there, under AI agents. To try again, start a new setup there.`,
+    `Sanctum didn't answer the agent's first call, so the agent keeps its earlier connection to this home, “${name}”. If Settings lists the new agent too, remove it there, under AI Agents. To try again, start a new setup there.`,
   firstCallFailed:
-    "Sanctum didn't answer the agent's first call. If Settings doesn't show the agent connected, start a new setup there, under AI agents, Add an agent, and run this again with its code.",
+    "Sanctum didn't answer the agent's first call. If Settings doesn't show the agent connected, start a new setup there, under AI Agents, Add an agent, and run this again with its code.",
   tooManyAttempts:
     "Sanctum is holding this computer back after too many wrong codes. Wait 15 minutes, then try again.",
 };
@@ -326,7 +326,7 @@ export function connectedWords(connected: Connected, tokens: TokenStore) {
   const done = commands.find((each) => each.registered);
   if (done) {
     lines.push(
-      "Its tools are there from the agent's next session. Tell the person it's connected; what you can do is decided in Sanctum's Settings, under AI agents.",
+      "Its tools are there from the agent's next session. Tell the person it's connected; what you can do is decided in Sanctum's Settings, under AI Agents.",
     );
   } else {
     const first = commands[0]!;

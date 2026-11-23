@@ -270,7 +270,7 @@ describe("Settings → System", () => {
     const attention = container.querySelector(
       'section[aria-labelledby="settings-attention"]',
     )!;
-    expect(attention.textContent).toContain("Needs attentionSanctum");
+    expect(attention.textContent).toContain("Needs AttentionSanctum");
     const sanctum = button("SanctumClock not synchronised", attention)!;
     expect(sanctum.getAttribute("aria-label")).toBe(
       "Sanctum: Clock not synchronised. Opens Status",

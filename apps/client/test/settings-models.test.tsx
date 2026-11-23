@@ -306,10 +306,10 @@ describe("Settings → AI models", () => {
     expect(text).toContain("Qwen3 8B on Office Mac");
     expect(text).toContain("Ollama at 192.168.1.40:11434");
     expect(text).not.toContain("in your home");
-    expect(text).toContain("Other sources");
+    expect(text).toContain("Other Sources");
     expect(text).toContain("Key ending in 4f2a");
     expect(text).not.toContain("leaves your home");
-    expect(text).toContain("Tokens used4,500 tokens in the last 30 days");
+    expect(text).toContain("Tokens Used4,500 tokens in the last 30 days");
     expect(text).not.toContain("sk-");
 
     await click(button("Use"));
@@ -424,7 +424,7 @@ describe("Settings → AI models", () => {
     await show();
     const text = container.textContent ?? "";
 
-    expect(text).toContain("Apps that use it");
+    expect(text).toContain("Apps That Use It");
     expect(text).toContain("ExampleHasn't asked in the last 30 days");
     await click(button("Open"));
     expect(openApp).toHaveBeenCalledWith("sanctum.example");
@@ -449,7 +449,7 @@ describe("Settings → AI models", () => {
     sources = [];
     await show();
     expect(container.textContent).toContain("Your home has no AI model yet");
-    expect(container.textContent).not.toContain("Tokens used");
+    expect(container.textContent).not.toContain("Tokens Used");
   });
 
   it("keeps a typed computer name until it is saved", async () => {

@@ -31,7 +31,7 @@ nothing in Sanctum is open to them.
 
 ## Adding an agent
 
-1. Open **Settings → AI agents** and choose **Add an agent**.
+1. Open **Settings → AI Agents** and choose **Add an agent**.
 2. Give it a name you'll recognise, such as "Codex on the office Mac". The
    sheet lists everything AI agents can use, under **On** and **Off until you
    switch them on**. You can change any of it later, as
@@ -97,7 +97,7 @@ default_tools_approval_mode = "approve"
 
 ## Your agents
 
-**Settings → AI agents** lists each agent with who added it, when, and when
+**Settings → AI Agents** lists each agent with who added it, when, and when
 it last reached Sanctum, such as "Added by Maya on 20 Nov · Seen 5 minutes
 ago".
 Anyone in the household sees and manages every agent, from any device.

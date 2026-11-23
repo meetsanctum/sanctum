@@ -36,7 +36,7 @@ When an update waits, the app's settings say what the new version needs.
   much more, such as "It needs 64 MB more memory". Turning off an app you
   don't use can make room. Sanctum checks for room every minute.
 
-Settings → Needs attention lists every app with an update waiting.
+Settings → Needs Attention lists every app with an update waiting.
 
 ## Going back after an update
 
@@ -57,7 +57,7 @@ starting or changing versions.
 
 An app's settings show why it isn't running. When an app stops unexpectedly,
 its pages and cards dim if it stays down. Turning it off also takes its
-cards off Home. In its settings, **How it's running** shows memory use and
+cards off Home. In its settings, **How It's Running** shows memory use and
 restarts. A notice near the top says what went wrong when Sanctum knows.
 
 | What it says                                        | What to do                                                                       |

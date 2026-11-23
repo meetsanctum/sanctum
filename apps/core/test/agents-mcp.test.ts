@@ -262,13 +262,13 @@ describe("the MCP endpoint", () => {
     expect(needs.structuredContent).toEqual({
       error: "not_allowed",
       message:
-        "“Sweep” needs “See who lives here”, which is switched off for AI agents in Settings, What AI agents can use.",
+        "“Sweep” needs “See who lives here”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
     });
     const indirect = await client.callTool({ name: "sanctum_example_inspect" });
     expect(indirect.structuredContent).toEqual({
       error: "not_allowed",
       message:
-        "“Inspect the floors” needs “See who lives here”, which is switched off for AI agents in Settings, What AI agents can use.",
+        "“Inspect the floors” needs “See who lives here”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
     });
 
     // Switched off after the agent listed it: refused all the same.
@@ -321,7 +321,7 @@ describe("the MCP endpoint", () => {
     expect(JSON.stringify(first.devices)).not.toMatch(/setBy|actor/);
     expect(first.notAllowed).toContainEqual({
       title: "See who lives here",
-      where: "Settings, What AI agents can use",
+      where: "Settings, What AI Agents Can Use",
     });
     expect(first.notAllowed).toContainEqual({
       title: "Peek",

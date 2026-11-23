@@ -128,7 +128,10 @@ What is under which licence, and what neither covers, is in
 - Inter; sentence case everywhere, never all caps (acronyms such as OS keep
   their capitals), except in names, where each word starts with a capital:
   the names Sanctum gives devices ("Office Light"), apps' names ("Natural
-  Light") and the types summary tiles count ("Contact Sensors"); no dividing
+  Light") and the types summary tiles count ("Contact Sensors"), and in
+  Settings' titles: its areas' and pages' names and the headings over its
+  cards ("AI Models", "Needs Attention"), where "and", articles and short
+  prepositions inside a title stay small ("Rooms and Floors"); no dividing
   lines; corners from the `--radius` scale, nothing pill-shaped but a
   count's badge ("3 found").
 - Widget titles in the app's colour, but room sections' headings neutral like
