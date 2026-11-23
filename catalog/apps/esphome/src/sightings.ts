@@ -51,6 +51,17 @@ export function macOf(text: string | undefined): string | null {
   return /^[0-9a-f]{12}$/.test(hex) ? hex.match(/../g)!.join(":") : null;
 }
 
+/**
+ * A device's name without the end of its MAC address that ESPHome adds to
+ * set apart devices on the same firmware (name_add_mac_suffix): "Home
+ * Assistant Voice 0ad8d8" is "Home Assistant Voice". A name that is nothing
+ * else stays whole.
+ */
+export function withoutMacSuffix(name: string, mac: string) {
+  const suffix = mac.replace(/:/g, "").slice(-6);
+  return name.match(new RegExp(`^(.*\\S)[ _-]${suffix}$`, "i"))?.[1] ?? name;
+}
+
 /** A sighting as one of ESPHome's devices, or null for one that names no MAC. */
 export function announcedOf(sighting: Sighting): Announced | null {
   const mac = macOf(sighting.txt.mac);
@@ -66,7 +77,7 @@ export function announcedOf(sighting: Sighting): Announced | null {
           : "older";
   return {
     mac,
-    name: txt.friendly_name?.trim() || sighting.name,
+    name: withoutMacSuffix(txt.friendly_name?.trim() || sighting.name, mac),
     addresses: sighting.addresses,
     port: sighting.port,
     encryption,

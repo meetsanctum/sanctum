@@ -50,9 +50,8 @@ describe("a record from before a key was given or taken off", () => {
     await announce(home.core, device);
 
     expect(device.sighting().txt.api_provisioning).toBeDefined();
-    expect(
-      await listedAs(key, "Has the key it was given before"),
-    ).toMatchObject({ asks: [] });
+    // Listed again, asking nothing: Add tries the key it was given.
+    await home.core.until(() => listed(key)?.asks.length === 0, "listed");
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toEqual([{ key: given, encrypted: true }]);
@@ -115,7 +114,7 @@ describe("a record from before a key was given or taken off", () => {
     });
     expect(home.core.registered.has(key)).toBe(false);
     expect(device.keysSent).toEqual([]);
-    expect(listed(key)?.description).toBe("Gets an encryption key of its own");
+    expect(listed(key)).toMatchObject({ description: null, asks: [] });
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toEqual([

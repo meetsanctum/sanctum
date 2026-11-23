@@ -278,6 +278,39 @@ describe("adding a device", () => {
     });
   });
 
+  it("names it without the end of its MAC address its firmware adds", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ friendlyName: "Voice" });
+    const suffix = device.options.mac.replace(/:/g, "").slice(-6).toLowerCase();
+    device.options.friendlyName = `Home Assistant Voice ${suffix}`;
+    device.options.name = `home-assistant-voice-${suffix}`;
+    await announce(home.core, device);
+    const key = keyOf(device.options.mac);
+    await home.core.until(
+      () =>
+        home.core.found.find((each) => each.key === key)?.name ===
+        "Home Assistant Voice",
+      "listed by its name alone",
+    );
+
+    await add(home.core, device);
+    expect(home.core.registered.get(key)?.name).toBe("Home Assistant Voice");
+  });
+
+  it("keeps a name that is nothing but the end of its MAC address", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ friendlyName: "Voice" });
+    const suffix = device.options.mac.replace(/:/g, "").slice(-6).toLowerCase();
+    device.options.friendlyName = suffix;
+    await announce(home.core, device);
+    const key = keyOf(device.options.mac);
+
+    await home.core.until(
+      () => home.core.found.find((each) => each.key === key)?.name === suffix,
+      "listed by its whole name",
+    );
+  });
+
   it("refuses a key that doesn't match, or isn't a key, and keeps nothing", async () => {
     home = await startHome();
     const device = await home.plugIn();

@@ -83,8 +83,8 @@ describe("a device waiting for a key", () => {
 
     // It took the key, so it now announces one, which adding tries first.
     await announce(home.core, device);
+    // Nothing is asked: adding tries the key it was given.
     expect(home.core.found.find((each) => each.key === key)).toMatchObject({
-      description: "Has the key it was given before",
       asks: [],
     });
     await home.core.add(key, {});

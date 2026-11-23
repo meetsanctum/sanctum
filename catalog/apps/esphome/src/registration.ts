@@ -6,6 +6,7 @@ import {
 
 import type { Session } from "./connection.js";
 import type { Mapping } from "./entities.js";
+import { withoutMacSuffix } from "./sightings.js";
 
 // What a device is in the core, from what its connection says: its name,
 // maker and product, type, capabilities and firmware.
@@ -88,7 +89,10 @@ export function registrationOf(
   mapping: Mapping,
 ): DeviceRegistration {
   const { info } = session;
-  const name = label(info.friendlyName) ?? label(info.name) ?? mac;
+  const name = withoutMacSuffix(
+    label(info.friendlyName) ?? label(info.name) ?? mac,
+    mac,
+  );
   const maker = makerOf(info);
   return {
     key: mac,

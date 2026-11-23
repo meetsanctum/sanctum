@@ -36,8 +36,9 @@ const olderDevice = (options: OlderOptions = {}) =>
 
 const card = (key: string) => home.core.found.find((each) => each.key === key);
 
-const older =
-  "Gets a setup key without encryption, as its firmware needs, then its own key encrypted";
+// Listed by who made it, asking nothing: how it gets its key isn't the
+// household's business.
+const older = { description: "Nabu Casa", asks: [] };
 
 async function addOlder(options?: OlderOptions) {
   const device = await olderDevice(options);
@@ -58,7 +59,7 @@ describe("older firmware", () => {
     const key = keyOf(device.options.mac);
     await home.core.until(() => card(key) !== undefined, "listed");
 
-    expect(card(key)).toMatchObject({ description: older, asks: [] });
+    expect(card(key)).toMatchObject(older);
     expect(device.connections).toBe(0);
   });
 
@@ -76,10 +77,6 @@ describe("older firmware", () => {
     device.reboot();
     // Flashed with firmware from before 2026.7, as its record now says.
     await announce(home.core, device);
-    await home.core.until(
-      () => card(key)?.description === older,
-      "listed as older firmware",
-    );
 
     await home.core.add(key, {});
     expect(device.keysSent.map((each) => each.encrypted)).toEqual([
@@ -191,16 +188,12 @@ describe("older firmware", () => {
     device.psk = null;
     device.reboot();
     await announce(home.core, device);
-    await home.core.until(
-      () => card(key)?.description === "Has the key it was given before",
-      "listed with its kept key",
-    );
     // Its kept key, tried encrypted, no longer works, and it answers as
     // older firmware: Add says so, and the card does too.
     expect(await home.core.add(key, {})).toEqual({
       refused: { refusal: "changed" },
     });
-    expect(card(key)?.description).toBe(older);
+    expect(card(key)).toMatchObject(older);
     await home.core.add(key, {});
 
     expect(home.core.registered.has(key)).toBe(true);
@@ -233,10 +226,15 @@ describe("older firmware", () => {
     await home.core.until(() => device.psk === null, "its key off");
     expect(device.waiting).toBe(false);
     await announce(home.core, device);
-    await home.core.until(
-      () => card(key)?.description === older,
-      "listed as older firmware",
-    );
+    await home.core.until(() => card(key) !== undefined, "listed again");
+    expect(card(key)).toMatchObject(older);
+    // Added again, it gets a setup key in the clear, then its own encrypted.
+    const sent = device.keysSent.length;
+    await home.core.add(key, {});
+    expect(device.keysSent.slice(sent).map((each) => each.encrypted)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("finishes removing a key it cleared while the answer was lost", async () => {
@@ -254,7 +252,7 @@ describe("older firmware", () => {
     expect(home.core.registered.has(key)).toBe(false);
     expect(home.core.secrets.size).toBe(0);
     expect(device.keysSent).toHaveLength(sent);
-    expect(card(key)?.description).toBe(older);
+    expect(card(key)).toMatchObject(older);
   });
 
   it("keeps its key when its firmware can't clear one, unless removed anyway", async () => {

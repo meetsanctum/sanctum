@@ -50,7 +50,9 @@ export function createFound(options: {
   /** Whether Sanctum kept a key it gave to the device. */
   hasKeptKey: (mac: string) => Promise<boolean>;
   /** Who made a device, from what it says of itself. */
-  makerOf: (info: Session["info"]) => string | null;
+  makerOf: (
+    info: Pick<Session["info"], "projectName" | "manufacturer" | "model">,
+  ) => string | null;
 }) {
   const { ctx, timings, announced } = options;
   const observations = new Map<string, Observation>();
@@ -104,37 +106,31 @@ export function createFound(options: {
         for (const each of shown) {
           const row = { key: each.mac, name: each.name.slice(0, 120) };
           const said = saidOf(each);
-          if (said === "waits") {
-            found.push({
-              ...row,
-              description:
-                observations.get(each.mac)?.learned?.maker ??
-                "Gets an encryption key of its own",
-              asks: [],
+          // Who made it, where adding asks nothing: how it gets its key is
+          // Sanctum's business, not the household's.
+          const maker =
+            observations.get(each.mac)?.learned?.maker ??
+            options.makerOf({
+              projectName: each.projectName ?? undefined,
+              manufacturer: "",
+              model: "",
             });
-          } else if (said === "closed") {
+          if (said === "closed") {
             found.push({
               ...row,
               description: "Turn it off and on again to add it",
               asks: [],
             });
-          } else if (said === "older") {
-            found.push({
-              ...row,
-              description:
-                "Gets a setup key without encryption, as its firmware needs, then its own key encrypted",
-              asks: [],
-            });
           } else if (said === "clear") {
             found.push({ ...row, description: "Not encrypted", asks: [] });
-          } else if (await options.hasKeptKey(each.mac)) {
-            // Removed with the key it was given still on it, it's added
+          } else if (
+            said === "waits" ||
+            said === "older" ||
+            (await options.hasKeptKey(each.mac))
+          ) {
+            // One removed with the key it was given still on it is added
             // with that key again.
-            found.push({
-              ...row,
-              description: "Has the key it was given before",
-              asks: [],
-            });
+            found.push({ ...row, description: maker, asks: [] });
           } else {
             found.push({
               ...row,
