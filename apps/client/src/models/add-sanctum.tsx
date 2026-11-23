@@ -7,7 +7,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { addProblemOf, Asks, shortfallWords } from "../add-app-sheet";
 import { AppIcon } from "../app-icon";
@@ -55,8 +55,12 @@ export function AddSanctum(props: {
   const [model, setModel] = useState("");
   const [problem, setProblem] = useState<string>();
   const { busy, onBusy } = props;
+  // Ollama added here has no model yet, and may not answer while its image
+  // downloads: the sheet stays on the step to download one.
+  const isAddedHere = useRef(false);
 
   useEffect(() => {
+    if (isAddedHere.current) return;
     const controller = new AbortController();
     const { signal } = controller;
     setPhase({ kind: "looking" });
@@ -109,6 +113,7 @@ export function AddSanctum(props: {
         method: "POST",
         json: { id: app.id, version: app.version },
       });
+      isAddedHere.current = true;
       props.onAppAdded(added);
       setPhase({ kind: "noModel" });
     } catch (error) {

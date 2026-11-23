@@ -191,16 +191,21 @@ afterEach(async () => {
 const openApp = vi.fn();
 
 async function show() {
-  await act(async () => {
+  // As the shell does, an app added in the sheet comes back in the list.
+  const render = () =>
     root.render(
       <ModelsPage
         live={live}
         page={null}
         apps={installed}
         onOpenApp={openApp}
+        onAppAdded={(app) => {
+          installed = [...installed.filter((each) => each.id !== app.id), app];
+          render();
+        }}
       />,
     );
-  });
+  await act(async () => render());
 }
 
 async function type(input: HTMLInputElement, value: string) {
@@ -537,6 +542,8 @@ describe("Settings → AI models", () => {
   });
 
   it("adds Ollama on Sanctum, then points to its page for a model", async () => {
+    // Ollama doesn't answer yet while its image downloads.
+    isOllamaAvailable = false;
     await show();
     await click(button("Add a source"));
     await click(button("Continue"));
@@ -554,6 +561,10 @@ describe("Settings → AI models", () => {
     expect(document.body.textContent).toContain("Ollama is added to Sanctum");
     expect(document.body.textContent).toContain(
       "Go to the Ollama app to download a model.",
+    );
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(requests.filter(([, path]) => path === "/api/models/look")).toEqual(
+      [],
     );
 
     await click(button("Open Ollama"));

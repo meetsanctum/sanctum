@@ -14,7 +14,11 @@ import { claimed, post, testCore, type TestCore } from "./support.js";
 // loaded once in use, and counted by day with the other sources.
 
 async function home(
-  options: { url?: string | null; sources?: FakeSources } = {},
+  options: {
+    url?: string | null;
+    sources?: FakeSources;
+    serviceUrl?: () => Promise<string | null>;
+  } = {},
 ) {
   const sources = options.sources ?? fakeSources();
   const manager = fakeManager().manager;
@@ -22,8 +26,9 @@ async function home(
     modelFetchers: sources.fetchers,
     manager: {
       ...manager,
-      serviceUrl: async () =>
-        options.url === undefined ? sanctumOllama : options.url,
+      serviceUrl:
+        options.serviceUrl ??
+        (async () => (options.url === undefined ? sanctumOllama : options.url)),
     },
   });
   const { token } = await claimed(core);
@@ -84,6 +89,47 @@ describe("Ollama on Sanctum as a source", () => {
 
     expect(look.json()).toEqual({ found: false, problem: "unreachable" });
     expect(added.statusCode).toBe(503);
+  });
+
+  it("keeps the address a newer lookup found when an older one fails after it", async () => {
+    const answers: ((url: string | null) => void)[] = [];
+    let isWaiting = false;
+    const { core, token } = await home({
+      serviceUrl: () =>
+        isWaiting
+          ? new Promise<string | null>((resolve, reject) => {
+              answers.push((url) =>
+                url ? resolve(url) : reject(new Error("timed out")),
+              );
+            })
+          : Promise.resolve(sanctumOllama),
+    });
+    await addSanctum(core, token);
+    await checked(core);
+
+    isWaiting = true;
+    const older = post(
+      core,
+      "/api/models/look",
+      { kind: "sanctum" },
+      { token },
+    );
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    const newer = post(
+      core,
+      "/api/models/look",
+      { kind: "sanctum" },
+      { token },
+    );
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]!(sanctumOllama);
+    expect((await newer).json<ModelSourceLook>().found).toBe(true);
+    answers[0]!(null);
+    expect((await older).json<ModelSourceLook>().found).toBe(true);
+
+    expect(core.models.inUse()?.endpoint()).toMatchObject({
+      baseUrl: `${sanctumOllama}/v1`,
+    });
   });
 
   it("reads Ollama's running URL from the manager's service status", async () => {
