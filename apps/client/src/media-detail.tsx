@@ -107,9 +107,10 @@ function aboutWhatPlays(capability: Media): string | null {
 }
 
 // The picture of what plays, in its own shape up to 300 by 264 px. Without
-// one, it is a soft grey gradient the shell draws in the shape the picture
-// would have, saying "Nothing playing" while nothing does; a song's is
-// square, a film's or a show's as wide as a screen.
+// one, or while nothing plays, it is a soft grey gradient the shell draws in
+// the shape the picture would have, with no words on it: the detail's title
+// already says nothing plays. A song's is square, a film's or a show's as
+// wide as a screen.
 function Artwork(props: {
   square: boolean;
   nothing: boolean;
@@ -147,19 +148,14 @@ function Artwork(props: {
   }
   return (
     <div
+      aria-hidden="true"
       style={{
         ...frame.style,
         background:
           "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
       }}
-      className={`${frame.className} grid place-items-center overflow-hidden px-4 text-center`}
-    >
-      {props.nothing && (
-        <span className="text-[26px] leading-8 font-medium tracking-[-0.01em] text-white/52">
-          Nothing playing
-        </span>
-      )}
-    </div>
+      className={frame.className}
+    />
   );
 }
 
