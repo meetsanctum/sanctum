@@ -44,7 +44,9 @@ pnpm-debug.log*
 # Packaged desktop app
 apps/desktop/release
 
-# This worktree's development stack (deploy/dev/stack.sh), and the touches
-# `pnpm dev:display` records
+# This worktree's development stack (deploy/dev/stack.sh), the touches and
+# timings `pnpm dev:display` records, and the client built for the display
 .sanctum-stack
 .sanctum-display-touches.jsonl
+.sanctum-display-frames.jsonl
+apps/client/dist-display

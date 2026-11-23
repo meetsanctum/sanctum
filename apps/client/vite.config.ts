@@ -18,6 +18,14 @@ const touchLog =
         new URL("../../.sanctum-display-touches.jsonl", import.meta.url),
       )
     : undefined;
+const frameLog =
+  process.env.SANCTUM_DISPLAY_FRAMES === "true"
+    ? fileURLToPath(
+        new URL("../../.sanctum-display-frames.jsonl", import.meta.url),
+      )
+    : undefined;
+// The client built for the display by `build:display`.
+const builtDir = fileURLToPath(new URL("./dist-display", import.meta.url));
 
 function brand(): Plugin {
   return {
@@ -32,7 +40,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     brand(),
-    displayPort ? displayBridge(touchLog) : undefined,
+    displayPort ? displayBridge({ touchLog, frameLog, builtDir }) : undefined,
   ],
   resolve: {
     // The alias the shadcn components import from (components.json).
