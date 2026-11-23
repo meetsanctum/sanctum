@@ -1,4 +1,8 @@
-import { EntityCategory, MediaPlayerState } from "esphome-client";
+import {
+  EntityCategory,
+  MediaPlayerState,
+  VoiceAssistantEvent,
+} from "esphome-client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { EmulatedEntity } from "./emulated-device.js";
@@ -114,9 +118,16 @@ describe("a smart speaker", () => {
     const key = await add(home.core, device);
     await home.core.until(() => device.voiceFollowed, "its requests followed");
 
+    const declinedRun = [
+      { type: "response", isDeclined: true },
+      { type: "event", eventType: VoiceAssistantEvent.RUN_END },
+    ];
     device.wake();
-    await home.core.until(() => device.voiceAnswers.length === 1, "an answer");
-    expect(device.voiceAnswers).toEqual([{ declined: true }]);
+    await home.core.until(
+      () => device.voiceMessages.length >= declinedRun.length,
+      "its run ended",
+    );
+    expect(device.voiceMessages).toEqual(declinedRun);
 
     const greeted = device.greeted;
     device.reboot();
@@ -126,8 +137,11 @@ describe("a smart speaker", () => {
       "followed again",
     );
     device.wake();
-    await home.core.until(() => device.voiceAnswers.length === 2, "an answer");
-    expect(device.voiceAnswers[1]).toEqual({ declined: true });
+    await home.core.until(
+      () => device.voiceMessages.length >= declinedRun.length * 2,
+      "its run ended",
+    );
+    expect(device.voiceMessages).toEqual([...declinedRun, ...declinedRun]);
     expect(home.core.availability.get(key)).toBe("online");
   });
 

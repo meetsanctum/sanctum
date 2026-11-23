@@ -1,3 +1,5 @@
+import { VoiceAssistantEvent } from "esphome-client";
+
 import type { Session } from "./connection.js";
 import { hasVoiceAssistant } from "./registration.js";
 
@@ -6,7 +8,9 @@ import { hasVoiceAssistant } from "./registration.js";
 // starting up, so its ring twinkles and its button does nothing. Sanctum
 // follows them on each of its connections and declines every request at
 // once, before the device sends any sound, so the device shows that nothing
-// answered it and nothing it hears leaves it.
+// answered it and nothing it hears leaves it. Each declined request is then
+// told its run ended, as Home Assistant ends a run after an error: a device
+// ends its run only when told, and until then a Voice PE's ring stays red.
 
 /**
  * Follows a session's voice requests, if its device has a voice assistant,
@@ -17,7 +21,9 @@ export function declineRequests(session: Session) {
   const { client } = session;
   const requests = client.voiceAssistant;
   const listener = client.on("voiceAssistantRequest", (request) => {
-    if (request.start) requests.respondToRequest({ error: true });
+    if (!request.start) return;
+    requests.respondToRequest({ error: true });
+    requests.sendEvent(VoiceAssistantEvent.RUN_END);
   });
   const lifecycle = client.on("lifecycle", (event) => {
     if (event.kind !== "disconnect") return;

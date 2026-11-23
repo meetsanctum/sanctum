@@ -156,6 +156,21 @@ describe("buttons", () => {
       button: null,
       press: "brightness_move_up",
     });
+    expect(pressParts("on_press")).toEqual({ button: "on", press: "press" });
+  });
+
+  it("take a press word before press as one press, as ESPHome names them", () => {
+    for (const action of ["double_press", "triple_press", "long_press"]) {
+      expect(pressParts(action)).toEqual({ button: null, press: action });
+    }
+    expect(pressParts("up_long_press")).toEqual({
+      button: "up",
+      press: "long_press",
+    });
+    expect(pressParts("press_press")).toEqual({
+      button: "press",
+      press: "press",
+    });
   });
 
   it("have no state and take no commands", () => {
