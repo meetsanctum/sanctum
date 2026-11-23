@@ -419,10 +419,13 @@ export function MediaPlaying(props: Props) {
       ref={page}
       className="@container flex w-[760px] max-w-full justify-center"
     >
-      <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[minmax(0,1fr)_auto] @min-[560px]:gap-10 @min-[560px]:pt-7">
-        {/* Side by side, the bar is on the picture's middle line whatever is
-            above or below it: the rows above and below the bar are as tall
-            as each other, and the column is as tall as the picture. */}
+      {/* Side by side, the bar's column is as wide as it is beside the
+          widest picture, 300 px, so the bar keeps one length whatever plays,
+          and the picture is centred in the column beside it. */}
+      <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[calc(100%_-_300px_-_--spacing(10))_1fr] @min-[560px]:gap-10 @min-[560px]:pt-7">
+        {/* The bar is on the picture's middle line whatever is above or
+            below it: the rows above and below the bar are as tall as each
+            other, and the column is as tall as the picture. */}
         <div className="flex min-w-0 flex-col @min-[560px]:grid @min-[560px]:grid-rows-[1fr_auto_1fr] @min-[560px]:self-stretch">
           {(title || about) && (
             <div className="pb-5 @min-[560px]:self-end">
