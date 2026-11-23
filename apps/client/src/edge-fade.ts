@@ -20,6 +20,7 @@ export function useEdgeFade(
   const followed = useRef<{ row: HTMLElement; stop: () => void } | null>(null);
   // Each render only checks the row is still the one followed: a row can
   // appear, go or be replaced as what it shows changes.
+  // focusWhenScrollable is read when the hook starts following a row.
   useLayoutEffect(() => {
     const row = ref.current;
     if (followed.current?.row === row) return;
