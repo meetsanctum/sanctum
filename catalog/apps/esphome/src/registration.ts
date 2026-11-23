@@ -89,10 +89,10 @@ export function registrationOf(
   mapping: Mapping,
 ): DeviceRegistration {
   const { info } = session;
-  const name = withoutMacSuffix(
-    label(info.friendlyName) ?? label(info.name) ?? mac,
-    mac,
-  );
+  const name =
+    label(withoutMacSuffix(info.friendlyName ?? "", mac)) ??
+    label(withoutMacSuffix(info.name ?? "", mac)) ??
+    mac;
   const maker = makerOf(info);
   return {
     key: mac,

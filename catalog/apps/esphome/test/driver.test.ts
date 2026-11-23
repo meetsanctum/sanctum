@@ -278,37 +278,40 @@ describe("adding a device", () => {
     });
   });
 
-  it("names it without the end of its MAC address its firmware adds", async () => {
-    home = await startHome();
-    const device = await home.plugIn({ friendlyName: "Voice" });
-    const suffix = device.options.mac.replace(/:/g, "").slice(-6).toLowerCase();
-    device.options.friendlyName = `Home Assistant Voice ${suffix}`;
-    device.options.name = `home-assistant-voice-${suffix}`;
-    await announce(home.core, device);
-    const key = keyOf(device.options.mac);
-    await home.core.until(
-      () =>
-        home.core.found.find((each) => each.key === key)?.name ===
-        "Home Assistant Voice",
-      "listed by its name alone",
-    );
+  it.each([
+    "Home Assistant Voice",
+    "Home Assistant Voice ".repeat(5) + "Upstairs hall",
+    "Home Assistant\nVoice",
+  ])(
+    "drops the MAC suffix from %j in discovery and registration",
+    async (name) => {
+      home = await startHome();
+      const device = await home.plugIn({
+        mac: "AA:BB:CC:0A:D8:D8",
+        friendlyName: `${name} 0AD8D8`,
+        name: "home-assistant-voice-0ad8d8",
+      });
+      const key = keyOf(device.options.mac);
+      expect(home.core.found.find((each) => each.key === key)?.name).toBe(name);
 
-    await add(home.core, device);
-    expect(home.core.registered.get(key)?.name).toBe("Home Assistant Voice");
-  });
+      await add(home.core, device);
+      expect(home.core.registered.get(key)?.name).toBe(name);
+    },
+  );
 
   it("keeps a name that is nothing but the end of its MAC address", async () => {
     home = await startHome();
-    const device = await home.plugIn({ friendlyName: "Voice" });
-    const suffix = device.options.mac.replace(/:/g, "").slice(-6).toLowerCase();
-    device.options.friendlyName = suffix;
-    await announce(home.core, device);
+    const device = await home.plugIn({
+      mac: "AA:BB:CC:0A:D8:D8",
+      friendlyName: "0ad8d8",
+    });
     const key = keyOf(device.options.mac);
-
-    await home.core.until(
-      () => home.core.found.find((each) => each.key === key)?.name === suffix,
-      "listed by its whole name",
+    expect(home.core.found.find((each) => each.key === key)?.name).toBe(
+      "0ad8d8",
     );
+
+    await add(home.core, device);
+    expect(home.core.registered.get(key)?.name).toBe("0ad8d8");
   });
 
   it("refuses a key that doesn't match, or isn't a key, and keeps nothing", async () => {

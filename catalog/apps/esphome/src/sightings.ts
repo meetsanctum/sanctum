@@ -58,8 +58,10 @@ export function macOf(text: string | undefined): string | null {
  * else stays whole.
  */
 export function withoutMacSuffix(name: string, mac: string) {
-  const suffix = mac.replace(/:/g, "").slice(-6);
-  return name.match(new RegExp(`^(.*\\S)[ _-]${suffix}$`, "i"))?.[1] ?? name;
+  const trimmed = name.trim();
+  const suffix = trimmed.match(/[ _-]([0-9a-f]{6})$/i)?.[1]?.toLowerCase();
+  if (suffix !== mac.replaceAll(":", "").slice(-6)) return trimmed;
+  return trimmed.slice(0, -7).trimEnd() || trimmed;
 }
 
 /** A sighting as one of ESPHome's devices, or null for one that names no MAC. */

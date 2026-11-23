@@ -2,6 +2,7 @@ import type { AppContext, FoundReport } from "@meetsanctum/app-sdk";
 
 import type { Address, Session, Timings } from "./connection.js";
 import { askUnderZeroKey, isOlderFirmware, type Answer } from "./keys.js";
+import { makerOf } from "./registration.js";
 import { beforeProvisioning, type Announced } from "./sightings.js";
 
 // The devices ESPHome found and hasn't added, and what each says of its key.
@@ -49,10 +50,6 @@ export function createFound(options: {
   added: (mac: string) => boolean;
   /** Whether Sanctum kept a key it gave to the device. */
   hasKeptKey: (mac: string) => Promise<boolean>;
-  /** Who made a device, from what it says of itself. */
-  makerOf: (
-    info: Pick<Session["info"], "projectName" | "manufacturer" | "model">,
-  ) => string | null;
 }) {
   const { ctx, timings, announced } = options;
   const observations = new Map<string, Observation>();
@@ -106,15 +103,6 @@ export function createFound(options: {
         for (const each of shown) {
           const row = { key: each.mac, name: each.name.slice(0, 120) };
           const said = saidOf(each);
-          // Who made it, where adding asks nothing: how it gets its key is
-          // Sanctum's business, not the household's.
-          const maker =
-            observations.get(each.mac)?.learned?.maker ??
-            options.makerOf({
-              projectName: each.projectName ?? undefined,
-              manufacturer: "",
-              model: "",
-            });
           if (said === "closed") {
             found.push({
               ...row,
@@ -128,9 +116,14 @@ export function createFound(options: {
             said === "older" ||
             (await options.hasKeptKey(each.mac))
           ) {
-            // One removed with the key it was given still on it is added
-            // with that key again.
-            found.push({ ...row, description: maker, asks: [] });
+            const description =
+              observations.get(each.mac)?.learned?.maker ??
+              makerOf({
+                projectName: each.projectName ?? undefined,
+                manufacturer: "",
+                model: "",
+              }).manufacturer;
+            found.push({ ...row, description, asks: [] });
           } else {
             found.push({
               ...row,
@@ -238,7 +231,10 @@ export function createFound(options: {
       if (answer.says !== "unclear") {
         observation.learned = {
           said: answer.says,
-          maker: answer.says === "waits" ? options.makerOf(answer.info) : null,
+          maker:
+            ("info" in probe ? makerOf(probe.info).manufacturer : null) ??
+            observation.learned?.maker ??
+            null,
         };
       }
       await list();

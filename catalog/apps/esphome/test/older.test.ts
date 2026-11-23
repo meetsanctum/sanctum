@@ -21,6 +21,7 @@ afterEach(async () => {
 
 type OlderOptions = Pick<EmulatedOptions, "clears" | "maxConnections"> & {
   kind?: "button" | "switch";
+  project?: string;
 };
 
 const olderDevice = (options: OlderOptions = {}) =>
@@ -53,7 +54,7 @@ async function addOlder(options?: OlderOptions) {
 }
 
 describe("older firmware", () => {
-  it("is listed by what Add does, and isn't asked until someone adds it", async () => {
+  it("lists the project's maker without connecting before Add", async () => {
     home = await startHome();
     const device = await olderDevice();
     const key = keyOf(device.options.mac);
@@ -161,12 +162,13 @@ describe("older firmware", () => {
 
   it("is sent a new setup key on another Add after refusing one, never the kept one again", async () => {
     home = await startHome();
-    const device = await olderDevice();
+    const device = await olderDevice({ project: "" });
     const key = keyOf(device.options.mac);
-    await home.core.until(() => card(key) !== undefined, "listed");
+    expect(card(key)).toMatchObject({ description: null, asks: [] });
     device.refusesKeys = true;
 
     await expect(home.core.add(key, {})).rejects.toThrow();
+    expect(card(key)).toMatchObject({ description: "Espressif", asks: [] });
     expect(home.core.registered.has(key)).toBe(false);
     device.refusesKeys = false;
     await home.core.add(key, {});
@@ -188,8 +190,8 @@ describe("older firmware", () => {
     device.psk = null;
     device.reboot();
     await announce(home.core, device);
-    // Its kept key, tried encrypted, no longer works, and it answers as
-    // older firmware: Add says so, and the card does too.
+    // Its kept key no longer works, so Add asks for another go once it
+    // confirms the older firmware can take a new key.
     expect(await home.core.add(key, {})).toEqual({
       refused: { refusal: "changed" },
     });
