@@ -9,8 +9,8 @@
 // ctx.models, and only within a turn: a call from a person or a shared
 // device to an action that declares `turn: true`. Answers stream by handle.
 
-/** The providers a source can be, with Ollama on a computer in the home. */
-export const modelProviders = ["openrouter", "openai"] as const;
+/** The AI providers a source can be, each reached with its own API key. */
+export const modelProviders = ["openrouter", "anthropic", "openai"] as const;
 export type ModelProvider = (typeof modelProviders)[number];
 export type ModelSourceKind = "sanctum" | "computer" | ModelProvider;
 
@@ -143,6 +143,7 @@ export type ModelMessage =
 export type ModelTool = {
   name: string;
   description: string;
+  /** Claude requires object input and uses that type when it is omitted. */
   input: Record<string, unknown>;
 };
 

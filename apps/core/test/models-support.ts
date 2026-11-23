@@ -1,8 +1,8 @@
 import type { ModelFetchers } from "../src/models/endpoints.js";
 
-// Fake AI model sources for tests: Ollama on a computer in the home and
-// OpenRouter on the internet, answering as the real ones do, with an answer
-// streamed as server-sent events.
+// Fake AI model sources for tests: Ollama on a computer in the home, and
+// OpenRouter and Anthropic on the internet, answering as the real ones do,
+// with an answer streamed as server-sent events.
 
 /** What a fake source answers to a chat. */
 export type FakeAnswer = {
@@ -16,6 +16,12 @@ export type FakeAnswer = {
   delayMs?: number;
   // It sends its first piece of text, then nothing until it's stopped.
   hangs?: boolean;
+  // Anthropic's only: it thinks first, and why it stops instead of the
+  // usual end of a turn or a tool call. Null omits the stop reason.
+  thinks?: boolean;
+  stopReason?: string | null;
+  // Releases the rest of Claude's events after the first text delta.
+  afterFirstText?: Promise<void>;
 };
 
 export type FakeSources = {
@@ -27,6 +33,7 @@ export type FakeSources = {
     answer: FakeAnswer;
   };
   openRouter: { key: string; answer: FakeAnswer };
+  anthropic: { key: string; answer: FakeAnswer };
   // Every request, as method and URL, with the authorization it carried.
   requests: { method: string; url: string; authorization?: string }[];
   // Each chat's body as sent.
@@ -135,6 +142,104 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
   });
 }
 
+// Anthropic's stream: the message, then each block opened, filled and
+// closed, then why it stopped with what it wrote.
+function anthropicEvents(answer: FakeAnswer, tool: string) {
+  const events: [string, unknown][] = [
+    [
+      "message_start",
+      {
+        type: "message_start",
+        message: {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-5-5",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: answer.tokens?.read ?? 30,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 10,
+            output_tokens: 1,
+          },
+        },
+      },
+    ],
+  ];
+  let index = 0;
+  const block = (start: unknown, deltas: unknown[]) => {
+    events.push([
+      "content_block_start",
+      { type: "content_block_start", index, content_block: start },
+    ]);
+    for (const delta of deltas) {
+      events.push([
+        "content_block_delta",
+        { type: "content_block_delta", index, delta },
+      ]);
+    }
+    events.push(["content_block_stop", { type: "content_block_stop", index }]);
+    index += 1;
+  };
+  if (answer.thinks) {
+    block({ type: "thinking", thinking: "", signature: "" }, [
+      { type: "signature_delta", signature: "sig-thought-1" },
+    ]);
+  }
+  block(
+    { type: "text", text: "" },
+    (answer.text ?? ["It's ", "noon."]).map((text) => ({
+      type: "text_delta",
+      text,
+    })),
+  );
+  if (answer.callsTool) {
+    const input = answer.toolArguments ?? "{}";
+    block({ type: "tool_use", id: "toolu_1", name: tool, input: {} }, [
+      { type: "input_json_delta", partial_json: input.slice(0, 1) },
+      { type: "input_json_delta", partial_json: input.slice(1) },
+    ]);
+  }
+  events.push(
+    [
+      "message_delta",
+      {
+        type: "message_delta",
+        delta: {
+          stop_reason:
+            answer.stopReason === null
+              ? undefined
+              : (answer.stopReason ??
+                (answer.callsTool ? "tool_use" : "end_turn")),
+          stop_sequence: null,
+        },
+        usage: { output_tokens: answer.tokens?.written ?? 8 },
+      },
+    ],
+    ["message_stop", { type: "message_stop" }],
+  );
+  const chunks = events.map(
+    ([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
+  );
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      if (answer.afterFirstText) {
+        const first = chunks.findIndex((chunk) =>
+          chunk.includes('"text_delta"'),
+        );
+        controller.enqueue(
+          encoder.encode(chunks.splice(0, first + 1).join("")),
+        );
+        await answer.afterFirstText;
+      }
+      controller.enqueue(encoder.encode(chunks.join("")));
+      controller.close();
+    },
+  });
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -154,6 +259,10 @@ export function fakeSources(): FakeSources {
       answer: { callsTool: true },
     },
     openRouter: { key: "sk-or-v1-test-key-4f2a", answer: { callsTool: true } },
+    anthropic: {
+      key: "sk-ant-api03-test-key-7c1d",
+      answer: { callsTool: true },
+    },
     requests: [],
     chats: [],
     stopped: 0,
@@ -187,6 +296,7 @@ export function fakeSources(): FakeSources {
       async internet(input, init) {
         const url = new URL(String(input));
         note(url, init);
+        if (url.host === "api.anthropic.com") return anthropic(url, init);
         if (url.host !== "openrouter.ai") return unreachable();
         const authorized =
           headerOf(init, "authorization") ===
@@ -216,6 +326,56 @@ export function fakeSources(): FakeSources {
       },
     },
   };
+  async function anthropic(url: URL, init?: RequestInit) {
+    // Anthropic takes a key in either header; its SDK sends it as a bearer.
+    const key =
+      headerOf(init, "x-api-key") ??
+      headerOf(init, "authorization")?.replace(/^Bearer /, "");
+    if (key !== sources.anthropic.key) {
+      return json(
+        {
+          type: "error",
+          error: { type: "authentication_error", message: "invalid x-api-key" },
+        },
+        401,
+      );
+    }
+    if (url.pathname === "/v1/models") {
+      return json({
+        data: [
+          {
+            type: "model",
+            id: "claude-sonnet-5-5",
+            display_name: "Claude Sonnet 5.5",
+            created_at: "2026-10-01T00:00:00Z",
+          },
+          {
+            type: "model",
+            id: "claude-haiku-5-5",
+            display_name: "Claude Haiku 5.5",
+            created_at: "2026-10-01T00:00:00Z",
+          },
+        ],
+        has_more: false,
+        first_id: "claude-sonnet-5-5",
+        last_id: "claude-haiku-5-5",
+      });
+    }
+    if (url.pathname === "/v1/messages") {
+      const body = JSON.parse(String(init?.body)) as {
+        tools?: { name: string }[];
+      };
+      sources.chats.push(body);
+      return new Response(
+        anthropicEvents(
+          sources.anthropic.answer,
+          body.tools?.[0]?.name ?? "get_time",
+        ),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    }
+    return json({ type: "error", error: { type: "not_found_error" } }, 404);
+  }
   function note(url: URL, init?: RequestInit) {
     const authorization = headerOf(init, "authorization");
     sources.requests.push({

@@ -23,11 +23,12 @@ import {
   resolveHomeAddress,
 } from "./addresses.js";
 import { checkSource } from "./check.js";
-import { ModelError, type ModelEndpoint } from "./client.js";
+import { ModelError } from "./client.js";
 import {
   endpointOf,
   listModels,
   warmOllama,
+  type ModelEndpoint,
   type ModelFetchers,
   type SourceReach,
 } from "./endpoints.js";
@@ -60,7 +61,11 @@ export type SourceInUse = {
   endpoint: () => ModelEndpoint;
 };
 
-const providerNames = { openrouter: "OpenRouter", openai: "OpenAI" } as const;
+const providerNames = {
+  openrouter: "OpenRouter",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+} as const;
 type RunningCheck = { controller: AbortController; run: Promise<void> };
 
 // Why a source's list didn't come: a list is small, so one that takes too

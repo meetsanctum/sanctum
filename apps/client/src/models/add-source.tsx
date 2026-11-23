@@ -42,6 +42,13 @@ const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const fieldLabel = "text-[13px] font-medium";
 const choice =
   "flex cursor-pointer items-start gap-3 rounded-md border-2 border-transparent bg-card px-4 py-3 has-checked:border-primary has-checked:bg-background has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
+const providerOptions = modelProviders.map((value) => ({
+  value,
+  label: providerNames[value],
+}));
+const providerList = new Intl.ListFormat("en-GB", {
+  type: "disjunction",
+}).format(providerOptions.map(({ label }) => label));
 
 export function AddSource(props: {
   open: boolean;
@@ -296,8 +303,8 @@ export function AddSource(props: {
                     With an AI provider
                   </span>
                   <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    OpenRouter or OpenAI, with your own API key. Faster, but
-                    what's asked leaves your home.
+                    {providerList}, with your own API key. Faster, but what's
+                    asked leaves your home.
                   </span>
                 </span>
               </label>
@@ -436,16 +443,16 @@ export function AddSource(props: {
             </DialogHeader>
             <SegmentedControl
               label="Provider"
-              options={modelProviders.map((each) => ({
-                value: each,
-                label: providerNames[each],
-              }))}
+              options={providerOptions}
               value={provider}
               onValueChange={(each) => {
+                if (each === provider) return;
                 setProvider(each);
+                setKey("");
                 forget();
               }}
               disabled={adding}
+              phoneMenu
               className="self-start"
             />
             <div className="flex flex-col gap-1.5">
@@ -497,6 +504,8 @@ export function AddSource(props: {
                 A short test question and the description of a test tool.
                 {provider === "openrouter" &&
                   " OpenRouter passes it to the company behind the model."}
+                {provider === "anthropic" &&
+                  " Anthropic keeps the start of a conversation for a few minutes to answer faster."}
               </p>
             </div>
             {problemLine}

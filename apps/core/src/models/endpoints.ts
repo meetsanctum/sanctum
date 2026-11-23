@@ -3,10 +3,18 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
+  anthropicChat,
+  anthropicModels,
+  type AnthropicEndpoint,
+  type KeptAnswers,
+} from "./anthropic.js";
+import {
+  chat,
   ModelError,
   problemOfError,
   problemOfStatus,
-  type ModelEndpoint,
+  type ChatEndpoint,
+  type ModelRequest,
 } from "./client.js";
 
 // Where each kind of source answers. Ollama on Sanctum is reached at the
@@ -21,7 +29,7 @@ export type ModelFetchers = {
   internet: typeof fetch;
 };
 
-const providers = {
+const chatProviders = {
   openrouter: {
     baseUrl: "https://openrouter.ai/api/v1",
     maxTokensField: "max_tokens",
@@ -31,10 +39,10 @@ const providers = {
     maxTokensField: "max_completion_tokens",
   },
 } as const satisfies Record<
-  ModelProvider,
+  Exclude<ModelProvider, "anthropic">,
   {
     baseUrl: string;
-    maxTokensField: ModelEndpoint["maxTokensField"];
+    maxTokensField: ChatEndpoint["maxTokensField"];
   }
 >;
 
@@ -46,6 +54,16 @@ export type SourceReach =
   | { kind: "sanctum"; url: string }
   | { kind: "computer"; address: HomeAddress }
   | { kind: ModelProvider; key: string };
+
+export type ModelEndpoint =
+  (ChatEndpoint & { api?: never }) | AnthropicEndpoint;
+
+function anthropicEndpoint(
+  key: string,
+  fetch: typeof globalThis.fetch,
+): AnthropicEndpoint {
+  return { api: "anthropic", baseUrl: "https://api.anthropic.com", key, fetch };
+}
 
 export function endpointOf(
   reach: SourceReach,
@@ -69,13 +87,31 @@ export function endpointOf(
       maxTokensField: "max_tokens",
     };
   }
-  const provider = providers[reach.kind];
+  if (reach.kind === "anthropic") {
+    return anthropicEndpoint(reach.key, fetchers.internet);
+  }
+  const provider = chatProviders[reach.kind];
   return {
     baseUrl: provider.baseUrl,
     key: reach.key,
     fetch: fetchers.internet,
     maxTokensField: provider.maxTokensField,
   };
+}
+
+/**
+ * Asks a source with the client its API needs, and yields the answer in
+ * pieces. What the turn keeps of Claude's answers goes with the question.
+ */
+export function ask(
+  endpoint: ModelEndpoint,
+  request: ModelRequest & { kept?: KeptAnswers },
+  signal: AbortSignal,
+  onFirstPiece?: () => void,
+) {
+  return endpoint.api === "anthropic"
+    ? anthropicChat(endpoint, request, signal, onFirstPiece)
+    : chat(endpoint, request, signal, onFirstPiece);
 }
 
 const listTimeoutMs = 10_000;
@@ -214,14 +250,14 @@ export async function listModels(
       // The key is checked on its own, since the list of models is public.
       await getJson(
         fetchers.internet,
-        `${providers.openrouter.baseUrl}/key`,
+        `${chatProviders.openrouter.baseUrl}/key`,
         reach.key,
         signal,
       );
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${providers.openrouter.baseUrl}/models?supported_parameters=tools`,
+          `${chatProviders.openrouter.baseUrl}/models?supported_parameters=tools`,
           reach.key,
           signal,
         ),
@@ -231,11 +267,16 @@ export async function listModels(
         .map((model) => ({ id: model.id, name: model.name ?? model.id }))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
+    case "anthropic":
+      return anthropicModels(
+        anthropicEndpoint(reach.key, fetchers.internet),
+        signal,
+      );
     case "openai": {
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${providers.openai.baseUrl}/models`,
+          `${chatProviders.openai.baseUrl}/models`,
           reach.key,
           signal,
         ),

@@ -259,7 +259,7 @@ function SourceRow(props: {
       : source.kind === "computer"
         ? Laptop
         : Cloud;
-  const hasKey = source.kind === "openrouter" || source.kind === "openai";
+  const hasKey = source.kind !== "computer" && source.kind !== "sanctum";
   return (
     <li className="flex flex-col gap-2.5">
       <div className="flex items-center gap-3">

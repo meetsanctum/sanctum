@@ -14,6 +14,7 @@ export const modelsTitle = "AI Models";
 
 export const providerNames: Record<ModelProvider, string> = {
   openrouter: "OpenRouter",
+  anthropic: "Anthropic",
   openai: "OpenAI",
 };
 
