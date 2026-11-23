@@ -104,7 +104,10 @@ function aboutWhatPlays(capability: Media): string | null {
   return parts.length > 0 ? [...new Set(parts)].join(" · ") : null;
 }
 
-// The placeholder for active media without a picture, and its veil tint.
+// A picture the shell draws for something playing that has none to show,
+// because its player gave none, the core refused it or it didn't load:
+// warm, so it reads as something playing, not as nothing. The veil takes
+// its colour as it would one taken from a picture.
 const missingArtwork =
   "radial-gradient(55% 60% at 36% 38%, rgb(226 84 112 / 80%) 0%, transparent 70%), radial-gradient(45% 50% at 86% 90%, rgb(242 166 92 / 90%) 0%, transparent 72%), linear-gradient(150deg, #7c2438 0%, #882a44 55%, #6f2136 100%)";
 export const missingArtworkTint = "oklch(0.42 0.12 12)";
