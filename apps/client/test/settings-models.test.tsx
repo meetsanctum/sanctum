@@ -94,13 +94,14 @@ const ollamaOffer = {
   ],
   shortfalls: [],
 };
-let sanctumModels: { id: string; name: string; size?: number }[] = [];
+let sanctumModels: { id: string; name: string; size?: number }[];
+let isOllamaAvailable: boolean;
 
 let container: HTMLDivElement;
 let root: Root;
 let sources: ModelSourceInfo[];
 let apps: ModelsInfo["apps"];
-let usage: ModelsInfo["usage"];
+let usage: ModelsInfo["usage"] | undefined;
 let installed: AppInfo[];
 let requests: [string, string, unknown][];
 const live = createLiveFeed();
@@ -112,11 +113,13 @@ beforeEach(() => {
   usage = usageOf({ mac: 100, router: 50 });
   installed = [];
   requests = [];
+  sanctumModels = [];
+  isOllamaAvailable = true;
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
     const method = init.method ?? "GET";
     requests.push([method, path, init.json]);
-    const info = (): ModelsInfo => ({ sources, apps, usage });
+    const info = () => ({ sources, apps, ...(usage && { usage }) });
     if (path === "/api/models") return info() as never;
     if (path === "/api/apps/available") return [ollamaOffer] as never;
     if (path === "/api/apps/add") {
@@ -126,9 +129,9 @@ beforeEach(() => {
     if (path === "/api/models/look") {
       const asked = init.json as { kind: string; address?: string };
       if (asked.kind === "sanctum") {
-        return sanctumModels.length > 0
+        return isOllamaAvailable
           ? ({ found: true, models: sanctumModels } as never)
-          : ({ found: true, models: [] } as never);
+          : ({ found: false, problem: "unreachable" } as never);
       }
       if (asked.kind === "computer" && asked.address === "192.168.1.9") {
         return {
@@ -322,7 +325,11 @@ describe("Settings → AI models", () => {
         tokens: { today: 0, month: 0 },
       },
     ];
-    usage = usageOf({ mac: 100, router: 50 }, { "sanctum.example": 150 });
+    installed = [{ ...ollamaApp, id: "sanctum.former", name: "Former" }];
+    usage = usageOf(
+      { mac: 100, router: 50 },
+      { "sanctum.example": 100, "sanctum.former": 50 },
+    );
     await show();
     const sums = () =>
       [
@@ -336,7 +343,9 @@ describe("Settings → AI models", () => {
       "OpenAI: GPT-5 Mini with OpenRouter1,500",
     ]);
     expect(
-      container.querySelector('[role="img"]')?.getAttribute("aria-label"),
+      container
+        .querySelector('[aria-label^="Tokens used"]')
+        ?.getAttribute("aria-label"),
     ).toContain("by model");
 
     await click(
@@ -344,23 +353,56 @@ describe("Settings → AI models", () => {
         (each) => each.textContent === "Apps",
       )!,
     );
-    expect(sums()).toEqual(["Example4,500"]);
+    expect(sums()).toEqual(["Example3,000", "Former1,500"]);
+  });
+
+  it("keeps the totals and source choices that an older core supports", async () => {
+    usage = undefined;
+    await show();
+    expect(container.textContent).toContain("Today 46 · last 30 days 1,046");
+    expect(container.querySelector('[aria-label^="Tokens used"]')).toBeNull();
+
+    await click(button("Add a source"));
+    expect(document.querySelectorAll('input[name="where"]')).toHaveLength(2);
+    await click(button("Continue"));
+    expect(labelled("Address")).toBeDefined();
   });
 
   it("reads one day's tokens with the arrow keys", async () => {
     await show();
-    const chart = container.querySelector<HTMLElement>('[role="img"]')!;
+    const chart = container.querySelector<HTMLElement>(
+      '[aria-label^="Tokens used"]',
+    )!;
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 300, 128),
+    );
     await act(async () => {
       chart.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+        new PointerEvent("pointermove", {
+          pointerType: "mouse",
+          clientX: 0,
+          bubbles: true,
+        }),
       );
     });
-
-    expect(
-      [...container.querySelectorAll('[role="status"]')].map(
-        (each) => each.textContent,
-      ),
-    ).toContainEqual(expect.stringContaining("TodayQwen3 8B on Office Mac100"));
+    expect(chart.querySelector('[role="status"]')?.textContent).toContain(
+      "Oct",
+    );
+    await act(async () => {
+      chart.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+    });
+    expect(chart.querySelector('[role="status"]')?.textContent).toContain(
+      "Oct",
+    );
+    expect(chart.querySelector('[role="status"]')?.textContent).toContain("26");
+    await act(async () => {
+      chart.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    expect(chart.querySelector('[role="status"]')?.textContent).toBe("");
   });
 
   it("lists the apps that may use it, each opening its page", async () => {
@@ -378,7 +420,7 @@ describe("Settings → AI models", () => {
     const text = container.textContent ?? "";
 
     expect(text).toContain("Apps that use it");
-    expect(text).toContain("ExampleHasn't asked anything yet");
+    expect(text).toContain("ExampleHasn't asked in the last 30 days");
     await click(button("Open"));
     expect(openApp).toHaveBeenCalledWith("sanctum.example");
   });
@@ -390,7 +432,7 @@ describe("Settings → AI models", () => {
 
     expect(text).toContain("No app uses your home's AI model yet.");
     expect(text).toContain("None in the last 30 days.");
-    expect(container.querySelector('[role="img"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Tokens used"]')).toBeNull();
     expect(
       [...container.querySelectorAll("button")].some(
         (each) => each.textContent === "Apps",
@@ -495,7 +537,6 @@ describe("Settings → AI models", () => {
   });
 
   it("adds Ollama on Sanctum, then points to its page for a model", async () => {
-    sanctumModels = [];
     await show();
     await click(button("Add a source"));
     await click(button("Continue"));
@@ -518,6 +559,22 @@ describe("Settings → AI models", () => {
     await click(button("Open Ollama"));
     expect(openApp).toHaveBeenCalledWith("sanctum.ollama");
     expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("reports an unreachable Ollama without saying it needs a model", async () => {
+    installed = [ollamaApp];
+    isOllamaAvailable = false;
+    await show();
+    await click(button("Add a source"));
+    await click(button("Continue"));
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "Ollama isn't answering.",
+    );
+    expect(document.body.textContent).not.toContain(
+      "Go to the Ollama app to download a model.",
+    );
+    expect(button("Open Ollama")).toBeDefined();
   });
 
   it("adds one of the models Ollama on Sanctum has", async () => {

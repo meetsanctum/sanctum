@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
-import { sizeText } from "./words";
+import { problemText, sizeText } from "./words";
 
 // Adding Ollama on Sanctum as a source, in the Add sheet: the Ollama app
 // added here when the home hasn't it, with what it needs; while it has no
@@ -32,6 +32,7 @@ type Phase =
   | { kind: "looking" }
   | { kind: "add"; app: AvailableApp | undefined }
   | { kind: "noModel" }
+  | { kind: "unavailable"; problem: string }
   | { kind: "choose"; models: ModelChoice[] };
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
@@ -44,27 +45,29 @@ export function AddSanctum(props: {
   onAdded: (info: ModelsInfo) => void;
   onAppAdded: (app: AppInfo) => void;
   // Closes the sheet and opens Ollama's page.
-  onOpenOllama: () => void;
+  onOpenOllama?: () => void;
   // A request under way, which closing the sheet waits for.
+  busy: boolean;
   onBusy: (busy: boolean) => void;
 }) {
   const hasOllama = props.apps.some((app) => app.id === ollamaAppId);
   const [phase, setPhase] = useState<Phase>({ kind: "looking" });
   const [model, setModel] = useState("");
-  const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
-  const { onBusy } = props;
-
-  useEffect(() => onBusy(busy), [busy, onBusy]);
+  const { busy, onBusy } = props;
 
   useEffect(() => {
-    let isCurrent = true;
+    const controller = new AbortController();
+    const { signal } = controller;
+    setPhase({ kind: "looking" });
     const look = async () => {
       if (!hasOllama) {
-        const list = await coreJson<AvailableApp[]>("/api/apps/available")
+        const list = await coreJson<AvailableApp[]>("/api/apps/available", {
+          signal,
+        })
           .then((each) => (Array.isArray(each) ? each : []))
           .catch(() => []);
-        if (isCurrent) {
+        if (!signal.aborted) {
           setPhase({
             kind: "add",
             app: list.find((app) => app.id === ollamaAppId),
@@ -74,10 +77,18 @@ export function AddSanctum(props: {
       }
       const answer = await coreJson<ModelSourceLook>("/api/models/look", {
         method: "POST",
+        signal,
         json: { kind: "sanctum" },
       }).catch(() => undefined);
-      if (!isCurrent) return;
-      if (answer?.found && answer.models.length > 0) {
+      if (signal.aborted) return;
+      if (!answer?.found) {
+        setPhase({
+          kind: "unavailable",
+          problem: problemText(answer?.problem ?? "unreachable", {
+            kind: "sanctum",
+          }),
+        });
+      } else if (answer.models.length > 0) {
         setPhase({ kind: "choose", models: answer.models });
         setModel(answer.models[0]!.id);
       } else {
@@ -85,15 +96,13 @@ export function AddSanctum(props: {
       }
     };
     void look();
-    return () => {
-      isCurrent = false;
-    };
+    return () => controller.abort();
   }, [hasOllama]);
 
   const addOllama = async () => {
     if (phase.kind !== "add" || !phase.app || busy) return;
     const { app } = phase;
-    setBusy(true);
+    onBusy(true);
     setProblem(undefined);
     try {
       const added = await coreJson<AppInfo>("/api/apps/add", {
@@ -105,14 +114,14 @@ export function AddSanctum(props: {
     } catch (error) {
       setProblem(addProblemOf(error, app));
     } finally {
-      setBusy(false);
+      onBusy(false);
     }
   };
 
   const addSource = async (event: FormEvent) => {
     event.preventDefault();
     if (phase.kind !== "choose" || !model || busy) return;
-    setBusy(true);
+    onBusy(true);
     setProblem(undefined);
     try {
       props.onAdded(
@@ -123,7 +132,7 @@ export function AddSanctum(props: {
       );
     } catch {
       setProblem("That did not work. Try again.");
-      setBusy(false);
+      onBusy(false);
     }
   };
 
@@ -209,27 +218,38 @@ export function AddSanctum(props: {
     );
   }
 
-  if (phase.kind === "noModel") {
+  if (phase.kind === "noModel" || phase.kind === "unavailable") {
+    const isUnavailable = phase.kind === "unavailable";
     return (
       <div className="flex flex-col gap-5">
         <DialogHeader>
           {title}
           <DialogDescription>
-            Go to the Ollama app to download a model.
+            {isUnavailable
+              ? "Check Ollama on its app page."
+              : "Go to the Ollama app to download a model."}
           </DialogDescription>
         </DialogHeader>
-        <p
-          role="status"
-          className="m-0 flex items-center gap-2 text-sm font-medium"
-        >
-          <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
-          Ollama is added to {productName}
-        </p>
+        {isUnavailable ? (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {phase.problem}
+          </p>
+        ) : (
+          <p
+            role="status"
+            className="m-0 flex items-center gap-2 text-sm font-medium"
+          >
+            <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
+            Ollama is added to {productName}
+          </p>
+        )}
         <DialogFooter>
           {back}
-          <Button type="button" onClick={props.onOpenOllama}>
-            Open Ollama
-          </Button>
+          {props.onOpenOllama && (
+            <Button type="button" onClick={props.onOpenOllama} disabled={busy}>
+              Open Ollama
+            </Button>
+          )}
         </DialogFooter>
       </div>
     );
@@ -262,18 +282,21 @@ export function AddSanctum(props: {
           </label>
         ))}
       </fieldset>
-      <p className={help}>
-        For another model, download it on{" "}
-        <Button
-          type="button"
-          variant="link"
-          size="inline"
-          onClick={props.onOpenOllama}
-        >
-          Ollama's page
-        </Button>
-        .
-      </p>
+      {props.onOpenOllama && (
+        <p className={help}>
+          For another model, download it on{" "}
+          <Button
+            type="button"
+            variant="link"
+            size="inline"
+            onClick={props.onOpenOllama}
+            disabled={busy}
+          >
+            Ollama's page
+          </Button>
+          .
+        </p>
+      )}
       {problemLine}
       <DialogFooter>
         {back}

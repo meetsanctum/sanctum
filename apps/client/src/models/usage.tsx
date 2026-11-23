@@ -4,7 +4,8 @@ import { useState, type KeyboardEvent } from "react";
 
 import { AppIcon } from "../app-icon";
 import { Segments } from "../automations/fields";
-import { Section } from "../components";
+import { Row, Section } from "../components";
+import type { ModelsResponse } from "./data";
 import { sourceName } from "./words";
 
 // Settings → AI models' Tokens used: the last 30 days as a line for each
@@ -79,9 +80,11 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
   const shown = day ?? pinned;
 
   const dayAt = (clientX: number, box: DOMRect) =>
-    Math.round(
-      Math.min(1, Math.max(0, (clientX - box.left) / box.width)) * last,
-    );
+    box.width > 0
+      ? Math.round(
+          Math.min(1, Math.max(0, (clientX - box.left) / box.width)) * last,
+        )
+      : last;
   const keys = (event: KeyboardEvent) => {
     const from = shown ?? last + 1;
     const next =
@@ -96,6 +99,7 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
     }
     if (next === undefined) return;
     event.preventDefault();
+    setDay(undefined);
     setPinned(next);
   };
 
@@ -108,7 +112,7 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
           <span>0</span>
         </div>
         <div
-          role="img"
+          role="group"
           aria-label={props.label}
           tabIndex={0}
           className="relative h-32 min-w-0 flex-1 cursor-crosshair rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -176,33 +180,41 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
               />
             ))}
           </svg>
-          {shown !== undefined && (
-            <div
-              role="status"
-              className="pointer-events-none absolute top-0 z-10 min-w-44 -translate-x-1/2 rounded-md bg-popover px-2.5 py-2 text-[12px] leading-4 text-popover-foreground shadow-md"
-              style={{
-                left: `clamp(5.5rem, ${x(shown)}%, calc(100% - 5.5rem))`,
-              }}
-            >
-              <div className="mb-1 font-semibold">
-                {dayText(days[shown]!, shown === last)}
-              </div>
-              {series.map((each, at) => (
-                <div key={each.key} className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className={`h-[3px] w-3 shrink-0 rounded-xs bg-current ${colours[at]}`}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                    {each.name}
-                  </span>
-                  <span className="font-medium tabular-nums">
-                    {count(each.tokens[shown]!)}
-                  </span>
+          <div
+            role="status"
+            className={
+              shown === undefined
+                ? "sr-only"
+                : "pointer-events-none absolute top-0 z-10 min-w-44 -translate-x-1/2 rounded-md bg-popover px-2.5 py-2 text-[12px] leading-4 text-popover-foreground shadow-md"
+            }
+            style={
+              shown === undefined
+                ? undefined
+                : { left: `clamp(5.5rem, ${x(shown)}%, calc(100% - 5.5rem))` }
+            }
+          >
+            {shown !== undefined && (
+              <>
+                <div className="mb-1 font-semibold">
+                  {dayText(days[shown]!, shown === last)}
                 </div>
-              ))}
-            </div>
-          )}
+                {series.map((each, at) => (
+                  <div key={each.key} className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className={`h-[3px] w-3 shrink-0 rounded-xs bg-current ${colours[at]}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {each.name}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {count(each.tokens[shown]!)}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex justify-between ps-10 text-[11px] leading-none text-muted-foreground">
@@ -214,15 +226,21 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
   );
 }
 
-export function TokensUsed(props: { info: ModelsInfo }) {
+export function TokensUsed(props: {
+  info: ModelsResponse;
+  installed: readonly AppInfo[];
+}) {
   const { info } = props;
+  const { usage } = info;
   const [shown, setShown] = useState<Shown>("models");
   const names = new Map(
     info.sources.map((each) => [each.id, sourceName(each)]),
   );
-  const appNames = new Map(info.apps.map((app) => [app.id, app.name]));
+  const appNames = new Map(
+    [...props.installed, ...info.apps].map((app) => [app.id, app.name]),
+  );
   const bySource = withOthers(
-    info.usage.sources.map((each) => ({
+    (usage?.sources ?? []).map((each) => ({
       key: each.id,
       name: names.get(each.id) ?? "A source",
       tokens: each.tokens,
@@ -231,17 +249,17 @@ export function TokensUsed(props: { info: ModelsInfo }) {
   );
   const byApp = withOthers(
     [
-      ...info.usage.apps.map((each) => ({
+      ...(usage?.apps ?? []).map((each) => ({
         key: each.id,
         name: appNames.get(each.id) ?? each.id,
         tokens: each.tokens,
       })),
-      ...(sum(info.usage.checks) > 0
+      ...(usage && sum(usage.checks) > 0
         ? [
             {
               key: "checks",
               name: "Checks in Settings",
-              tokens: info.usage.checks,
+              tokens: usage.checks,
             },
           ]
         : []),
@@ -261,10 +279,7 @@ export function TokensUsed(props: { info: ModelsInfo }) {
       action={
         total > 0 && (
           <div className="flex items-center gap-2">
-            <span
-              id="settings-models-show"
-              className="text-[13px] font-medium text-muted-foreground"
-            >
+            <span className="text-[13px] font-medium text-muted-foreground">
               Show
             </span>
             <div className="w-40">
@@ -282,7 +297,18 @@ export function TokensUsed(props: { info: ModelsInfo }) {
         )
       }
     >
-      {total === 0 ? (
+      {!usage ? (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {info.sources.map((source) => (
+            <li key={source.id}>
+              <Row
+                title={sourceName(source)}
+                detail={`Today ${count(source.tokens.today)} · last 30 days ${count(source.tokens.month)}`}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : total === 0 ? (
         <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
           None in the last 30 days. Tokens show here once an app asks your
           home's AI model something, or Settings checks a source.
@@ -292,7 +318,7 @@ export function TokensUsed(props: { info: ModelsInfo }) {
           <Chart
             key={shown}
             series={series}
-            days={info.usage.days}
+            days={usage.days}
             label={`Tokens used each day of the last 30, by ${shown === "models" ? "model" : "app"}. The arrow keys read each day.`}
           />
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -321,25 +347,22 @@ export function TokensUsed(props: { info: ModelsInfo }) {
 }
 
 export function AppsUsing(props: {
-  info: ModelsInfo;
+  apps: ModelsInfo["apps"];
   installed: readonly AppInfo[];
   onOpenApp?: (appId: string) => void;
 }) {
-  const { info } = props;
-  const used = new Map(
-    info.usage.apps.map((each) => [each.id, sum(each.tokens)]),
-  );
+  const { apps } = props;
   return (
     <Section id="settings-models-apps" title="Apps that use it">
-      {info.apps.length === 0 ? (
+      {apps.length === 0 ? (
         <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-          No app uses your home's AI model yet. An app that can, such as the
-          Assistant, asks for it when you add the app.
+          No app uses your home's AI model yet. Apps that need it ask for
+          permission when you add them.
         </p>
       ) : (
         <>
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {info.apps.map((app) => {
+            {apps.map((app) => {
               const installed = props.installed.find(
                 (each) => each.id === app.id,
               );
@@ -353,9 +376,9 @@ export function AppsUsing(props: {
                       {app.name}
                     </span>
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                      {(used.get(app.id) ?? 0) > 0
+                      {app.tokens.month > 0
                         ? "Uses your home's AI model"
-                        : "Hasn't asked anything yet"}
+                        : "Hasn't asked in the last 30 days"}
                     </span>
                   </span>
                   {props.onOpenApp &&

@@ -100,8 +100,7 @@ export async function createModules(
       AppUpdateManager &
       UpdateManager &
       StatusManager &
-      Pick<ManagerClient, "hostResources"> &
-      Partial<Pick<ManagerClient, "serviceUrl">> &
+      Pick<ManagerClient, "hostResources" | "serviceUrl"> &
       PowerManager &
       SpaceManager & {
         // The manager's audit after an entry (activity/manager-audit.ts);
@@ -479,8 +478,7 @@ export async function createModules(
         .list()
         .filter((app) => app.permissions.includes(modelsUsePermission)),
     // Ollama on Sanctum, at the address the manager gives while it runs.
-    sanctumUrl: async () =>
-      (await options.manager.serviceUrl?.("ollama")) ?? null,
+    sanctumUrl: () => options.manager.serviceUrl("ollama"),
     log,
     now,
   });

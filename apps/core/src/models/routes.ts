@@ -34,12 +34,12 @@ const model = z.string().min(1).max(256);
 
 const schemas = {
   look: z.union([
-    z.object({ kind: z.literal("sanctum") }),
+    z.strictObject({ kind: z.literal("sanctum") }),
     z.object({ kind: z.literal("computer"), address }),
     z.object({ kind: provider, key }),
   ]) satisfies z.ZodType<LookAtModelSource>,
   add: z.union([
-    z.object({ kind: z.literal("sanctum"), model }),
+    z.strictObject({ kind: z.literal("sanctum"), model }),
     z.object({ kind: z.literal("computer"), address, computer, model }),
     z.object({ kind: provider, key, model }),
   ]) satisfies z.ZodType<AddModelSource>,

@@ -3,7 +3,6 @@ import type {
   ModelChoice,
   ModelSourceInfo,
   ModelSourceLook,
-  ModelsInfo,
 } from "@meetsanctum/app-sdk";
 import {
   Button,
@@ -55,7 +54,7 @@ import { coreJson } from "../core-fetch";
 import { AddSource } from "./add-source";
 import { ollamaAppId } from "./add-sanctum";
 import { AppsUsing, TokensUsed } from "./usage";
-import { useModels } from "./data";
+import { useModels, type ModelsResponse } from "./data";
 import {
   checkLine,
   modelsTitle,
@@ -93,16 +92,20 @@ export function ModelsPage(props: {
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  const supportsSanctum = info === undefined || info.usage !== undefined;
   const sources = info?.sources ?? [];
   const inUse = sources.find((source) => source.inUse);
   const others = sources.filter((source) => !source.inUse);
+  const hasOllamaPage = props.apps.some(
+    (app) => app.id === ollamaAppId && app.pages.length > 0,
+  );
 
   const act = async (path: string) => {
     if (isActing) return;
     setIsActing(true);
     try {
       answered(
-        await coreJson<ModelsInfo>(path, {
+        await coreJson<ModelsResponse>(path, {
           method: "POST",
           signal: AbortSignal.timeout(10_000),
         }),
@@ -121,7 +124,11 @@ export function ModelsPage(props: {
       onUse={() => void act(`/api/models/sources/${source.id}/use`)}
       onCheck={() => void act(`/api/models/sources/${source.id}/check`)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
-      onOpenOllama={props.onOpenApp && (() => props.onOpenApp?.(ollamaAppId))}
+      onOpenOllama={
+        hasOllamaPage && props.onOpenApp
+          ? () => props.onOpenApp?.(ollamaAppId)
+          : undefined
+      }
     />
   );
 
@@ -147,7 +154,8 @@ export function ModelsPage(props: {
               Your home has no AI model yet
             </span>
             <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-              Your home's AI model can run on {productName} with the Ollama app,
+              Your home's AI model can run{" "}
+              {supportsSanctum && `on ${productName} with the Ollama app, `}
               on a computer in your home with Ollama, or with an AI provider and
               your own API key. With a provider, what's asked leaves your home.
             </p>
@@ -172,10 +180,12 @@ export function ModelsPage(props: {
           </p>
         </Section>
       )}
-      {info && sources.length > 0 && <TokensUsed info={info} />}
       {info && sources.length > 0 && (
+        <TokensUsed info={info} installed={props.apps} />
+      )}
+      {info && (sources.length > 0 || info.apps.length > 0) && (
         <AppsUsing
-          info={info}
+          apps={info.apps}
           installed={props.apps}
           onOpenApp={props.onOpenApp}
         />
@@ -186,6 +196,7 @@ export function ModelsPage(props: {
         onAdded={answered}
         onCloseAutoFocus={() => addButton.current?.focus()}
         apps={props.apps}
+        supportsSanctum={supportsSanctum}
         onAppAdded={props.onAppAdded}
         onOpenApp={props.onOpenApp}
       />
@@ -362,7 +373,7 @@ const editTitles: Record<Editing["action"], (name: string) => string> = {
 function EditSource(props: {
   editing?: Editing;
   onClose: () => void;
-  onDone: (info: ModelsInfo) => void;
+  onDone: (info: ModelsResponse) => void;
   onFocusFallback: () => void;
 }) {
   // What the dialog showed stays while it closes.
@@ -441,7 +452,7 @@ function EditSource(props: {
     setProblem(undefined);
     const path = `/api/models/sources/${source.id}`;
     try {
-      const info = await coreJson<ModelsInfo>(path, {
+      const info = await coreJson<ModelsResponse>(path, {
         method: action === "remove" ? "DELETE" : "PATCH",
         signal,
         ...(action === "remove"
@@ -497,9 +508,11 @@ function EditSource(props: {
               {action === "rename" &&
                 "The name shows here and in the activity log."}
               {action === "model" &&
-                (source?.kind === "computer"
-                  ? "The models on that computer. For another, run ollama pull there."
-                  : "The models your key can use.")}
+                (source?.kind === "sanctum"
+                  ? "The models in the Ollama app. For another, download it on Ollama's page."
+                  : source?.kind === "computer"
+                    ? "The models on that computer. For another, run ollama pull there."
+                    : "The models your key can use.")}
               {action === "key" &&
                 `${productName} checks the new key, then keeps it sealed and never shows it again.`}
               {action === "remove" &&

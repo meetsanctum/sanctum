@@ -4,7 +4,6 @@ import {
   type ModelProvider,
   type ModelSourceLook,
   type AppInfo,
-  type ModelsInfo,
 } from "@meetsanctum/app-sdk";
 import {
   Button,
@@ -27,6 +26,7 @@ import {
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
+import type { ModelsResponse } from "./data";
 import { problemText, providerNames, sizeText } from "./words";
 
 // Adding a source of the home's AI model: first where it runs, then Ollama
@@ -45,16 +45,19 @@ const choice =
 export function AddSource(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdded: (info: ModelsInfo) => void;
+  onAdded: (info: ModelsResponse) => void;
   onCloseAutoFocus: () => void;
   // The home's apps, as the shell has them, for whether Ollama is there.
   apps: readonly AppInfo[];
+  supportsSanctum: boolean;
   onAppAdded?: (app: AppInfo) => void;
   // Opens an app's page, as Ollama's.
   onOpenApp?: (appId: string) => void;
 }) {
   const [step, setStep] = useState<"where" | Where>("where");
-  const [where, setWhere] = useState<Where>("sanctum");
+  const { supportsSanctum } = props;
+  const defaultSource = supportsSanctum ? "sanctum" : "computer";
+  const [where, setWhere] = useState<Where>(defaultSource);
   const [address, setAddress] = useState("");
   const [computer, setComputer] = useState("");
   const [provider, setProvider] = useState<ModelProvider>("openrouter");
@@ -76,7 +79,7 @@ export function AddSource(props: {
     if (!props.open) return;
     cancel();
     setStep("where");
-    setWhere("sanctum");
+    setWhere(defaultSource);
     setAddress("");
     setComputer("");
     setProvider("openrouter");
@@ -86,7 +89,7 @@ export function AddSource(props: {
     setProblem(undefined);
     setLooking(false);
     setAdding(false);
-  }, [props.open, cancel]);
+  }, [props.open, defaultSource, cancel]);
 
   // What was found is for what was typed: typing again asks again.
   const forget = () => {
@@ -146,7 +149,7 @@ export function AddSource(props: {
     setAdding(true);
     setProblem(undefined);
     try {
-      const info = await coreJson<ModelsInfo>("/api/models/sources", {
+      const info = await coreJson<ModelsResponse>("/api/models/sources", {
         method: "POST",
         signal,
         json:
@@ -220,6 +223,7 @@ export function AddSource(props: {
   return (
     <Dialog open={props.open} onOpenChange={setOpen}>
       <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           props.onCloseAutoFocus();
@@ -242,21 +246,25 @@ export function AddSource(props: {
             </DialogHeader>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend className="sr-only">Where it runs</legend>
-              <label className={choice}>
-                <input
-                  type="radio"
-                  name="where"
-                  checked={where === "sanctum"}
-                  onChange={() => setWhere("sanctum")}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span className="flex flex-col gap-0.5 leading-tight">
-                  <span className="text-sm font-medium">On {productName}</span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    With the Ollama app. Your data never leaves your home.
+              {supportsSanctum && (
+                <label className={choice}>
+                  <input
+                    type="radio"
+                    name="where"
+                    checked={where === "sanctum"}
+                    onChange={() => setWhere("sanctum")}
+                    className="mt-0.5 size-4 shrink-0 accent-primary"
+                  />
+                  <span className="flex flex-col gap-0.5 leading-tight">
+                    <span className="text-sm font-medium">
+                      On {productName}
+                    </span>
+                    <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
+                      With the Ollama app. Your data never leaves your home.
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+              )}
               <label className={choice}>
                 <input
                   type="radio"
@@ -315,10 +323,14 @@ export function AddSource(props: {
               props.onOpenChange(false);
             }}
             onAppAdded={(app) => props.onAppAdded?.(app)}
-            onOpenOllama={() => {
-              props.onOpenChange(false);
-              props.onOpenApp?.(ollamaAppId);
-            }}
+            onOpenOllama={
+              props.onOpenApp &&
+              (() => {
+                props.onOpenChange(false);
+                props.onOpenApp?.(ollamaAppId);
+              })
+            }
+            busy={adding}
             onBusy={setAdding}
           />
         )}

@@ -1,7 +1,7 @@
-import type { ModelSourceLook, ModelsInfo } from "@meetsanctum/app-sdk";
+import type { ModelSourceLook } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
-import { fakeManager } from "./manager-support.js";
+import { fakeManager, managerSocket } from "./manager-support.js";
 import {
   fakeSources,
   sanctumOllama,
@@ -17,10 +17,14 @@ async function home(
   options: { url?: string | null; sources?: FakeSources } = {},
 ) {
   const sources = options.sources ?? fakeSources();
-  const url = options.url === undefined ? sanctumOllama : options.url;
+  const manager = fakeManager().manager;
   const core = await testCore({
     modelFetchers: sources.fetchers,
-    manager: { ...fakeManager().manager, serviceUrl: async () => url },
+    manager: {
+      ...manager,
+      serviceUrl: async () =>
+        options.url === undefined ? sanctumOllama : options.url,
+    },
   });
   const { token } = await claimed(core);
   return { core, token, sources };
@@ -82,6 +86,30 @@ describe("Ollama on Sanctum as a source", () => {
     expect(added.statusCode).toBe(503);
   });
 
+  it("reads Ollama's running URL from the manager's service status", async () => {
+    let service: { state: string; url?: string } = {
+      state: "running",
+      url: sanctumOllama,
+    };
+    const { client, received } = await managerSocket(() => ({
+      status: 200,
+      body: {
+        service: { name: "ollama", apps: ["sanctum.ollama"], ...service },
+      },
+    }));
+
+    expect(await client.serviceUrl("ollama")).toBe(sanctumOllama);
+    service = { state: "starting" };
+    expect(await client.serviceUrl("ollama")).toBeNull();
+    expect(received).toEqual(
+      Array(2).fill({
+        method: "GET",
+        url: "/api/services/ollama",
+        body: undefined,
+      }),
+    );
+  });
+
   it("is added, checked and shown to apps as Sanctum, in the home", async () => {
     const { core, token } = await home();
 
@@ -120,27 +148,68 @@ describe("Ollama on Sanctum as a source", () => {
     }
   });
 
-  it("has Ollama load the model in use as the core starts", async () => {
+  it("refuses a supplied key or address when looking for or adding Ollama", async () => {
+    const { core, token, sources } = await home();
+    for (const fields of [
+      { key: "sk-0123456789" },
+      { address: sanctumOllama },
+    ]) {
+      const look = await post(
+        core,
+        "/api/models/look",
+        { kind: "sanctum", ...fields },
+        { token },
+      );
+      const add = await post(
+        core,
+        "/api/models/sources",
+        { kind: "sanctum", model: "qwen3:8b", ...fields },
+        { token },
+      );
+
+      expect(look.statusCode).toBe(400);
+      expect(add.statusCode).toBe(400);
+    }
+    expect(sources.requests).toEqual([]);
+  });
+
+  it("warms the saved model once Ollama becomes available after a restart", async () => {
     const { core, token, sources } = await home();
     await addSanctum(core, token);
     await checked(core);
+    await core.stop();
     sources.chats.length = 0;
 
-    core.models.start();
-
-    await vi.waitFor(() =>
-      expect(sources.chats).toContainEqual({
-        model: "qwen3:8b",
-        keep_alive: -1,
-      }),
-    );
-    await core.models.stop();
+    let url: string | null = null;
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let restarted: TestCore | undefined;
+    try {
+      restarted = await testCore({
+        dataDir: core.dataDir,
+        modelFetchers: sources.fetchers,
+        manager: { ...fakeManager().manager, serviceUrl: async () => url },
+      });
+      expect(restarted.models.info().sources[0]?.downSince).toBeDefined();
+      expect(sources.chats).toEqual([]);
+      url = sanctumOllama;
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() =>
+        expect(sources.chats).toEqual([{ model: "qwen3:8b", keep_alive: -1 }]),
+      );
+      expect(restarted.models.info().sources[0]?.downSince).toBeUndefined();
+    } finally {
+      await restarted?.stop();
+      vi.useRealTimers();
+    }
   });
 
   it("counts the tokens of each day of the last 30, by source, app and check", async () => {
     const { core, token } = await home();
     await addSanctum(core, token);
-    const { usage, sources } = (await checked(core)) as ModelsInfo;
+    const { sources } = await checked(core);
+    const source = sources[0]!;
+    core.models.count(source.id, "sanctum.example", { read: 30, written: 10 });
+    const { usage, apps, sources: updated } = core.models.info();
 
     // Thirty days in a row, as the core's clock has them, today last.
     expect(usage.days).toHaveLength(30);
@@ -153,7 +222,11 @@ describe("Ollama on Sanctum as a source", () => {
       { id: sources[0]!.id, tokens: expect.any(Array) },
     ]);
     expect(usage.sources[0]!.tokens.at(-1)).toBeGreaterThan(0);
-    expect(usage.checks.at(-1)).toBe(usage.sources[0]!.tokens.at(-1));
-    expect(usage.apps).toEqual([]);
+    expect(usage.apps).toEqual([
+      { id: "sanctum.example", tokens: [...Array(29).fill(0), 40] },
+    ]);
+    expect(apps).toEqual([]);
+    expect(usage.sources[0]!.tokens.at(-1)).toBe(usage.checks.at(-1)! + 40);
+    expect(updated[0]!.tokens.today).toBe(usage.sources[0]!.tokens.at(-1));
   });
 });
