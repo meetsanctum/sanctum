@@ -151,7 +151,8 @@ export function createModels(
   // for as long as the service runs.
   let sanctumUrl: string | null = null;
   // Each lookup's number, so one that settles after a newer one started
-  // leaves the newer one's address be, whether it found one or failed.
+  // leaves the newer one's address be, whether it found one or failed. A
+  // lookup that found the address still answers with it.
   let lookups = 0;
   function cachedSanctumReach(): SanctumReach {
     if (!sanctumUrl)
@@ -164,7 +165,7 @@ export function createModels(
     const url = await options.sanctumUrl().catch(() => null);
     signal?.throwIfAborted();
     if (lookup === lookups) sanctumUrl = url;
-    return cachedSanctumReach();
+    return url ? { kind: "sanctum", url } : cachedSanctumReach();
   }
 
   // How a source is reached now, asking the manager for Ollama's address.
