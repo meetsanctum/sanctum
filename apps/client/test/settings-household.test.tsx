@@ -155,10 +155,10 @@ describe("Settings → Household", () => {
   it("saves the temperature unit the home shows, with the rest", async () => {
     await act(async () => root.render(<HouseholdSection />));
     const unit = (name: string) =>
-      [
-        ...container.querySelectorAll<HTMLInputElement>("input[type=radio]"),
-      ].find((each) => each.parentElement?.textContent === name)!;
-    expect(unit("Celsius").checked).toBe(true);
+      [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+        (each) => each.textContent === name,
+      )!;
+    expect(unit("Celsius").getAttribute("aria-checked")).toBe("true");
     expect(button("Save").disabled).toBe(true);
 
     await act(async () => unit("Fahrenheit").click());

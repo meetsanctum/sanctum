@@ -6,7 +6,7 @@ import type {
   MotionSensitivity,
   MotionState,
 } from "@meetsanctum/app-sdk";
-import { Button, Switch } from "@meetsanctum/ui-sdk";
+import { Button, SegmentedControl, Switch } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronDown, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -26,7 +26,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { CoreError } from "./core-fetch";
 import { deviceProblem } from "./device-parts";
 
@@ -363,30 +362,17 @@ export function MotionSettings(props: {
             standing={lineOf("sensitivity")}
             onRetry={() => retry("sensitivity")}
             control={(ids) => (
-              <ToggleGroup
-                type="single"
-                aria-labelledby={ids.label}
-                aria-describedby={ids.hint}
-                value={shown("sensitivity") ?? ""}
-                // Pressing the chosen one again keeps it.
-                onValueChange={(value: string) =>
-                  value &&
-                  value !== shown("sensitivity") &&
-                  void send({ sensitivity: value as MotionSensitivity })
-                }
-                spacing={1}
-                className="w-full rounded-md bg-foreground/8 p-0.75"
-              >
-                {features.sensitivity!.map((level) => (
-                  <ToggleGroupItem
-                    key={level}
-                    value={level}
-                    className="h-8.5 flex-1 rounded-sm px-1.5 text-sm hover:bg-foreground/5 data-[state=on]:bg-foreground data-[state=on]:text-background data-[state=on]:hover:bg-foreground/90 data-[state=on]:hover:text-background"
-                  >
-                    {sensitivityLabel(level)}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+              <SegmentedControl
+                labelledBy={ids.label}
+                describedBy={ids.hint}
+                options={features.sensitivity!.map((level) => ({
+                  value: level,
+                  label: sensitivityLabel(level),
+                }))}
+                value={shown("sensitivity") as MotionSensitivity | undefined}
+                onValueChange={(sensitivity) => void send({ sensitivity })}
+                fill
+              />
             )}
             stacked
           />

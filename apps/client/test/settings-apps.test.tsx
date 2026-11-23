@@ -177,10 +177,12 @@ async function show(me: Me, page = "app", app = weather.id) {
   );
 }
 
-const radio = (name: string) =>
-  [...container.querySelectorAll<HTMLLabelElement>("fieldset label")]
-    .find((label) => label.textContent === name)!
-    .querySelector("input")!;
+const segment = (name: string) =>
+  [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === name,
+  )!;
+const isChosen = (name: string) =>
+  segment(name).getAttribute("aria-checked") === "true";
 const field = (name: string) =>
   [...container.querySelectorAll("label")]
     .find((label) => label.textContent === name)!
@@ -224,12 +226,12 @@ describe("Settings → Apps → the app", () => {
 
   it("lets someone choose, and saves the choice at once", async () => {
     await show(admin);
-    expect(radio("Celsius").checked).toBe(true);
+    expect(isChosen("Celsius")).toBe(true);
 
-    await act(async () => radio("Fahrenheit").click());
+    await act(async () => segment("Fahrenheit").click());
 
     expect(updates).toEqual([{ temperatureUnit: "fahrenheit" }]);
-    expect(radio("Fahrenheit").checked).toBe(true);
+    expect(isChosen("Fahrenheit")).toBe(true);
   });
 
   it("saves a switch at once, and a number once it is left", async () => {
@@ -274,7 +276,7 @@ describe("Settings → Apps → the app", () => {
           resolve = done;
         }),
     );
-    await act(async () => radio("Fahrenheit").click());
+    await act(async () => segment("Fahrenheit").click());
     await act(async () =>
       live.publish({
         type: "settings",
@@ -285,7 +287,7 @@ describe("Settings → Apps → the app", () => {
     await act(async () =>
       resolve({ ...stored, temperatureUnit: "fahrenheit" }),
     );
-    expect(radio("Celsius").checked).toBe(true);
+    expect(isChosen("Celsius")).toBe(true);
   });
 
   it("finishes queued edits after leaving the page", async () => {
@@ -297,8 +299,8 @@ describe("Settings → Apps → the app", () => {
           resolve = done;
         }),
     );
-    await act(async () => radio("Fahrenheit").click());
-    await act(async () => radio("Celsius").click());
+    await act(async () => segment("Fahrenheit").click());
+    await act(async () => segment("Celsius").click());
     await show(admin, "main");
     await act(async () =>
       resolve({ ...stored, temperatureUnit: "fahrenheit" }),
@@ -329,7 +331,7 @@ describe("Settings → Apps → the app", () => {
       }),
     );
 
-    expect(radio("Fahrenheit").checked).toBe(true);
+    expect(isChosen("Fahrenheit")).toBe(true);
   });
 
   it("keeps live changes when an older snapshot finishes loading", async () => {
@@ -349,7 +351,7 @@ describe("Settings → Apps → the app", () => {
       }),
     );
     await act(async () => resolve(stored));
-    expect(radio("Fahrenheit").checked).toBe(true);
+    expect(isChosen("Fahrenheit")).toBe(true);
   });
 
   it("preserves a live change when a pending edit is refused", async () => {
@@ -371,7 +373,7 @@ describe("Settings → Apps → the app", () => {
       }),
     );
     await act(async () => reject(new CoreError(400, "invalid_request")));
-    expect(radio("Fahrenheit").checked).toBe(true);
+    expect(isChosen("Fahrenheit")).toBe(true);
     expect(field("Days").value).toBe("7");
   });
 
@@ -384,9 +386,9 @@ describe("Settings → Apps → the app", () => {
           resolve = done;
         }),
     );
-    await act(async () => radio("Fahrenheit").click());
-    await act(async () => radio("Celsius").click());
-    expect(radio("Celsius").checked).toBe(true);
+    await act(async () => segment("Fahrenheit").click());
+    await act(async () => segment("Celsius").click());
+    expect(isChosen("Celsius")).toBe(true);
     // The second write waits, so the core cannot apply these out of order.
     expect(updates).toEqual([]);
 
@@ -394,7 +396,7 @@ describe("Settings → Apps → the app", () => {
       resolve({ ...stored, temperatureUnit: "fahrenheit" }),
     );
     expect(updates).toEqual([{ temperatureUnit: "celsius" }]);
-    expect(radio("Celsius").checked).toBe(true);
+    expect(isChosen("Celsius")).toBe(true);
   });
 
   it("lets a shared client change them too", async () => {

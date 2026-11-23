@@ -15,6 +15,7 @@ export * from "./page-section";
 export * from "./presses";
 export * from "./section-button";
 export * from "./section-tile";
+export * from "./segmented-control";
 export * from "./swipe-pages";
 export * from "./temperature-unit";
 export * from "./tile-icons";
@@ -34,6 +35,7 @@ export {
 export { ScrollArea } from "./components/ui/scroll-area";
 export { Slider } from "./components/ui/slider";
 export { Switch } from "./components/ui/switch";
+export { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 // What an app's page runs on in its frame, and what it says to the shell.
 export { startFrame } from "./frame/runtime";
 export * from "./frame/protocol";

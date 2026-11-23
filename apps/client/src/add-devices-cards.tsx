@@ -4,7 +4,7 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
 import {
@@ -18,7 +18,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { Segments } from "./automations/fields";
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import {
@@ -334,15 +333,16 @@ function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
       <span id={id} className="text-xs font-medium text-(--silver)">
         Show as
       </span>
-      <Segments
+      <SegmentedControl
+        fill
         label={`${props.device.name}: show as`}
         options={showAs.options.map((option) => ({
           value: option.id,
           label: option.title,
         }))}
-        selected={showAs.current}
+        value={showAs.current}
         wraps
-        onSelect={(value) =>
+        onValueChange={(value) =>
           void props.work.onSave(props.device, {
             shownAs: showAs.choice(value),
           })

@@ -4,7 +4,12 @@ import type {
   SettingSchema,
   SettingValue,
 } from "@meetsanctum/app-sdk";
-import { Input, Switch, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Input,
+  SegmentedControl,
+  Switch,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -168,12 +173,15 @@ function SettingField(props: {
   return <TypedField {...props} />;
 }
 
-function Hint(props: { setting: SettingSchema }) {
+function Hint(props: { setting: SettingSchema; id?: string }) {
   return props.setting.description ? (
-    <span className={label}>{props.setting.description}</span>
+    <span id={props.id} className={label}>
+      {props.setting.description}
+    </span>
   ) : null;
 }
 
+// A few choices side by side, the one in effect chosen; long labels wrap.
 function Choice(props: {
   setting: SettingSchema;
   value: SettingValue | undefined;
@@ -181,30 +189,26 @@ function Choice(props: {
   onChange: (value: SettingValue) => void;
 }) {
   const { setting } = props;
-  const name = useId();
+  const id = useId();
   return (
-    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-      <legend className={`mb-2 p-0 ${label}`}>{setting.title}</legend>
-      <div className="flex flex-wrap gap-1">
-        {props.options.map((option) => (
-          <label
-            key={option}
-            className="flex h-9 cursor-pointer items-center rounded-md bg-foreground/8 px-3 text-sm font-medium has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background"
-          >
-            <input
-              type="radio"
-              name={name}
-              value={option}
-              checked={props.value === option}
-              onChange={() => props.onChange(option)}
-              className="sr-only"
-            />
-            {setting.options?.[option] ?? option}
-          </label>
-        ))}
-      </div>
-      <Hint setting={setting} />
-    </fieldset>
+    <div className="flex min-w-0 flex-col gap-2">
+      <span id={`${id}-label`} className={label}>
+        {setting.title}
+      </span>
+      <SegmentedControl
+        labelledBy={`${id}-label`}
+        describedBy={setting.description ? `${id}-hint` : undefined}
+        options={props.options.map((option) => ({
+          value: option,
+          label: setting.options?.[option] ?? option,
+        }))}
+        value={typeof props.value === "string" ? props.value : undefined}
+        onValueChange={props.onChange}
+        wraps
+        className="self-start"
+      />
+      <Hint setting={setting} id={`${id}-hint`} />
+    </div>
   );
 }
 
