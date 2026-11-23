@@ -109,7 +109,12 @@ describe("a device's entities", () => {
         features: { actions: ["single", "double"], holds: [] },
       },
     ]);
-    expect(unused).toEqual(["CO2", "Smoke", "Blind", "Restart"]);
+    expect(unused.map(({ name }) => name)).toEqual([
+      "CO2",
+      "Smoke",
+      "Blind",
+      "Restart",
+    ]);
   });
 
   it("have ids within 32 characters, kept apart by their keys", () => {

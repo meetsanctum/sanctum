@@ -14,9 +14,10 @@ import { hasVoiceAssistant } from "./registration.js";
 
 /**
  * Follows a session's voice requests, if its device has a voice assistant,
- * declining each, until the session ends.
+ * declining each, until the session ends. The wake phrase distinguishes a
+ * local wake-word detection from a button press.
  */
-export function declineRequests(session: Session) {
+export function declineRequests(session: Session, heard: () => void) {
   if (!hasVoiceAssistant(session.info)) return;
   const { client } = session;
   const requests = client.voiceAssistant;
@@ -24,6 +25,7 @@ export function declineRequests(session: Session) {
     if (!request.start) return;
     requests.respondToRequest({ error: true });
     requests.sendEvent(VoiceAssistantEvent.RUN_END);
+    if (request.wakeWordPhrase) heard();
   });
   const lifecycle = client.on("lifecycle", (event) => {
     if (event.kind !== "disconnect") return;

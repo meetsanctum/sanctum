@@ -196,6 +196,11 @@ export class EmulatedDevice {
   refusesKeys = false;
   /** How many sessions it greeted in the clear. */
   plainGreetings = 0;
+  /**
+   * States it holds whatever it's told, by entity key, as a Voice PE's side
+   * switch holds its microphones muted.
+   */
+  readonly held = new Map<number, Record<string, FieldValue>>();
   /** Responses and events the voice assistant received, in wire order. */
   readonly voiceMessages: (
     | { type: "response"; isDeclined: boolean }
@@ -309,12 +314,17 @@ export class EmulatedDevice {
   }
 
   /** Hears its wake word, asking whoever follows it to listen. */
-  wake() {
+  wake(phrase: string | null = "Okay Nabu") {
     if (!this.voiceFollower)
       throw new Error("nobody follows its voice requests");
     this.voiceFollower(
       message.voiceAssistantRequest,
-      field({ fieldNumber: 1, valueType: "varint" }, 1),
+      Buffer.concat([
+        field({ fieldNumber: 1, valueType: "varint" }, 1),
+        ...(phrase
+          ? [field({ fieldNumber: 5, valueType: "string" }, phrase)]
+          : []),
+      ]),
     );
   }
 
@@ -344,7 +354,7 @@ export class EmulatedDevice {
     ];
     for (const [name, value] of Object.entries(state)) {
       const spec = schema.fields[name];
-      if (spec) parts.push(field(spec, value));
+      if (spec && value !== false) parts.push(field(spec, value));
     }
     send(schema.messageType, Buffer.concat(parts));
   }
@@ -718,6 +728,11 @@ export class EmulatedDevice {
       if (value !== undefined) said[name] = value;
     }
     this.commands.push({ type: entry.type, key, fields: said });
+    const held = this.held.get(key);
+    if (held) {
+      this.setState(key, held);
+      return;
+    }
     if (entry.type === "media_player") {
       this.setState(key, this.playerAfter(key, said));
       return;

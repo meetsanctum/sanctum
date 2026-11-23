@@ -1,12 +1,8 @@
-import {
-  EntityCategory,
-  MediaPlayerState,
-  VoiceAssistantEvent,
-} from "esphome-client";
+import { MediaPlayerState, VoiceAssistantEvent } from "esphome-client";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { EmulatedEntity } from "./emulated-device.js";
 import { add, announce, startHome } from "./support.js";
+import { player, voicePe } from "./voice-pe.js";
 
 // A smart speaker, such as the Home Assistant Voice PE: a device with a voice
 // assistant that plays. It's declared a smart speaker, its player is a media
@@ -20,59 +16,7 @@ afterEach(async () => {
   await home?.stop();
 });
 
-const player: EmulatedEntity = {
-  type: "media_player",
-  key: 201,
-  objectId: "media_player",
-  name: "Media Player",
-  // Volume set, mute and stop are standard. The speaker also supports Play and Pause.
-  fields: {
-    featureFlags: (1 << 0) | (1 << 2) | (1 << 3) | (1 << 12) | (1 << 14),
-  },
-};
-
-// The parts a Voice PE shows over its API, as its firmware names them.
-const voicePe: EmulatedEntity[] = [
-  player,
-  {
-    type: "event",
-    key: 202,
-    objectId: "button_press",
-    name: "Button press",
-    fields: {
-      deviceClass: "button",
-      eventTypes: [
-        "double_press",
-        "triple_press",
-        "long_press",
-        "easter_egg_press",
-      ],
-    },
-  },
-  {
-    type: "switch",
-    key: 203,
-    objectId: "mute",
-    name: "Mute",
-    fields: { entityCategory: EntityCategory.CONFIG },
-  },
-  {
-    type: "light",
-    key: 204,
-    objectId: "led_ring",
-    name: "LED Ring",
-    fields: { entityCategory: EntityCategory.CONFIG },
-  },
-];
-
-const speaker = () =>
-  home.plugIn({
-    name: "voice",
-    project: "Nabu Casa.Home Assistant Voice PE",
-    voiceAssistant: true,
-    entities: voicePe,
-    states: { 201: { state: MediaPlayerState.IDLE, volume: 0.6 } },
-  });
+const speaker = () => voicePe(home);
 
 describe("a smart speaker", () => {
   it("is a smart speaker that plays and is pressed, its ring and mute its own", async () => {

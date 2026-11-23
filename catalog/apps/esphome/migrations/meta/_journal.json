@@ -15,6 +15,13 @@
       "when": 1795379440631,
       "tag": "0001_first_key",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795435395960,
+      "tag": "0002_heard_wake_word",
+      "breakpoints": true
     }
   ]
 }
