@@ -78,13 +78,12 @@ worktree's display mode its own port. Set `SANCTUM_DISPLAY_TOUCHES=true` to
 record each gesture's pointer and touch events in the worktree's
 `.sanctum-display-touches.jsonl` file.
 
-Set `SANCTUM_DISPLAY_FRAMES=true` to time the display: each second's frame
-gaps, input that waited a frame or more, frames over 50 ms with the scripts
-that ran longest in them, how often a moving finger reports, and the first
-words of the screen, so a run is known to have timed the screen it meant to,
-recorded in `.sanctum-display-frames.jsonl`. The display then also follows a control on
-the dev server, which only this Mac may change, so a run needs no hand on
-the display but for what it measures:
+Set `SANCTUM_DISPLAY_FRAMES=true` to record frame gaps, input that took a
+frame or more to show, long animation frames with their longest scripts, and
+how often a moving finger reports. The recorder samples the first words of
+the screen so you can check which screen the run timed. The timings go to
+`.sanctum-display-frames.jsonl` on this Mac. Use the local command line to
+change what the display shows and measures:
 
 ```sh
 pnpm --filter @meetsanctum/client build:display   # the production client, served at /__display/built/
@@ -93,9 +92,10 @@ curl -d '{"blur":false}' localhost:8123/__display/control   # or masks; reload: 
 node apps/client/dev/display-frames-summary.ts     # one block per page, label and effects, with its screens
 ```
 
-The page is `dev`, `built` or `blank`, a page with nothing on it but the
-recorder. The built client is served by the same server so the display keeps
-its sign-in.
+Choose `dev` for the dev client, `built` for the built client, or `blank` for
+a page with just the frame recorder. Build the client before switching to
+`built`. The built client uses the same address, so the display keeps its
+sign-in.
 
 ## Checks
 

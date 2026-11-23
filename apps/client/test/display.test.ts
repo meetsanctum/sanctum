@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { createServer } from "vite";
 import { expect, it, vi } from "vitest";
@@ -108,6 +111,115 @@ it("records two rapid taps as separate gestures and ignores mouse events", async
   }
 });
 
+it("keeps short drags and partial frame windows with the settings that measured them", async () => {
+  const script = await readFile(
+    new URL("../dev/display-frames.js", import.meta.url),
+    "utf8",
+  );
+  const handlers = new Map<string, (event?: object) => void>();
+  const posts: Record<string, unknown>[] = [];
+  let control = {
+    page: "dev",
+    label: "scroll",
+    blur: true,
+    masks: true,
+    prompt: "",
+    reload: 0,
+    path: "/",
+  };
+  let now = 0;
+  let nextFrame: (at: number) => void;
+  let poll: () => void;
+  const document = {
+    hidden: false,
+    addEventListener: handlers.set.bind(handlers),
+    querySelector: () => ({ innerText: "Home Lights" }),
+    getElementById: () => null,
+    createElement: () => ({}),
+    head: { append: () => {} },
+  };
+  runInNewContext(script, {
+    AbortSignal,
+    location: { pathname: "/" },
+    performance: { now: () => now },
+    requestAnimationFrame: (callback: typeof nextFrame) => {
+      nextFrame = callback;
+    },
+    setInterval: (callback: typeof poll) => {
+      poll = callback;
+    },
+    addEventListener: handlers.set.bind(handlers),
+    document,
+    innerWidth: 1264,
+    innerHeight: 724,
+    devicePixelRatio: 1,
+    navigator: {},
+    fetch: async (url: string, options: { body: string }) => {
+      if (url === "/__display/control") {
+        return { ok: true, json: async () => control };
+      }
+      posts.push(JSON.parse(options.body));
+      return { ok: true };
+    },
+  });
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+  const frame = (at: number) => nextFrame((now = at));
+  const touch = (type: string, timeStamp: number, isPrimary = true) =>
+    handlers.get(`pointer${type}`)!({
+      pointerType: "touch",
+      isPrimary,
+      timeStamp,
+    });
+
+  await settle();
+  posts.length = 0;
+  frame(10);
+  frame(30);
+  touch("move", 40);
+  touch("move", 55, false);
+  touch("move", 70);
+  touch("up", 80);
+  touch("down", 90);
+  touch("move", 100);
+  touch("move", 130);
+
+  now = 150;
+  control = { ...control, blur: false };
+  poll!();
+  await settle();
+  frame(160);
+  frame(185);
+  document.hidden = true;
+  handlers.get("visibilitychange")!();
+  frame(700);
+  document.hidden = false;
+  handlers.get("visibilitychange")!();
+  frame(800);
+  frame(830);
+  handlers.get("pagehide")!();
+
+  expect(posts).toEqual([
+    expect.objectContaining({
+      label: "scroll",
+      blur: true,
+      moves: [expect.objectContaining({ coalesced: 4, count: 2, p50: 30 })],
+    }),
+    expect.objectContaining({
+      blur: true,
+      frames: [expect.objectContaining({ count: 1, durationMs: 20 })],
+    }),
+    expect.objectContaining({
+      blur: false,
+      shows: "Home Lights",
+      frames: [expect.objectContaining({ count: 1, durationMs: 25 })],
+    }),
+    expect.objectContaining({
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 30 })],
+    }),
+  ]);
+});
+
 it("records frame timings, serves the blank page and the built client, and follows its control", async () => {
   const root = await mkdtemp(join(tmpdir(), "sanctum-display-"));
   try {
@@ -118,7 +230,13 @@ it("records frame timings, serves the blank page and the built client, and follo
       configFile: false,
       root,
       logLevel: "silent",
-      plugins: [displayBridge({ frameLog, builtDir })],
+      plugins: [
+        displayBridge({
+          frameLog,
+          builtDir,
+          touchLog: join(root, "touches.jsonl"),
+        }),
+      ],
       optimizeDeps: { noDiscovery: true },
       server: { host: "127.0.0.1", port: 0, watch: null },
     });
@@ -149,6 +267,9 @@ it("records frame timings, serves the blank page and the built client, and follo
       const missing = await fetch(base + builtPath);
       expect(missing.status).toBe(404);
       expect(await missing.text()).toContain("build:display");
+      expect(
+        (await post("/__display/control", '{"page":"built"}')).status,
+      ).toBe(409);
       await mkdir(join(builtDir, "assets"), { recursive: true });
       await writeFile(
         join(builtDir, "index.html"),
@@ -159,7 +280,7 @@ it("records frame timings, serves the blank page and the built client, and follo
         const page = await fetch(base + path);
         expect(page.headers.get("content-type")).toBe("text/html");
         expect(await page.text()).toBe(
-          '<html><head><script type="module" src="/dev/display-frames.js"></script></head></html>',
+          '<html><head><script type="module" src="/dev/display-touches.js"></script><script type="module" src="/dev/display-frames.js"></script></head></html>',
         );
       }
       const script = await fetch(base + builtPath + "assets/index.js");
@@ -186,6 +307,9 @@ it("records frame timings, serves the blank page and the built client, and follo
       });
       expect(
         (await post("/__display/control", '{"page":"elsewhere"}')).status,
+      ).toBe(400);
+      expect(
+        (await post("/__display/control", '{"page":["dev"]}')).status,
       ).toBe(400);
       const changed = await post(
         "/__display/control",
@@ -218,18 +342,16 @@ it("sums up each run's frames, input and long frames", () => {
       masks: true,
       shows: "Home Lights",
       frames: [
-        { at: 0, count: 30, p50: 33, p95: 50, max: 80, over50: 3, over100: 0 },
+        { count: 30, p50: 33, p95: 50, over50: 3 },
         {
-          at: 1000,
+          durationMs: 1500,
           count: 20,
           p50: 50,
           p95: 90,
-          max: 120,
           over50: 7,
-          over100: 1,
         },
       ],
-      moves: [{ at: 0, count: 12, p50: 75, p95: 80, max: 90, coalesced: 12 }],
+      moves: [{ count: 12, p50: 75 }],
       events: [
         { name: "pointerdown", delay: 40, duration: 120 },
         { name: "pointermove", delay: 500, duration: 600 },
@@ -269,8 +391,8 @@ it("sums up each run's frames, input and long frames", () => {
       blur: true,
       masks: true,
       screens: ["Home Lights", "Office Light"],
-      seconds: 2,
-      fps: 25,
+      seconds: 2.5,
+      fps: 20,
       frameGapP50: 50,
       frameGapP95: 90,
       slowFrameShare: 20,
@@ -286,4 +408,34 @@ it("sums up each run's frames, input and long frames", () => {
     },
     expect.objectContaining({ page: "blank", seconds: 0, fps: 0 }),
   ]);
+});
+
+it("summarises valid timings when the log contains invalid or incomplete lines", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sanctum-display-"));
+  try {
+    const log = join(root, "frames.jsonl");
+    const run = { page: "built", label: "scroll", blur: true, masks: true };
+    await writeFile(
+      log,
+      [
+        JSON.stringify({ ...run, frames: "missing samples" }),
+        JSON.stringify({ ...run, shows: "Home" }),
+        '{"page":',
+      ].join("\n"),
+    );
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, [
+      fileURLToPath(
+        new URL("../dev/display-frames-summary.ts", import.meta.url),
+      ),
+      log,
+      "--json",
+    ]);
+    expect(JSON.parse(stdout)).toEqual([
+      expect.objectContaining({ ...run, screens: ["Home"] }),
+    ]);
+    expect(stderr).toContain("line 1");
+    expect(stderr).toContain("line 3");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

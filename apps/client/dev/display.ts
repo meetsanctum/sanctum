@@ -1,4 +1,4 @@
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readFile, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 import type { Plugin } from "vite";
@@ -31,12 +31,14 @@ export const builtPath = "/__display/built/";
 const blankPath = "/__display/blank";
 const controlPath = "/__display/control";
 const framesScript = "/dev/display-frames.js";
+const missingBuild =
+  "No client built for the display: pnpm --filter @meetsanctum/client build:display";
 
 /**
  * What the display is told on its next look: which page to show, the run its
  * timings belong to, and effects turned off by hand to see what they cost.
  */
-export type DisplayControl = {
+type DisplayControl = {
   page: "dev" | "built" | "blank";
   label: string;
   blur: boolean;
@@ -107,25 +109,48 @@ function sendControl(response: ServerResponse, control: DisplayControl) {
   response.end(JSON.stringify({ ...control, path: pages[control.page] }));
 }
 
-// A change to what the display is told, from this Mac only: anyone on the
-// network reaches this port.
+// Only local command-line tooling changes the control. The display and other
+// browsers on the network can read it.
 async function changeControl(
   request: IncomingMessage,
   response: ServerResponse,
   control: DisplayControl,
+  builtDir?: string,
 ) {
-  if (!isLoopback(request)) {
+  if (!isLoopback(request) || request.headers.origin !== undefined) {
     request.resume();
     response.writeHead(403).end();
     return;
   }
-  const change = parseObject((await readBody(request, 4096)) ?? "");
+  const text = await readBody(request, 4096);
+  if (text === undefined) {
+    response.writeHead(413).end();
+    return;
+  }
+  const change = parseObject(text);
   const page = change?.page;
-  if (!change || (page !== undefined && !Object.hasOwn(pages, String(page)))) {
+  if (
+    !change ||
+    (page !== undefined &&
+      page !== "dev" &&
+      page !== "built" &&
+      page !== "blank")
+  ) {
     response.writeHead(400).end();
     return;
   }
-  if (page !== undefined) control.page = page as DisplayControl["page"];
+  if (page === "built") {
+    const index =
+      builtDir &&
+      (await stat(join(builtDir, "index.html")).catch(() => undefined));
+    if (!index || !index.isFile()) {
+      response
+        .writeHead(409, { "content-type": "text/plain" })
+        .end(missingBuild);
+      return;
+    }
+  }
+  if (page !== undefined) control.page = page;
   if (typeof change.label === "string") control.label = change.label;
   if (typeof change.prompt === "string") control.prompt = change.prompt;
   if (typeof change.blur === "boolean") control.blur = change.blur;
@@ -134,11 +159,12 @@ async function changeControl(
   sendControl(response, control);
 }
 
-const scriptTag = `<script type="module" src="${framesScript}"></script>`;
+const scriptTag = (src: string) =>
+  `<script type="module" src="${src}"></script>`;
 
 const blankPage = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${scriptTag}</head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${scriptTag(framesScript)}</head>
 <body style="margin:0;height:100vh;background:#222326"></body>
 </html>`;
 
@@ -161,7 +187,7 @@ async function serveBuilt(
   route: string,
   response: ServerResponse,
   builtDir: string,
-  withFrames: boolean,
+  scripts: string[],
 ) {
   const relative = normalize(route.slice(builtPath.length));
   const extension = extname(relative);
@@ -190,12 +216,12 @@ async function serveBuilt(
     page = await readFile(join(builtDir, "index.html"), "utf8");
   } catch {
     response.writeHead(404, { "content-type": "text/plain" });
-    response.end(
-      "No client built for the display: pnpm --filter @meetsanctum/client build:display",
-    );
+    response.end(missingBuild);
     return;
   }
-  if (withFrames) page = page.replace("<head>", `<head>${scriptTag}`);
+  if (scripts.length) {
+    page = page.replace("<head>", `<head>${scripts.map(scriptTag).join("")}`);
+  }
   response.writeHead(200, {
     "content-type": "text/html",
     "cache-control": "no-cache",
@@ -263,7 +289,9 @@ export function displayBridge(
         if (frameLog && route === controlPath) {
           if (method === "GET") return sendControl(response, control);
           if (method === "POST") {
-            void changeControl(request, response, control).catch(next);
+            void changeControl(request, response, control, builtDir).catch(
+              next,
+            );
             return;
           }
         }
@@ -276,12 +304,7 @@ export function displayBridge(
           return;
         }
         if (builtDir && method === "GET" && `${route}/`.startsWith(builtPath)) {
-          void serveBuilt(
-            route.length < builtPath.length ? builtPath : route,
-            response,
-            builtDir,
-            Boolean(frameLog),
-          ).catch(next);
+          void serveBuilt(route, response, builtDir, scripts).catch(next);
           return;
         }
         next();

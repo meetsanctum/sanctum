@@ -53,6 +53,18 @@ export default defineConfig({
     host: displayPort ? "0.0.0.0" : undefined,
     port: displayPort ?? 5173,
     strictPort: Boolean(displayPort),
+    fs: {
+      // Keep the display logs local, even when Vite serves the whole workspace.
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem,key,p12,pfx,cer,der}",
+        ".npmrc",
+        ".yarnrc.yml",
+        "**/.git/**",
+        ".sanctum-display-*.jsonl",
+      ],
+    },
     proxy: {
       // The live WebSocket too.
       "/api": { target: coreUrl, ws: true },

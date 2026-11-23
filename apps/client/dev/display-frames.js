@@ -4,24 +4,21 @@
 // and how often a moving finger reports. It follows the dev server's
 // control: the page to show, the run's label, blur or masks turned off, and
 // what to do now, shown in a banner at the top while a run needs a hand.
-// It says what the screen shows, in its first words, when that changes, so
-// a run is known to be of the screen it meant to time.
+// It samples the screen's first words so the log shows what the run timed.
 // Its own cost is a callback each frame and a request every two seconds.
 
-const kind = location.pathname.startsWith("/__display/built")
+const builtPath = "/__display/built";
+const kind = `${location.pathname}/`.startsWith(`${builtPath}/`)
   ? "built"
-  : location.pathname.startsWith("/__display/blank")
+  : location.pathname === "/__display/blank"
     ? "blank"
     : "dev";
-const pathOf = {
-  dev: "/",
-  built: "/__display/built/",
-  blank: "/__display/blank",
-};
 const load = Math.random().toString(36).slice(2, 10);
 
 let control = { label: "", blur: true, masks: true, prompt: "", reload: 0 };
 let seenReload;
+let runStart = 0;
+let isRecording = !document.hidden;
 let batch = { frames: [], moves: [], events: [], loafs: [] };
 
 function percentile(sorted, share) {
@@ -49,20 +46,26 @@ function describe(element) {
 // Frames: the gaps between animation frames, summed up each second.
 let frameGaps = [];
 let lastFrame;
-let frameWindow = performance.now();
+let frameWindow;
+function finishFrameWindow() {
+  if (!frameGaps.length) return;
+  batch.frames.push({
+    at: Math.round(frameWindow),
+    durationMs: lastFrame - frameWindow,
+    ...summarise(frameGaps),
+    over50: frameGaps.filter((gap) => gap > 50).length,
+    over100: frameGaps.filter((gap) => gap > 100).length,
+  });
+  frameGaps = [];
+  frameWindow = lastFrame;
+}
+
 function onFrame(now) {
-  if (lastFrame !== undefined) frameGaps.push(now - lastFrame);
-  lastFrame = now;
-  if (now - frameWindow >= 1000) {
-    const summary = summarise(frameGaps);
-    batch.frames.push({
-      at: Math.round(frameWindow),
-      ...summary,
-      over50: frameGaps.filter((gap) => gap > 50).length,
-      over100: frameGaps.filter((gap) => gap > 100).length,
-    });
-    frameGaps = [];
-    frameWindow = now;
+  if (isRecording && now >= runStart) {
+    if (lastFrame === undefined) frameWindow = now;
+    else frameGaps.push(now - lastFrame);
+    lastFrame = now;
+    if (now - frameWindow >= 1000) finishFrameWindow();
   }
   requestAnimationFrame(onFrame);
 }
@@ -73,36 +76,47 @@ let moveGaps = [];
 let coalesced = 0;
 let lastMove;
 let moveWindow;
+for (const type of ["pointerdown", "pointerup", "pointercancel"]) {
+  document.addEventListener(
+    type,
+    (event) => {
+      if (event.pointerType === "touch" && event.isPrimary)
+        lastMove = undefined;
+    },
+    { capture: true, passive: true },
+  );
+}
 document.addEventListener(
   "pointermove",
   (event) => {
-    if (event.pointerType !== "touch") return;
+    if (!isRecording || event.pointerType !== "touch" || !event.isPrimary) {
+      return;
+    }
     const now = event.timeStamp;
+    if (now < runStart) return;
     if (lastMove !== undefined && now - lastMove < 500) {
       moveGaps.push(now - lastMove);
     }
     lastMove = now;
     moveWindow ??= now;
-    coalesced += event.getCoalescedEvents?.().length ?? 1;
-    if (now - moveWindow >= 1000) {
-      batch.moves.push({
-        at: Math.round(moveWindow),
-        ...summarise(moveGaps),
-        coalesced,
-      });
-      moveGaps = [];
-      coalesced = 0;
-      moveWindow = now;
-    }
+    coalesced += event.getCoalescedEvents?.().length || 1;
   },
   { capture: true, passive: true },
 );
 
+const drainObservers = [];
 function observe(type, onEntry, options = {}) {
-  if (!PerformanceObserver.supportedEntryTypes?.includes(type)) return;
-  new PerformanceObserver((list) => list.getEntries().forEach(onEntry)).observe(
-    { type, buffered: true, ...options },
+  if (!globalThis.PerformanceObserver?.supportedEntryTypes?.includes(type)) {
+    return;
+  }
+  const record = (entry) => {
+    if (isRecording && entry.startTime >= runStart) onEntry(entry);
+  };
+  const observer = new PerformanceObserver((list) =>
+    list.getEntries().forEach(record),
   );
+  observer.observe({ type, buffered: true, ...options });
+  drainObservers.push(() => observer.takeRecords().forEach(record));
 }
 
 // Input that took a frame or more: how long it waited, ran and took to show.
@@ -149,12 +163,27 @@ observe("long-animation-frame", (entry) => {
 let sentScreen = false;
 let shown = "";
 function send(keepalive = false) {
+  if (!isRecording) return;
+  for (const drain of drainObservers) drain();
+  if (moveWindow !== undefined) {
+    batch.moves.push({
+      at: Math.round(moveWindow),
+      ...summarise(moveGaps),
+      coalesced,
+    });
+    moveGaps = [];
+    coalesced = 0;
+    moveWindow = undefined;
+  }
   const { frames, moves, events, loafs } = batch;
-  const shows = (document.querySelector("main") ?? document.body)?.innerText
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160);
-  const changed = shows !== undefined && shows !== shown;
+  const shows =
+    (
+      document.querySelector("main") ?? document.getElementById("root")
+    )?.innerText
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160) ?? "";
+  const changed = shows !== shown;
   if (
     !changed &&
     !frames.length &&
@@ -199,6 +228,13 @@ function send(keepalive = false) {
   }).catch(() => {});
 }
 
+function flushTimings(keepalive) {
+  finishFrameWindow();
+  send(keepalive);
+  lastFrame = undefined;
+  lastMove = undefined;
+}
+
 const styles = {
   blur: "*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}",
   masks:
@@ -231,29 +267,43 @@ function showPrompt(text) {
   if (banner.textContent !== text) banner.textContent = text;
 }
 
+let isFollowing = false;
 async function follow() {
+  if (isFollowing) return;
+  isFollowing = true;
   try {
-    const response = await fetch("/__display/control", { cache: "no-store" });
+    const response = await fetch("/__display/control", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
     if (!response.ok) return;
     const next = await response.json();
-    if (next.label !== control.label) send();
+    const isChangingPage = kind !== next.page;
+    const isReloading = seenReload !== undefined && next.reload > seenReload;
+    if (isChangingPage || isReloading) {
+      flushTimings(true);
+      if (isChangingPage) location.assign(next.path);
+      else location.reload();
+      return;
+    }
+    if (
+      next.label !== control.label ||
+      next.blur !== control.blur ||
+      next.masks !== control.masks
+    ) {
+      flushTimings();
+      shown = "";
+      runStart = performance.now();
+    }
     control = next;
     turnOff("blur", !control.blur);
     turnOff("masks", !control.masks);
     showPrompt(control.prompt);
-    if (pathOf[kind] !== control.path) {
-      send(true);
-      location.assign(control.path);
-      return;
-    }
-    if (seenReload !== undefined && control.reload > seenReload) {
-      send(true);
-      location.reload();
-      return;
-    }
     seenReload = control.reload;
   } catch {
     // The dev server restarts now and then; the next look tries again.
+  } finally {
+    isFollowing = false;
   }
 }
 
@@ -262,4 +312,9 @@ setInterval(() => {
   send();
   void follow();
 }, 2000);
-addEventListener("pagehide", () => send(true));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) flushTimings(true);
+  else runStart = performance.now();
+  isRecording = !document.hidden;
+});
+addEventListener("pagehide", () => flushTimings(true));

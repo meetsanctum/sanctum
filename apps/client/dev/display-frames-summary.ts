@@ -7,14 +7,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-type Gaps = {
-  at: number;
+type Frames = {
   count: number;
   p50: number;
   p95: number;
-  max: number;
+  durationMs?: number;
+  over50: number;
 };
-type Frames = Gaps & { over50: number; over100: number };
 type InputEvent = { name: string; delay: number; duration: number };
 type LongFrame = {
   duration: number;
@@ -22,14 +21,14 @@ type LongFrame = {
   render: number;
   scripts?: { duration: number; invoker: string; source: string }[];
 };
-/** One line the display posted. */
-export type FrameLine = {
+/** The fields used to summarise one line the display posted. */
+type FrameLine = {
   page: string;
   label: string;
   blur: boolean;
   masks: boolean;
   frames?: Frames[];
-  moves?: (Gaps & { coalesced: number })[];
+  moves?: { count: number; p50: number }[];
   events?: InputEvent[];
   loafs?: LongFrame[];
   /** What the screen shows, in its first words, when that changed. */
@@ -40,7 +39,82 @@ type Run = Omit<FrameLine, "frames" | "moves" | "events" | "loafs" | "shows"> &
     screens: string[];
   };
 
-export function percentile(values: number[], share: number) {
+type Sample = Record<string, unknown>;
+
+function isObject(value: unknown): value is Sample {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasNumbers(sample: Sample, ...fields: string[]) {
+  return fields.every((field) => Number.isFinite(sample[field]));
+}
+
+function hasSamples(value: unknown, check: (sample: Sample) => boolean) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.every((sample) => isObject(sample) && check(sample)))
+  );
+}
+
+function isFrameLine(line: unknown): line is FrameLine {
+  return (
+    isObject(line) &&
+    typeof line.page === "string" &&
+    typeof line.label === "string" &&
+    typeof line.blur === "boolean" &&
+    typeof line.masks === "boolean" &&
+    (line.shows === undefined || typeof line.shows === "string") &&
+    hasSamples(
+      line.frames,
+      (frame) =>
+        hasNumbers(frame, "count", "p50", "p95", "over50") &&
+        (frame.durationMs === undefined || hasNumbers(frame, "durationMs")),
+    ) &&
+    hasSamples(line.moves, (move) => hasNumbers(move, "count", "p50")) &&
+    hasSamples(
+      line.events,
+      (event) =>
+        typeof event.name === "string" &&
+        hasNumbers(event, "delay", "duration"),
+    ) &&
+    hasSamples(
+      line.loafs,
+      (frame) =>
+        hasNumbers(frame, "duration", "blocking", "render") &&
+        hasSamples(
+          frame.scripts,
+          (script) =>
+            typeof script.invoker === "string" &&
+            typeof script.source === "string" &&
+            hasNumbers(script, "duration"),
+        ),
+    )
+  );
+}
+
+function readLines(file: string) {
+  const lines: FrameLine[] = [];
+  for (const [index, text] of readFileSync(file, "utf8")
+    .split("\n")
+    .entries()) {
+    if (!text.trim()) continue;
+    let line: unknown;
+    try {
+      line = JSON.parse(text);
+    } catch {
+      // The last line may still be getting written while the display records.
+    }
+    if (isFrameLine(line)) lines.push(line);
+    else
+      console.error(
+        `Skipping invalid frame data on line ${index + 1} of ${file}`,
+      );
+  }
+  return lines;
+}
+
+function percentile(values: number[], share: number) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[
@@ -79,7 +153,10 @@ export function summariseRuns(lines: FrameLine[]) {
     }
   }
   return [...runs.values()].map((run) => {
-    const seconds = run.frames.length;
+    // Lines without a duration were recorded with nominal one-second windows.
+    const elapsed =
+      run.frames.reduce((sum, each) => sum + (each.durationMs ?? 1000), 0) /
+      1000;
     const frames = run.frames.reduce((sum, each) => sum + each.count, 0);
     const slow = run.frames.reduce((sum, each) => sum + each.over50, 0);
     const scripts = new Map<string, number>();
@@ -98,8 +175,8 @@ export function summariseRuns(lines: FrameLine[]) {
       blur: run.blur,
       masks: run.masks,
       screens: run.screens,
-      seconds,
-      fps: seconds ? Math.round((frames / seconds) * 10) / 10 : 0,
+      seconds: Math.round(elapsed * 10) / 10,
+      fps: elapsed ? Math.round((frames / elapsed) * 10) / 10 : 0,
       frameGapP50: median(run.frames.map((each) => each.p50)),
       frameGapP95: percentile(
         run.frames.map((each) => each.p95),
@@ -146,17 +223,17 @@ function print(runs: ReturnType<typeof summariseRuns>) {
       console.log(`  screen   ${screen.slice(0, 80)}`);
     }
     console.log(
-      `  frames   ${run.fps} fps over ${run.seconds} s, gap p50 ${run.frameGapP50} ms, p95 ${run.frameGapP95} ms, ${run.slowFrameShare}% over 50 ms`,
+      `  frames   ${run.fps} fps over ${run.seconds} s, gap p50 ${run.frameGapP50} ms (median window), gap p95 ${run.frameGapP95} ms (95th percentile of window p95s), ${run.slowFrameShare}% over 50 ms`,
     );
     if (run.moveGapP50) {
       console.log(`  finger   a move every ${run.moveGapP50} ms (p50)`);
     }
     if (run.inputs)
       console.log(
-        `  input    ${run.inputs} slow presses, delay p50 ${run.inputDelayP50} ms, p95 ${run.inputDelayP95} ms, to paint p95 ${run.inputToPaintP95} ms`,
+        `  input    ${run.inputs} slow input events, delay p50 ${run.inputDelayP50} ms, p95 ${run.inputDelayP95} ms, to paint p95 ${run.inputToPaintP95} ms`,
       );
     console.log(
-      `  long     ${run.longFrames} frames, ${run.blockingMs} ms blocking, ${run.renderShareOfLongFrames}% of them style, layout and paint`,
+      `  long     ${run.longFrames} frames, ${run.blockingMs} ms blocking, ${run.renderShareOfLongFrames}% of their time in the render phase`,
     );
     for (const script of run.topScripts) {
       console.log(`           ${script.ms} ms  ${script.name}`);
@@ -171,11 +248,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     fileURLToPath(
       new URL("../../../.sanctum-display-frames.jsonl", import.meta.url),
     );
-  const lines = readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as FrameLine);
-  const runs = summariseRuns(lines);
+  const runs = summariseRuns(readLines(file));
   if (args.includes("--json")) console.log(JSON.stringify(runs, null, 2));
   else print(runs);
 }
