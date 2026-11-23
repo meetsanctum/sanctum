@@ -14,6 +14,7 @@ const picture = () =>
 
 function Image({ hash }: { hash: string }) {
   const artwork = useArtwork(hash);
+  if (artwork === "missing") return <span>missing</span>;
   return artwork && <img src={artwork.url} alt="" />;
 }
 
@@ -83,9 +84,16 @@ describe("player artwork", () => {
     fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
     await render();
     expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toBe("missing");
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(
       new Headers(fetch.mock.calls[1]![1].headers).get("authorization"),
     ).toBe("Bearer client_two");
+  });
+
+  it("is missing at once for a name that isn't a hash, fetching nothing", async () => {
+    await act(async () => root.render(<Image hash="not-a-hash" />));
+    expect(container.textContent).toBe("missing");
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

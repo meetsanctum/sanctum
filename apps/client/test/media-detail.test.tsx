@@ -55,7 +55,9 @@ async function render(
         device={device}
         capability={device.capabilities[0] as Media}
         disabled={disabled}
-        artwork={artwork}
+        artwork={artwork ?? null}
+        isArtworkMissing={false}
+        onArtworkError={() => {}}
         onCommand={(command) => sent.push(command)}
       />,
     );
@@ -89,7 +91,7 @@ async function press(label: string) {
 }
 
 describe("Playing", () => {
-  it("falls back after an image error and sizes each replacement independently", async () => {
+  it("sizes each replacement image independently", async () => {
     const device = mediaPlayer("box", "Living Room TV", "office", {
       on: true,
       activity: "paused",
@@ -107,15 +109,10 @@ describe("Playing", () => {
       "min(300px, 132px)",
     );
 
-    await render(MediaPlaying, device, false, "blob:broken");
+    await render(MediaPlaying, device, false, "blob:replacement");
     expect(image()!.style.getPropertyValue("--artwork-width")).toBe(
       "min(300px, 469px)",
     );
-    await act(async () => image()!.dispatchEvent(new Event("error")));
-    expect(image()).toBeNull();
-
-    await render(MediaPlaying, device, false, "blob:replacement");
-    expect(image()!.getAttribute("src")).toBe("blob:replacement");
   });
 
   it("shows what plays, where it is, and pauses it", async () => {

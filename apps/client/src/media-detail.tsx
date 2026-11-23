@@ -44,8 +44,6 @@ type Props = {
   /** Offline: shown, with nothing to press. */
   disabled: boolean;
   failures?: number;
-  /** The picture of what plays, once it has arrived (artwork.ts). */
-  artwork?: string | null;
   onCommand: (command: MediaCommand) => void;
 };
 
@@ -106,19 +104,27 @@ function aboutWhatPlays(capability: Media): string | null {
   return parts.length > 0 ? [...new Set(parts)].join(" · ") : null;
 }
 
-// The picture of what plays, in its own shape up to 300 by 264 px. Without
-// one, or while nothing plays, it is a soft grey gradient the shell draws in
-// the shape the picture would have, with no words on it: the detail's title
-// already says nothing plays. A song's is square, a film's or a show's as
+// A picture the shell draws for something playing that has none to show,
+// because its player gave none, the core refused it or it didn't load:
+// warm, so it reads as something playing, not as nothing. The veil takes
+// its colour as it would one taken from a picture.
+const missingArtwork =
+  "radial-gradient(55% 60% at 36% 38%, rgb(226 84 112 / 80%) 0%, transparent 70%), radial-gradient(45% 50% at 86% 90%, rgb(242 166 92 / 90%) 0%, transparent 72%), linear-gradient(150deg, #7c2438 0%, #882a44 55%, #6f2136 100%)";
+export const missingArtworkTint = "oklch(0.42 0.12 12)";
+
+// The picture of what plays, in its own shape up to 300 by 264 px. The
+// placeholder is warm if artwork is missing and grey while it loads or
+// nothing plays. A song's placeholder is square, a film's or a show's as
 // wide as a screen.
 function Artwork(props: {
   square: boolean;
   nothing: boolean;
-  url?: string | null;
+  isMissing: boolean;
+  url: string | null;
+  onError: (url: string) => void;
 }) {
   const [ratio, setRatio] = useState<number | null>(null);
-  const [failed, setFailed] = useState(false);
-  const picture = props.url && !props.nothing && !failed ? props.url : null;
+  const picture = props.nothing ? null : props.url;
   // As wide as the page beside it allows, 300 px, or 264 px tall where it's
   // taller than that: the player's own picture by its own shape.
   const shape = (picture && ratio) || (props.square ? 1 : 16 / 9);
@@ -134,7 +140,7 @@ function Artwork(props: {
       <img
         src={picture}
         alt=""
-        onError={() => setFailed(true)}
+        onError={() => props.onError(picture)}
         onLoad={(event) => {
           const { naturalWidth, naturalHeight } = event.currentTarget;
           if (naturalWidth > 0 && naturalHeight > 0) {
@@ -152,7 +158,9 @@ function Artwork(props: {
       style={{
         ...frame.style,
         background:
-          "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
+          !props.nothing && props.isMissing
+            ? missingArtwork
+            : "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
       }}
       className={frame.className}
     />
@@ -358,7 +366,13 @@ function Transport(props: {
  * one layout for every player and whatever it plays: a song, a show, a film
  * or nothing.
  */
-export function MediaPlaying(props: Props) {
+export function MediaPlaying(
+  props: Props & {
+    artwork: string | null;
+    isArtworkMissing: boolean;
+    onArtworkError: (url: string) => void;
+  },
+) {
   const { capability, onCommand } = props;
   const state = capability.state;
   const playing = isPlaying(capability);
@@ -456,7 +470,9 @@ export function MediaPlaying(props: Props) {
             key={props.artwork}
             square={square}
             nothing={nothing}
+            isMissing={props.isArtworkMissing}
             url={props.artwork}
+            onError={props.onArtworkError}
           />
         </div>
       </div>
