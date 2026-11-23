@@ -336,29 +336,55 @@ describe("Settings → AI models", () => {
       { "sanctum.example": 100, "sanctum.former": 50 },
     );
     await show();
-    const sums = () =>
-      [
-        ...container.querySelectorAll(
-          '[aria-labelledby="settings-models-tokens"] li',
-        ),
-      ].map((each) => each.textContent);
+    const section = container.querySelector(
+      '[aria-labelledby="settings-models-tokens"]',
+    )!;
+    const group = section.querySelector('[role="radiogroup"]')!;
+    const labelId = group.getAttribute("aria-labelledby");
+    expect(labelId && document.getElementById(labelId)?.textContent).toBe(
+      "Show",
+    );
+    const radios = group.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    expect([...radios].map((radio) => radio.textContent)).toEqual([
+      "Models",
+      "Apps",
+    ]);
+    const modelsRadio = radios[0]!;
+    const appsRadio = radios[1]!;
 
-    expect(sums()).toEqual([
+    const sums = () =>
+      [...section.querySelectorAll("li")].map((each) => each.textContent);
+    const chartLabel = () =>
+      section
+        .querySelector('[aria-label^="Tokens used"]')
+        ?.getAttribute("aria-label");
+    const modelTotals = [
       "Qwen3 8B on Office Mac3,000",
       "OpenAI: GPT-5 Mini with OpenRouter1,500",
-    ]);
-    expect(
-      container
-        .querySelector('[aria-label^="Tokens used"]')
-        ?.getAttribute("aria-label"),
-    ).toContain("by model");
+    ];
+    expect(sums()).toEqual(modelTotals);
+    expect(chartLabel()).toContain("by model");
+    expect(modelsRadio.getAttribute("aria-checked")).toBe("true");
 
-    await click(
-      [...container.querySelectorAll("button")].find(
-        (each) => each.textContent === "Apps",
-      )!,
-    );
+    await click(appsRadio);
     expect(sums()).toEqual(["Example3,000", "Former1,500"]);
+    expect(chartLabel()).toContain("by app");
+    expect(appsRadio.getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => {
+      appsRadio.focus();
+      appsRadio.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowLeft",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(document.activeElement).toBe(modelsRadio);
+    expect(modelsRadio.getAttribute("aria-checked")).toBe("true");
+    expect(sums()).toEqual(modelTotals);
+    expect(chartLabel()).toContain("by model");
   });
 
   it("keeps the totals and source choices that an older core supports", async () => {
