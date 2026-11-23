@@ -4,12 +4,17 @@ import type {
   Places,
   Weekday,
 } from "@meetsanctum/app-sdk";
-import { Button, formatLightLevel, Input } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  formatLightLevel,
+  Input,
+  SegmentedControl,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-
-import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 
 import {
   capitalize,
@@ -97,44 +102,6 @@ export function OptionList(props: {
 const onLook =
   "data-[state=on]:bg-foreground data-[state=on]:text-background data-[state=on]:hover:bg-foreground/90 data-[state=on]:hover:text-background";
 
-/** Two to four choices side by side: shadcn's toggle group, one at a time. */
-export function Segments(props: {
-  label: string;
-  options: { value: string; label: string }[];
-  selected: string | undefined;
-  onSelect(value: string): void;
-  // Long labels wrap onto a second line rather than run out of the control,
-  // as in a narrow card.
-  wraps?: boolean;
-}) {
-  return (
-    <ToggleGroup
-      type="single"
-      aria-label={props.label}
-      value={props.selected ?? ""}
-      // Pressing the chosen one again keeps it chosen.
-      onValueChange={(value: string) => value && props.onSelect(value)}
-      spacing={1}
-      className="w-full rounded-md bg-foreground/8 p-0.75"
-    >
-      {props.options.map((option) => (
-        <ToggleGroupItem
-          key={option.value}
-          value={option.value}
-          className={cn(
-            "h-7.5 flex-1 rounded-sm px-2.5 text-[13px] hover:bg-foreground/5",
-            props.wraps &&
-              "h-auto min-h-7.5 px-1.5 py-1 leading-tight whitespace-normal pointer-coarse:min-h-10",
-            onLook,
-          )}
-        >
-          {option.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
-  );
-}
-
 function DaysControl(props: {
   value: Weekday[] | undefined;
   onChange(value: Weekday[] | undefined): void;
@@ -151,15 +118,16 @@ function DaysControl(props: {
         : undefined;
   return (
     <div className="flex flex-col gap-3">
-      <Segments
+      <SegmentedControl
+        fill
         label="Days"
         options={[
           { value: "every", label: "Every day" },
           { value: "weekdays", label: "Weekdays" },
           { value: "weekends", label: "Weekends" },
         ]}
-        selected={preset}
-        onSelect={(value) =>
+        value={preset}
+        onValueChange={(value) =>
           props.onChange(
             value === "every"
               ? undefined
@@ -207,15 +175,16 @@ function OffsetControl(props: {
   const [minutes, setMinutes] = useState(Math.abs(props.value) || 15);
   return (
     <div className="flex flex-col gap-3">
-      <Segments
+      <SegmentedControl
+        fill
         label="When"
         options={[
           { value: "before", label: "Before" },
           { value: "dot", label: "On the dot" },
           { value: "after", label: "After" },
         ]}
-        selected={side}
-        onSelect={(value) =>
+        value={side}
+        onValueChange={(value) =>
           props.onChange(
             value === "dot" ? 0 : value === "before" ? -minutes : minutes,
           )
@@ -502,11 +471,12 @@ export function FieldControl(props: {
         label: capitalize(text),
       }));
       return options.length <= 3 ? (
-        <Segments
+        <SegmentedControl
+          fill
           label={label}
           options={options}
-          selected={props.value as string | undefined}
-          onSelect={props.onChange}
+          value={props.value as string | undefined}
+          onValueChange={props.onChange}
         />
       ) : (
         <OptionList
@@ -519,16 +489,17 @@ export function FieldControl(props: {
     }
     case "boolean":
       return (
-        <Segments
+        <SegmentedControl
+          fill
           label={label}
           options={[
             { value: "true", label: "On" },
             { value: "false", label: "Off" },
           ]}
-          selected={
+          value={
             props.value === undefined ? undefined : String(props.value === true)
           }
-          onSelect={(value) => props.onChange(value === "true")}
+          onValueChange={(value) => props.onChange(value === "true")}
         />
       );
     case "names": {

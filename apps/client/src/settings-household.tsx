@@ -3,7 +3,7 @@ import {
   type HomeLocation,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
 import {
   useEffect,
   useId,
@@ -335,30 +335,25 @@ function HomeForm() {
         minutes more exact. Leave latitude and longitude empty to keep them to
         yourselves: the time zone still sets the home’s clock.
       </p>
-      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-        <legend className={`mb-2 p-0 ${label}`}>Temperature unit</legend>
-        <div className="flex flex-wrap gap-1">
-          {temperatureUnits.map((unit) => (
-            <label
-              key={unit}
-              className="flex h-9 cursor-pointer items-center rounded-md bg-foreground/8 px-3 text-sm font-medium has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background"
-            >
-              <input
-                type="radio"
-                name={unitName}
-                value={unit}
-                checked={draft.temperatureUnit === unit}
-                onChange={() => changeUnit(unit)}
-                className="sr-only"
-              />
-              {unitNames[unit]}
-            </label>
-          ))}
-        </div>
-        <span className={label}>
+      <div className="flex min-w-0 flex-col gap-2">
+        <span id={`${unitName}-label`} className={label}>
+          Temperature unit
+        </span>
+        <SegmentedControl
+          labelledBy={`${unitName}-label`}
+          describedBy={`${unitName}-hint`}
+          options={temperatureUnits.map((unit) => ({
+            value: unit,
+            label: unitNames[unit],
+          }))}
+          value={draft.temperatureUnit}
+          onValueChange={changeUnit}
+          className="self-start"
+        />
+        <span id={`${unitName}-hint`} className={label}>
           How the home shows temperatures: in rooms, sensors and Weather.
         </span>
-      </fieldset>
+      </div>
       {(note || problem) && (
         <p
           role={problem ? "alert" : "status"}
