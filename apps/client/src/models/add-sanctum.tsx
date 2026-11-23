@@ -226,7 +226,7 @@ export function AddSanctum(props: {
           {title}
           <DialogDescription>
             {isUnavailable
-              ? "Check Ollama on its app page."
+              ? `Ollama is added to ${productName}.`
               : "Go to the Ollama app to download a model."}
           </DialogDescription>
         </DialogHeader>
