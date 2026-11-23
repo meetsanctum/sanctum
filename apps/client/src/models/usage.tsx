@@ -1,9 +1,8 @@
 import type { AppInfo, ModelsInfo } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
-import { useState, type KeyboardEvent } from "react";
+import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { useId, useState, type KeyboardEvent } from "react";
 
 import { AppIcon } from "../app-icon";
-import { Segments } from "../automations/fields";
 import { Row, Section } from "../components";
 import type { ModelsResponse } from "./data";
 import { sourceName } from "./words";
@@ -14,6 +13,12 @@ import { sourceName } from "./words";
 // read a day's tokens. A home that hasn't used any says so instead.
 
 type Shown = "models" | "apps";
+
+const shownOptions: { value: Shown; label: string }[] = [
+  { value: "models", label: "Models" },
+  { value: "apps", label: "Apps" },
+];
+
 type Series = { key: string; name: string; tokens: number[] };
 
 // Fixed by each one's place in the home's list, so a series keeps its
@@ -233,6 +238,7 @@ export function TokensUsed(props: {
   const { info } = props;
   const { usage } = info;
   const [shown, setShown] = useState<Shown>("models");
+  const showId = useId();
   const names = new Map(
     info.sources.map((each) => [each.id, sourceName(each)]),
   );
@@ -279,20 +285,19 @@ export function TokensUsed(props: {
       action={
         total > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-muted-foreground">
+            <span
+              id={showId}
+              className="text-[13px] font-medium text-muted-foreground"
+            >
               Show
             </span>
-            <div className="w-40">
-              <Segments
-                label="Show"
-                options={[
-                  { value: "models", label: "Models" },
-                  { value: "apps", label: "Apps" },
-                ]}
-                selected={shown}
-                onSelect={(value) => setShown(value as Shown)}
-              />
-            </div>
+            <SegmentedControl
+              labelledBy={showId}
+              options={shownOptions}
+              value={shown}
+              onValueChange={(value) => setShown(value)}
+              size="sm"
+            />
           </div>
         )
       }
