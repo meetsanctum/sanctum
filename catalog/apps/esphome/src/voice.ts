@@ -8,8 +8,9 @@ import { hasVoiceAssistant } from "./registration.js";
 // starting up, so its ring twinkles and its button does nothing. Sanctum
 // follows them on each of its connections and declines every request at
 // once, before the device sends any sound, so the device shows that nothing
-// answered it and nothing it hears leaves it. RUN_END lets Voice PE firmware
-// that waits for the event clear the error ring after a declined request.
+// answered it and nothing it hears leaves it. Each declined request is then
+// told its run ended, as Home Assistant ends a run after an error: a device
+// ends its run only when told, and until then a Voice PE's ring stays red.
 
 /**
  * Follows a session's voice requests, if its device has a voice assistant,
