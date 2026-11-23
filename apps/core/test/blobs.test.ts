@@ -23,6 +23,10 @@ const png = (...rest: number[]) =>
     ...[8, 2, 0, 0, 0, 0, 0, 0, 0],
     ...[0, 0, 0, rest.length, 0x49, 0x44, 0x41, 0x54],
     ...rest,
+    0,
+    0,
+    0,
+    0,
   ]);
 
 async function pictureCore() {
@@ -78,7 +82,7 @@ describe("a driver's picture", () => {
     new DataView(huge.buffer).setUint32(16, 5000);
     new DataView(huge.buffer).setUint32(20, 5000);
     await expect(radio.picture("box-1", "image/png", huge)).rejects.toThrow(
-      /4096 px a side/,
+      /4096 px on each side/,
     );
   });
 

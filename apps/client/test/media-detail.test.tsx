@@ -55,7 +55,9 @@ async function render(
         device={device}
         capability={device.capabilities[0] as Media}
         disabled={disabled}
-        artwork={artwork}
+        artwork={artwork ?? null}
+        isArtworkMissing={false}
+        onArtworkError={() => {}}
         onCommand={(command) => sent.push(command)}
       />,
     );
@@ -89,7 +91,7 @@ async function press(label: string) {
 }
 
 describe("Playing", () => {
-  it("falls back after an image error and sizes each replacement independently", async () => {
+  it("sizes each replacement image independently", async () => {
     const device = mediaPlayer("box", "Living Room TV", "office", {
       on: true,
       activity: "paused",
@@ -107,15 +109,10 @@ describe("Playing", () => {
       "min(300px, 132px)",
     );
 
-    await render(MediaPlaying, device, false, "blob:broken");
+    await render(MediaPlaying, device, false, "blob:replacement");
     expect(image()!.style.getPropertyValue("--artwork-width")).toBe(
       "min(300px, 469px)",
     );
-    await act(async () => image()!.dispatchEvent(new Event("error")));
-    expect(image()).toBeNull();
-
-    await render(MediaPlaying, device, false, "blob:replacement");
-    expect(image()!.getAttribute("src")).toBe("blob:replacement");
   });
 
   it("shows what plays, where it is, and pauses it", async () => {
@@ -133,7 +130,6 @@ describe("Playing", () => {
     expect(text).toContain("Season 2, episode 4 · TV");
     expect(text).toContain("17:12");
     expect(text).toContain("−27:48");
-    expect(text).not.toContain("Nothing playing");
 
     await press("Play Living Room TV");
     await press("Next");
@@ -242,10 +238,38 @@ describe("Playing", () => {
         media: show,
       }),
     );
-    expect(container.textContent).toContain("Nothing playing");
+    expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).not.toContain(show.title);
     expect(button("Next")!.disabled).toBe(true);
     expect(seekBar()).toBeNull();
+  });
+
+  it("draws the empty picture, with no words, in the frame a picture of that shape gets", async () => {
+    const frame = () =>
+      container
+        .querySelector<HTMLElement>('[style*="--artwork-width"]')
+        ?.style.getPropertyValue("--artwork-width");
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "idle",
+      }),
+    );
+    expect(frame()).toBe("min(300px, 469px)");
+    await render(
+      MediaPlaying,
+      mediaPlayer(
+        "speaker",
+        "Office Speaker",
+        "office",
+        { activity: "idle" },
+        { power: false },
+        "smart-speaker",
+      ),
+    );
+    expect(frame()).toBe("min(300px, 264px)");
+    expect(container.textContent).not.toContain("Nothing playing");
   });
 
   it("keeps its shape while off, dimmed and empty, with nothing to press", async () => {
@@ -258,7 +282,7 @@ describe("Playing", () => {
       }),
     );
     const text = container.textContent ?? "";
-    expect(text).toContain("Nothing playing");
+    expect(container.querySelector("img")).toBeNull();
     expect(text).not.toContain("The Long Way Round");
     expect(text).toContain("–:––");
     expect(button("Play Living Room TV")!.disabled).toBe(true);

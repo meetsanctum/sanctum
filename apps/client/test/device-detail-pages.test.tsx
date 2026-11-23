@@ -10,6 +10,7 @@ import { useArtwork } from "../src/artwork";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail } from "../src/device-detail";
 import { forgetPageTicket } from "../src/frames/page-ticket";
+import { missingArtworkTint } from "../src/media-detail";
 import { useDevices } from "../src/use-devices";
 import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
 import { motionCapability } from "./device-tiles-fixtures";
@@ -231,6 +232,34 @@ it("asks for the same artwork again when the detail is reopened", async () => {
   expect(useArtwork).toHaveBeenLastCalledWith(null);
   await open("tv/player");
   expect(useArtwork).toHaveBeenLastCalledWith(hash);
+});
+
+it("uses the placeholder tint on image failure and the new tint on replacement", async () => {
+  const tv = mediaPlayer("tv", "TV", "office", {
+    on: true,
+    activity: "paused",
+    media: { artwork: "a".repeat(64) },
+  });
+  devices = [tv];
+  const image = () => dialog().querySelector("img");
+  const tint = () =>
+    dialog()
+      .querySelector("[data-tint]:last-of-type")
+      ?.getAttribute("data-tint");
+
+  vi.mocked(useArtwork).mockReturnValue({ url: "blob:broken", colour: null });
+  await open("tv/player");
+  await act(async () => image()!.dispatchEvent(new Event("error")));
+  expect(image()).toBeNull();
+  expect(tint()).toBe(missingArtworkTint);
+
+  const replacement = { url: "blob:next", colour: "oklch(0.4 0.1 80)" };
+  vi.mocked(useArtwork).mockReturnValue(replacement);
+  await act(async () =>
+    live.publish({ type: "device", id: tv.id, device: { ...tv } }),
+  );
+  expect(image()?.getAttribute("src")).toBe(replacement.url);
+  expect(tint()).toBe(replacement.colour);
 });
 
 describe("a light with a button and a temperature sensor", () => {

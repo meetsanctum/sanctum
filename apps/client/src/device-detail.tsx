@@ -279,16 +279,19 @@ export function DeviceDetail(props: {
       : [];
   // The picture of what it plays, and its colour on the veil, while
   // something does.
-  const playing = Boolean(
+  const isMediaActive = Boolean(
     (props.open || isCovering) &&
     player?.state &&
     player.state.on !== false &&
     player.state.activity !== "idle",
   );
-  const artworkHash = playing ? player?.state?.media?.artwork : null;
+  const artworkHash = isMediaActive ? player?.state?.media?.artwork : null;
   const found = useArtwork(artworkHash);
-  const artwork = found === "missing" ? null : found;
-  const artworkMissing = playing && (!artworkHash || found === "missing");
+  const [failedArtworkUrl, setFailedArtworkUrl] = useState<string | null>(null);
+  const artwork =
+    found !== "missing" && found?.url !== failedArtworkUrl ? found : null;
+  const isArtworkMissing =
+    isMediaActive && !artwork && (!artworkHash || found !== null);
   const mediaProps = player &&
     device &&
     playerTile && {
@@ -297,8 +300,6 @@ export function DeviceDetail(props: {
       capability: player,
       disabled: playerTile.disabled,
       failures: playerTile.failures,
-      artwork: artwork?.url ?? null,
-      artworkMissing,
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
@@ -312,7 +313,13 @@ export function DeviceDetail(props: {
                 label: "Playing",
                 icon: Play,
                 content: (
-                  <MediaPlaying key={`${device.id}/playing`} {...mediaProps} />
+                  <MediaPlaying
+                    key={`${device.id}/playing`}
+                    {...mediaProps}
+                    artwork={artwork?.url ?? null}
+                    isArtworkMissing={isArtworkMissing}
+                    onArtworkError={setFailedArtworkUrl}
+                  />
                 ),
               },
               // A player with power has a Remote, with its power; one
@@ -425,7 +432,7 @@ export function DeviceDetail(props: {
     selected?.page ?? initial ?? (controlTile ? undefined : after[0]?.id);
   const tint =
     page === "playing"
-      ? (artwork?.colour ?? (artworkMissing ? missingArtworkTint : null))
+      ? (artwork?.colour ?? (isArtworkMissing ? missingArtworkTint : null))
       : (selected?.tint ?? null);
   // The other pages keep the colour they had when they came into view.
   const onPageChange = (page: string) =>

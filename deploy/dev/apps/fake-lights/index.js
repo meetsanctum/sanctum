@@ -116,6 +116,9 @@ async function reportPlayer(ctx, key, refreshArtwork = false) {
       });
       state.media = { ...media, artwork: hash };
     } catch (error) {
+      const withoutArtwork = { ...media };
+      delete withoutArtwork.artwork;
+      state.media = withoutArtwork;
       ctx.log(`episode ${media.episode}'s picture was refused: ${error}`);
     }
   }

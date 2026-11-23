@@ -4,7 +4,7 @@ import { blobOf, maxBlobBytes, pictureSize } from "../src/index.js";
 
 // What the core keeps of a blob an app hands over: a still picture of its
 // declared type, of up to 700 KB, its bytes in base64, whose header gives a
-// size of up to 4096 px a side and 16 megapixels.
+// size of up to 4096 px on each side.
 
 const wire = (type: string, bytes: number[] | Uint8Array) => ({
   type,
@@ -62,17 +62,21 @@ const jpegOf = (width: number, height: number) => [
   0x11,
   0,
 ];
-const riff = (body: number[]) => [
+const le32 = (value: number) => u32(value).reverse();
+const riff = (...chunks: number[][]) => [
   ...Buffer.from("RIFF"),
-  ...le24(body.length + 4),
-  0,
+  ...le32(chunks.reduce((size, each) => size + each.length, 4)),
   ...Buffer.from("WEBP"),
-  ...body,
+  ...chunks.flat(),
 ];
-const lossy = (width: number, height: number) =>
-  riff([
-    ...Buffer.from("VP8 "),
-    ...u32(0),
+const webpChunk = (type: string, data: number[]) => [
+  ...Buffer.from(type),
+  ...le32(data.length),
+  ...data,
+  ...(data.length % 2 ? [0] : []),
+];
+const lossyFrame = (width: number, height: number) =>
+  webpChunk("VP8 ", [
     0,
     0,
     0,
@@ -81,42 +85,16 @@ const lossy = (width: number, height: number) =>
     0x2a,
     ...le16(width),
     ...le16(height),
-    0,
-    0,
   ]);
 const lossless = (width: number, height: number) => {
   const bits = (width - 1) | ((height - 1) << 14);
-  return riff([
-    ...Buffer.from("VP8L"),
-    ...u32(0),
-    0x2f,
-    bits & 0xff,
-    (bits >>> 8) & 0xff,
-    (bits >>> 16) & 0xff,
-    (bits >>> 24) & 0xff,
-    0,
-    0,
-    0,
-    0,
-    0,
-  ]);
+  return riff(webpChunk("VP8L", [0x2f, ...le32(bits)]));
 };
-const extended = (width: number, height: number, flags = 0) =>
-  riff([
-    ...Buffer.from("VP8X"),
-    ...u32(10),
-    flags,
-    0,
-    0,
-    0,
-    ...le24(width - 1),
-    ...le24(height - 1),
-    0,
-    0,
-  ]);
+const canvas = (width: number, height: number, flags = 0) =>
+  webpChunk("VP8X", [flags, 0, 0, 0, ...le24(width - 1), ...le24(height - 1)]);
 const png = pngOf(1, 1);
 const jpeg = jpegOf(1, 1);
-const webp = lossy(1, 1);
+const webp = riff(lossyFrame(1, 1));
 
 describe("a blob an app hands over", () => {
   it("is a JPEG, PNG or WebP whose bytes begin as its type's do", () => {
@@ -146,7 +124,7 @@ describe("a blob an app hands over", () => {
     expect(blobOf(wire("image/png", fits))?.bytes.length).toBe(maxBlobBytes);
   });
 
-  it("is a picture of up to 4096 px a side and 16 megapixels, read from its header", () => {
+  it("is a picture of up to 4096 px on each side, read from its header", () => {
     expect(pictureSize("image/png", Uint8Array.from(pngOf(640, 360)))).toEqual({
       width: 640,
       height: 360,
@@ -154,34 +132,50 @@ describe("a blob an app hands over", () => {
     expect(
       pictureSize("image/jpeg", Uint8Array.from(jpegOf(1500, 1000))),
     ).toEqual({ width: 1500, height: 1000 });
-    expect(pictureSize("image/webp", Uint8Array.from(lossy(300, 200)))).toEqual(
-      { width: 300, height: 200 },
-    );
+    expect(
+      pictureSize("image/webp", Uint8Array.from(riff(lossyFrame(300, 200)))),
+    ).toEqual({ width: 300, height: 200 });
     expect(
       pictureSize("image/webp", Uint8Array.from(lossless(300, 200))),
     ).toEqual({ width: 300, height: 200 });
-    expect(
-      pictureSize("image/webp", Uint8Array.from(extended(3000, 2000))),
-    ).toEqual({ width: 3000, height: 2000 });
 
     expect(blobOf(wire("image/png", pngOf(4096, 4096)))).not.toBeNull();
     expect(blobOf(wire("image/jpeg", jpegOf(4096, 2304)))).not.toBeNull();
     expect(blobOf(wire("image/png", pngOf(4097, 100)))).toBeNull();
     expect(blobOf(wire("image/jpeg", jpegOf(100, 30_000)))).toBeNull();
-    expect(blobOf(wire("image/webp", extended(16_384, 16_384)))).toBeNull();
+    expect(blobOf(wire("image/webp", lossless(16_384, 16_384)))).toBeNull();
     expect(blobOf(wire("image/png", pngOf(0, 100)))).toBeNull();
   });
 
   it("is refused when it moves, or its header gives no size", () => {
     expect(
-      blobOf(wire("image/png", pngOf(10, 10, chunk("acTL", u32(2))))),
+      blobOf(
+        wire("image/png", pngOf(10, 10, chunk("acTL", [...u32(2), ...u32(0)]))),
+      ),
     ).toBeNull();
-    expect(blobOf(wire("image/webp", extended(10, 10, 0x02)))).toBeNull();
+    expect(blobOf(wire("image/webp", riff(canvas(10, 10, 0x02))))).toBeNull();
     // Only the signature, as a file cut short would be.
     expect(blobOf(wire("image/png", signature))).toBeNull();
     expect(blobOf(wire("image/jpeg", [0xff, 0xd8, 0xff, 0xda]))).toBeNull();
-    expect(
-      blobOf(wire("image/webp", riff([...Buffer.from("ALPH"), 0, 0, 0, 0]))),
-    ).toBeNull();
+    expect(blobOf(wire("image/webp", riff(webpChunk("ALPH", []))))).toBeNull();
+  });
+
+  it("uses the same dimensions for an extended WebP canvas and its frame", () => {
+    const frame = lossyFrame(3000, 2000);
+    const read = (...chunks: number[][]) =>
+      pictureSize("image/webp", Uint8Array.from(riff(...chunks)));
+    expect(read(canvas(3000, 2000), webpChunk("ICCP", [1]), frame)).toEqual({
+      width: 3000,
+      height: 2000,
+    });
+    expect(read(canvas(3000, 2000))).toBeNull();
+    expect(read(canvas(3000, 2001), frame)).toBeNull();
+  });
+
+  it("refuses truncated size and framing headers", () => {
+    expect(blobOf(wire("image/png", png.slice(0, 24)))).toBeNull();
+    expect(blobOf(wire("image/png", png.slice(0, -1)))).toBeNull();
+    expect(blobOf(wire("image/jpeg", jpeg.slice(0, -1)))).toBeNull();
+    expect(blobOf(wire("image/webp", webp.slice(0, -1)))).toBeNull();
   });
 });

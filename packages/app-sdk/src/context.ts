@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   fitsPictureBudget,
   maxBlobBytes,
+  maxBlobSide,
   pictureSize,
   type AppBlob,
   type BlobOnTheWire,
@@ -574,7 +575,7 @@ export function createAppContext(options: {
         }
         if (!fitsPictureBudget(size)) {
           throw new Error(
-            `A picture cannot exceed 4096 px a side or 16 megapixels (this one is ${size.width} by ${size.height})`,
+            `A picture must be 1 to ${maxBlobSide} px on each side (this one is ${size.width} by ${size.height})`,
           );
         }
         return core.putBlob({

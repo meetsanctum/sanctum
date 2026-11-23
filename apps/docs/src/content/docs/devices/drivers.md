@@ -82,15 +82,14 @@ Sanctum can't take.
   `ctx.devices.release` when the button is let go.
 - **Pictures by their hash.** A media player's picture of what it plays goes
   to `ctx.blobs.put`, a still JPEG, PNG or WebP of up to 700 KB and 4096 px
-  a side or 16 megapixels, which answers its hash; the player's state names
-  it as `media.artwork`. The core reads the size from the picture's header
-  and refuses a larger one, or one that moves: shrink it first, or report
-  what plays without a picture, which the shell then shows with a picture of
-  its own. The core keeps pictures in memory while a state names them and 10
-  minutes after. It keeps at most 16 MB and 128 pictures of a driver's, and
-  to make room it lets the oldest that no state names go before their 10
-  minutes are up. So a driver puts its picture again when it starts, and
-  whenever it names a picture its state stopped naming.
+  on each side. The call returns a hash the player reports as
+  `media.artwork`. Resize oversized pictures and use a still frame from an
+  animation. If there is no suitable picture, report what plays without
+  `media.artwork` so the shell shows its own placeholder. The core keeps
+  pictures in memory while a state names them and for 10 minutes afterward.
+  It keeps at most 16 MB and 128 pictures per driver and can drop the oldest
+  unnamed pictures sooner to make room. A driver uploads its picture again
+  when it starts or when it uses a picture its state stopped naming.
 
 ## In the code
 
