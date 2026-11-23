@@ -357,9 +357,9 @@ export function SpeakerCards(props: DevicePageProps) {
             </p>
           ) : (
             <p className="m-0 px-1 text-[13px] leading-[18px] text-muted-foreground">
-              When it hears its wake word, it can chime. It flashes red because
-              no assistant answers it. While the switch on its side is on, the
-              microphones stay muted.
+              When it hears its wake word, it chimes and flashes red: Sanctum
+              doesn't answer it. The switch on its side mutes the microphones
+              too, and while it's on, only that switch turns them back on.
             </p>
           ))}
       </div>
