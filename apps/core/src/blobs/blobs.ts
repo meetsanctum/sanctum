@@ -50,10 +50,16 @@ function artworkOf(device: DeviceInfo | null) {
 export type Blobs = ReturnType<typeof createBlobs>;
 
 export function createBlobs(options: {
+  /** For tests: the core's clock. */
   now?: () => Date;
   log: (message: string) => void;
 }) {
-  const now = () => (options.now?.() ?? new Date()).getTime();
+  // The minute is measured on a clock that only moves forward, so a host
+  // whose time jumps, as a Pi's does when it first syncs, keeps a picture
+  // its full minute.
+  const now = options.now
+    ? () => options.now!().getTime()
+    : () => performance.now();
   const kept = new Map<string, Kept>();
   // Each app's blobs, so a put weighs only its own app's.
   const byApp = new Map<string, Map<string, Kept>>();

@@ -214,6 +214,22 @@ describe("a driver's picture", () => {
     expect(restarted.blobs.get(hash)).not.toBeNull();
   });
 
+  it("keeps the picture a stored state names once the core restarts and its driver puts it again", async () => {
+    const { core } = await pictureCore();
+    const bytes = png(11);
+    const hash = await radio.picture("box-1", "image/png", bytes);
+    await settled();
+    await core.stop();
+
+    // The driver puts the same bytes, and its state already names them, so
+    // no change follows: only the devices the core read as it started do.
+    const restarted = await testCore({ dataDir: core.dataDir });
+    expect(restarted.blobs.put("test.lamps", "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).not.toBeNull();
+  });
+
   it("keeps pictures named by every media capability until the last device moves on", async () => {
     const { core } = await pictureCore();
     const driver = "test.lamps";
