@@ -132,6 +132,37 @@ describe("Ollama on Sanctum as a source", () => {
     });
   });
 
+  it("answers with the address a lookup found while a newer one is still waiting", async () => {
+    const answers: ((url: string | null) => void)[] = [];
+    const { core, token } = await home({
+      serviceUrl: () =>
+        new Promise<string | null>((resolve) => answers.push(resolve)),
+    });
+
+    const older = post(
+      core,
+      "/api/models/look",
+      { kind: "sanctum" },
+      { token },
+    );
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    const newer = post(
+      core,
+      "/api/models/look",
+      { kind: "sanctum" },
+      { token },
+    );
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[0]!(sanctumOllama);
+
+    expect((await older).json<ModelSourceLook>().found).toBe(true);
+    answers[1]!(null);
+    expect((await newer).json()).toEqual({
+      found: false,
+      problem: "unreachable",
+    });
+  });
+
   it("reads Ollama's running URL from the manager's service status", async () => {
     let service: { state: string; url?: string } = {
       state: "running",
