@@ -1,4 +1,4 @@
-import type { Actor } from "@meetsanctum/app-sdk";
+import { turnLimits, type Actor } from "@meetsanctum/app-sdk";
 
 import type { Activity, ActivityAuthor } from "../activity/activity.js";
 import type { Principal } from "../auth/clients.js";
@@ -9,6 +9,7 @@ import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { InstalledApp } from "./installed.js";
 import type { Supervisor } from "./supervisor.js";
+import { opensTurn } from "../models/turns.js";
 
 type ActionRunner = ReturnType<typeof createActionRunner<InstalledApp>>;
 
@@ -80,7 +81,9 @@ export function createActionCalls(options: {
     who: ActivityAuthor,
     input: unknown,
   ) {
-    const deadline = Date.now() + timeoutMs;
+    // A turn has its own time, for the AI model's answers.
+    const deadline =
+      Date.now() + (opensTurn(action, actor) ? turnLimits.turnMs : timeoutMs);
     // One on its way back is waited for, within a call's time, rather than fail.
     if (!accepts(entry) && appStateOf(entry) !== "paused") {
       await supervisor.arrives(entry, timeoutMs);

@@ -7,7 +7,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import { randomUUID } from "node:crypto";
 
-import type { Activity } from "../activity/activity.js";
+import type { Activity, ActivityAuthor } from "../activity/activity.js";
+import type { Turns } from "../models/turns.js";
 import type { AgentsCanUse, AppOffers } from "../agents/can-use.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
@@ -111,6 +112,8 @@ export function createAppHost(options: {
   onApp?: (app: AppInfo) => void;
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
+  // The turns in which apps ask the home's AI model.
+  turns?: Pick<Turns, "open" | "source">;
   log: Log;
   timeoutMs?: number;
   now?: () => Date;
@@ -167,6 +170,7 @@ export function createAppHost(options: {
 
   const contexts = createAppContexts({
     ...options,
+    modelSource: () => options.turns?.source() ?? null,
     entities: options.entities,
     now,
     isOff: (appId) => installed.get(appId)?.off === true,
@@ -254,12 +258,23 @@ export function createAppHost(options: {
     log,
   });
 
+  const { turns } = options;
   const { record, execute } = createActionRunner<InstalledApp>({
     activity,
     timeoutMs,
     log,
     contextFor,
     deliver,
+    ...(turns
+      ? {
+          turnFor: (entry: InstalledApp, who: ActivityAuthor) =>
+            turns.open({
+              appId: entry.app.id,
+              appName: entry.manifest.name,
+              who,
+            }),
+        }
+      : {}),
   });
   const { offChangeOf, ...runChoices } = createAppRunChoices({
     installed,

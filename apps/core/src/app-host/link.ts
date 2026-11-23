@@ -50,6 +50,8 @@ const defaultMaxUnreadBytes = 8 * 1024 * 1024;
 const maxConnections = 4;
 
 const methods = new Set<string>(coreCallMethods);
+// The refusals that came with a later protocol than the oldest.
+const codeSince: Partial<Record<string, number>> = { limited: 12, no_turn: 14 };
 
 type Open = {
   // What it may do, decided when the core issued it.
@@ -283,8 +285,8 @@ export function createAppLink(options: {
         (value): Outcome => ({ ok: true, value }),
         (error: unknown): Outcome =>
           isActionError(error) &&
-          // Protocol 11 runners close their connection on an unknown code.
-          (error.code !== "limited" || connection.protocol >= 12)
+          // An older runner closes its connection on a code it doesn't know.
+          connection.protocol >= (codeSince[error.code] ?? 0)
             ? failureOf(error, error.code)
             : failureOf(error),
       )

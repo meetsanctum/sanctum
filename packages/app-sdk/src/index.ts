@@ -138,6 +138,12 @@ export interface ActionDefinition<
   readonly output: Output;
   /** What it offers AI agents; left out, they never see it. */
   readonly assistant?: AssistantOffer;
+  /**
+   * A call to it from a person or a shared device opens a turn, within which
+   * ctx.models answers (models.ts), and has the turn's time instead of an
+   * action's 30 s. Calls from anything else run it without one.
+   */
+  readonly turn?: boolean;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -173,8 +179,11 @@ export const actionErrorCodes = [
   // The permission gate's refusal, which reaches an app when the core
   // refuses one of its calls for the actor behind it.
   "needs_approval",
-  // An AI agent used its device-command allowance for the last minute.
+  // An AI agent used its device-command allowance for the last minute, or a
+  // turn asked for as many answers from the AI model as it may.
   "limited",
+  // The home's AI model answers only within a turn, which this call isn't.
+  "no_turn",
 ] as const;
 export type ActionErrorCode = (typeof actionErrorCodes)[number];
 
@@ -508,6 +517,7 @@ export function toStaticManifest(app: AppDefinition) {
       input: z.toJSONSchema(action.input, { io: "input" }),
       output: z.toJSONSchema(action.output),
       assistant: action.assistant ?? null,
+      ...(action.turn ? { turn: true as const } : {}),
     })),
     events: app.events.map((event) => ({
       id: event.id,
@@ -755,6 +765,9 @@ function assertAction(action: ActionDefinition) {
   }
   if (!tierSchema.safeParse(action.tier).success) {
     throw new Error(`"${id}" needs a tier: ${tierSchema.options.join(", ")}`);
+  }
+  if (action.turn !== undefined && typeof action.turn !== "boolean") {
+    throw new Error(`"${id}"'s turn is true or false`);
   }
 }
 

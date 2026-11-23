@@ -53,6 +53,10 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     secret: unused,
     putSecret: unused,
     removeSecret: unused,
+    modelSource: unused,
+    openModel: unused,
+    readModel: unused,
+    cancelModel: unused,
     log() {},
   };
   return createAppContext({

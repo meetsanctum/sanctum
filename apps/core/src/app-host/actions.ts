@@ -16,6 +16,7 @@ import type { Outcome } from "../activity/schema.js";
 import type { AppContract, DeclaredAction } from "./contract.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { EmittedEvent } from "./app-work.js";
+import { opensTurn, type Turn } from "../models/turns.js";
 
 // Runs apps' actions for the app host and writes them to the activity log. A
 // call that may change something has its entry as it starts, and what the
@@ -49,10 +50,13 @@ export function createActionRunner<
     entry: Entry,
     actor: Actor,
     storage: ReturnType<AppStorage["call"]>,
-    events: { held: EmittedEvent[]; withinMs: number },
+    events: { held: EmittedEvent[]; withinMs: number; turn?: Turn },
   ) => AppContext;
   // Hands on the events a call held back.
   deliver: (events: readonly EmittedEvent[]) => void;
+  // A turn for a person's or a shared device's call to an action that
+  // declares one, in which the app may ask the home's AI model.
+  turnFor?: (entry: Entry, who: ActivityAuthor) => Turn;
 }) {
   const { activity, timeoutMs, log } = options;
 
@@ -137,7 +141,14 @@ export function createActionRunner<
 
     const storage = entry.storage.call();
     const held: EmittedEvent[] = [];
-    const ctx = options.contextFor(entry, actor, storage, { held, withinMs });
+    const turn = opensTurn(declared, actor)
+      ? options.turnFor?.(entry, who)
+      : undefined;
+    const ctx = options.contextFor(entry, actor, storage, {
+      held,
+      withinMs,
+      ...(turn ? { turn } : {}),
+    });
     if (declared.tier !== "read") {
       logged = record(appId, action.id, who, "ok");
     }
@@ -168,6 +179,11 @@ export function createActionRunner<
       throw fail("app_failed");
     } finally {
       storage.end();
+      // Its entry, if any, is the cause of the turn's.
+      if (turn) {
+        if (logged) activity.within(logged, () => turn.end());
+        else turn.end();
+      }
     }
 
     const output = parse(action.output, result);

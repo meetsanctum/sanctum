@@ -1,4 +1,10 @@
-import type { ModelProblem } from "@meetsanctum/app-sdk";
+import type {
+  ModelMessage,
+  ModelProblem,
+  ModelTokens,
+  ModelTool,
+  ModelToolCall,
+} from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 // The client for OpenAI's chat completions, which Ollama, OpenAI and
@@ -7,22 +13,6 @@ import { z } from "zod";
 // input is whole, then one end with why it stopped and the tokens counted.
 // Messages and tools pass through unchanged, in the order given, so a source
 // that caches the start of a prompt can reuse it.
-
-export type ModelToolCall = { id: string; name: string; input: unknown };
-
-export type ModelMessage =
-  | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string; toolCalls?: ModelToolCall[] }
-  | { role: "tool"; toolCallId: string; content: string };
-
-export type ModelTool = {
-  name: string;
-  description: string;
-  // A JSON Schema for the tool's input.
-  input: Record<string, unknown>;
-};
-
-export type ModelTokens = { read: number; written: number };
 
 export type ModelPiece =
   | { type: "text"; text: string }

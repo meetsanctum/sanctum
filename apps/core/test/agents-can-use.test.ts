@@ -618,6 +618,7 @@ describe("an app's calls on an AI agent's behalf", () => {
         cancel() {},
         list: () => [],
       },
+      models: { source: () => null },
       log() {},
     });
     return { core, maya, lamp, plug, calls };

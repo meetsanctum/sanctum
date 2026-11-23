@@ -13,6 +13,7 @@ import {
   RadioTower,
   Share2,
   Shield,
+  Sparkles,
   SquarePlus,
   Thermometer,
   ToggleRight,
@@ -43,4 +44,5 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   list: List,
   history: History,
   tv: Tv,
+  sparkles: Sparkles,
 };
