@@ -43,12 +43,17 @@ const serviceLooks: Record<string, { colour: string; line: string }> = {
     colour: "bg-orange",
     line: `Carries messages between Zigbee and ${productName}`,
   },
+  ollama: {
+    colour: "bg-purple",
+    line: `Runs AI models on ${productName}`,
+  },
 };
 
 // A service in the line of the app that uses it.
 const serviceWords: Record<string, string> = {
   zigbee2mqtt: "Zigbee2MQTT",
   mosquitto: "messaging",
+  ollama: "Ollama",
 };
 
 const systemColour = "bg-foreground/24";

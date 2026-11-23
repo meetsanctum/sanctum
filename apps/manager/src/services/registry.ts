@@ -1,5 +1,6 @@
 import type { ServiceSpec } from "./containers.js";
 import { mosquittoSpec, type MqttClient } from "./mosquitto.js";
+import { ollamaData, ollamaMemoryMb, ollamaSpec, ollamaUrl } from "./ollama.js";
 import type { ServicesState } from "./state.js";
 import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
 import {
@@ -20,6 +21,8 @@ export type NotYet = { problem: string; neverSetUp?: true };
 
 export type SpecContext = {
   state: ServicesState;
+  // The host's memory, in MB, and its cores.
+  host: { memoryMb: number; cpus: number };
   mqttClients: MqttClient[];
   // The coordinator to use, or why there is none yet.
   zigbeeCoordinator: () => Promise<{ coordinator: ZigbeeCoordinator } | NotYet>;
@@ -38,14 +41,25 @@ export type ServiceDefinition = {
   mqttTopics?: string[];
   // What an app needs to know to use the service, besides its broker account.
   connection?: () => Record<string, unknown>;
+  // Where it answers over HTTP: the core reaches it there on the `sanctum`
+  // network, and an app that asks for it on a network shared only with it
+  // (apps/service-networks.ts), since no account limits it.
+  url?: string;
+  // Its image is large: it downloads while the others go on, and the
+  // service runs once it's there.
+  largeImage?: true;
+  // Its data needs no copy before a new version, as models that download
+  // again, too large to copy (image-change.ts).
+  dataNeedsNoCopy?: true;
   // The container to run, or why it cannot run yet.
   spec: (context: SpecContext) => Promise<ServiceSpec | NotYet> | ServiceSpec;
   // The volumes its own data lives in, which erasing it deletes, as
   // Zigbee2MQTT's holds the Zigbee network and its key.
   dataVolumes?: string[];
-  // The memory it counts for beside apps while it runs, in MB. It isn't a
-  // limit: one that ran out would take its network down with it.
-  memoryMb: number;
+  // The memory it counts for beside apps while it runs, in MB, on a host
+  // with this much. It isn't a limit unless its spec sets one: one that ran
+  // out would take its network down with it.
+  memoryMb: number | ((hostMemoryMb: number) => number);
 };
 
 // In the order they start.
@@ -79,7 +93,25 @@ export const serviceDefinitions: ServiceDefinition[] = [
       });
     },
   },
+  {
+    name: "ollama",
+    needs: [],
+    forApps: true,
+    // Its cap: a model it loads takes most of what it holds.
+    memoryMb: ollamaMemoryMb,
+    url: ollamaUrl,
+    largeImage: true,
+    dataNeedsNoCopy: true,
+    dataVolumes: [ollamaData],
+    spec: ({ host }) => ollamaSpec(host),
+  },
 ];
+
+/** What a service counts for beside apps, in MB, on a host with this much memory. */
+export function serviceMemoryMb(name: string, hostMemoryMb: number) {
+  const memoryMb = findService(name)?.memoryMb ?? 0;
+  return typeof memoryMb === "function" ? memoryMb(hostMemoryMb) : memoryMb;
+}
 
 export function findService(name: string) {
   return serviceDefinitions.find((definition) => definition.name === name);

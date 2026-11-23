@@ -1,11 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
+import { availableParallelism, totalmem } from "node:os";
 import { join } from "node:path";
 
 import { isBroker, joinAppNetworks } from "../apps/broker.js";
-import type { Log } from "../docker-resources.js";
+import { reaches, syncServiceNetworks } from "../apps/service-networks.js";
+import { assertManaged, type Log } from "../docker-resources.js";
 import {
   errorMessage,
+  inspectImage,
+  isNotFound,
+  pullImage,
   type ContainerInfo,
   type DockerClientLike,
 } from "../docker.js";
@@ -15,8 +20,6 @@ import {
   removeServiceContainer,
   stopServiceContainer,
 } from "./containers.js";
-import { assertManaged } from "../docker-resources.js";
-import { isNotFound } from "../docker.js";
 import type { Operations } from "../operations.js";
 import { createImageChanges } from "./image-change.js";
 import { mosquittoPasswordHash, mosquittoUrl } from "./mosquitto.js";
@@ -52,6 +55,8 @@ export type ServiceStatus = {
   neverSetUp?: true;
   image?: string;
   restarts?: number;
+  // Where it answers over HTTP on the `sanctum` network, while it runs.
+  url?: string;
 };
 
 type Observed = Omit<ServiceStatus, "name" | "apps">;
@@ -61,6 +66,11 @@ export class ServiceRequestError extends Error {}
 /** What's asked of a service can't happen now, as erasing one an app holds. */
 export class ServiceBusyError extends Error {}
 export class UnknownServiceError extends Error {}
+
+type Download = { image: string; failedAt?: number; problem?: string };
+
+// A large image that failed to download is tried again after this.
+const downloadAgainMs = 5 * 60_000;
 
 // Reverse-DNS app ids, as packages/app-sdk requires them.
 const appId = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
@@ -104,6 +114,9 @@ export function createServices(options: {
   dataDir: string;
   // The host's /dev, as mounted into the manager.
   hostDevDir: string;
+  // The host's memory, in bytes, and its cores, for services' caps.
+  totalMemory?: () => number;
+  cpus?: () => number;
   log: Log;
   // Called after a change, to reconcile soon; resolves once that reconcile
   // has run.
@@ -123,7 +136,11 @@ export function createServices(options: {
   ) => void;
 }) {
   const { docker, store, hostDevDir, log } = options;
+  const totalMemory = options.totalMemory ?? totalmem;
+  const cpus = options.cpus ?? availableParallelism;
   const seen = new Map<string, Observed>();
+  // Large images on their way, or the last that failed, by service.
+  const downloads = new Map<string, Download>();
   // Count old containers until Docker confirms their removal, even if the
   // last app that needed the service has released it.
   const mayBeRunning = new Set<string>();
@@ -184,12 +201,50 @@ export function createServices(options: {
       : last?.state === "failed"
         ? last
         : { state: "off" };
-    return { name, apps: state.apps[name] ?? [], ...current };
+    const url = findService(name)?.url;
+    return {
+      name,
+      apps: state.apps[name] ?? [],
+      ...current,
+      ...(url && current.state === "running" ? { url } : {}),
+    };
+  }
+
+  // Downloads a large image while the reconcile goes on, then reconciles
+  // again; one that fails waits a while before it's tried again.
+  function download(name: string, image: string) {
+    const last = downloads.get(name);
+    if (
+      last?.image === image &&
+      (last.failedAt === undefined ||
+        Date.now() - last.failedAt < downloadAgainMs)
+    ) {
+      return last;
+    }
+    const started: Download = { image };
+    downloads.set(name, started);
+    log(`Downloading ${image} for ${name}`);
+    void pullImage(docker, image).then(
+      () => {
+        if (downloads.get(name) !== started) return;
+        downloads.delete(name);
+        void options.onChange?.();
+      },
+      (error: unknown) => {
+        const problem = errorMessage(error);
+        log(`${name}: couldn't download ${image}: ${problem}`);
+        if (downloads.get(name) !== started) return;
+        downloads.set(name, { image, failedAt: Date.now(), problem });
+        void options.onChange?.();
+      },
+    );
+    return started;
   }
 
   function connection(definition: ServiceDefinition, app: string) {
     const account = store.current().mqttAccounts[app];
     return {
+      ...(definition.url ? { http: { url: definition.url } } : {}),
       ...(definition.mqttTopics && account
         ? {
             mqtt: {
@@ -252,16 +307,49 @@ export function createServices(options: {
       });
       return;
     }
-    const wanted = await imageChanges.specToRun(name, spec);
-    const container = await reconcileServiceContainer({
-      docker,
-      service: name,
-      spec: wanted,
-      log,
-    });
+    const wanted = definition.dataNeedsNoCopy
+      ? spec
+      : await imageChanges.specToRun(name, spec);
+    const isMissingImage =
+      definition.largeImage && !(await inspectImage(docker, wanted.image));
+    let container;
+    if (isMissingImage) {
+      // One on its version before goes on meanwhile.
+      container = await inspectService(docker, name);
+      const downloading = download(name, wanted.image);
+      if (!container) {
+        observed.set(
+          name,
+          downloading.problem
+            ? {
+                state: "failed",
+                problem: `Couldn't download its image: ${downloading.problem}`,
+              }
+            : { state: "starting", problem: "Downloading its image" },
+        );
+        return;
+      }
+    } else {
+      container = await reconcileServiceContainer({
+        docker,
+        service: name,
+        spec: wanted,
+        log,
+        removeReplacedImage: definition.dataNeedsNoCopy,
+      });
+    }
     if (isBroker(name)) await joinAppNetworks(docker, container, log);
-    await imageChanges.ran(name, wanted.image);
-    observed.set(name, observe(container, wanted.image));
+    if (definition.url) {
+      await syncServiceNetworks(
+        docker,
+        name,
+        container,
+        context.state.apps[name] ?? [],
+        log,
+      );
+    }
+    if (!isMissingImage) await imageChanges.ran(name, wanted.image);
+    observed.set(name, observe(container, container.Config.Image));
   }
 
   return {
@@ -315,12 +403,11 @@ export function createServices(options: {
     },
 
     // The app no longer needs the service, because it was removed or its
-    // permission was switched off. Its broker account goes, and the answer
-    // waits for the reconcile that takes it out of the broker, so the core
-    // knows the app can no longer log in. Once no app needs the service, it
-    // stops; its data volume stays.
+    // permission was switched off. The answer waits for the reconcile that
+    // removes its broker account or disconnects the service from its network.
+    // Once no app needs the service, it stops; its data volume stays.
     async release(name: string, app: string) {
-      forApps(name);
+      const definition = forApps(name);
       checkApp(app);
       await store.update((draft) => {
         const apps = (draft.apps[name] ?? []).filter((each) => each !== app);
@@ -332,6 +419,14 @@ export function createServices(options: {
         syncAccounts(draft);
       });
       await options.onChange?.();
+      if (definition.url) {
+        // No account to take back: the service leaving the app's network is
+        // what takes it away.
+        if (reaches(await inspectService(docker, name), app, name)) {
+          throw new Error(`${name} hasn't left ${app}'s network`);
+        }
+        return;
+      }
       if (!brokerState || (brokerState.apps[name] ?? []).includes(app)) {
         throw new Error("The broker has not confirmed the service revocation");
       }
@@ -462,6 +557,10 @@ export function createServices(options: {
 
       const context: SpecContext = {
         state,
+        host: {
+          memoryMb: Math.floor(totalMemory() / (1024 * 1024)),
+          cpus: cpus(),
+        },
         mqttClients: mqttClientTopics(state).flatMap((client) => {
           const account = state.mqttAccounts[client.username];
           return account ? [{ ...client, hash: account.hash }] : [];

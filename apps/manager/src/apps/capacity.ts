@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { totalmem } from "node:os";
 import { join } from "node:path";
 
-import { findService, withServiceDependencies } from "../services/registry.js";
+import {
+  serviceMemoryMb,
+  withServiceDependencies,
+} from "../services/registry.js";
 import { readJson, writeJson } from "../state.js";
 import type { AppImages } from "./images.js";
 import { AppRefusal } from "./refusal.js";
@@ -11,11 +14,12 @@ import { AppRefusal } from "./refusal.js";
 // add and container start is checked against, so the add sheet and a start
 // agree. Memory: each app container it holds, running or stopped (one stopped
 // for its update's copy or after a crash still needs its room back), at its
-// limit, unless the core turned the app off; each service it runs, at a fixed
-// size; and what's reserved. Disk: what each data image may still grow to, the
-// room kept for updates (images.ts), and what's reserved. A reservation holds
-// an add's memory and data image until its container starts, and its services
-// until the manager is asked to run them. Any claim expires after 10 minutes.
+// limit, unless the core turned the app off; each service it runs, at its
+// configured size; and what's reserved. Disk: what each data image may still
+// grow to, the room kept for updates (images.ts), and what's reserved.
+// A reservation holds an add's memory and data image until its container
+// starts, and its services until the manager is asked to run them. Any claim
+// expires after 10 minutes.
 // Reservations live in memory only and are lost on a manager restart.
 
 const mebibyte = 1024 * 1024;
@@ -127,10 +131,11 @@ export function createCapacity(options: {
     const total = totalMemory();
     let free = (total - keptForTheHost(total)) / mebibyte;
     for (const mb of byApp.values()) free -= mb;
-    for (const name of counted) free -= findService(name)?.memoryMb ?? 0;
+    const totalMb = total / mebibyte;
+    for (const name of counted) free -= serviceMemoryMb(name, totalMb);
     let servicesMb = 0;
     for (const name of withServiceDependencies(services)) {
-      if (!counted.has(name)) servicesMb += findService(name)?.memoryMb ?? 0;
+      if (!counted.has(name)) servicesMb += serviceMemoryMb(name, totalMb);
     }
     return { memoryFreeMb: Math.max(0, Math.floor(free)), servicesMb };
   }
