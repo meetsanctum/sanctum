@@ -38,8 +38,8 @@ export type Mapped = {
 /** What a device's entities give Sanctum, and what they don't. */
 export type Mapping = {
   mapped: Mapped[];
-  /** The other entities' names, as the device calls them, in its order. */
-  unused: string[];
+  /** The other entities, in the order the device lists them. */
+  unused: Entity[];
 };
 
 // A capability's id from its entity's, stable while the entity keeps its
@@ -175,11 +175,11 @@ function capabilityOf(entity: Entity): Capability | null {
 
 /**
  * A device's entities as Sanctum takes them: its everyday ones mapped onto
- * capabilities, at most 32, and the rest by name.
+ * capabilities, at most 32, and the rest for its page.
  */
 export function mapEntities(entities: readonly Entity[]): Mapping {
   const mapped: Mapped[] = [];
-  const unused: string[] = [];
+  const unused: Entity[] = [];
   const ids = new Set<string>();
   for (const entity of entities) {
     // Its own settings and readings about itself are for its page only.
@@ -195,7 +195,7 @@ export function mapEntities(entities: readonly Entity[]): Mapping {
       // What it hides by default, it rarely needs.
       entity.disabledByDefault !== true
     ) {
-      unused.push(entity.name);
+      unused.push(entity);
     }
   }
   return { mapped, unused };

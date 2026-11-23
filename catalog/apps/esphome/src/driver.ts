@@ -22,7 +22,7 @@ import {
   type Session,
   type Timings,
 } from "./connection.js";
-import { mapEntities, type Mapping } from "./entities.js";
+import type { Mapping } from "./entities.js";
 import { makerOf, registrationOf } from "./registration.js";
 import { createFacts, type Facts } from "./facts.js";
 import { createFound } from "./found.js";
@@ -37,13 +37,13 @@ import {
 } from "./keys.js";
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { report } from "./reports.js";
+import { connectionFactsOf, describeSession } from "./session-details.js";
 import { lightCommandOf, mediaCommandOf } from "./states.js";
 import {
-  createSpeakers,
-  partNames,
-  speakerPartsOf,
+  changeSpeaker,
+  speakerSettingsOf,
   type SpeakerChange,
-  type SpeakerParts,
+  type SpeakerSettings,
 } from "./speaker.js";
 import { declineRequests } from "./voice.js";
 
@@ -71,6 +71,8 @@ type Owned = {
   problem: string | null;
   sleeps: boolean;
   setup: Promise<void>;
+  lastSpeaker: SpeakerSettings | null;
+  speakerChange: Promise<void>;
   // What the core last took of its problem, unknown once an answer is
   // lost, and the report that's latest.
   told: string | null | undefined;
@@ -93,7 +95,6 @@ const flashMs = 1_500;
 export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const timings = { ...defaultTimings, ...options.timings };
   const facts: Facts = createFacts(ctx.storage.db);
-  const speakers = createSpeakers(facts);
   // What the network announces, by each sighting's name, and by MAC.
   const sightings = new Map<string, Announced>();
   const announced = new Map<string, Announced>();
@@ -135,16 +136,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const { keepZero, giveOlderKey, giveOwnKey } = keying;
 
   function connected(owned: Owned, session: Session, hear: () => void) {
-    // A device with a voice assistant waits for one before it's ready.
-    declineRequests(session, () => {
-      speakers.heard(owned.mac).catch((error: unknown) => {
-        ctx.log(`could not keep when ${owned.mac} heard (${String(error)})`);
-      });
-    });
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
     owned.maker = makerOf(session.info).manufacturer ?? owned.maker;
     owned.haltReport = undefined;
+    const { parts, mapping } = describeSession(session);
+    owned.lastSpeaker = parts && speakerSettingsOf(session, parts);
     // Its latest session, open or closed since with nothing in its place.
     const current = () =>
       devices.get(owned.mac) === owned &&
@@ -153,13 +150,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     // removal waits for those writes before the core forgets the device.
     const work = async () => {
       if (!current()) return;
-      const mapping = mappingOf(session);
       const sleeps = session.info.hasDeepSleep === true;
       await ctx.devices.register(registrationOf(owned.mac, session, mapping));
       if (!current()) return;
-      if (!(await finishSetup(owned.mac, session, mapping))) {
+      if (!(await finishSetup(owned.mac, session))) {
         await facts.save(owned.mac, {
-          ...factsOf(session, mapping),
+          ...connectionFactsOf(session),
           firstKey: null,
         });
       }
@@ -183,59 +179,37 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (devices.get(owned.mac) === owned) hear();
     });
     owned.setup = setup.catch(() => undefined);
+    // Subscribe promptly and keep wake-word writes ordered with setup and removal.
+    declineRequests(session, () => {
+      if (!parts) return;
+      const at = Date.now();
+      owned.setup = owned.setup
+        .then(async () => {
+          if (devices.get(owned.mac) === owned)
+            await facts.heard(owned.mac, at, connectionFactsOf(session));
+        })
+        .catch((error: unknown) => {
+          ctx.log(`could not keep when ${owned.mac} heard (${String(error)})`);
+        });
+    });
     return setup;
-  }
-
-  // What a session tells of its device for the device's page.
-  function factsOf(session: Session, mapping: Mapping) {
-    return {
-      address: `${session.address.host}:${session.address.port}`,
-      encrypted: session.encrypted,
-      version: session.info.esphomeVersion ?? null,
-      unused: mapping.unused.filter(
-        (name) => !partNames(partsOf(session)).includes(name),
-      ),
-      sleeps: session.info.hasDeepSleep === true,
-    };
   }
 
   // A verified connection under the given key completes setup even if
   // the response to setting that key was lost. The marker stays with the
   // key if someone removes the device without clearing it.
-  async function finishSetup(mac: string, session: Session, mapping: Mapping) {
+  async function finishSetup(mac: string, session: Session) {
     if (!session.encrypted) return false;
     const given = await ctx.secrets.get(givenOf(mac));
     if (!given) return false;
     const pending = await ctx.secrets.get(setupOf(mac));
     if (!pending && given !== "setup") return false;
-    await facts.save(mac, { ...factsOf(session, mapping), firstKey: "setup" });
+    await facts.save(mac, { ...connectionFactsOf(session), firstKey: "setup" });
     if (pending) {
       await ctx.secrets.set(givenOf(mac), "setup");
       await ctx.secrets.delete(setupOf(mac));
     }
     return true;
-  }
-
-  // Each session's parts, by its own entities, so what an older session
-  // said is read by the parts it had.
-  const mappings = new WeakMap<Session, Mapping>();
-  const speakerParts = new WeakMap<Session, SpeakerParts | null>();
-  // Each speaker's parts as its last connection had them, for its page while
-  // it's out of reach.
-  const lastParts = new Map<string, SpeakerParts | null>();
-  function partsOf(session: Session) {
-    if (!speakerParts.has(session)) {
-      speakerParts.set(session, speakerPartsOf(session));
-    }
-    return speakerParts.get(session)!;
-  }
-  function mappingOf(session: Session) {
-    let mapping = mappings.get(session);
-    if (!mapping) {
-      mapping = mapEntities(session.entities);
-      mappings.set(session, mapping);
-    }
-    return mapping;
   }
 
   // One of its devices from now on, connected with the session that added
@@ -252,6 +226,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       reports: 0,
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
+      lastSpeaker:
+        device.type === "smart-speaker"
+          ? { microphones: null, ring: null }
+          : null,
+      speakerChange: Promise.resolve(),
       removing: false,
       rekeying: false,
       maker: device.manufacturer ?? null,
@@ -269,9 +248,16 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             throw error;
           }),
         state: (event, session) => {
-          lastParts.set(mac, partsOf(session));
-          speakers.observe(mac, partsOf(session), event);
-          report(ctx, facts, mac, mappingOf(session), event, session);
+          const { parts, mapping } = describeSession(session);
+          if (
+            parts &&
+            owned.connection.session === session &&
+            ((event.type === "switch" && event.key === parts.mute?.key) ||
+              (event.type === "light" && event.key === parts.ring?.key))
+          ) {
+            owned.lastSpeaker = speakerSettingsOf(session, parts);
+          }
+          report(ctx, facts, mac, mapping, event, session);
         },
         reachable: (reachable) => {
           const availability = reachable
@@ -343,8 +329,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     if (!owned) return;
     clearTimeout(owned.telling);
     devices.delete(mac);
-    speakers.forget(mac);
-    lastParts.delete(mac);
     owned.connection.stop();
     return owned.setup;
   }
@@ -394,8 +378,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // core's from now on, and its connection that session.
   async function take(mac: string, session: Session) {
     try {
-      const mapping = mapEntities(session.entities);
-      await finishSetup(mac, session, mapping);
+      const { mapping } = describeSession(session);
+      await finishSetup(mac, session);
       const { id } = await ctx.devices
         .register(registrationOf(mac, session, mapping))
         .catch((error: unknown) => {
@@ -759,12 +743,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     /** A smart speaker's own parts for its page, or null for another device. */
     async speaker(deviceId: string) {
       const owned = [...devices.values()].find((each) => each.id === deviceId);
-      const session = owned?.connection.session;
       if (!owned) return null;
-      return speakers.read(
-        owned.mac,
-        session ? partsOf(session) : (lastParts.get(owned.mac) ?? null),
-      );
+      const session = owned.connection.session;
+      const parts = session && describeSession(session).parts;
+      const settings = session
+        ? parts && speakerSettingsOf(session, parts)
+        : owned.lastSpeaker;
+      if (!settings) return null;
+      return { ...settings, heardWakeWordAt: await facts.lastHeard(owned.mac) };
     },
 
     /** Changes a smart speaker's own parts, from its page. */
@@ -773,10 +759,17 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (!owned) throw new ActionError("not_found", "No such device");
       const session = owned.connection.session;
       if (!session) throw new Error("It isn't reachable");
-      const parts = partsOf(session);
+      const { parts } = describeSession(session);
       if (!parts)
         throw new ActionError("not_found", "It isn't a smart speaker");
-      await speakers.change(owned.mac, session, parts, change);
+      const pending = owned.speakerChange.then(async () => {
+        if (owned.connection.session !== session || owned.removing) {
+          throw new Error("It isn't reachable");
+        }
+        await changeSpeaker(session, parts, change);
+      });
+      owned.speakerChange = pending.catch(() => undefined);
+      await pending;
     },
   };
 }

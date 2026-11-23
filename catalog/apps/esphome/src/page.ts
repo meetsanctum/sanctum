@@ -17,7 +17,6 @@ const deviceFacts = z.object({
   unused: z.array(z.string()),
   sleeps: z.boolean(),
   firstKey: z.enum(["setup"]).nullable(),
-  heardWakeWordAt: z.number().nullable(),
 });
 
 const colour = z.string().regex(/^#[0-9a-f]{6}$/);

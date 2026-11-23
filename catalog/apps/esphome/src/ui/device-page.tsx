@@ -75,7 +75,9 @@ export function DevicePage(props: DevicePageProps) {
   if (!facts) return null;
   return (
     <div className="flex flex-col gap-5">
-      {device.type === "smart-speaker" && <SpeakerCards device={device} />}
+      {device.type === "smart-speaker" && (
+        <SpeakerCards key={device.id} device={device} />
+      )}
       <ConnectionSection facts={facts} />
     </div>
   );

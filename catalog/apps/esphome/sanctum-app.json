@@ -159,12 +159,6 @@
                 "type": "null"
               }
             ]
-          },
-          "heardWakeWordAt": {
-            "type": [
-              "number",
-              "null"
-            ]
           }
         },
         "required": [
@@ -174,8 +168,7 @@
           "signal",
           "unused",
           "sleeps",
-          "firstKey",
-          "heardWakeWordAt"
+          "firstKey"
         ],
         "additionalProperties": false
       },

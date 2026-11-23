@@ -10,12 +10,14 @@ import {
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import type { ChangeSpeakerAction, SpeakerAction } from "../page";
+import { ringColourDistance } from "../ring-colour";
 import type { Ring, SpeakerChange, SpeakerState } from "../speaker";
 
 // A smart speaker's own parts on ESPHome's page: Listening, its microphones
@@ -25,7 +27,7 @@ import type { Ring, SpeakerChange, SpeakerState } from "../speaker";
 // seconds while it shows.
 
 /** The ring's colours, the first the speaker's own. */
-export const ringColours = [
+const ringColours = [
   { name: "Sky blue", hex: "#18bbf2" },
   { name: "Warm white", hex: "#ffd9a8" },
   { name: "Green", hex: "#30d158" },
@@ -38,15 +40,10 @@ const readEveryMs = 5_000;
 
 /** The colour among the ring's that a colour is closest to, if it's close. */
 export function ringColourOf(hex: string) {
-  const rgb = (value: string) =>
-    [1, 3, 5].map((at) => parseInt(value.slice(at, at + 2), 16));
-  const [r, g, b] = rgb(hex);
   let best: string | null = null;
   let bestDistance = Infinity;
   for (const colour of ringColours) {
-    const [cr, cg, cb] = rgb(colour.hex);
-    const distance =
-      Math.abs(r! - cr!) + Math.abs(g! - cg!) + Math.abs(b! - cb!);
+    const distance = ringColourDistance(hex, colour.hex);
     if (distance < bestDistance) {
       best = colour.hex;
       bestDistance = distance;
@@ -59,18 +56,31 @@ export function ringColourOf(hex: string) {
 /** When it last heard its wake word: Today at 21:14, Yesterday at 07:02, 17 Nov at 09:30. */
 export function heardWords(at: number | null, now: Date, timeZone?: string) {
   if (at === null) return "Not yet";
-  const day = (date: Date) => date.toLocaleDateString("en-CA", { timeZone });
+  const calendar = new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    timeZone,
+  });
+  const day = (date: Date) => {
+    const { year, month, day } = Object.fromEntries(
+      calendar
+        .formatToParts(date)
+        .map(({ type, value }) => [type, Number(value)]),
+    );
+    return Date.UTC(year!, month! - 1, day!);
+  };
   const heard = new Date(at);
   const time = heard.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone,
   });
-  const yesterday = new Date(now.getTime() - 86_400_000);
+  const daysAgo = (day(now) - day(heard)) / 86_400_000;
   const words =
-    day(heard) === day(now)
+    daysAgo === 0
       ? "Today"
-      : day(heard) === day(yesterday)
+      : daysAgo === 1
         ? "Yesterday"
         : heard.toLocaleDateString("en-GB", {
             day: "numeric",
@@ -109,6 +119,7 @@ function SwitchRow(props: {
 function ColourChoice(props: {
   value: string | null;
   disabled: boolean;
+  busy: boolean;
   onChange: (hex: string) => void;
 }) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
@@ -122,7 +133,11 @@ function ColourChoice(props: {
           : 0;
     if (by === 0) return;
     event.preventDefault();
-    const at = ringColours.findIndex((each) => each.hex === focusable);
+    if (props.disabled || props.busy) return;
+    const at = ringColours.findIndex(
+      ({ hex }) => buttons.current.get(hex) === event.target,
+    );
+    if (at < 0) return;
     const next =
       ringColours[(at + by + ringColours.length) % ringColours.length]!.hex;
     props.onChange(next);
@@ -152,7 +167,10 @@ function ColourChoice(props: {
             aria-label={colour.name}
             tabIndex={colour.hex === focusable ? 0 : -1}
             disabled={props.disabled}
-            onClick={() => props.onChange(colour.hex)}
+            aria-disabled={props.busy || undefined}
+            onClick={() => {
+              if (!props.busy) props.onChange(colour.hex);
+            }}
           >
             <span
               aria-hidden="true"
@@ -171,21 +189,39 @@ function BrightnessRow(props: {
   disabled: boolean;
   onChange: (brightness: number) => void;
 }) {
+  const labelId = useId();
+  const dragging = useRef(false);
   const [sliding, setSliding] = useState<number | null>(null);
   const shown = sliding ?? props.value;
+  function stopDragging() {
+    dragging.current = false;
+    setSliding(null);
+  }
   return (
     <div className="flex min-h-13 items-center gap-4 px-2.5 text-[15px] leading-5">
-      <span id="ring-brightness" className="w-22 shrink-0">
+      <span id={labelId} className="w-22 shrink-0">
         Brightness
       </span>
       <Slider
-        aria-labelledby="ring-brightness"
+        ref={(root) => {
+          // The shared slider puts its accessible role on the thumb.
+          root
+            ?.querySelector('[role="slider"]')
+            ?.setAttribute("aria-labelledby", labelId);
+        }}
         min={20}
         max={100}
         step={1}
         value={[shown]}
         disabled={props.disabled}
-        onValueChange={([value]) => setSliding(value ?? props.value)}
+        onPointerDown={() => {
+          dragging.current = !props.disabled;
+        }}
+        onPointerUp={stopDragging}
+        onPointerCancel={stopDragging}
+        onValueChange={([value]) => {
+          if (dragging.current) setSliding(value ?? null);
+        }}
         onValueCommit={([value]) => {
           setSliding(null);
           if (value !== undefined) props.onChange(value);
@@ -209,6 +245,7 @@ export function SpeakerCards(props: DevicePageProps) {
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const reads = useRef(0);
+  const pending = useRef(false);
 
   const read = useCallback(async () => {
     const read = ++reads.current;
@@ -216,21 +253,37 @@ export function SpeakerCards(props: DevicePageProps) {
       const now = await client.call<SpeakerAction>("esphome.speaker", {
         device: device.id,
       });
-      if (read === reads.current) setSpeaker(now);
+      if (read === reads.current) {
+        setSpeaker(now);
+        if (now.microphones) setStillMuted(false);
+      }
     } catch {
       // What it showed stays until a read goes through.
     }
   }, [client, device.id]);
 
   useEffect(() => {
-    void read();
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void read();
-    }, readEveryMs);
-    return () => clearInterval(timer);
+    let current = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      if (!pending.current && document.visibilityState === "visible")
+        await read();
+      if (current) timer = setTimeout(refresh, readEveryMs);
+    }
+    const initial = pending.current ? Promise.resolve() : read();
+    void initial.then(() => {
+      if (current) timer = setTimeout(refresh, readEveryMs);
+    });
+    return () => {
+      current = false;
+      reads.current += 1;
+      clearTimeout(timer);
+    };
   }, [read, device.availability]);
 
   async function change(next: SpeakerChange, shown: SpeakerState) {
+    if (pending.current) return;
+    pending.current = true;
     setSpeaker(shown);
     setStillMuted(false);
     setFailed(false);
@@ -243,6 +296,7 @@ export function SpeakerCards(props: DevicePageProps) {
         ...next,
       });
     } catch (error) {
+      setSpeaker(speaker);
       if (
         next.microphones &&
         (error as { code?: string }).code === "conflict"
@@ -250,8 +304,9 @@ export function SpeakerCards(props: DevicePageProps) {
         setStillMuted(true);
       } else setFailed(true);
     } finally {
-      setBusy(false);
       await read();
+      pending.current = false;
+      setBusy(false);
     }
   }
 
@@ -263,9 +318,9 @@ export function SpeakerCards(props: DevicePageProps) {
 
   return (
     <>
-      {microphones !== null && (
-        <div className="flex flex-col gap-2">
-          <PageSection id="speaker-listening" title="Listening">
+      <div className="flex flex-col gap-2">
+        <PageSection id="speaker-listening" title="Listening">
+          {microphones !== null && (
             <SwitchRow
               id="speaker-microphones"
               label="Microphones"
@@ -285,12 +340,14 @@ export function SpeakerCards(props: DevicePageProps) {
                 change({ microphones: on }, { ...speaker, microphones: on })
               }
             />
-            <div className="flex min-h-11 items-center justify-between gap-3 px-2.5 text-[15px] leading-5">
-              <span className="text-muted-foreground">Heard its wake word</span>
-              <span>{heardWords(speaker.heardWakeWordAt, new Date())}</span>
-            </div>
-          </PageSection>
-          {stillMuted ? (
+          )}
+          <div className="flex min-h-11 items-center justify-between gap-3 px-2.5 text-[15px] leading-5">
+            <span className="text-muted-foreground">Heard its wake word</span>
+            <span>{heardWords(speaker.heardWakeWordAt, new Date())}</span>
+          </div>
+        </PageSection>
+        {microphones !== null &&
+          (stillMuted ? (
             <p
               role="alert"
               className="m-0 px-1 text-[13px] leading-[18px] text-destructive"
@@ -300,13 +357,12 @@ export function SpeakerCards(props: DevicePageProps) {
             </p>
           ) : (
             <p className="m-0 px-1 text-[13px] leading-[18px] text-muted-foreground">
-              When it hears its wake word, it chimes and flashes red: Sanctum
-              doesn't answer it. The switch on its side mutes the microphones
-              too, and while it's on, only that switch turns them back on.
+              When it hears its wake word, it can chime. It flashes red because
+              no assistant answers it. While the switch on its side is on, the
+              microphones stay muted.
             </p>
-          )}
-        </div>
-      )}
+          ))}
+      </div>
       {ring && (
         <div className="flex flex-col gap-2">
           <PageSection id="speaker-ring" title="Ring">
@@ -315,17 +371,18 @@ export function SpeakerCards(props: DevicePageProps) {
               label="Glow while waiting"
               detail="Otherwise it lights only while it's busy"
               checked={ring.glow}
-              disabled={!reachable}
+              disabled={!reachable || busy}
               onChange={(glow) => changeRing({ glow })}
             />
             <ColourChoice
               value={ringColourOf(ring.colour)}
               disabled={!reachable}
+              busy={busy}
               onChange={(colour) => changeRing({ colour })}
             />
             <BrightnessRow
               value={Math.max(20, ring.brightness)}
-              disabled={!reachable}
+              disabled={!reachable || busy}
               onChange={(brightness) => changeRing({ brightness })}
             />
           </PageSection>

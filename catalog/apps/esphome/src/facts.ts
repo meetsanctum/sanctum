@@ -1,5 +1,5 @@
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 
 import { deviceFacts } from "./schema.js";
 
@@ -16,12 +16,12 @@ export type DeviceFacts = {
   sleeps: boolean;
   /** How its first key from Sanctum reached it, where that's worth saying. */
   firstKey: "setup" | null;
-  /** When a smart speaker last heard its wake word, in ms since the epoch. */
-  heardWakeWordAt: number | null;
 };
 
 /** What a connection tells of a device: all but what it says later. */
-export type ConnectionFacts = Omit<DeviceFacts, "signal" | "heardWakeWordAt">;
+type ConnectionFacts = Omit<DeviceFacts, "signal">;
+
+const { mac, heardWakeWordAt, ...pageFields } = getTableColumns(deviceFacts);
 
 export function createFacts(db: SqliteRemoteDatabase) {
   return {
@@ -40,20 +40,33 @@ export function createFacts(db: SqliteRemoteDatabase) {
     },
     async read(mac: string): Promise<DeviceFacts | null> {
       const row = await db
-        .select()
+        .select(pageFields)
         .from(deviceFacts)
         .where(eq(deviceFacts.mac, mac))
         .get();
-      if (!row) return null;
-      const { mac: _mac, ...facts } = row;
-      return facts;
+      return row ?? null;
     },
     /** When a smart speaker heard its wake word, kept as the latest. */
-    async heard(mac: string, at: number) {
+    async heard(
+      mac: string,
+      at: number,
+      connection: Omit<ConnectionFacts, "firstKey">,
+    ) {
       await db
-        .update(deviceFacts)
-        .set({ heardWakeWordAt: at })
-        .where(eq(deviceFacts.mac, mac));
+        .insert(deviceFacts)
+        .values({ mac, ...connection, heardWakeWordAt: at })
+        .onConflictDoUpdate({
+          target: deviceFacts.mac,
+          set: { heardWakeWordAt: at },
+        });
+    },
+    async lastHeard(key: string) {
+      const row = await db
+        .select({ heardWakeWordAt })
+        .from(deviceFacts)
+        .where(eq(mac, key))
+        .get();
+      return row?.heardWakeWordAt ?? null;
     },
     async remove(mac: string) {
       await db.delete(deviceFacts).where(eq(deviceFacts.mac, mac));

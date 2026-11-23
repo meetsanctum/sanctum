@@ -314,12 +314,17 @@ export class EmulatedDevice {
   }
 
   /** Hears its wake word, asking whoever follows it to listen. */
-  wake() {
+  wake(phrase: string | null = "Okay Nabu") {
     if (!this.voiceFollower)
       throw new Error("nobody follows its voice requests");
     this.voiceFollower(
       message.voiceAssistantRequest,
-      field({ fieldNumber: 1, valueType: "varint" }, 1),
+      Buffer.concat([
+        field({ fieldNumber: 1, valueType: "varint" }, 1),
+        ...(phrase
+          ? [field({ fieldNumber: 5, valueType: "string" }, phrase)]
+          : []),
+      ]),
     );
   }
 
@@ -349,7 +354,7 @@ export class EmulatedDevice {
     ];
     for (const [name, value] of Object.entries(state)) {
       const spec = schema.fields[name];
-      if (spec) parts.push(field(spec, value));
+      if (spec && value !== false) parts.push(field(spec, value));
     }
     send(schema.messageType, Buffer.concat(parts));
   }

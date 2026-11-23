@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { SpeakerState } from "../src/speaker.js";
-import { add, startHome } from "./support.js";
-import { voicePe } from "./voice-pe.js";
+import { add, announce, startHome } from "./support.js";
+import { player, voicePe } from "./voice-pe.js";
 
 // A smart speaker's own parts on ESPHome's page: its microphones, which its
 // side switch can hold muted, its ring's glow, colour and brightness, and
@@ -25,7 +25,8 @@ async function eventually(check: () => Promise<boolean>, what: string) {
 }
 
 async function addedSpeaker() {
-  home = await startHome();
+  // The heartbeat ticks once a second, and an unmute can take two.
+  home = await startHome({ offlineMs: 3_000 });
   const device = await voicePe(home);
   const key = await add(home.core, device);
   const id = `device:${key}`;
@@ -105,8 +106,55 @@ describe("a smart speaker's page", () => {
     expect((await read()).ring?.colour).toBe("#ff9f0a");
   });
 
-  it("keeps when it last heard its wake word", async () => {
+  it("keeps glow on when brightness changes in quick succession", async () => {
+    const { device, read, change } = await addedSpeaker();
+
+    await Promise.all([
+      change({ ring: { glow: true } }),
+      change({ ring: { brightness: 40 } }),
+    ]);
+
+    expect(device.commands.at(-1)?.fields).not.toHaveProperty("state");
+    expect((await read()).ring).toMatchObject({ glow: true, brightness: 40 });
+  });
+
+  it("waits for the ring to report the requested brightness", async () => {
+    const { device, read, change } = await addedSpeaker();
+    device.held.set(204, { brightness: 0.66 });
+    let settled = false;
+    const write = change({ ring: { brightness: 40 } }).finally(() => {
+      settled = true;
+    });
+
+    await home.core.until(() => device.commands.length > 0, "brightness sent");
+    expect(settled).toBe(false);
+    expect((await read()).ring?.brightness).toBe(66);
+    device.held.delete(204);
+    device.setState(204, { brightness: 0.4 });
+    await write;
+    expect((await read()).ring?.brightness).toBe(40);
+  });
+
+  it("drops microphone state from the old session after reconnecting", async () => {
     const { device, read } = await addedSpeaker();
+    expect((await read()).microphones).toBe(true);
+
+    delete device.states[203];
+    device.reboot();
+    await announce(home.core, device);
+    await home.core.until(() => device.voiceFollowed, "followed again");
+
+    expect((await read()).microphones).toBeNull();
+  });
+
+  it("records only wake words and keeps the timestamp after an app restart", async () => {
+    const { device, read } = await addedSpeaker();
+    device.wake(null);
+    await home.core.until(
+      () => device.voiceMessages.length === 2,
+      "button run ended",
+    );
+    expect((await read()).heardWakeWordAt).toBeNull();
     const before = Date.now();
 
     device.wake();
@@ -117,6 +165,36 @@ describe("a smart speaker's page", () => {
     const heard = (await read()).heardWakeWordAt!;
     expect(heard).toBeGreaterThanOrEqual(before);
     expect(heard).toBeLessThanOrEqual(Date.now());
+
+    await device.unplug();
+    await home.core.stop();
+    await home.core.start();
+    expect(await read()).toEqual({
+      microphones: null,
+      ring: null,
+      heardWakeWordAt: heard,
+    });
+  });
+
+  it("tracks the wake word of a speaker without microphone or ring controls", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      voiceAssistant: true,
+      entities: [player],
+    });
+    const key = await add(home.core, device);
+    await home.core.until(() => device.voiceFollowed, "its requests followed");
+    const read = () =>
+      home.core.call("esphome.speaker", {
+        device: `device:${key}`,
+      }) as Promise<SpeakerState>;
+
+    device.wake();
+    await eventually(
+      async () => (await read()).heardWakeWordAt !== null,
+      "heard",
+    );
+    expect(await read()).toMatchObject({ microphones: null, ring: null });
   });
 
   it("isn't a smart speaker's page on another device", async () => {

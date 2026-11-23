@@ -7,7 +7,7 @@ import {
 } from "esphome-client";
 
 import type { Session } from "./connection.js";
-import type { Facts } from "./facts.js";
+import { ringColourDistance, ringRgb } from "./ring-colour.js";
 import { hasVoiceAssistant } from "./registration.js";
 
 // A smart speaker's own parts, which only ESPHome's page shows: its
@@ -20,13 +20,15 @@ import { hasVoiceAssistant } from "./registration.js";
 /** A smart speaker's own parts, by their entities, where it has them. */
 export type SpeakerParts = { mute: Entity | null; ring: Entity | null };
 
-/** What a smart speaker's page shows of it. */
-export type SpeakerState = {
+export type SpeakerSettings = {
   /** Whether its microphones are on, unknown until it says. */
   microphones: boolean | null;
   /** Its ring, unknown until it says. */
   ring: Ring | null;
-  /** When it last heard its wake word, in ms since the epoch. */
+};
+
+/** What a smart speaker's page shows of it. */
+export type SpeakerState = SpeakerSettings & {
   heardWakeWordAt: number | null;
 };
 
@@ -58,149 +60,113 @@ export function speakerPartsOf(
         each.entityCategory === EntityCategory.CONFIG,
     ) ?? null;
   const parts = { mute: own("switch", "mute"), ring: own("light", "led_ring") };
-  return parts.mute || parts.ring ? parts : null;
+  return parts;
 }
 
-/** The names of a speaker's parts, which its page shows as its own. */
-export const partNames = (parts: SpeakerParts | null) =>
-  [parts?.mute?.name, parts?.ring?.name].filter(
-    (name): name is string => name !== undefined,
-  );
-
 const hex = (value: number) =>
-  Math.round(Math.min(1, Math.max(0, value)) * 255)
+  Math.round(unit(value) * 255)
     .toString(16)
     .padStart(2, "0");
 
+function unit(value: number) {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
 function ringOf(event: TelemetryEvent & { type: "light" }): Ring {
-  const brightness =
-    typeof event.brightness === "number" && Number.isFinite(event.brightness)
-      ? event.brightness
-      : 0;
   return {
     glow: event.state === true,
     colour: `#${hex(event.red ?? 0)}${hex(event.green ?? 0)}${hex(event.blue ?? 0)}`,
-    brightness: Math.round(Math.min(1, Math.max(0, brightness)) * 100),
+    brightness: Math.round(unit(event.brightness ?? 0) * 100),
   };
 }
 
-const rgbOf = (colour: string) => ({
-  r: parseInt(colour.slice(1, 3), 16) / 255,
-  g: parseInt(colour.slice(3, 5), 16) / 255,
-  b: parseInt(colour.slice(5, 7), 16) / 255,
-});
+export function speakerSettingsOf(
+  { client }: Session,
+  { mute, ring }: SpeakerParts,
+): SpeakerSettings {
+  const switches = mute && client.latest(entityId("switch", mute.objectId));
+  const lights = ring && client.latest(entityId("light", ring.objectId));
+  return {
+    microphones: switches ? switches.state !== true : null,
+    ring: lights ? ringOf(lights) : null,
+  };
+}
 
-// How long a change may take to show in what the speaker says: a muted
-// speaker whose side switch holds it so says it's still muted.
-const settleMs = 2_000;
+async function changeMicrophones(
+  { client }: Session,
+  mute: Entity,
+  microphones: boolean,
+) {
+  const id = entityId("switch", mute.objectId);
+  const muted = !microphones;
+  const matches = (event: TelemetryEvent & { type: "switch" }) =>
+    (event.state === true) === muted;
+  const current = client.latest(id);
+  if (current && matches(current)) return;
+  try {
+    await client.commandAndAwait(id, { state: muted }, { predicate: matches });
+  } catch (error) {
+    // The hardware switch can prevent unmuting while the connection stays open.
+    if (
+      microphones &&
+      error instanceof DOMException &&
+      error.name === "TimeoutError" &&
+      client.latest(id)?.state === true
+    ) {
+      throw new ActionError("conflict", "Still muted by its side switch");
+    }
+    throw error;
+  }
+}
 
-/** Every smart speaker's own parts, as their connections last told them. */
-export function createSpeakers(facts: Facts) {
-  const said = new Map<string, { muted?: boolean; ring?: Ring }>();
-  const waiters = new Set<() => void>();
-
-  function until(check: () => boolean, ms: number) {
-    if (check()) return Promise.resolve(true);
-    return new Promise<boolean>((resolve) => {
-      const waiter = () => {
-        if (!check()) return;
-        clearTimeout(timer);
-        waiters.delete(waiter);
-        resolve(true);
-      };
-      const timer = setTimeout(() => {
-        waiters.delete(waiter);
-        resolve(false);
-      }, ms);
-      waiters.add(waiter);
-    });
+async function changeRing(
+  { client }: Session,
+  ring: Entity,
+  change: Partial<Ring>,
+) {
+  const { glow, brightness, colour } = change;
+  if (glow === undefined && brightness === undefined && colour === undefined) {
+    return;
   }
 
-  return {
-    /** Takes what a speaker's connection says of its parts. */
-    observe(mac: string, parts: SpeakerParts | null, event: TelemetryEvent) {
-      if (!parts) return;
-      const now = said.get(mac) ?? {};
-      if (event.type === "switch" && event.key === parts.mute?.key) {
-        now.muted = event.state === true;
-      } else if (event.type === "light" && event.key === parts.ring?.key) {
-        now.ring = ringOf(event);
-      } else return;
-      said.set(mac, now);
-      for (const waiter of [...waiters]) waiter();
-    },
-
-    /** That a speaker heard its wake word now. */
-    async heard(mac: string) {
-      await facts.heard(mac, Date.now());
-    },
-
-    /** What a speaker's page shows, or null for a device that isn't one. */
-    async read(mac: string, parts: SpeakerParts | null) {
-      if (!parts) return null;
-      const now = said.get(mac);
-      const muted = parts.mute ? now?.muted : undefined;
-      const state: SpeakerState = {
-        microphones: muted === undefined ? null : !muted,
-        ring: parts.ring ? (now?.ring ?? null) : null,
-        heardWakeWordAt: (await facts.read(mac))?.heardWakeWordAt ?? null,
-      };
-      return state;
-    },
-
-    /**
-     * Changes a speaker's parts. Microphones turned on that stay muted, as
-     * its side switch holds them, are refused as a conflict.
-     */
-    async change(
-      mac: string,
-      session: Session,
-      parts: SpeakerParts,
-      change: SpeakerChange,
-    ) {
-      const { client } = session;
-      if (change.ring) {
-        if (!parts.ring) throw new ActionError("not_found", "It has no ring");
-        const ring = { ...said.get(mac)?.ring, ...change.ring };
-        const options: Record<string, unknown> = {};
-        if (change.ring.glow !== undefined) options.state = change.ring.glow;
-        if (change.ring.brightness !== undefined) {
-          options.brightness = change.ring.brightness / 100;
-        }
-        if (change.ring.colour !== undefined) {
-          options.rgb = rgbOf(change.ring.colour);
-          options.colorBrightness = 1;
-        }
-        // An unlit ring keeps its colour and brightness for when it's busy.
-        options.state ??= ring.glow ?? false;
-        client.command(
-          entityId("light", parts.ring.objectId),
-          options as never,
-        );
-      }
-      if (change.microphones !== undefined) {
-        if (!parts.mute) {
-          throw new ActionError("not_found", "It has no microphones' switch");
-        }
-        const muted = !change.microphones;
-        client.command(entityId("switch", parts.mute.objectId), {
-          state: muted,
-        });
-        const took = await until(
-          () => said.get(mac)?.muted === muted,
-          settleMs,
-        );
-        if (!took && change.microphones) {
-          throw new ActionError("conflict", "Still muted by its side switch");
-        }
-        if (!took) throw new Error("It didn't say it was muted");
-      }
-    },
-
-    forget(mac: string) {
-      said.delete(mac);
-    },
+  const id = entityId("light", ring.objectId);
+  const matches = (event: TelemetryEvent & { type: "light" }) => {
+    const actual = ringOf(event);
+    return (
+      (glow === undefined || actual.glow === glow) &&
+      (brightness === undefined || actual.brightness === brightness) &&
+      (colour === undefined || ringColourDistance(actual.colour, colour) <= 2)
+    );
   };
+  const current = client.latest(id);
+  if (current && matches(current)) return;
+
+  // ESPHome keeps the fields a command leaves out, including whether it glows.
+  await client.commandAndAwait(
+    id,
+    {
+      ...(glow !== undefined && { state: glow }),
+      ...(brightness !== undefined && { brightness: brightness / 100 }),
+      ...(colour !== undefined && { rgb: ringRgb(colour), colorBrightness: 1 }),
+    },
+    { predicate: matches },
+  );
 }
 
-export type Speakers = ReturnType<typeof createSpeakers>;
+export async function changeSpeaker(
+  session: Session,
+  parts: SpeakerParts,
+  change: SpeakerChange,
+) {
+  if (change.microphones !== undefined && !parts.mute) {
+    throw new ActionError("not_found", "It has no microphones' switch");
+  }
+  if (change.ring && !parts.ring) {
+    throw new ActionError("not_found", "It has no ring");
+  }
+  if (change.microphones !== undefined && parts.mute) {
+    await changeMicrophones(session, parts.mute, change.microphones);
+  }
+  if (change.ring && parts.ring)
+    await changeRing(session, parts.ring, change.ring);
+}

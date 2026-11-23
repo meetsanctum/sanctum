@@ -28,7 +28,8 @@ export const timings = {
   askAgainMs: 150,
 };
 
-export const app = () => createEsphomeApp({ timings });
+export const app = (overrides: Partial<typeof timings> = {}) =>
+  createEsphomeApp({ timings: { ...timings, ...overrides } });
 
 let macs = 0;
 
@@ -168,9 +169,9 @@ export const signalEntity: EmulatedEntity = {
 };
 
 /** A home with ESPHome running, and the devices it hears of. */
-export async function startHome() {
+export async function startHome(timingOverrides?: Partial<typeof timings>) {
   const devices: EmulatedDevice[] = [];
-  const core = createDriverCore(app(), { migrationsFolder });
+  const core = createDriverCore(app(timingOverrides), { migrationsFolder });
   await core.start();
   return {
     core,

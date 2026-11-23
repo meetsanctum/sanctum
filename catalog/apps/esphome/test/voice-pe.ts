@@ -19,7 +19,7 @@ export const player: EmulatedEntity = {
 };
 
 // The parts a Voice PE shows over its API, as its firmware names them.
-export const voicePeEntities: EmulatedEntity[] = [
+const voicePeEntities: EmulatedEntity[] = [
   player,
   {
     type: "event",
