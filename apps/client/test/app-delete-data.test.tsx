@@ -96,6 +96,23 @@ describe("deleting a removed app's data", () => {
     ).toBe(
       "Its settings and what it saved are deleted, so adding it back starts it afresh.",
     );
+    expect(
+      deletingWords({
+        ...example,
+        adds: { ...example.adds, devices: false },
+        requests: [
+          {
+            id: "services:ollama",
+            reason: "To run AI models on Sanctum.",
+            needed: true,
+            asked: null,
+            startsOn: false,
+          },
+        ],
+      }),
+    ).toBe(
+      "Its settings and what it saved are deleted, so adding it back starts it afresh. Unless another app uses Ollama, the models it downloaded are deleted too.",
+    );
   });
 
   it("asks first, with Cancel focused, then deletes it", async () => {

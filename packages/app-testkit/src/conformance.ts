@@ -77,6 +77,11 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
     },
     readModel: notFound,
     cancelModel: notFound,
+    hostResources: async () => ({
+      processor: { name: null, cores: 4, matrixInstructions: null },
+      memory: null,
+      storage: null,
+    }),
   };
 }
 

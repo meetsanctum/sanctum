@@ -25,13 +25,18 @@ export function deletingWords(app: AvailableApp) {
   const words = app.adds.devices
     ? "Its devices, their history and its settings are deleted, so adding it back means adding every device again."
     : "Its settings and what it saved are deleted, so adding it back starts it afresh.";
-  // A service holds a driver's network, as Zigbee2MQTT does, and goes only
-  // when no other app uses it, which this sheet can't tell.
-  const hasNetwork = app.requests.some((request) =>
-    request.id.startsWith("services:"),
-  );
-  return hasNetwork
-    ? `${words} Unless another app uses its network, that's erased too, so every ${app.name} device has to be paired again.`
+  // A service's data goes only when no other app uses it, which this sheet
+  // can't tell: a driver's network, as Zigbee2MQTT holds it, or Ollama's
+  // models.
+  const services = app.requests
+    .filter((request) => request.id.startsWith("services:"))
+    .map((request) => request.id.slice("services:".length));
+  if (services.length === 0) return words;
+  if (app.adds.devices) {
+    return `${words} Unless another app uses its network, that's erased too, so every ${app.name} device has to be paired again.`;
+  }
+  return services.includes("ollama")
+    ? `${words} Unless another app uses Ollama, the models it downloaded are deleted too.`
     : words;
 }
 

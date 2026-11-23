@@ -117,6 +117,7 @@ function home(
     openModel: unused,
     readModel: unused,
     cancelModel: unused,
+    hostResources: unused,
     log() {},
   };
   return {

@@ -1,0 +1,322 @@
+{
+  "id": "sanctum.ollama",
+  "name": "Ollama",
+  "version": "0.1.0",
+  "core": "^2.0.0",
+  "protocol": 15,
+  "summary": "AI models on Sanctum itself, so what's asked stays in your home.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": null,
+  "driver": null,
+  "permissions": [
+    {
+      "id": "services:ollama",
+      "reason": "To run AI models on Sanctum.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "cpu",
+    "color": "iris"
+  },
+  "pages": [
+    "main"
+  ],
+  "settings": null,
+  "actions": [
+    {
+      "id": "ollama.status",
+      "title": "Models on Sanctum",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "isAnswering": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "object",
+            "properties": {
+              "processor": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "cores": {
+                    "type": "number"
+                  },
+                  "isLikelySlow": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "cores",
+                  "isLikelySlow"
+                ],
+                "additionalProperties": false
+              },
+              "memory": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "totalBytes": {
+                        "type": "number"
+                      },
+                      "roomBytes": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "totalBytes",
+                      "roomBytes"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "storage": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "freeBytes": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "freeBytes"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "processor",
+              "memory",
+              "storage"
+            ],
+            "additionalProperties": false
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "number"
+                },
+                "memoryBytes": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "sizeBytes",
+                "memoryBytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "downloads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "completedBytes": {
+                  "type": "number"
+                },
+                "totalBytes": {
+                  "type": "number"
+                },
+                "bytesPerSecond": {
+                  "type": "number"
+                },
+                "problem": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "completedBytes",
+                "totalBytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "offered": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "number"
+                },
+                "memoryBytes": {
+                  "type": "number"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "isSuggested": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "sizeBytes",
+                "memoryBytes",
+                "isSuggested"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "isAnswering",
+          "host",
+          "models",
+          "downloads",
+          "offered"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "ollama.download",
+      "title": "Download a model",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+          },
+          "anyway": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "ollama.stop",
+      "title": "Stop a download",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "ollama.remove",
+      "title": "Remove a model",
+      "tier": "destructive",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

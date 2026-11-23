@@ -28,6 +28,7 @@ import type {
   Actor,
   EventDefinition,
 } from "./index.js";
+import type { HostResources } from "./host.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type {
   ModelAnswer,
@@ -144,6 +145,8 @@ export interface CoreCalls {
   }): Promise<ModelAnswerPiece[]>;
   /** Stops an answer. */
   cancelModel(handle: string): Promise<void>;
+  /** What the machine Sanctum runs on has now. */
+  hostResources(): Promise<HostResources>;
   log(message: string): void;
 }
 
@@ -381,6 +384,13 @@ export interface AppContext {
      */
     answer(question: ModelQuestion): ModelAnswer;
   };
+  readonly host: {
+    /**
+     * What the machine Sanctum runs on has now: its processor, and the
+     * memory and storage it has free.
+     */
+    resources(): Promise<HostResources>;
+  };
   log(message: string): void;
 }
 
@@ -546,6 +556,7 @@ export function createAppContext(options: {
       source: () => core.modelSource(),
       answer: (question) => modelAnswerOf(core, question),
     },
+    host: { resources: () => core.hostResources() },
     log: (message) => core.log(message),
   };
 }

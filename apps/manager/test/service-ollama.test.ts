@@ -144,7 +144,11 @@ describe("Ollama on the host", () => {
     const { connection } = await services.need("ollama", app);
     await settle();
 
-    expect(connection).toEqual({ http: { url: ollamaUrl } });
+    expect(connection).toEqual({
+      http: { url: ollamaUrl },
+      // What Ollama may take: half of 16 GiB.
+      memoryBytes: 8 * gib,
+    });
     const container = docker.container("sanctum-ollama")!;
     expect(container.options.Image).toBe(ollamaImage);
     expect(container.options.Env).toEqual(

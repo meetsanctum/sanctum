@@ -619,6 +619,9 @@ describe("an app's calls on an AI agent's behalf", () => {
         list: () => [],
       },
       models: { source: () => null },
+      host: async () => {
+        throw new Error("not in this test");
+      },
       log() {},
     });
     return { core, maya, lamp, plug, calls };

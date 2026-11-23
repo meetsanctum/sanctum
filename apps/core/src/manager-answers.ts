@@ -121,7 +121,10 @@ export const hostStatus = z.object({
     })
     .nullable(),
   processor: z.object({
+    // An older manager says neither.
+    name: z.string().nullable().optional(),
     cores: z.number(),
+    matrixInstructions: z.boolean().nullable().optional(),
     usage: z.number().nullable(),
     mhz: z.number().nullable(),
     celsius: z.number().nullable(),

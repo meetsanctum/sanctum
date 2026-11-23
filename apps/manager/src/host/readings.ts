@@ -35,6 +35,24 @@ export function modelOf(cpuinfo: string) {
   return match ? match[1]!.replace(/\s+Rev\s+[\w.]+$/, "").trim() : null;
 }
 
+/** The processor's name, as x86's cpuinfo gives it: "Intel(R) N150". */
+export function processorNameOf(cpuinfo: string) {
+  const match = /^model name\s*:\s*(.+)$/m.exec(cpuinfo);
+  return match ? match[1]!.replace(/\s+/g, " ").trim() : null;
+}
+
+/**
+ * Whether the processor has the vector instructions an AI model runs
+ * quickly on without graphics: AVX2 on x86, or the dot product (asimddp) on
+ * ARM. Null where cpuinfo names neither kind of flags.
+ */
+export function matrixInstructionsOf(cpuinfo: string) {
+  const flags = /^(flags|Features)\s*:\s*(.+)$/m.exec(cpuinfo);
+  if (!flags) return null;
+  const names = new Set(flags[2]!.trim().split(/\s+/));
+  return names.has("avx2") || names.has("asimddp");
+}
+
 const kib = 1024;
 
 export function memoryOf(meminfo: string): MemoryReading | null {
@@ -133,6 +151,14 @@ export function createHostReadings(
     async model() {
       const cpuinfo = await text("proc/cpuinfo");
       return cpuinfo ? modelOf(cpuinfo) : null;
+    },
+
+    async processor() {
+      const cpuinfo = await text("proc/cpuinfo");
+      return {
+        name: cpuinfo ? processorNameOf(cpuinfo) : null,
+        matrixInstructions: cpuinfo ? matrixInstructionsOf(cpuinfo) : null,
+      };
     },
 
     async uptimeSeconds() {

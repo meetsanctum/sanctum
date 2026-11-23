@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
 import type { Turns } from "../models/turns.js";
+import type { ManagerClient } from "../manager.js";
+import { hostResourcesOf } from "./host-resources.js";
 import type { AgentsCanUse, AppOffers } from "../agents/can-use.js";
 import type { Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
@@ -73,7 +75,9 @@ function message(error: unknown) {
 export function createAppHost(options: {
   gate: Gate;
   activity: Activity;
-  manager: ServiceManager & AppContainerManager;
+  manager: ServiceManager &
+    AppContainerManager &
+    Pick<ManagerClient, "hostStatus">;
   people: Pick<People, "list">;
   places: Pick<PlacesModule, "list" | "location">;
   devices: Devices;
@@ -171,6 +175,7 @@ export function createAppHost(options: {
   const contexts = createAppContexts({
     ...options,
     modelSource: options.turns.source,
+    host: async () => hostResourcesOf(await options.manager.hostStatus()),
     entities: options.entities,
     now,
     isOff: (appId) => installed.get(appId)?.off === true,

@@ -70,6 +70,7 @@ export * from "./lights.js";
 export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
+export * from "./host.js";
 export * from "./net.js";
 export * from "./pairing.js";
 export * from "./people.js";

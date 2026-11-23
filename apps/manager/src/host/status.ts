@@ -74,7 +74,11 @@ export type HostStatus = {
     images: ImageStatus[];
   } | null;
   processor: {
+    // Its name where the kernel gives one, as x86's do.
+    name: string | null;
     cores: number;
+    // Whether it has the vector instructions AI models run quickly on.
+    matrixInstructions: boolean | null;
     // From 0 to 1, over the last sample.
     usage: number | null;
     mhz: number | null;
@@ -337,6 +341,7 @@ export function createHostStatus(options: {
         celsius,
         network,
         clock,
+        processor,
       ] = await Promise.all([
         readings.model(),
         hostSystem(),
@@ -349,6 +354,7 @@ export function createHostStatus(options: {
         readings.celsius(),
         readings.network(),
         options.clock(),
+        readings.processor(),
       ]);
       const images = (await options.images?.listOrNone()) ?? [];
       return {
@@ -374,7 +380,14 @@ export function createHostStatus(options: {
               : [{ service: name, apps: appsOf(name, services), bytes }];
           }),
         },
-        processor: { cores: readings.cores(), usage, mhz, celsius },
+        processor: {
+          name: processor.name,
+          cores: readings.cores(),
+          matrixInstructions: processor.matrixInstructions,
+          usage,
+          mhz,
+          celsius,
+        },
         power:
           low === null
             ? null

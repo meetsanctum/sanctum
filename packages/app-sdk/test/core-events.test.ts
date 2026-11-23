@@ -57,6 +57,7 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     openModel: unused,
     readModel: unused,
     cancelModel: unused,
+    hostResources: unused,
     log() {},
   };
   return createAppContext({
