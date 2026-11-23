@@ -229,6 +229,7 @@ export function createDriverCore(
     openModel: absent,
     readModel: absent,
     cancelModel: absent,
+    hostResources: absent,
     devices: async () => [...registered.values()].map(infoOf),
     async device(id) {
       const device = [...registered.values()].find(

@@ -74,6 +74,7 @@ export const coreCallMethods = [
   "openModel",
   "readModel",
   "cancelModel",
+  "hostResources",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 

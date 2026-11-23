@@ -24,6 +24,7 @@ COPY packages/ui-sdk/bin packages/ui-sdk/bin
 COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json
 COPY catalog/apps/natural-light/package.json catalog/apps/natural-light/package.json
+COPY catalog/apps/ollama/package.json catalog/apps/ollama/package.json
 COPY catalog/apps/weather/package.json catalog/apps/weather/package.json
 COPY catalog/apps/zigbee/package.json catalog/apps/zigbee/package.json
 RUN pnpm install --filter @meetsanctum/core... --filter "{./catalog/apps/**}..." --frozen-lockfile

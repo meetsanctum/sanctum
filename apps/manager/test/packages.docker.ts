@@ -389,10 +389,9 @@ describe("the apps' packages on real images", () => {
 
     for (const { id, version, runtime, permissions } of shipped) {
       const folder = staged.apps[id]!.current.folder;
-      // A driver's start waits for its service, which this home's broker,
-      // reachable by nobody, never gives it; then nothing else reaches it.
-      const isWaiting = permissions.some((each) =>
-        each.id.startsWith("services:"),
+      // The Zigbee driver waits for a broker the test keeps unreachable.
+      const isWaiting = permissions.some(
+        ({ id }) => id === "services:zigbee2mqtt",
       );
       const started = await api("PUT", `/api/apps/${id}/container`, {
         folder,
@@ -408,7 +407,7 @@ describe("the apps' packages on real images", () => {
         };
 
         // What it names first is what was staged.
-        expect(report).toMatchObject({
+        expect(report, `Conformance report for ${id}`).toMatchObject({
           hello: {
             type: "hello",
             protocol: expect.any(Number),
@@ -447,6 +446,15 @@ describe("the apps' packages on real images", () => {
             outcome.ok || outcome.code !== undefined,
             `${action}: ${JSON.stringify(outcome)}`,
           ).toBe(true);
+        }
+        if (id === "sanctum.ollama") {
+          expect(report.reads).toContainEqual({
+            action: "ollama.status",
+            outcome: {
+              ok: true,
+              value: expect.objectContaining({ isAnswering: false }),
+            },
+          });
         }
 
         const container = await docker(

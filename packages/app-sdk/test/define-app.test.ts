@@ -701,6 +701,7 @@ const noCore: CoreCalls = {
   openModel: unused,
   readModel: unused,
   cancelModel: unused,
+  hostResources: unused,
   log() {},
 };
 

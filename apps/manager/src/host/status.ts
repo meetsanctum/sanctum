@@ -74,7 +74,11 @@ export type HostStatus = {
     images: ImageStatus[];
   } | null;
   processor: {
+    // Its name where the kernel gives one, as x86's do.
+    name: string | null;
     cores: number;
+    // Whether it has the vector instructions AI models run quickly on.
+    matrixInstructions: boolean | null;
     // From 0 to 1, over the last sample.
     usage: number | null;
     mhz: number | null;
@@ -304,6 +308,17 @@ export function createHostStatus(options: {
     return system;
   }
 
+  // These readings need only the kernel and filesystem. Apps can poll them
+  // without starting Docker requests or counting what takes up space.
+  async function resources() {
+    const [cpu, memory, storage] = await Promise.all([
+      readings.processor(),
+      readings.memory(),
+      readings.disk(dataDir),
+    ]);
+    return { ...cpu, memory, storage };
+  }
+
   return {
     start() {
       void sample();
@@ -316,6 +331,7 @@ export function createHostStatus(options: {
     },
 
     sample,
+    resources,
 
     // Counts what takes the space again at the next look, once something
     // has freed some.
@@ -326,24 +342,20 @@ export function createHostStatus(options: {
     async status(): Promise<HostStatus> {
       const services = options.services?.list() ?? [];
       const [
-        model,
+        { model, processor, memory, storage: disk },
         os,
         uptimeSeconds,
-        memory,
         containers,
-        disk,
         counted,
         mhz,
         celsius,
         network,
         clock,
       ] = await Promise.all([
-        readings.model(),
+        resources(),
         hostSystem(),
         readings.uptimeSeconds(),
-        readings.memory(),
         containersMemory(services).catch(() => []),
-        readings.disk(dataDir),
         currentSizes(),
         readings.mhz(),
         readings.celsius(),
@@ -374,7 +386,7 @@ export function createHostStatus(options: {
               : [{ service: name, apps: appsOf(name, services), bytes }];
           }),
         },
-        processor: { cores: readings.cores(), usage, mhz, celsius },
+        processor: { ...processor, usage, mhz, celsius },
         power:
           low === null
             ? null

@@ -1,4 +1,5 @@
 import { sightingLostSchema, sightingSchema } from "@meetsanctum/app-sdk";
+import type { HostResources } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 // What the manager answers the core, in the shapes the core checks every
@@ -121,7 +122,10 @@ export const hostStatus = z.object({
     })
     .nullable(),
   processor: z.object({
+    // An older manager says neither.
+    name: z.string().nullable().optional(),
     cores: z.number(),
+    matrixInstructions: z.boolean().nullable().optional(),
     usage: z.number().nullable(),
     mhz: z.number().nullable(),
     celsius: z.number().nullable(),
@@ -152,6 +156,35 @@ export const hostStatus = z.object({
   ),
 });
 export type HostStatus = z.infer<typeof hostStatus>;
+
+// Apps only see the resource readings, even if an older manager sends
+// the full status.
+export const hostResources = hostStatus
+  .pick({ model: true })
+  .extend({
+    processor: hostStatus.shape.processor.pick({
+      name: true,
+      cores: true,
+      matrixInstructions: true,
+    }),
+    memory: hostStatus.shape.memory
+      .unwrap()
+      .pick({ total: true, available: true })
+      .nullable(),
+    storage: hostStatus.shape.storage.unwrap().pick({ free: true }).nullable(),
+  })
+  .transform((status): HostResources => ({
+    processor: {
+      name: status.model ?? status.processor.name ?? null,
+      cores: status.processor.cores,
+      matrixInstructions: status.processor.matrixInstructions ?? null,
+    },
+    memory: status.memory && {
+      totalBytes: status.memory.total,
+      availableBytes: status.memory.available,
+    },
+    storage: status.storage && { freeBytes: status.storage.free },
+  }));
 
 // The host's last 24 hours (apps/manager/src/host/history.ts): each 5
 // minutes' mean, oldest first.

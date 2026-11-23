@@ -42,6 +42,9 @@ describe("service connections from ended contexts", () => {
         pairing: () => core.pairing,
         secrets: { get: () => null, put() {}, remove() {} },
         models: { source: () => null },
+        host: async () => {
+          throw new Error("not in this test");
+        },
         log() {},
       });
       const requested = calls.serviceConnection("mosquitto");

@@ -85,7 +85,7 @@ export type ServerOptions = {
   // What the manager did on its own, which the core copies (audit.ts).
   audit?: Audit;
   // The host's status, for Settings → Status (host/status.ts).
-  status?: Pick<HostStatusReporter, "status">;
+  status?: Pick<HostStatusReporter, "status" | "resources">;
   // The host's last 24 hours (host/history.ts).
   history?: Pick<HostHistory, "points">;
   // What apps look for on the home's network (discovery.ts).
@@ -237,12 +237,17 @@ export function createServer(
 
   // What the host is and how it is doing: its model and system, memory,
   // storage, processor, power and network, and its services.
-  app.get("/api/host/status", async (_request, reply) => {
-    if (!options.status) {
-      return reply.code(503).send({ error: "This manager reports no host" });
-    }
-    return options.status.status();
-  });
+  app.get<{ Querystring: { view?: string } }>(
+    "/api/host/status",
+    async (request, reply) => {
+      if (!options.status) {
+        return reply.code(503).send({ error: "This manager reports no host" });
+      }
+      return request.query.view === "resources"
+        ? options.status.resources()
+        : options.status.status();
+    },
+  );
 
   // How busy, how warm and how full of memory the host was in each 5
   // minutes of the last 24 hours.

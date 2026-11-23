@@ -161,6 +161,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       openModel: absent,
       readModel: absent,
       cancelModel: absent,
+      hostResources: absent,
       entities: absent,
       fetch: absent,
       emit: absent,

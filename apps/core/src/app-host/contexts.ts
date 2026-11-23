@@ -6,6 +6,7 @@ import {
   type Actor,
   type AppContext,
   type CoreCalls,
+  type HostResources,
   type ModelSourceShown,
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
@@ -67,6 +68,8 @@ export function createAppContexts(options: {
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model in use, as apps see it.
   modelSource: () => ModelSourceShown | null;
+  // What the machine Sanctum runs on has now.
+  host: () => Promise<HostResources>;
   log: (message: string) => void;
   now: () => Date;
   // Whether someone turned an app off: other apps don't read what it brought.
@@ -220,6 +223,7 @@ export function createAppContexts(options: {
       blobs: () => (options.isInstalled(entry) ? options.blobs : undefined),
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
+      host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });
     const ctx = createAppContext({

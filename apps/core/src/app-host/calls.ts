@@ -21,6 +21,7 @@ import {
   type CoreCalls,
   type CoreEventName,
   type DeviceInfo,
+  type HostResources,
   type ModelSourceShown,
   type ServiceConnection,
 } from "@meetsanctum/app-sdk";
@@ -191,6 +192,8 @@ export function createCoreCalls(options: {
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model, and the turn this call opened, if it opened one.
   models: { source: () => ModelSourceShown | null; turn?: Turn };
+  // What the machine Sanctum runs on has now.
+  host: () => Promise<HostResources>;
   log: (message: string) => void;
 }): CoreCalls {
   const { appId, actor, devices, agents } = options;
@@ -592,6 +595,12 @@ export function createCoreCalls(options: {
       const pieces = await turn.read(read?.handle, read?.after);
       need(modelsUsePermission);
       return pieces;
+    },
+
+    // What the host has: nothing private, so it needs no permission.
+    async hostResources() {
+      open();
+      return options.host();
     },
 
     async cancelModel(handle) {
