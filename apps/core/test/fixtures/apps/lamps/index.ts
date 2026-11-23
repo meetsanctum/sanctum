@@ -711,9 +711,17 @@ export default defineApp({
       title: "Nudge it",
       tier: "write",
       aboutDevice: { done: "Nudged it" },
-      input: z.object({ device: z.string() }),
+      input: z.object({
+        device: z.string(),
+        effect: z.enum(["refused", "failed", "offline"]).optional(),
+      }),
       output: z.object({}),
-      async run() {
+      async run(ctx, { effect }) {
+        if (effect === "refused") throw new ActionError("conflict");
+        if (effect === "failed") throw new Error("It didn't answer");
+        if (effect === "offline") {
+          await ctx.devices.report({ key: "lamp-1", availability: "offline" });
+        }
         return {};
       },
     }),

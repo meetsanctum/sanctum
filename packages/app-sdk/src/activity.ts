@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // The activity log: what happened in the home, who did it and how it ended,
 // as the core's activity routes answer it and its live socket pushes it.
 // History says what a device was; the log says what was done and by whom,
@@ -11,6 +13,12 @@ export const activityKinds = [
   "system",
 ] as const;
 export type ActivityKind = (typeof activityKinds)[number];
+
+/** The past-tense words Activity keeps for an action about a device. */
+export const deviceActionActivitySchema = z.object({
+  done: z.string().min(1).max(80).regex(/\S/),
+});
+export type DeviceActionActivity = z.infer<typeof deviceActionActivitySchema>;
 
 /** How it ended: done, refused, or failed, as a device that did not answer. */
 export type ActivityOutcome = "ok" | "refused" | "failed";

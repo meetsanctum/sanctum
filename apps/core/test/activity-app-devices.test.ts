@@ -16,8 +16,18 @@ async function activityOf(core: TestCore, token: string, device?: string) {
   return page.entries.filter((entry) => entry.action === "lamps.nudge");
 }
 
-const nudge = (core: TestCore, token: string, device: string) =>
-  post(core, "/api/apps/test.lamps/actions/lamps.nudge", { device }, { token });
+const nudge = (
+  core: TestCore,
+  token: string,
+  device: string,
+  effect?: "refused" | "failed" | "offline",
+) =>
+  post(
+    core,
+    "/api/apps/test.lamps/actions/lamps.nudge",
+    { device, effect },
+    { token },
+  );
 
 describe("an app's action about one of its devices", () => {
   it("is about the device, says what it did, and shows in the device's activity", async () => {
@@ -74,6 +84,108 @@ describe("an app's action about one of its devices", () => {
     await nudge(core, maya.token, "not-a-device");
 
     const [entry] = await activityOf(core, maya.token);
-    expect(entry).toMatchObject({ done: "Nudged it", subject: null });
+    expect(entry).toMatchObject({
+      title: "Nudge it",
+      done: null,
+      subject: null,
+    });
   });
+
+  it.each(["refused", "failed"] as const)(
+    "keeps a %s call out of the success count",
+    async (outcome) => {
+      const { core, maya, lamp } = await lampsCore();
+      await nudge(core, maya.token, lamp);
+      core.advance(1_000);
+      await nudge(core, maya.token, lamp);
+      const [success] = await activityOf(core, maya.token, lamp);
+
+      core.advance(1_000);
+      await nudge(core, maya.token, lamp, outcome);
+
+      const entries = await activityOf(core, maya.token, lamp);
+      expect(entries).toEqual([
+        expect.objectContaining({
+          outcome,
+          count: 1,
+          subject: { ...success!.subject },
+        }),
+        success,
+      ]);
+    },
+  );
+
+  it("keeps what a call did after its app is removed", async () => {
+    const { core, maya, lamp } = await lampsCore({ origin: "official" });
+    await nudge(core, maya.token, lamp);
+    const [before] = await activityOf(core, maya.token, lamp);
+
+    expect(
+      (await post(core, "/api/apps/test.lamps/remove", {}, maya)).statusCode,
+    ).toBe(200);
+
+    const [after] = await activityOf(core, maya.token, lamp);
+    expect(after).toMatchObject({
+      title: "Nudge it",
+      done: "Nudged it",
+      subject: {
+        type: "device",
+        id: lamp,
+        name: before!.subject!.name,
+        gone: true,
+      },
+    });
+  });
+
+  it("names the device when its app is off and cannot take the call", async () => {
+    const { core, maya, lamp } = await lampsCore({ origin: "official" });
+    expect(
+      (await post(core, "/api/apps/test.lamps/off", { off: true }, maya))
+        .statusCode,
+    ).toBe(200);
+
+    expect((await nudge(core, maya.token, lamp)).statusCode).toBe(503);
+    const [entry] = await activityOf(core, maya.token, lamp);
+    expect(entry).toMatchObject({
+      outcome: "refused",
+      reason: "unavailable",
+      subject: { id: lamp },
+    });
+  });
+
+  it("gives activity a device action causes an entry of its own", async () => {
+    const { core, maya, lamp } = await lampsCore();
+    await nudge(core, maya.token, lamp);
+    const [first] = await activityOf(core, maya.token, lamp);
+    await nudge(core, maya.token, lamp, "offline");
+
+    const entries = await activityOf(core, maya.token, lamp);
+    expect(entries.map(({ count }) => count)).toEqual([1, 1]);
+    const offline = core.activity
+      .recent()
+      .find(({ action }) => action === "device.offline");
+    expect(offline?.causeId).toBe(entries[0]!.id);
+    expect(entries[1]!.id).toBe(first!.id);
+  });
+
+  it.each(["device.press", "workflow.run"])(
+    "keeps the caller when an app action is named %s",
+    async (action) => {
+      const { core, maya, lamp } = await lampsCore();
+      const id = core.activity.for("sanctum.example")({
+        action,
+        outcome: "ok",
+        subjectId: lamp,
+        personId: maya.person.id,
+        detail: { actionTitle: "Nudge it", actionDone: "Nudged it" },
+      });
+
+      expect(core.activityViews.info(core.activity.get(id)!)).toMatchObject({
+        subject: { type: "device", id: lamp },
+        who: { kind: "person", id: maya.person.id },
+        run: null,
+        caused: null,
+      });
+    },
+  );
 });

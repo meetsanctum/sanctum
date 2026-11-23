@@ -262,7 +262,7 @@ export function createAppHost(options: {
     log,
   });
 
-  const { record, execute } = createActionRunner<InstalledApp>({
+  const { record, recordRefusal, execute } = createActionRunner<InstalledApp>({
     activity,
     timeoutMs,
     log,
@@ -274,7 +274,7 @@ export function createAppHost(options: {
         appName: entry.manifest.name,
         who,
       }),
-    driverOf: (deviceId) => options.devices.get(deviceId)?.driver ?? null,
+    deviceById: options.devices.row,
   });
   const { offChangeOf, ...runChoices } = createAppRunChoices({
     installed,
@@ -320,7 +320,7 @@ export function createAppHost(options: {
     agentWho: activity.agentWho,
     agentCanUse: (appId, actionId) =>
       options.agents.canUse(appId, actionId, "action"),
-    record,
+    recordRefusal,
     execute,
     track,
     timeoutMs,
@@ -498,16 +498,11 @@ export function createAppHost(options: {
       }
     },
 
-    // An installed app's action by its title, and what it says it did to a
-    // device where it acts on one, for the activity log.
-    actionWords(
-      appId: string,
-      actionId: string,
-    ): { title: string; done: string | null } | null {
-      const action = installed.get(appId)?.contract.actions.get(actionId);
-      return action
-        ? { title: action.title, done: action.aboutDevice?.done ?? null }
-        : null;
+    // An installed app's action by its title, for the activity log.
+    actionTitle(appId: string, actionId: string): string | null {
+      return (
+        installed.get(appId)?.contract.actions.get(actionId)?.title ?? null
+      );
     },
 
     /** Whether the apps it started with are installed, so `list` is the home's apps. */

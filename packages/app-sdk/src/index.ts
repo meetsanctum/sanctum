@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import {
+  deviceActionActivitySchema,
+  type DeviceActionActivity,
+} from "./activity.js";
 import type { AssistantOffer } from "./ai-agents.js";
 import { assertAssistantOffers } from "./ai-offer-validation.js";
 import {
@@ -150,9 +154,10 @@ export interface ActionDefinition<
    * That a call acts on one of the app's own devices, which its input's
    * `device` names by the core's id, and what Activity says the call did, in
    * the past tense: "Muted its microphones" reads "Office Speaker muted its
-   * microphones". A person's calls about the same device join one entry.
+   * microphones". In Activity, successful calls to the same action can
+   * join when they are about the same device and by the same caller.
    */
-  readonly aboutDevice?: { done: string };
+  readonly aboutDevice?: DeviceActionActivity;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -780,6 +785,13 @@ function assertAction(action: ActionDefinition) {
   }
   if (action.turn !== undefined && typeof action.turn !== "boolean") {
     throw new Error(`"${id}"'s turn is true or false`);
+  }
+  if (
+    !deviceActionActivitySchema.optional().safeParse(action.aboutDevice).success
+  ) {
+    throw new Error(
+      `"${id}"'s aboutDevice needs a non-blank done phrase of up to 80 characters`,
+    );
   }
 }
 

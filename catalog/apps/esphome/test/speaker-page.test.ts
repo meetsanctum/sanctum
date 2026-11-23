@@ -118,6 +118,14 @@ describe("a smart speaker's page", () => {
     expect((await read()).ring?.colour).toBe("#ff9f0a");
   });
 
+  it("requires a ring setting to change", async () => {
+    const { change } = await addedSpeaker();
+
+    await expect(change({ ring: {} })).rejects.toThrow(
+      "Give at least one ring setting",
+    );
+  });
+
   it("keeps glow on when brightness changes in quick succession", async () => {
     const { device, read, change } = await addedSpeaker();
 

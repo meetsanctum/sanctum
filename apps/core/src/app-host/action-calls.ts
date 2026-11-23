@@ -26,14 +26,21 @@ export function createActionCalls(options: {
   agentWho: Activity["agentWho"];
   // Whether AI agents may run one of an app's actions now.
   agentCanUse: (appId: string, actionId: string) => boolean;
-  record: ActionRunner["record"];
+  recordRefusal: ActionRunner["recordRefusal"];
   execute: ActionRunner["execute"];
   // Counts a call under way until it settles.
   track: <T>(entry: InstalledApp, call: Promise<T>) => Promise<T>;
   timeoutMs: number;
 }) {
-  const { installed, gate, supervisor, accepts, record, execute, timeoutMs } =
-    options;
+  const {
+    installed,
+    gate,
+    supervisor,
+    accepts,
+    recordRefusal,
+    execute,
+    timeoutMs,
+  } = options;
 
   function find(appId: string, actionId: string) {
     const entry = installed.get(appId);
@@ -59,13 +66,14 @@ export function createActionCalls(options: {
     entry: InstalledApp,
     action: DeclaredAction,
     who: ActivityAuthor,
+    input: unknown,
     admit: () => T,
   ): T {
     try {
       return admit();
     } catch (error) {
       if (error instanceof ActionCallError) {
-        record(entry.app.id, action.id, who, "refused", error.code);
+        recordRefusal(entry.app.id, action, who, error.code, input);
       }
       throw error;
     }
@@ -88,7 +96,7 @@ export function createActionCalls(options: {
     if (!accepts(entry) && appStateOf(entry) !== "paused") {
       await supervisor.arrives(entry, timeoutMs);
       if (actor.kind === "assistant-run") {
-        check(entry, action, who, () => {
+        check(entry, action, who, input, () => {
           gate.requireActiveAgent(actor.id);
           admits(entry, action, actor);
         });
@@ -101,7 +109,7 @@ export function createActionCalls(options: {
       withinMs <= 0
     ) {
       if (action.tier !== "read") {
-        record(entry.app.id, action.id, who, "refused", "unavailable");
+        recordRefusal(entry.app.id, action, who, "unavailable", input);
       }
       throw new ActionCallError("unavailable");
     }
@@ -126,7 +134,7 @@ export function createActionCalls(options: {
         principal.scope === "agent"
           ? options.agentWho(principal.client.id)
           : { personId: principal.person?.id, clientId: principal.client.id };
-      const actor = check(entry, action, who, () =>
+      const actor = check(entry, action, who, request.input, () =>
         admits(entry, action, gate.admit(principal, action)),
       );
       return run(entry, action, actor, who, request.input);
@@ -146,7 +154,7 @@ export function createActionCalls(options: {
         actor.kind === "assistant-run"
           ? options.agentWho(actor.id)
           : { actor: `${actor.kind}:${actor.id}` };
-      check(entry, action, who, () => {
+      check(entry, action, who, request.input, () => {
         gate.permit(actor, action);
         admits(entry, action, actor);
       });

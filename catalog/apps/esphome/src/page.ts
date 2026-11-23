@@ -117,12 +117,20 @@ export function changeRingAction(
     title: "Change its ring",
     tier: "write",
     aboutDevice: { done: "Changed its ring" },
-    input: z.object({
-      device: z.string(),
-      glow: z.boolean().optional(),
-      colour: colour.optional(),
-      brightness: z.number().int().min(20).max(100).optional(),
-    }),
+    input: z
+      .object({
+        device: z.string(),
+        glow: z.boolean().optional(),
+        colour: colour.optional(),
+        brightness: z.number().int().min(20).max(100).optional(),
+      })
+      .refine(
+        ({ glow, colour, brightness }) =>
+          glow !== undefined ||
+          colour !== undefined ||
+          brightness !== undefined,
+        "Give at least one ring setting",
+      ),
     output: z.object({}),
     async run(_ctx, { device, ...ring }) {
       await change(device, { ring });

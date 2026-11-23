@@ -60,9 +60,12 @@ function DeviceActivity(props: {
   const entries = activity.entries.slice(0, shown);
   const last = entries.find((entry) =>
     isRemote
-      ? entry.action === "device.press"
-      : (entry.action === "device.command" && entry.outcome === "ok") ||
-        entry.action === "device.changed",
+      ? entry.source === "devices" && entry.action === "device.press"
+      : entry.outcome === "ok" &&
+        (entry.done ||
+          (entry.source === "devices" &&
+            (entry.action === "device.command" ||
+              entry.action === "device.changed"))),
   );
 
   return (

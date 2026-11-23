@@ -4,6 +4,7 @@ import {
   assertDriverProblems,
   appManifestSchema,
   assistantOfferOf,
+  deviceActionActivitySchema,
   roomSectionKinds,
   standardEntityTypes,
   tierSchema,
@@ -12,6 +13,7 @@ import {
   type AppDefinition,
   type AiOfferInfo,
   type AssistantOffer,
+  type DeviceActionActivity,
   type StaticManifest,
   type Tier,
   type WidgetDefinition,
@@ -283,7 +285,7 @@ export type DeclaredAction = {
   turn: boolean;
   // The app's own device a call acts on, by its input's `device`, and what
   // Activity says a call did.
-  aboutDevice: { done: string } | null;
+  aboutDevice: DeviceActionActivity | null;
 };
 
 /** A workflow trigger as its manifest declares it. */
@@ -492,7 +494,7 @@ const manifestShape = z.looseObject({
       input: schema,
       output: schema,
       turn: z.boolean().optional(),
-      aboutDevice: z.object({ done: z.string().min(1).max(80) }).optional(),
+      aboutDevice: deviceActionActivitySchema.optional(),
     }),
   ),
   events: z.array(named.extend({ payload: schema })),

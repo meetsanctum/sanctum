@@ -559,13 +559,6 @@ export function activityWords(
   where: Where = "home",
   rooms: RoomNames = () => null,
 ): Words {
-  if (entry.action === "workflow.run") return runEntry(entry);
-  const words =
-    systemEntry(entry) ??
-    deviceEntry(entry, where, rooms) ??
-    aiEntry(entry) ??
-    setupEntry(entry);
-  if (words) return words;
   // An app's action about one of its devices: what it did, said of the
   // device, and how many times as a slider's steps join.
   if (entry.done && entry.subject?.type === "device") {
@@ -589,6 +582,13 @@ export function activityWords(
       problem: false,
     };
   }
+  if (entry.action === "workflow.run") return runEntry(entry);
+  const words =
+    systemEntry(entry) ??
+    deviceEntry(entry, where, rooms) ??
+    aiEntry(entry) ??
+    setupEntry(entry);
+  if (words) return words;
   // An app's action, by its title.
   const title = entry.title ?? entry.action;
   return {
@@ -601,8 +601,15 @@ export function activityWords(
 /** The last change a device's list starts with, as "Alex turned it on at 21:52". */
 export function lastChangeWords(entry: ActivityInfo) {
   const at = timeText(Date.parse(entry.at));
-  if (entry.action === "device.press") {
+  if (entry.source === "devices" && entry.action === "device.press") {
     return `${pressLabel(String(entry.detail?.action ?? ""))} at ${at}`;
+  }
+  const who =
+    entry.who.kind === "press"
+      ? (entry.who.name ?? "A remote")
+      : whoWords(entry.who) || "Someone";
+  if (entry.done) {
+    return `${who} ${entry.done.charAt(0).toLowerCase()}${entry.done.slice(1)} at ${at}`;
   }
   const asked = (
     entry.action === "device.changed"
@@ -612,10 +619,6 @@ export function lastChangeWords(entry: ActivityInfo) {
   if (entry.who.kind === "device") {
     return `${asked.on ? "Switched on" : "Switched off"} outside ${productName} at ${at}`;
   }
-  const who =
-    entry.who.kind === "press"
-      ? (entry.who.name ?? "A remote")
-      : whoWords(entry.who) || "Someone";
   const did =
     entry.count > 1
       ? "adjusted it"

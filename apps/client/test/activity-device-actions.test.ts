@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activityWords } from "../src/activity/words";
+import { activityWords, lastChangeWords } from "../src/activity/words";
 import { entry } from "./activity-fixtures";
 
 // An app's action about one of its devices, as a smart speaker's page
@@ -64,5 +64,19 @@ describe("an app's action about a device", () => {
     expect(activityWords(ringChange({ subject: null })).title).toBe(
       "Change its ring",
     );
+  });
+
+  it("uses the app's words for the device's last change", () => {
+    expect(lastChangeWords(ringChange({ at: "2026-10-31T21:52:00" }))).toBe(
+      "Alex changed its ring at 21:52",
+    );
+  });
+
+  it("uses the app's words when its action id matches a press", () => {
+    const log = ringChange({
+      action: "device.press",
+      at: "2026-10-31T21:52:00",
+    });
+    expect(lastChangeWords(log)).toBe("Alex changed its ring at 21:52");
   });
 });
