@@ -85,11 +85,13 @@ Sanctum can't take.
   on each side. The call returns a hash the player reports as
   `media.artwork`. Resize oversized pictures and use a still frame from an
   animation. If there is no suitable picture, report what plays without
-  `media.artwork` so the shell shows its own placeholder. The core keeps
-  pictures in memory while a state names them and for 10 minutes afterward.
-  It keeps at most 16 MB and 128 pictures per driver and can drop the oldest
-  unnamed pictures sooner to make room. A driver uploads its picture again
-  when it starts or when it uses a picture its state stopped naming.
+  `media.artwork` so the shell shows its own placeholder. The core keeps a
+  picture in memory while any of that driver's device states name it and
+  for a minute after the last one stops. Report the state that names a new
+  picture within a minute of putting it. The core keeps at most 16 MB and
+  128 pictures per driver and can drop the oldest unnamed pictures sooner to
+  make room. Put a picture again when the driver starts or when it names a
+  picture its devices stopped naming.
 
 ## In the code
 

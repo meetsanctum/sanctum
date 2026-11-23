@@ -9,7 +9,7 @@ import type { LocationChange, PlacesChange } from "./places/places.js";
 // What happened in the core, once it has committed, for the core's modules
 // that follow it. Each module publishes what happened to it, and each
 // follower hears every event in the order it was published, the followers
-// one after the other in the order they were set (modules.ts). Delivery is
+// one after the other in the order set in core-followers.ts. Delivery is
 // synchronous: the first publish delivers before it returns, and one made
 // while an event is being delivered waits until that event has reached every
 // follower. A follower that throws is logged and holds up neither the
