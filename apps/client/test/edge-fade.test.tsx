@@ -11,13 +11,15 @@ import { useEdgeFade } from "../src/edge-fade";
 let root: Root;
 let container: HTMLDivElement;
 
-function Row() {
+function Row(props: { tiles?: number; shown?: boolean }) {
   const row = useRef<HTMLDivElement>(null);
   useEdgeFade(row);
+  if (props.shown === false) return null;
   return (
     <div ref={row}>
-      <span />
-      <span />
+      {Array.from({ length: props.tiles ?? 2 }, (_, index) => (
+        <span key={index} />
+      ))}
     </div>
   );
 }
@@ -79,5 +81,36 @@ describe("a row's edge fade", () => {
     row.dispatchEvent(new Event("scroll"));
     expect(first!.style.maskImage).toBe("");
     expect(second!.style.maskImage).toBe("");
+  });
+
+  it("follows a row from when it appears, and fades a tile added later", async () => {
+    await act(async () => root.render(<Row shown={false} />));
+    await act(async () => root.render(<Row />));
+    const row = container.firstElementChild as HTMLElement;
+    layOut(row, 0, 412);
+    row.dispatchEvent(new Event("scroll"));
+    expect((row.children[1] as HTMLElement).style.maskImage).toBe(
+      "linear-gradient(to right, black 0px, black 64px, transparent 88px)",
+    );
+
+    await act(async () => root.render(<Row tiles={3} />));
+    layOut(row, 0, 624);
+    await act(async () => {
+      row.append(document.createElement("i"));
+      row.lastElementChild!.remove();
+    });
+    expect((row.children[2] as HTMLElement).style.maskImage).toBe(
+      "linear-gradient(to right, black 0px, black -148px, transparent -124px)",
+    );
+  });
+
+  it("sets nothing up again when the row draws again", async () => {
+    const added = vi.spyOn(HTMLElement.prototype, "addEventListener");
+    await act(async () => root.render(<Row />));
+    await act(async () => root.render(<Row />));
+    await act(async () => root.render(<Row />));
+    expect(added.mock.calls.filter(([type]) => type === "scroll")).toHaveLength(
+      1,
+    );
   });
 });

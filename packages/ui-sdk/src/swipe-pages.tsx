@@ -90,6 +90,21 @@ export function SwipePages(props: {
   const id = useId();
   const pageId = pages[page]?.id;
   const announcePage = useEffectEvent((id: string) => props.onPageChange?.(id));
+  // The page on show draws at once, and the others once it has painted,
+  // so what opens draws only what is seen first: on a slow tablet a
+  // device's history and activity cost as much as the rest together.
+  const [drawsAll, setDrawsAll] = useState(false);
+  useEffect(() => {
+    if (drawsAll) return;
+    let later: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      later = setTimeout(() => setDrawsAll(true));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(later);
+    };
+  }, [drawsAll]);
 
   useEffect(() => {
     if (pageId !== undefined) announcePage(pageId);
@@ -256,20 +271,22 @@ export function SwipePages(props: {
               }}
               className="col-start-1 row-start-1 min-h-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-data-swiping:transition-none motion-reduce:transition-none"
             >
-              <ScrollArea type="scroll" className={pageScroll}>
-                <div className="flex min-w-0 flex-1 flex-col items-center justify-center ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] py-6 sm:ps-[calc(48px+env(safe-area-inset-left))] sm:pe-[calc(48px+env(safe-area-inset-right))]">
-                  {/* Centred, with 16 px of its own around it, and no wider
-                      than the room, so a page that can narrow does; one
-                      that can't overflows both sides alike. */}
-                  <div
-                    data-slot="swipe-page-content"
-                    data-muted={each.muted ? "" : undefined}
-                    className="flex max-w-full flex-col items-center p-4 data-muted:opacity-50"
-                  >
-                    {each.content}
+              {(drawsAll || index === page) && (
+                <ScrollArea type="scroll" className={pageScroll}>
+                  <div className="flex min-w-0 flex-1 flex-col items-center justify-center ps-[calc(24px+env(safe-area-inset-left))] pe-[calc(24px+env(safe-area-inset-right))] py-6 sm:ps-[calc(48px+env(safe-area-inset-left))] sm:pe-[calc(48px+env(safe-area-inset-right))]">
+                    {/* Centred, with 16 px of its own around it, and no
+                        wider than the room, so a page that can narrow does;
+                        one that can't overflows both sides alike. */}
+                    <div
+                      data-slot="swipe-page-content"
+                      data-muted={each.muted ? "" : undefined}
+                      className="flex max-w-full flex-col items-center p-4 data-muted:opacity-50"
+                    >
+                      {each.content}
+                    </div>
                   </div>
-                </div>
-              </ScrollArea>
+                </ScrollArea>
+              )}
             </section>
           ))}
         </div>

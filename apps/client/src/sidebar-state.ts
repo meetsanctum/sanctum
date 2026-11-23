@@ -233,24 +233,29 @@ export function useSidebarLayout(isVeiled = false) {
   // far as it moves, which the desktop app does since the system draws them;
   // the first time, and where motion is reduced, at once. An overlay hides
   // them for as long as it covers the window, at once too, since nothing
-  // slides then. View's item names what ⌃⌘S does.
-  const [isCovered, setCovered] = useState(false);
-  const lightsWanted = (docked || floating !== null) && !isCovered;
+  // slides then. View's item names what ⌃⌘S does. Being covered is kept
+  // out of React's state: it changes only the lights, and as state it would
+  // draw the whole shell again each time a device's page opens or closes.
+  const isCovered = useRef(false);
   // Whether they show, none at first, which sidebar brought them, and
   // whether an overlay covered them last time.
   const lightsShown = useRef<boolean | null>(null);
   const lightsWith = useRef<"docked" | "floating" | null>(null);
   const wasCovered = useRef(false);
-  useEffect(() => {
+  const layout = useRef({ docked, floating, reducedMotion });
+  const placeLights = useCallback(() => {
+    const { docked, floating, reducedMotion } = layout.current;
+    const covered = isCovered.current;
+    const lightsWanted = (docked || floating !== null) && !covered;
     const showing = docked ? "docked" : floating !== null ? "floating" : null;
     const moving = showing ?? lightsWith.current;
     if (showing) lightsWith.current = showing;
-    const coverChanged = wasCovered.current !== isCovered;
-    wasCovered.current = isCovered;
+    const coverChanged = wasCovered.current !== covered;
+    wasCovered.current = covered;
     const before = lightsShown.current;
     // A new cover must stop a slide already heading out, even though its
     // target is hidden too.
-    if (before === lightsWanted && !(coverChanged && isCovered)) return;
+    if (before === lightsWanted && !(coverChanged && covered)) return;
     lightsShown.current = lightsWanted;
     const by =
       before === null || reducedMotion || coverChanged
@@ -261,7 +266,19 @@ export function useSidebarLayout(isVeiled = false) {
     void getShell()
       .window?.setControls(lightsWanted, by)
       .catch(() => undefined);
-  }, [docked, floating, isCovered, lightsWanted, reducedMotion]);
+  }, []);
+  useEffect(() => {
+    layout.current = { docked, floating, reducedMotion };
+    placeLights();
+  }, [docked, floating, reducedMotion, placeLights]);
+  const setCovered = useCallback(
+    (covered: boolean) => {
+      if (isCovered.current === covered) return;
+      isCovered.current = covered;
+      placeLights();
+    },
+    [placeLights],
+  );
   const canHideSidebar = docked || (!canDock && floating === "open");
   useEffect(() => {
     void getShell()

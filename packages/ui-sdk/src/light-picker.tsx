@@ -54,6 +54,10 @@ const shades = [20, 35, 50, 65, 80, 100];
 // for Done.
 const shadeSlots = [1, 2, 3, 5, 6, 7];
 const whites = 8;
+// How many circles wide the picker is (size-72 and a circle's size-14): a
+// circle flies in from the middle by a share of its own size, which needs
+// no measuring, so opening a light lays its page out once, not twice.
+const pickerPerCircle = 72 / 14;
 // How far out from the middle the ring's circles sit, and a wheel's Back
 // and Done, in % of the picker.
 const ring = 39;
@@ -86,7 +90,11 @@ const nearest = <T,>(values: readonly T[], gap: (value: T) => number) =>
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 const kelvin = (mireds: number) => Math.round(1_000_000 / mireds / 100) * 100;
-const kelvinText = (mireds: number) => `${kelvin(mireds).toLocaleString()} K`;
+// Made once: toLocaleString makes a formatter on each call, and the picker
+// writes a temperature for each of its whites.
+const kelvinNumber = new Intl.NumberFormat();
+const kelvinText = (mireds: number) =>
+  `${kelvinNumber.format(kelvin(mireds))} K`;
 
 // Whites spread evenly across a light's range, coolest first.
 function whitesOf(range: Range) {
@@ -155,20 +163,19 @@ export function LightPicker(props: {
   useLayoutEffect(() => {
     const box = picker.current;
     if (!box) return;
-    const size = box.offsetWidth;
     const reduced = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     box.querySelectorAll<HTMLElement>("[data-fly]").forEach((circle, index) => {
-      const dx = ((50 - Number(circle.dataset.x)) / 100) * size;
-      const dy = ((50 - Number(circle.dataset.y)) / 100) * size;
+      const dx = (50 - Number(circle.dataset.x)) * pickerPerCircle;
+      const dy = (50 - Number(circle.dataset.y)) * pickerPerCircle;
       circle.animate?.(
         reduced
           ? [{ opacity: 0 }, { opacity: 1 }]
           : [
               {
                 opacity: 0,
-                transform: `translate(${dx}px, ${dy}px) scale(0.4)`,
+                transform: `translate(${dx}%, ${dy}%) scale(0.4)`,
               },
               { opacity: 1, transform: "none" },
             ],

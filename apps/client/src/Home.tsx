@@ -7,7 +7,6 @@ import {
   TemperatureUnitProvider,
   type CoreBridge,
   type PageParams,
-  type Tile,
 } from "@meetsanctum/ui-sdk";
 import {
   useCallback,
@@ -31,8 +30,6 @@ import { useGoing } from "./power-notice";
 import { coreJson } from "./core-fetch";
 import { startCoreStatusPolling, type CoreStatus } from "./core-status";
 import { activitySettingsPage } from "./activity/page";
-import { DeviceDetail } from "./device-detail";
-import { tileKey } from "./device-tiles";
 import {
   dashboardBackground,
   dashboardFrame,
@@ -45,6 +42,7 @@ import { AppFrame } from "./frames/app-frame";
 import { HomeRooms } from "./home-dashboard";
 import { HomeSidebar } from "./home-sidebar";
 import { HomeWidgets, useWidgetCards } from "./home-widgets";
+import { OpenDeviceDetail, useOpenDevice } from "./open-device";
 import { OverlayHostProvider } from "./overlay-host";
 import {
   CategoryPage,
@@ -161,34 +159,10 @@ export function Home(props: {
   // A failed answer keeps no old reading on show: System's row says it can't
   // check, and nothing leads Needs attention or the tile on a stale one.
   const shownStatus = statusFailed ? undefined : systemStatus;
-  // The device whose detail is open, kept while it closes.
-  const [detail, setDetail] = useState<{
-    key: string | null;
-    open: boolean;
-    openFirstPage: boolean;
-  }>({
-    key: null,
-    open: false,
-    openFirstPage: false,
-  });
-  const openDevice = useCallback(
-    (tile: Tile) =>
-      setDetail({ key: tile.key, open: true, openFirstPage: false }),
-    [],
-  );
-  const openRoomDevice = useCallback(
-    (tile: Tile) =>
-      setDetail({
-        key: tileKey(tile.deviceId, tile.capabilityId),
-        open: true,
-        openFirstPage: true,
-      }),
-    [],
-  );
-  const closeDevice = useCallback(
-    () => setDetail((current) => ({ ...current, open: false })),
-    [],
-  );
+  // The device whose detail is open, kept out of Home's state.
+  const openedDevice = useOpenDevice();
+  const { open: openDevice, openFromRoom: openRoomDevice } = openedDevice;
+  const closeDevice = openedDevice.close;
   const sectionEntities = useSectionEntities(live, installed, devices.fail);
   const widgetCards = useWidgetCards(live, installed);
 
@@ -745,16 +719,13 @@ export function Home(props: {
               onForgotten={props.onSignedOut}
             />
           )}
-          <DeviceDetail
+          <OpenDeviceDetail
+            opened={openedDevice}
             container={screen}
-            tileKey={detail.key}
-            openFirstPage={detail.openFirstPage}
-            open={detail.open}
             devices={devices}
             apps={apps}
             live={live}
             home={home}
-            onClose={closeDevice}
             isAway={veil !== undefined}
             onCovering={sidebar.setCovered}
             onShowActivity={(device) => {

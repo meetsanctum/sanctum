@@ -49,6 +49,8 @@ async function render(
       />,
     );
   });
+  // The pages not on show draw once the first has painted.
+  await act(async () => vi.advanceTimersByTime(20));
 }
 
 const button = (label: string) => {

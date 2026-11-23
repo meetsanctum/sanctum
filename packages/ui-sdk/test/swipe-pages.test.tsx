@@ -199,3 +199,32 @@ it("scrolls tabs too many for the width to keep the current one in view", async 
     }
   }
 });
+
+it("draws the page on show at once and the others once it has painted", async () => {
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      root.render(
+        <SwipePages
+          label="Device"
+          initial="second"
+          pages={["First", "Second", "Third"].map((label) => ({
+            id: label.toLowerCase(),
+            label,
+            icon: Sun,
+            content: <p>{label}</p>,
+          }))}
+        />,
+      );
+    });
+    const drawn = () =>
+      [...container.querySelectorAll("p")].map((each) => each.textContent);
+    expect(drawn()).toEqual(["Second"]);
+    expect(container.querySelectorAll("[role=tabpanel]")).toHaveLength(3);
+
+    await act(async () => vi.advanceTimersByTime(20));
+    expect(drawn()).toEqual(["First", "Second", "Third"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});

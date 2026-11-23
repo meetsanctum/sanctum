@@ -383,10 +383,14 @@ export function countedWeekHeadline(
   return `${words.times(total)} ${isWholeWeek ? "this week" : since}`;
 }
 
+// One formatter for every time a history writes: toLocaleTimeString makes a
+// new one on each call, which a week of history calls hundreds of times.
+const time = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 /** A time of day as Automations writes it, such as 07:30. */
 export function timeText(at: number) {
-  return new Date(at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return time.format(at);
 }
