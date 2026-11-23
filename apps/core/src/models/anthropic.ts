@@ -302,22 +302,24 @@ export async function* anthropicChat(
           system,
           messages,
           tools,
+          // The tools and the start of the conversation stay the same from one
+          // answer to the next, so Anthropic reuses them.
+          cache_control: { type: "ephemeral" },
         },
         { signal },
       );
       for await (const event of stream) {
+        // Thinking counts as the start of an answer: Claude is answering.
         if (event.type === "content_block_start") {
+          firstPiece();
           if (event.content_block.type === "tool_use") {
-            firstPiece();
             toolInputs.set(event.index, { json: "", isClosed: false });
           }
           if (event.content_block.type === "text" && event.content_block.text) {
-            firstPiece();
             yield { type: "text", text: event.content_block.text };
           }
         } else if (event.type === "content_block_delta") {
           if (event.delta.type === "text_delta" && event.delta.text) {
-            firstPiece();
             yield { type: "text", text: event.delta.text };
           }
           if (event.delta.type === "input_json_delta") {

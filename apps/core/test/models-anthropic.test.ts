@@ -208,8 +208,8 @@ describe("Anthropic as a source", () => {
       system: expect.stringContaining("Call get_time"),
       messages: [{ role: "user", content: "What time is it?" }],
       tools: [{ name: "get_time", input_schema: { type: "object" } }],
+      cache_control: { type: "ephemeral" },
     });
-    expect(asked).not.toHaveProperty("cache_control");
     expect(JSON.stringify(asked)).not.toContain(sources.anthropic.key);
     expect(sources.requests).not.toHaveLength(0);
     for (const request of sources.requests) {
@@ -437,20 +437,6 @@ describe("Claude's answers", () => {
       release();
       await stream.return(undefined);
     }
-  });
-
-  it("does not count thinking or an empty text block as the first piece", async () => {
-    const sources = fakeSources();
-    sources.anthropic.answer = { thinks: true, text: [] };
-    const first = vi.fn();
-    const messages: ModelMessage[] = [{ role: "user", content: "Hi" }];
-
-    await answer(sources, messages, undefined, undefined, first);
-    expect(first).not.toHaveBeenCalled();
-
-    sources.anthropic.answer = { thinks: true, text: [], callsTool: true };
-    await answer(sources, messages, undefined, undefined, first);
-    expect(first).toHaveBeenCalledOnce();
   });
 
   it("continues a draft when the model rejects assistant prefill", async () => {
