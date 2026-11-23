@@ -86,8 +86,15 @@ async function show(shown: DeviceInfo = device) {
         if (isReadFailing) throw new Error("Can't read its state");
         return speaker;
       }
-      if (id === "esphome.changeSpeaker") {
-        const { device: _device, ...change } = input;
+      const change =
+        id === "esphome.muteMicrophones"
+          ? { microphones: false }
+          : id === "esphome.unmuteMicrophones"
+            ? { microphones: true }
+            : id === "esphome.changeRing"
+              ? (({ device: _device, ...ring }) => ({ ring }))(input)
+              : null;
+      if (change) {
         changes.push(change);
         await writeGate;
         if (refuse) throw Object.assign(new Error(refuse), { code: refuse });

@@ -133,6 +133,11 @@ export type ActivityInfo = {
   action: string;
   /** An app's action by its title, such as "Run mood". */
   title: string | null;
+  /**
+   * What an app's action about a device did, in the past tense, such as
+   * "Muted its microphones", for an entry whose subject is that device.
+   */
+  done: string | null;
   outcome: ActivityOutcome;
   /** Why it was refused or failed, as an error code. */
   reason: string | null;

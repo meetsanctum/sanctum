@@ -23,7 +23,8 @@ import { opensTurn, type Turn } from "../models/turns.js";
 // action does has it as its cause, so a light a mood turned on names whoever
 // ran the mood; how the call ended changes the entry after.
 
-// An app's own call joins its last entry for the same action.
+// An app's own call joins its last entry for the same action, and anyone's
+// call about a device the one before about it, as a slider's steps do.
 const appSteps: Joining = {
   withinMs: activityTimes.adjustmentsJoinMs,
   matches: () => true,
@@ -57,6 +58,8 @@ export function createActionRunner<
   // A turn for a person's or a shared device's call to an action that
   // declares one, in which the app may ask the home's AI model.
   turnFor: (entry: Entry, who: ActivityAuthor) => Turn;
+  // The app that drives a device, by the device's id.
+  driverOf: (deviceId: string) => string | null;
 }) {
   const { activity, timeoutMs, log } = options;
 
@@ -72,9 +75,22 @@ export function createActionRunner<
     return activity.for(appId)(
       { action: actionId, outcome, reason, subjectId, ...who },
       // An app acting on its own, as on a job, joins its last entry for
-      // the same action, so natural light's steps are one entry.
-      who.actor?.startsWith("app:") && !activity.cause() ? appSteps : undefined,
+      // the same action, so natural light's steps are one entry; a call
+      // about a device joins the one before about it.
+      (who.actor?.startsWith("app:") && !activity.cause()) || subjectId
+        ? appSteps
+        : undefined,
     );
+  }
+
+  // The app's own device a call acts on, where its action says it acts on
+  // one: another app's device, or none, leaves the entry about nothing.
+  function deviceOf(appId: string, declared: DeclaredAction, input: unknown) {
+    if (!declared.aboutDevice) return undefined;
+    const device = (input as { device?: unknown } | null)?.device;
+    return typeof device === "string" && options.driverOf(device) === appId
+      ? device
+      : undefined;
   }
 
   // Runs one action as an actor the gate has already admitted: the input is
@@ -96,12 +112,13 @@ export function createActionRunner<
       throw new ActionCallError("not_found");
     }
     let logged: string | undefined;
+    let subjectId: string | undefined;
     const ended = (outcome: Outcome, reason: string) => {
       const joined = logged && activity.get(logged);
       if (joined && joined.count === 1) {
         activity.update(logged!, { outcome, reason });
       } else {
-        record(appId, action.id, who, outcome, reason);
+        record(appId, action.id, who, outcome, reason, subjectId);
       }
     };
     const refuse = (error: ActionCallError) => {
@@ -149,8 +166,9 @@ export function createActionRunner<
       withinMs,
       ...(turn ? { turn } : {}),
     });
+    subjectId = deviceOf(appId, declared, input.data);
     if (declared.tier !== "read") {
-      logged = record(appId, action.id, who, "ok");
+      logged = record(appId, action.id, who, "ok", undefined, subjectId);
     }
     const running = () =>
       withTimeout(

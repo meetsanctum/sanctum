@@ -566,6 +566,29 @@ export function activityWords(
     aiEntry(entry) ??
     setupEntry(entry);
   if (words) return words;
+  // An app's action about one of its devices: what it did, said of the
+  // device, and how many times as a slider's steps join.
+  if (entry.done && entry.subject?.type === "device") {
+    if (entry.outcome !== "ok") {
+      const title = `${entry.title ?? entry.action} didn't work`;
+      return {
+        title:
+          where === "device"
+            ? title
+            : `${subjectName(entry, "A device")}: ${title}`,
+        detail: byWords(entry),
+        problem: true,
+      };
+    }
+    const times = entry.count > 1 ? `, ${entry.count} times` : "";
+    return {
+      title: about(entry, where, `${entry.done}${times}`),
+      detail: [byWords(entry), entry.count > 1 ? spanWords(entry) : ""]
+        .filter(Boolean)
+        .join(" · "),
+      problem: false,
+    };
+  }
   // An app's action, by its title.
   const title = entry.title ?? entry.action;
   return {

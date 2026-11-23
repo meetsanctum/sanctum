@@ -71,30 +71,64 @@ export function speakerAction(
 
 export type SpeakerAction = ReturnType<typeof speakerAction>;
 
-export function changeSpeakerAction(
+// Each change from the page is an action of its own, about the speaker, so
+// Activity says what was done to which speaker and joins a slider's steps.
+
+export function microphonesActions(
+  change: (deviceId: string, change: SpeakerChange) => Promise<void>,
+) {
+  const input = z.object({ device: z.string() });
+  const output = z.object({});
+  return [
+    defineAction({
+      id: "esphome.muteMicrophones",
+      title: "Mute its microphones",
+      tier: "write",
+      aboutDevice: { done: "Muted its microphones" },
+      input,
+      output,
+      async run(_ctx, { device }) {
+        await change(device, { microphones: false });
+        return {};
+      },
+    }),
+    defineAction({
+      id: "esphome.unmuteMicrophones",
+      title: "Turn on its microphones",
+      tier: "write",
+      aboutDevice: { done: "Turned on its microphones" },
+      input,
+      output,
+      async run(_ctx, { device }) {
+        await change(device, { microphones: true });
+        return {};
+      },
+    }),
+  ] as const;
+}
+
+export type MicrophonesAction = ReturnType<typeof microphonesActions>[number];
+
+export function changeRingAction(
   change: (deviceId: string, change: SpeakerChange) => Promise<void>,
 ) {
   return defineAction({
-    id: "esphome.changeSpeaker",
-    title: "Change a smart speaker",
+    id: "esphome.changeRing",
+    title: "Change its ring",
     tier: "write",
+    aboutDevice: { done: "Changed its ring" },
     input: z.object({
       device: z.string(),
-      microphones: z.boolean().optional(),
-      ring: z
-        .object({
-          glow: z.boolean().optional(),
-          colour: colour.optional(),
-          brightness: z.number().int().min(20).max(100).optional(),
-        })
-        .optional(),
+      glow: z.boolean().optional(),
+      colour: colour.optional(),
+      brightness: z.number().int().min(20).max(100).optional(),
     }),
     output: z.object({}),
-    async run(_ctx, { device, ...rest }) {
-      await change(device, rest);
+    async run(_ctx, { device, ...ring }) {
+      await change(device, { ring });
       return {};
     },
   });
 }
 
-export type ChangeSpeakerAction = ReturnType<typeof changeSpeakerAction>;
+export type ChangeRingAction = ReturnType<typeof changeRingAction>;

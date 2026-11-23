@@ -146,6 +146,13 @@ export interface ActionDefinition<
    * action's 30 s. Calls from anything else run it without one.
    */
   readonly turn?: boolean;
+  /**
+   * That a call acts on one of the app's own devices, which its input's
+   * `device` names by the core's id, and what Activity says the call did, in
+   * the past tense: "Muted its microphones" reads "Office Speaker muted its
+   * microphones". A person's calls about the same device join one entry.
+   */
+  readonly aboutDevice?: { done: string };
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -520,6 +527,9 @@ export function toStaticManifest(app: AppDefinition) {
       output: z.toJSONSchema(action.output),
       assistant: action.assistant ?? null,
       ...(action.turn ? { turn: true as const } : {}),
+      ...(action.aboutDevice
+        ? { aboutDevice: { done: action.aboutDevice.done } }
+        : {}),
     })),
     events: app.events.map((event) => ({
       id: event.id,

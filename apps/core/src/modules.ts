@@ -624,7 +624,7 @@ export async function createModules(
     // An app that's gone by the name its entries kept.
     app: (id) =>
       apps.list().find((app) => app.id === id)?.name ?? activity.nameThen(id),
-    action: (app, id) => apps.actionTitle(app, id),
+    action: (app, id) => apps.actionWords(app, id),
     workflow: (id) => workflows.brief(id),
     device: (id) => devices.get(id)?.name ?? null,
     room: (id) =>

@@ -32,8 +32,20 @@ async function addedSpeaker() {
   const id = `device:${key}`;
   const read = async () =>
     (await home.core.call("esphome.speaker", { device: id })) as SpeakerState;
-  const change = (input: object) =>
-    home.core.call("esphome.changeSpeaker", { device: id, ...input });
+  // The page's change, by the action it calls for it.
+  const change = async (input: { microphones?: boolean; ring?: object }) => {
+    if (input.microphones !== undefined) {
+      await home.core.call(
+        input.microphones
+          ? "esphome.unmuteMicrophones"
+          : "esphome.muteMicrophones",
+        { device: id },
+      );
+    }
+    if (input.ring) {
+      await home.core.call("esphome.changeRing", { device: id, ...input.ring });
+    }
+  };
   await eventually(async () => {
     const now = await read();
     return now.ring !== null && now.microphones !== null;

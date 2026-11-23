@@ -26,8 +26,12 @@ export type ActivityLookups = {
   // Revoked clients too.
   client(id: string): string | null;
   app(id: string): string | null;
-  // An app's action's title.
-  action(app: string, id: string): string | null;
+  // An app's action's title, and what it did to a device where it acts on
+  // one.
+  action(
+    app: string,
+    id: string,
+  ): { title: string; done: string | null } | null;
   workflow(id: string): { name: string; app: string | null } | null;
   device(id: string): string | null;
   room(id: string): string | null;
@@ -96,9 +100,13 @@ export function createActivityViews(
 
   function subjectOf(entry: ActivityEntry): ActivityThing | null {
     if (!entry.subjectId) return null;
-    const type = subjectTypes.find(([prefix]) =>
-      entry.action.startsWith(prefix),
-    )?.[1];
+    // An app's action about one of its devices.
+    const aboutDevice =
+      isApp(entry.source) &&
+      lookups.action(entry.source, entry.action)?.done != null;
+    const type = aboutDevice
+      ? "device"
+      : subjectTypes.find(([prefix]) => entry.action.startsWith(prefix))?.[1];
     return type ? thing(type, entry.subjectId) : null;
   }
 
@@ -240,6 +248,9 @@ export function createActivityViews(
   return {
     info(entry: ActivityEntry): ActivityInfo {
       const chain = chainOf(entry);
+      const words = isApp(entry.source)
+        ? lookups.action(entry.source, entry.action)
+        : null;
       let detail = entry.detail;
       // Keep the recorded kind for filtering when a device changes kinds.
       if (entry.kind === "devices" && detail && "capabilityKind" in detail) {
@@ -254,9 +265,8 @@ export function createActivityViews(
         kind: entry.kind ?? "setup",
         source: entry.source,
         action: entry.action,
-        title: isApp(entry.source)
-          ? lookups.action(entry.source, entry.action)
-          : null,
+        title: words?.title ?? null,
+        done: words?.done ?? null,
         outcome: entry.outcome,
         reason: entry.reason,
         detail,

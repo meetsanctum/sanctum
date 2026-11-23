@@ -281,6 +281,9 @@ export type DeclaredAction = {
   schema: JsonSchema;
   // A person's or a shared device's call opens a turn (models/turns.ts).
   turn: boolean;
+  // The app's own device a call acts on, by its input's `device`, and what
+  // Activity says a call did.
+  aboutDevice: { done: string } | null;
 };
 
 /** A workflow trigger as its manifest declares it. */
@@ -410,6 +413,7 @@ export function contractOf(manifest: StaticManifest): AppContract {
         output: schemaCheck(action.output),
         schema: action.input as JsonSchema,
         turn: action.turn === true,
+        aboutDevice: action.aboutDevice ?? null,
       },
     ]),
   );
@@ -488,6 +492,7 @@ const manifestShape = z.looseObject({
       input: schema,
       output: schema,
       turn: z.boolean().optional(),
+      aboutDevice: z.object({ done: z.string().min(1).max(80) }).optional(),
     }),
   ),
   events: z.array(named.extend({ payload: schema })),
