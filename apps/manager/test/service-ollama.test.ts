@@ -7,9 +7,17 @@ import { createCapacity } from "../src/apps/capacity.js";
 import { createAppContainers, nodeImage } from "../src/apps/containers.js";
 import { serviceNetworkName } from "../src/apps/service-networks.js";
 import { sanctumNetworkName } from "../src/core-container.js";
+import { ensureNetwork } from "../src/docker-resources.js";
 import { createOperations } from "../src/operations.js";
+import { createReconciler } from "../src/reconcile.js";
+import { serviceContainerOptions } from "../src/services/containers.js";
 import { mosquittoImage } from "../src/services/mosquitto.js";
-import { ollamaData, ollamaImage, ollamaUrl } from "../src/services/ollama.js";
+import {
+  ollamaData,
+  ollamaImage,
+  ollamaSpec,
+  ollamaUrl,
+} from "../src/services/ollama.js";
 import { createServices } from "../src/services/services.js";
 import { createServicesStateStore } from "../src/services/state.js";
 import { zigbee2mqttImage } from "../src/services/zigbee2mqtt.js";
@@ -25,6 +33,34 @@ const app = "sanctum.example";
 const other = "sanctum.example-two";
 const folder = "0.1.0+1a2b3c4d5e6f7a8b";
 const gib = 1024 ** 3;
+const olderImage = "ollama/ollama:0.40.15";
+
+async function startOlderOllama(docker: FakeDocker) {
+  docker.load(olderImage, { title: "ollama", version: "0.40.15" });
+  await ensureNetwork(docker, sanctumNetworkName);
+  const { id } = await docker.createContainer(
+    serviceContainerOptions("ollama", {
+      ...ollamaSpec({ memoryMb: 16 * 1024, cpus: 4 }),
+      image: olderImage,
+    }),
+  );
+  await docker.getContainer(id).start();
+}
+
+function pausePull(docker: FakeDocker) {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const paused = new Promise<void>((done, failed) => {
+    resolve = done;
+    reject = failed;
+  });
+  const pull = docker.pull.bind(docker);
+  vi.spyOn(docker, "pull").mockImplementation(async (ref) => {
+    await paused;
+    return pull(ref);
+  });
+  return { resolve, reject };
+}
 
 async function home(
   permissions: Record<string, string[]> = { [app]: ["services:ollama"] },
@@ -44,7 +80,15 @@ async function home(
       JSON.stringify({ id, permissions: asked.map((each) => ({ id: each })) }),
     );
   }
-  const onServiceNetwork = vi.fn();
+  const reconciler = createReconciler({
+    log: vi.fn(),
+    run: () => services.reconcile(),
+  });
+  const reconcile = async () => {
+    await reconciler.wait();
+    await reconciler.reconcile();
+  };
+  const onServiceNetwork = vi.fn(() => void reconcile());
   const apps = createAppContainers({
     docker,
     dataDir,
@@ -55,11 +99,7 @@ async function home(
     onServiceNetwork,
   });
   const dev = await hostDev();
-  // As the manager's loop does: a change reconciles, one at a time.
-  let queue = Promise.resolve();
-  const onChange = vi.fn(
-    () => (queue = queue.then(() => services.reconcile())),
-  );
+  const onObserved = vi.fn();
   const services = createServices({
     operations: createOperations(),
     docker,
@@ -69,12 +109,13 @@ async function home(
     totalMemory: () => 16 * gib,
     cpus: () => 4,
     log: vi.fn(),
-    onChange,
+    onChange: reconcile,
+    onObserved,
   });
   await services.start();
   // Reconciles until its image is there and it runs.
   const settle = async () => {
-    await services.reconcile();
+    await reconcile();
     await vi.waitFor(() =>
       expect(services.status("ollama").state).toBe("running"),
     );
@@ -90,7 +131,8 @@ async function home(
     settle,
     start,
     networksOf,
-    onChange,
+    reconcile,
+    onObserved,
     onServiceNetwork,
   };
 }
@@ -130,23 +172,18 @@ describe("Ollama on the host", () => {
   });
 
   it("downloads its image while the reconcile goes on, then runs", async () => {
-    const { docker, services } = await home();
-    let downloaded!: () => void;
-    const pull = docker.pull.bind(docker);
-    vi.spyOn(docker, "pull").mockImplementation(async (ref) => {
-      await new Promise<void>((resolve) => (downloaded = resolve));
-      return pull(ref);
-    });
+    const { docker, services, reconcile } = await home();
+    const pull = pausePull(docker);
     await services.need("ollama", app);
 
-    await services.reconcile();
+    await reconcile();
 
     expect(services.status("ollama")).toMatchObject({
       state: "starting",
       problem: "Downloading its image",
     });
     expect(services.status("ollama").url).toBeUndefined();
-    downloaded();
+    pull.resolve();
     await vi.waitFor(() =>
       expect(services.status("ollama").state).toBe("running"),
     );
@@ -154,22 +191,76 @@ describe("Ollama on the host", () => {
   });
 
   it("says why its image didn't download, and waits before trying again", async () => {
-    const { docker, services } = await home();
+    const { docker, services, reconcile } = await home();
     const pull = vi
       .spyOn(docker, "pull")
       .mockRejectedValue(notFound(`manifest for ${ollamaImage} not found`));
     await services.need("ollama", app);
 
-    await services.reconcile();
+    await reconcile();
     await vi.waitFor(() =>
       expect(services.status("ollama").state).toBe("failed"),
     );
-    await services.reconcile();
+    await reconcile();
 
     expect(services.status("ollama").problem).toMatch(
       /^Couldn't download its image/,
     );
     expect(pull).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays off if an in-flight download fails after the last app releases it", async () => {
+    const { docker, services, reconcile, onObserved } = await home();
+    const pull = pausePull(docker);
+    await services.need("ollama", app);
+    await reconcile();
+    expect(services.status("ollama").state).toBe("starting");
+
+    await services.release("ollama", app);
+    pull.reject(new Error("Download interrupted"));
+    await reconcile();
+
+    expect(services.status("ollama")).toEqual({
+      name: "ollama",
+      apps: [],
+      state: "off",
+    });
+    expect(onObserved).not.toHaveBeenCalledWith(
+      "ollama",
+      expect.anything(),
+      expect.objectContaining({ state: "failed" }),
+    );
+  });
+
+  it("grants and revokes access on the older container while its replacement downloads", async () => {
+    const { docker, services, start, reconcile, networksOf, settle } =
+      await home({ [app]: ["services:ollama"], [other]: ["services:ollama"] });
+    await startOlderOllama(docker);
+    const pull = pausePull(docker);
+    await services.need("ollama", other);
+    await start(app);
+    await start(other);
+    await services.need("ollama", app);
+    await reconcile();
+
+    expect(services.status("ollama")).toMatchObject({
+      state: "running",
+      image: olderImage,
+      url: ollamaUrl,
+    });
+    expect(networksOf("sanctum-ollama")).toContain(
+      serviceNetworkName(app, "ollama"),
+    );
+    await services.release("ollama", app);
+
+    expect(networksOf("sanctum-ollama").sort()).toEqual(
+      [sanctumNetworkName, serviceNetworkName(other, "ollama")].sort(),
+    );
+    pull.resolve();
+    await settle();
+    await vi.waitFor(() =>
+      expect(services.status("ollama").image).toBe(ollamaImage),
+    );
   });
 
   it("is reached by an app that holds it on a network shared only with it", async () => {
@@ -193,7 +284,7 @@ describe("Ollama on the host", () => {
   });
 
   it("joins only the networks of the apps that hold it, and leaves one as its app lets go", async () => {
-    const { services, settle, start, networksOf } = await home({
+    const { services, settle, start, networksOf, reconcile } = await home({
       [app]: ["services:ollama"],
       [other]: ["services:ollama"],
     });
@@ -206,7 +297,7 @@ describe("Ollama on the host", () => {
     );
 
     await services.need("ollama", other);
-    await services.reconcile();
+    await reconcile();
     expect(networksOf("sanctum-ollama")).toContain(
       serviceNetworkName(other, "ollama"),
     );
@@ -218,6 +309,36 @@ describe("Ollama on the host", () => {
     );
     expect(networksOf("sanctum-ollama")).toContain(
       serviceNetworkName(other, "ollama"),
+    );
+  });
+
+  it("revokes access even when another app's network cannot be read", async () => {
+    const { docker, services, settle, start, networksOf } = await home({
+      [other]: ["services:ollama"],
+      [app]: ["services:ollama"],
+    });
+    await start(other);
+    await start(app);
+    await services.need("ollama", other);
+    await services.need("ollama", app);
+    await settle();
+    const getNetwork = docker.getNetwork.bind(docker);
+    vi.spyOn(docker, "getNetwork").mockImplementation((name) => {
+      const handle = getNetwork(name);
+      return name === serviceNetworkName(other, "ollama")
+        ? {
+            ...handle,
+            inspect: async () => {
+              throw new Error("Docker didn't answer");
+            },
+          }
+        : handle;
+    });
+
+    await services.release("ollama", app);
+
+    expect(networksOf("sanctum-ollama")).not.toContain(
+      serviceNetworkName(app, "ollama"),
     );
   });
 
@@ -268,23 +389,21 @@ describe("Ollama on the host", () => {
     expect(docker.container(`sanctum-app-${app}`)).toBeUndefined();
   });
 
-  it("keeps no copy of its models before a new version", async () => {
+  it("replaces the old image without copying its models", async () => {
     const { docker, dataDir, services, settle } = await home();
+    await startOlderOllama(docker);
     await services.need("ollama", app);
     await settle();
-    const older = docker.container("sanctum-ollama")!;
-    docker.publish("ollama/ollama:0.40.15", {
-      title: "ollama",
-      version: "0.40.15",
-    });
-    // As one made by a manager before this one.
-    older.options.Image = "ollama/ollama:0.40.15";
-    older.options.Labels!["sanctum.definition"] = "before";
 
-    await services.reconcile();
-
-    expect(docker.container("sanctum-ollama")?.options.Image).toBe(ollamaImage);
+    await vi.waitFor(() =>
+      expect(docker.container("sanctum-ollama")?.options.Image).toBe(
+        ollamaImage,
+      ),
+    );
     expect(await readdir(join(dataDir, "backups")).catch(() => [])).toEqual([]);
+    await expect(docker.getImage(olderImage).inspect()).rejects.toMatchObject({
+      statusCode: 404,
+    });
   });
 
   it("counts half the host's memory beside the apps while it runs", async () => {

@@ -7,9 +7,9 @@ import { stacked } from "../stack.js";
 // it has, and its cloud models and web search are off, so what's asked stays
 // in the home. It runs on the processor, within a cap on memory and cores.
 //
-// The core reaches it on the `sanctum` network, and the app that manages it
-// on a network shared only with it (apps/service-networks.ts). On the
-// `sanctum` network it can download models.
+// The core reaches it on the `sanctum` network. An app that holds the service
+// reaches it on a network shared only with Ollama (apps/service-networks.ts).
+// Ollama downloads models over the `sanctum` network.
 
 export const ollamaImage = "ollama/ollama:0.40.16";
 const port = 11434;
@@ -21,7 +21,7 @@ export const ollamaMemoryMb = (hostMemoryMb: number) =>
   Math.floor(hostMemoryMb / 2);
 
 /** Every core but one, which stays for the core and the apps. */
-export const ollamaCpus = (hostCpus: number) => Math.max(1, hostCpus - 1);
+const ollamaCpus = (hostCpus: number) => Math.max(1, hostCpus - 1);
 
 export function ollamaSpec(host: {
   memoryMb: number;

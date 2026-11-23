@@ -20,24 +20,22 @@ import {
   brokerNetworkFor,
   brokerNetworkName,
   removeBrokerNetwork,
-  usesBroker,
 } from "./broker.js";
-import {
-  httpServices,
-  removeServiceNetworks,
-  serviceNetworkFor,
-  serviceNetworkName,
-} from "./service-networks.js";
 import { createCapacity, type Capacity, type HeldApp } from "./capacity.js";
 import type { AppExits } from "./exits.js";
 import { defaultImageMb, imageVolumeName, type AppImages } from "./images.js";
 import type { LanHolders, LanPolicy, LanVersion } from "./lan.js";
 import { AppRefusal } from "./refusal.js";
+import {
+  appServiceNetworks,
+  removeServiceNetworks,
+  serviceNetworkFor,
+  serviceNetworkName,
+} from "./service-networks.js";
 
 // An app's own container, beside the core: the official Node image, the app's
-// staged package read-only, its socket's folder, and no network but the
-// broker's, for an app that uses it (broker.ts), or its holder's, for one that
-// reaches the devices it found (lan.ts). The core
+// staged package read-only and its socket's folder. An app can have a network
+// for the broker, an HTTP service, or the devices it found. The core
 // decides when each starts, and Docker never restarts one by itself, so whoever
 // supervises it hears why it stopped. What runs in it comes with the app's own
 // copy of the SDK.
@@ -417,21 +415,14 @@ export function createAppContainers(options: {
   // take the new core's policy.
   async function keptAsMade(
     spec: AppContainerSpec,
-    packageDir: string,
     policy: LanPolicy | undefined,
+    serviceNetwork: string | undefined,
   ) {
     const existing = await inspectApp(spec.app);
     if (!existing?.State.Running) return undefined;
     const holder = policy ? await lan?.running(spec.app) : undefined;
     if (policy && !holder) return undefined;
-    const http = await httpServices(packageDir);
-    const network = holder
-      ? `container:${holder.Id}`
-      : (await usesBroker(packageDir))
-        ? brokerNetworkName(spec.app)
-        : http[0]
-          ? serviceNetworkName(spec.app, http[0])
-          : undefined;
+    const network = holder ? `container:${holder.Id}` : serviceNetwork;
     const desired = appContainerOptions(
       spec,
       imageVolumeName(spec.app),
@@ -518,18 +509,25 @@ export function createAppContainers(options: {
             409,
           );
         }
-        const brokers = await usesBroker(packageDir);
-        const http = await httpServices(packageDir);
+        const { usesBroker, httpServices } =
+          await appServiceNetworks(packageDir);
         // One network each: the device network's holder, the broker's, or one
         // service's.
-        if ((policy ? 1 : 0) + (brokers ? 1 : 0) + http.length > 1) {
+        if (
+          Number(Boolean(policy)) + Number(usesBroker) + httpServices.length >
+          1
+        ) {
           throw new AppRefusal(
             `${spec.app} can reach only one of devices, the broker and a service over HTTP`,
             409,
           );
         }
+        const [httpService] = httpServices;
         if (keep) {
-          const kept = await keptAsMade(spec, packageDir, policy);
+          const serviceNetwork = usesBroker
+            ? brokerNetworkName(spec.app)
+            : httpService && serviceNetworkName(spec.app, httpService);
+          const kept = await keptAsMade(spec, policy, serviceNetwork);
           if (kept) return kept;
         }
         await assertFits(spec);
@@ -549,13 +547,13 @@ export function createAppContainers(options: {
         const holder = policy ? await lan!.make(spec.app, policy) : undefined;
         const network = holder
           ? `container:${holder.id}`
-          : brokers
+          : usesBroker
             ? await brokerNetworkFor(docker, spec.app, log)
-            : http[0]
-              ? await serviceNetworkFor(docker, spec.app, http[0])
+            : httpService
+              ? await serviceNetworkFor(docker, spec.app, httpService)
               : undefined;
         // The service joins it once the app holds it.
-        if (http[0]) options.onServiceNetwork?.();
+        if (httpService) options.onServiceNetwork?.();
 
         // The one it replaces keeps running until this one is sure to start.
         const desired = appContainerOptions(spec, dataVolume, network);

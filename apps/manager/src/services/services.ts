@@ -5,10 +5,11 @@ import { join } from "node:path";
 
 import { isBroker, joinAppNetworks } from "../apps/broker.js";
 import { reaches, syncServiceNetworks } from "../apps/service-networks.js";
-import type { Log } from "../docker-resources.js";
+import { assertManaged, type Log } from "../docker-resources.js";
 import {
   errorMessage,
   inspectImage,
+  isNotFound,
   pullImage,
   type ContainerInfo,
   type DockerClientLike,
@@ -19,8 +20,6 @@ import {
   removeServiceContainer,
   stopServiceContainer,
 } from "./containers.js";
-import { assertManaged } from "../docker-resources.js";
-import { isNotFound } from "../docker.js";
 import type { Operations } from "../operations.js";
 import { createImageChanges } from "./image-change.js";
 import { mosquittoPasswordHash, mosquittoUrl } from "./mosquitto.js";
@@ -227,7 +226,8 @@ export function createServices(options: {
     log(`Downloading ${image} for ${name}`);
     void pullImage(docker, image).then(
       () => {
-        if (downloads.get(name) === started) downloads.delete(name);
+        if (downloads.get(name) !== started) return;
+        downloads.delete(name);
         void options.onChange?.();
       },
       (error: unknown) => {
@@ -235,13 +235,7 @@ export function createServices(options: {
         log(`${name}: couldn't download ${image}: ${problem}`);
         if (downloads.get(name) !== started) return;
         downloads.set(name, { image, failedAt: Date.now(), problem });
-        // One still on its version before goes on as it was.
-        if (observed.get(name)?.state !== "running") {
-          observed.set(name, {
-            state: "failed",
-            problem: `Couldn't download its image: ${problem}`,
-          });
-        }
+        void options.onChange?.();
       },
     );
     return started;
@@ -250,6 +244,7 @@ export function createServices(options: {
   function connection(definition: ServiceDefinition, app: string) {
     const account = store.current().mqttAccounts[app];
     return {
+      ...(definition.url ? { http: { url: definition.url } } : {}),
       ...(definition.mqttTopics && account
         ? {
             mqtt: {
@@ -315,30 +310,34 @@ export function createServices(options: {
     const wanted = definition.dataNeedsNoCopy
       ? spec
       : await imageChanges.specToRun(name, spec);
-    if (definition.largeImage && !(await inspectImage(docker, wanted.image))) {
+    const isMissingImage =
+      definition.largeImage && !(await inspectImage(docker, wanted.image));
+    let container;
+    if (isMissingImage) {
       // One on its version before goes on meanwhile.
-      const existing = await inspectService(docker, name);
-      // Said at once, before the download can end and say otherwise.
+      container = await inspectService(docker, name);
       const downloading = download(name, wanted.image);
-      observed.set(
-        name,
-        existing
-          ? observe(existing, existing.Config.Image)
-          : downloading.problem
+      if (!container) {
+        observed.set(
+          name,
+          downloading.problem
             ? {
                 state: "failed",
                 problem: `Couldn't download its image: ${downloading.problem}`,
               }
             : { state: "starting", problem: "Downloading its image" },
-      );
-      return;
+        );
+        return;
+      }
+    } else {
+      container = await reconcileServiceContainer({
+        docker,
+        service: name,
+        spec: wanted,
+        log,
+        removeReplacedImage: definition.dataNeedsNoCopy,
+      });
     }
-    const container = await reconcileServiceContainer({
-      docker,
-      service: name,
-      spec: wanted,
-      log,
-    });
     if (isBroker(name)) await joinAppNetworks(docker, container, log);
     if (definition.url) {
       await syncServiceNetworks(
@@ -349,8 +348,8 @@ export function createServices(options: {
         log,
       );
     }
-    await imageChanges.ran(name, wanted.image);
-    observed.set(name, observe(container, wanted.image));
+    if (!isMissingImage) await imageChanges.ran(name, wanted.image);
+    observed.set(name, observe(container, container.Config.Image));
   }
 
   return {
@@ -404,12 +403,11 @@ export function createServices(options: {
     },
 
     // The app no longer needs the service, because it was removed or its
-    // permission was switched off. Its broker account goes, and the answer
-    // waits for the reconcile that takes it out of the broker, so the core
-    // knows the app can no longer log in. Once no app needs the service, it
-    // stops; its data volume stays.
+    // permission was switched off. The answer waits for the reconcile that
+    // removes its broker account or disconnects the service from its network.
+    // Once no app needs the service, it stops; its data volume stays.
     async release(name: string, app: string) {
-      forApps(name);
+      const definition = forApps(name);
       checkApp(app);
       await store.update((draft) => {
         const apps = (draft.apps[name] ?? []).filter((each) => each !== app);
@@ -421,7 +419,7 @@ export function createServices(options: {
         syncAccounts(draft);
       });
       await options.onChange?.();
-      if (findService(name)?.url) {
+      if (definition.url) {
         // No account to take back: the service leaving the app's network is
         // what takes it away.
         if (reaches(await inspectService(docker, name), app, name)) {

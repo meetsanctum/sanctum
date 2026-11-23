@@ -103,7 +103,6 @@ export const serviceDefinitions: ServiceDefinition[] = [
     largeImage: true,
     dataNeedsNoCopy: true,
     dataVolumes: [ollamaData],
-    connection: () => ({ http: { url: ollamaUrl } }),
     spec: ({ host }) => ollamaSpec(host),
   },
 ];

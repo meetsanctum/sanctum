@@ -141,6 +141,10 @@ if (config.supervise) {
   });
   // Services run beside the core and keep running through its updates, so
   // their loop is not paused by one.
+  const reconcileServices = async () => {
+    await serviceReconciler?.wait();
+    await serviceReconciler?.reconcile();
+  };
   const services = createServices({
     operations,
     docker,
@@ -148,10 +152,7 @@ if (config.supervise) {
     dataDir: config.dataDir,
     hostDevDir: config.hostDevDir,
     log,
-    onChange: async () => {
-      await serviceReconciler?.wait();
-      await serviceReconciler?.reconcile();
-    },
+    onChange: reconcileServices,
     onObserved: (name, before, after) => {
       const entry = serviceChange(name, before, after);
       if (entry) void audit.record(entry);
@@ -250,7 +251,7 @@ if (config.supervise) {
     exits: appExits,
     capacity,
     // The service joins an app's network for it once the app holds it.
-    onServiceNetwork: () => void serviceReconciler?.reconcile(),
+    onServiceNetwork: () => void reconcileServices(),
   });
   // An app whose network's holder stopped stops too, soon after.
   if (lan) {

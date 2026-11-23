@@ -126,13 +126,13 @@ export async function removeUnusedImage(
 }
 
 // Makes the service's container match its spec and run. Returns the running
-// container. The image it replaces stays: a change of image (image-change.ts)
-// may yet go back to it.
+// container. Services with a data copy keep the old image for rollback.
 export async function reconcileServiceContainer(options: {
   docker: DockerClientLike;
   service: string;
   spec: ServiceSpec;
   log: Log;
+  removeReplacedImage?: boolean;
 }) {
   const { docker, service, spec, log } = options;
   const desired = serviceContainerOptions(service, spec);
@@ -168,7 +168,15 @@ export async function reconcileServiceContainer(options: {
   log(`Creating ${name} from ${spec.image}`);
   await docker.createContainer(desired);
   await docker.getContainer(name).start();
-  return (await inspectContainer(docker, name))!;
+  const container = (await inspectContainer(docker, name))!;
+  if (
+    options.removeReplacedImage &&
+    existing &&
+    existing.Image !== container.Image
+  ) {
+    await removeUnusedImage(docker, existing.Image);
+  }
+  return container;
 }
 
 // Stops a service that cannot run yet, such as Zigbee2MQTT without its

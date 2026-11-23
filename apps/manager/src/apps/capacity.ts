@@ -14,11 +14,12 @@ import { AppRefusal } from "./refusal.js";
 // add and container start is checked against, so the add sheet and a start
 // agree. Memory: each app container it holds, running or stopped (one stopped
 // for its update's copy or after a crash still needs its room back), at its
-// limit, unless the core turned the app off; each service it runs, at a fixed
-// size; and what's reserved. Disk: what each data image may still grow to, the
-// room kept for updates (images.ts), and what's reserved. A reservation holds
-// an add's memory and data image until its container starts, and its services
-// until the manager is asked to run them. Any claim expires after 10 minutes.
+// limit, unless the core turned the app off; each service it runs, at its
+// configured size; and what's reserved. Disk: what each data image may still
+// grow to, the room kept for updates (images.ts), and what's reserved.
+// A reservation holds an add's memory and data image until its container
+// starts, and its services until the manager is asked to run them. Any claim
+// expires after 10 minutes.
 // Reservations live in memory only and are lost on a manager restart.
 
 const mebibyte = 1024 * 1024;
