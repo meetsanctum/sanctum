@@ -78,7 +78,7 @@ describe("ESPHome's device page", () => {
     );
   });
 
-  it("says how older firmware got its first key", async () => {
+  it("says nothing of how older firmware got its first key", async () => {
     await show({
       address: "192.168.1.42:6053",
       encrypted: true,
@@ -89,9 +89,8 @@ describe("ESPHome's device page", () => {
       firstKey: "setup",
     });
 
-    expect(host.textContent).toContain(
-      "Its firmware takes a first key only without encryption: it got a setup key that way, then its own key encrypted.",
-    );
+    expect(host.textContent).toContain("Encrypted");
+    expect(host.textContent).not.toContain("key");
   });
 
   it("says in red when a device's connection isn't encrypted", async () => {
