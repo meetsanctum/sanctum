@@ -480,8 +480,14 @@ export function createDriverCore(
       handlers.clear();
       await app.start?.(own, { reason: "started" });
     },
-    /** As the core does once it restarted while the driver ran on. */
-    resume: async () => app.resume?.(own, { reason: "started" }),
+    /**
+     * As the core does once it restarted while the driver ran on: the
+     * pictures it kept in memory are gone, so the driver puts them again.
+     */
+    async resume() {
+      blobs.clear();
+      await app.resume?.(own, { reason: "started" });
+    },
     async stop() {
       try {
         await app.stop?.(own, { reason: "shutdown" });
