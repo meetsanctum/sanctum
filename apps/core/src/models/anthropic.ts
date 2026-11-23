@@ -131,20 +131,6 @@ function problemOf(error: unknown, signal?: AbortSignal): ModelError {
   return new ModelError("answer", "the source stopped with an error");
 }
 
-const continueDraft: MessageParam = {
-  role: "user",
-  content: "Please continue the assistant's draft.",
-};
-
-function endsWithDraft(messages: readonly MessageParam[]) {
-  const last = messages.at(-1);
-  return (
-    last?.role === "assistant" &&
-    Array.isArray(last.content) &&
-    last.content.every((block) => block.type === "text")
-  );
-}
-
 /**
  * The conversation as the Messages API takes it. System messages before the
  * first other one become the system prompt, and later ones the household's
@@ -204,24 +190,15 @@ export function messagesOf(
       ];
       const [first] = message.toolCalls ?? [];
       const answered = first && kept?.get(first.id);
-      const continued =
-        answered &&
-        answered.messages.length === wire.length + 1 &&
-        endsWithDraft(wire);
       // A thinking block is tied to the conversation that produced it. If
       // the app edits that conversation, send the app's version on its own.
       if (
         answered &&
         answered.system === (system.join("\n\n") || undefined) &&
         isDeepStrictEqual(answered.tools, tools) &&
-        isDeepStrictEqual(
-          answered.messages,
-          continued ? [...wire, continueDraft] : wire,
-        ) &&
+        isDeepStrictEqual(answered.messages, wire) &&
         isDeepStrictEqual(answered.visible, content)
       ) {
-        // Restore the prompt that accompanied a draft when Claude answered it.
-        if (continued) wire.push(continueDraft);
         wire.push({ role: "assistant", content: answered.content });
       } else if (content.length > 0) {
         wire.push({ role: "assistant", content });
@@ -287,75 +264,65 @@ export async function* anthropicChat(
         };
       })
     : undefined;
-  const { system, messages: history } = messagesOf(
+  const { system, messages } = messagesOf(
     request.messages,
     request.kept,
     tools,
   );
+  // Current Claude models don't continue their own unfinished text, and the
+  // core adds no words of its own to make them.
+  if (messages.at(-1)?.role === "assistant") {
+    throw new ModelError(
+      "refused",
+      "Claude answers only after the household's words or a tool's result, not after its own",
+    );
+  }
   const toolInputs = new Map<number, { json: string; isClosed: boolean }>();
   function firstPiece() {
     onFirstPiece?.();
     onFirstPiece = undefined;
   }
-  const client = clientOf(endpoint);
-  let messages = history;
   let final;
-  for (;;) {
-    try {
-      const stream = client.messages.stream(
-        {
-          model: request.model,
-          max_tokens: request.maxTokens,
-          system,
-          messages,
-          tools,
-          // The tools and the start of the conversation stay the same from one
-          // answer to the next, so Anthropic reuses them.
-          cache_control: { type: "ephemeral" },
-        },
-        { signal },
-      );
-      for await (const event of stream) {
-        // Thinking counts as the start of an answer: Claude is answering.
-        if (event.type === "content_block_start") {
-          firstPiece();
-          if (event.content_block.type === "tool_use") {
-            toolInputs.set(event.index, { json: "", isClosed: false });
-          }
-          if (event.content_block.type === "text" && event.content_block.text) {
-            yield { type: "text", text: event.content_block.text };
-          }
-        } else if (event.type === "content_block_delta") {
-          if (event.delta.type === "text_delta" && event.delta.text) {
-            yield { type: "text", text: event.delta.text };
-          }
-          if (event.delta.type === "input_json_delta") {
-            const input = toolInputs.get(event.index);
-            if (input) input.json += event.delta.partial_json;
-          }
-        } else if (event.type === "content_block_stop") {
-          const input = toolInputs.get(event.index);
-          if (input) input.isClosed = true;
+  try {
+    const stream = clientOf(endpoint).messages.stream(
+      {
+        model: request.model,
+        max_tokens: request.maxTokens,
+        system,
+        messages,
+        tools,
+        // The tools and the start of the conversation stay the same from one
+        // answer to the next, so Anthropic reuses them.
+        cache_control: { type: "ephemeral" },
+      },
+      { signal },
+    );
+    for await (const event of stream) {
+      // Thinking counts as the start of an answer: Claude is answering.
+      if (event.type === "content_block_start") {
+        firstPiece();
+        if (event.content_block.type === "tool_use") {
+          toolInputs.set(event.index, { json: "", isClosed: false });
         }
+        if (event.content_block.type === "text" && event.content_block.text) {
+          yield { type: "text", text: event.content_block.text };
+        }
+      } else if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta" && event.delta.text) {
+          yield { type: "text", text: event.delta.text };
+        }
+        if (event.delta.type === "input_json_delta") {
+          const input = toolInputs.get(event.index);
+          if (input) input.json += event.delta.partial_json;
+        }
+      } else if (event.type === "content_block_stop") {
+        const input = toolInputs.get(event.index);
+        if (input) input.isClosed = true;
       }
-      final = await stream.finalMessage();
-      break;
-    } catch (error) {
-      // Some models reject a draft as the last message before streaming starts.
-      if (
-        !signal.aborted &&
-        messages === history &&
-        endsWithDraft(history) &&
-        error instanceof APIError &&
-        error.status === 400 &&
-        error.type === "invalid_request_error" &&
-        error.message.includes("does not support assistant message prefill")
-      ) {
-        messages = [...history, continueDraft];
-        continue;
-      }
-      throw problemOf(error, signal);
     }
+    final = await stream.finalMessage();
+  } catch (error) {
+    throw problemOf(error, signal);
   }
 
   const stop = stopOf(

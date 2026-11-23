@@ -444,69 +444,18 @@ describe("Claude's answers", () => {
     }
   });
 
-  it("continues a draft when the model rejects assistant prefill", async () => {
+  it("refuses a conversation that ends with Claude's own text, before sending it", async () => {
     const sources = fakeSources();
-    sources.anthropic.answer = { callsTool: true, thinks: true };
-    const fetcher = sources.fetchers.internet;
-    const requests = vi
-      .fn<typeof fetch>()
-      .mockImplementation(async (input, init) => {
-        const { messages } = JSON.parse(String(init?.body)) as {
-          messages: { role: string }[];
-        };
-        if (messages.at(-1)?.role === "assistant") {
-          return Response.json(
-            {
-              type: "error",
-              error: {
-                type: "invalid_request_error",
-                message:
-                  "This model does not support assistant message prefill. The conversation must end with a user message.",
-              },
-            },
-            { status: 400 },
-          );
-        }
-        return fetcher(input, init);
-      });
-    sources.fetchers.internet = requests;
-    const kept: KeptAnswers = new Map();
-    const draft: ModelMessage[] = [
-      { role: "user", content: "Lights on" },
-      { role: "assistant", content: "I'll turn the" },
-    ];
-
-    await answer(sources, draft, kept);
-    expect(requests).toHaveBeenCalledTimes(2);
-    const [retried] = sources.chats as { messages: unknown[] }[];
-    expect(retried?.messages).toEqual([
-      draft[0],
-      { role: "assistant", content: [{ type: "text", text: "I'll turn the" }] },
-      { role: "user", content: "Please continue the assistant's draft." },
-    ]);
-
-    sources.anthropic.answer = { text: ["Done."] };
-    await answer(
-      sources,
-      [
-        ...draft,
-        {
-          role: "assistant",
-          content: "It's noon.",
-          toolCalls: [{ id: "toolu_1", name: "lights", input: {} }],
-        },
-        { role: "tool", toolCallId: "toolu_1", content: "On" },
-      ],
-      kept,
-    );
-    const followUp = sources.chats[1] as { messages: unknown[] };
-    expect(followUp.messages.slice(0, 3)).toEqual(retried?.messages);
-    expect(followUp.messages[3]).toMatchObject({
-      role: "assistant",
-      content: expect.arrayContaining([
-        { type: "thinking", thinking: "", signature: "sig-thought-1" },
+    await expect(
+      answer(sources, [
+        { role: "user", content: "Lights on" },
+        { role: "assistant", content: "I'll turn the" },
       ]),
+    ).rejects.toMatchObject({
+      problem: "refused",
+      message: expect.stringContaining("not after its own"),
     });
+    expect(sources.requests).toEqual([]);
   });
 
   it("rejects a stream with no stop reason", async () => {

@@ -452,6 +452,7 @@ export function AddSource(props: {
                 forget();
               }}
               disabled={adding}
+              phoneMenu
               className="self-start"
             />
             <div className="flex flex-col gap-1.5">
