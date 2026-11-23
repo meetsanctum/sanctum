@@ -37,7 +37,7 @@ export function contentSecurityPolicy(allowPlainHttp: boolean) {
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "img-src 'self' data:",
+    "img-src 'self' data: blob:",
     `connect-src https: wss:${allowPlainHttp ? " http: ws:" : ""}`,
     "object-src 'none'",
     "base-uri 'none'",

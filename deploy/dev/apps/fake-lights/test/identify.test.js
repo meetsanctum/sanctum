@@ -10,6 +10,7 @@ beforeEach(async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
   reports = [];
   context = {
+    actor: { kind: "app", id: app.id },
     devices: {
       list: async () => [],
       register: async ({ key }) => ({ id: key }),
@@ -17,6 +18,7 @@ beforeEach(async (t) => {
       present: async () => {},
       found: async () => {},
     },
+    blobs: { put: async () => ({ hash: "0".repeat(64) }) },
   };
   await app.start(context);
   t.after(() => app.stop());

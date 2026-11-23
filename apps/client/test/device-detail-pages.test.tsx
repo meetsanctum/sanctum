@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HostedApp } from "../src/apps";
+import { useArtwork } from "../src/artwork";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail } from "../src/device-detail";
 import { forgetPageTicket } from "../src/frames/page-ticket";
@@ -16,6 +17,7 @@ import { unknownHome } from "./home-fixtures";
 import {
   contactSensor,
   light,
+  mediaPlayer,
   places,
   plug,
   sensor,
@@ -25,6 +27,7 @@ vi.mock("../src/core-fetch", () => ({
   coreJson: vi.fn(),
   currentCredential: () => ({ token: "client" }),
 }));
+vi.mock("../src/artwork", () => ({ useArtwork: vi.fn(() => null) }));
 
 // A device's detail is the device's, whichever of its tiles opened it: the
 // same pages in the same order, opening on the page of the tile pressed.
@@ -83,6 +86,7 @@ const relay: DeviceInfo = {
 
 function Detail(props: {
   tileKey: string;
+  open?: boolean;
   openFirstPage?: boolean;
   apps?: readonly HostedApp[];
 }) {
@@ -92,7 +96,7 @@ function Detail(props: {
       container={container}
       tileKey={props.tileKey}
       openFirstPage={props.openFirstPage}
-      open
+      open={props.open ?? true}
       devices={shown}
       apps={props.apps ?? [presses]}
       live={live}
@@ -138,6 +142,7 @@ beforeEach(() => {
   );
   live = createLiveFeed();
   devices = [panel, relay];
+  vi.mocked(useArtwork).mockReturnValue(null);
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init) => {
     const page =
@@ -173,6 +178,59 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+});
+
+it("keeps the opening tint on Remote and updates it on Playing", async () => {
+  const tv = mediaPlayer("tv", "TV", "office", {
+    on: true,
+    activity: "paused",
+  });
+  devices = [tv];
+  const first = "oklch(0.4 0.1 40)";
+  const next = "oklch(0.4 0.1 80)";
+  const tint = () =>
+    dialog()
+      .querySelector("[data-tint]:last-of-type")
+      ?.getAttribute("data-tint");
+  const select = (page: string) =>
+    act(async () => {
+      dialog()
+        .querySelector<HTMLButtonElement>(`[role=tab][aria-label=${page}]`)!
+        .click();
+    });
+
+  vi.mocked(useArtwork).mockReturnValue({ url: "blob:first", colour: first });
+  await open("tv/player");
+  expect(tint()).toBe(first);
+  await select("Remote");
+
+  vi.mocked(useArtwork).mockReturnValue({ url: "blob:next", colour: next });
+  await act(async () =>
+    live.publish({ type: "device", id: tv.id, device: { ...tv } }),
+  );
+  expect(tint()).toBe(first);
+
+  await select("Playing");
+  expect(tint()).toBe(next);
+});
+
+it("asks for the same artwork again when the detail is reopened", async () => {
+  const hash = "a".repeat(64);
+  devices = [
+    mediaPlayer("tv", "TV", "office", {
+      on: true,
+      activity: "paused",
+      media: { artwork: hash },
+    }),
+  ];
+  await open("tv/player");
+  expect(useArtwork).toHaveBeenLastCalledWith(hash);
+  await act(async () =>
+    root.render(<Detail tileKey="tv/player" open={false} />),
+  );
+  expect(useArtwork).toHaveBeenLastCalledWith(null);
+  await open("tv/player");
+  expect(useArtwork).toHaveBeenLastCalledWith(hash);
 });
 
 describe("a light with a button and a temperature sensor", () => {

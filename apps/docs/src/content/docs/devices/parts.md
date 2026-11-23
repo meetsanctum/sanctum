@@ -93,7 +93,9 @@ features the part declares when it joins.
 
 It says whether it is playing, paused, loading or idle, and whatever it
 knows of what is playing: its title, artist, album, series, season and
-episode, how long it is and where it is, and the app playing it. Where it
+episode, how long it is and where it is, the app playing it, and a picture
+of it, which its driver hands over and the Playing page shows, its colour
+on the glass behind. Where it
 has them, it also says whether it is on, its volume and whether it is muted.
 
 Turning it on or off, playing or pausing, a volume and mute wait for the

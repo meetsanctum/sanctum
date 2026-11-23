@@ -2,6 +2,7 @@ import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useRef,
   useState,
@@ -63,6 +64,8 @@ export function SwipePages(props: {
   pages: SwipePage[];
   /** The page it opens on, by its id: the first unless said. */
   initial?: string;
+  /** The page on show, including when it first opens. */
+  onPageChange?: (id: string) => void;
 }) {
   const { pages } = props;
   const [chosen, setChosen] = useState(() => {
@@ -85,6 +88,12 @@ export function SwipePages(props: {
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const tabRow = useRef<HTMLDivElement>(null);
   const id = useId();
+  const pageId = pages[page]?.id;
+  const announcePage = useEffectEvent((id: string) => props.onPageChange?.(id));
+
+  useEffect(() => {
+    if (pageId !== undefined) announcePage(pageId);
+  }, [pageId]);
 
   // The current tab scrolls into view, clear of the fade, however the page
   // was chosen: a swipe, a click or a key.

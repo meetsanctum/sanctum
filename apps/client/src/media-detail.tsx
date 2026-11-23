@@ -15,6 +15,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
@@ -43,6 +44,8 @@ type Props = {
   /** Offline: shown, with nothing to press. */
   disabled: boolean;
   failures?: number;
+  /** The picture of what plays, once it has arrived (artwork.ts). */
+  artwork?: string | null;
   onCommand: (command: MediaCommand) => void;
 };
 
@@ -103,10 +106,42 @@ function aboutWhatPlays(capability: Media): string | null {
   return parts.length > 0 ? [...new Set(parts)].join(" · ") : null;
 }
 
-// The picture of what plays. Until a player hands one over, it is a soft
-// grey gradient the shell draws, saying "Nothing playing" while nothing
-// does; a song's is square, a film's or a show's as wide as a screen.
-function Artwork(props: { square: boolean; nothing: boolean }) {
+// The picture of what plays, in its own shape up to 300 by 264 px. Without
+// one, it is a soft grey gradient the shell draws, saying "Nothing playing"
+// while nothing does; a song's is square, a film's or a show's as wide as a
+// screen.
+function Artwork(props: {
+  square: boolean;
+  nothing: boolean;
+  url?: string | null;
+}) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+  if (props.url && !props.nothing && !failed) {
+    // The player's own picture in its own shape: as wide as the page beside
+    // it allows, 300 px, or 264 px tall where it's taller than that.
+    const shape = ratio ?? (props.square ? 1 : 16 / 9);
+    return (
+      <img
+        src={props.url}
+        alt=""
+        onError={() => setFailed(true)}
+        onLoad={(event) => {
+          const { naturalWidth, naturalHeight } = event.currentTarget;
+          if (naturalWidth > 0 && naturalHeight > 0) {
+            setRatio(naturalWidth / naturalHeight);
+          }
+        }}
+        style={
+          {
+            aspectRatio: shape,
+            "--artwork-width": `min(300px, ${Math.round(264 * shape)}px)`,
+          } as CSSProperties
+        }
+        className="block w-full rounded-xl object-cover @min-[560px]:w-(--artwork-width)"
+      />
+    );
+  }
   return (
     <div
       className={`grid w-full place-items-center overflow-hidden rounded-xl px-4 text-center ${props.square ? "aspect-square @min-[560px]:w-66" : "aspect-video @min-[560px]:w-75"}`}
@@ -343,7 +378,12 @@ export function MediaPlaying(props: Props) {
           </div>
         </div>
         <div className="order-first grid place-items-center self-stretch @min-[560px]:order-none">
-          <Artwork square={square} nothing={nothing} />
+          <Artwork
+            key={props.artwork}
+            square={square}
+            nothing={nothing}
+            url={props.artwork}
+          />
         </div>
       </div>
     </div>

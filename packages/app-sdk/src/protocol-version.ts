@@ -24,6 +24,7 @@
 // 13 brings media players: a driver may register the `media` kind.
 // 14 brings the home's AI model: ctx.models, an answer read by its handle,
 // and `no_turn` for a call outside a turn.
-export const protocolVersion = 14;
+// 15 lets a driver hand the core a picture (ctx.blobs.put).
+export const protocolVersion = 15;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;
