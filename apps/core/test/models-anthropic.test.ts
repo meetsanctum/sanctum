@@ -218,13 +218,13 @@ describe("Anthropic as a source", () => {
     }
   });
 
-  it("uses the household's key even when the SDK has custom headers", async () => {
+  it("sends SDK headers and the household's key without environment overrides", async () => {
     const sources = fakeSources();
     const requests = vi.spyOn(sources.fetchers, "internet");
     const { core, token } = await home(sources);
     vi.stubEnv(
       "ANTHROPIC_CUSTOM_HEADERS",
-      "Authorization: Bearer another-key\nX-Api-Key: another-key\nX-Gateway-Token: another-key",
+      "Authorization: Bearer another-key\nX-Api-Key: another-key\nX-Gateway-Token: another-key\n Host : other.example\n Anthropic-Version : other-version",
     );
     try {
       const look = await post(
@@ -234,12 +234,17 @@ describe("Anthropic as a source", () => {
         { token },
       );
       expect(look.json<ModelSourceLook>()).toMatchObject({ found: true });
-      expect(
-        Object.fromEntries(new Headers(requests.mock.calls[0]?.[1]?.headers)),
-      ).toEqual({
+      const headers = Object.fromEntries(
+        new Headers(requests.mock.calls[0]?.[1]?.headers),
+      );
+      expect(headers).toMatchObject({
+        accept: "application/json",
         authorization: `Bearer ${sources.anthropic.key}`,
-        "anthropic-version": "2026-10-21",
+        "anthropic-version": expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       });
+      expect(headers).not.toHaveProperty("x-api-key");
+      expect(headers).not.toHaveProperty("x-gateway-token");
+      expect(headers).not.toHaveProperty("host");
     } finally {
       vi.unstubAllEnvs();
     }

@@ -56,14 +56,13 @@ export type KeptAnswers = Map<
 function boundedFetch(endpoint: AnthropicEndpoint): typeof fetch {
   let size = 0;
   return async (input, init) => {
-    // Build the API headers here so the SDK's environment headers stay local.
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${endpoint.key}`);
+    headers.delete("x-api-key");
+    headers.delete("host");
     const response = await endpoint.fetch(input, {
       ...init,
-      headers: {
-        authorization: `Bearer ${endpoint.key}`,
-        "anthropic-version": "2026-10-21",
-        ...(init?.body == null ? {} : { "content-type": "application/json" }),
-      },
+      headers,
       redirect: "error",
     });
     if (!response.body) return response;
@@ -90,9 +89,17 @@ function boundedFetch(endpoint: AnthropicEndpoint): typeof fetch {
 }
 
 function clientOf(endpoint: AnthropicEndpoint) {
+  // The SDK merges these entries over environment headers by name. It skips
+  // undefined values when building the request, leaving its built-in defaults.
+  const overrides: [string, undefined][] = [];
+  for (const line of (process.env.ANTHROPIC_CUSTOM_HEADERS ?? "").split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon >= 0) overrides.push([line.slice(0, colon).trim(), undefined]);
+  }
   return new Anthropic({
     apiKey: endpoint.key,
     baseURL: endpoint.baseUrl,
+    defaultHeaders: Object.fromEntries(overrides),
     fetch: boundedFetch(endpoint),
     logLevel: "off",
     openTelemetry: false,
