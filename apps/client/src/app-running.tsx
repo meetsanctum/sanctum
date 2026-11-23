@@ -146,7 +146,7 @@ export function AppRunningSection(props: {
   const share = memory === null ? 0 : memory / (limitMb * mebibyte);
   const restarts = restartsWords(app.name, running?.restarts);
   return (
-    <Section id="app-running" title="How it's running">
+    <Section id="app-running" title="How It's Running">
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         <RunningRow
           icon={Gauge}

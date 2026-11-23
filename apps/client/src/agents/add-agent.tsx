@@ -328,7 +328,7 @@ function NameStep(props: {
         </div>
       ) : props.hasPermissionsFailed ? (
         <p role="alert" className="m-0 text-sm text-destructive">
-          What AI agents can use didn&apos;t load. Close this and open it again.
+          {canUseTitle} didn&apos;t load. Close this and open it again.
         </p>
       ) : (
         <p role="status" className="m-0 text-[13px] text-muted-foreground">

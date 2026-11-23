@@ -216,7 +216,7 @@ export function AppPage(props: {
   return (
     <>
       <SettingsPageBar
-        title={`${app.name} settings`}
+        title={`${app.name} Settings`}
         backTo={props.backTo}
         onBack={props.onDone}
       />

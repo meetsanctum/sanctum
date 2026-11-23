@@ -409,7 +409,7 @@ describe("the last 24 hours", () => {
     await render();
     const day = section("status-day");
     expect(day.textContent).toBe(
-      "Last 24 hoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB now",
+      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB now",
     );
     expect(day.querySelectorAll('[aria-busy="true"]')).toHaveLength(3);
   });
@@ -420,7 +420,7 @@ describe("the last 24 hours", () => {
     };
     await render();
     expect(section("status-day").textContent).toBe(
-      "Last 24 hoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Updates and services answers",
+      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Updates and services answers",
     );
   });
 });

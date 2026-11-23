@@ -185,7 +185,7 @@ describe("Needs attention", () => {
   it("lists what needs someone, the most pressing first, each with its fix", async () => {
     await show([desk, sensor, heater, button, lamp, plug]);
 
-    expect(container.querySelector("h2")?.textContent).toBe("Needs attention");
+    expect(container.querySelector("h2")?.textContent).toBe("Needs Attention");
     expect(container.textContent).toContain("4 devices");
     expect(rows()).toEqual([
       "Hall plugNot paired any more: add it again or remove it · Hall · TRADFRI control outletRemove",

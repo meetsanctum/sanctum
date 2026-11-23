@@ -123,7 +123,7 @@ export function SettingsOverview(props: {
         {row(
           "rooms",
           Layers,
-          "Rooms and floors",
+          "Rooms and Floors",
           describeRoomsAndFloors(places),
         )}
         {row(

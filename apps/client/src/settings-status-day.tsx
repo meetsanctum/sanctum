@@ -110,7 +110,7 @@ export function LastDaySection(props: {
       </div>
     );
     return (
-      <Section id="status-day" title="Last 24 hours">
+      <Section id="status-day" title="Last 24 Hours">
         <div className={cn("flex flex-col", failed ? "gap-3" : "gap-6")}>
           <Reading {...heading.processor}>{shape}</Reading>
           {host.processor.celsius !== null && (
@@ -165,7 +165,7 @@ export function LastDaySection(props: {
       : "processor";
 
   return (
-    <Section id="status-day" title="Last 24 hours">
+    <Section id="status-day" title="Last 24 Hours">
       <div className="flex flex-col gap-6">
         <Reading {...heading.processor} summary={processorSummary(usage)}>
           <DayLineChart

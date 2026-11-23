@@ -229,7 +229,7 @@ describe("the core's tools for AI agents", () => {
       content: {
         error: "not_allowed",
         message:
-          "“Control your lights” is switched off for AI agents in Settings, What AI agents can use.",
+          "“Control your lights” is switched off for AI agents in Settings, What AI Agents Can Use.",
       },
     });
     // Logged once, naming the switch.
@@ -265,7 +265,7 @@ describe("the core's tools for AI agents", () => {
       content: {
         error: "not_allowed",
         message:
-          "“Control your switches” is switched off for AI agents in Settings, What AI agents can use.",
+          "“Control your switches” is switched off for AI agents in Settings, What AI Agents Can Use.",
       },
     });
 

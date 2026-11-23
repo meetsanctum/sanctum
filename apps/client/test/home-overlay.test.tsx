@@ -191,7 +191,7 @@ it("opens the app's settings after adding it from a hardware offer", async () =>
       container.querySelector(".top-bar h1") ??
       container.querySelector("main h1")
     )?.textContent;
-  expect(title()).toBe("Example settings");
+  expect(title()).toBe("Example Settings");
   await press("Done");
   expect(title()).toBe("Home");
 });

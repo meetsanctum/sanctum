@@ -271,7 +271,7 @@ describe("an app's settings page", () => {
     await show({ ...moods, run: { since: "2026-11-06T10:00:00.000Z" } });
 
     const heading = [...container.querySelectorAll("h2")].find(
-      ({ textContent }) => textContent === "How it's running",
+      ({ textContent }) => textContent === "How It's Running",
     );
     const turnOff = [...container.querySelectorAll("button")].find(
       ({ textContent }) => textContent === "Turn off Moods",
@@ -304,13 +304,13 @@ describe("an app's settings page", () => {
   it("has nothing to say of how one in the core's process is running", async () => {
     await show(moods);
 
-    expect(container.textContent).not.toContain("How it's running");
+    expect(container.textContent).not.toContain("How It's Running");
   });
 
   it("says its version, its state and what it does", async () => {
     await show(moods);
 
-    expect(container.querySelector("h1")?.textContent).toBe("Moods settings");
+    expect(container.querySelector("h1")?.textContent).toBe("Moods Settings");
     expect(text()).toContain("Version 0.8.0");
     expect(text()).toContain("Running");
     expect(text()).toContain("Moods for each room");
@@ -521,7 +521,7 @@ describe("an app's settings page", () => {
       '[aria-labelledby="settings-app-pieces"]',
     )!;
     expect(pieces.textContent).toBe(
-      "Workflow piecesWith sample valuesRun AuroraStep · Used by 1 automation",
+      "Workflow PiecesWith sample valuesRun AuroraStep · Used by 1 automation",
     );
   });
 

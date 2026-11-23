@@ -65,7 +65,7 @@ export const setupPage: Record<SetupTarget, string> = {
 const pageTitles: Record<string, string> = {
   main: "Settings",
   [householdSettingsPage]: "Household",
-  [roomsSettingsPage]: "Rooms and floors",
+  [roomsSettingsPage]: "Rooms and Floors",
   [devicesSettingsPage]: "Devices",
   [maintenanceSettingsPage]: "Maintenance",
   [activitySettingsPage]: "Activity",
@@ -86,7 +86,7 @@ export function settingsPageTitle(
 ) {
   if (page === appSettingsPage) {
     const app = apps.find((each) => each.id === params.id);
-    return app ? `${app.name} settings` : "Settings";
+    return app ? `${app.name} Settings` : "Settings";
   }
   return pageTitles[page] ?? "Settings";
 }
@@ -203,7 +203,7 @@ export function SettingsPage(props: {
     case roomsSettingsPage:
       return (
         <>
-          <PageBar title="Rooms and floors" leading={back} />
+          <PageBar title="Rooms and Floors" leading={back} />
           <RoomsSection live={props.live} adding={start === "add-room"} />
         </>
       );

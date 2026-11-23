@@ -171,7 +171,7 @@ export function AppAdds(props: {
   return (
     <>
       {manifest.driver && (
-        <Section id="settings-app-devices" title="Devices it brings">
+        <Section id="settings-app-devices" title="Devices It Brings">
           <Line
             icon={SquarePlus}
             title={own.length === 0 ? "None yet" : plural(own.length, "device")}
@@ -240,7 +240,7 @@ export function AppAdds(props: {
           <Section
             key={section.id}
             id="settings-app-section"
-            title="Room section"
+            title="Room Section"
             hint="Drawn from its samples"
           >
             <Line
@@ -279,7 +279,7 @@ export function AppAdds(props: {
         );
       })}
       {devicePages.length > 0 && (
-        <Section id="settings-app-device-pages" title="Device pages">
+        <Section id="settings-app-device-pages" title="Device Pages">
           {devicePages.map((page) => {
             if (page.devices === "own") {
               return (
@@ -386,7 +386,7 @@ function PiecesSection(props: {
   return (
     <Section
       id="settings-app-pieces"
-      title="Workflow pieces"
+      title="Workflow Pieces"
       hint="With sample values"
     >
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
@@ -438,7 +438,7 @@ function SharesSection(props: {
   return (
     <Section
       id="settings-app-shares"
-      title="Information it shares"
+      title="Information It Shares"
       hint="Other apps read it with your permission"
     >
       {shared.map((type) => {
