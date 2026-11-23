@@ -1,6 +1,7 @@
 import {
   blobKeptMs,
   maxAppBlobBytes,
+  maxAppBlobs,
   maxBlobBytes,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
@@ -153,6 +154,31 @@ describe("an app's blobs", () => {
     expect(() => blobs.put(app, "image/png", bigPng(fit))).toThrow(/16 MB/);
     expect(blobs.get(unnamed)).not.toBeNull();
     expect(() => blobs.put(otherApp, "image/png", bigPng(fit))).not.toThrow();
+  });
+
+  it("keep at most 128 of an app's, however small, letting the oldest unnamed go", () => {
+    let at = 0;
+    const named = new Set<string>();
+    const blobs = createBlobs({
+      named: () => new Map([[app, named]]),
+      now: () => new Date(at),
+      log() {},
+    });
+    const other = blobs.put(otherApp, "image/png", png(0, 0));
+    const hashes = Array.from({ length: maxAppBlobs }, (_, index) => {
+      at += 1;
+      return blobs.put(app, "image/png", png(index >> 8, index & 0xff, 1));
+    });
+    named.add(hashes[0]!);
+    blobs.put(app, "image/png", png(255, 255, 1));
+    expect(blobs.get(hashes[0]!)).not.toBeNull();
+    expect(blobs.get(hashes[1]!)).toBeNull();
+    expect(blobs.get(hashes[2]!)).not.toBeNull();
+    expect(blobs.get(other)).not.toBeNull();
+
+    for (const hash of hashes) named.add(hash);
+    named.add(blobs.put(app, "image/png", png(255, 255, 2)));
+    expect(() => blobs.put(app, "image/png", png(255, 255, 3))).toThrow(/128/);
   });
 
   it("retains shared bytes when one owner is removed", () => {

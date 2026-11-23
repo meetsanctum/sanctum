@@ -2,6 +2,7 @@ import {
   ActionError,
   blobKeptMs,
   maxAppBlobBytes,
+  maxAppBlobs,
   type BlobType,
 } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
@@ -16,8 +17,9 @@ import { deviceCapabilities, devices } from "../devices/schema.js";
 // only, never on disk or in a backup, so a picture of what someone watched
 // doesn't outlast the core. One lives while a device's reported state names
 // it and 10 minutes after; a sweep each minute lets the rest go. Each app
-// keeps at most 16 MB, and a put past that drops its oldest that nothing
-// names. An app's go when it's removed.
+// keeps at most 16 MB in at most 128 blobs, and a put past either drops its
+// oldest that nothing names, sooner than 10 minutes if it must. An app's go
+// when it's removed.
 
 // How often the sweep runs, in ms.
 const sweepEveryMs = 60_000;
@@ -43,11 +45,16 @@ export function createBlobs(options: {
 }) {
   const now = () => (options.now?.() ?? new Date()).getTime();
   const kept = new Map<string, Kept>();
+  // Each app's blobs, so a put weighs only its own app's.
+  const byApp = new Map<string, Map<string, Kept>>();
   let timer: NodeJS.Timeout | undefined;
 
   function forget(hash: string, blob: Kept, app: string) {
     blob.owners.delete(app);
     if (blob.owners.size === 0) kept.delete(hash);
+    const own = byApp.get(app);
+    own?.delete(hash);
+    if (own?.size === 0) byApp.delete(app);
   }
 
   function sweep() {
@@ -69,8 +76,9 @@ export function createBlobs(options: {
     /**
      * Keeps an app's blob, already checked (blobOf), and answers its hash.
      * The same bytes give the same hash and share storage, but count for
-     * each app that put them. Past an app's 16 MB, its oldest blobs that
-     * none of its devices name go if that makes room for the new one.
+     * each app that put them. Past an app's 16 MB or 128 blobs, its oldest
+     * blobs that none of its devices name go if that makes room for the new
+     * one.
      */
     put(app: string, type: BlobType, bytes: Uint8Array): string {
       const hash = createHash("sha256").update(bytes).digest("hex");
@@ -81,37 +89,47 @@ export function createBlobs(options: {
         owner.usedAt = at;
         return hash;
       }
-      const own = [...kept].flatMap(([hash, blob]) => {
-        const owner = blob.owners.get(app);
-        return owner ? [{ hash, blob, usedAt: owner.usedAt }] : [];
-      });
+      const own = [...(byApp.get(app) ?? [])].map(([hash, blob]) => ({
+        hash,
+        blob,
+        usedAt: blob.owners.get(app)!.usedAt,
+      }));
       let size = own.reduce(
         (total, { blob }) => total + blob.bytes.length,
         bytes.length,
       );
-      if (size > maxAppBlobBytes) {
+      let count = own.length + 1;
+      const overLimit = () => size > maxAppBlobBytes || count > maxAppBlobs;
+      if (overLimit()) {
         const named = options.named().get(app);
         const unnamed = own.filter(({ hash }) => !named?.has(hash));
         const reclaimable = unnamed.reduce(
           (total, { blob }) => total + blob.bytes.length,
           0,
         );
-        if (size - reclaimable > maxAppBlobBytes) {
+        if (
+          size - reclaimable > maxAppBlobBytes ||
+          count - unnamed.length > maxAppBlobs
+        ) {
           throw new ActionError(
             "conflict",
-            "The core keeps 16 MB of an app's pictures, and its devices name too many to make room",
+            "The core keeps 16 MB or 128 of an app's pictures, and its devices name too many to make room",
           );
         }
         unnamed.sort((a, b) => a.usedAt - b.usedAt);
         for (const { hash, blob } of unnamed) {
           forget(hash, blob, app);
           size -= blob.bytes.length;
-          if (size <= maxAppBlobBytes) break;
+          count -= 1;
+          if (!overLimit()) break;
         }
       }
       const blob = known ?? { type, bytes, owners: new Map<string, Owner>() };
       blob.owners.set(app, { usedAt: at, wasNamed: false });
       kept.set(hash, blob);
+      const mine = byApp.get(app) ?? new Map<string, Kept>();
+      mine.set(hash, blob);
+      byApp.set(app, mine);
       return hash;
     },
 
@@ -123,7 +141,7 @@ export function createBlobs(options: {
 
     /** An app was removed: what it put goes with it. */
     removeApp(app: string) {
-      for (const [hash, blob] of kept) {
+      for (const [hash, blob] of byApp.get(app) ?? []) {
         forget(hash, blob, app);
       }
     },
@@ -145,6 +163,7 @@ export function createBlobs(options: {
       clearInterval(timer);
       timer = undefined;
       kept.clear();
+      byApp.clear();
     },
 
     /** Runs the sweep now, as its timer would. */

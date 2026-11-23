@@ -6,8 +6,9 @@
 // The core keeps blobs in its memory, never on disk or in a backup: one
 // lives while a device's state names it and 10 minutes after, and all of
 // them go when the core stops. A driver that names a picture puts it again
-// when it starts. Each app keeps at most 16 MB; past that, the core drops
-// its oldest that nothing names.
+// when it starts. Each app keeps at most 16 MB in at most 128 blobs; past
+// either, the core drops its oldest that nothing names, without waiting out
+// the 10 minutes.
 
 /** The types a blob may be: pictures a browser shows. */
 export const blobTypes = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -17,6 +18,8 @@ export type BlobType = (typeof blobTypes)[number];
 export const maxBlobBytes = 700_000;
 /** The most an app's blobs come to, in bytes. */
 export const maxAppBlobBytes = 16 * 1024 * 1024;
+/** The most blobs an app keeps at once. */
+export const maxAppBlobs = 128;
 /** How long a blob outlives the last device state that named it, in ms. */
 export const blobKeptMs = 10 * 60_000;
 
