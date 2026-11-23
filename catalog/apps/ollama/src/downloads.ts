@@ -1,3 +1,4 @@
+import type { OfferedModel } from "./models.js";
 import type { Ollama } from "./ollama.js";
 
 // The models downloading while the app runs, which outlast the call that
@@ -6,7 +7,7 @@ import type { Ollama } from "./ollama.js";
 // until it's tried again or stopped; one that's done leaves the list, as the
 // model is then on Sanctum.
 
-export type Download = {
+type Download = {
   id: string;
   completedBytes: number;
   totalBytes: number;
@@ -16,76 +17,86 @@ export type Download = {
   problem?: string;
 };
 
-type Running = Download & {
+type TrackedDownload = {
+  progress: Download;
+  sizeBytes: number;
   controller: AbortController;
-  startedAt: number;
 };
 
-export function createDownloads(options: {
-  ollama: () => Ollama;
-  log: (message: string) => void;
-  now?: () => number;
-}) {
-  const now = options.now ?? Date.now;
-  const downloads = new Map<string, Running>();
+export function createDownloads(
+  ollama: Ollama,
+  log: (message: string) => void,
+) {
+  const downloads = new Map<string, TrackedDownload>();
 
-  function shown({ controller: _, startedAt: __, ...download }: Running) {
-    return download;
+  function stop(id: string) {
+    const tracked = downloads.get(id);
+    if (!tracked) return;
+    tracked.controller.abort();
+    downloads.delete(id);
   }
 
   return {
-    list: (): Download[] => [...downloads.values()].map(shown),
+    list: () =>
+      [...downloads.values()].map(({ progress }) => ({ ...progress })),
+    isRunning(id: string) {
+      const tracked = downloads.get(id);
+      return tracked !== undefined && tracked.progress.problem === undefined;
+    },
+    // The registry reports progress one layer at a time. Reserve the full
+    // estimate for each active pull until it finishes.
+    reservedBytes() {
+      let bytes = 0;
+      for (const { progress, sizeBytes } of downloads.values()) {
+        if (progress.problem === undefined) {
+          bytes += Math.max(sizeBytes, progress.totalBytes);
+        }
+      }
+      return bytes;
+    },
 
-    /** Starts a download, or tries a failed one again; one under way goes on. */
-    start(id: string) {
-      const current = downloads.get(id);
-      if (current && !current.problem) return;
-      const running: Running = {
-        id,
-        completedBytes: current?.completedBytes ?? 0,
-        totalBytes: current?.totalBytes ?? 0,
+    /** Starts a download or tries a failed one again. */
+    start({ id, sizeBytes }: OfferedModel) {
+      const progress: Download = { id, completedBytes: 0, totalBytes: 0 };
+      const tracked: TrackedDownload = {
+        progress,
+        sizeBytes,
         controller: new AbortController(),
-        startedAt: now(),
       };
-      downloads.set(id, running);
-      let first: number | undefined;
-      void options
-        .ollama()
-        .pull(id, running.controller.signal, (progress) => {
-          first ??= progress.completedBytes;
-          running.completedBytes = progress.completedBytes;
-          running.totalBytes = progress.totalBytes;
-          const seconds = (now() - running.startedAt) / 1000;
-          if (seconds >= 1) {
-            running.bytesPerSecond =
-              (progress.completedBytes - first) / seconds;
+      downloads.set(id, tracked);
+      let startedAt: number | undefined;
+      void ollama
+        .pull(id, tracked.controller.signal, (update) => {
+          const now = performance.now();
+          startedAt ??= now;
+          progress.completedBytes = update.completedBytes;
+          progress.totalBytes = Math.max(sizeBytes, update.totalBytes);
+          const seconds = (now - startedAt) / 1000;
+          if (seconds >= 1 && update.transferredBytes > 0) {
+            progress.bytesPerSecond = update.transferredBytes / seconds;
           }
         })
         .then(
           () => {
-            if (downloads.get(id) === running) downloads.delete(id);
+            if (downloads.get(id) === tracked) downloads.delete(id);
           },
           (error: unknown) => {
-            if (running.controller.signal.aborted) return;
+            if (tracked.controller.signal.aborted) return;
             const problem =
-              error instanceof Error ? error.message : String(error);
-            options.log(`Couldn't download ${id}: ${problem}`);
-            if (downloads.get(id) === running) running.problem = problem;
+              (error instanceof Error ? error.message : String(error)) ||
+              "Ollama couldn't finish the download";
+            progress.problem = problem;
+            log(`Couldn't download ${id}: ${problem}`);
           },
         );
     },
 
     /** Stops a download; Ollama keeps what came. */
-    stop(id: string) {
-      const running = downloads.get(id);
-      if (!running) return;
-      running.controller.abort();
-      downloads.delete(id);
-    },
+    stop,
 
     /** Stops them all, as the app stops. */
     stopAll() {
-      for (const id of [...downloads.keys()]) this.stop(id);
+      for (const id of downloads.keys()) stop(id);
     },
   };
 }

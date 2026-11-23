@@ -7,6 +7,7 @@ import type { HostResources } from "@meetsanctum/app-sdk";
 // storage there is, and says when the processor is likely too slow.
 
 const gb = 1_000_000_000;
+const mib = 1024 ** 2;
 
 export type OfferedModel = {
   /** Ollama's tag, such as qwen3:4b. */
@@ -47,7 +48,7 @@ export const offeredModels: readonly OfferedModel[] = [
 ];
 
 /** Storage left free beside a download, for the home's own data and updates. */
-export const storageMarginBytes = 2 * gb;
+const storageMarginBytes = 2 * gb;
 
 export type HostCheck = {
   processor: { name: string | null; cores: number; isLikelySlow: boolean };
@@ -77,7 +78,8 @@ export function hostCheck(
       totalBytes: memory.totalBytes,
       roomBytes: Math.min(
         memory.availableBytes,
-        ollamaMemoryBytes ?? memory.availableBytes,
+        // An older manager caps Ollama at half the host's memory in MiB.
+        ollamaMemoryBytes ?? Math.floor(memory.totalBytes / (2 * mib)) * mib,
       ),
     },
     storage,
@@ -85,11 +87,13 @@ export function hostCheck(
 }
 
 /** Whether a model fits the memory and storage this Sanctum has free. */
-export function fits(model: OfferedModel, check: HostCheck) {
+export function fits(model: OfferedModel, check: HostCheck, reservedBytes = 0) {
   return (
-    (!check.memory || model.memoryBytes <= check.memory.roomBytes) &&
-    (!check.storage ||
-      model.sizeBytes + storageMarginBytes <= check.storage.freeBytes)
+    check.memory !== null &&
+    model.memoryBytes <= check.memory.roomBytes &&
+    check.storage !== null &&
+    model.sizeBytes + storageMarginBytes + reservedBytes <=
+      check.storage.freeBytes
   );
 }
 
@@ -98,7 +102,7 @@ export function fits(model: OfferedModel, check: HostCheck) {
  * the host's memory, so the rest of the home keeps its room, such as Qwen3
  * 1.7B with 8 GB and Qwen3 4B with 16 GB.
  */
-export function suggestedModel(check: HostCheck) {
+export function suggestedModel(check: HostCheck, reservedBytes = 0) {
   const total = check.memory?.totalBytes;
   if (total === undefined) return undefined;
   return offeredModels
@@ -106,7 +110,7 @@ export function suggestedModel(check: HostCheck) {
       (model) =>
         model.id.startsWith("qwen3:") &&
         model.memoryBytes <= total / 4 &&
-        fits(model, check),
+        fits(model, check, reservedBytes),
     )
     .at(-1)?.id;
 }
@@ -115,7 +119,10 @@ export function suggestedModel(check: HostCheck) {
 export function modelName(tag: string) {
   const offered = offeredModels.find((model) => model.id === tag);
   if (offered) return offered.name;
-  const [name = tag, variant] = tag.split(":");
+  const tagStart = tag.lastIndexOf(":");
+  const hasTag = tagStart > tag.lastIndexOf("/");
+  const name = hasTag ? tag.slice(0, tagStart) : tag;
+  const variant = hasTag ? tag.slice(tagStart + 1) : undefined;
   const named = name.charAt(0).toUpperCase() + name.slice(1);
   if (!variant || variant === "latest") return named;
   return /^\d+(\.\d+)?[bkm]$/i.test(variant)

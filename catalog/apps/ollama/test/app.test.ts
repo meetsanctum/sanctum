@@ -85,6 +85,11 @@ describe("the Ollama app", () => {
       total: 1.3 * gb,
       completed: 0.5 * gb,
     });
+    await vi.waitFor(async () =>
+      expect((await status()).downloads).toMatchObject([
+        { completedBytes: 0.5 * gb, totalBytes: 1.4 * gb },
+      ]),
+    );
     pull!.send({
       status: "pulling b2",
       digest: "sha256:b2",
@@ -164,16 +169,42 @@ describe("the Ollama app", () => {
     ).toBe("conflict");
   });
 
-  it("removes a model", async () => {
-    const { ollama, act } = await home();
-    ollama.models = [{ name: "qwen3:4b", size: 2.5 * gb }];
+  it("holds room for downloads that start together", async () => {
+    const { ollama, act, status } = await home({
+      host: () => ({ ...piHost(), storage: { freeBytes: 5 * gb } }),
+    });
+    const requests = await Promise.all([
+      refusal(act("ollama.download", { model: "qwen3:1.7b", anyway: true })),
+      refusal(act("ollama.download", { model: "llama3.2:3b", anyway: true })),
+    ]);
+    expect(requests).toContain(null);
+    expect(requests).toContain("conflict");
+    expect(ollama.pulls).toHaveLength(1);
+    expect((await status()).offered).toEqual([]);
 
-    await act("ollama.remove", { model: "qwen3:4b" });
+    await act("ollama.stop", { model: ollama.pulls[0]!.model });
+    expect((await status()).offered).toHaveLength(3);
+  });
 
-    expect(ollama.deleted).toEqual(["qwen3:4b"]);
+  it("keeps a download running when asked to remove a model that isn't installed", async () => {
+    const { ollama, act, status } = await home();
+    await act("ollama.download", { model: "qwen3:4b" });
     expect(await refusal(act("ollama.remove", { model: "qwen3:4b" }))).toBe(
       "not_found",
     );
+    expect(ollama.pulls[0]!.aborted).toBe(false);
+    expect((await status()).downloads).toHaveLength(1);
+  });
+
+  it("removes a model by the name Ollama lists, including its namespace", async () => {
+    const { ollama, act } = await home();
+    const model = "library/CustomModel:latest";
+    ollama.models = [{ name: model, size: 2.5 * gb }];
+
+    await act("ollama.remove", { model });
+
+    expect(ollama.deleted).toEqual([model]);
+    expect(await refusal(act("ollama.remove", { model }))).toBe("not_found");
   });
 
   it("says when Ollama doesn't answer yet", async () => {

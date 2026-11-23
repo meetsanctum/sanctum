@@ -22,11 +22,9 @@ import { createOllama, type Ollama } from "./ollama.js";
 // stops a download and removes a model. Ollama's models stay on Sanctum, and
 // what's asked of them never leaves the home. The page is in ./ui.
 
-export const servicesPermission = "services:ollama";
-
-const modelId = z
-  .string()
-  .regex(/^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$/, "an Ollama model's tag");
+// We pass model IDs back exactly as Ollama lists them, including namespaced
+// names. Downloads check the catalog and removal checks the installed list.
+const modelId = z.string().min(1);
 
 const hostShape = z.object({
   processor: z.object({
@@ -79,26 +77,25 @@ export type OllamaStatus = z.infer<typeof statusShape>;
 
 /** The app, with Ollama's fetch a test may replace. */
 export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
-  let ollama: Ollama | undefined;
-  let memoryBytes: number | undefined;
-  let downloads: Downloads | undefined;
+  let connection:
+    { ollama: Ollama; downloads: Downloads; memoryBytes?: number } | undefined;
 
   async function connect(ctx: AppContext) {
-    if (ollama && downloads) return { ollama, downloads };
-    const connection = await ctx.services.connection("ollama");
-    const url = connection.http?.url;
+    if (connection) return connection;
+    const service = await ctx.services.connection("ollama");
+    if (connection) return connection;
+    const url = service.http?.url;
     if (!url) throw new Error("The manager gave no address for Ollama");
-    memoryBytes =
-      typeof connection.memoryBytes === "number"
-        ? connection.memoryBytes
-        : undefined;
-    const reached = createOllama(url, options.fetch);
-    ollama = reached;
-    downloads = createDownloads({
-      ollama: () => reached,
-      log: (message) => ctx.log(message),
-    });
-    return { ollama: reached, downloads };
+    const ollama = createOllama(url, options.fetch);
+    connection = {
+      ollama,
+      downloads: createDownloads(ollama, (message) => ctx.log(message)),
+      memoryBytes:
+        typeof service.memoryBytes === "number"
+          ? service.memoryBytes
+          : undefined,
+    };
+    return connection;
   }
 
   const status = defineAction({
@@ -108,23 +105,23 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
     input: z.object({}),
     output: statusShape,
     async run(ctx) {
-      const { ollama, downloads } = await connect(ctx);
-      const check = hostCheck(await ctx.host.resources(), memoryBytes);
-      let isAnswering = true;
-      const models = await ollama.models().catch(() => {
-        isAnswering = false;
-        return [];
-      });
+      const { ollama, downloads, memoryBytes } = await connect(ctx);
+      const [resources, models] = await Promise.all([
+        ctx.host.resources(),
+        ollama.models().catch(() => null),
+      ]);
+      const check = hostCheck(resources, memoryBytes);
       const underWay = downloads.list();
       const here = new Set([
-        ...models.map((model) => model.id),
+        ...(models ?? []).map((model) => model.id),
         ...underWay.map((download) => download.id),
       ]);
-      const suggested = suggestedModel(check);
+      const reservedBytes = downloads.reservedBytes();
+      const suggested = suggestedModel(check, reservedBytes);
       return {
-        isAnswering,
+        isAnswering: models !== null,
         host: check,
-        models: models.map((model) => ({
+        models: (models ?? []).map((model) => ({
           id: model.id,
           name: modelName(model.id),
           sizeBytes: model.sizeBytes,
@@ -137,7 +134,9 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
           name: modelName(download.id),
         })),
         offered: offeredModels
-          .filter((model) => !here.has(model.id) && fits(model, check))
+          .filter(
+            (model) => !here.has(model.id) && fits(model, check, reservedBytes),
+          )
           .map((model) => ({ ...model, isSuggested: model.id === suggested })),
       };
     },
@@ -154,15 +153,22 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
     }),
     output: z.object({}),
     async run(ctx, { model, anyway }) {
-      const { downloads } = await connect(ctx);
       const offered = offeredModels.find((each) => each.id === model);
       if (!offered) throw new ActionError("not_found");
+      const connected = await connect(ctx);
+      const { ollama, downloads, memoryBytes } = connected;
+      if (downloads.isRunning(model)) return {};
+      if ((await ollama.models()).some((each) => each.id === model)) return {};
       const check = hostCheck(await ctx.host.resources(), memoryBytes);
-      if (!fits(offered, check)) throw new ActionError("conflict");
-      if (check.processor.isLikelySlow && !anyway) {
+      if (connection !== connected) throw new ActionError("conflict");
+      if (downloads.isRunning(model)) return {};
+      if (
+        !fits(offered, check, downloads.reservedBytes()) ||
+        (check.processor.isLikelySlow && !anyway)
+      ) {
         throw new ActionError("conflict");
       }
-      downloads.start(model);
+      downloads.start(offered);
       return {};
     },
   });
@@ -188,11 +194,11 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
     output: z.object({}),
     async run(ctx, { model }) {
       const { ollama, downloads } = await connect(ctx);
-      downloads.stop(model);
       const models = await ollama.models();
       if (!models.some((each) => each.id === model)) {
         throw new ActionError("not_found");
       }
+      downloads.stop(model);
       await ollama.remove(model);
       return {};
     },
@@ -208,7 +214,7 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
     pages: ["main"],
     permissions: [
       {
-        id: servicesPermission,
+        id: "services:ollama",
         reason: "To run AI models on Sanctum.",
         needed: true,
       },
@@ -219,9 +225,8 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
       await connect(ctx);
     },
     async stop() {
-      downloads?.stopAll();
-      ollama = undefined;
-      downloads = undefined;
+      connection?.downloads.stopAll();
+      connection = undefined;
     },
   });
 }

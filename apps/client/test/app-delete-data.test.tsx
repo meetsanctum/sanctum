@@ -96,22 +96,31 @@ describe("deleting a removed app's data", () => {
     ).toBe(
       "Its settings and what it saved are deleted, so adding it back starts it afresh.",
     );
+  });
+
+  it("warns that Ollama's models go too, including for apps that add devices", () => {
+    const requests = [
+      {
+        id: "services:ollama",
+        reason: "To run AI models on Sanctum.",
+        needed: true,
+        asked: null,
+        startsOn: false,
+      },
+    ];
+    const warning =
+      "Unless another app uses Ollama, its downloaded models are deleted too.";
+    expect(deletingWords({ ...example, requests })).toBe(
+      `Its devices, their history and its settings are deleted, so adding it back means adding every device again. ${warning}`,
+    );
     expect(
       deletingWords({
         ...example,
         adds: { ...example.adds, devices: false },
-        requests: [
-          {
-            id: "services:ollama",
-            reason: "To run AI models on Sanctum.",
-            needed: true,
-            asked: null,
-            startsOn: false,
-          },
-        ],
+        requests,
       }),
     ).toBe(
-      "Its settings and what it saved are deleted, so adding it back starts it afresh. Unless another app uses Ollama, the models it downloaded are deleted too.",
+      `Its settings and what it saved are deleted, so adding it back starts it afresh. ${warning}`,
     );
   });
 

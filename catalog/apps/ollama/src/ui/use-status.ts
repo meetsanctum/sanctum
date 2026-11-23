@@ -14,17 +14,20 @@ export function useStatus() {
   const client = useAppClient();
   const [status, setStatus] = useState<OllamaStatus>();
   const [hasFailed, setHasFailed] = useState(false);
-  const request = useRef(0);
+  const request = useRef({ isPending: false });
 
   const load = useCallback(async () => {
-    const current = ++request.current;
+    const current = { isPending: true };
+    request.current = current;
     try {
-      const next = await client.call<never>("ollama.status", {} as never);
+      const next = await client.call("ollama.status", {});
       if (current !== request.current) return;
       setStatus(next as OllamaStatus);
       setHasFailed(false);
     } catch {
       if (current === request.current) setHasFailed(true);
+    } finally {
+      current.isPending = false;
     }
   }, [client]);
 
@@ -33,8 +36,16 @@ export function useStatus() {
   );
   useEffect(() => {
     void load();
+    return () => {
+      request.current = { isPending: false };
+    };
+  }, [load]);
+
+  useEffect(() => {
     const timer = setInterval(
-      () => void load(),
+      () => {
+        if (!request.current.isPending) void load();
+      },
       isDownloading ? downloadingEveryMs : restingEveryMs,
     );
     return () => clearInterval(timer);
@@ -44,7 +55,7 @@ export function useStatus() {
   const act = useCallback(
     async (action: string, input: Record<string, unknown>) => {
       try {
-        await client.call<never>(action, input as never);
+        await client.call(action, input);
         return true;
       } catch {
         return false;

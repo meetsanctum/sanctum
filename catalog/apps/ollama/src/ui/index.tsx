@@ -5,9 +5,8 @@ import {
   Switch,
   defineAppUi,
   icons,
-  type PageProps,
 } from "@meetsanctum/ui-sdk";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { OllamaStatus } from "../index";
 import { useStatus } from "./use-status";
@@ -89,12 +88,18 @@ function ThisSanctum({ host }: { host: OllamaStatus["host"] }) {
 
 function ModelRow(props: {
   model: OllamaStatus["models"][number];
-  onRemove: () => Promise<boolean>;
+  onRemove: () => Promise<void>;
 }) {
   const { model } = props;
   const [isConfirming, setIsConfirming] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
-  const id = `ollama-model-${model.id.replace(/[^a-z0-9]/gi, "-")}`;
+  const id = useId();
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    if (!isConfirming && wasConfirming.current) removeButton.current?.focus();
+    wasConfirming.current = isConfirming;
+  }, [isConfirming]);
   const remove = async () => {
     setIsBusy(true);
     await props.onRemove();
@@ -107,6 +112,7 @@ function ModelRow(props: {
         <Words id={id} name={model.name} line={modelLine(model)} />
         {!isConfirming && (
           <Button
+            ref={removeButton}
             variant="outline"
             size="sm"
             aria-describedby={`${id}-name`}
@@ -130,6 +136,7 @@ function ModelRow(props: {
             Remove
           </Button>
           <Button
+            autoFocus
             variant="ghost"
             size="sm"
             disabled={isBusy}
@@ -147,19 +154,31 @@ function DownloadRow(props: {
   download: OllamaStatus["downloads"][number];
   onStop: () => void;
   onRetry: () => void;
+  canRetry: boolean;
 }) {
   const { download } = props;
-  const id = `ollama-download-${download.id.replace(/[^a-z0-9]/gi, "-")}`;
+  const id = useId();
   return (
-    <div className="flex flex-col gap-1 pb-2" role="status" aria-live="polite">
+    <div className="flex flex-col gap-1 pb-2">
       <div className={row}>
         <Words id={id} name={download.name} line={downloadLine(download)} />
         {download.problem && (
-          <Button variant="outline" size="sm" onClick={props.onRetry}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!props.canRetry}
+            aria-describedby={`${id}-name`}
+            onClick={props.onRetry}
+          >
             Try again
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={props.onStop}>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-describedby={`${id}-name`}
+          onClick={props.onStop}
+        >
           {download.problem ? "Cancel" : "Stop download"}
         </Button>
       </div>
@@ -168,6 +187,7 @@ function DownloadRow(props: {
           className="mx-2.5 h-1.5 overflow-hidden rounded-full bg-muted"
           role="progressbar"
           aria-label={`Downloading ${download.name}`}
+          aria-describedby={`${id}-line`}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percentOf(download)}
@@ -182,7 +202,7 @@ function DownloadRow(props: {
   );
 }
 
-function MainPage(_props: PageProps) {
+function MainPage() {
   const { status, hasFailed, act } = useStatus();
   const [isAnyway, setIsAnyway] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -195,7 +215,6 @@ function MainPage(_props: PageProps) {
     setProblem(undefined);
     const isDone = await act(action, input);
     if (!isDone) setProblem(refused);
-    return isDone;
   };
 
   if (!status) {
@@ -229,47 +248,46 @@ function MainPage(_props: PageProps) {
         <PageSection id="ollama-models" title="Models on Sanctum">
           {!status.isAnswering ? (
             <p className={`${note} px-2.5 py-2`}>
-              Ollama is starting. Its models show here once it answers.
+              Ollama isn’t answering. Its models show here once it answers.
             </p>
           ) : status.models.length === 0 && status.downloads.length === 0 ? (
             <p className={`${note} px-2.5 py-2`}>None yet.</p>
           ) : (
-            <>
-              {status.models.map((model) => (
-                <ModelRow
-                  key={model.id}
-                  model={model}
-                  onRemove={() =>
-                    run(
-                      "ollama.remove",
-                      { model: model.id },
-                      `Couldn’t remove ${model.name}. Try again.`,
-                    )
-                  }
-                />
-              ))}
-              {status.downloads.map((download) => (
-                <DownloadRow
-                  key={download.id}
-                  download={download}
-                  onStop={() =>
-                    void run(
-                      "ollama.stop",
-                      { model: download.id },
-                      `Couldn’t stop downloading ${download.name}.`,
-                    )
-                  }
-                  onRetry={() =>
-                    void run(
-                      "ollama.download",
-                      { model: download.id, anyway: isAnyway },
-                      `Couldn’t download ${download.name}. Try again.`,
-                    )
-                  }
-                />
-              ))}
-            </>
+            status.models.map((model) => (
+              <ModelRow
+                key={model.id}
+                model={model}
+                onRemove={() =>
+                  run(
+                    "ollama.remove",
+                    { model: model.id },
+                    `Couldn’t remove ${model.name}. Try again.`,
+                  )
+                }
+              />
+            ))
           )}
+          {status.downloads.map((download) => (
+            <DownloadRow
+              key={download.id}
+              download={download}
+              canRetry={canDownload && status.isAnswering}
+              onStop={() =>
+                void run(
+                  "ollama.stop",
+                  { model: download.id },
+                  `Couldn’t stop downloading ${download.name}.`,
+                )
+              }
+              onRetry={() =>
+                void run(
+                  "ollama.download",
+                  { model: download.id, anyway: isAnyway },
+                  `Couldn’t download ${download.name}. Try again.`,
+                )
+              }
+            />
+          ))}
         </PageSection>
         <div className="flex flex-col gap-2">
           <PageSection id="ollama-offered" title="Download a model">
@@ -288,7 +306,11 @@ function MainPage(_props: PageProps) {
                 />
               </div>
             )}
-            {status.offered.length === 0 ? (
+            {!status.host.memory || !status.host.storage ? (
+              <p className={`${note} px-2.5 py-2`}>
+                Couldn’t check the memory and storage available for downloads.
+              </p>
+            ) : status.offered.length === 0 ? (
               <p className={`${note} px-2.5 py-2`}>
                 No other model fits the memory and storage this Sanctum has
                 free.

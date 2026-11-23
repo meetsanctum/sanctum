@@ -8,6 +8,7 @@ const gb = 1_000_000_000;
 
 /** A size such as 1.4 GB, or 640 MB under a gigabyte. */
 export function sizeText(bytes: number) {
+  if (bytes === 0) return "0 MB";
   if (bytes < gb) return `${Math.max(1, Math.round(bytes / 1_000_000))} MB`;
   return `${(bytes / gb).toFixed(1).replace(/\.0$/, "")} GB`;
 }

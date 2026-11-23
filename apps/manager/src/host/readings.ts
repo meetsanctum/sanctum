@@ -30,14 +30,14 @@ export type CpuTimes = { busy: number; total: number };
 
 // The model a Raspberry Pi's kernel adds to /proc/cpuinfo, without its board
 // revision: "Raspberry Pi 4 Model B Rev 1.4" → "Raspberry Pi 4 Model B".
-export function modelOf(cpuinfo: string) {
-  const match = /^Model\s*:\s*(.+)$/m.exec(cpuinfo);
+function modelOf(cpuinfo: string) {
+  const match = /^Model[ \t]*:[ \t]*(\S.*)/m.exec(cpuinfo);
   return match ? match[1]!.replace(/\s+Rev\s+[\w.]+$/, "").trim() : null;
 }
 
 /** The processor's name, as x86's cpuinfo gives it: "Intel(R) N150". */
-export function processorNameOf(cpuinfo: string) {
-  const match = /^model name\s*:\s*(.+)$/m.exec(cpuinfo);
+function processorNameOf(cpuinfo: string) {
+  const match = /^model name[ \t]*:[ \t]*(\S.*)/m.exec(cpuinfo);
   return match ? match[1]!.replace(/\s+/g, " ").trim() : null;
 }
 
@@ -46,11 +46,10 @@ export function processorNameOf(cpuinfo: string) {
  * quickly on without graphics: AVX2 on x86, or the dot product (asimddp) on
  * ARM. Null where cpuinfo names neither kind of flags.
  */
-export function matrixInstructionsOf(cpuinfo: string) {
-  const flags = /^(flags|Features)\s*:\s*(.+)$/m.exec(cpuinfo);
+function matrixInstructionsOf(cpuinfo: string) {
+  const flags = /^(?:flags|Features)[ \t]*:[ \t]*(\S.*)/m.exec(cpuinfo);
   if (!flags) return null;
-  const names = new Set(flags[2]!.trim().split(/\s+/));
-  return names.has("avx2") || names.has("asimddp");
+  return /(?:^|\s)(?:avx2|asimddp)(?:\s|$)/.test(flags[1]!);
 }
 
 const kib = 1024;
@@ -148,16 +147,15 @@ export function createHostReadings(
   }
 
   return {
-    async model() {
-      const cpuinfo = await text("proc/cpuinfo");
-      return cpuinfo ? modelOf(cpuinfo) : null;
-    },
-
     async processor() {
-      const cpuinfo = await text("proc/cpuinfo");
+      const cpuinfo = (await text("proc/cpuinfo")) ?? "";
       return {
-        name: cpuinfo ? processorNameOf(cpuinfo) : null,
-        matrixInstructions: cpuinfo ? matrixInstructionsOf(cpuinfo) : null,
+        model: modelOf(cpuinfo),
+        processor: {
+          name: processorNameOf(cpuinfo),
+          cores: cpus().length,
+          matrixInstructions: matrixInstructionsOf(cpuinfo),
+        },
       };
     },
 
@@ -176,8 +174,6 @@ export function createHostReadings(
       const stat = await text("proc/stat");
       return stat ? cpuTimesOf(stat) : null;
     },
-
-    cores: () => cpus().length,
 
     // The first core's speed now, in MHz.
     async mhz() {

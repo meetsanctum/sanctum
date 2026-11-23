@@ -240,7 +240,7 @@
         "properties": {
           "model": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+            "minLength": 1
           },
           "anyway": {
             "type": "boolean"
@@ -268,7 +268,7 @@
         "properties": {
           "model": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+            "minLength": 1
           }
         },
         "required": [
@@ -293,7 +293,7 @@
         "properties": {
           "model": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+            "minLength": 1
           }
         },
         "required": [

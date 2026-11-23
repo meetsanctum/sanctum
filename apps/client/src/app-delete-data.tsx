@@ -28,16 +28,21 @@ export function deletingWords(app: AvailableApp) {
   // A service's data goes only when no other app uses it, which this sheet
   // can't tell: a driver's network, as Zigbee2MQTT holds it, or Ollama's
   // models.
-  const services = app.requests
-    .filter((request) => request.id.startsWith("services:"))
-    .map((request) => request.id.slice("services:".length));
-  if (services.length === 0) return words;
-  if (app.adds.devices) {
-    return `${words} Unless another app uses its network, that's erased too, so every ${app.name} device has to be paired again.`;
+  const notices = [words];
+  if (
+    app.adds.devices &&
+    app.requests.some((request) => request.id === "services:zigbee2mqtt")
+  ) {
+    notices.push(
+      `Unless another app uses its network, that's erased too, so every ${app.name} device has to be paired again.`,
+    );
   }
-  return services.includes("ollama")
-    ? `${words} Unless another app uses Ollama, the models it downloaded are deleted too.`
-    : words;
+  if (app.requests.some((request) => request.id === "services:ollama")) {
+    notices.push(
+      "Unless another app uses Ollama, its downloaded models are deleted too.",
+    );
+  }
+  return notices.join(" ");
 }
 
 export function DeleteAppData(props: {

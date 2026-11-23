@@ -27,11 +27,13 @@ const pullLine = z.object({
 /** How long a short question to Ollama may take. */
 const askTimeoutMs = 10_000;
 
-export type OllamaModel = { id: string; sizeBytes: number };
-export type PullProgress = { completedBytes: number; totalBytes: number };
-
-/** Why Ollama didn't do what it was asked, in its own words. */
-export class OllamaError extends Error {}
+type OllamaModel = { id: string; sizeBytes: number };
+type PullProgress = {
+  completedBytes: number;
+  totalBytes: number;
+  transferredBytes: number;
+};
+const ollamaError = z.object({ error: z.string().min(1) });
 
 export function createOllama(url: string, fetcher: typeof fetch = fetch) {
   async function ask(path: string, init: RequestInit = {}) {
@@ -41,9 +43,12 @@ export function createOllama(url: string, fetcher: typeof fetch = fetch) {
       signal: init.signal ?? AbortSignal.timeout(askTimeoutMs),
     });
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      const said = /"error"\s*:\s*"([^"]+)"/.exec(text)?.[1];
-      throw new OllamaError(said ?? `Ollama answered ${response.status}`);
+      const said = ollamaError.safeParse(
+        await response.json().catch(() => null),
+      );
+      throw new Error(
+        said.success ? said.data.error : `Ollama answered ${response.status}`,
+      );
     }
     return response;
   }
@@ -78,29 +83,36 @@ export function createOllama(url: string, fetcher: typeof fetch = fetch) {
         body: JSON.stringify({ model, stream: true }),
         signal,
       });
-      if (!response.body) throw new OllamaError("Ollama sent nothing");
-      const parts = new Map<string, PullProgress>();
+      if (!response.body) throw new Error("Ollama sent nothing");
+      const parts = new Map<string, Omit<PullProgress, "transferredBytes">>();
       const decoder = new TextDecoder();
       let rest = "";
       let isDone = false;
+      let transferredBytes = 0;
       const read = (line: string) => {
         if (!line.trim()) return;
         const said = pullLine.safeParse(JSON.parse(line));
         if (!said.success) return;
-        if (said.data.error) throw new OllamaError(said.data.error);
+        if (said.data.error) throw new Error(said.data.error);
         const { digest, total, completed } = said.data;
         if (digest && total) {
-          parts.set(digest, {
-            totalBytes: total,
-            completedBytes: completed ?? 0,
-          });
+          const part = { totalBytes: total, completedBytes: completed ?? 0 };
+          const previous = parts.get(digest);
+          // The first report for a layer can include already cached bytes.
+          if (previous) {
+            transferredBytes += Math.max(
+              0,
+              part.completedBytes - previous.completedBytes,
+            );
+          }
+          parts.set(digest, part);
           let totalBytes = 0;
           let completedBytes = 0;
           for (const part of parts.values()) {
             totalBytes += part.totalBytes;
             completedBytes += part.completedBytes;
           }
-          onProgress({ totalBytes, completedBytes });
+          onProgress({ totalBytes, completedBytes, transferredBytes });
         }
         if (said.data.status === "success") isDone = true;
       };
@@ -113,7 +125,7 @@ export function createOllama(url: string, fetcher: typeof fetch = fetch) {
         }
       }
       read(rest + decoder.decode());
-      if (!isDone) throw new OllamaError("The download broke off");
+      if (!isDone) throw new Error("The download broke off");
     },
 
     async remove(model: string) {

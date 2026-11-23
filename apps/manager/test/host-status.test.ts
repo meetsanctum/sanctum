@@ -1,7 +1,7 @@
 import { link, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { StatusDockerLike } from "../src/docker.js";
 import { createHostReadings } from "../src/host/readings.js";
@@ -174,6 +174,38 @@ async function reporter(
 }
 
 describe("the host's status", () => {
+  it("serves the app resource view without asking Docker", async () => {
+    const fake = docker();
+    const listContainers = vi.spyOn(fake, "listContainers");
+    const info = vi.spyOn(fake, "info");
+    const listOrNone = vi.fn(async () => []);
+    const { status } = await reporter({
+      docker: fake,
+      images: { listOrNone },
+      files: { "proc/cpuinfo": "model name :\nFeatures :\nprocessor : 0\n" },
+    });
+    const server = createServer({ version: "test" }, { status });
+    servers.push(server);
+
+    const response = await server.inject("/api/host/status?view=resources");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      model: null,
+      processor: {
+        name: null,
+        cores: expect.any(Number),
+        matrixInstructions: null,
+      },
+      memory: expect.objectContaining({ total: 8007400 * 1024 }),
+      storage: expect.objectContaining({ free: expect.any(Number) }),
+    });
+    expect(listContainers).not.toHaveBeenCalled();
+    expect(listOrNone).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expect(fake.dfCalls).toBe(0);
+  });
+
   it("says what a Pi is, and how it is doing", async () => {
     const { status } = await reporter({
       docker: docker(),

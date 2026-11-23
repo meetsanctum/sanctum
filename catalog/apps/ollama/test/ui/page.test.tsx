@@ -108,6 +108,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 async function show(client: AppClient) {
@@ -175,6 +176,35 @@ describe("Ollama's page", () => {
     });
   });
 
+  it("shows the result of a progress poll that takes longer than the polling interval", async () => {
+    vi.useFakeTimers();
+    const { client, call } = fakeClient(capable());
+    await show(client);
+    let respond!: (status: OllamaStatus) => void;
+    const response = new Promise<OllamaStatus>(
+      (resolve) => (respond = resolve),
+    );
+    call.mockImplementationOnce(() => response);
+    call.mockClear();
+
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    expect(call).toHaveBeenCalledTimes(1);
+
+    const updated = capable();
+    updated.downloads[0]!.completedBytes = 1 * gb;
+    await act(async () => respond(updated));
+
+    expect(container.textContent).toContain("Downloading · 1.0 of 1.4 GB");
+  });
+
+  it("still lets someone stop a download when the model list is unavailable", async () => {
+    const { client, call } = fakeClient({ ...capable(), isAnswering: false });
+    await show(client);
+
+    await act(async () => button("Stop download").click());
+    expect(call).toHaveBeenCalledWith("ollama.stop", { model: "qwen3:1.7b" });
+  });
+
   it("asks before removing a model", async () => {
     const { client, call } = fakeClient(capable());
     await show(client);
@@ -184,7 +214,11 @@ describe("Ollama's page", () => {
       "Remove Qwen3 4B? Downloading it again takes a while.",
     );
     expect(call).not.toHaveBeenCalledWith("ollama.remove", expect.anything());
+    expect(document.activeElement).toBe(button("Keep it"));
+    await act(async () => button("Keep it").click());
+    expect(document.activeElement).toBe(button("Remove"));
 
+    await act(async () => button("Remove").click());
     await act(async () => button("Remove").click());
     expect(call).toHaveBeenCalledWith("ollama.remove", { model: "qwen3:4b" });
   });

@@ -37,7 +37,9 @@ describe("the host check", () => {
       roomBytes: 8 * gb,
     });
     expect(hostCheck(piHost(), 4 * gb).memory?.roomBytes).toBe(4 * gb);
-    expect(hostCheck(piHost(), undefined).memory?.roomBytes).toBe(5.1 * gb);
+    expect(hostCheck(piHost(), undefined).memory?.roomBytes).toBe(
+      3814 * 1024 ** 2,
+    );
   });
 
   it("offers only what fits the memory and storage left", () => {
@@ -51,6 +53,17 @@ describe("the host check", () => {
     expect(fits(model("qwen3:4b"), hostCheck(full, 4 * gb))).toBe(false);
   });
 
+  it("needs both readings before it can say a model fits", () => {
+    const resources = piHost();
+    const offered = model("qwen3:1.7b");
+    expect(
+      fits(offered, hostCheck({ ...resources, storage: null }, 4 * gb)),
+    ).toBe(false);
+    expect(
+      fits(offered, hostCheck({ ...resources, memory: null }, 4 * gb)),
+    ).toBe(false);
+  });
+
   it("suggests Qwen3 1.7B with 8 GB and Qwen3 4B with 16 GB", () => {
     expect(suggestedModel(hostCheck(piHost(), 4 * gb))).toBe("qwen3:1.7b");
     expect(suggestedModel(hostCheck(n150Host(), 8 * gb))).toBe("qwen3:4b");
@@ -62,5 +75,8 @@ describe("a model's name", () => {
     expect(modelName("llama3.2:3b")).toBe("Llama 3.2 3B");
     expect(modelName("qwen3:14b")).toBe("Qwen3 14B");
     expect(modelName("mistral:latest")).toBe("Mistral");
+    expect(modelName("registry.example:5000/team/custom:7b")).toBe(
+      "Registry.example:5000/team/custom 7B",
+    );
   });
 });

@@ -1,6 +1,6 @@
 // What the machine Sanctum runs on has, for an app that has to know whether
 // something fits before it starts it, as Ollama's page does before it
-// downloads a model. Each part is null where the host can't say.
+// downloads a model. Readings the host can't give are null.
 
 export type HostResources = {
   processor: {
