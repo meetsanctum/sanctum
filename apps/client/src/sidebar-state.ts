@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -267,8 +268,11 @@ export function useSidebarLayout(isVeiled = false) {
       .window?.setControls(lightsWanted, by)
       .catch(() => undefined);
   }, []);
-  useEffect(() => {
+  // The overlay's cleanup can run before the effect that places the lights.
+  useLayoutEffect(() => {
     layout.current = { docked, floating, reducedMotion };
+  }, [docked, floating, reducedMotion]);
+  useEffect(() => {
     placeLights();
   }, [docked, floating, reducedMotion, placeLights]);
   const setCovered = useCallback(

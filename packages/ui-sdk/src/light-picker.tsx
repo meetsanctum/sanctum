@@ -18,6 +18,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type ReactNode,
 } from "react";
@@ -54,10 +55,11 @@ const shades = [20, 35, 50, 65, 80, 100];
 // for Done.
 const shadeSlots = [1, 2, 3, 5, 6, 7];
 const whites = 8;
-// How many circles wide the picker is (size-72 and a circle's size-14): a
-// circle flies in from the middle by a share of its own size, which needs
-// no measuring, so opening a light lays its page out once, not twice.
-const pickerPerCircle = 72 / 14;
+// Sizes in Tailwind spacing units. The ratio lets a circle fly in from the
+// middle by a share of its own size without measuring the layout.
+const pickerSize = 72;
+const circleSize = 14;
+const pickerPerCircle = pickerSize / circleSize;
 // How far out from the middle the ring's circles sit, and a wheel's Back
 // and Done, in % of the picker.
 const ring = 39;
@@ -330,7 +332,15 @@ export function LightPicker(props: {
   // room above itself whatever it shows.
   return (
     <div className="flex flex-col items-center gap-11 pt-11">
-      <div ref={picker} className="relative size-72 shrink-0">
+      <div
+        ref={picker}
+        style={
+          {
+            "--picker-size": `calc(var(--spacing) * ${pickerSize})`,
+          } as CSSProperties
+        }
+        className="relative size-(--picker-size) shrink-0"
+      >
         {layer === "wheel" && (
           <Wheel
             name={name}
@@ -410,12 +420,15 @@ function Circle(props: {
       data-x={props.at.x}
       data-y={props.at.y}
       onClick={props.onClick}
-      style={{
-        left: `${props.at.x}%`,
-        top: `${props.at.y}%`,
-        background: props.colour,
-      }}
-      className="absolute grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring/70 aria-pressed:ring-3 aria-pressed:ring-white"
+      style={
+        {
+          left: `${props.at.x}%`,
+          top: `${props.at.y}%`,
+          background: props.colour,
+          "--circle-size": `calc(var(--spacing) * ${circleSize})`,
+        } as CSSProperties
+      }
+      className="absolute grid size-(--circle-size) -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring/70 aria-pressed:ring-3 aria-pressed:ring-white"
     >
       {Icon && <Icon aria-hidden="true" className="size-6" />}
     </button>

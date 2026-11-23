@@ -25,7 +25,12 @@ function Row(props: { tiles?: number; shown?: boolean }) {
 }
 
 // Lays the row out: 300 px wide, its tiles 200 px each, 12 px apart.
-function layOut(row: HTMLElement, scrollLeft: number, scrollWidth: number) {
+function layOut(
+  row: HTMLElement,
+  scrollLeft: number,
+  scrollWidth: number,
+  lastWidth = 200,
+) {
   const rect = (left: number, width: number) =>
     ({ left, right: left + width, width }) as DOMRect;
   Object.defineProperty(row, "clientWidth", { value: 300, configurable: true });
@@ -35,8 +40,9 @@ function layOut(row: HTMLElement, scrollLeft: number, scrollWidth: number) {
   });
   row.scrollLeft = scrollLeft;
   row.getBoundingClientRect = () => rect(0, 300);
-  [...row.children].forEach((tile, index) => {
-    tile.getBoundingClientRect = () => rect(index * 212 - scrollLeft, 200);
+  [...row.children].forEach((tile, index, tiles) => {
+    const width = index === tiles.length - 1 ? lastWidth : 200;
+    tile.getBoundingClientRect = () => rect(index * 212 - scrollLeft, width);
   });
 }
 
@@ -83,7 +89,25 @@ describe("a row's edge fade", () => {
     expect(second!.style.maskImage).toBe("");
   });
 
-  it("follows a row from when it appears, and fades a tile added later", async () => {
+  it("follows a row when it appears and a tile when it is added and resizes", async () => {
+    const observed = new Set<Element>();
+    let resize: (tile: Element) => void = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(paint: () => void) {
+          resize = (tile) => {
+            if (observed.has(tile)) paint();
+          };
+        }
+        observe(tile: Element) {
+          observed.add(tile);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      },
+    );
     await act(async () => root.render(<Row shown={false} />));
     await act(async () => root.render(<Row />));
     const row = container.firstElementChild as HTMLElement;
@@ -93,14 +117,23 @@ describe("a row's edge fade", () => {
       "linear-gradient(to right, black 0px, black 64px, transparent 88px)",
     );
 
+    const frame = vi.fn<(_paint: FrameRequestCallback) => number>(() => 1);
+    vi.stubGlobal("requestAnimationFrame", frame);
     await act(async () => root.render(<Row tiles={3} />));
-    layOut(row, 0, 624);
-    await act(async () => {
-      row.append(document.createElement("i"));
-      row.lastElementChild!.remove();
-    });
-    expect((row.children[2] as HTMLElement).style.maskImage).toBe(
-      "linear-gradient(to right, black 0px, black -148px, transparent -124px)",
+    const added = row.lastElementChild as HTMLElement;
+    layOut(row, 212, 512, 88);
+    frame.mock.lastCall![0](0);
+    expect(added.style.maskImage).toBe(
+      "linear-gradient(to right, transparent -212px, black -188px, black 100%)",
+    );
+
+    frame.mockClear();
+    layOut(row, 212, 624);
+    resize(added);
+    expect(frame).toHaveBeenCalledTimes(1);
+    frame.mock.lastCall![0](0);
+    expect(added.style.maskImage).toBe(
+      "linear-gradient(to right, transparent -212px, black -188px, black 64px, transparent 88px)",
     );
   });
 

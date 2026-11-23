@@ -81,7 +81,6 @@ export function SwipePages(props: {
     selectedIndex >= 0
       ? selectedIndex
       : Math.min(chosen.index, pages.length - 1);
-  const setPage = (index: number) => setChosen({ id: pages[index]?.id, index });
   const [dx, setDx] = useState<number | null>(null);
   const swipe = useRef<Swipe | null>(null);
   const swiped = useRef(false);
@@ -94,6 +93,10 @@ export function SwipePages(props: {
   // so what opens draws only what is seen first: on a slow tablet a
   // device's history and activity cost as much as the rest together.
   const [drawsAll, setDrawsAll] = useState(false);
+  const setPage = (index: number) => {
+    if (index !== page) setDrawsAll(true);
+    setChosen({ id: pages[index]?.id, index });
+  };
   useEffect(() => {
     if (drawsAll) return;
     let later: ReturnType<typeof setTimeout> | undefined;
@@ -160,6 +163,7 @@ export function SwipePages(props: {
       if (Math.abs(across) < swipeAfter) return;
       at.active = true;
       swiped.current = true;
+      setDrawsAll(true);
       event.currentTarget.setPointerCapture?.(event.pointerId);
     }
     at.across = across;

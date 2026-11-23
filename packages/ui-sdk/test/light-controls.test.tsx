@@ -143,6 +143,42 @@ describe("a colour light's colour", () => {
     expect(pressed()).toEqual(["Orange", "Colour"]);
   });
 
+  it("starts an off-center colour's animation at the center of the picker", async () => {
+    const animate = vi.fn(function (this: Element, _frames: Keyframe[]) {});
+    const original = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "animate",
+    );
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    try {
+      await render(colourLight, orange);
+
+      const circle = button("Orange");
+      const index = animate.mock.contexts.indexOf(circle);
+      const transform = animate.mock.calls[index]?.[0][0]?.transform;
+      const offset = /^translate\(([^%]+)%, ([^%]+)%\) scale\(0\.4\)$/.exec(
+        String(transform),
+      );
+      expect(offset).toBeTruthy();
+
+      // The translation is a percentage of the circle, but its position
+      // is measured in percentages of the picker.
+      expect(
+        parseFloat(circle.style.left) + Number(offset![1]) * (14 / 72),
+      ).toBeCloseTo(50);
+      expect(
+        parseFloat(circle.style.top) + Number(offset![2]) * (14 / 72),
+      ).toBeCloseTo(50);
+    } finally {
+      if (original)
+        Object.defineProperty(Element.prototype, "animate", original);
+      else Reflect.deleteProperty(Element.prototype, "animate");
+    }
+  });
+
   it("turns the light on in a colour, then offers its shades", async () => {
     await render(colourLight, { ...orange, on: false });
     await click(button("Blue"));

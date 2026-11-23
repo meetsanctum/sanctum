@@ -21,6 +21,7 @@ import {
   lamp,
   kettle,
   remote,
+  climateSensor,
 } from "./device-detail-fixtures";
 
 vi.mock("../src/core-fetch", () => ({
@@ -653,27 +654,6 @@ describe("the detail of a device Sanctum cannot use", () => {
     });
     expect(dialog()).toBeNull();
   });
-});
-
-// A climate sensor on a battery, which last said something 3 minutes ago.
-const reading = (measure: "temperature" | "humidity", value: number) => ({
-  id: measure,
-  kind: "sensor" as const,
-  features: { measures: measure },
-  state: { value },
-  observed: { value },
-  desired: null,
-  sync: "synced" as const,
-  setBy: null,
-  changedAt: null,
-});
-const climateSensor = (battery: number): DeviceInfo => ({
-  ...lamp,
-  id: "climate",
-  name: "Office sensor",
-  lastSeenAt: new Date(Date.now() - 3 * 60_000).toISOString(),
-  battery,
-  capabilities: [reading("temperature", 21.5), reading("humidity", 48)],
 });
 
 describe("a sensor's detail", () => {
