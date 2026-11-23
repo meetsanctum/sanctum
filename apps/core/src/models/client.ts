@@ -17,7 +17,11 @@ import { z } from "zod";
 export type ModelPiece =
   | { type: "text"; text: string }
   | ({ type: "tool" } & ModelToolCall)
-  | { type: "end"; stop: "done" | "tool" | "limit"; tokens: ModelTokens };
+  | {
+      type: "end";
+      stop: "done" | "tool" | "limit" | "unavailable";
+      tokens: ModelTokens;
+    };
 
 export type ModelRequest = {
   model: string;
@@ -27,10 +31,7 @@ export type ModelRequest = {
 };
 
 /** Where a source answers, and how. */
-export type ModelEndpoint = {
-  // Anthropic's own Messages API, where OpenAI's chat completions are the
-  // rest's.
-  api?: "anthropic";
+export type ChatEndpoint = {
   // Ends without a slash, such as http://192.168.1.40:11434/v1.
   baseUrl: string;
   key?: string;
@@ -169,7 +170,7 @@ async function* dataLines(body: ReadableStream<Uint8Array>) {
  * answer breaks off.
  */
 export async function* chat(
-  endpoint: ModelEndpoint,
+  endpoint: ChatEndpoint,
   request: ModelRequest,
   signal: AbortSignal,
   onFirstPiece?: () => void,

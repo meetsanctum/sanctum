@@ -1,7 +1,7 @@
 import type { ModelCheck, ModelTokens } from "@meetsanctum/app-sdk";
 
-import { ModelError, type ModelEndpoint } from "./client.js";
-import { ask } from "./endpoints.js";
+import { ModelError } from "./client.js";
+import { ask, type ModelEndpoint } from "./endpoints.js";
 
 // Settings' check of a source: a short question with one tool, as an app's
 // turn would ask, timed to the first piece of the answer. A model that
@@ -84,7 +84,10 @@ export async function checkSource(options: {
           !Array.isArray(piece.input) &&
           Object.keys(piece.input).length === 0;
       }
-      if (piece.type === "end") tokens = piece.tokens;
+      if (piece.type === "end") {
+        tokens = piece.tokens;
+        if (piece.stop === "unavailable") throw new ModelError("answer");
+      }
     }
     if (!answered) throw new ModelError("answer", "the source gave no answer");
   } catch (error) {

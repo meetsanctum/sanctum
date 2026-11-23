@@ -3,9 +3,9 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
-  anthropicBaseUrl,
   anthropicChat,
   anthropicModels,
+  type AnthropicEndpoint,
   type KeptAnswers,
 } from "./anthropic.js";
 import {
@@ -13,7 +13,7 @@ import {
   ModelError,
   problemOfError,
   problemOfStatus,
-  type ModelEndpoint,
+  type ChatEndpoint,
   type ModelRequest,
 } from "./client.js";
 
@@ -29,13 +29,9 @@ export type ModelFetchers = {
   internet: typeof fetch;
 };
 
-const providers = {
+const chatProviders = {
   openrouter: {
     baseUrl: "https://openrouter.ai/api/v1",
-    maxTokensField: "max_tokens",
-  },
-  anthropic: {
-    baseUrl: anthropicBaseUrl,
     maxTokensField: "max_tokens",
   },
   openai: {
@@ -43,10 +39,10 @@ const providers = {
     maxTokensField: "max_completion_tokens",
   },
 } as const satisfies Record<
-  ModelProvider,
+  Exclude<ModelProvider, "anthropic">,
   {
     baseUrl: string;
-    maxTokensField: ModelEndpoint["maxTokensField"];
+    maxTokensField: ChatEndpoint["maxTokensField"];
   }
 >;
 
@@ -58,6 +54,16 @@ export type SourceReach =
   | { kind: "sanctum"; url: string }
   | { kind: "computer"; address: HomeAddress }
   | { kind: ModelProvider; key: string };
+
+export type ModelEndpoint =
+  (ChatEndpoint & { api?: never }) | AnthropicEndpoint;
+
+function anthropicEndpoint(
+  key: string,
+  fetch: typeof globalThis.fetch,
+): AnthropicEndpoint {
+  return { api: "anthropic", baseUrl: "https://api.anthropic.com", key, fetch };
+}
 
 export function endpointOf(
   reach: SourceReach,
@@ -81,9 +87,11 @@ export function endpointOf(
       maxTokensField: "max_tokens",
     };
   }
-  const provider = providers[reach.kind];
+  if (reach.kind === "anthropic") {
+    return anthropicEndpoint(reach.key, fetchers.internet);
+  }
+  const provider = chatProviders[reach.kind];
   return {
-    ...(reach.kind === "anthropic" ? { api: "anthropic" as const } : {}),
     baseUrl: provider.baseUrl,
     key: reach.key,
     fetch: fetchers.internet,
@@ -242,14 +250,14 @@ export async function listModels(
       // The key is checked on its own, since the list of models is public.
       await getJson(
         fetchers.internet,
-        `${providers.openrouter.baseUrl}/key`,
+        `${chatProviders.openrouter.baseUrl}/key`,
         reach.key,
         signal,
       );
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${providers.openrouter.baseUrl}/models?supported_parameters=tools`,
+          `${chatProviders.openrouter.baseUrl}/models?supported_parameters=tools`,
           reach.key,
           signal,
         ),
@@ -261,18 +269,14 @@ export async function listModels(
     }
     case "anthropic":
       return anthropicModels(
-        {
-          baseUrl: providers.anthropic.baseUrl,
-          key: reach.key,
-          fetch: fetchers.internet,
-        },
+        anthropicEndpoint(reach.key, fetchers.internet),
         signal,
       );
     case "openai": {
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${providers.openai.baseUrl}/models`,
+          `${chatProviders.openai.baseUrl}/models`,
           reach.key,
           signal,
         ),

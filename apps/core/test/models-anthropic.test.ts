@@ -5,6 +5,7 @@ import {
   type ModelAnswerPiece,
   type ModelMessage,
   type ModelSourceLook,
+  type ModelTool,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -103,6 +104,13 @@ async function answer(
   sources: FakeSources,
   messages: Parameters<typeof ask>[1]["messages"],
   kept?: KeptAnswers,
+  tools: ModelTool[] = [
+    {
+      name: "lights",
+      description: "Turns lights on or off.",
+      input: { type: "object", properties: { to: { type: "string" } } },
+    },
+  ],
 ) {
   const pieces: ModelPiece[] = [];
   for await (const piece of ask(
@@ -113,13 +121,7 @@ async function answer(
     {
       model: "claude-sonnet-5-5",
       messages,
-      tools: [
-        {
-          name: "lights",
-          description: "Turns lights on or off.",
-          input: { type: "object", properties: { to: { type: "string" } } },
-        },
-      ],
+      tools,
       maxTokens: 512,
       ...(kept ? { kept } : {}),
     },
@@ -201,11 +203,33 @@ describe("Anthropic as a source", () => {
       tools: [{ name: "get_time", input_schema: { type: "object" } }],
     });
     expect(JSON.stringify(asked)).not.toContain(sources.anthropic.key);
-    expect(
-      sources.requests
-        .filter((each) => each.authorization?.includes(sources.anthropic.key))
-        .every((each) => new URL(each.url).host === "api.anthropic.com"),
-    ).toBe(true);
+    expect(sources.requests).not.toHaveLength(0);
+    for (const request of sources.requests) {
+      expect(new URL(request.url).host).toBe("api.anthropic.com");
+      expect(request.authorization).toBe(`Bearer ${sources.anthropic.key}`);
+    }
+  });
+
+  it("uses the household's key even when the SDK has custom headers", async () => {
+    const { core, token, sources } = await home();
+    vi.stubEnv(
+      "ANTHROPIC_CUSTOM_HEADERS",
+      "Authorization: Bearer another-key\nX-Api-Key: another-key",
+    );
+    try {
+      const look = await post(
+        core,
+        "/api/models/look",
+        { kind: "anthropic", key: sources.anthropic.key },
+        { token },
+      );
+      expect(look.json<ModelSourceLook>()).toMatchObject({ found: true });
+      expect(sources.requests[0]?.authorization).toBe(
+        `Bearer ${sources.anthropic.key}`,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("says a check whose model declined failed", async () => {
@@ -224,9 +248,9 @@ describe("Anthropic as a source", () => {
     );
     const [source] = (await checked(core)).sources;
 
-    expect(source?.check).toMatchObject({
-      outcome: "failed",
-      problem: "answer",
+    expect(source).toMatchObject({
+      check: { outcome: "failed", problem: "answer" },
+      tokens: { today: 48 },
     });
   });
 });
@@ -354,6 +378,90 @@ describe("Claude's answers", () => {
     expect(pieces.filter((piece) => piece.type === "tool")).toEqual([]);
     expect(pieces.at(-1)).toMatchObject({ type: "end", stop: "limit" });
   });
+
+  it("reject an incomplete tool input when Claude says the call is ready", async () => {
+    const sources = fakeSources();
+    sources.anthropic.answer = { callsTool: true, toolArguments: '{"to":"on"' };
+
+    await expect(
+      answer(sources, [{ role: "user", content: "Lights on" }]),
+    ).rejects.toMatchObject({ problem: "answer" });
+  });
+
+  it("reject invalid tokens before issuing tool calls", async () => {
+    const sources = fakeSources();
+    sources.anthropic.answer = {
+      callsTool: true,
+      tokens: { read: 30, written: -1 },
+    };
+    const pieces = ask(
+      endpointOf(
+        { kind: "anthropic", key: sources.anthropic.key },
+        sources.fetchers,
+      ),
+      {
+        model: "claude-sonnet-5-5",
+        messages: [{ role: "user", content: "Hi" }],
+        maxTokens: 64,
+      },
+      AbortSignal.timeout(5_000),
+    );
+
+    await expect(pieces.next()).resolves.toMatchObject({
+      value: { type: "text" },
+    });
+    await expect(pieces.next()).resolves.toMatchObject({
+      value: { type: "text" },
+    });
+    await expect(pieces.next()).rejects.toMatchObject({ problem: "answer" });
+  });
+
+  it.each(["system", "tools", "user", "assistant"] as const)(
+    "leave out kept thinking when the app changes the %s",
+    async (changed) => {
+      const sources = fakeSources();
+      sources.anthropic.answer = { callsTool: true, thinks: true };
+      const kept: KeptAnswers = new Map();
+      const initial: ModelMessage[] = [
+        { role: "system", content: "You run a home." },
+        { role: "user", content: "Lights on" },
+      ];
+      await answer(sources, initial, kept);
+
+      sources.anthropic.answer = { text: ["Done."] };
+      const assistant = changed === "assistant" ? "Edited text." : "It's noon.";
+      await answer(
+        sources,
+        [
+          {
+            role: "system",
+            content: changed === "system" ? "Be brief." : initial[0]!.content,
+          },
+          {
+            role: "user",
+            content: changed === "user" ? "Lights off" : initial[1]!.content,
+          },
+          {
+            role: "assistant",
+            content: assistant,
+            toolCalls: [{ id: "toolu_1", name: "lights", input: {} }],
+          },
+          { role: "tool", toolCallId: "toolu_1", content: "On" },
+        ],
+        kept,
+        changed === "tools" ? [] : undefined,
+      );
+
+      const second = sources.chats[1] as { messages: unknown[] };
+      expect(second.messages[1]).toEqual({
+        role: "assistant",
+        content: [
+          { type: "text", text: assistant },
+          { type: "tool_use", id: "toolu_1", name: "lights", input: {} },
+        ],
+      });
+    },
+  );
 
   it("say a key that opens nothing is the key's problem", async () => {
     const sources = fakeSources();

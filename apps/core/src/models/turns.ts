@@ -6,7 +6,7 @@ import {
   type ModelSourceShown,
   type ModelStop,
 } from "@meetsanctum/app-sdk";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
@@ -150,7 +150,7 @@ export function createTurns(options: {
     appId: string,
     counted: (tokens: number) => void,
     watched: Watched,
-    kept: KeptAnswers,
+    keptBySource: Map<string, KeptAnswers>,
   ) {
     const first = new AbortController();
     const revoked = () => stop(answer, "cancelled");
@@ -162,8 +162,19 @@ export function createTurns(options: {
         : turnLimits.firstPieceWithProviderMs,
     );
     try {
+      const endpoint = source.endpoint();
+      let kept: KeptAnswers | undefined;
+      if (endpoint.api === "anthropic") {
+        const keyHash = createHash("sha256").update(endpoint.key).digest("hex");
+        const connection = `${source.id} ${source.model} ${keyHash}`;
+        kept = keptBySource.get(connection);
+        if (!kept) {
+          kept = new Map();
+          keptBySource.set(connection, kept);
+        }
+      }
       const pieces = ask(
-        source.endpoint(),
+        endpoint,
         {
           model: source.model,
           messages: asked.messages,
@@ -173,7 +184,7 @@ export function createTurns(options: {
             a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
           ),
           maxTokens: asked.maxTokens ?? turnLimits.maxTokens,
-          kept,
+          ...(kept ? { kept } : {}),
         },
         AbortSignal.any([answer.controller.signal, first.signal]),
         () => clearTimeout(timer),
@@ -241,9 +252,9 @@ export function createTurns(options: {
       const startedAt = Date.now();
       let tokens = 0;
       const used: Pick<SourceInUse, "id" | "model" | "detail">[] = [];
-      // Claude's answers that called a tool, kept for the rest of the turn
-      // for the source and model that gave them: no other reads them.
-      const kept = new Map<string, KeptAnswers>();
+      // Claude's tool answers are kept only for this turn, scoped to the
+      // source, model and key that produced them.
+      const keptBySource = new Map<string, KeptAnswers>();
       let ended = false;
 
       function answerOf(handle: unknown) {
@@ -294,8 +305,7 @@ export function createTurns(options: {
               tokens += more;
             },
             watch(),
-            kept.get(`${id} ${model}`) ??
-              kept.set(`${id} ${model}`, new Map()).get(`${id} ${model}`)!,
+            keptBySource,
           );
           return handle;
         },
@@ -342,6 +352,7 @@ export function createTurns(options: {
           if (ended) return;
           ended = true;
           for (const answer of answers.values()) stop(answer, "cancelled");
+          keptBySource.clear();
           if (answers.size === 0) return;
           const answered = [...answers.values()].some((answer) => {
             const last = answer.pieces.at(-1);
