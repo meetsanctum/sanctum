@@ -8,6 +8,8 @@ import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
 import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
 import { agentsTitle, canUseTitle } from "./agents/words";
 import { AppPage } from "./app-settings";
+import { ModelsPage, modelsSettingsPage } from "./models/models-page";
+import { modelsTitle } from "./models/words";
 import { BackButton, Section } from "./components";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
@@ -37,7 +39,8 @@ import type { Devices } from "./use-devices";
 // dashboard's Batteries tile opens too, the activity log, which a device's
 // detail opens too, the apps the home has installed, each with a page of its
 // preferences and what it brings, which its own pages open too, with those
-// it can add, the AI agents with what they can use, the clients, this
+// it can add, the AI agents with what they can use, the AI models, the
+// clients, this
 // device among them, and System: Status, with a page of how the machine
 // Sanctum runs on is doing, the version, updates and the last restore. Each
 // page leads with Back, named for the page under it. It is the same on every
@@ -69,6 +72,7 @@ const pageTitles: Record<string, string> = {
   [appsSettingsPage]: "Apps",
   [agentsSettingsPage]: agentsTitle,
   [canUseSettingsPage]: canUseTitle,
+  [modelsSettingsPage]: modelsTitle,
   [clientsSettingsPage]: "Clients",
   [systemSettingsPage]: "System",
   [statusSettingsPage]: "Status",
@@ -234,6 +238,8 @@ export function SettingsPage(props: {
           page={back}
         />
       );
+    case modelsSettingsPage:
+      return <ModelsPage live={props.live} page={back} />;
     case canUseSettingsPage:
       return (
         <CanUsePage

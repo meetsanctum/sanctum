@@ -1,0 +1,58 @@
+import type { ModelsInfo } from "@meetsanctum/app-sdk";
+import type { LiveFeed } from "@meetsanctum/ui-sdk";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { coreJson } from "../core-fetch";
+
+// What Settings reads of the home's AI models: asked again often while a
+// check runs, so its answer shows as soon as it's there, and every half
+// minute otherwise, so a source that stops answering says so.
+
+const checkingEvery = 1_500;
+const restingEvery = 30_000;
+const requestTimeoutMs = 10_000;
+
+export function useModels(live?: LiveFeed) {
+  const [info, setInfo] = useState<ModelsInfo>();
+  const request = useRef(0);
+  const latestAnswer = useRef(0);
+  const refresh = useCallback(async () => {
+    const current = ++request.current;
+    try {
+      const next = await coreJson<ModelsInfo>("/api/models", {
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      });
+      if (current < latestAnswer.current) return;
+      latestAnswer.current = current;
+      setInfo(next);
+    } catch {
+      // The next refresh can ask again.
+    }
+  }, []);
+  // An answer to a change, which is newer than any listing under way.
+  const answered = useCallback((next: ModelsInfo) => {
+    latestAnswer.current = ++request.current;
+    setInfo(next);
+  }, []);
+  const checking = info?.sources.some((source) => source.checking) ?? false;
+  useEffect(() => {
+    const update = () => void refresh();
+    update();
+    const stop = live?.subscribe({ refresh: update });
+    const timer = window.setInterval(
+      update,
+      checking ? checkingEvery : restingEvery,
+    );
+    return () => {
+      stop?.();
+      window.clearInterval(timer);
+    };
+  }, [live, refresh, checking]);
+  useEffect(
+    () => () => {
+      latestAnswer.current = ++request.current;
+    },
+    [],
+  );
+  return { info, refresh, answered };
+}

@@ -13,6 +13,7 @@ import { createCoreTools } from "./agents/core-tools.js";
 import { createAgentLimiter } from "./agents/limits.js";
 import { registerMcpRoute } from "./agents/mcp.js";
 import { registerAgentRoutes } from "./agents/routes.js";
+import { registerModelRoutes } from "./models/routes.js";
 import { createAgentTools } from "./agents/tools.js";
 import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
@@ -66,6 +67,7 @@ export function createServer(
     | "activityViews"
     | "agentsCanUse"
     | "logAgentLimited"
+    | "models"
     | "apps"
     | "availableApps"
     | "appAdding"
@@ -210,6 +212,7 @@ export function createServer(
         gate,
       });
       registerAgentRoutes(core, { canUse: options.agentsCanUse, gate });
+      registerModelRoutes(core, { models: options.models, gate });
       registerMcpRoute(core, {
         tools: createAgentTools({
           canUse: () => options.agentsCanUse.list(),

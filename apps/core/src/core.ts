@@ -362,6 +362,7 @@ export function createCore(
       ["start discovery", () => modules!.discovery?.start()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
       ["start the sweep of drivers' pictures", () => modules!.blobs.start()],
+      ["watch the AI model in use", () => modules!.models.start()],
       // A Zigbee stick plugged in while the home has no app for it offers
       // that app, once the home's list is known.
       [
