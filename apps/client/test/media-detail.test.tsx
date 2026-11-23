@@ -248,6 +248,34 @@ describe("Playing", () => {
     expect(seekBar()).toBeNull();
   });
 
+  it("draws nothing playing in the frame a picture of that shape gets", async () => {
+    const frame = () =>
+      [...container.querySelectorAll<HTMLElement>("div")]
+        .filter((each) => each.textContent === "Nothing playing")
+        .at(-1)!
+        .style.getPropertyValue("--artwork-width");
+    await render(
+      MediaPlaying,
+      mediaPlayer("box", "Living Room TV", "office", {
+        on: true,
+        activity: "idle",
+      }),
+    );
+    expect(frame()).toBe("min(300px, 469px)");
+    await render(
+      MediaPlaying,
+      mediaPlayer(
+        "speaker",
+        "Office Speaker",
+        "office",
+        { activity: "idle" },
+        { power: false },
+        "smart-speaker",
+      ),
+    );
+    expect(frame()).toBe("min(300px, 264px)");
+  });
+
   it("keeps its shape while off, dimmed and empty, with nothing to press", async () => {
     await render(
       MediaPlaying,
