@@ -7,7 +7,7 @@ import { ActivityPage, activitySettingsPage } from "./activity/page";
 import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
 import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
 import { agentsTitle, canUseTitle } from "./agents/words";
-import { AppPage, formatAppSettingsTitle } from "./app-settings";
+import { AppPage, appSettingsTitle } from "./app-settings";
 import { ModelsPage, modelsSettingsPage } from "./models/models-page";
 import { modelsTitle } from "./models/words";
 import { BackButton, Section } from "./components";
@@ -86,7 +86,7 @@ export function settingsPageTitle(
 ) {
   if (page === appSettingsPage) {
     const app = apps.find((each) => each.id === params.id);
-    return app ? formatAppSettingsTitle(app.name) : "Settings";
+    return app ? appSettingsTitle(app.name) : "Settings";
   }
   return pageTitles[page] ?? "Settings";
 }

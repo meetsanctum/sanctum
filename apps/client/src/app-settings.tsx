@@ -50,7 +50,8 @@ import { PreferencesSection } from "./settings-preferences";
 // An app without an icon of its own, such as a driver, gets a plain one.
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
 
-export function formatAppSettingsTitle(name: string) {
+// An app's settings page's title, which Back on a page over it names too.
+export function appSettingsTitle(name: string) {
   return `${name} Settings`;
 }
 
@@ -220,7 +221,7 @@ export function AppPage(props: {
   return (
     <>
       <SettingsPageBar
-        title={formatAppSettingsTitle(app.name)}
+        title={appSettingsTitle(app.name)}
         backTo={props.backTo}
         onBack={props.onDone}
       />
