@@ -91,7 +91,7 @@ export function SegmentedControl<T extends string>(props: {
       // Every segment as wide as the widest, or a share of the whole width,
       // but never narrower than its own label, which would run into the next.
       className={cn(
-        "inline-grid max-w-full auto-cols-fr grid-flow-col rounded-md bg-foreground/8 p-0.75",
+        "inline-grid max-w-full auto-cols-[minmax(min-content,1fr)] grid-flow-col rounded-md bg-foreground/8 p-0.75",
         props.fill && "grid w-full",
         props.phoneMenu && "max-sm:hidden",
         props.className,

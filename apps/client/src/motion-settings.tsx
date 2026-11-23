@@ -372,6 +372,7 @@ export function MotionSettings(props: {
                 value={shown("sensitivity")}
                 onValueChange={(sensitivity) => void send({ sensitivity })}
                 fill
+                phoneMenu
               />
             )}
             stacked

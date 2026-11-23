@@ -138,10 +138,14 @@ it("can select an empty string as a choice distinct from no selection", async ()
 
 it("gives every segment the same width, and stretches only when asked", async () => {
   let { group } = await render("on");
-  expect(group.classList.contains("auto-cols-fr")).toBe(true);
+  expect(group.classList.contains("auto-cols-[minmax(min-content,1fr)]")).toBe(
+    true,
+  );
   expect(group.classList.contains("w-full")).toBe(false);
   ({ group } = await render("on", vi.fn(), { fill: true }));
-  expect(group.classList.contains("auto-cols-fr")).toBe(true);
+  expect(group.classList.contains("auto-cols-[minmax(min-content,1fr)]")).toBe(
+    true,
+  );
   expect(group.classList.contains("w-full")).toBe(true);
 });
 
