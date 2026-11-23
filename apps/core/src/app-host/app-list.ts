@@ -2,7 +2,7 @@ import type { AvailableApp } from "@meetsanctum/app-sdk";
 
 import type { Activity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
-import type { Devices } from "../devices/devices.js";
+import type { DeviceChange, Devices } from "../devices/devices.js";
 import type { Pairing } from "../devices/pairing.js";
 import type { Sightings } from "../discovery/sightings.js";
 import type { Entities } from "../entities/entities.js";
@@ -48,6 +48,8 @@ export function createAppList(deps: {
   sightings: Sightings | undefined;
   pairing: Pairing;
   devices: Devices;
+  // Called when an app's devices are hidden or shown again.
+  onDeviceVisibility: (change: DeviceChange) => void;
   // Built after the list, which reaches it only once both are.
   workflows: () => Workflows["forApps"];
   activity: Activity;
@@ -125,7 +127,7 @@ export function createAppList(deps: {
     workflows,
     devices,
     finishRemoval: (appId) => appRemoving.finish(appId),
-    onDevice: live.device,
+    onDevice: deps.onDeviceVisibility,
     available: availableApps,
     added,
     offers: hardwareOffers,
@@ -181,7 +183,7 @@ export function createAppList(deps: {
       pairing.refresh();
       void deviceOffers.check();
     },
-    onDevice: live.device,
+    onDevice: deps.onDeviceVisibility,
     log,
   });
   return {

@@ -4,11 +4,13 @@
 // device's state names a picture by its hash rather than carrying it.
 //
 // The core keeps blobs in its memory, never on disk or in a backup: one
-// lives while a device's state names it and 10 minutes after, and all of
-// them go when the core stops. A driver that names a picture puts it again
-// when it starts. Each app keeps at most 16 MB in at most 128 blobs; past
-// either, the core drops its oldest that nothing names, without waiting out
-// the 10 minutes.
+// lives while a state of one of its own app's devices names it, and a
+// minute after; another app's device naming the same bytes keeps nothing.
+// All of them go when the core stops. A driver that names a picture puts
+// it again when it starts, and whenever it names one its state stopped
+// naming. Each app keeps at most 16 MB in at most 128 blobs; past either,
+// the core drops its oldest that nothing names, without waiting out the
+// minute.
 //
 // A small file can hold a picture far larger than it looks, which a client
 // would have to decode in full to show. So the core reads each picture's
@@ -27,8 +29,8 @@ export const maxAppBlobBytes = 16 * 1024 * 1024;
 export const maxAppBlobs = 128;
 /** The widest or tallest picture, in px. */
 export const maxBlobSide = 4096;
-/** How long a blob outlives the last device state that named it, in ms. */
-export const blobKeptMs = 10 * 60_000;
+/** How long an unnamed blob is kept after upload or its last reference, in ms. */
+export const blobKeptMs = 60_000;
 
 /** A blob's name: its SHA-256, in lower-case hex. */
 export const blobHashPattern = /^[0-9a-f]{64}$/;

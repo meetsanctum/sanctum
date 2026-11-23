@@ -3,12 +3,13 @@ import {
   maxAppBlobBytes,
   maxAppBlobs,
   maxBlobBytes,
+  type DeviceInfo,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { createBlobs } from "../src/blobs/blobs.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
-import { get, post } from "./support.js";
+import { get, post, testCore } from "./support.js";
 
 // Blobs: pictures a driver hands the core, kept in memory by their hash for
 // clients to fetch while a device's state names them.
@@ -28,6 +29,31 @@ const png = (...rest: number[]) =>
     0,
     0,
   ]);
+
+// A media player of the app's whose state names a picture, as a device's
+// change brings it to the blobs; null names none.
+function player(app: string, hash: string | null) {
+  return {
+    id: `player-${app}`,
+    driver: app,
+    capabilities: [
+      { kind: "media", observed: hash ? { media: { artwork: hash } } : {} },
+    ],
+  } as unknown as DeviceInfo;
+}
+
+// Names each hash by a device of the app's of its own.
+function namer(blobs: ReturnType<typeof createBlobs>, app: string) {
+  let devices = 0;
+  return (hash: string) => {
+    devices += 1;
+    blobs.deviceChanged({
+      id: `${app}-${devices}`,
+      before: null,
+      after: { ...player(app, hash), id: `${app}-${devices}` },
+    });
+  };
+}
 
 async function pictureCore() {
   const home = await lampsCore({ origin: "official" });
@@ -86,7 +112,7 @@ describe("a driver's picture", () => {
     );
   });
 
-  it("lasts while a device's state names it and 10 minutes after", async () => {
+  it("lasts while a device's state names it and a minute after", async () => {
     const { core, maya } = await pictureCore();
     const first = await radio.picture("box-1", "image/png", png(5));
     await settled();
@@ -101,20 +127,20 @@ describe("a driver's picture", () => {
 
     await radio.picture("box-1", "image/png", png(6));
     await settled();
-    core.advance(minute);
-    core.blobs.sweep(); // The first sweep to see that it went unnamed.
-    core.advance(blobKeptMs - minute);
+    core.advance(blobKeptMs - 1);
     core.blobs.sweep();
     expect(await shown(first)).toBe(200);
-    core.advance(2 * minute);
+    core.advance(1);
     core.blobs.sweep();
     expect(await shown(first)).toBe(404);
+    expect(blobKeptMs).toBe(minute);
   });
 
   it("goes with the driver and cannot be restored by its stop hook", async () => {
     const { core, maya } = await pictureCore();
     const bytes = png(7);
     const hash = await radio.picture("box-1", "image/png", bytes);
+    const deviceChanged = vi.spyOn(core.blobs, "deviceChanged");
     let upload: Promise<unknown> | undefined;
     radio.onStop = async (ctx) => {
       upload = ctx.blobs.put({ type: "image/png", data: bytes });
@@ -127,6 +153,134 @@ describe("a driver's picture", () => {
     expect(upload).toBeDefined();
     await expect(upload).rejects.toThrow(/cannot keep/);
     expect((await get(core, `/api/blobs/${hash}`, maya)).statusCode).toBe(404);
+    expect(deviceChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        before: expect.objectContaining({ driverName: "Living room box" }),
+        after: null,
+      }),
+    );
+  });
+
+  it("follows a driver's stored artwork again when the driver is added back", async () => {
+    const { core, maya } = await pictureCore();
+    const driver = "test.lamps";
+    const manifest = core.apps.manifest(driver)!;
+    const bytes = png(10);
+    const hash = await radio.picture("box-1", "image/png", bytes);
+    await settled();
+    expect(
+      (await post(core, `/api/apps/${driver}/remove`, {}, maya)).statusCode,
+    ).toBe(200);
+    await core.stop();
+
+    const restarted = await testCore({ dataDir: core.dataDir });
+    expect(restarted.blobs.put(driver, "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).toBeNull();
+
+    vi.spyOn(restarted.availableApps, "find").mockResolvedValue({
+      app: {
+        id: driver,
+        name: manifest.name,
+        version: manifest.version,
+        summary: manifest.summary,
+        icon: manifest.icon,
+        requests: manifest.permissions,
+        memory: manifest.runtime.memory,
+        data: manifest.runtime.data,
+        adds: {
+          devices: true,
+          widgets: 0,
+          roomSections: 0,
+          devicePages: 0,
+          pieces: 0,
+        },
+        shortfalls: [],
+      },
+      pkg: { origin: "official", apart: { manifest, digest: "", folder: "" } },
+    });
+    // The test core records the add and reveals the devices without an installer.
+    const response = await post(
+      restarted,
+      "/api/apps/add",
+      { id: driver, version: manifest.version },
+      maya,
+    );
+    expect(response.json()).toEqual({ error: "app_failed" });
+    expect(restarted.blobs.put(driver, "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).not.toBeNull();
+  });
+
+  it("keeps the picture a stored state names once the core restarts and its driver puts it again", async () => {
+    const { core } = await pictureCore();
+    const bytes = png(11);
+    const hash = await radio.picture("box-1", "image/png", bytes);
+    await settled();
+    await core.stop();
+
+    // The driver puts the same bytes, and its state already names them, so
+    // no change follows: only the devices the core read as it started do.
+    const restarted = await testCore({ dataDir: core.dataDir });
+    expect(restarted.blobs.put("test.lamps", "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).not.toBeNull();
+  });
+
+  it("keeps pictures named by every media capability until the last device moves on", async () => {
+    const { core } = await pictureCore();
+    const driver = "test.lamps";
+    const first = core.blobs.put(driver, "image/png", png(8));
+    const second = core.blobs.put(driver, "image/png", png(9));
+    const key = "two-players";
+    core.devices.register(driver, {
+      key,
+      name: "Two players",
+      type: "media-player",
+      capabilities: [
+        { kind: "media", id: "main" },
+        { kind: "media", id: "aux" },
+        { kind: "media", id: "extra" },
+      ],
+    });
+    const playing = (artwork: string) => ({
+      activity: "playing",
+      media: { artwork },
+    });
+    const idle = { activity: "idle" };
+    core.devices.report(driver, {
+      key,
+      states: {
+        main: playing(first),
+        aux: playing(second),
+        extra: playing(second),
+      },
+    });
+    await radio.picture("box-1", "image/png", png(9));
+    await settled();
+    core.advance(2 * blobKeptMs);
+    core.blobs.sweep();
+    expect(core.blobs.get(first)).not.toBeNull();
+    expect(core.blobs.get(second)).not.toBeNull();
+
+    core.devices.report(driver, { key, states: { aux: idle } });
+    await radio.press("box-1", { media: null });
+    await settled();
+    core.advance(blobKeptMs);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).not.toBeNull();
+
+    core.devices.report(driver, { key, states: { extra: idle } });
+    core.advance(blobKeptMs - 1);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).not.toBeNull();
+    core.advance(1);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).toBeNull();
+    expect(core.blobs.get(first)).not.toBeNull();
   });
 });
 
@@ -142,17 +296,13 @@ describe("an app's blobs", () => {
 
   it("make room for a new one by letting go of the oldest nothing names", () => {
     let at = 0;
-    const named = new Set<string>();
-    const blobs = createBlobs({
-      named: () => new Map([[app, named]]),
-      now: () => new Date(at),
-      log: () => {},
-    });
+    const blobs = createBlobs({ now: () => new Date(at), log: () => {} });
+    const name = namer(blobs, app);
     const hashes = Array.from({ length: fit }, (_, index) => {
       at += 1;
       return blobs.put(app, "image/png", bigPng(index));
     });
-    named.add(hashes[0]!);
+    name(hashes[0]!);
     // The oldest is named, so the second oldest goes.
     blobs.put(app, "image/png", bigPng(fit));
     expect(blobs.get(hashes[0]!)).not.toBeNull();
@@ -160,13 +310,10 @@ describe("an app's blobs", () => {
   });
 
   it("keeps existing artwork when an upload cannot make enough room", () => {
-    const named = new Set<string>();
-    const blobs = createBlobs({
-      named: () => new Map([[app, named]]),
-      log() {},
-    });
+    const blobs = createBlobs({ log() {} });
+    const name = namer(blobs, app);
     for (let index = 0; index < fit; index += 1) {
-      named.add(blobs.put(app, "image/png", bigPng(index)));
+      name(blobs.put(app, "image/png", bigPng(index)));
     }
     const unnamed = blobs.put(app, "image/png", png(99));
     expect(() => blobs.put(app, "image/png", bigPng(fit))).toThrow(/16 MB/);
@@ -176,31 +323,27 @@ describe("an app's blobs", () => {
 
   it("keep at most 128 of an app's, however small, letting the oldest unnamed go", () => {
     let at = 0;
-    const named = new Set<string>();
-    const blobs = createBlobs({
-      named: () => new Map([[app, named]]),
-      now: () => new Date(at),
-      log() {},
-    });
+    const blobs = createBlobs({ now: () => new Date(at), log() {} });
+    const name = namer(blobs, app);
     const other = blobs.put(otherApp, "image/png", png(0, 0));
     const hashes = Array.from({ length: maxAppBlobs }, (_, index) => {
       at += 1;
       return blobs.put(app, "image/png", png(index >> 8, index & 0xff, 1));
     });
-    named.add(hashes[0]!);
+    name(hashes[0]!);
     blobs.put(app, "image/png", png(255, 255, 1));
     expect(blobs.get(hashes[0]!)).not.toBeNull();
     expect(blobs.get(hashes[1]!)).toBeNull();
     expect(blobs.get(hashes[2]!)).not.toBeNull();
     expect(blobs.get(other)).not.toBeNull();
 
-    for (const hash of hashes) named.add(hash);
-    named.add(blobs.put(app, "image/png", png(255, 255, 2)));
+    for (const hash of hashes) name(hash);
+    name(blobs.put(app, "image/png", png(255, 255, 2)));
     expect(() => blobs.put(app, "image/png", png(255, 255, 3))).toThrow(/128/);
   });
 
   it("retains shared bytes when one owner is removed", () => {
-    const blobs = createBlobs({ named: () => new Map(), log() {} });
+    const blobs = createBlobs({ log() {} });
     const shared = blobs.put(app, "image/png", png(1));
     expect(blobs.put(otherApp, "image/png", png(1))).toBe(shared);
     blobs.removeApp(app);
@@ -210,7 +353,7 @@ describe("an app's blobs", () => {
   });
 
   it("go when their app is removed, and all go when the core stops", () => {
-    const blobs = createBlobs({ named: () => new Map(), log: () => {} });
+    const blobs = createBlobs({ log: () => {} });
     const mine = blobs.put(app, "image/png", png(1));
     const other = blobs.put(otherApp, "image/png", png(2));
     blobs.removeApp(app);
@@ -218,5 +361,68 @@ describe("an app's blobs", () => {
     expect(blobs.get(other)).not.toBeNull();
     blobs.close();
     expect(blobs.get(other)).toBeNull();
+  });
+
+  it("follow what devices name, from the devices as the core starts", () => {
+    let at = 0;
+    const blobs = createBlobs({ now: () => new Date(at), log() {} });
+    const shown = blobs.put(app, "image/png", png(1));
+    const named = blobs.put(app, "image/png", png(2));
+    // A device that already names one as the core starts keeps it.
+    blobs.start([player(app, shown)]);
+    onTestFinished(() => blobs.close());
+    at = 2 * blobKeptMs;
+    blobs.sweep();
+    expect(blobs.get(shown)).not.toBeNull();
+    expect(blobs.get(named)).toBeNull();
+
+    // Once it names another, the first has its minute.
+    const next = blobs.put(app, "image/png", png(3));
+    blobs.deviceChanged({
+      id: player(app, null).id,
+      before: player(app, shown),
+      after: player(app, next),
+    });
+    at += blobKeptMs - 1;
+    blobs.sweep();
+    expect(blobs.get(shown)).not.toBeNull();
+    at += 1;
+    blobs.sweep();
+    expect(blobs.get(shown)).toBeNull();
+    expect(blobs.get(next)).not.toBeNull();
+
+    // A device removed names nothing.
+    blobs.deviceChanged({
+      id: player(app, null).id,
+      before: player(app, next),
+      after: null,
+    });
+    at += blobKeptMs;
+    blobs.sweep();
+    expect(blobs.get(next)).toBeNull();
+  });
+
+  it("count only the app's own devices' names", () => {
+    let at = 0;
+    const blobs = createBlobs({ now: () => new Date(at), log() {} });
+    const hash = blobs.put(app, "image/png", png(1));
+    // Another app's device names the same bytes, which it never put.
+    namer(blobs, otherApp)(hash);
+    at = blobKeptMs;
+    blobs.sweep();
+    expect(blobs.get(hash)).toBeNull();
+  });
+
+  it("are kept a minute after they are put, for the report that names them", () => {
+    let at = 0;
+    const blobs = createBlobs({ now: () => new Date(at), log() {} });
+    const hash = blobs.put(app, "image/png", png(1));
+    at = blobKeptMs - 1;
+    blobs.sweep();
+    expect(blobs.get(hash)).not.toBeNull();
+    namer(blobs, app)(hash);
+    at = 10 * blobKeptMs;
+    blobs.sweep();
+    expect(blobs.get(hash)).not.toBeNull();
   });
 });
