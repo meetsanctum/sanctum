@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   fits,
+  capacityOf,
   hostCheck,
   modelName,
   offeredModels,
-  suggestedModel,
 } from "../src/models.js";
 import { n150Host, piHost } from "./support.js";
 
@@ -64,9 +64,36 @@ describe("the host check", () => {
     ).toBe(false);
   });
 
-  it("suggests Qwen3 1.7B with 8 GB and Qwen3 4B with 16 GB", () => {
-    expect(suggestedModel(hostCheck(piHost(), 4 * gb))).toBe("qwen3:1.7b");
-    expect(suggestedModel(hostCheck(n150Host(), 8 * gb))).toBe("qwen3:4b");
+  it("says what each model takes: fitting under three quarters, tight up to all, too large beyond", () => {
+    const check = hostCheck(piHost(), 4 * gb);
+    const memory = (id: string) => capacityOf(model(id), check).memory?.state;
+
+    expect(memory("qwen3:1.7b")).toBe("fits");
+    expect(memory("llama3.2:3b")).toBe("fits");
+    expect(memory("qwen3:4b")).toBe("tight");
+    expect(memory("qwen3:8b")).toBe("tooLarge");
+    expect(capacityOf(model("qwen3:1.7b"), check).memory).toEqual({
+      neededBytes: 2 * gb,
+      roomBytes: 4 * gb,
+      state: "fits",
+    });
+  });
+
+  it("counts storage beside the 2 GB kept and the downloads under way", () => {
+    const little = piHost();
+    little.storage = { freeBytes: 4.4 * gb };
+    const check = hostCheck(little, 4 * gb);
+    const storage = (id: string, reserved = 0) =>
+      capacityOf(model(id), check, reserved).storage;
+
+    expect(storage("qwen3:1.7b")?.state).toBe("fits");
+    expect(storage("llama3.2:3b")).toMatchObject({
+      neededBytes: 2 * gb,
+      state: "tight",
+    });
+    expect(storage("qwen3:4b")?.state).toBe("tooLarge");
+    expect(storage("qwen3:1.7b", 0.6 * gb)?.state).toBe("tight");
+    expect(storage("qwen3:1.7b", 1.4 * gb)?.state).toBe("tooLarge");
   });
 });
 

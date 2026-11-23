@@ -3,8 +3,9 @@ import type { HostResources } from "@meetsanctum/app-sdk";
 // The models the page offers, and whether this Sanctum can run them. Each is
 // one that calls tools well, which a home's AI model needs, with its
 // download and the memory it takes with a short conversation, as Ollama runs
-// it on the processor. The page offers only those that fit the memory and
-// storage there is, and says when the processor is likely too slow.
+// it on the processor. The page shows what each takes of the memory and
+// storage free, offers only those that fit, and says when the processor is
+// likely too slow.
 
 const gb = 1_000_000_000;
 const mib = 1024 ** 2;
@@ -15,8 +16,6 @@ export type OfferedModel = {
   name: string;
   sizeBytes: number;
   memoryBytes: number;
-  /** What sets it apart, where something does. */
-  note?: string;
 };
 
 export const offeredModels: readonly OfferedModel[] = [
@@ -43,7 +42,6 @@ export const offeredModels: readonly OfferedModel[] = [
     name: "Qwen3 8B",
     sizeBytes: 5.2 * gb,
     memoryBytes: 6.5 * gb,
-    note: "better answers, slower",
   },
 ];
 
@@ -86,33 +84,63 @@ export function hostCheck(
   };
 }
 
-/** Whether a model fits the memory and storage this Sanctum has free. */
-export function fits(model: OfferedModel, check: HostCheck, reservedBytes = 0) {
-  return (
-    check.memory !== null &&
-    model.memoryBytes <= check.memory.roomBytes &&
-    check.storage !== null &&
-    model.sizeBytes + storageMarginBytes + reservedBytes <=
-      check.storage.freeBytes
-  );
+/**
+ * How a model sits with what's free: it fits while it takes under three
+ * quarters, it's tight up to all of it, and it's too large beyond that.
+ */
+export type CapacityState = "fits" | "tight" | "tooLarge";
+
+/** What a model takes of what's free for models, where the host says. */
+export type Capacity = {
+  neededBytes: number;
+  roomBytes: number;
+  state: CapacityState;
+};
+
+const tightFrom = 0.75;
+
+function capacity(neededBytes: number, roomBytes: number): Capacity {
+  const share = roomBytes > 0 ? neededBytes / roomBytes : Infinity;
+  return {
+    neededBytes,
+    roomBytes: Math.max(0, roomBytes),
+    state: share < tightFrom ? "fits" : share <= 1 ? "tight" : "tooLarge",
+  };
 }
 
 /**
- * The model to suggest: the largest Qwen3 that takes at most a quarter of
- * the host's memory, so the rest of the home keeps its room, such as Qwen3
- * 1.7B with 8 GB and Qwen3 4B with 16 GB.
+ * What a model takes of the memory free for models, and of the storage
+ * free beside downloads under way, keeping 2 GB of storage spare. Null
+ * where the host doesn't say.
  */
-export function suggestedModel(check: HostCheck, reservedBytes = 0) {
-  const total = check.memory?.totalBytes;
-  if (total === undefined) return undefined;
-  return offeredModels
-    .filter(
-      (model) =>
-        model.id.startsWith("qwen3:") &&
-        model.memoryBytes <= total / 4 &&
-        fits(model, check, reservedBytes),
-    )
-    .at(-1)?.id;
+export function capacityOf(
+  model: OfferedModel,
+  check: HostCheck,
+  reservedBytes = 0,
+) {
+  return {
+    memory: check.memory && capacity(model.memoryBytes, check.memory.roomBytes),
+    storage:
+      check.storage &&
+      capacity(
+        model.sizeBytes,
+        check.storage.freeBytes - storageMarginBytes - reservedBytes,
+      ),
+  };
+}
+
+/**
+ * Whether a model fits the memory and storage this Sanctum has free: one
+ * the host can't say it fits is never downloaded.
+ */
+export function fits(model: OfferedModel, check: HostCheck, reservedBytes = 0) {
+  const { memory, storage } = capacityOf(model, check, reservedBytes);
+  return (
+    memory !== null &&
+    memory.state !== "tooLarge" &&
+    storage !== null &&
+    storage.state !== "tooLarge"
+  );
 }
 
 /** How a tag reads, where the page doesn't offer it: qwen3:14b as Qwen3 14B. */

@@ -5,6 +5,7 @@ import {
   Switch,
   defineAppUi,
   icons,
+  type LucideIcon,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -12,20 +13,26 @@ import type { OllamaStatus } from "../index";
 import { useStatus } from "./use-status";
 import {
   downloadLine,
+  memoryCapacityLine,
   memoryLine,
   modelLine,
   percentOf,
   processorLine,
+  roomHint,
+  shareOf,
+  storageCapacityLine,
   storageLine,
 } from "./words";
 import { version } from "../../sanctum-app.json";
 
 // Ollama's page: what this Sanctum has for AI models, the models on it with
-// those downloading, and the models it could download. A processor that's
-// likely too slow says so, and its downloads wait until the household ticks
-// Download anyway; models that don't fit the memory and storage left aren't
-// offered. Removing a model asks first. It's the household's, the same on
-// every device.
+// those downloading, and the models it could download, each with a circle
+// for how much of the memory free for models it takes and what it needs of
+// the memory and storage. A model that's tight or too large says so in
+// orange or red, and one too large stays listed with Download off. A
+// processor that's likely too slow says so, and its downloads wait until the
+// household switches on Download anyway. Removing a model asks first. It's
+// the household's, the same on every device.
 
 const note =
   "m-0 px-1 text-[13px] leading-[18px] font-medium text-muted-foreground";
@@ -202,6 +209,125 @@ function DownloadRow(props: {
   );
 }
 
+type Offer = OllamaStatus["offered"][number];
+type CapacityState = NonNullable<Offer["memory"]>["state"];
+
+// Green while it fits, orange when it's tight, red when it's too large.
+const ringColour: Record<CapacityState, string> = {
+  fits: "text-(--leaf-text)",
+  tight: "text-(--sun-text)",
+  tooLarge: "text-(--danger)",
+};
+const labelColour: Record<Exclude<CapacityState, "fits">, string> = {
+  tight:
+    "text-(--sun-text) bg-[color-mix(in_srgb,var(--sun-text)_12%,transparent)]",
+  tooLarge:
+    "text-(--danger) bg-[color-mix(in_srgb,var(--danger)_11%,transparent)]",
+};
+
+/** How much of the memory free for models a model takes, as a ring. */
+function Ring(props: { name: string; memory: Offer["memory"] }) {
+  const { memory } = props;
+  const radius = 9;
+  const length = 2 * Math.PI * radius;
+  const share = memory ? shareOf(memory) : 0;
+  const label = !memory
+    ? `${props.name}: the memory free isn't known`
+    : share > 100
+      ? `${props.name} needs more memory than is free for models`
+      : `${props.name} takes ${share}% of the memory free for models`;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label={label}
+      className={`size-7 shrink-0 ${memory ? ringColour[memory.state] : ""}`}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r={radius}
+        fill="none"
+        strokeWidth="3.5"
+        className="stroke-muted"
+      />
+      {memory && (
+        <circle
+          cx="12"
+          cy="12"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray={`${(length * Math.min(share, 100)) / 100} ${length}`}
+          transform="rotate(-90 12 12)"
+        />
+      )}
+    </svg>
+  );
+}
+
+/** A line of what a model takes: neutral while it fits, a label when not. */
+function CapacityLine(props: {
+  icon: LucideIcon;
+  state: CapacityState;
+  text: string;
+}) {
+  const look =
+    props.state === "fits"
+      ? "text-muted-foreground"
+      : `rounded-xs px-1.5 py-0.5 font-semibold ${labelColour[props.state]}`;
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1 self-start text-[13px] leading-[18px] font-medium ${look}`}
+    >
+      <props.icon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="min-w-0">{props.text}</span>
+    </span>
+  );
+}
+
+function OfferRow(props: {
+  offer: Offer;
+  canDownload: boolean;
+  onDownload: () => void;
+}) {
+  const { offer } = props;
+  const id = `ollama-offer-${offer.id.replace(/[^a-z0-9]/gi, "-")}`;
+  return (
+    <div className={row}>
+      <Ring name={offer.name} memory={offer.memory} />
+      <span id={`${id}-words`} className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span id={`${id}-name`} className="text-[15px] leading-5 font-medium">
+          {offer.name}
+        </span>
+        <CapacityLine
+          icon={icons.HardDrive}
+          state={offer.storage?.state ?? "fits"}
+          text={storageCapacityLine(offer.storage, offer.sizeBytes)}
+        />
+        {offer.memory && (
+          <CapacityLine
+            icon={icons.MemoryStick}
+            state={offer.memory.state}
+            text={memoryCapacityLine(offer.memory)}
+          />
+        )}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!props.canDownload || !offer.fits}
+        aria-describedby={`${id}-words`}
+        onClick={props.onDownload}
+      >
+        Download
+      </Button>
+    </div>
+  );
+}
+
 function MainPage() {
   const { status, hasFailed, act } = useStatus();
   const [isAnyway, setIsAnyway] = useState(false);
@@ -290,7 +416,11 @@ function MainPage() {
           ))}
         </PageSection>
         <div className="flex flex-col gap-2">
-          <PageSection id="ollama-offered" title="Download a model">
+          <PageSection
+            id="ollama-offered"
+            title="Download a model"
+            hint={roomHint(status.offered)}
+          >
             {isSlow && (
               <div className={row}>
                 <Words
@@ -312,38 +442,29 @@ function MainPage() {
               </p>
             ) : status.offered.length === 0 ? (
               <p className={`${note} px-2.5 py-2`}>
-                No other model fits the memory and storage this Sanctum has
-                free.
+                Every model offered here is on this Sanctum.
               </p>
             ) : (
-              status.offered.map((model) => {
-                const id = `ollama-offer-${model.id.replace(/[^a-z0-9]/gi, "-")}`;
-                return (
-                  <div key={model.id} className={row}>
-                    <Words id={id} name={model.name} line={modelLine(model)} />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!canDownload || !status.isAnswering}
-                      aria-describedby={`${id}-name`}
-                      onClick={() =>
-                        void run(
-                          "ollama.download",
-                          { model: model.id, anyway: isAnyway },
-                          `Couldn’t download ${model.name}. Try again.`,
-                        )
-                      }
-                    >
-                      Download
-                    </Button>
-                  </div>
-                );
-              })
+              status.offered.map((offer) => (
+                <OfferRow
+                  key={offer.id}
+                  offer={offer}
+                  canDownload={canDownload && status.isAnswering}
+                  onDownload={() =>
+                    void run(
+                      "ollama.download",
+                      { model: offer.id, anyway: isAnyway },
+                      `Couldn’t download ${offer.name}. Try again.`,
+                    )
+                  }
+                />
+              ))
             )}
           </PageSection>
           <p className={note}>
-            Models that handle your home’s tools well, sized for this Sanctum.
-            What’s asked of them stays in your home.
+            Models that handle your home’s tools well. The circle shows how much
+            of the memory free for models each takes; one that doesn’t fit stays
+            listed, with Download off. What’s asked of them stays in your home.
           </p>
         </div>
       </div>

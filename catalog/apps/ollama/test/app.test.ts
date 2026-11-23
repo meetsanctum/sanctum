@@ -51,13 +51,13 @@ describe("the Ollama app", () => {
         memoryBytes: 6.5 * gb,
       },
     ]);
-    expect(shown.offered.map((model) => [model.id, model.isSuggested])).toEqual(
-      [
-        ["qwen3:1.7b", false],
-        ["llama3.2:3b", false],
-        ["qwen3:4b", true],
-      ],
-    );
+    expect(
+      shown.offered.map((model) => [model.id, model.memory?.state, model.fits]),
+    ).toEqual([
+      ["qwen3:1.7b", "fits", true],
+      ["llama3.2:3b", "fits", true],
+      ["qwen3:4b", "fits", true],
+    ]);
   });
 
   it("leaves Ollama's cloud models out", async () => {
@@ -180,10 +180,12 @@ describe("the Ollama app", () => {
     expect(requests).toContain(null);
     expect(requests).toContain("conflict");
     expect(ollama.pulls).toHaveLength(1);
-    expect((await status()).offered).toEqual([]);
+    expect((await status()).offered.filter((model) => model.fits)).toEqual([]);
 
     await act("ollama.stop", { model: ollama.pulls[0]!.model });
-    expect((await status()).offered).toHaveLength(3);
+    expect((await status()).offered.filter((model) => model.fits)).toHaveLength(
+      3,
+    );
   });
 
   it("keeps a download running when asked to remove a model that isn't installed", async () => {

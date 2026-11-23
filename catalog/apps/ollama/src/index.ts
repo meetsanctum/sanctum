@@ -8,11 +8,11 @@ import { z } from "zod";
 
 import { createDownloads, type Downloads } from "./downloads.js";
 import {
+  capacityOf,
   fits,
   hostCheck,
   modelName,
   offeredModels,
-  suggestedModel,
 } from "./models.js";
 import { createOllama, type Ollama } from "./ollama.js";
 
@@ -38,6 +38,12 @@ const hostShape = z.object({
   storage: z.object({ freeBytes: z.number() }).nullable(),
 });
 
+const capacityShape = z.object({
+  neededBytes: z.number(),
+  roomBytes: z.number(),
+  state: z.enum(["fits", "tight", "tooLarge"]),
+});
+
 const statusShape = z.object({
   /** Whether Ollama answered: it may still be starting, or downloading itself. */
   isAnswering: z.boolean(),
@@ -60,15 +66,17 @@ const statusShape = z.object({
       problem: z.string().optional(),
     }),
   ),
-  // Those that fit and aren't here yet, smallest first.
+  // Those not here yet, smallest first, with what each takes of the memory
+  // and storage free, those that don't fit too.
   offered: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
       sizeBytes: z.number(),
       memoryBytes: z.number(),
-      note: z.string().optional(),
-      isSuggested: z.boolean(),
+      memory: capacityShape.nullable(),
+      storage: capacityShape.nullable(),
+      fits: z.boolean(),
     }),
   ),
 });
@@ -117,7 +125,6 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
         ...underWay.map((download) => download.id),
       ]);
       const reservedBytes = downloads.reservedBytes();
-      const suggested = suggestedModel(check, reservedBytes);
       return {
         isAnswering: models !== null,
         host: check,
@@ -134,10 +141,12 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
           name: modelName(download.id),
         })),
         offered: offeredModels
-          .filter(
-            (model) => !here.has(model.id) && fits(model, check, reservedBytes),
-          )
-          .map((model) => ({ ...model, isSuggested: model.id === suggested })),
+          .filter((model) => !here.has(model.id))
+          .map((model) => ({
+            ...model,
+            ...capacityOf(model, check, reservedBytes),
+            fits: fits(model, check, reservedBytes),
+          })),
       };
     },
   });

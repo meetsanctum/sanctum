@@ -201,10 +201,71 @@
                 "memoryBytes": {
                   "type": "number"
                 },
-                "note": {
-                  "type": "string"
+                "memory": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "neededBytes": {
+                          "type": "number"
+                        },
+                        "roomBytes": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "fits",
+                            "tight",
+                            "tooLarge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "neededBytes",
+                        "roomBytes",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
-                "isSuggested": {
+                "storage": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "neededBytes": {
+                          "type": "number"
+                        },
+                        "roomBytes": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "fits",
+                            "tight",
+                            "tooLarge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "neededBytes",
+                        "roomBytes",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fits": {
                   "type": "boolean"
                 }
               },
@@ -213,7 +274,9 @@
                 "name",
                 "sizeBytes",
                 "memoryBytes",
-                "isSuggested"
+                "memory",
+                "storage",
+                "fits"
               ],
               "additionalProperties": false
             }

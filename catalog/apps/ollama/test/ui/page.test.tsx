@@ -45,8 +45,9 @@ const capable = (): OllamaStatus => ({
       name: "Qwen3 8B",
       sizeBytes: 5.2 * gb,
       memoryBytes: 6.5 * gb,
-      note: "better answers, slower",
-      isSuggested: false,
+      memory: { neededBytes: 6.5 * gb, roomBytes: 8 * gb, state: "tight" },
+      storage: { neededBytes: 5.2 * gb, roomBytes: 178 * gb, state: "fits" },
+      fits: true,
     },
   ],
 });
@@ -66,7 +67,9 @@ const slow = (): OllamaStatus => ({
       name: "Qwen3 1.7B",
       sizeBytes: 1.4 * gb,
       memoryBytes: 2 * gb,
-      isSuggested: true,
+      memory: { neededBytes: 2 * gb, roomBytes: 4 * gb, state: "fits" },
+      storage: { neededBytes: 1.4 * gb, roomBytes: 39 * gb, state: "fits" },
+      fits: true,
     },
   ],
 });
@@ -149,8 +152,9 @@ describe("Ollama's page", () => {
         .querySelector('[role="progressbar"]')
         ?.getAttribute("aria-valuenow"),
     ).toBe("43");
+    expect(text).toContain("Download a model8 GB of memory free for models");
     expect(text).toContain(
-      "5.2 GB · uses about 6.5 GB of memory · better answers, slower",
+      "Qwen3 8B5.2 GB downloadTight · uses 6.5 of 8 GB memory",
     );
     expect(button("Download").disabled).toBe(false);
   });
@@ -162,7 +166,7 @@ describe("Ollama's page", () => {
     expect(text).toContain(
       "Processor: Raspberry Pi 4 Model B, 4 cores. Likely too slow",
     );
-    expect(text).toContain("suggested for this Sanctum");
+    expect(text).toContain("Qwen3 1.7B1.4 GB downloadUses 2 of 4 GB memory");
     expect(button("Download").disabled).toBe(true);
 
     await act(async () => {
@@ -203,6 +207,62 @@ describe("Ollama's page", () => {
 
     await act(async () => button("Stop download").click());
     expect(call).toHaveBeenCalledWith("ollama.stop", { model: "qwen3:1.7b" });
+  });
+
+  it("shows what each model takes, and keeps one too large listed with Download off", async () => {
+    const little = slow();
+    little.host.processor.isLikelySlow = false;
+    const room = { memory: 4 * gb, storage: 2.4 * gb };
+    const offer = (
+      name: string,
+      sizeBytes: number,
+      memoryBytes: number,
+      memory: "fits" | "tight" | "tooLarge",
+      storage: "fits" | "tight" | "tooLarge",
+    ) => ({
+      id: name.toLowerCase().replace(/ /g, "-"),
+      name,
+      sizeBytes,
+      memoryBytes,
+      memory: {
+        neededBytes: memoryBytes,
+        roomBytes: room.memory,
+        state: memory,
+      },
+      storage: {
+        neededBytes: sizeBytes,
+        roomBytes: room.storage,
+        state: storage,
+      },
+      fits: memory !== "tooLarge" && storage !== "tooLarge",
+    });
+    little.offered = [
+      offer("Llama 3.2 3B", 2 * gb, 2.8 * gb, "fits", "tight"),
+      offer("Qwen3 4B", 2.5 * gb, 3.2 * gb, "tight", "tooLarge"),
+    ];
+    const text = await show(fakeClient(little).client);
+
+    expect(text).toContain(
+      "Download a model4 GB of memory and 2.4 GB of storage free for models",
+    );
+    expect(text).toContain(
+      "Llama 3.2 3BTight · needs 2 of 2.4 GB storageUses 2.8 of 4 GB memory",
+    );
+    expect(text).toContain(
+      "Qwen3 4BToo large · needs 2.5 of 2.4 GB storageTight · uses 3.2 of 4 GB memory",
+    );
+    const downloads = [...container.querySelectorAll("button")].filter(
+      (each) => each.textContent === "Download",
+    );
+    expect(downloads.map((each) => each.disabled)).toEqual([false, true]);
+    expect(
+      [...container.querySelectorAll('svg[role="img"]')].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+    ).toEqual([
+      "Llama 3.2 3B takes 70% of the memory free for models",
+      "Qwen3 4B takes 80% of the memory free for models",
+    ]);
   });
 
   it("asks before removing a model", async () => {
