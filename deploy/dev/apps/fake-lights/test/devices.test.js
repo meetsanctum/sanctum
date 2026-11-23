@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, test } from "node:test";
 
 import { createDriverCore } from "@meetsanctum/app-testkit";
@@ -22,10 +23,36 @@ afterEach(async () => {
 
 const typeOf = (key) => core.registered.get(key)?.type;
 
-test("brings its lights and contact sensors as what they are", () => {
+test("brings its lights, plugs and sensors as what they are", () => {
   assert.equal(typeOf("floor"), "light");
+  assert.equal(typeOf("coffee"), "plug");
   assert.equal(typeOf("balcony-door"), "contact");
+  assert.equal(typeOf("hallway-motion"), "motion");
+  assert.equal(typeOf("office-climate"), "sensor");
   assert.deepEqual(core.refused, []);
+});
+
+test("brings every device the seed puts in a room, and no other", async () => {
+  const seed = await readFile(
+    new URL("../../../seed.mjs", import.meta.url),
+    "utf8",
+  );
+  const rooms = Function(
+    `return ${seed.match(/const rooms = (\{[\s\S]*?\n\});/)[1]}`,
+  )();
+  const seeded = Object.values(rooms).flat().sort();
+  const brought = [...core.registered.values()]
+    .map((device) => device.name)
+    .sort();
+  assert.equal(seeded.length, 60);
+  assert.deepEqual(brought, seeded);
+});
+
+test("turns a plug on and off", async () => {
+  await core.command("coffee", "power", "switch", { on: true });
+  assert.deepEqual(core.latest("coffee", "power"), { on: true });
+  await core.command("coffee", "power", "switch", { on: false });
+  assert.deepEqual(core.latest("coffee", "power"), { on: false });
 });
 
 test("reports a new episode when the TV box skips forwards or backwards", async () => {

@@ -6,22 +6,28 @@ import {
 } from "@meetsanctum/app-sdk";
 import { crc32, deflateSync } from "node:zlib";
 
-// Pretend lights, contact sensors and media players for a development
-// stack, since a Mac has no Zigbee stick: a driver app like Zigbee, whose
-// lights and players do what they're told at once and whose contact sensors
-// open and close by themselves. Add
+import {
+  climateOf,
+  climateSensors,
+  contactSensors,
+  isOpen,
+  lightNames,
+  motionSensors,
+  plugNames,
+  seesMotion,
+} from "./home.js";
+
+// A pretend home's devices for a development stack, since a Mac has no
+// Zigbee stick: a driver app like Zigbee, whose lights, plugs and players do
+// what they're told at once, and whose contact, motion and climate sensors
+// change by themselves (home.js). Add
 // devices can try it out: while it lets devices join, a new light joins a few
 // seconds in and another a little later, and it has found a climate sensor
 // and a plug on the network, the plug asking for its key ("sanctum"). Only
 // a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
-  [
-    ["floor", "Floor lamp"],
-    ["shelf", "Shelf light"],
-    ["desk", "Desk lamp"],
-    ["bedside", "Bedside lamp"],
-  ].map(([key, name]) => [
+  lightNames.map(([key, name]) => [
     key,
     {
       name,
@@ -34,21 +40,10 @@ const lights = new Map(
     },
   ]),
 );
-
-// A door that opens for half a minute every few minutes, and a window that
-// stays open for ten minutes of every half hour, so a home shows both a
-// sensor that has just opened and one open for a while.
-const minute = 60_000;
-const contacts = new Map([
-  [
-    "balcony-door",
-    { name: "Balcony door", every: 3 * minute, openFor: 30_000 },
-  ],
-  [
-    "bedroom-window",
-    { name: "Bedroom window", every: 30 * minute, openFor: 10 * minute },
-  ],
-]);
+const plugs = new Map(
+  plugNames.map(([key, name]) => [key, { name, state: { on: false } }]),
+);
+const contacts = new Map(contactSensors.map((each) => [each.key, each]));
 
 // A TV box playing a show, which turns on and off and steps the TV's volume,
 // and a smart speaker with nothing on, its volume a level it can mute.
@@ -226,16 +221,40 @@ const playedTo = (media, playing) =>
       )
     : media.position;
 
-// Whether a contact is open now, by the clock: open at the start of each of
-// its periods.
-const isOpen = ({ every, openFor }, now = Date.now()) => now % every < openFor;
-
 const reportContact = (ctx, key) =>
   ctx.devices.report({
     key,
     availability: "online",
     states: { contact: { open: isOpen(contacts.get(key)) } },
     battery: 87,
+  });
+
+const reportMotion = (ctx, sensor) =>
+  ctx.devices.report({
+    key: sensor.key,
+    availability: "online",
+    states: { occupancy: { motion: seesMotion(sensor) } },
+    battery: 74,
+  });
+
+function reportClimate(ctx, sensor) {
+  const { temperature, humidity } = climateOf(sensor);
+  return ctx.devices.report({
+    key: sensor.key,
+    availability: "online",
+    states: {
+      temperature: { value: temperature },
+      humidity: { value: humidity },
+    },
+    battery: 91,
+  });
+}
+
+const reportPlug = (ctx, key) =>
+  ctx.devices.report({
+    key,
+    availability: "online",
+    states: { power: plugs.get(key).state },
   });
 
 let ticking;
@@ -437,6 +456,56 @@ export default defineApp({
       });
       await reportContact(ctx, key);
     }
+    for (const sensor of motionSensors) {
+      await ctx.devices.register({
+        key: sensor.key,
+        name: sensor.name,
+        manufacturer: "Sanctum",
+        model: "Fake motion sensor",
+        type: "motion",
+        capabilities: [
+          {
+            id: "occupancy",
+            kind: "motion",
+            features: { sensitivity: null, clearAfter: null, indicator: false },
+          },
+        ],
+      });
+      await reportMotion(ctx, sensor);
+    }
+    for (const sensor of climateSensors) {
+      await ctx.devices.register({
+        key: sensor.key,
+        name: sensor.name,
+        manufacturer: "Sanctum",
+        model: "Fake climate sensor",
+        type: "sensor",
+        capabilities: [
+          {
+            id: "temperature",
+            kind: "sensor",
+            features: { measures: "temperature" },
+          },
+          {
+            id: "humidity",
+            kind: "sensor",
+            features: { measures: "humidity" },
+          },
+        ],
+      });
+      await reportClimate(ctx, sensor);
+    }
+    for (const [key, { name }] of plugs) {
+      await ctx.devices.register({
+        key,
+        name,
+        manufacturer: "Sanctum",
+        model: "Fake plug",
+        type: "plug",
+        capabilities: [{ id: "power", kind: "switch" }],
+      });
+      await reportPlug(ctx, key);
+    }
     for (const [key, { name, type, features }] of players) {
       await ctx.devices.register({
         key,
@@ -458,15 +527,30 @@ export default defineApp({
       if (previouslyAdded.has(device.key)) await registerFound(ctx, device);
     }
     await ctx.devices.present({
-      keys: [...lights.keys(), ...contacts.keys(), ...players.keys(), ...added],
+      keys: [
+        ...lights.keys(),
+        ...plugs.keys(),
+        ...contacts.keys(),
+        ...motionSensors.map((each) => each.key),
+        ...climateSensors.map((each) => each.key),
+        ...players.keys(),
+        ...added,
+      ],
     });
     await ctx.devices.found(listed());
-    // The core takes a report that says the same again as no change.
+    // The core takes a report that says the same again as no change, so
+    // only what changed reaches a client.
     ticking = setInterval(() => {
       for (const key of contacts.keys()) {
         void reportContact(ctx, key).catch(() => undefined);
       }
-    }, 10_000);
+      for (const sensor of motionSensors) {
+        void reportMotion(ctx, sensor).catch(() => undefined);
+      }
+      for (const sensor of climateSensors) {
+        void reportClimate(ctx, sensor).catch(() => undefined);
+      }
+    }, 5_000);
   },
   async stop() {
     clearInterval(ticking);
@@ -478,6 +562,15 @@ export default defineApp({
   },
   driver: {
     async command(ctx, command) {
+      const plug = plugs.get(command.key);
+      if (command.kind === "switch" && plug) {
+        plug.state = {
+          ...plug.state,
+          ...switchCapability.desired(command.command),
+        };
+        await reportPlug(ctx, command.key);
+        return;
+      }
       if (command.kind === "switch" && added.has(command.key)) {
         await ctx.devices.report({
           key: command.key,
