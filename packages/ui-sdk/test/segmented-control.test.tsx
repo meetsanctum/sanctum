@@ -144,3 +144,40 @@ it("gives every segment the same width, and stretches only when asked", async ()
   expect(group.classList.contains("auto-cols-fr")).toBe(true);
   expect(group.classList.contains("w-full")).toBe(true);
 });
+
+it("is a menu of the same choices on a phone, with phoneMenu", async () => {
+  const onValueChange = vi.fn();
+  await act(async () => {
+    root.render(
+      <SegmentedControl
+        label="Show"
+        options={options}
+        value="on"
+        onValueChange={onValueChange}
+        phoneMenu
+      />,
+    );
+  });
+  const group = container.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  const menu = container.querySelector("select")!;
+  expect(group.classList.contains("max-sm:hidden")).toBe(true);
+  expect(menu.parentElement!.classList.contains("sm:hidden")).toBe(true);
+  expect(menu.getAttribute("aria-label")).toBe("Show");
+  expect([...menu.options].map((option) => option.text)).toEqual([
+    "Automatic",
+    "On",
+    "Off",
+  ]);
+  expect(menu.selectedOptions[0]!.text).toBe("On");
+
+  await act(async () => {
+    menu.value = menu.options[2]!.value;
+    menu.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(onValueChange).toHaveBeenCalledExactlyOnceWith("off");
+});
+
+it("has no menu without phoneMenu", async () => {
+  await render("on");
+  expect(container.querySelector("select")).toBeNull();
+});

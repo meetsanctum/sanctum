@@ -123,6 +123,7 @@ export function ActivityPage(props: {
           value={kind}
           onValueChange={(value) => setKind(value)}
           size="sm"
+          phoneMenu
         />
         {device && (
           <span className="flex h-8 items-center gap-1 rounded-md bg-card ps-3 pe-1 text-sm font-medium">

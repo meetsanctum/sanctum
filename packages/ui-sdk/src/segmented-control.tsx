@@ -1,6 +1,10 @@
 import { cn } from "cn";
 import type { KeyboardEvent } from "react";
 
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "./components/ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 
 /** One of a segmented control's choices. */
@@ -9,7 +13,8 @@ export type SegmentedOption<T extends string> = { value: T; label: string };
 // A few choices side by side, one chosen at a time, like tabs: a track of
 // the ink at 8%, with the chosen segment raised in the page's own colour,
 // White by day and a lighter grey in the evening. For two to five short
-// choices; more, or long ones, take a NativeSelect. Arrow keys move and
+// choices; more, or long ones, take a NativeSelect, and with phoneMenu it
+// becomes one on a phone where it would not fit. Arrow keys move and
 // choose together, and pressing the chosen segment keeps it selected.
 
 const sizes = {
@@ -64,10 +69,12 @@ export function SegmentedControl<T extends string>(props: {
   /** Long labels wrap onto a second line rather than run out of it. */
   wraps?: boolean;
   disabled?: boolean;
+  /** On a phone, the same choices as a menu, where they wouldn't fit. */
+  phoneMenu?: boolean;
   /** Places it; its look comes from its size alone. */
   className?: string;
 }) {
-  return (
+  const segments = (
     <ToggleGroup
       type="single"
       aria-label={props.label}
@@ -86,6 +93,7 @@ export function SegmentedControl<T extends string>(props: {
       className={cn(
         "inline-grid max-w-full auto-cols-fr grid-flow-col rounded-md bg-foreground/8 p-0.75",
         props.fill && "grid w-full",
+        props.phoneMenu && "max-sm:hidden",
         props.className,
       )}
     >
@@ -106,5 +114,33 @@ export function SegmentedControl<T extends string>(props: {
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
+  );
+  if (!props.phoneMenu) return segments;
+  return (
+    <>
+      {segments}
+      <NativeSelect
+        aria-label={props.label}
+        aria-labelledby={props.labelledBy}
+        aria-describedby={props.describedBy}
+        // Values carry the same prefix, so no choice is mistaken for none.
+        value={props.value === undefined ? "" : `:${props.value}`}
+        onChange={(event) => {
+          if (event.target.value) {
+            props.onValueChange(event.target.value.slice(1) as T);
+          }
+        }}
+        disabled={props.disabled}
+        size={props.size === "sm" ? "sm" : "default"}
+        className={cn("sm:hidden", props.fill && "w-full", props.className)}
+      >
+        {props.value === undefined && <NativeSelectOption value="" hidden />}
+        {props.options.map((option) => (
+          <NativeSelectOption key={option.value} value={`:${option.value}`}>
+            {option.label}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </>
   );
 }
