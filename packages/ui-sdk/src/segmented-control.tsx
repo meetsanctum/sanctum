@@ -81,7 +81,8 @@ export function SegmentedControl<T extends string>(props: {
       onKeyDownCapture={selectWithArrowKey}
       disabled={props.disabled}
       spacing={1}
-      // Every segment as wide as the widest, or a share of the whole width.
+      // Every segment as wide as the widest, or a share of the whole width,
+      // but never narrower than its own label, which would run into the next.
       className={cn(
         "inline-grid max-w-full auto-cols-fr grid-flow-col rounded-md bg-foreground/8 p-0.75",
         props.fill && "grid w-full",
@@ -93,7 +94,7 @@ export function SegmentedControl<T extends string>(props: {
           key={option.value}
           value={`:${option.value}`}
           className={cn(
-            "min-w-0 rounded-sm font-medium text-foreground hover:bg-foreground/5 hover:text-foreground pointer-coarse:h-10",
+            "rounded-sm font-medium text-foreground hover:bg-foreground/5 hover:text-foreground pointer-coarse:h-10",
             "data-[state=on]:bg-background data-[state=on]:shadow-[0_1px_3px_rgb(0_0_0/12%)] data-[state=on]:hover:bg-background",
             "dark:data-[state=on]:bg-foreground/16 dark:data-[state=on]:hover:bg-foreground/16",
             sizes[props.size ?? "default"],
