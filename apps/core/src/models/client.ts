@@ -28,6 +28,9 @@ export type ModelRequest = {
 
 /** Where a source answers, and how. */
 export type ModelEndpoint = {
+  // Anthropic's own Messages API, where OpenAI's chat completions are the
+  // rest's.
+  api?: "anthropic";
   // Ends without a slash, such as http://192.168.1.40:11434/v1.
   baseUrl: string;
   key?: string;

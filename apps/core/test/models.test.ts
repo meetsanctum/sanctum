@@ -151,7 +151,7 @@ describe("AI models", () => {
     expect(sources.chats[0]).toMatchObject({
       model: "qwen3:8b",
       stream: true,
-      max_tokens: 256,
+      max_tokens: 1024,
       tools: [{ type: "function", function: { name: "get_time" } }],
     });
     const entry = core.db

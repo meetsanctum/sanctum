@@ -295,8 +295,8 @@ export function AddSource(props: {
                     With an AI provider
                   </span>
                   <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    OpenRouter or OpenAI, with your own API key. Faster, but
-                    what's asked leaves your home.
+                    OpenRouter, Anthropic or OpenAI, with your own API key.
+                    Faster, but what's asked leaves your home.
                   </span>
                 </span>
               </label>

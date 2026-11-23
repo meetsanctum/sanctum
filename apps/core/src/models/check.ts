@@ -1,6 +1,7 @@
 import type { ModelCheck, ModelTokens } from "@meetsanctum/app-sdk";
 
-import { chat, ModelError, type ModelEndpoint } from "./client.js";
+import { ModelError, type ModelEndpoint } from "./client.js";
+import { ask } from "./endpoints.js";
 
 // Settings' check of a source: a short question with one tool, as an app's
 // turn would ask, timed to the first piece of the answer. A model that
@@ -12,7 +13,9 @@ const checkLimits = {
   firstWordInHomeMs: 90_000,
   firstWordProviderMs: 30_000,
   wholeMs: 120_000,
-  maxTokens: 256,
+  // Room for a model that thinks before it calls the tool, as Claude and
+  // OpenAI's reasoning models do: their thinking counts against it.
+  maxTokens: 1_024,
 };
 
 const question = {
@@ -62,7 +65,7 @@ export async function checkSource(options: {
   let usedTool = false;
   let tokens: ModelTokens = { read: 0, written: 0 };
   try {
-    for await (const piece of chat(
+    for await (const piece of ask(
       options.endpoint,
       { model: options.model, ...question, maxTokens: checkLimits.maxTokens },
       signal,

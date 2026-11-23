@@ -3,10 +3,18 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
+  anthropicBaseUrl,
+  anthropicChat,
+  anthropicModels,
+  type KeptAnswers,
+} from "./anthropic.js";
+import {
+  chat,
   ModelError,
   problemOfError,
   problemOfStatus,
   type ModelEndpoint,
+  type ModelRequest,
 } from "./client.js";
 
 // Where each kind of source answers. Ollama on Sanctum is reached at the
@@ -24,6 +32,10 @@ export type ModelFetchers = {
 const providers = {
   openrouter: {
     baseUrl: "https://openrouter.ai/api/v1",
+    maxTokensField: "max_tokens",
+  },
+  anthropic: {
+    baseUrl: anthropicBaseUrl,
     maxTokensField: "max_tokens",
   },
   openai: {
@@ -71,11 +83,27 @@ export function endpointOf(
   }
   const provider = providers[reach.kind];
   return {
+    ...(reach.kind === "anthropic" ? { api: "anthropic" as const } : {}),
     baseUrl: provider.baseUrl,
     key: reach.key,
     fetch: fetchers.internet,
     maxTokensField: provider.maxTokensField,
   };
+}
+
+/**
+ * Asks a source with the client its API needs, and yields the answer in
+ * pieces. What the turn keeps of Claude's answers goes with the question.
+ */
+export function ask(
+  endpoint: ModelEndpoint,
+  request: ModelRequest & { kept?: KeptAnswers },
+  signal: AbortSignal,
+  onFirstPiece?: () => void,
+) {
+  return endpoint.api === "anthropic"
+    ? anthropicChat(endpoint, request, signal, onFirstPiece)
+    : chat(endpoint, request, signal, onFirstPiece);
 }
 
 const listTimeoutMs = 10_000;
@@ -231,6 +259,15 @@ export async function listModels(
         .map((model) => ({ id: model.id, name: model.name ?? model.id }))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
+    case "anthropic":
+      return anthropicModels(
+        {
+          baseUrl: providers.anthropic.baseUrl,
+          key: reach.key,
+          fetch: fetchers.internet,
+        },
+        signal,
+      );
     case "openai": {
       const found = openAiModels.safeParse(
         await getJson(

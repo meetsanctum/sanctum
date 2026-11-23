@@ -16,7 +16,7 @@ import {
 export const modelSources = sqliteTable("model_sources", {
   id: text("id").primaryKey(),
   kind: text("kind", {
-    enum: ["sanctum", "computer", "openrouter", "openai"],
+    enum: ["sanctum", "computer", "openrouter", "anthropic", "openai"],
   }).notNull(),
   model: text("model").notNull(),
   modelName: text("model_name").notNull(),

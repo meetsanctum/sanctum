@@ -11,7 +11,9 @@ import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Watched } from "../app-host/net.js";
-import { chat, ModelError } from "./client.js";
+import type { KeptAnswers } from "./anthropic.js";
+import { ModelError } from "./client.js";
+import { ask } from "./endpoints.js";
 import type { Models, SourceInUse } from "./models.js";
 
 // A turn: one call from someone waiting, a person or a shared device, to an
@@ -148,6 +150,7 @@ export function createTurns(options: {
     appId: string,
     counted: (tokens: number) => void,
     watched: Watched,
+    kept: KeptAnswers,
   ) {
     const first = new AbortController();
     const revoked = () => stop(answer, "cancelled");
@@ -159,7 +162,7 @@ export function createTurns(options: {
         : turnLimits.firstPieceWithProviderMs,
     );
     try {
-      const pieces = chat(
+      const pieces = ask(
         source.endpoint(),
         {
           model: source.model,
@@ -170,6 +173,7 @@ export function createTurns(options: {
             a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
           ),
           maxTokens: asked.maxTokens ?? turnLimits.maxTokens,
+          kept,
         },
         AbortSignal.any([answer.controller.signal, first.signal]),
         () => clearTimeout(timer),
@@ -237,6 +241,9 @@ export function createTurns(options: {
       const startedAt = Date.now();
       let tokens = 0;
       const used: Pick<SourceInUse, "id" | "model" | "detail">[] = [];
+      // Claude's answers that called a tool, kept for the rest of the turn
+      // for the source and model that gave them: no other reads them.
+      const kept = new Map<string, KeptAnswers>();
       let ended = false;
 
       function answerOf(handle: unknown) {
@@ -287,6 +294,8 @@ export function createTurns(options: {
               tokens += more;
             },
             watch(),
+            kept.get(`${id} ${model}`) ??
+              kept.set(`${id} ${model}`, new Map()).get(`${id} ${model}`)!,
           );
           return handle;
         },

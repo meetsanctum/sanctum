@@ -60,7 +60,11 @@ export type SourceInUse = {
   endpoint: () => ModelEndpoint;
 };
 
-const providerNames = { openrouter: "OpenRouter", openai: "OpenAI" } as const;
+const providerNames = {
+  openrouter: "OpenRouter",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+} as const;
 type RunningCheck = { controller: AbortController; run: Promise<void> };
 
 // Why a source's list didn't come: a list is small, so one that takes too
