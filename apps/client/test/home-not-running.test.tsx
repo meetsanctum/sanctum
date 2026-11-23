@@ -287,7 +287,7 @@ it("puts the shell's notice above a paused app's page, which is dimmed and inert
   expect(buttonCalled("Weather settings")).toBeDefined();
 
   await press(buttonCalled("Open settings", notice)!);
-  expect(pageTitle()).toBe("Weather settings");
+  expect(pageTitle()).toBe("Weather Settings");
 });
 
 it("follows an app paused on another device at once, with no refresh", async () => {
@@ -376,5 +376,5 @@ it("counts a paused app on Home's Attention tile, which leads to its row in Need
     "MoodsPaused: it needs “Control your lights”Open settings",
   );
   await press(buttonCalled("Open Moods settings", section)!);
-  expect(pageTitle()).toBe("Moods settings");
+  expect(pageTitle()).toBe("Moods Settings");
 });

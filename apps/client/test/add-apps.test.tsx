@@ -111,7 +111,7 @@ describe("Add apps", () => {
     const section =
       container.querySelector("#settings-add-apps")!.parentElement!
         .parentElement!.parentElement!;
-    expect(section.textContent).toContain("Add apps");
+    expect(section.textContent).toContain("Add Apps");
     expect(section.textContent).toContain("1 app");
     expect(section.textContent).toContain(
       "ExampleBrings example devices into your home.",
@@ -138,11 +138,11 @@ describe("Add apps", () => {
   it("isn't there with nothing to add, nor offers one the home has now", async () => {
     available = [];
     await render();
-    expect(container.textContent).not.toContain("Add apps");
+    expect(container.textContent).not.toContain("Add Apps");
 
     available = [example];
     await render([weather, added]);
-    expect(container.textContent).not.toContain("Add apps");
+    expect(container.textContent).not.toContain("Add Apps");
   });
 
   it("says what it needs, what it starts with and what it adds before it runs", async () => {

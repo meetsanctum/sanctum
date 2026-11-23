@@ -3,7 +3,7 @@
 Connects an AI agent on a computer at home, such as Claude Code or Codex, to
 [Sanctum](https://meetsanctum.com) over MCP.
 
-Someone adds the agent in Sanctum's Settings, under AI agents, and pastes
+Someone adds the agent in Sanctum's Settings, under AI Agents, and pastes
 the prompt it gives into the agent. The prompt has the agent run:
 
 ```sh
@@ -24,7 +24,7 @@ The connector then:
 The agent starts it with `serve --connection <id>`: an MCP server on stdio,
 for agents on the 2025-11-25 or the 2026-07-28 revision, which passes the
 agent's calls on to the home. What the agent can do is decided in Sanctum's
-Settings, under What AI agents can use.
+Settings, under What AI Agents Can Use.
 
 If a tool call loses its reply, check the home's state before trying again.
 The connector reconnects for the next call.

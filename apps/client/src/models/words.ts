@@ -10,7 +10,7 @@ import { productName } from "../brand";
 // model and where it runs, how its last check went, and what to do when it
 // doesn't answer.
 
-export const modelsTitle = "AI models";
+export const modelsTitle = "AI Models";
 
 export const providerNames: Record<ModelProvider, string> = {
   openrouter: "OpenRouter",

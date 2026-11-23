@@ -38,7 +38,7 @@ of the sidebar, in the order you pinned them, on every device in your home.
 
 **Settings → Apps** lists your apps with their versions. Press one to see
 its settings: whether it's running, what it's allowed to do and what it adds
-to your home. **Add apps**, below it, lists the apps you could add.
+to your home. **Add Apps**, below it, lists the apps you could add.
 
 ## Each app runs on its own
 

@@ -326,7 +326,7 @@ export function NeedsAttentionSection(props: {
   return (
     <Section
       id="settings-attention"
-      title="Needs attention"
+      title="Needs Attention"
       hint={hintOf(!!sanctum, apps, needed)}
     >
       <ul className="m-0 flex list-none flex-col gap-3 p-0">

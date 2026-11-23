@@ -51,7 +51,7 @@ export type HomeOverview = {
 };
 
 /** Where the core's own areas are decided. */
-export const areasPage = "Settings, What AI agents can use";
+export const areasPage = "Settings, What AI Agents Can Use";
 
 // What Sanctum keeps for people, whatever is switched on.
 export const notForAgents: HomeOverview["notForAgents"] = [

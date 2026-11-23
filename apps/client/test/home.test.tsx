@@ -218,7 +218,7 @@ describe("Settings' pages", () => {
     await openFromOverview("Settings");
     await openArea("Devices");
     await openFromOverview("Moods");
-    expect(pageTitle()).toBe("Moods settings");
+    expect(pageTitle()).toBe("Moods Settings");
 
     await act(async () =>
       container
@@ -261,7 +261,7 @@ describe("an app's preferences", () => {
         .click();
     });
 
-    expect(pageTitle()).toBe("Moods settings");
+    expect(pageTitle()).toBe("Moods Settings");
     expect(backShown()).toBe(false);
     await act(async () => backTo("Apps")!.click());
     expect(pageTitle()).toBe("Apps");
@@ -269,7 +269,7 @@ describe("an app's preferences", () => {
 
   it("are the page Apps opens for an app without one of its own, over Apps, so Done returns there", async () => {
     await openFromOverview("Moods");
-    expect(pageTitle()).toBe("Moods settings");
+    expect(pageTitle()).toBe("Moods Settings");
     expect(backShown()).toBe(false);
     await done();
     expect(pageTitle()).toBe("Apps");
@@ -290,7 +290,7 @@ describe("an app's preferences", () => {
       gear("Weather"),
     );
     await act(async () => gear("Weather")!.click());
-    expect(pageTitle()).toBe("Weather settings");
+    expect(pageTitle()).toBe("Weather Settings");
     expect(gear("Weather")).toBeNull();
 
     await openFromOverview("Settings");
@@ -747,7 +747,7 @@ describe("the pinned apps", () => {
     homeData.pins = ["sanctum.settings", "sanctum.moods"];
     await refresh();
     await press(tile("Moods"));
-    expect(pageTitle()).toBe("Moods settings");
+    expect(pageTitle()).toBe("Moods Settings");
     expect(tile("Moods").getAttribute("aria-current")).toBe("page");
     expect(tile("Settings").getAttribute("aria-current")).toBeNull();
     expect(tile("Apps").getAttribute("aria-current")).toBeNull();

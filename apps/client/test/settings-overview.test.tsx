@@ -161,13 +161,13 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
-      "Rooms and floors2 rooms on 1 floor",
+      "Rooms and Floors2 rooms on 1 floor",
       "Devices2 devices",
       "Maintenance1 battery",
       "ActivityWho did what in the home",
       "Apps2 apps · 1 update waiting",
-      "AI agents2 agents",
-      "AI modelsQwen3 8B on Office Mac",
+      "AI Agents2 agents",
+      "AI ModelsQwen3 8B on Office Mac",
       "ClientsThis device and 2 others",
       "SystemCan't check right now",
     ]);
@@ -187,13 +187,13 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
-      "Rooms and floorsNo rooms yet",
+      "Rooms and FloorsNo rooms yet",
       "DevicesNone yet",
       "MaintenanceNothing to do",
       "ActivityWho did what in the home",
       "Apps1 app",
-      "AI agentsNone yet",
-      "AI modelsNone yet",
+      "AI AgentsNone yet",
+      "AI ModelsNone yet",
       "ClientsThis device",
       "SystemCan't check right now",
     ]);
@@ -201,13 +201,13 @@ describe("Settings' first page", () => {
 
   it("counts rooms and floors without putting unassigned rooms on a floor", async () => {
     await show({ places: { ...home, rooms: [office, home.rooms[1]!] } });
-    expect(row("Rooms and floors").textContent).toBe(
-      "Rooms and floors2 rooms · 1 floor",
+    expect(row("Rooms and Floors").textContent).toBe(
+      "Rooms and Floors2 rooms · 1 floor",
     );
 
     await show({ places: { ...home, rooms: [] } });
-    expect(row("Rooms and floors").textContent).toBe(
-      "Rooms and floorsNo rooms yet · 1 floor",
+    expect(row("Rooms and Floors").textContent).toBe(
+      "Rooms and FloorsNo rooms yet · 1 floor",
     );
   });
 
@@ -226,7 +226,7 @@ describe("Settings' first page", () => {
 
     for (const area of [
       "Household",
-      "Rooms and floors",
+      "Rooms and Floors",
       "Devices",
       "Maintenance",
       "Activity",

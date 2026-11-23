@@ -217,7 +217,7 @@ describe("Settings → Apps → the app", () => {
   it("shows the app, and no preferences for one without settings", async () => {
     await show(admin, "app", zigbee.id);
 
-    expect(container.querySelector("h1")?.textContent).toBe("Zigbee settings");
+    expect(container.querySelector("h1")?.textContent).toBe("Zigbee Settings");
     expect(container.textContent).toContain("Version 0.2.0");
     expect(container.textContent).not.toContain("Preferences");
   });

@@ -115,7 +115,7 @@ export function CanUsePage(props: {
         <>
           <Section
             id="settings-ai-home"
-            title="Your home"
+            title="Your Home"
             hint="For every AI agent"
           >
             <CanUseRows>
@@ -124,7 +124,7 @@ export function CanUsePage(props: {
           </Section>
           <Section
             id="settings-ai-whos-home"
-            title="What tells who's home"
+            title="What Tells Who's Home"
             hint="Asks before each turns on"
           >
             <CanUseRows>
@@ -133,7 +133,7 @@ export function CanUsePage(props: {
             <CanUseNote problem={problem}>{toldWhatsOff}</CanUseNote>
           </Section>
           {offering.length > 0 && (
-            <Section id="settings-ai-apps" title="In your apps">
+            <Section id="settings-ai-apps" title="In Your Apps">
               <ul className="m-0 flex list-none flex-col gap-1 p-0">
                 {offering.map((app) => (
                   <li key={app.id}>

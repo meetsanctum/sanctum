@@ -86,7 +86,7 @@ function ThisSanctum({ host }: { host: OllamaStatus["host"] }) {
       {host.processor.isLikelySlow && (
         <p className="m-0 px-2.5 pb-2 text-[13px] leading-[18px] font-medium text-muted-foreground">
           For quicker answers, use Ollama on a computer in your home, or an AI
-          provider, from Settings → AI models.
+          provider, from Settings → AI Models.
         </p>
       )}
     </PageSection>

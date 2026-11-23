@@ -7,7 +7,7 @@ sidebar:
 
 ## Adding an app
 
-1. Open **Settings → Apps**. Under **Add apps**, choose **Add** beside the
+1. Open **Settings → Apps**. Under **Add Apps**, choose **Add** beside the
    app you want.
 2. The sheet shows what the app adds to your home, how much memory it can
    use and the permissions it needs or asks to start with, together with
@@ -15,7 +15,7 @@ sidebar:
 3. Choose **Add** followed by the app's name, such as **Add Weather**. Its
    settings open so you can see whether it's running.
 
-**Add apps** doesn't show when your home already has every app.
+**Add Apps** doesn't show when your home already has every app.
 
 ### When an app can't be added
 
@@ -38,7 +38,7 @@ You don't have to look for these two:
   into Sanctum's computer brings up an offer on connected devices in your
   home. Choose **Add Zigbee** or **Cancel**. If someone cancels the offer,
   it closes on every device and stays closed while the stick stays plugged
-  in. You can still add Zigbee from **Settings → Apps** under **Add apps**.
+  in. You can still add Zigbee from **Settings → Apps** under **Add Apps**.
 - **ESPHome.** If the ESPHome app isn't installed, Sanctum can offer it
   when it finds ESPHome devices on your network. In **Add devices**, the
   **ESPHome** card says how many it found, such as "2 ESPHome devices found".
@@ -78,7 +78,7 @@ you chose. For Zigbee or ESPHome, its devices come back with their rooms
 and history. Automations that removal turned off can turn back on by
 themselves if they still have everything they need and nobody changed them.
 
-Under **Add apps**, a removed app shows the date until which its data is
+Under **Add Apps**, a removed app shows the date until which its data is
 kept. To delete it sooner, choose the button under the app, such as
 **Delete Zigbee's data now**. This can't be undone, so Sanctum asks first.
 Adding the app back afterwards starts it from scratch.
