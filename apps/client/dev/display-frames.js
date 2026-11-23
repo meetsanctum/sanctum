@@ -4,6 +4,8 @@
 // and how often a moving finger reports. It follows the dev server's
 // control: the page to show, the run's label, blur or masks turned off, and
 // what to do now, shown in a banner at the top while a run needs a hand.
+// It says what the screen shows, in its first words, when that changes, so
+// a run is known to be of the screen it meant to time.
 // Its own cost is a callback each frame and a request every two seconds.
 
 const kind = location.pathname.startsWith("/__display/built")
@@ -145,9 +147,21 @@ observe("long-animation-frame", (entry) => {
 });
 
 let sentScreen = false;
+let shown = "";
 function send(keepalive = false) {
   const { frames, moves, events, loafs } = batch;
-  if (!frames.length && !moves.length && !events.length && !loafs.length) {
+  const shows = (document.querySelector("main") ?? document.body)?.innerText
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+  const changed = shows !== undefined && shows !== shown;
+  if (
+    !changed &&
+    !frames.length &&
+    !moves.length &&
+    !events.length &&
+    !loafs.length
+  ) {
     return;
   }
   batch = { frames: [], moves: [], events: [], loafs: [] };
@@ -163,6 +177,10 @@ function send(keepalive = false) {
     events,
     loafs,
   };
+  if (changed) {
+    shown = shows;
+    body.shows = shows;
+  }
   if (!sentScreen) {
     sentScreen = true;
     body.screen = {

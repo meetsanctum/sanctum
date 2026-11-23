@@ -1,6 +1,6 @@
 // Sums up what `SANCTUM_DISPLAY_FRAMES=true pnpm dev:display` recorded, one
 // block per run: the page (dev, built or blank), its label, and whether blur
-// and masks were on.
+// and masks were on, with the screens the run saw by their first words.
 //
 //   node apps/client/dev/display-frames-summary.ts [file] [--json]
 
@@ -32,9 +32,13 @@ export type FrameLine = {
   moves?: (Gaps & { coalesced: number })[];
   events?: InputEvent[];
   loafs?: LongFrame[];
+  /** What the screen shows, in its first words, when that changed. */
+  shows?: string;
 };
-type Run = Omit<FrameLine, "frames" | "moves" | "events" | "loafs"> &
-  Required<Pick<FrameLine, "frames" | "moves" | "events" | "loafs">>;
+type Run = Omit<FrameLine, "frames" | "moves" | "events" | "loafs" | "shows"> &
+  Required<Pick<FrameLine, "frames" | "moves" | "events" | "loafs">> & {
+    screens: string[];
+  };
 
 export function percentile(values: number[], share: number) {
   if (values.length === 0) return 0;
@@ -62,6 +66,7 @@ export function summariseRuns(lines: FrameLine[]) {
         moves: [],
         events: [],
         loafs: [],
+        screens: [],
       };
       runs.set(key, run);
     }
@@ -69,6 +74,9 @@ export function summariseRuns(lines: FrameLine[]) {
     run.moves.push(...(line.moves ?? []));
     run.events.push(...(line.events ?? []));
     run.loafs.push(...(line.loafs ?? []));
+    if (line.shows && !run.screens.includes(line.shows)) {
+      run.screens.push(line.shows);
+    }
   }
   return [...runs.values()].map((run) => {
     const seconds = run.frames.length;
@@ -89,6 +97,7 @@ export function summariseRuns(lines: FrameLine[]) {
       label: run.label,
       blur: run.blur,
       masks: run.masks,
+      screens: run.screens,
       seconds,
       fps: seconds ? Math.round((frames / seconds) * 10) / 10 : 0,
       frameGapP50: median(run.frames.map((each) => each.p50)),
@@ -133,6 +142,9 @@ function print(runs: ReturnType<typeof summariseRuns>) {
     console.log(
       `\n${run.page} · ${run.label || "(no label)"}${effects ? ` · ${effects}` : ""}`,
     );
+    for (const screen of run.screens) {
+      console.log(`  screen   ${screen.slice(0, 80)}`);
+    }
     console.log(
       `  frames   ${run.fps} fps over ${run.seconds} s, gap p50 ${run.frameGapP50} ms, p95 ${run.frameGapP95} ms, ${run.slowFrameShare}% over 50 ms`,
     );

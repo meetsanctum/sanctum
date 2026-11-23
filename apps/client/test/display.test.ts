@@ -216,6 +216,7 @@ it("sums up each run's frames, input and long frames", () => {
       label: "scroll",
       blur: true,
       masks: true,
+      shows: "Home Lights",
       frames: [
         { at: 0, count: 30, p50: 33, p95: 50, max: 80, over50: 3, over100: 0 },
         {
@@ -244,7 +245,21 @@ it("sums up each run's frames, input and long frames", () => {
         },
       ],
     },
-    { page: "built", label: "scroll", blur: true, masks: true, frames: [] },
+    {
+      page: "built",
+      label: "scroll",
+      blur: true,
+      masks: true,
+      frames: [],
+      shows: "Office Light",
+    },
+    {
+      page: "built",
+      label: "scroll",
+      blur: true,
+      masks: true,
+      shows: "Home Lights",
+    },
     { page: "blank", label: "", blur: true, masks: true },
   ]);
   expect(runs).toEqual([
@@ -253,6 +268,7 @@ it("sums up each run's frames, input and long frames", () => {
       label: "scroll",
       blur: true,
       masks: true,
+      screens: ["Home Lights", "Office Light"],
       seconds: 2,
       fps: 25,
       frameGapP50: 50,
