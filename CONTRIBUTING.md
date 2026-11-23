@@ -115,8 +115,8 @@ manager ── Docker, updates and rollback, backups, certificates, USB and seri
   Zigbee, connect devices to the core.
 - **The manager** (`apps/manager`) is the only privileged process. It starts
   and updates the core and the services apps ask for (Mosquitto,
-  Zigbee2MQTT), backs up before each update and rolls back when a new version
-  isn't healthy.
+  Zigbee2MQTT, Ollama), backs up before each update and rolls back when a new
+  version isn't healthy.
 - **The shell** (`apps/client`) is the React app behind every screen. Apps'
   pages are built with `@meetsanctum/ui-sdk`, served by the core and shown
   in sandboxed frames, which talk to the shell over a message channel.

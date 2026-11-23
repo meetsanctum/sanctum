@@ -146,6 +146,44 @@ describe("Add devices navigation while requests finish", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("finishes an earlier pairing open and close before reopening", async () => {
+    const reply = pendingReply<PairingInfo & { since: string }>();
+    vi.mocked(coreJson).mockReturnValueOnce(reply.promise);
+    await show();
+    await click("Zigbee");
+    await show(false);
+    await show();
+    await click("Zigbee");
+    await act(async () =>
+      reply.resolve({
+        ...pairing,
+        until: "2026-10-29T12:04:00.000Z",
+        since: "2026-10-29T12:00:00.000Z",
+      }),
+    );
+    expect(requests).toEqual([
+      "/api/devices/pairing/close",
+      "/api/devices/pairing/open",
+    ]);
+    expect(pairing.until).not.toBeNull();
+  });
+
+  it("deducts the time spent waiting for the radio from the countdown", async () => {
+    await show();
+    const reply = pendingReply<PairingInfo & { since: string }>();
+    vi.mocked(coreJson).mockReturnValueOnce(reply.promise);
+    await click("Zigbee");
+    await act(async () => vi.advanceTimersByTime(3_000));
+    await act(async () =>
+      reply.resolve({
+        ...pairing,
+        until: "2026-10-29T12:04:00.000Z",
+        since: "2026-10-29T12:00:00.000Z",
+      }),
+    );
+    expect(dialog().querySelector("h3")!.textContent).toContain("3:57");
+  });
+
   it("requires another stop after restarting following a failed dismissal", async () => {
     await show();
     await click("Zigbee");

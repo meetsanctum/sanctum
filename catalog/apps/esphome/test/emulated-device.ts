@@ -79,6 +79,7 @@ const message = {
   subscribeVoiceAssistant: 89,
   voiceAssistantRequest: 90,
   voiceAssistantResponse: 91,
+  voiceAssistantEvent: 92,
 } as const;
 
 // Protocol buffers, as far as the API needs them.
@@ -195,8 +196,11 @@ export class EmulatedDevice {
   refusesKeys = false;
   /** How many sessions it greeted in the clear. */
   plainGreetings = 0;
-  /** Each answer to a voice request it made, and whether it was declined. */
-  readonly voiceAnswers: { declined: boolean }[] = [];
+  /** Responses and events the voice assistant received, in wire order. */
+  readonly voiceMessages: (
+    | { type: "response"; isDeclined: boolean }
+    | { type: "event"; eventType: number }
+  )[] = [];
   // Who follows its voice assistant's requests, as a session's send.
   private voiceFollower: ((type: number, payload: Buffer) => void) | null =
     null;
@@ -626,7 +630,15 @@ export class EmulatedDevice {
         });
       } else if (this.voiceFollower === send) this.voiceFollower = null;
     } else if (type === message.voiceAssistantResponse) {
-      this.voiceAnswers.push({ declined: decode(payload).get(2)?.[0] === 1 });
+      this.voiceMessages.push({
+        type: "response",
+        isDeclined: decode(payload).get(2)?.[0] === 1,
+      });
+    } else if (type === message.voiceAssistantEvent) {
+      this.voiceMessages.push({
+        type: "event",
+        eventType: Number(decode(payload).get(1)?.[0] ?? 0),
+      });
     } else if (type === message.pingRequest) {
       if (this.answersPings) send(message.pingResponse, Buffer.alloc(0));
     } else if (type === message.disconnectRequest) {

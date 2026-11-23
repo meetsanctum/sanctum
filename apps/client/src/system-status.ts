@@ -131,6 +131,7 @@ export function useSystemStatus(options: {
 export const serviceNames: Record<string, string> = {
   zigbee2mqtt: "Zigbee",
   mosquitto: "Messaging",
+  ollama: "Ollama",
 };
 
 export const serviceName = (service: string) =>
