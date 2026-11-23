@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { activity } from "../src/activity/schema.js";
+import { maxResponseBytes } from "../src/models/client.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, post, testCore, type TestCore } from "./support.js";
 
@@ -447,7 +448,7 @@ describe("an app's turn with the home's AI model", () => {
 
   it.each([
     { reason: "empty", answer: { text: [] } },
-    { reason: "oversized", answer: { text: ["x".repeat(1024 * 1024)] } },
+    { reason: "oversized", answer: { text: ["x".repeat(maxResponseBytes)] } },
     {
       reason: "too large to deliver a whole tool call",
       answer: {

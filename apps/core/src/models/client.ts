@@ -134,7 +134,9 @@ const streamChunk = z.object({
 
 // Providers enforce their token limits. Bound the bytes the core reads too,
 // including unfinished lines and tool arguments spread across many chunks.
-const maxResponseBytes = 1024 * 1024;
+// Each streamed piece from a provider carries a few hundred bytes around a
+// token or two, so a whole answer of 4,096 tokens can pass 1 MiB.
+export const maxResponseBytes = 8 * 1024 * 1024;
 
 /** The lines of an event stream's data, one JSON chunk or [DONE] each. */
 async function* dataLines(body: ReadableStream<Uint8Array>) {
