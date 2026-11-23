@@ -503,6 +503,8 @@ export function AddSource(props: {
                 A short test question and the description of a test tool.
                 {provider === "openrouter" &&
                   " OpenRouter passes it to the company behind the model."}
+                {provider === "anthropic" &&
+                  " Anthropic keeps the start of a conversation for a few minutes to answer faster."}
               </p>
             </div>
             {problemLine}

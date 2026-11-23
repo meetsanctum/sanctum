@@ -580,7 +580,11 @@ describe("Settings → AI models", () => {
     await click(button("Continue"));
     const key = labelled("API key");
     await type(key, "sk-or-v1-test-key-4f2a");
+    expect(document.body.textContent).not.toContain("keeps the start");
     await click(button("Anthropic"));
+    expect(document.body.textContent).toContain(
+      "Anthropic keeps the start of a conversation for a few minutes to answer faster.",
+    );
     expect(key.value).toBe("");
     expect(button("Check key").disabled).toBe(true);
     expect(requests.filter(([, path]) => path === "/api/models/look")).toEqual(
