@@ -425,10 +425,11 @@ export function MediaPlaying(props: Props) {
       <div className="grid w-full items-center gap-5 px-1 pt-2 @min-[560px]:grid-cols-[calc(100%_-_300px_-_--spacing(10))_1fr] @min-[560px]:gap-10 @min-[560px]:pt-7">
         {/* The bar is on the picture's middle line whatever is above or
             below it: the rows above and below the bar are as tall as each
-            other, and the column is as tall as the picture. */}
+            other, and the column is as tall as the picture. What plays is
+            centred in the space above the bar, at least 20 px from it. */}
         <div className="flex min-w-0 flex-col @min-[560px]:grid @min-[560px]:grid-rows-[1fr_auto_1fr] @min-[560px]:self-stretch">
           {(title || about) && (
-            <div className="pb-5 @min-[560px]:self-end">
+            <div className="pb-5 @min-[560px]:self-center @min-[560px]:py-5">
               <Heading title={title} about={about} />
             </div>
           )}
