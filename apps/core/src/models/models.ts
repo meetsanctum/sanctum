@@ -150,6 +150,9 @@ export function createModels(
   // Ollama on Sanctum's address, as the manager last gave it: the same name
   // for as long as the service runs.
   let sanctumUrl: string | null = null;
+  // Each lookup's number, so one that settles after a newer one started
+  // leaves the newer one's address be, whether it found one or failed.
+  let lookups = 0;
   function cachedSanctumReach(): SanctumReach {
     if (!sanctumUrl)
       throw new ModelError("unreachable", "Ollama isn't running");
@@ -157,9 +160,10 @@ export function createModels(
   }
 
   async function sanctumReach(signal?: AbortSignal): Promise<SanctumReach> {
+    const lookup = ++lookups;
     const url = await options.sanctumUrl().catch(() => null);
     signal?.throwIfAborted();
-    sanctumUrl = url;
+    if (lookup === lookups) sanctumUrl = url;
     return cachedSanctumReach();
   }
 
