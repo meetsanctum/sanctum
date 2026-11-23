@@ -4,6 +4,7 @@ import type { DeviceProblem } from "./device-problems.js";
 import type { DeviceType } from "./device-types.js";
 import type { FirmwareInfo } from "./firmware.js";
 import type { Actor, Tier } from "./index.js";
+import { buttonAction } from "./presses.js";
 import {
   media,
   mediaFeatures,
@@ -95,46 +96,6 @@ export type LightMove = z.output<typeof lightMove>;
 const switchFeatures = z.strictObject({});
 const switchState = z.strictObject({ on: z.boolean() });
 const switchCommand = z.strictObject({ on: z.boolean() });
-
-/**
- * One of a button's press actions, by its driver's name, such as single,
- * double, hold or Zigbee2MQTT's on_press and up_hold.
- */
-export const buttonAction = z
-  .string()
-  .regex(
-    /^[A-Za-z0-9][\w.:-]{0,63}$/,
-    "use a short action name such as single",
-  );
-
-// The words for a kind of press at the end of an action's name.
-const pressWords = new Set([
-  "press",
-  "hold",
-  "click",
-  "single",
-  "double",
-  "triple",
-  "quadruple",
-  "many",
-  "long",
-]);
-
-/**
- * One of a remote's actions as its button and the press, as drivers name
- * them: up_hold is the up button's hold and button_1_double button 1's
- * double press; single, with no button named, is the remote's one button.
- */
-export function pressParts(action: string): {
-  button: string | null;
-  press: string;
-} {
-  const words = action.split("_");
-  const press = words.at(-1)!;
-  return words.length > 1 && pressWords.has(press.toLowerCase())
-    ? { button: words.slice(0, -1).join("_"), press }
-    : { button: null, press: action };
-}
 
 // A button says which presses it makes, and which of them are holds: a
 // press that lasts until the button is let go, which the driver says

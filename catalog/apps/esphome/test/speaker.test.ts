@@ -1,4 +1,8 @@
-import { EntityCategory, MediaPlayerState } from "esphome-client";
+import {
+  EntityCategory,
+  MediaPlayerState,
+  VoiceAssistantEvent,
+} from "esphome-client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { EmulatedEntity } from "./emulated-device.js";
@@ -115,8 +119,13 @@ describe("a smart speaker", () => {
     await home.core.until(() => device.voiceFollowed, "its requests followed");
 
     device.wake();
-    await home.core.until(() => device.voiceAnswers.length === 1, "an answer");
+    await home.core.until(
+      () => device.voiceEvents.length === 1,
+      "its run ended",
+    );
     expect(device.voiceAnswers).toEqual([{ declined: true }]);
+    // Told its run ended, as its ring stays red until it is.
+    expect(device.voiceEvents).toEqual([VoiceAssistantEvent.RUN_END]);
 
     const greeted = device.greeted;
     device.reboot();
@@ -126,7 +135,10 @@ describe("a smart speaker", () => {
       "followed again",
     );
     device.wake();
-    await home.core.until(() => device.voiceAnswers.length === 2, "an answer");
+    await home.core.until(
+      () => device.voiceEvents.length === 2,
+      "its run ended",
+    );
     expect(device.voiceAnswers[1]).toEqual({ declined: true });
     expect(home.core.availability.get(key)).toBe("online");
   });

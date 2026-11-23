@@ -43,7 +43,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // without encryption, or that lost the key it was given, is repaired.
     // 0.6.0: media players, and smart speakers, whose voice requests are
     // followed and declined.
-    version: "0.6.1",
+    version: "0.6.2",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",

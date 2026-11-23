@@ -56,6 +56,22 @@ describe("a remote's presses by button", () => {
     expect(pressTitle("up_hold", groups)).toBe("Up button, hold");
   });
 
+  it("keep a smart speaker's double, triple and long presses on its one button", () => {
+    const groups = pressGroups(["double_press", "triple_press", "long_press"]);
+
+    expect(groups).toEqual([
+      {
+        button: null,
+        presses: [
+          { action: "double_press", label: "Double press" },
+          { action: "triple_press", label: "Triple press" },
+          { action: "long_press", label: "Long press" },
+        ],
+      },
+    ]);
+    expect(pressTitle("long_press", groups)).toBe("Long press");
+  });
+
   it("keep a remote with one button, or none named, as one group", () => {
     const groups = pressGroups(["single", "double", "hold"]);
     expect(groups).toEqual([
