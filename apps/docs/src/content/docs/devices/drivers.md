@@ -83,12 +83,12 @@ Sanctum can't take.
 - **Pictures by their hash.** A media player's picture of what it plays
   goes to `ctx.blobs.put`, a JPEG, PNG or WebP of up to 700 KB, which
   answers its hash; the player's state names it as `media.artwork`. The
-  core keeps pictures in memory while a state names them and a minute
-  after, so a driver reports the state that names a picture within a
-  minute of putting it. It keeps at most 16 MB and 128 pictures of a
-  driver's, and to make room it lets the oldest that no state names go
-  sooner. So a driver puts its picture again when it starts, and whenever
-  it names a picture its state stopped naming.
+  core keeps a picture in memory while any of that driver's device
+  states name it and for a minute after the last one stops. Report the
+  state that names a new picture within a minute of putting it. The
+  core keeps at most 16 MB and 128 pictures per driver and can drop the
+  oldest unnamed pictures sooner to make room. Put a picture again when
+  the driver starts or when it names a picture its devices stopped naming.
 
 ## In the code
 

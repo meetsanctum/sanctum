@@ -5,11 +5,11 @@ import {
   maxBlobBytes,
   type DeviceInfo,
 } from "@meetsanctum/app-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { createBlobs } from "../src/blobs/blobs.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
-import { get, post } from "./support.js";
+import { get, post, testCore } from "./support.js";
 
 // Blobs: pictures a driver hands the core, kept in memory by their hash for
 // clients to fetch while a device's state names them.
@@ -122,6 +122,7 @@ describe("a driver's picture", () => {
     const { core, maya } = await pictureCore();
     const bytes = png(7);
     const hash = await radio.picture("box-1", "image/png", bytes);
+    const deviceChanged = vi.spyOn(core.blobs, "deviceChanged");
     let upload: Promise<unknown> | undefined;
     radio.onStop = async (ctx) => {
       upload = ctx.blobs.put({ type: "image/png", data: bytes });
@@ -134,6 +135,118 @@ describe("a driver's picture", () => {
     expect(upload).toBeDefined();
     await expect(upload).rejects.toThrow(/cannot keep/);
     expect((await get(core, `/api/blobs/${hash}`, maya)).statusCode).toBe(404);
+    expect(deviceChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        before: expect.objectContaining({ driverName: "Living room box" }),
+        after: null,
+      }),
+    );
+  });
+
+  it("follows a driver's stored artwork again when the driver is added back", async () => {
+    const { core, maya } = await pictureCore();
+    const driver = "test.lamps";
+    const manifest = core.apps.manifest(driver)!;
+    const bytes = png(10);
+    const hash = await radio.picture("box-1", "image/png", bytes);
+    await settled();
+    expect(
+      (await post(core, `/api/apps/${driver}/remove`, {}, maya)).statusCode,
+    ).toBe(200);
+    await core.stop();
+
+    const restarted = await testCore({ dataDir: core.dataDir });
+    expect(restarted.blobs.put(driver, "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).toBeNull();
+
+    vi.spyOn(restarted.availableApps, "find").mockResolvedValue({
+      app: {
+        id: driver,
+        name: manifest.name,
+        version: manifest.version,
+        summary: manifest.summary,
+        icon: manifest.icon,
+        requests: manifest.permissions,
+        memory: manifest.runtime.memory,
+        data: manifest.runtime.data,
+        adds: {
+          devices: true,
+          widgets: 0,
+          roomSections: 0,
+          devicePages: 0,
+          pieces: 0,
+        },
+        shortfalls: [],
+      },
+      pkg: { origin: "official", apart: { manifest, digest: "", folder: "" } },
+    });
+    // The test core records the add and reveals the devices without an installer.
+    const response = await post(
+      restarted,
+      "/api/apps/add",
+      { id: driver, version: manifest.version },
+      maya,
+    );
+    expect(response.json()).toEqual({ error: "app_failed" });
+    expect(restarted.blobs.put(driver, "image/png", bytes)).toBe(hash);
+    restarted.advance(2 * blobKeptMs);
+    restarted.blobs.sweep();
+    expect(restarted.blobs.get(hash)).not.toBeNull();
+  });
+
+  it("keeps pictures named by every media capability until the last device moves on", async () => {
+    const { core } = await pictureCore();
+    const driver = "test.lamps";
+    const first = core.blobs.put(driver, "image/png", png(8));
+    const second = core.blobs.put(driver, "image/png", png(9));
+    const key = "two-players";
+    core.devices.register(driver, {
+      key,
+      name: "Two players",
+      type: "media-player",
+      capabilities: [
+        { kind: "media", id: "main" },
+        { kind: "media", id: "aux" },
+        { kind: "media", id: "extra" },
+      ],
+    });
+    const playing = (artwork: string) => ({
+      activity: "playing",
+      media: { artwork },
+    });
+    const idle = { activity: "idle" };
+    core.devices.report(driver, {
+      key,
+      states: {
+        main: playing(first),
+        aux: playing(second),
+        extra: playing(second),
+      },
+    });
+    await radio.picture("box-1", "image/png", png(9));
+    await settled();
+    core.advance(2 * blobKeptMs);
+    core.blobs.sweep();
+    expect(core.blobs.get(first)).not.toBeNull();
+    expect(core.blobs.get(second)).not.toBeNull();
+
+    core.devices.report(driver, { key, states: { aux: idle } });
+    await radio.press("box-1", { media: null });
+    await settled();
+    core.advance(blobKeptMs);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).not.toBeNull();
+
+    core.devices.report(driver, { key, states: { extra: idle } });
+    core.advance(blobKeptMs - 1);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).not.toBeNull();
+    core.advance(1);
+    core.blobs.sweep();
+    expect(core.blobs.get(second)).toBeNull();
+    expect(core.blobs.get(first)).not.toBeNull();
   });
 });
 
@@ -223,6 +336,7 @@ describe("an app's blobs", () => {
     const named = blobs.put(app, "image/png", png(2));
     // A device that already names one as the core starts keeps it.
     blobs.start([player(app, shown)]);
+    onTestFinished(() => blobs.close());
     at = 2 * blobKeptMs;
     blobs.sweep();
     expect(blobs.get(shown)).not.toBeNull();
@@ -252,7 +366,6 @@ describe("an app's blobs", () => {
     at += blobKeptMs;
     blobs.sweep();
     expect(blobs.get(next)).toBeNull();
-    blobs.close();
   });
 
   it("count only the app's own devices' names", () => {

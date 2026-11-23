@@ -20,7 +20,7 @@ export const maxBlobBytes = 700_000;
 export const maxAppBlobBytes = 16 * 1024 * 1024;
 /** The most blobs an app keeps at once. */
 export const maxAppBlobs = 128;
-/** How long a blob outlives the last device state that named it, in ms. */
+/** How long an unnamed blob is kept after upload or its last reference, in ms. */
 export const blobKeptMs = 60_000;
 
 /** A blob's name: its SHA-256, in lower-case hex. */

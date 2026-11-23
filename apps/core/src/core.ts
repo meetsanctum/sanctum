@@ -290,6 +290,11 @@ export function createCore(
           if (onTrial()) modules.workflows.hold();
         },
       ],
+      // Seed the pictures' index before drivers can put pictures on startup.
+      [
+        "start the sweep of drivers' pictures",
+        () => modules!.blobs.start(modules!.devices.list()),
+      ],
       // And again now and then: a manager that started after the core, as
       // when an update replaced it, has not heard the home's id yet.
       [
@@ -361,10 +366,6 @@ export function createCore(
       ["start the manager's audit", () => modules!.managerAudit?.start()],
       ["start discovery", () => modules!.discovery?.start()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
-      [
-        "start the sweep of drivers' pictures",
-        () => modules!.blobs.start(modules!.devices.list()),
-      ],
       ["watch the AI model in use", () => modules!.models.start()],
       // A Zigbee stick plugged in while the home has no app for it offers
       // that app, once the home's list is known.

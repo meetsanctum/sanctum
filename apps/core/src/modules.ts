@@ -40,6 +40,7 @@ import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
 import type { Limits } from "./auth/limits.js";
+import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
 import type { CoreDatabase } from "./database.js";
 import { createDevices } from "./devices/devices.js";
@@ -596,6 +597,10 @@ export async function createModules(
     sightings,
     pairing,
     devices,
+    onDeviceVisibility(change) {
+      blobs.deviceChanged(change);
+      live.device(change);
+    },
     workflows: () => workflows.forApps,
     activity,
     entities,
@@ -651,62 +656,19 @@ export async function createModules(
       );
     }
   });
-  // Set last, once every follower is built, in this order. Each handler
-  // calls through, so a test that replaces a module's method still reaches
-  // it.
-  eventBus.setFollowers([
-    ["holds", { "device.pressed": (press) => holds.pressed(press) }],
-    [
-      "live updates",
-      {
-        "device.changed": (change) => live.device(change),
-        "device.pressed": (press) => live.press(press),
-        "places.changed": ({ after }) => live.places(after),
-        "entity.changed": (change) => live.entity(change),
-      },
-    ],
-    ["events for apps", apps.eventsForApps],
-    [
-      "pairing",
-      {
-        "device.changed"({ id, before, after }) {
-          if (after === null) pairing.removed(id);
-          // A device added or removed leaves or rejoins what was found.
-          if (before === null || after === null) pairing.refresh();
-        },
-      },
-    ],
-    // Devices named after their room follow it.
-    ["device names", { "places.changed": () => devices.renameAll() }],
-    // Before workflows, which follow what it makes of a place's sensors.
-    ["motion", motion.follower],
-    [
-      "workflows",
-      {
-        "device.changed": (change) => workflows.deviceChanged(change),
-        // Not one a capture holds.
-        "device.pressed"(press) {
-          if (!press.isCaptured) workflows.pressed(press);
-        },
-        "entity.changed": (change) => workflows.entityChanged(change),
-        "app.emitted": (event) => workflows.appEvent(event),
-        "motion.changed": (change) => workflows.motionChanged(change),
-      },
-    ],
-    [
-      "dashboards",
-      { "device.changed": (change) => dashboards.deviceChanged(change) },
-    ],
-    [
-      "history",
-      { "device.changed": (change) => history.deviceChanged(change) },
-    ],
-    // Which pictures players name, so the rest can go.
-    [
-      "drivers' pictures",
-      { "device.changed": (change) => blobs.deviceChanged(change) },
-    ],
-  ]);
+  // Register the followers once every module they call has been built.
+  setCoreFollowers(eventBus, {
+    apps,
+    blobs,
+    dashboards,
+    devices,
+    history,
+    holds,
+    live,
+    motion,
+    pairing,
+    workflows,
+  });
 
   // Stop new workflow runs and offer checks before waiting on shutdown.
   const stopNewWork = [
@@ -731,11 +693,11 @@ export async function createModules(
     ["stop holds", () => holds.close()],
     ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
-    ["let drivers' pictures go", () => blobs.close()],
     ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
     ["close the bus", () => eventBus.close()],
+    ["let drivers' pictures go", () => blobs.close()],
     ["stop history", () => history.close()],
     ["stop pairing", () => pairing.stop()],
   ] as const satisfies CoreSteps["stopping"];
