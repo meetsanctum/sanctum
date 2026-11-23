@@ -118,14 +118,16 @@ describe("a smart speaker", () => {
     const key = await add(home.core, device);
     await home.core.until(() => device.voiceFollowed, "its requests followed");
 
+    const declinedRun = [
+      { type: "response", isDeclined: true },
+      { type: "event", eventType: VoiceAssistantEvent.RUN_END },
+    ];
     device.wake();
     await home.core.until(
-      () => device.voiceEvents.length === 1,
+      () => device.voiceMessages.length >= declinedRun.length,
       "its run ended",
     );
-    expect(device.voiceAnswers).toEqual([{ declined: true }]);
-    // Told its run ended, as its ring stays red until it is.
-    expect(device.voiceEvents).toEqual([VoiceAssistantEvent.RUN_END]);
+    expect(device.voiceMessages).toEqual(declinedRun);
 
     const greeted = device.greeted;
     device.reboot();
@@ -136,10 +138,10 @@ describe("a smart speaker", () => {
     );
     device.wake();
     await home.core.until(
-      () => device.voiceEvents.length === 2,
+      () => device.voiceMessages.length >= declinedRun.length * 2,
       "its run ended",
     );
-    expect(device.voiceAnswers[1]).toEqual({ declined: true });
+    expect(device.voiceMessages).toEqual([...declinedRun, ...declinedRun]);
     expect(home.core.availability.get(key)).toBe("online");
   });
 
