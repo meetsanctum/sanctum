@@ -38,6 +38,13 @@ import {
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { report } from "./reports.js";
 import { lightCommandOf, mediaCommandOf } from "./states.js";
+import {
+  createSpeakers,
+  partNames,
+  speakerPartsOf,
+  type SpeakerChange,
+  type SpeakerParts,
+} from "./speaker.js";
 import { declineRequests } from "./voice.js";
 
 // ESPHome's side of the Drivers contract. It keeps no list of its devices:
@@ -86,6 +93,7 @@ const flashMs = 1_500;
 export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   const timings = { ...defaultTimings, ...options.timings };
   const facts: Facts = createFacts(ctx.storage.db);
+  const speakers = createSpeakers(facts);
   // What the network announces, by each sighting's name, and by MAC.
   const sightings = new Map<string, Announced>();
   const announced = new Map<string, Announced>();
@@ -128,7 +136,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
 
   function connected(owned: Owned, session: Session, hear: () => void) {
     // A device with a voice assistant waits for one before it's ready.
-    declineRequests(session);
+    declineRequests(session, () => {
+      speakers.heard(owned.mac).catch((error: unknown) => {
+        ctx.log(`could not keep when ${owned.mac} heard (${String(error)})`);
+      });
+    });
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
     owned.maker = makerOf(session.info).manufacturer ?? owned.maker;
@@ -180,7 +192,9 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       address: `${session.address.host}:${session.address.port}`,
       encrypted: session.encrypted,
       version: session.info.esphomeVersion ?? null,
-      unused: mapping.unused,
+      unused: mapping.unused.filter(
+        (name) => !partNames(partsOf(session)).includes(name),
+      ),
       sleeps: session.info.hasDeepSleep === true,
     };
   }
@@ -205,6 +219,16 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // Each session's parts, by its own entities, so what an older session
   // said is read by the parts it had.
   const mappings = new WeakMap<Session, Mapping>();
+  const speakerParts = new WeakMap<Session, SpeakerParts | null>();
+  // Each speaker's parts as its last connection had them, for its page while
+  // it's out of reach.
+  const lastParts = new Map<string, SpeakerParts | null>();
+  function partsOf(session: Session) {
+    if (!speakerParts.has(session)) {
+      speakerParts.set(session, speakerPartsOf(session));
+    }
+    return speakerParts.get(session)!;
+  }
   function mappingOf(session: Session) {
     let mapping = mappings.get(session);
     if (!mapping) {
@@ -244,8 +268,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             ctx.log(`could not take in ${mac} (${String(error)})`);
             throw error;
           }),
-        state: (event, session) =>
-          report(ctx, facts, mac, mappingOf(session), event, session),
+        state: (event, session) => {
+          lastParts.set(mac, partsOf(session));
+          speakers.observe(mac, partsOf(session), event);
+          report(ctx, facts, mac, mappingOf(session), event, session);
+        },
         reachable: (reachable) => {
           const availability = reachable
             ? "online"
@@ -316,6 +343,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     if (!owned) return;
     clearTimeout(owned.telling);
     devices.delete(mac);
+    speakers.forget(mac);
+    lastParts.delete(mac);
     owned.connection.stop();
     return owned.setup;
   }
@@ -725,6 +754,29 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     async page(deviceId: string) {
       const owned = [...devices.values()].find((each) => each.id === deviceId);
       return owned ? facts.read(owned.mac) : null;
+    },
+
+    /** A smart speaker's own parts for its page, or null for another device. */
+    async speaker(deviceId: string) {
+      const owned = [...devices.values()].find((each) => each.id === deviceId);
+      const session = owned?.connection.session;
+      if (!owned) return null;
+      return speakers.read(
+        owned.mac,
+        session ? partsOf(session) : (lastParts.get(owned.mac) ?? null),
+      );
+    },
+
+    /** Changes a smart speaker's own parts, from its page. */
+    async changeSpeaker(deviceId: string, change: SpeakerChange) {
+      const owned = [...devices.values()].find((each) => each.id === deviceId);
+      if (!owned) throw new ActionError("not_found", "No such device");
+      const session = owned.connection.session;
+      if (!session) throw new Error("It isn't reachable");
+      const parts = partsOf(session);
+      if (!parts)
+        throw new ActionError("not_found", "It isn't a smart speaker");
+      await speakers.change(owned.mac, session, parts, change);
     },
   };
 }

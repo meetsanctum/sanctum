@@ -65,6 +65,7 @@ describe("ESPHome's device page", () => {
       unused: ["Display brightness", "Restart"],
       sleeps: false,
       firstKey: null,
+      heardWakeWordAt: null,
     });
 
     expect(rows()).toEqual([
@@ -87,6 +88,7 @@ describe("ESPHome's device page", () => {
       unused: [],
       sleeps: false,
       firstKey: "setup",
+      heardWakeWordAt: null,
     });
 
     expect(host.textContent).toContain("Encrypted");
@@ -102,6 +104,7 @@ describe("ESPHome's device page", () => {
       unused: [],
       sleeps: false,
       firstKey: null,
+      heardWakeWordAt: null,
     });
 
     const connection = [...host.querySelectorAll("dd")].find(

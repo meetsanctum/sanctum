@@ -5,7 +5,7 @@ import {
   lanPermission,
 } from "@meetsanctum/app-sdk";
 import { createDriver, type Driver, type DriverOptions } from "./driver.js";
-import { deviceAction } from "./page.js";
+import { changeSpeakerAction, deviceAction, speakerAction } from "./page.js";
 import { esphomeService } from "./sightings.js";
 
 // The ESPHome driver app: brings the lights, switches, sensors, motion and
@@ -32,6 +32,10 @@ export function createEsphomeApp(options: DriverOptions = {}) {
   }
 
   const device = deviceAction((deviceId) => running().page(deviceId));
+  const speaker = speakerAction((deviceId) => running().speaker(deviceId));
+  const changeSpeaker = changeSpeakerAction((deviceId, change) =>
+    running().changeSpeaker(deviceId, change),
+  );
 
   return defineApp({
     id: "sanctum.esphome",
@@ -42,8 +46,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // 0.5.0: older firmware gets a setup key, then its own; a device left
     // without encryption, or that lost the key it was given, is repaired.
     // 0.6.0: media players, and smart speakers, whose voice requests are
-    // followed and declined.
-    version: "0.6.2",
+    // followed and declined. 0.7.0: a smart speaker's microphones, ring and
+    // wake word on its page.
+    version: "0.7.0",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -75,7 +80,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       ],
     },
     migrations: "migrations",
-    actions: [device],
+    actions: [device, speaker, changeSpeaker],
     events: [],
     async start(ctx) {
       const started = createDriver(ctx, options);

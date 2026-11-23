@@ -190,7 +190,11 @@ export function mapEntities(entities: readonly Entity[]): Mapping {
     if (capability && !ids.has(capability.id) && mapped.length < 32) {
       ids.add(capability.id);
       mapped.push({ capability, entity });
-    } else if (!ownPart || entity.type !== "sensor") {
+    } else if (
+      (!ownPart || entity.type !== "sensor") &&
+      // What it hides by default, it rarely needs.
+      entity.disabledByDefault !== true
+    ) {
       unused.push(entity.name);
     }
   }

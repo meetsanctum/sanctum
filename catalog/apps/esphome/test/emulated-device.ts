@@ -196,6 +196,11 @@ export class EmulatedDevice {
   refusesKeys = false;
   /** How many sessions it greeted in the clear. */
   plainGreetings = 0;
+  /**
+   * States it holds whatever it's told, by entity key, as a Voice PE's side
+   * switch holds its microphones muted.
+   */
+  readonly held = new Map<number, Record<string, FieldValue>>();
   /** Responses and events the voice assistant received, in wire order. */
   readonly voiceMessages: (
     | { type: "response"; isDeclined: boolean }
@@ -718,6 +723,11 @@ export class EmulatedDevice {
       if (value !== undefined) said[name] = value;
     }
     this.commands.push({ type: entry.type, key, fields: said });
+    const held = this.held.get(key);
+    if (held) {
+      this.setState(key, held);
+      return;
+    }
     if (entry.type === "media_player") {
       this.setState(key, this.playerAfter(key, said));
       return;

@@ -1,0 +1,1 @@
+ALTER TABLE `device_facts` ADD `heard_wake_word_at` integer;
