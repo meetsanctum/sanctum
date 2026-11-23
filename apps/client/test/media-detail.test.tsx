@@ -250,10 +250,9 @@ describe("Playing", () => {
 
   it("draws nothing playing in the frame a picture of that shape gets", async () => {
     const frame = () =>
-      [...container.querySelectorAll<HTMLElement>("div")]
-        .filter((each) => each.textContent === "Nothing playing")
-        .at(-1)!
-        .style.getPropertyValue("--artwork-width");
+      container
+        .querySelector<HTMLElement>('[style*="--artwork-width"]')
+        ?.style.getPropertyValue("--artwork-width");
     await render(
       MediaPlaying,
       mediaPlayer("box", "Living Room TV", "office", {

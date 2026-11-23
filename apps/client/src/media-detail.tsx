@@ -126,7 +126,7 @@ function Artwork(props: {
       aspectRatio: shape,
       "--artwork-width": `min(300px, ${Math.round(264 * shape)}px)`,
     } as CSSProperties,
-    className: "block w-full rounded-xl @min-[560px]:w-(--artwork-width)",
+    className: "w-full rounded-xl @min-[560px]:w-(--artwork-width)",
   };
   if (picture) {
     return (
@@ -141,7 +141,7 @@ function Artwork(props: {
           }
         }}
         style={frame.style}
-        className={`${frame.className} object-cover`}
+        className={`${frame.className} block object-cover`}
       />
     );
   }
@@ -182,12 +182,16 @@ function Heading(props: { title: string | null; about: string | null }) {
 // Where it is in what plays: a bar, the clock under it hanging below the
 // bar's own line, so what is laid out by the bar lines up with the bar
 // itself. Where the player seeks, the bar is a slider.
-function Timeline(props: Props & { able: boolean }) {
+function Timeline(
+  props: Pick<Props, "capability" | "failures" | "name" | "onCommand"> & {
+    canControl: boolean;
+  },
+) {
   const { capability, onCommand } = props;
   const position = usePosition(capability);
   const duration = capability.state?.media?.duration;
   const canSeek =
-    props.able &&
+    props.canControl &&
     duration !== undefined &&
     duration > 0 &&
     capability.features.playback.includes("seek");
@@ -195,7 +199,7 @@ function Timeline(props: Props & { able: boolean }) {
   const seekPointer = useRef<number | null>(null);
   const seekTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const shownAt = canSeek ? (seeking ?? position) : position;
-  const shows = props.able && shownAt !== null;
+  const hasPosition = props.canControl && shownAt !== null;
 
   useEffect(() => {
     if (canSeek) return;
@@ -226,9 +230,9 @@ function Timeline(props: Props & { able: boolean }) {
 
   return (
     <div
-      className={`relative h-1.5 rounded-full bg-white/22 has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50 ${duration === undefined || !props.able ? "opacity-45" : ""}`}
+      className={`relative isolate h-1.5 rounded-full bg-white/22 has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50 ${duration === undefined || !props.canControl ? "opacity-45" : ""}`}
     >
-      {duration !== undefined && shows && (
+      {duration !== undefined && hasPosition && (
         <span
           aria-hidden="true"
           className="absolute inset-y-0 left-0 rounded-full bg-white"
@@ -263,7 +267,7 @@ function Timeline(props: Props & { able: boolean }) {
           }}
           onPointerCancel={cancelSeek}
           onLostPointerCapture={cancelSeek}
-          className="absolute inset-x-0 -top-2 h-6 w-full cursor-pointer [touch-action:none]"
+          className="absolute inset-x-0 -top-2 z-10 h-6 w-full cursor-pointer [touch-action:none]"
         >
           <input
             type="range"
@@ -282,10 +286,11 @@ function Timeline(props: Props & { able: boolean }) {
           />
         </div>
       )}
+      {/* The seek hit area sits above the clock where they overlap. */}
       <div className="absolute inset-x-0 top-full mt-1 flex justify-between text-xs text-white/64 tabular-nums">
-        <span>{shows ? clock(shownAt) : "–:––"}</span>
+        <span>{hasPosition ? clock(shownAt) : "–:––"}</span>
         <span>
-          {duration !== undefined && shows
+          {duration !== undefined && hasPosition
             ? `−${clock(duration - shownAt)}`
             : "–:––"}
         </span>
@@ -304,9 +309,9 @@ function seekAt(event: PointerEvent<HTMLDivElement>, duration: number) {
 // skips.
 function Transport(props: {
   name: string;
-  playback: readonly string[];
-  playing: boolean;
-  able: boolean;
+  playback: Readonly<Media["features"]["playback"]>;
+  isPlaying: boolean;
+  canControl: boolean;
   canToggle: boolean;
   onToggle: () => void;
   onCommand: (command: MediaCommand) => void;
@@ -317,7 +322,7 @@ function Transport(props: {
         variant="ghost"
         size="round"
         aria-label={step === "previous" ? "Previous" : "Next"}
-        disabled={!props.able}
+        disabled={!props.canControl}
         onClick={() => props.onCommand({ playback: step })}
       >
         {step === "previous" ? (
@@ -327,21 +332,21 @@ function Transport(props: {
         )}
       </Button>
     );
-  const skips =
+  const hasSkipButtons =
     props.playback.includes("previous") || props.playback.includes("next");
   return (
     <div
-      className={`flex items-center px-4 ${skips ? "justify-between" : "justify-center"}`}
+      className={`flex items-center px-4 ${hasSkipButtons ? "justify-between" : "justify-center"}`}
     >
       {skip("previous")}
       <Button
         variant="glass"
         size="round-lg"
-        aria-label={`${props.playing ? "Pause" : "Play"} ${props.name}`}
+        aria-label={`${props.isPlaying ? "Pause" : "Play"} ${props.name}`}
         disabled={!props.canToggle}
         onClick={props.onToggle}
       >
-        {props.playing ? (
+        {props.isPlaying ? (
           <Pause aria-hidden="true" fill="currentColor" />
         ) : (
           <Play aria-hidden="true" fill="currentColor" />
@@ -362,7 +367,7 @@ export function MediaPlaying(props: Props) {
   const state = capability.state;
   const playing = isPlaying(capability);
   const nothing = !state || state.on === false || state.activity === "idle";
-  const able = !props.disabled && !nothing;
+  const canControl = !props.disabled && !nothing;
   const canToggle = !props.disabled && canPlayPause(capability);
   const page = useRef<HTMLDivElement>(null);
   const title = nothing ? null : (state?.media?.title ?? null);
@@ -425,15 +430,21 @@ export function MediaPlaying(props: Props) {
             </div>
           )}
           <div className="@min-[560px]:row-start-2">
-            <Timeline {...props} able={able} />
+            <Timeline
+              capability={capability}
+              canControl={canControl}
+              failures={props.failures}
+              name={props.name}
+              onCommand={onCommand}
+            />
           </div>
           {/* Below the bar's clock: 4 px, its 16 px line and 20 px. */}
           <div className="mt-10 @min-[560px]:row-start-3 @min-[560px]:self-start">
             <Transport
               name={props.name}
               playback={capability.features.playback}
-              playing={playing}
-              able={able}
+              isPlaying={playing}
+              canControl={canControl}
               canToggle={canToggle}
               onToggle={() => toggle.current?.()}
               onCommand={onCommand}
