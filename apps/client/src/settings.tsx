@@ -114,6 +114,8 @@ export function SettingsPage(props: {
   onAppChanged?: (app: AppInfo) => void;
   // One was added here, as the core answered.
   onAppAdded?: (app: AppInfo) => void;
+  // Opens an app's own page, as AI models opens Ollama's.
+  onOpenApp?: (appId: string) => void;
   // Home's background, which an app's previews stand on; mocha unless said.
   homeBackground?: string;
   me?: Me;
@@ -239,7 +241,15 @@ export function SettingsPage(props: {
         />
       );
     case modelsSettingsPage:
-      return <ModelsPage live={props.live} page={back} />;
+      return (
+        <ModelsPage
+          live={props.live}
+          page={back}
+          apps={props.apps}
+          onAppAdded={props.onAppAdded}
+          onOpenApp={props.onOpenApp}
+        />
+      );
     case canUseSettingsPage:
       return (
         <CanUsePage

@@ -4,6 +4,7 @@ import {
   type ActivityInfo,
 } from "@meetsanctum/app-sdk";
 
+import { productName } from "../brand";
 import { providerNames } from "../models/words";
 import { byWords } from "./actor-words";
 import type { Words } from "./words";
@@ -19,6 +20,7 @@ function sourceWords(detail: ActivityInfo["detail"]) {
   if (typeof detail?.computer === "string") {
     return `${model} on ${detail.computer}`;
   }
+  if (detail?.kind === "sanctum") return `${model} on ${productName}`;
   const provider = modelProviders.find((each) => each === detail?.kind);
   return provider ? `${model} with ${providerNames[provider]}` : model;
 }

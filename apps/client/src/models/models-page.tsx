@@ -1,8 +1,8 @@
 import type {
+  AppInfo,
   ModelChoice,
   ModelSourceInfo,
   ModelSourceLook,
-  ModelsInfo,
 } from "@meetsanctum/app-sdk";
 import {
   Button,
@@ -15,6 +15,7 @@ import {
   Check,
   CircleAlert,
   Cloud,
+  Cpu,
   EllipsisVertical,
   KeyRound,
   Laptop,
@@ -34,7 +35,7 @@ import {
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
-import { Row, Section } from "../components";
+import { Section } from "../components";
 import {
   Dialog,
   DialogContent,
@@ -51,21 +52,23 @@ import {
 } from "../components/ui/dropdown-menu";
 import { coreJson } from "../core-fetch";
 import { AddSource } from "./add-source";
-import { useModels } from "./data";
+import { ollamaAppId } from "./add-sanctum";
+import { AppsUsing, TokensUsed } from "./usage";
+import { useModels, type ModelsResponse } from "./data";
 import {
   checkLine,
   modelsTitle,
   problemText,
   sourceDetail,
   sourceName,
-  tokensText,
 } from "./words";
 
 // Settings → AI models: the sources of the home's AI model, the one in use
 // first, then the others with Use, each with how its last check went and a
 // menu to check it again, rename it, change its model or key, or remove it;
-// then the tokens each used. Add a source looks at a computer's address or a
-// provider's key before adding it. Every client sees and changes the same.
+// then the tokens used and the apps that use it (usage.tsx). Add a source
+// adds Ollama on Sanctum, or looks at a computer's address or a provider's
+// key before adding it. Every client sees and changes the same.
 
 export const modelsSettingsPage = "ai-models";
 
@@ -75,23 +78,34 @@ type Editing = {
   trigger: HTMLButtonElement | null;
 };
 
-export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
+export function ModelsPage(props: {
+  live: LiveFeed;
+  page: ReactNode;
+  // The home's apps, as the shell has them.
+  apps: readonly AppInfo[];
+  onAppAdded?: (app: AppInfo) => void;
+  // Opens an app's page, as Ollama's.
+  onOpenApp?: (appId: string) => void;
+}) {
   const { info, refresh, answered } = useModels(props.live);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  const supportsSanctum = info === undefined || info.usage !== undefined;
   const sources = info?.sources ?? [];
-  const apps = info?.apps ?? [];
   const inUse = sources.find((source) => source.inUse);
   const others = sources.filter((source) => !source.inUse);
+  const hasOllamaPage = props.apps.some(
+    (app) => app.id === ollamaAppId && app.pages.length > 0,
+  );
 
   const act = async (path: string) => {
     if (isActing) return;
     setIsActing(true);
     try {
       answered(
-        await coreJson<ModelsInfo>(path, {
+        await coreJson<ModelsResponse>(path, {
           method: "POST",
           signal: AbortSignal.timeout(10_000),
         }),
@@ -110,6 +124,11 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
       onUse={() => void act(`/api/models/sources/${source.id}/use`)}
       onCheck={() => void act(`/api/models/sources/${source.id}/check`)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
+      onOpenOllama={
+        hasOllamaPage && props.onOpenApp
+          ? () => props.onOpenApp?.(ollamaAppId)
+          : undefined
+      }
     />
   );
 
@@ -135,9 +154,10 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
               Your home has no AI model yet
             </span>
             <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-              Your home's AI model can run on a computer in your home with a
-              local Ollama model, or with an AI provider and your own API key.
-              With a provider, what's asked leaves your home.
+              Your home's AI model can run{" "}
+              {supportsSanctum && `on ${productName} with the Ollama app, `}
+              on a computer in your home with Ollama, or with an AI provider and
+              your own API key. With a provider, what's asked leaves your home.
             </p>
           </div>
         )}
@@ -160,40 +180,25 @@ export function ModelsPage(props: { live: LiveFeed; page: ReactNode }) {
           </p>
         </Section>
       )}
-      {apps.length > 0 && (
-        <Section id="settings-models-apps" title="Apps that use it">
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {apps.map((app) => (
-              <li key={app.id}>
-                <Row title={app.name} detail={tokensText(app.tokens)} />
-              </li>
-            ))}
-          </ul>
-        </Section>
+      {info && sources.length > 0 && (
+        <TokensUsed info={info} installed={props.apps} />
       )}
-      {sources.length > 0 && (
-        <Section id="settings-models-tokens" title="Tokens used">
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {sources.map((source) => (
-              <li key={source.id}>
-                <Row
-                  title={sourceName(source)}
-                  detail={tokensText(source.tokens)}
-                />
-              </li>
-            ))}
-          </ul>
-          <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-            What a provider charges, and any limit on it, is set with that
-            provider.
-          </p>
-        </Section>
+      {info && (sources.length > 0 || info.apps.length > 0) && (
+        <AppsUsing
+          apps={info.apps}
+          installed={props.apps}
+          onOpenApp={props.onOpenApp}
+        />
       )}
       <AddSource
         open={adding}
         onOpenChange={setAdding}
         onAdded={answered}
         onCloseAutoFocus={() => addButton.current?.focus()}
+        apps={props.apps}
+        supportsSanctum={supportsSanctum}
+        onAppAdded={props.onAppAdded}
+        onOpenApp={props.onOpenApp}
       />
       <EditSource
         editing={editing}
@@ -241,12 +246,20 @@ function SourceRow(props: {
     action: Editing["action"],
     trigger: HTMLButtonElement | null,
   ) => void;
+  // Opens Ollama's page, for Ollama on Sanctum.
+  onOpenOllama?: () => void;
 }) {
   const { source } = props;
   const name = sourceName(source);
   const detailId = useId();
   const menuButton = useRef<HTMLButtonElement>(null);
-  const Icon = source.kind === "computer" ? Laptop : Cloud;
+  const Icon =
+    source.kind === "sanctum"
+      ? Cpu
+      : source.kind === "computer"
+        ? Laptop
+        : Cloud;
+  const hasKey = source.kind === "openrouter" || source.kind === "openai";
   return (
     <li className="flex flex-col gap-2.5">
       <div className="flex items-center gap-3">
@@ -311,7 +324,7 @@ function SourceRow(props: {
               <Repeat />
               Change model
             </DropdownMenuItem>
-            {source.kind !== "computer" && (
+            {hasKey && (
               <DropdownMenuItem
                 onSelect={() => props.onEdit("key", menuButton.current)}
               >
@@ -330,6 +343,20 @@ function SourceRow(props: {
         </DropdownMenu>
       </div>
       <CheckStatus source={source} />
+      {source.inUse && source.kind === "sanctum" && (
+        <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
+          Ollama keeps this model loaded, so the first question after a restart
+          doesn't wait for it.
+          {props.onOpenOllama && (
+            <>
+              {" "}
+              <Button variant="link" size="inline" onClick={props.onOpenOllama}>
+                Manage models on Ollama's page
+              </Button>
+            </>
+          )}
+        </p>
+      )}
     </li>
   );
 }
@@ -346,7 +373,7 @@ const editTitles: Record<Editing["action"], (name: string) => string> = {
 function EditSource(props: {
   editing?: Editing;
   onClose: () => void;
-  onDone: (info: ModelsInfo) => void;
+  onDone: (info: ModelsResponse) => void;
   onFocusFallback: () => void;
 }) {
   // What the dialog showed stays while it closes.
@@ -425,7 +452,7 @@ function EditSource(props: {
     setProblem(undefined);
     const path = `/api/models/sources/${source.id}`;
     try {
-      const info = await coreJson<ModelsInfo>(path, {
+      const info = await coreJson<ModelsResponse>(path, {
         method: action === "remove" ? "DELETE" : "PATCH",
         signal,
         ...(action === "remove"
@@ -481,9 +508,11 @@ function EditSource(props: {
               {action === "rename" &&
                 "The name shows here and in the activity log."}
               {action === "model" &&
-                (source?.kind === "computer"
-                  ? "The models on that computer. For another, run ollama pull there."
-                  : "The models your key can use.")}
+                (source?.kind === "sanctum"
+                  ? "The models in the Ollama app. For another, download it on Ollama's page."
+                  : source?.kind === "computer"
+                    ? "The models on that computer. For another, run ollama pull there."
+                    : "The models your key can use.")}
               {action === "key" &&
                 `${productName} checks the new key, then keeps it sealed and never shows it again.`}
               {action === "remove" &&

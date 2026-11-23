@@ -19,16 +19,26 @@ export const providerNames: Record<ModelProvider, string> = {
 
 /** A source as people read it, such as "Qwen3 8B on Office Mac". */
 export function sourceName(source: ModelSourceInfo) {
-  return source.kind === "computer"
-    ? `${source.modelName} on ${source.computer ?? source.address}`
-    : `${source.modelName} with ${providerNames[source.kind]}`;
+  switch (source.kind) {
+    case "sanctum":
+      return `${source.modelName} on ${productName}`;
+    case "computer":
+      return `${source.modelName} on ${source.computer ?? source.address}`;
+    default:
+      return `${source.modelName} with ${providerNames[source.kind]}`;
+  }
 }
 
-/** Where a source runs, under its name. */
+/** What runs it or reaches it, under its name: its name says where. */
 export function sourceDetail(source: ModelSourceInfo) {
-  return source.kind === "computer"
-    ? `Ollama at ${source.address} · in your home`
-    : `Key ending in ${source.keyEnd} · what's asked leaves your home`;
+  switch (source.kind) {
+    case "sanctum":
+      return "Ollama";
+    case "computer":
+      return `Ollama at ${source.address}`;
+    default:
+      return `Key ending in ${source.keyEnd}`;
+  }
 }
 
 const minute = 60_000;
@@ -56,7 +66,22 @@ export function problemText(
   problem: ModelProblem,
   where: { kind: ModelSourceInfo["kind"]; address?: string },
 ) {
-  const provider = where.kind === "computer" ? "" : providerNames[where.kind];
+  const provider =
+    where.kind === "computer" || where.kind === "sanctum"
+      ? ""
+      : providerNames[where.kind];
+  if (where.kind === "sanctum") {
+    switch (problem) {
+      case "unreachable":
+        return "Ollama isn't answering. Check that the Ollama app is running.";
+      case "timeout":
+        return `It took too long to answer. A model that's large for ${productName} can be slow at first: check again in a minute.`;
+      case "model":
+        return "That model isn't on Ollama any more. Choose another.";
+      default:
+        return `Its answer didn't make sense to ${productName}.`;
+    }
+  }
   switch (problem) {
     case "unreachable":
       return where.kind === "computer"
@@ -95,9 +120,11 @@ export function checkLine(
     (check?.outcome !== "failed" || check.problem === "unreachable")
   ) {
     const where =
-      source.kind === "computer"
-        ? `Check that ${source.computer ?? "the computer"} is awake and Ollama is running there.`
-        : "Check your home's connection to the internet.";
+      source.kind === "sanctum"
+        ? "Check that the Ollama app is running."
+        : source.kind === "computer"
+          ? `Check that ${source.computer ?? "the computer"} is awake and Ollama is running there.`
+          : "Check your home's connection to the internet.";
     return {
       text: `Not answering since ${timeText(source.downSince)}. ${where}`,
       tone: "problem",
@@ -113,7 +140,7 @@ export function checkLine(
       };
     case "noTool":
       return {
-        text: "Answered, but didn't use the tool: it may not handle your home's tools well",
+        text: "Answered, but may not use your home's AI tools well or act on your devices",
         tone: "plain",
       };
     case "failed":
@@ -125,12 +152,6 @@ export function checkLine(
         tone: "problem",
       };
   }
-}
-
-/** The tokens a source used, as Tokens used lists them. */
-export function tokensText(tokens: ModelSourceInfo["tokens"]) {
-  const count = (value: number) => value.toLocaleString();
-  return `Today ${count(tokens.today)} · last 30 days ${count(tokens.month)}`;
 }
 
 /** A model's download, such as 5.2 GB. */

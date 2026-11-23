@@ -551,6 +551,13 @@ export function Home(props: {
                         apps={installed}
                         onAppChanged={appChanged}
                         onAppAdded={appAdded}
+                        onOpenApp={(appId) => {
+                          const page = installed.find(
+                            (each) => each.id === appId,
+                          )?.pages[0];
+                          if (page)
+                            setRoutes([{ app: appId, page, params: {} }]);
+                        }}
                         homeBackground={
                           dashboardBackground[
                             dashboards?.find((each) => each.kind === "home")

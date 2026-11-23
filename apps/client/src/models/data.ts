@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
 
+// The installed desktop client can connect to a core that only sends totals.
+export type ModelsResponse = Omit<ModelsInfo, "usage"> & {
+  usage?: ModelsInfo["usage"];
+};
+
 // What Settings reads of the home's AI models: asked again often while a
 // check runs, so its answer shows as soon as it's there, and every half
 // minute otherwise, so a source that stops answering says so.
@@ -13,13 +18,13 @@ const restingEvery = 30_000;
 const requestTimeoutMs = 10_000;
 
 export function useModels(live?: LiveFeed) {
-  const [info, setInfo] = useState<ModelsInfo>();
+  const [info, setInfo] = useState<ModelsResponse>();
   const request = useRef(0);
   const latestAnswer = useRef(0);
   const refresh = useCallback(async () => {
     const current = ++request.current;
     try {
-      const next = await coreJson<ModelsInfo>("/api/models", {
+      const next = await coreJson<ModelsResponse>("/api/models", {
         signal: AbortSignal.timeout(requestTimeoutMs),
       });
       if (current < latestAnswer.current) return;
@@ -30,7 +35,7 @@ export function useModels(live?: LiveFeed) {
     }
   }, []);
   // An answer to a change, which is newer than any listing under way.
-  const answered = useCallback((next: ModelsInfo) => {
+  const answered = useCallback((next: ModelsResponse) => {
     latestAnswer.current = ++request.current;
     setInfo(next);
   }, []);

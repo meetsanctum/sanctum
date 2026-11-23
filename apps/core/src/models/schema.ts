@@ -9,11 +9,14 @@ import {
 // The home's AI models: the sources the household added, one of them in
 // use, and the tokens each used by day.
 
-/** A source: Ollama on a computer in the home, or a provider and its key. */
+/**
+ * A source: Ollama on Sanctum, Ollama on a computer in the home, or a
+ * provider and its key.
+ */
 export const modelSources = sqliteTable("model_sources", {
   id: text("id").primaryKey(),
   kind: text("kind", {
-    enum: ["computer", "openrouter", "openai"],
+    enum: ["sanctum", "computer", "openrouter", "openai"],
   }).notNull(),
   model: text("model").notNull(),
   modelName: text("model_name").notNull(),

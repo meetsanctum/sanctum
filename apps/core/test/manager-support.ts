@@ -93,7 +93,7 @@ export type TestManager = ServiceManager &
   UpdateManager &
   StatusManager &
   PowerManager &
-  Pick<ManagerClient, "hostResources"> &
+  Pick<ManagerClient, "hostResources" | "serviceUrl"> &
   SpaceManager & {
     discovery?: SightingsManager["discovery"];
     deleteAppData?: (app: string) => Promise<void>;
@@ -159,6 +159,7 @@ export function fakeManager() {
     async hostResources() {
       return hostResources.parse(await manager.hostStatus());
     },
+    serviceUrl: async () => null,
     capabilities: () => ({
       appContainers: true,
       memoryLimits: true,
