@@ -78,6 +78,25 @@ worktree's display mode its own port. Set `SANCTUM_DISPLAY_TOUCHES=true` to
 record each gesture's pointer and touch events in the worktree's
 `.sanctum-display-touches.jsonl` file.
 
+Set `SANCTUM_DISPLAY_FRAMES=true` to record frame gaps, input that took a
+frame or more to show, long animation frames with their longest scripts, and
+how often a moving finger reports. The recorder samples the first words of
+the screen so you can check which screen the run timed. The timings go to
+`.sanctum-display-frames.jsonl` on this Mac. Use the local command line to
+change what the display shows and measures:
+
+```sh
+pnpm --filter @meetsanctum/client build:display   # the production client, served at /__display/built/
+curl -d '{"page":"built","label":"home scroll"}' localhost:8123/__display/control
+curl -d '{"blur":false}' localhost:8123/__display/control   # or masks; reload: true loads the page again
+node apps/client/dev/display-frames-summary.ts     # one block per page, label and effects, with its screens
+```
+
+Choose `dev` for the dev client, `built` for the built client, or `blank` for
+a page with just the frame recorder. Build the client before switching to
+`built`. The built client uses the same address, so the display keeps its
+sign-in.
+
 ## Checks
 
 ```sh
