@@ -49,6 +49,7 @@ export * from "./activity.js";
 export * from "./ai-agents.js";
 export * from "./app-definition.js";
 export * from "./app-manifest.js";
+export * from "./blobs.js";
 export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";

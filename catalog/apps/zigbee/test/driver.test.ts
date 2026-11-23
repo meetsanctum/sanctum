@@ -593,6 +593,7 @@ describe("re-registering a device", () => {
           secret: absent,
           putSecret: absent,
           removeSecret: absent,
+          putBlob: absent,
           modelSource: absent,
           openModel: absent,
           readModel: absent,

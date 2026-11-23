@@ -11,6 +11,7 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createAgentsCanUse } from "./agents/can-use.js";
+import { createBlobs, namedArtwork } from "./blobs/blobs.js";
 import {
   createAgentCommandLimiter,
   createLimitedLog,
@@ -460,6 +461,8 @@ export async function createModules(
     log,
     now,
   });
+  // Pictures drivers hand over, in memory only (blobs/blobs.ts).
+  const blobs = createBlobs({ named: namedArtwork(db), now, log });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -502,6 +505,7 @@ export async function createModules(
     entities,
     settings: appSettingsStore,
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
+    blobs,
     sightings: () => sightings?.list() ?? [],
     updates: appUpdates,
     versions: appVersions,
@@ -723,6 +727,7 @@ export async function createModules(
     ["stop holds", () => holds.close()],
     ["finish changes to apps", () => listTurns.settled()],
     ["stop the app host", () => apps.close()],
+    ["let drivers' pictures go", () => blobs.close()],
     ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],
@@ -737,6 +742,7 @@ export async function createModules(
 
   return {
     activity,
+    blobs,
     activityViews,
     agentsCanUse,
     logAgentLimited,

@@ -69,6 +69,7 @@ export const coreCallMethods = [
   "secret",
   "putSecret",
   "removeSecret",
+  "putBlob",
   "modelSource",
   "openModel",
   "readModel",

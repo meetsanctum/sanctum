@@ -1,6 +1,12 @@
 import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { z } from "zod";
 
+import {
+  maxBlobBytes,
+  type AppBlob,
+  type BlobOnTheWire,
+  type PutBlob,
+} from "./blobs.js";
 import type {
   CoreEventHandler,
   CoreEventHandlers,
@@ -134,6 +140,8 @@ export interface CoreCalls {
   /** Keeps one of the app's own secrets, replacing what it kept by that name. */
   putSecret(secret: AppSecret): Promise<void>;
   removeSecret(name: string): Promise<void>;
+  /** Hands the core a blob, its bytes in base64 (blobs.ts). */
+  putBlob(blob: BlobOnTheWire): Promise<PutBlob>;
   /** The home's AI model in use, or null when there's none; needs `models.use`. */
   modelSource(): Promise<ModelSourceShown | null>;
   /** Starts an answer within the call's turn, and gives its handle; needs `models.use`. */
@@ -368,6 +376,15 @@ export interface AppContext {
     delete(name: string): Promise<void>;
   };
   /**
+   * Bytes for the core to keep and give clients, such as a picture of what
+   * a media player plays (blobs.ts), for a driver holding devices.register:
+   * a JPEG, PNG or WebP of up to 700 KB. It answers the blob's hash, which
+   * a device's state names it by; the same bytes give the same hash.
+   */
+  readonly blobs: {
+    put(blob: AppBlob): Promise<PutBlob>;
+  };
+  /**
    * The home's AI model, the one the household chose in Settings; needs
    * `models.use`. The core asks it for the app, which never learns its
    * address or key. An answer needs a turn: only an action that declares
@@ -551,6 +568,17 @@ export function createAppContext(options: {
       get: (name) => core.secret(name),
       set: (name, value) => core.putSecret({ name, value }),
       delete: (name) => core.removeSecret(name),
+    },
+    blobs: {
+      async put({ type, data }) {
+        if (data.byteLength > maxBlobBytes) {
+          throw new Error("A blob cannot exceed 700 KB");
+        }
+        return core.putBlob({
+          type,
+          data: Buffer.from(data).toString("base64"),
+        });
+      },
     },
     models: {
       source: () => core.modelSource(),

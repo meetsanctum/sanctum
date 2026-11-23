@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto";
+
 import {
   ActionError,
+  blobOf,
+  type BlobType,
   capabilityOf,
   createAppContext,
   deviceFirmware,
@@ -106,6 +110,8 @@ export function createDriverCore(
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
   const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
+  // The blobs the driver handed over, by their hash.
+  const blobs = new Map<string, { type: BlobType; bytes: Uint8Array }>();
   // What the driver says is wrong with each of its devices, as the core
   // shows it.
   const problems = new Map<string, DeviceProblem>();
@@ -416,6 +422,15 @@ export function createDriverCore(
       });
     },
     ...secretCalls,
+    // Checks the bytes and assigns the same hash as the core.
+    async putBlob(blob) {
+      const kept = blobOf(blob);
+      if (!kept)
+        refuse(new Error(`${app.id} handed over a blob the core cannot keep`));
+      const hash = createHash("sha256").update(kept.bytes).digest("hex");
+      blobs.set(hash, kept);
+      return { hash };
+    },
     log() {},
   };
   for (const name of options.unanswered ?? []) {
@@ -453,6 +468,8 @@ export function createDriverCore(
     refused,
     presented,
     secrets,
+    /** The blobs the driver handed over, by their hash. */
+    blobs,
     problems,
     /** The devices the driver last said it could add, but those it has registered. */
     get found() {
@@ -464,8 +481,14 @@ export function createDriverCore(
       handlers.clear();
       await app.start?.(own, { reason: "started" });
     },
-    /** As the core does once it restarted while the driver ran on. */
-    resume: async () => app.resume?.(own, { reason: "started" }),
+    /**
+     * As the core does once it restarted while the driver ran on: the
+     * pictures it kept in memory are gone, so the driver puts them again.
+     */
+    async resume() {
+      blobs.clear();
+      await app.resume?.(own, { reason: "started" });
+    },
     async stop() {
       try {
         await app.stop?.(own, { reason: "shutdown" });

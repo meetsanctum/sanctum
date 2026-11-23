@@ -30,6 +30,7 @@ import type { EmittedEvent, JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
+import type { Blobs } from "../blobs/blobs.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
 import type { Turn } from "../models/turns.js";
@@ -62,6 +63,8 @@ export function createAppContexts(options: {
   net: NetFetch;
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
+  blobs: Blobs;
+  isInstalled: (entry: InstalledApp) => boolean;
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model in use, as apps see it.
   modelSource: () => ModelSourceShown | null;
@@ -217,6 +220,7 @@ export function createAppContexts(options: {
       watch: (permission) => entry.requests.watch(permission),
       pairing: options.pairing,
       secrets: options.secrets,
+      blobs: () => (options.isInstalled(entry) ? options.blobs : undefined),
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       host: options.host,

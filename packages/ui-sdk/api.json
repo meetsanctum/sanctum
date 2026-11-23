@@ -1,5 +1,5 @@
 {
-  "version": "0.1.19",
+  "version": "0.1.20",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2619,6 +2619,7 @@
       "    onCommand: (command: LightCommand) => void;",
       "    pages?: readonly SwipePage[];",
       "    initial?: string;",
+      "    onPageChange?: (id: string) => void;",
       "}): import(\"react\").JSX.Element;",
       "export declare function PowerButton(props: {",
       "    name: string;",
@@ -2766,6 +2767,7 @@
       "    label: string;",
       "    pages: SwipePage[];",
       "    initial?: string;",
+      "    onPageChange?: (id: string) => void;",
       "}): import(\"react\").JSX.Element;"
     ],
     "temperature-unit.d.ts": [

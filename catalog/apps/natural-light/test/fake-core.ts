@@ -156,6 +156,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       secret: absent,
       putSecret: absent,
       removeSecret: absent,
+      putBlob: absent,
       modelSource: absent,
       openModel: absent,
       readModel: absent,

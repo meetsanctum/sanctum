@@ -39,6 +39,7 @@ import type { ApartPackage } from "./loader.js";
 import { createAppLifecycle } from "./lifecycle.js";
 import type { NetFetch } from "./net.js";
 import { createAppServices, type ServiceManager } from "./services.js";
+import type { Blobs } from "../blobs/blobs.js";
 import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
 import { createSupervisor, type AppContainerManager } from "./supervisor.js";
@@ -96,6 +97,8 @@ export function createAppHost(options: {
   settings: AppSettingsStore;
   // Apps' own secrets, sealed by the core.
   secrets: AppSecrets;
+  // The pictures drivers hand over, in the core's memory.
+  blobs: Blobs;
   // What the manager found on the home's network (discovery/sightings.ts).
   sightings?: () => readonly Sighting[];
   grants: AppGrants;
@@ -177,6 +180,7 @@ export function createAppHost(options: {
     host: () => options.manager.hostResources(),
     entities: options.entities,
     now,
+    isInstalled: (entry) => installed.get(entry.app.id) === entry,
     isOff: (appId) => installed.get(appId)?.off === true,
   });
   const { settingsOf, contextFor, deliver } = contexts;
@@ -460,6 +464,7 @@ export function createAppHost(options: {
       }
       installed.delete(appId);
       kept.delete(appId);
+      options.blobs.removeApp(appId);
       const ended = entry && supervisor.end(entry);
       // Before it yields, so an app installed again waits for its release.
       const release = entry && appServices.removing(appId, entry.services);

@@ -80,6 +80,14 @@ Sanctum can't take.
 - **Presses as they happen.** A button's presses go to `ctx.devices.press`,
   one call for each press, never as state. A hold ends with
   `ctx.devices.release` when the button is let go.
+- **Pictures by their hash.** A media player's picture of what it plays
+  goes to `ctx.blobs.put`, a JPEG, PNG or WebP of up to 700 KB, which
+  answers its hash; the player's state names it as `media.artwork`. The
+  core keeps pictures in memory while a state names them and 10 minutes
+  after. It keeps at most 16 MB and 128 pictures of a driver's, and to make
+  room it lets the oldest that no state names go before their 10 minutes
+  are up. So a driver puts its picture again when it starts, and whenever
+  it names a picture its state stopped naming.
 
 ## In the code
 
@@ -92,6 +100,8 @@ The types, categories and parts are defined in `@meetsanctum/app-sdk`
 | `device-categories.ts`   | The categories and the kind of part each holds          |
 | `devices.ts`             | The parts: what each can do, says and is asked          |
 | `device-registration.ts` | What a driver registers, and the check of its type      |
+| `media.ts`               | The media part: what a player can do, says and is asked |
+| `blobs.ts`               | Pictures a driver hands over, and their limits          |
 
 The Zigbee and ESPHome drivers, in `catalog/apps/zigbee` and
 `catalog/apps/esphome`, show both ways of picking a type: by the parts, and
