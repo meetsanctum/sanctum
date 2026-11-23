@@ -11,7 +11,7 @@ import {
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
 import { createAgentsCanUse } from "./agents/can-use.js";
-import { createBlobs, namedArtwork } from "./blobs/blobs.js";
+import { createBlobs } from "./blobs/blobs.js";
 import {
   createAgentCommandLimiter,
   createLimitedLog,
@@ -461,7 +461,7 @@ export async function createModules(
     now,
   });
   // Pictures drivers hand over, in memory only (blobs/blobs.ts).
-  const blobs = createBlobs({ named: namedArtwork(db), now, log });
+  const blobs = createBlobs({ now, log });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -700,6 +700,11 @@ export async function createModules(
     [
       "history",
       { "device.changed": (change) => history.deviceChanged(change) },
+    ],
+    // Which pictures players name, so the rest can go.
+    [
+      "drivers' pictures",
+      { "device.changed": (change) => blobs.deviceChanged(change) },
     ],
   ]);
 

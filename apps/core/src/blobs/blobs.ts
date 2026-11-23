@@ -4,29 +4,31 @@ import {
   maxAppBlobBytes,
   maxAppBlobs,
   type BlobType,
+  type DeviceInfo,
 } from "@meetsanctum/app-sdk";
-import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
 
-import type { CoreDatabase } from "../database.js";
-import { deviceCapabilities, devices } from "../devices/schema.js";
+import type { DeviceChange } from "../devices/devices.js";
 
 // Blobs: bytes drivers hand the core, such as a picture of what a media
 // player plays, kept by their SHA-256 so a device's state names one by its
 // hash and clients fetch it (routes.ts). They live in the core's memory
 // only, never on disk or in a backup, so a picture of what someone watched
 // doesn't outlast the core. One lives while a device's reported state names
-// it and 10 minutes after; a sweep each minute lets the rest go. Each app
-// keeps at most 16 MB in at most 128 blobs, and a put past either drops its
-// oldest that nothing names, sooner than 10 minutes if it must. An app's go
-// when it's removed.
+// it and a minute after: long enough for a driver to put a picture before
+// the report that names it, and for a client to fetch one it has just seen
+// named. Which device names which picture is followed in memory, from the
+// devices as the core starts and each change after (modules.ts), so nothing
+// is looked up to decide. Each app keeps at most 16 MB in at most 128
+// blobs, and a put past either drops its oldest that nothing names, sooner
+// than a minute if it must. An app's go when it's removed.
 
 // How often the sweep runs, in ms.
-const sweepEveryMs = 60_000;
+const sweepEveryMs = 15_000;
 
 type Owner = {
+  // When it was put, or last stopped being named.
   usedAt: number;
-  wasNamed: boolean;
 };
 
 type Kept = {
@@ -35,11 +37,22 @@ type Kept = {
   owners: Map<string, Owner>;
 };
 
+/** The picture a device's reported state names, and the app that brings it. */
+function artworkOf(device: DeviceInfo | null) {
+  if (!device) return null;
+  for (const capability of device.capabilities) {
+    if (capability.kind !== "media") continue;
+    const artwork = capability.observed?.media?.artwork;
+    if (typeof artwork === "string") {
+      return { app: device.driver, hash: artwork };
+    }
+  }
+  return null;
+}
+
 export type Blobs = ReturnType<typeof createBlobs>;
 
 export function createBlobs(options: {
-  /** The hashes each driver's devices' reported states name now. */
-  named: () => ReadonlyMap<string, ReadonlySet<string>>;
   now?: () => Date;
   log: (message: string) => void;
 }) {
@@ -47,7 +60,38 @@ export function createBlobs(options: {
   const kept = new Map<string, Kept>();
   // Each app's blobs, so a put weighs only its own app's.
   const byApp = new Map<string, Map<string, Kept>>();
+  // The picture each device names, and how many of each app's devices
+  // name each of its pictures.
+  const names = new Map<string, { app: string; hash: string }>();
+  const namedBy = new Map<string, Map<string, number>>();
   let timer: NodeJS.Timeout | undefined;
+
+  const isNamed = (app: string, hash: string) =>
+    (namedBy.get(app)?.get(hash) ?? 0) > 0;
+
+  function name(id: string, named: { app: string; hash: string } | null) {
+    const before = names.get(id);
+    if (before?.app === named?.app && before?.hash === named?.hash) return;
+    if (before) {
+      const counts = namedBy.get(before.app)!;
+      const count = counts.get(before.hash)! - 1;
+      if (count > 0) counts.set(before.hash, count);
+      else {
+        counts.delete(before.hash);
+        if (counts.size === 0) namedBy.delete(before.app);
+        // Its minute starts now.
+        const owner = kept.get(before.hash)?.owners.get(before.app);
+        if (owner) owner.usedAt = now();
+      }
+      names.delete(id);
+    }
+    if (named) {
+      names.set(id, named);
+      const counts = namedBy.get(named.app) ?? new Map<string, number>();
+      counts.set(named.hash, (counts.get(named.hash) ?? 0) + 1);
+      namedBy.set(named.app, counts);
+    }
+  }
 
   function forget(hash: string, blob: Kept, app: string) {
     blob.owners.delete(app);
@@ -58,16 +102,12 @@ export function createBlobs(options: {
   }
 
   function sweep() {
-    if (kept.size === 0) return;
-    const named = options.named();
     const at = now();
     for (const [hash, blob] of kept) {
       for (const [app, owner] of blob.owners) {
-        const isNamed = named.get(app)?.has(hash) ?? false;
-        // Start the grace period on the first sweep that sees it go unnamed.
-        if (isNamed || owner.wasNamed) owner.usedAt = at;
-        owner.wasNamed = isNamed;
-        if (at - owner.usedAt >= blobKeptMs) forget(hash, blob, app);
+        if (!isNamed(app, hash) && at - owner.usedAt >= blobKeptMs) {
+          forget(hash, blob, app);
+        }
       }
     }
   }
@@ -101,8 +141,7 @@ export function createBlobs(options: {
       let count = own.length + 1;
       const overLimit = () => size > maxAppBlobBytes || count > maxAppBlobs;
       if (overLimit()) {
-        const named = options.named().get(app);
-        const unnamed = own.filter(({ hash }) => !named?.has(hash));
+        const unnamed = own.filter(({ hash }) => !isNamed(app, hash));
         const reclaimable = unnamed.reduce(
           (total, { blob }) => total + blob.bytes.length,
           0,
@@ -125,7 +164,7 @@ export function createBlobs(options: {
         }
       }
       const blob = known ?? { type, bytes, owners: new Map<string, Owner>() };
-      blob.owners.set(app, { usedAt: at, wasNamed: false });
+      blob.owners.set(app, { usedAt: at });
       kept.set(hash, blob);
       const mine = byApp.get(app) ?? new Map<string, Kept>();
       mine.set(hash, blob);
@@ -139,6 +178,11 @@ export function createBlobs(options: {
       return blob ? { type: blob.type, bytes: blob.bytes } : null;
     },
 
+    /** A device changed, was added or was removed (the event bus). */
+    deviceChanged({ id, after }: DeviceChange) {
+      name(id, artworkOf(after));
+    },
+
     /** An app was removed: what it put goes with it. */
     removeApp(app: string) {
       for (const [hash, blob] of byApp.get(app) ?? []) {
@@ -146,8 +190,12 @@ export function createBlobs(options: {
       }
     },
 
-    /** Starts the sweep, as a step of starting. */
-    start() {
+    /**
+     * Starts the sweep, as a step of starting, from the devices as they are
+     * then: what changes after comes as events.
+     */
+    start(devices: readonly DeviceInfo[]) {
+      for (const device of devices) name(device.id, artworkOf(device));
       timer = setInterval(() => {
         try {
           sweep();
@@ -164,34 +212,11 @@ export function createBlobs(options: {
       timer = undefined;
       kept.clear();
       byApp.clear();
+      names.clear();
+      namedBy.clear();
     },
 
     /** Runs the sweep now, as its timer would. */
     sweep,
-  };
-}
-
-/**
- * The pictures the devices' reported states name now: each media player's
- * `media.artwork`.
- */
-export function namedArtwork(db: CoreDatabase) {
-  return () => {
-    const named = new Map<string, Set<string>>();
-    const rows = db
-      .select({ driver: devices.driver, observed: deviceCapabilities.observed })
-      .from(deviceCapabilities)
-      .innerJoin(devices, eq(devices.id, deviceCapabilities.deviceId))
-      .where(eq(deviceCapabilities.kind, "media"))
-      .all();
-    for (const { driver, observed } of rows) {
-      const artwork = (observed as { media?: { artwork?: unknown } } | null)
-        ?.media?.artwork;
-      if (typeof artwork !== "string") continue;
-      const hashes = named.get(driver) ?? new Set<string>();
-      hashes.add(artwork);
-      named.set(driver, hashes);
-    }
-    return named;
   };
 }
