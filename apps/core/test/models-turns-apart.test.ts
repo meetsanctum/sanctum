@@ -22,6 +22,8 @@ const question = {
   messages: [{ role: "user" as const, content: "Tell me a long story." }],
 };
 
+const route = "/api/apps/sanctum.example/actions";
+
 const app = defineApp({
   ...base,
   id: "sanctum.example",
@@ -29,6 +31,21 @@ const app = defineApp({
     { id: modelsUsePermission, reason: "To answer you.", needed: true },
   ],
   actions: [
+    defineAction({
+      id: "example.reread",
+      title: "Read an answer twice",
+      tier: "read",
+      turn: true,
+      input: z.object({}),
+      output: z.unknown(),
+      async run(ctx) {
+        const answer = ctx.models.answer(question);
+        for await (const piece of answer) {
+          if (piece.type === "text") break;
+        }
+        return Promise.all([answer.text(), answer.text()]);
+      },
+    }),
     defineAction({
       id: "example.ask",
       title: "Ask",
@@ -62,48 +79,63 @@ const app = defineApp({
   ],
 });
 
+async function withSource() {
+  const sources = fakeSources();
+  const { core } = await apart(app, { modelFetchers: sources.fetchers });
+  const maya = await claimed(core);
+  await running(core, "sanctum.example");
+  await post(
+    core,
+    "/api/models/sources",
+    {
+      kind: "computer",
+      address: officeMac,
+      computer: "Office Mac",
+      model: "qwen3:8b",
+    },
+    maya,
+  );
+  await vi.waitFor(() =>
+    expect(core.models.info().sources[0]?.check).toBeDefined(),
+  );
+  return { core, maya, sources };
+}
+
 describe("an app apart asking the home's AI model", () => {
   it("reads a long answer in pieces, over many reads", async () => {
-    const sources = fakeSources();
+    const { core, maya, sources } = await withSource();
     const words = Array.from(
       { length: 40 },
       (_, each) => `${each}:${"x".repeat(4_000)} `,
     );
+    words.push("🏠".repeat(20_000));
     sources.ollama.answer = { text: words };
-    const { core } = await apart(app, { modelFetchers: sources.fetchers });
-    const maya = await claimed(core);
-    await running(core, "sanctum.example");
-    await post(
-      core,
-      "/api/models/sources",
-      {
-        kind: "computer",
-        address: officeMac,
-        computer: "Office Mac",
-        model: "qwen3:8b",
-      },
-      maya,
-    );
-    await vi.waitFor(() =>
-      expect(core.models.info().sources[0]?.check).toBeDefined(),
-    );
 
-    const asked = await post(
-      core,
-      "/api/apps/sanctum.example/actions/example.ask",
-      {},
-      maya,
-    );
-
+    const asked = await post(core, `${route}/example.ask`, {}, maya);
     expect(asked.statusCode).toBe(200);
     const pieces = asked.json<ModelAnswerPiece[]>();
+    const texts = pieces.filter((piece) => piece.type === "text");
+    for (const { text } of texts) {
+      expect(Buffer.from(text).toString("utf8")).toBe(text);
+    }
     expect(
-      pieces
-        .filter((piece) => piece.type === "text")
-        .map((piece) => piece.text)
-        .join(""),
-    ).toBe(words.join(""));
+      texts.every(
+        (piece) => Buffer.byteLength(JSON.stringify([piece])) <= 64 * 1024,
+      ),
+    ).toBe(true);
+    expect(texts.map((piece) => piece.text).join("")).toBe(words.join(""));
     expect(pieces.at(-1)).toMatchObject({ type: "end", stop: "done" });
+  });
+
+  it("lets readers get the whole answer after an earlier reader breaks", async () => {
+    const { core, maya, sources } = await withSource();
+    sources.ollama.answer = { text: ["It's ", "noon."] };
+    sources.chats.length = 0;
+
+    const asked = await post(core, `${route}/example.reread`, {}, maya);
+
+    expect(asked.json()).toEqual(["It's noon.", "It's noon."]);
+    expect(sources.chats).toHaveLength(1);
   });
 
   it("is refused no_turn without a turn", async () => {
@@ -113,12 +145,7 @@ describe("an app apart asking the home's AI model", () => {
     const maya = await claimed(core);
     await running(core, "sanctum.example");
 
-    const asked = await post(
-      core,
-      "/api/apps/sanctum.example/actions/example.plain",
-      {},
-      maya,
-    );
+    const asked = await post(core, `${route}/example.plain`, {}, maya);
 
     expect(asked.json()).toEqual({ refused: "no_turn" });
   });

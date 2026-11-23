@@ -13,17 +13,15 @@ export function modelAnswerOf(
   const opened = core.openModel(question);
   // Its refusal reaches whoever reads the answer, not the process.
   opened.catch(() => undefined);
-  let after = 0;
-  let ended = false;
-
   async function* pieces(): AsyncGenerator<ModelAnswerPiece> {
     const { handle } = await opened;
-    while (!ended) {
+    let after = 0;
+    for (;;) {
       const read = await core.readModel({ handle, after });
       after += read.length;
       for (const piece of read) {
-        if (piece.type === "end") ended = true;
         yield piece;
+        if (piece.type === "end") return;
       }
     }
   }

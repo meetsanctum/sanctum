@@ -562,18 +562,18 @@ export function createCoreCalls(options: {
       need(modelsUsePermission);
       const { turn } = options.models;
       if (!turn) throw new ActionError("no_turn");
-      return { handle: turn.open(question) };
+      return {
+        handle: turn.open(question, () => options.watch(modelsUsePermission)),
+      };
     },
 
     async readModel(read) {
       need(modelsUsePermission);
       const { turn } = options.models;
       if (!turn) throw new ActionError("no_turn");
-      const { handle, after } = (read ?? {}) as {
-        handle?: unknown;
-        after?: unknown;
-      };
-      return turn.read(handle as string, after as number);
+      const pieces = await turn.read(read?.handle, read?.after);
+      need(modelsUsePermission);
+      return pieces;
     },
 
     async cancelModel(handle) {

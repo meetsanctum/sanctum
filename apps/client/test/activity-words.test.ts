@@ -320,6 +320,9 @@ describe("an entry's words", () => {
     expect(turn("failed", { appName: "Example", answers: 1 })).toBe(
       "Example asked the AI model, but none was in use",
     );
+    expect(
+      turn("ok", { ...asked, models: [asked, { model: "Llama3.2 3B" }] }),
+    ).toBe("Example asked multiple AI models: 1,234 tokens in 4.2 s");
   });
 
   it("names what an AI agent wasn't allowed, by its switch's words", () => {

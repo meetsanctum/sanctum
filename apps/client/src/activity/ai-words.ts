@@ -108,18 +108,28 @@ export function aiEntry(entry: ActivityInfo): Words | null {
         typeof entry.detail?.appName === "string"
           ? entry.detail.appName
           : "An app";
-      if (typeof entry.detail?.model !== "string") {
+      const hasSeveralModels = Array.isArray(entry.detail?.models);
+      const source = hasSeveralModels
+        ? "multiple AI models"
+        : typeof entry.detail?.model === "string"
+          ? sourceWords(entry.detail)
+          : null;
+      if (!source) {
         return said(`${app} asked the AI model, but none was in use`);
       }
       if (entry.outcome !== "ok") {
-        return said(`${sourceWords(entry.detail)} didn't answer ${app}`);
+        return said(
+          hasSeveralModels
+            ? `The AI models didn't answer ${app}`
+            : `${source} didn't answer ${app}`,
+        );
       }
       const tokens =
         typeof entry.detail?.tokens === "number" ? entry.detail.tokens : 0;
       const seconds =
         typeof entry.detail?.ms === "number" ? entry.detail.ms / 1000 : 0;
       return said(
-        `${app} asked ${sourceWords(entry.detail)}: ${tokens.toLocaleString()} tokens in ${seconds.toFixed(1)} s`,
+        `${app} asked ${source}: ${tokens.toLocaleString()} tokens in ${seconds.toFixed(1)} s`,
       );
     }
   }

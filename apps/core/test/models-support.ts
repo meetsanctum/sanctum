@@ -10,6 +10,7 @@ export type FakeAnswer = {
   text?: string[];
   // Whether it calls the tool it was given.
   callsTool?: boolean;
+  toolArguments?: string;
   tokens?: { read: number; written: number };
   // How long it waits before the first piece.
   delayMs?: number;
@@ -85,7 +86,13 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
           {
             delta: {
               tool_calls: [
-                { index: 0, function: { name: "time", arguments: "{}" } },
+                {
+                  index: 0,
+                  function: {
+                    name: "time",
+                    arguments: answer.toolArguments ?? "{}",
+                  },
+                },
               ],
             },
           },

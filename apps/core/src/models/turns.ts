@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
+import type { Watched } from "../app-host/net.js";
 import { chat, ModelError } from "./client.js";
 import type { Models, SourceInUse } from "./models.js";
 
@@ -26,8 +27,11 @@ import type { Models, SourceInUse } from "./models.js";
 
 /** How long a read waits for a piece, when there's none yet. */
 const readWaitMs = 2_000;
-/** What one read answers at most, beside its first piece. */
+/** The byte limit for one read's JSON array of pieces. */
 const readBytes = 64 * 1024;
+// A JSON string can take six bytes per UTF-16 code unit. Reserve room for
+// the piece, array brackets and one extra code unit to keep a pair whole.
+const textUnits = Math.floor(readBytes / 6) - 8;
 
 const toolName = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const content = z.string().max(200_000);
@@ -82,17 +86,15 @@ type Answer = {
   ended: boolean;
   sourceId: string | undefined;
   controller: AbortController;
-  // How it ends if it's stopped before it's done.
-  stopAs: ModelStop;
   waiting: Set<() => void>;
 };
 
 /** One turn's calls into the home's AI model, for one app. */
 export type Turn = {
   /** Starts an answer and gives its handle. */
-  open(question: unknown): string;
+  open(question: unknown, watch: () => Watched): string;
   /** The answer's pieces after the first `after`, waiting a moment for one. */
-  read(handle: string, after: number): Promise<ModelAnswerPiece[]>;
+  read(handle: unknown, after: unknown): Promise<ModelAnswerPiece[]>;
   cancel(handle: string): void;
   /** Ends the turn with its call: what's under way stops. */
   end(): void;
@@ -129,12 +131,10 @@ export function createTurns(options: {
       underWay.delete(answer);
     }
     for (const wake of answer.waiting) wake();
-    answer.waiting.clear();
   }
 
   function stop(answer: Answer, as: ModelStop) {
     if (answer.ended) return;
-    answer.stopAs = as;
     answer.controller.abort();
     // Ended now, whatever the source does after.
     push(answer, { type: "end", stop: as, tokens: { read: 0, written: 0 } });
@@ -147,11 +147,14 @@ export function createTurns(options: {
     asked: z.infer<typeof question>,
     appId: string,
     counted: (tokens: number) => void,
+    watched: Watched,
   ) {
     const first = new AbortController();
+    const revoked = () => stop(answer, "cancelled");
+    watched.signal.addEventListener("abort", revoked, { once: true });
     const timer = setTimeout(
       () => first.abort(new ModelError("timeout")),
-      source.inHome
+      source.shown.inHome
         ? turnLimits.firstPieceInHomeMs
         : turnLimits.firstPieceWithProviderMs,
     );
@@ -171,13 +174,36 @@ export function createTurns(options: {
         AbortSignal.any([answer.controller.signal, first.signal]),
         () => clearTimeout(timer),
       );
+      let hasPiece = false;
       for await (const piece of pieces) {
         if (answer.ended) break;
         if (piece.type === "end") {
           models.count(source.id, appId, piece.tokens);
           counted(piece.tokens.read + piece.tokens.written);
+          push(answer, {
+            ...piece,
+            stop:
+              hasPiece || piece.stop === "limit" ? piece.stop : "unavailable",
+          });
+        } else if (Buffer.byteLength(JSON.stringify(piece)) + 2 <= readBytes) {
+          hasPiece = true;
+          push(answer, piece);
+        } else if (piece.type === "text") {
+          hasPiece = true;
+          let start = 0;
+          while (start < piece.text.length) {
+            let end = start + textUnits;
+            // Don't split a Unicode code point across pieces.
+            const next = piece.text.charCodeAt(end);
+            if (next >= 0xdc00 && next <= 0xdfff) end += 1;
+            push(answer, { type: "text", text: piece.text.slice(start, end) });
+            start = end;
+          }
+        } else {
+          // A tool call is delivered whole, so it must fit in one read.
+          stop(answer, "unavailable");
+          break;
         }
-        push(answer, piece);
       }
     } catch (error) {
       if (!answer.ended && !(error instanceof ModelError)) {
@@ -187,10 +213,9 @@ export function createTurns(options: {
       }
     } finally {
       clearTimeout(timer);
-      stop(
-        answer,
-        answer.controller.signal.aborted ? answer.stopAs : "unavailable",
-      );
+      watched.signal.removeEventListener("abort", revoked);
+      watched.done();
+      stop(answer, "unavailable");
     }
   }
 
@@ -211,7 +236,7 @@ export function createTurns(options: {
       const answers = new Map<string, Answer>();
       const startedAt = Date.now();
       let tokens = 0;
-      let used: SourceInUse | undefined;
+      const used: Pick<SourceInUse, "id" | "model" | "detail">[] = [];
       let ended = false;
 
       function answerOf(handle: unknown) {
@@ -223,16 +248,16 @@ export function createTurns(options: {
       }
 
       return {
-        open(input) {
+        open(input, watch) {
           if (ended) throw new Error(`This turn of ${turn.appId} has ended`);
+          if (answers.size >= turnLimits.answers) {
+            throw new ActionError("limited");
+          }
           const asked = question.safeParse(input);
           if (!asked.success) {
             throw new Error(
               `${turn.appId} asked the AI model something it can't take: ${z.prettifyError(asked.error)}`,
             );
-          }
-          if (answers.size >= turnLimits.answers) {
-            throw new ActionError("limited");
           }
           const handle = randomUUID();
           const source = models.inUse();
@@ -241,7 +266,6 @@ export function createTurns(options: {
             ended: false,
             sourceId: source?.id,
             controller: new AbortController(),
-            stopAs: "cancelled",
             waiting: new Set(),
           };
           answers.set(handle, answer);
@@ -249,17 +273,28 @@ export function createTurns(options: {
             stop(answer, "unavailable");
             return handle;
           }
-          used = source;
+          const { id, model, detail } = source;
+          if (!used.some((asked) => asked.id === id && asked.model === model)) {
+            used.push({ id, model, detail });
+          }
           underWay.add(answer);
-          void run(answer, source, asked.data, turn.appId, (more) => {
-            tokens += more;
-          });
+          void run(
+            answer,
+            source,
+            asked.data,
+            turn.appId,
+            (more) => {
+              tokens += more;
+            },
+            watch(),
+          );
           return handle;
         },
 
         async read(handle, after) {
           const answer = answerOf(handle);
           if (
+            typeof after !== "number" ||
             !Number.isInteger(after) ||
             after < 0 ||
             after > answer.pieces.length
@@ -268,18 +303,23 @@ export function createTurns(options: {
           }
           if (after === answer.pieces.length && !answer.ended) {
             await new Promise<void>((done) => {
-              const timer = setTimeout(done, readWaitMs);
-              answer.waiting.add(() => {
+              const wake = () => {
                 clearTimeout(timer);
+                answer.waiting.delete(wake);
                 done();
-              });
+              };
+              const timer = setTimeout(wake, readWaitMs);
+              answer.waiting.add(wake);
             });
           }
           const read: ModelAnswerPiece[] = [];
-          let size = 0;
-          for (const piece of answer.pieces.slice(after)) {
-            size += JSON.stringify(piece).length;
-            if (read.length > 0 && size > readBytes) break;
+          let size = 2;
+          for (let index = after; index < answer.pieces.length; index += 1) {
+            const piece = answer.pieces[index]!;
+            size +=
+              Buffer.byteLength(JSON.stringify(piece)) +
+              (index === after ? 0 : 1);
+            if (size > readBytes) break;
             read.push(piece);
           }
           return read;
@@ -294,22 +334,26 @@ export function createTurns(options: {
           ended = true;
           for (const answer of answers.values()) stop(answer, "cancelled");
           if (answers.size === 0) return;
-          const answered = [...answers.values()].some((answer) =>
-            answer.pieces.some(
-              (piece) => piece.type === "end" && piece.stop !== "unavailable",
-            ),
-          );
+          const answered = [...answers.values()].some((answer) => {
+            const last = answer.pieces.at(-1);
+            return last?.type === "end" && last.stop !== "unavailable";
+          });
+          const answerCount = answers.size;
+          answers.clear();
+          const only = used.length === 1 ? used[0] : undefined;
           options.record({
             action: "models.turn",
             outcome: answered ? "ok" : "failed",
             ...(answered ? {} : { reason: "unavailable" }),
             ...turn.who,
-            ...(used ? { subjectId: used.id } : {}),
+            ...(only ? { subjectId: only.id } : {}),
             detail: {
               app: turn.appId,
               appName: turn.appName,
-              ...(used?.detail ?? {}),
-              answers: answers.size,
+              ...(used.length > 1
+                ? { models: used.map(({ detail }) => detail) }
+                : only?.detail),
+              answers: answerCount,
               tokens,
               ms: Date.now() - startedAt,
             },

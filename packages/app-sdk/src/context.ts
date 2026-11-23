@@ -375,7 +375,7 @@ export interface AppContext {
     source(): Promise<ModelSourceShown | null>;
     /**
      * Asks the model, and gives the answer at once, to read in pieces as
-     * they come. Messages and tools are passed on as they are.
+     * they come. Messages stay in order and tools are sorted by name.
      */
     answer(question: ModelQuestion): ModelAnswer;
   };

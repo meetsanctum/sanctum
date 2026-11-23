@@ -3,7 +3,6 @@ import type {
   ChangeModelSource,
   LookAtModelSource,
   ModelChoice,
-  ModelProvider,
   ModelSourceInfo,
   ModelSourceLook,
   ModelSourceShown,
@@ -49,7 +48,6 @@ type SourceRow = typeof modelSources.$inferSelect;
 export type SourceInUse = {
   id: string;
   model: string;
-  inHome: boolean;
   shown: ModelSourceShown;
   // What the activity log says of it.
   detail: ReturnType<typeof named>;
@@ -212,9 +210,11 @@ export function createModels(
     return {
       id: row.id,
       model: row.model,
-      inHome: row.kind === "computer",
       shown: {
-        name: row.computer ?? providerNames[row.kind as ModelProvider],
+        name:
+          row.kind === "computer"
+            ? (row.computer ?? "Computer")
+            : providerNames[row.kind],
         model: row.modelName,
         inHome: row.kind === "computer",
       },

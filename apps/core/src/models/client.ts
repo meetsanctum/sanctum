@@ -82,7 +82,9 @@ function wireMessage(message: ModelMessage) {
                 type: "function",
                 function: {
                   name: call.name,
-                  arguments: JSON.stringify(call.input ?? {}),
+                  arguments: JSON.stringify(
+                    call.input === undefined ? {} : call.input,
+                  ),
                 },
               })),
             }
@@ -130,11 +132,20 @@ const streamChunk = z.object({
   error: z.unknown().optional(),
 });
 
+// Providers enforce their token limits. Bound the bytes the core reads too,
+// including unfinished lines and tool arguments spread across many chunks.
+const maxResponseBytes = 1024 * 1024;
+
 /** The lines of an event stream's data, one JSON chunk or [DONE] each. */
 async function* dataLines(body: ReadableStream<Uint8Array>) {
   const decoder = new TextDecoder();
   let rest = "";
+  let size = 0;
   for await (const bytes of body as unknown as AsyncIterable<Uint8Array>) {
+    size += bytes.byteLength;
+    if (size > maxResponseBytes) {
+      throw new ModelError("answer", "the source's answer was too large");
+    }
     rest += decoder.decode(bytes, { stream: true });
     let end: number;
     while ((end = rest.indexOf("\n")) >= 0) {

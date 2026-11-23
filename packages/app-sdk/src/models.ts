@@ -128,8 +128,8 @@ export type ModelTokens = { read: number; written: number };
 
 /**
  * Why an answer stopped: it was done, it called tools, it reached its
- * tokens, someone cancelled it or its turn ended, or the source gave none
- * (none in use, not answering, too slow to start, or removed meanwhile).
+ * tokens, it was cancelled (including when permission is taken away or the
+ * turn ends), or no usable answer came from the source.
  */
 export type ModelStop = "done" | "tool" | "limit" | "cancelled" | "unavailable";
 
@@ -157,7 +157,7 @@ export type ModelSourceShown = {
   inHome: boolean;
 };
 
-/** An answer under way: its pieces as they come. */
+/** An answer under way. Each reader sees its pieces from the start. */
 export interface ModelAnswer extends AsyncIterable<ModelAnswerPiece> {
   /** Waits for the whole answer and gives its text. */
   text(): Promise<string>;

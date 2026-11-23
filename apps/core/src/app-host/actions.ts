@@ -56,7 +56,7 @@ export function createActionRunner<
   deliver: (events: readonly EmittedEvent[]) => void;
   // A turn for a person's or a shared device's call to an action that
   // declares one, in which the app may ask the home's AI model.
-  turnFor?: (entry: Entry, who: ActivityAuthor) => Turn;
+  turnFor: (entry: Entry, who: ActivityAuthor) => Turn;
 }) {
   const { activity, timeoutMs, log } = options;
 
@@ -142,7 +142,7 @@ export function createActionRunner<
     const storage = entry.storage.call();
     const held: EmittedEvent[] = [];
     const turn = opensTurn(declared, actor)
-      ? options.turnFor?.(entry, who)
+      ? options.turnFor(entry, who)
       : undefined;
     const ctx = options.contextFor(entry, actor, storage, {
       held,

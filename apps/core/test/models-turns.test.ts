@@ -62,6 +62,7 @@ const input = z.object({
   tools: z.boolean().optional(),
   maxTokens: z.number().optional(),
   answers: z.number().optional(),
+  nextModel: z.string().optional(),
   waitMs: z.number().optional(),
 });
 
@@ -76,11 +77,31 @@ const ask = defineAction({
     const source = await ctx.models.source();
     const answers = [];
     for (let each = 0; each < (asked.answers ?? 1); each += 1) {
+      if (each > 0 && asked.nextModel) {
+        await vi.waitFor(async () =>
+          expect((await ctx.models.source())?.model).toBe(asked.nextModel),
+        );
+      }
       answers.push(
         await attempt(() =>
           piecesOf(ctx, {
             ...question,
-            ...(asked.tools ? { tools } : {}),
+            ...(asked.tools
+              ? {
+                  tools,
+                  messages: [
+                    ...question.messages,
+                    {
+                      role: "assistant",
+                      content: "",
+                      toolCalls: [
+                        { id: "earlier", name: "get_time", input: null },
+                      ],
+                    },
+                    { role: "tool", toolCallId: "earlier", content: "Noon." },
+                  ],
+                }
+              : {}),
             ...(asked.maxTokens ? { maxTokens: asked.maxTokens } : {}),
           }),
         ),
@@ -295,6 +316,18 @@ describe("an app's turn with the home's AI model", () => {
     expect(chat?.messages).toEqual([
       { role: "system", content: "You help at home." },
       { role: "user", content: "What time is it?" },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "earlier",
+            type: "function",
+            function: { name: "get_time", arguments: "null" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "earlier", content: "Noon." },
     ]);
     expect(
       (chat?.tools as { function: { name: string } }[]).map(
@@ -412,6 +445,37 @@ describe("an app's turn with the home's AI model", () => {
     ]);
   });
 
+  it.each([
+    { reason: "empty", answer: { text: [] } },
+    { reason: "oversized", answer: { text: ["x".repeat(1024 * 1024)] } },
+    {
+      reason: "too large to deliver a whole tool call",
+      answer: {
+        text: [],
+        callsTool: true,
+        toolArguments: JSON.stringify({ value: "x".repeat(64 * 1024) }),
+      },
+    },
+  ])(
+    "ends an answer unavailable when the response is $reason",
+    async ({ answer }) => {
+      const { core, maya, sources } = await home();
+      await withOfficeMac(core, maya.token);
+      sources.ollama.answer = answer;
+
+      const asked = await post(
+        core,
+        "/api/apps/sanctum.example/actions/example.ask",
+        {},
+        maya,
+      );
+
+      expect(asked.json<Asked>().answers[0]?.got).toMatchObject([
+        { type: "end", stop: "unavailable" },
+      ]);
+    },
+  );
+
   it("asks for at most eight answers a turn", async () => {
     const { core, maya } = await home();
     await withOfficeMac(core, maya.token);
@@ -453,6 +517,31 @@ describe("an app's turn with the home's AI model", () => {
     await vi.waitFor(() => expect(sources.stopped).toBe(1));
   });
 
+  it("stops an open answer when its permission is taken away", async () => {
+    const { core, maya, sources } = await home();
+    await withOfficeMac(core, maya.token);
+    sources.chats.length = 0;
+    sources.ollama.answer = { hangs: true };
+
+    const asking = post(
+      core,
+      "/api/apps/sanctum.example/actions/example.ask",
+      {},
+      maya,
+    );
+    await vi.waitFor(() => expect(sources.chats).toHaveLength(1));
+    const revoked = await post(
+      core,
+      "/api/apps/sanctum.example/permissions/update",
+      { permission: modelsUsePermission, granted: false },
+      maya,
+    );
+
+    expect(revoked.statusCode).toBe(200);
+    await vi.waitFor(() => expect(sources.stopped).toBe(1));
+    expect((await asking).statusCode).toBe(500);
+  });
+
   it("stops what's under way when the turn ends with its call", async () => {
     const { core, maya, sources } = await home();
     await withOfficeMac(core, maya.token);
@@ -474,6 +563,7 @@ describe("an app's turn with the home's AI model", () => {
     const { core, maya, sources } = await home();
     await withOfficeMac(core, maya.token);
     const id = core.models.info().sources[0]!.id;
+    sources.chats.length = 0;
     sources.ollama.answer = { text: ["It's "], hangs: true };
 
     const asking = post(
@@ -482,21 +572,14 @@ describe("an app's turn with the home's AI model", () => {
       {},
       maya,
     );
-    await vi.waitFor(() =>
-      expect(
-        sources.requests.some((request) =>
-          request.url.endsWith("/v1/chat/completions"),
-        ),
-      ).toBe(true),
-    );
-    // Its first piece on its way.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(sources.chats).toHaveLength(1));
     core.models.remove(id, { clientId: maya.client.id });
 
-    expect((await asking).json<Asked>().answers[0]?.got).toEqual([
-      { type: "text", text: "It's " },
-      { type: "end", stop: "unavailable", tokens: { read: 0, written: 0 } },
-    ]);
+    expect((await asking).json<Asked>().answers[0]?.got?.at(-1)).toEqual({
+      type: "end",
+      stop: "unavailable",
+      tokens: { read: 0, written: 0 },
+    });
     await vi.waitFor(() => expect(sources.stopped).toBe(1));
   });
 
@@ -519,6 +602,43 @@ describe("an app's turn with the home's AI model", () => {
 
     expect(plainCall.statusCode).toBe(504);
     expect(turnCall.statusCode).toBe(200);
+  });
+
+  it("attributes usage to both models when the model changes between answers", async () => {
+    const { core, maya, sources } = await home();
+    await withOfficeMac(core, maya.token);
+    const id = core.models.info().sources[0]!.id;
+    sources.ollama.answer = {
+      text: ["Noon."],
+      tokens: { read: 10, written: 2 },
+    };
+
+    const asking = post(
+      core,
+      "/api/apps/sanctum.example/actions/example.ask",
+      { answers: 2, nextModel: "Llama3.2 3B" },
+      maya,
+    );
+    await vi.waitFor(() =>
+      expect(core.models.info().apps[0]?.tokens.today).toBe(12),
+    );
+    await core.models.change(
+      id,
+      { model: "llama3.2:3b" },
+      { clientId: maya.client.id },
+    );
+
+    expect((await asking).statusCode).toBe(200);
+    expect(turns(core)).toMatchObject([
+      {
+        subjectId: null,
+        detail: {
+          models: [{ model: "Qwen3 8B" }, { model: "Llama3.2 3B" }],
+          tokens: 24,
+        },
+      },
+    ]);
+    expect(turns(core)[0]?.detail).not.toHaveProperty("model");
   });
 
   it("takes no more turns once the core is stopping", async () => {
