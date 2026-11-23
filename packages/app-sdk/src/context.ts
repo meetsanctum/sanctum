@@ -2,7 +2,9 @@ import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { z } from "zod";
 
 import {
+  fitsPictureBudget,
   maxBlobBytes,
+  pictureSize,
   type AppBlob,
   type BlobOnTheWire,
   type PutBlob,
@@ -563,6 +565,17 @@ export function createAppContext(options: {
       async put({ type, data }) {
         if (data.byteLength > maxBlobBytes) {
           throw new Error("A blob cannot exceed 700 KB");
+        }
+        const size = pictureSize(type, data);
+        if (!size) {
+          throw new Error(
+            `A blob must be a still ${type} whose header gives its size`,
+          );
+        }
+        if (!fitsPictureBudget(size)) {
+          throw new Error(
+            `A picture cannot exceed 4096 px a side or 16 megapixels (this one is ${size.width} by ${size.height})`,
+          );
         }
         return core.putBlob({
           type,

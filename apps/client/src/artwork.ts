@@ -10,7 +10,8 @@ import { coreBaseUrl } from "./core-url";
 // shown from memory, and with the colour the veil takes from it
 // (artwork-colour.ts). A hash names the same picture for good, so each is
 // fetched once and kept for the few that were shown last; one the core no
-// longer has is tried again when it's next asked for.
+// longer has is tried again when it's next asked for, and meanwhile is
+// missing, as one is whose name isn't a hash.
 
 type Artwork = { url: string; colour: string | null };
 type Picture = { blob: Blob; colour: string | null };
@@ -82,13 +83,19 @@ function pictureOf(hash: string) {
   return loading;
 }
 
-/** The picture a hash names, once it has arrived; null without one. */
-export function useArtwork(hash: string | null | undefined): Artwork | null {
+/**
+ * The picture a hash names, once it has arrived; "missing" when the core
+ * hasn't it to give, or the name isn't a hash; null while it is on its way,
+ * or without a hash.
+ */
+export function useArtwork(
+  hash: string | null | undefined,
+): Artwork | "missing" | null {
   const [shown, setShown] = useState<{
     hash: string;
     credential: ReturnType<typeof currentCredential>;
     host: string;
-    artwork: Artwork;
+    artwork: Artwork | "missing";
   } | null>(null);
   const valid = hash && blobHashPattern.test(hash) ? hash : null;
   const credential = valid ? currentCredential() : null;
@@ -99,7 +106,11 @@ export function useArtwork(hash: string | null | undefined): Artwork | null {
     let isCurrent = true;
     let url: string | undefined;
     void pictureOf(valid).then((picture) => {
-      if (!isCurrent || !picture) return;
+      if (!isCurrent) return;
+      if (!picture) {
+        setShown({ hash: valid, credential, host, artwork: "missing" });
+        return;
+      }
       // The image can outlive its entry in the shared cache.
       url = URL.createObjectURL(picture.blob);
       setShown({
@@ -114,6 +125,7 @@ export function useArtwork(hash: string | null | undefined): Artwork | null {
       if (url) URL.revokeObjectURL(url);
     };
   }, [valid, credential, host]);
+  if (hash && !valid) return "missing";
   return shown?.hash === valid &&
     shown.credential === credential &&
     shown.host === host

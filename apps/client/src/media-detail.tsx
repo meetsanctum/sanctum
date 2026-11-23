@@ -46,6 +46,8 @@ type Props = {
   failures?: number;
   /** The picture of what plays, once it has arrived (artwork.ts). */
   artwork?: string | null;
+  /** Something plays with no picture to show: none, or one the core refused. */
+  artworkMissing?: boolean;
   onCommand: (command: MediaCommand) => void;
 };
 
@@ -106,13 +108,22 @@ function aboutWhatPlays(capability: Media): string | null {
   return parts.length > 0 ? [...new Set(parts)].join(" · ") : null;
 }
 
+// A picture the shell draws for something playing that has none to show,
+// because its player gave none, the core refused it or it didn't load:
+// warm, so it reads as something playing, not as nothing.
+const missingArtwork =
+  "radial-gradient(55% 60% at 36% 38%, rgb(226 84 112 / 80%) 0%, transparent 70%), radial-gradient(45% 50% at 86% 90%, rgb(242 166 92 / 90%) 0%, transparent 72%), linear-gradient(150deg, #7c2438 0%, #882a44 55%, #6f2136 100%)";
+/** The veil's colour while that picture shows, as one taken from it. */
+export const missingArtworkTint = "oklch(0.42 0.12 12)";
+
 // The picture of what plays, in its own shape up to 300 by 264 px. Without
 // one, it is a soft grey gradient the shell draws, saying "Nothing playing"
-// while nothing does; a song's is square, a film's or a show's as wide as a
-// screen.
+// while nothing does, or the warm one above when something plays with no
+// picture; a song's is square, a film's or a show's as wide as a screen.
 function Artwork(props: {
   square: boolean;
   nothing: boolean;
+  missing: boolean;
   url?: string | null;
 }) {
   const [ratio, setRatio] = useState<number | null>(null);
@@ -147,7 +158,9 @@ function Artwork(props: {
       className={`grid w-full place-items-center overflow-hidden rounded-xl px-4 text-center ${props.square ? "aspect-square @min-[560px]:w-66" : "aspect-video @min-[560px]:w-75"}`}
       style={{
         background:
-          "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
+          !props.nothing && (props.missing || failed)
+            ? missingArtwork
+            : "radial-gradient(70% 90% at 22% 18%, rgb(255 255 255 / 16%) 0%, transparent 60%), radial-gradient(60% 80% at 85% 90%, rgb(120 128 150 / 28%) 0%, transparent 65%), linear-gradient(150deg, #55585f 0%, #3a3c41 55%, #2e2f33 100%)",
       }}
     >
       {props.nothing && (
@@ -382,6 +395,7 @@ export function MediaPlaying(props: Props) {
             key={props.artwork}
             square={square}
             nothing={nothing}
+            missing={props.artworkMissing ?? false}
             url={props.artwork}
           />
         </div>

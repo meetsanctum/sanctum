@@ -43,6 +43,7 @@ import {
   MediaPlaying,
   MediaRemote,
   MediaVolume,
+  missingArtworkTint,
   RemoteIcon,
 } from "./media-detail";
 import { ContactPage } from "./contact-detail";
@@ -278,14 +279,16 @@ export function DeviceDetail(props: {
       : [];
   // The picture of what it plays, and its colour on the veil, while
   // something does.
-  const artwork = useArtwork(
+  const playing = Boolean(
     (props.open || isCovering) &&
-      player?.state &&
-      player.state.on !== false &&
-      player.state.activity !== "idle"
-      ? player.state.media?.artwork
-      : null,
+    player?.state &&
+    player.state.on !== false &&
+    player.state.activity !== "idle",
   );
+  const artworkHash = playing ? player?.state?.media?.artwork : null;
+  const found = useArtwork(artworkHash);
+  const artwork = found === "missing" ? null : found;
+  const artworkMissing = playing && (!artworkHash || found === "missing");
   const mediaProps = player &&
     device &&
     playerTile && {
@@ -295,6 +298,7 @@ export function DeviceDetail(props: {
       disabled: playerTile.disabled,
       failures: playerTile.failures,
       artwork: artwork?.url ?? null,
+      artworkMissing,
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
@@ -420,7 +424,9 @@ export function DeviceDetail(props: {
   const page =
     selected?.page ?? initial ?? (controlTile ? undefined : after[0]?.id);
   const tint =
-    page === "playing" ? (artwork?.colour ?? null) : (selected?.tint ?? null);
+    page === "playing"
+      ? (artwork?.colour ?? (artworkMissing ? missingArtworkTint : null))
+      : (selected?.tint ?? null);
   // The other pages keep the colour they had when they came into view.
   const onPageChange = (page: string) =>
     setSelection({ detailKey, page, tint });

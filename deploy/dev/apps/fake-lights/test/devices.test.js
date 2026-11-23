@@ -41,6 +41,15 @@ test("reports a new episode when the TV box skips forwards or backwards", async 
   assert.equal(core.latest("tv-box", "player").media.artwork, artwork);
 });
 
+test("reports a fifth episode without the picture the core refuses", async () => {
+  const { episode } = core.latest("tv-box", "player").media;
+  assert.equal(episode % 5, 4);
+  await core.command("tv-box", "player", "media", { playback: "next" });
+  const { media } = core.latest("tv-box", "player");
+  assert.equal(media.episode, episode + 1);
+  assert.equal(media.artwork, undefined);
+});
+
 test("reports the next episode when the actor cannot upload artwork", async () => {
   const { episode } = core.latest("tv-box", "player").media;
   const reports = [];
