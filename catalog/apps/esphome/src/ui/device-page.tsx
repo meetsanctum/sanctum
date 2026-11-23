@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 
 import type { DeviceFacts } from "../facts";
 import type { DeviceAction } from "../page";
+import { SpeakerCards } from "./speaker-cards";
 
-// ESPHome's page in its devices' detail: how the device is reached, what it
-// runs, its Wi-Fi signal, and what it has that the app doesn't bring in.
+// ESPHome's page in its devices' detail: on a smart speaker its microphones
+// and ring first, then how the device is reached, what it runs, its Wi-Fi
+// signal, and what it has that the app doesn't bring in.
 
 /** A Wi-Fi signal in words, then in dBm with a true minus sign. */
 export function signalWords(dBm: number) {
@@ -71,6 +73,18 @@ export function DevicePage(props: DevicePageProps) {
     );
   }
   if (!facts) return null;
+  return (
+    <div className="flex flex-col gap-5">
+      {device.type === "smart-speaker" && (
+        <SpeakerCards key={device.id} device={device} />
+      )}
+      <ConnectionSection facts={facts} />
+    </div>
+  );
+}
+
+function ConnectionSection(props: { facts: DeviceFacts }) {
+  const { facts } = props;
   return (
     <section aria-label="How it's connected" className="flex flex-col gap-3">
       <Card>

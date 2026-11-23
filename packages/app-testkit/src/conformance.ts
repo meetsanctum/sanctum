@@ -25,15 +25,22 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
   };
   const done = async () => undefined;
   return {
-    // A broker nobody can reach, so a driver's start says it's waiting for it.
-    serviceConnection: async () => ({
-      mqtt: {
-        url: "mqtt://127.0.0.1:1",
-        username: "conformance",
-        password: "conformance",
-        topics: [],
-      },
-    }),
+    serviceConnection: async (name) => {
+      if (name === "ollama") {
+        // The app starts while the manager is still bringing Ollama up.
+        return { http: { url: "http://127.0.0.1:1" } };
+      }
+      if (name !== "zigbee2mqtt") throw new ActionError("not_found");
+      // An unreachable broker keeps the Zigbee driver waiting.
+      return {
+        mqtt: {
+          url: "mqtt://127.0.0.1:1",
+          username: "conformance",
+          password: "conformance",
+          topics: [],
+        },
+      };
+    },
     settings: async () => ({}),
     permissions: async () => manifest.permissions.map(({ id }) => id),
     permissionsRevision: async () => 0,
@@ -77,6 +84,11 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
     },
     readModel: notFound,
     cancelModel: notFound,
+    hostResources: async () => ({
+      processor: { name: null, cores: 4, matrixInstructions: null },
+      memory: null,
+      storage: null,
+    }),
   };
 }
 

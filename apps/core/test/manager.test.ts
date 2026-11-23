@@ -11,6 +11,7 @@ import {
   ManagerUnavailable,
   type ManagerClient,
 } from "../src/manager.js";
+import { piStatus } from "./manager-support.js";
 
 type Received = { method?: string; url?: string; body: unknown };
 
@@ -64,6 +65,45 @@ async function setUp() {
   open.push({ client });
   return { client, logs, socketPath };
 }
+
+describe("what apps read of the host", () => {
+  it("uses the resources view and still reads a full answer from an older manager", async () => {
+    const { client, socketPath } = await setUp();
+    const urls: (string | undefined)[] = [];
+    let answer: unknown = {
+      model: null,
+      processor: { name: "Intel(R) N150", cores: 4, matrixInstructions: true },
+      memory: null,
+      storage: null,
+    };
+    const server = createServer((request, response) => {
+      urls.push(request.url);
+      response.end(JSON.stringify(answer));
+    });
+    open.push({ server });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    expect(await client.hostResources()).toEqual({
+      processor: { name: "Intel(R) N150", cores: 4, matrixInstructions: true },
+      memory: null,
+      storage: null,
+    });
+    answer = piStatus();
+    expect(await client.hostResources()).toEqual({
+      processor: {
+        name: "Raspberry Pi 4 Model B",
+        cores: 4,
+        matrixInstructions: null,
+      },
+      memory: { totalBytes: 8_199_577_600, availableBytes: 7_542_419_456 },
+      storage: { freeBytes: 6_917_287_936 },
+    });
+    expect(urls).toEqual([
+      "/api/host/status?view=resources",
+      "/api/host/status?view=resources",
+    ]);
+  });
+});
 
 describe("what the manager can do", () => {
   // A manager answering one question, with whatever the test has decided.

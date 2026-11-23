@@ -16,6 +16,7 @@
         "@meetsanctum/esphome#build",
         "@meetsanctum/moods#build",
         "@meetsanctum/natural-light#build",
+        "@meetsanctum/ollama#build",
         "@meetsanctum/weather#build",
         "@meetsanctum/zigbee#build"
       ]

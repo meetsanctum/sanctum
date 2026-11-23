@@ -101,6 +101,7 @@ export async function createModules(
       AppUpdateManager &
       UpdateManager &
       StatusManager &
+      Pick<ManagerClient, "hostResources"> &
       PowerManager &
       SpaceManager & {
         // The manager's audit after an entry (activity/manager-audit.ts);

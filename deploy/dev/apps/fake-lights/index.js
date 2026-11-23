@@ -97,7 +97,9 @@ const players = new Map([
 
 // A player says what it plays with a picture of it, as a driver hands one
 // over: the TV box draws one for each episode, in a colour of its own, so
-// the detail's picture and the veil's colour change as it skips.
+// the detail's picture and the veil's colour change as it skips. Every
+// fifth episode's says it is far larger than the core keeps, so the core
+// refuses it and the player says what it plays without a picture.
 async function reportPlayer(ctx, key, refreshArtwork = false) {
   const player = players.get(key);
   const state = player.state;
@@ -107,11 +109,18 @@ async function reportPlayer(ctx, key, refreshArtwork = false) {
     (refreshArtwork || !media.artwork) &&
     ctx.actor.kind !== "assistant-run"
   ) {
-    const { hash } = await ctx.blobs.put({
-      type: "image/png",
-      data: episodePicture(media.episode),
-    });
-    state.media = { ...media, artwork: hash };
+    try {
+      const { hash } = await ctx.blobs.put({
+        type: "image/png",
+        data: episodePicture(media.episode),
+      });
+      state.media = { ...media, artwork: hash };
+    } catch (error) {
+      const withoutArtwork = { ...media };
+      delete withoutArtwork.artwork;
+      state.media = withoutArtwork;
+      ctx.log(`episode ${media.episode}'s picture was refused: ${error}`);
+    }
   }
   // Another command may have reported a newer state while the upload ran.
   if (player.state !== state) return;
@@ -122,7 +131,8 @@ async function reportPlayer(ctx, key, refreshArtwork = false) {
   });
 }
 
-// A 16:9 picture with a soft gradient, its hue by the episode.
+// A 16:9 picture with a soft gradient, its hue by the episode; every fifth
+// says it is 8000 by 4500 px.
 function episodePicture(episode) {
   const width = 160;
   const height = 90;
@@ -149,8 +159,9 @@ function episodePicture(episode) {
     return Buffer.concat([length, body, crc]);
   };
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
+  const oversized = episode % 5 === 0;
+  header.writeUInt32BE(oversized ? 8000 : width, 0);
+  header.writeUInt32BE(oversized ? 4500 : height, 4);
   header.set([8, 2, 0, 0, 0], 8);
   return Uint8Array.from(
     Buffer.concat([

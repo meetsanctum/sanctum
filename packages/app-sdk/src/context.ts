@@ -2,7 +2,10 @@ import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { z } from "zod";
 
 import {
+  fitsPictureBudget,
   maxBlobBytes,
+  maxBlobSide,
+  pictureSize,
   type AppBlob,
   type BlobOnTheWire,
   type PutBlob,
@@ -34,6 +37,7 @@ import type {
   Actor,
   EventDefinition,
 } from "./index.js";
+import type { HostResources } from "./host.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type {
   ModelAnswer,
@@ -152,6 +156,8 @@ export interface CoreCalls {
   }): Promise<ModelAnswerPiece[]>;
   /** Stops an answer. */
   cancelModel(handle: string): Promise<void>;
+  /** What the machine Sanctum runs on has now. */
+  hostResources(): Promise<HostResources>;
   log(message: string): void;
 }
 
@@ -398,6 +404,13 @@ export interface AppContext {
      */
     answer(question: ModelQuestion): ModelAnswer;
   };
+  readonly host: {
+    /**
+     * What the machine Sanctum runs on has now: its processor, and the
+     * memory and storage it has free.
+     */
+    resources(): Promise<HostResources>;
+  };
   log(message: string): void;
 }
 
@@ -564,6 +577,17 @@ export function createAppContext(options: {
         if (data.byteLength > maxBlobBytes) {
           throw new Error("A blob cannot exceed 700 KB");
         }
+        const size = pictureSize(type, data);
+        if (!size) {
+          throw new Error(
+            `A blob must be a still ${type} whose header gives its size`,
+          );
+        }
+        if (!fitsPictureBudget(size)) {
+          throw new Error(
+            `A picture must be 1 to ${maxBlobSide} px on each side (this one is ${size.width} by ${size.height})`,
+          );
+        }
         return core.putBlob({
           type,
           data: Buffer.from(data).toString("base64"),
@@ -574,6 +598,7 @@ export function createAppContext(options: {
       source: () => core.modelSource(),
       answer: (question) => modelAnswerOf(core, question),
     },
+    host: { resources: () => core.hostResources() },
     log: (message) => core.log(message),
   };
 }

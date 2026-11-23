@@ -255,7 +255,7 @@ export function createServices(options: {
             },
           }
         : {}),
-      ...definition.connection?.(),
+      ...definition.connection?.(Math.floor(totalMemory() / (1024 * 1024))),
     };
   }
 

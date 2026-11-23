@@ -12,6 +12,7 @@ import {
   heldServices,
   hostBody,
   hostHistory,
+  hostResources,
   hostStatus,
   keptCopy,
   lanVersion,
@@ -687,6 +688,14 @@ export function createManagerClient(options: {
       return parseBody(
         hostStatus,
         await once("GET", "/api/host/status", undefined, 15_000),
+      );
+    },
+
+    async hostResources() {
+      // Older managers ignore the view and return the full status.
+      return parseBody(
+        hostResources,
+        await once("GET", "/api/host/status?view=resources", undefined, 15_000),
       );
     },
 

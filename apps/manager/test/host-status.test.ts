@@ -1,7 +1,7 @@
 import { link, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { StatusDockerLike } from "../src/docker.js";
 import { createHostReadings } from "../src/host/readings.js";
@@ -27,7 +27,7 @@ async function pi(files: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "sanctum-host-"));
   const all: Record<string, string> = {
     "proc/cpuinfo":
-      "processor\t: 0\nBogoMIPS\t: 108.00\n\nRevision\t: d03114\nSerial\t\t: 10000000c8a1f2b3\nModel\t\t: Raspberry Pi 4 Model B Rev 1.4\n",
+      "processor\t: 0\nBogoMIPS\t: 108.00\nFeatures\t: fp asimd evtstrm crc32 cpuid\n\nRevision\t: d03114\nSerial\t\t: 10000000c8a1f2b3\nModel\t\t: Raspberry Pi 4 Model B Rev 1.4\n",
     "proc/meminfo":
       "MemTotal:        8007400 kB\nMemFree:         6012000 kB\nMemAvailable:    7365644 kB\nSwapTotal:       2097148 kB\nSwapFree:        2097148 kB\n",
     "proc/uptime": "421763.72 1659782.30\n",
@@ -174,6 +174,38 @@ async function reporter(
 }
 
 describe("the host's status", () => {
+  it("serves the app resource view without asking Docker", async () => {
+    const fake = docker();
+    const listContainers = vi.spyOn(fake, "listContainers");
+    const info = vi.spyOn(fake, "info");
+    const listOrNone = vi.fn(async () => []);
+    const { status } = await reporter({
+      docker: fake,
+      images: { listOrNone },
+      files: { "proc/cpuinfo": "model name :\nFeatures :\nprocessor : 0\n" },
+    });
+    const server = createServer({ version: "test" }, { status });
+    servers.push(server);
+
+    const response = await server.inject("/api/host/status?view=resources");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      model: null,
+      processor: {
+        name: null,
+        cores: expect.any(Number),
+        matrixInstructions: null,
+      },
+      memory: expect.objectContaining({ total: 8007400 * 1024 }),
+      storage: expect.objectContaining({ free: expect.any(Number) }),
+    });
+    expect(listContainers).not.toHaveBeenCalled();
+    expect(listOrNone).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    expect(fake.dfCalls).toBe(0);
+  });
+
   it("says what a Pi is, and how it is doing", async () => {
     const { status } = await reporter({
       docker: docker(),
@@ -196,7 +228,13 @@ describe("the host's status", () => {
         swapTotal: 2097148 * 1024,
         swapFree: 2097148 * 1024,
       },
-      processor: { mhz: 1800, celsius: 57.5 },
+      // A Pi 4's Cortex-A72 has no dot product, so AI models run slowly.
+      processor: {
+        name: null,
+        matrixInstructions: false,
+        mhz: 1800,
+        celsius: 57.5,
+      },
       power: { low: false, lastLowAt: null },
       network: {
         interface: "wlan0",
@@ -477,7 +515,8 @@ describe("the host's status", () => {
   it("says Ethernet's speed, and nothing a machine that isn't a Pi can't say", async () => {
     const { status } = await reporter({
       files: {
-        "proc/cpuinfo": "processor\t: 0\nmodel name\t: Intel(R) N100\n",
+        "proc/cpuinfo":
+          "processor\t: 0\nmodel name\t: Intel(R) N100\nflags\t\t: fpu sse4_2 avx avx2 fma\n",
         "proc/net/route":
           "Iface\tDestination\tGateway \tFlags\neth0\t00000000\t0101A8C0\t0003\n",
         "sys/class/net/eth0/speed": "1000\n",
@@ -491,6 +530,7 @@ describe("the host's status", () => {
     expect(report).toMatchObject({
       model: null,
       os: null,
+      processor: { name: "Intel(R) N100", matrixInstructions: true },
       power: null,
       network: { kind: "ethernet", speedMbps: 1000, signalDbm: null },
     });

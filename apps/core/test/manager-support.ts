@@ -9,11 +9,12 @@ import type { AppContainerManager } from "../src/app-host/supervisor.js";
 import type { AppUpdateManager } from "../src/app-host/updates.js";
 import type { ServiceManager } from "../src/app-host/services.js";
 import type { SightingsManager } from "../src/discovery/sightings.js";
-import type { HostStatus } from "../src/manager-answers.js";
+import { hostResources, type HostStatus } from "../src/manager-answers.js";
 import {
   createManagerClient,
   ManagerRefusal,
   ManagerUnavailable,
+  type ManagerClient,
   type LanPolicy,
 } from "../src/manager.js";
 import type { PowerManager } from "../src/system/power.js";
@@ -92,6 +93,7 @@ export type TestManager = ServiceManager &
   UpdateManager &
   StatusManager &
   PowerManager &
+  Pick<ManagerClient, "hostResources"> &
   SpaceManager & {
     discovery?: SightingsManager["discovery"];
     deleteAppData?: (app: string) => Promise<void>;
@@ -154,6 +156,9 @@ export function fakeManager() {
   // What it was asked to delete, as it was asked.
   const deleted: string[] = [];
   const manager: TestManager = {
+    async hostResources() {
+      return hostResources.parse(await manager.hostStatus());
+    },
     capabilities: () => ({
       appContainers: true,
       memoryLimits: true,

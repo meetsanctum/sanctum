@@ -22,4 +22,6 @@ export const deviceFacts = sqliteTable("device_facts", {
   // "setup" for older firmware, which took a setup key in the clear, then
   // its own encrypted.
   firstKey: text("first_key", { enum: ["setup"] }),
+  // When a smart speaker last heard its wake word, in ms since the epoch.
+  heardWakeWordAt: integer("heard_wake_word_at"),
 });

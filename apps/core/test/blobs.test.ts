@@ -15,9 +15,20 @@ import { get, post, testCore } from "./support.js";
 // clients to fetch while a device's state names them.
 
 const minute = 60_000;
-// Bytes that begin as a PNG does, which is all the core checks of them.
+// Bytes that begin as a 1 by 1 PNG does, which is all the core reads of
+// them; what follows tells one from another.
 const png = (...rest: number[]) =>
-  Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...rest]);
+  Uint8Array.from([
+    ...[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+    ...[0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1],
+    ...[8, 2, 0, 0, 0, 0, 0, 0, 0],
+    ...[0, 0, 0, rest.length, 0x49, 0x44, 0x41, 0x54],
+    ...rest,
+    0,
+    0,
+    0,
+    0,
+  ]);
 
 // A media player of the app's whose state names a picture, as a device's
 // change brings it to the blobs; null names none.
@@ -85,12 +96,19 @@ describe("a driver's picture", () => {
   it("is refused when it isn't a picture of its type, or is too large", async () => {
     await pictureCore();
     await expect(radio.picture("box-1", "image/jpeg", png(1))).rejects.toThrow(
-      /cannot keep/,
+      /must be a still image\/jpeg/,
     );
     const tooLarge = new Uint8Array(maxBlobBytes + 1);
     tooLarge.set(png());
     await expect(radio.picture("box-1", "image/png", tooLarge)).rejects.toThrow(
       /cannot exceed 700 KB/,
+    );
+    // A small file that says it is 5000 by 5000 px.
+    const huge = png(1);
+    new DataView(huge.buffer).setUint32(16, 5000);
+    new DataView(huge.buffer).setUint32(20, 5000);
+    await expect(radio.picture("box-1", "image/png", huge)).rejects.toThrow(
+      /4096 px on each side/,
     );
   });
 

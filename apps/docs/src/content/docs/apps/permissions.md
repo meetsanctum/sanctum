@@ -53,6 +53,7 @@ These are the permissions the apps in Sanctum ask for:
 | Know when there's motion        | Read your motion sensors                                    |
 | Bring devices into your home    | Add devices, as Zigbee and ESPHome do                       |
 | Use Zigbee2MQTT                 | Reach your Zigbee devices through the stick                 |
+| Use Ollama                      | Run AI models on Sanctum, as the Ollama app does            |
 | Find devices on your network    | Discover devices on your home network, as ESPHome does      |
 | Talk to devices on your network | Reach the devices it found                                  |
 | Keep its own automations        | Make automations of its own, as Moods does for your remotes |

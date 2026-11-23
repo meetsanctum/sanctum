@@ -39,8 +39,9 @@ export type ServiceDefinition = {
   // Topics the service uses on the broker, as a client with its own account.
   // An app that asks for the service gets an account for the same topics.
   mqttTopics?: string[];
-  // What an app needs to know to use the service, besides its broker account.
-  connection?: () => Record<string, unknown>;
+  // What an app needs to know to use the service, besides its broker account,
+  // on a host with this much memory, in MB.
+  connection?: (hostMemoryMb: number) => Record<string, unknown>;
   // Where it answers over HTTP: the core reaches it there on the `sanctum`
   // network, and an app that asks for it on a network shared only with it
   // (apps/service-networks.ts), since no account limits it.
@@ -103,6 +104,10 @@ export const serviceDefinitions: ServiceDefinition[] = [
     largeImage: true,
     dataNeedsNoCopy: true,
     dataVolumes: [ollamaData],
+    // What a model may take, so the app offers only those that fit.
+    connection: (hostMemoryMb) => ({
+      memoryBytes: ollamaMemoryMb(hostMemoryMb) * 1024 * 1024,
+    }),
     spec: ({ host }) => ollamaSpec(host),
   },
 ];

@@ -619,6 +619,7 @@ describe("the catalog's apps, from their packages", () => {
       "sanctum.esphome",
       "sanctum.moods",
       "sanctum.natural-light",
+      "sanctum.ollama",
       "sanctum.weather",
       "sanctum.zigbee",
     ]);

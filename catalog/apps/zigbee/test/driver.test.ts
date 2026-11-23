@@ -598,6 +598,7 @@ describe("re-registering a device", () => {
           openModel: absent,
           readModel: absent,
           cancelModel: absent,
+          hostResources: absent,
           press: absent,
           release: absent,
           firmware: absent,

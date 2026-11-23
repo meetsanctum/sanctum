@@ -1,9 +1,9 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "core": "^2.0.0",
-  "protocol": 15,
+  "protocol": 16,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
   "runtime": {
     "memory": 128,
@@ -170,6 +170,122 @@
           "sleeps",
           "firstKey"
         ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "esphome.speaker",
+      "title": "Smart speaker",
+      "tier": "read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "microphones": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "ring": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "glow": {
+                    "type": "boolean"
+                  },
+                  "colour": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-f]{6}$"
+                  },
+                  "brightness": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "glow",
+                  "colour",
+                  "brightness"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "heardWakeWordAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "microphones",
+          "ring",
+          "heardWakeWordAt"
+        ],
+        "additionalProperties": false
+      },
+      "assistant": null
+    },
+    {
+      "id": "esphome.changeSpeaker",
+      "title": "Change a smart speaker",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "microphones": {
+            "type": "boolean"
+          },
+          "ring": {
+            "type": "object",
+            "properties": {
+              "glow": {
+                "type": "boolean"
+              },
+              "colour": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "brightness": {
+                "type": "integer",
+                "minimum": 20,
+                "maximum": 100
+              }
+            }
+          }
+        },
+        "required": [
+          "device"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
         "additionalProperties": false
       },
       "assistant": null
