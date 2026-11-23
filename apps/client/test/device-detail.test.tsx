@@ -21,6 +21,7 @@ import {
   lamp,
   kettle,
   remote,
+  climateSensor,
 } from "./device-detail-fixtures";
 
 vi.mock("../src/core-fetch", () => ({
@@ -185,6 +186,16 @@ async function press(
   });
 }
 
+// The pages not on show draw once the first has painted (SwipePages).
+async function pagesDrawn() {
+  await act(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => setTimeout(resolve)),
+      ),
+  );
+}
+
 async function show() {
   await act(async () => {
     root.render(<Harness />);
@@ -325,6 +336,7 @@ describe("a device's detail", () => {
     kept = false;
     await show();
     await click(button("Kettle, On"));
+    await pagesDrawn();
     expect(
       [...dialog()!.querySelectorAll('[role="tab"]')].map((each) =>
         each.getAttribute("aria-label"),
@@ -398,6 +410,7 @@ describe("a device's detail", () => {
       apps = [app];
       await show();
       await click(button(tileLabel));
+      await pagesDrawn();
       expect(
         dialog()
           ?.querySelector('iframe[title="Presses: Presses"]')
@@ -460,6 +473,7 @@ describe("a device's detail", () => {
   it("stays open after a press that starts or ends in its controls", async () => {
     await show();
     await click(button("Lamp, 40%"));
+    await pagesDrawn();
     const slider = dialog()!.querySelector<HTMLElement>(
       '[aria-label="Lamp brightness"]',
     )!;
@@ -640,27 +654,6 @@ describe("the detail of a device Sanctum cannot use", () => {
     });
     expect(dialog()).toBeNull();
   });
-});
-
-// A climate sensor on a battery, which last said something 3 minutes ago.
-const reading = (measure: "temperature" | "humidity", value: number) => ({
-  id: measure,
-  kind: "sensor" as const,
-  features: { measures: measure },
-  state: { value },
-  observed: { value },
-  desired: null,
-  sync: "synced" as const,
-  setBy: null,
-  changedAt: null,
-});
-const climateSensor = (battery: number): DeviceInfo => ({
-  ...lamp,
-  id: "climate",
-  name: "Office sensor",
-  lastSeenAt: new Date(Date.now() - 3 * 60_000).toISOString(),
-  battery,
-  capabilities: [reading("temperature", 21.5), reading("humidity", 48)],
 });
 
 describe("a sensor's detail", () => {

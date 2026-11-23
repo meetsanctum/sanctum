@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type PointerEvent } from "react";
+import { act, useEffect, type PointerEvent } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,9 +10,23 @@ let layout: SidebarLayout;
 let root: Root;
 let container: HTMLDivElement;
 
-function Sidebar({ isVeiled = false }: { isVeiled?: boolean }) {
-  layout = useSidebarLayout(isVeiled);
+function Cover({ onCovering }: { onCovering: SidebarLayout["setCovered"] }) {
+  useEffect(() => {
+    onCovering(true);
+    return () => onCovering(false);
+  }, [onCovering]);
   return null;
+}
+
+function Sidebar({
+  isVeiled = false,
+  covered = false,
+}: {
+  isVeiled?: boolean;
+  covered?: boolean;
+}) {
+  layout = useSidebarLayout(isVeiled);
+  return covered ? <Cover onCovering={layout.setCovered} /> : null;
 }
 
 beforeEach(async () => {
@@ -323,6 +337,23 @@ describe("the traffic lights under an overlay", () => {
     await act(async () => layout.setCovered(false));
 
     // Collapsed by then, so they stay hidden.
+    expect(native.setControls).not.toHaveBeenCalled();
+  });
+
+  it("keeps them hidden when the window narrows as the overlay unmounts", async () => {
+    const native = await dockedInTheApp();
+    await act(async () => root.render(<Sidebar key="native" covered />));
+    expect(native.setControls).toHaveBeenLastCalledWith(false, 0);
+    native.setControls.mockClear();
+
+    vi.stubGlobal("matchMedia", () => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    await act(async () => root.render(<Sidebar key="native" />));
+
+    expect(layout.docked).toBe(false);
     expect(native.setControls).not.toHaveBeenCalled();
   });
 

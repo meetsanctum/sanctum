@@ -10,6 +10,7 @@ import {
   onWithin,
   spansOf,
   spanText,
+  timeText,
   weekHeadline,
   type Day,
 } from "../src/device-history-data";
@@ -135,6 +136,10 @@ describe("a device's history", () => {
     expect(durationText(2 * 3600)).toBe("2 h");
     expect(durationText(45 * 60)).toBe("45 min");
     expect(durationText(20)).toBe("under a minute");
+  });
+
+  it("shows Invalid Date when a timestamp cannot be parsed", () => {
+    expect(timeText(Date.parse("invalid"))).toBe("Invalid Date");
   });
 
   it("lets refreshed history replace older live changes and keeps newer ones", () => {

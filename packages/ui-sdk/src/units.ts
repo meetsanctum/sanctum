@@ -107,12 +107,15 @@ export function formatReading(
   return `${formatNumber(value)}${/^[%°]/.test(trimmed) ? "" : " "}${trimmed}`;
 }
 
+// Made once, since toLocaleString makes a formatter on each call.
+const luxNumber = new Intl.NumberFormat("en-GB");
+
 // A light level's number: whole lux under 100 and two figures from 100, so
 // it reads as steadily as a room's light changes.
 function lux(value: number) {
   const level = Math.max(0, value);
   const shown = level < 99.5 ? Math.round(level) : Number(level.toPrecision(2));
-  return shown.toLocaleString("en-GB");
+  return luxNumber.format(shown);
 }
 
 /** A light level, in lux, as readings show it: "4 lx", "320 lx", "1,100 lx". */

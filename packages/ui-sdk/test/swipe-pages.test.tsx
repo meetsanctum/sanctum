@@ -199,3 +199,75 @@ it("scrolls tabs too many for the width to keep the current one in view", async 
     }
   }
 });
+
+it("draws the page on show at once and the others once it has painted", async () => {
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      root.render(
+        <SwipePages
+          label="Device"
+          initial="second"
+          pages={["First", "Second", "Third"].map((label) => ({
+            id: label.toLowerCase(),
+            label,
+            icon: Sun,
+            content: <p>{label}</p>,
+          }))}
+        />,
+      );
+    });
+    const drawn = () =>
+      [...container.querySelectorAll("p")].map((each) => each.textContent);
+    expect(drawn()).toEqual(["Second"]);
+    expect(container.querySelectorAll("[role=tabpanel]")).toHaveLength(3);
+
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(drawn()).toEqual(["Second"]);
+
+    await act(async () => vi.advanceTimersToNextFrame());
+    expect(drawn()).toEqual(["Second"]);
+
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(drawn()).toEqual(["First", "Second", "Third"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["swipe", "tab"])(
+  "keeps both pages mounted when a %s changes pages before the first frame",
+  async (input) => {
+    vi.useFakeTimers();
+    try {
+      const first = await renderTwoPages();
+      const content = () => [
+        ...container.querySelectorAll("[data-slot=swipe-page-content]"),
+      ];
+      expect(content()).toEqual([first]);
+
+      if (input === "swipe") {
+        await act(async () => {
+          pointer(first, "pointerdown", 300);
+          pointer(first, "pointermove", 200);
+        });
+        expect(content().map((page) => page.textContent)).toEqual([
+          "First",
+          "Second",
+        ]);
+        await act(async () => pointer(first, "pointerup", 200));
+      } else {
+        const tab = container.querySelector<HTMLButtonElement>(
+          '[role="tab"][aria-label="Second"]',
+        )!;
+        await act(async () => tab.click());
+      }
+
+      expect(currentPage()).toBe("Second");
+      expect(content()).toHaveLength(2);
+      expect(content()[0]).toBe(first);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);

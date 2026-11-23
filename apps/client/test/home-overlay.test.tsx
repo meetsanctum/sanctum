@@ -10,11 +10,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import type { CoreStatus } from "../src/core-status";
+import * as dashboard from "../src/home-dashboard";
 import { Home } from "../src/Home";
 import * as shell from "../src/shell";
 import type { StoredHost } from "../src/shell";
 import { lamp, places } from "./device-detail-fixtures";
+import { motionCapability } from "./device-tiles-fixtures";
 import { moods } from "./home-shell-fixtures";
+import { contactSensor } from "./place-pages-fixtures";
 
 // A device's detail through the real Home: as it covers the window, the
 // macOS traffic lights hide (src/overlay.tsx, src/sidebar-state.ts).
@@ -52,6 +55,11 @@ const host: StoredHost = {
   pin: null,
 };
 const setControls = vi.fn(async (_visible: boolean, _by?: number) => {});
+const door = contactSensor("door", "Hallway door", "office", false);
+const devices = [
+  lamp,
+  { ...door, capabilities: [...door.capabilities, motionCapability(false)] },
+];
 let root: Root;
 let container: HTMLDivElement;
 
@@ -78,6 +86,7 @@ beforeEach(async () => {
   );
   localStorage.clear();
   setControls.mockClear();
+  vi.spyOn(dashboard, "HomeRooms");
   vi.spyOn(shell, "getShell").mockReturnValue({
     ...shell.getShell(),
     window: {
@@ -101,7 +110,7 @@ beforeEach(async () => {
           devices: [lamp.id],
         },
       ];
-    if (path === "/api/devices") return [lamp];
+    if (path === "/api/devices") return devices;
     if (path === "/api/places") return places;
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -127,15 +136,18 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it("hides the traffic lights while a device's detail covers the window", async () => {
+it("hides the traffic lights while detail covers the window without redrawing Home", async () => {
   expect(setControls).toHaveBeenLastCalledWith(true, 0);
   setControls.mockClear();
+  const dashboardRenders = vi.mocked(dashboard.HomeRooms).mock.calls.length;
+  expect(dashboardRenders).toBeGreaterThan(0);
 
   await press("Lamp, 40%");
   expect(dialog()).not.toBeNull();
   // Where the frame's backing looks for it (src/shell-frame.css).
   expect(dialog()!.parentElement!.className).toBe("home-screen");
   expect(setControls.mock.calls).toEqual([[false, 0]]);
+  expect(dashboard.HomeRooms).toHaveBeenCalledTimes(dashboardRenders);
 
   await press("Done");
   expect(dialog()).toBeNull();
@@ -143,6 +155,17 @@ it("hides the traffic lights while a device's detail covers the window", async (
     [false, 0],
     [true, 0],
   ]);
+  expect(dashboard.HomeRooms).toHaveBeenCalledTimes(dashboardRenders);
+});
+
+it("opens a room's contact tile on the device's first page", async () => {
+  await press("Office");
+  await press("Hallway door, Closed");
+
+  const selected = dialog()?.querySelector(
+    '[role="tab"][aria-selected="true"]',
+  );
+  expect(selected?.getAttribute("aria-label")).toBe("Motion");
 });
 
 it("opens the app's settings after adding it from a hardware offer", async () => {

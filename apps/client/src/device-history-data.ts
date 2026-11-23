@@ -385,8 +385,9 @@ export function countedWeekHeadline(
 
 /** A time of day as Automations writes it, such as 07:30. */
 export function timeText(at: number) {
-  return new Date(at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "Invalid Date";
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }

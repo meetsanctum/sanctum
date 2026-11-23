@@ -18,6 +18,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type ReactNode,
 } from "react";
@@ -54,6 +55,11 @@ const shades = [20, 35, 50, 65, 80, 100];
 // for Done.
 const shadeSlots = [1, 2, 3, 5, 6, 7];
 const whites = 8;
+// Sizes in Tailwind spacing units. The ratio lets a circle fly in from the
+// middle by a share of its own size without measuring the layout.
+const pickerSize = 72;
+const circleSize = 14;
+const pickerPerCircle = pickerSize / circleSize;
 // How far out from the middle the ring's circles sit, and a wheel's Back
 // and Done, in % of the picker.
 const ring = 39;
@@ -86,7 +92,11 @@ const nearest = <T,>(values: readonly T[], gap: (value: T) => number) =>
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 const kelvin = (mireds: number) => Math.round(1_000_000 / mireds / 100) * 100;
-const kelvinText = (mireds: number) => `${kelvin(mireds).toLocaleString()} K`;
+// Made once: toLocaleString makes a formatter on each call, and the picker
+// writes a temperature for each of its whites.
+const kelvinNumber = new Intl.NumberFormat();
+const kelvinText = (mireds: number) =>
+  `${kelvinNumber.format(kelvin(mireds))} K`;
 
 // Whites spread evenly across a light's range, coolest first.
 function whitesOf(range: Range) {
@@ -155,20 +165,19 @@ export function LightPicker(props: {
   useLayoutEffect(() => {
     const box = picker.current;
     if (!box) return;
-    const size = box.offsetWidth;
     const reduced = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     box.querySelectorAll<HTMLElement>("[data-fly]").forEach((circle, index) => {
-      const dx = ((50 - Number(circle.dataset.x)) / 100) * size;
-      const dy = ((50 - Number(circle.dataset.y)) / 100) * size;
+      const dx = (50 - Number(circle.dataset.x)) * pickerPerCircle;
+      const dy = (50 - Number(circle.dataset.y)) * pickerPerCircle;
       circle.animate?.(
         reduced
           ? [{ opacity: 0 }, { opacity: 1 }]
           : [
               {
                 opacity: 0,
-                transform: `translate(${dx}px, ${dy}px) scale(0.4)`,
+                transform: `translate(${dx}%, ${dy}%) scale(0.4)`,
               },
               { opacity: 1, transform: "none" },
             ],
@@ -323,7 +332,15 @@ export function LightPicker(props: {
   // room above itself whatever it shows.
   return (
     <div className="flex flex-col items-center gap-11 pt-11">
-      <div ref={picker} className="relative size-72 shrink-0">
+      <div
+        ref={picker}
+        style={
+          {
+            "--picker-size": `calc(var(--spacing) * ${pickerSize})`,
+          } as CSSProperties
+        }
+        className="relative size-(--picker-size) shrink-0"
+      >
         {layer === "wheel" && (
           <Wheel
             name={name}
@@ -403,12 +420,15 @@ function Circle(props: {
       data-x={props.at.x}
       data-y={props.at.y}
       onClick={props.onClick}
-      style={{
-        left: `${props.at.x}%`,
-        top: `${props.at.y}%`,
-        background: props.colour,
-      }}
-      className="absolute grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring/70 aria-pressed:ring-3 aria-pressed:ring-white"
+      style={
+        {
+          left: `${props.at.x}%`,
+          top: `${props.at.y}%`,
+          background: props.colour,
+          "--circle-size": `calc(var(--spacing) * ${circleSize})`,
+        } as CSSProperties
+      }
+      className="absolute grid size-(--circle-size) -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-ring/70 aria-pressed:ring-3 aria-pressed:ring-white"
     >
       {Icon && <Icon aria-hidden="true" className="size-6" />}
     </button>
