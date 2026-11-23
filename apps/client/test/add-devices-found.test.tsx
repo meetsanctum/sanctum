@@ -76,6 +76,25 @@ describe("Add devices, adding what drivers found", () => {
     expect(cards()[0]!.querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
+  it("makes Done the primary action once one is added", async () => {
+    core.answers.kitchen = () => ({ added: kitchenSensor() });
+    await show();
+    await way("Devices found");
+    const done = () =>
+      [...document.querySelectorAll<HTMLElement>("[role=dialog] button")].find(
+        (button) => button.textContent === "Done",
+      )!;
+    expect(done().dataset.variant).toBe("outline");
+
+    await act(async () => named("Add Kitchen sensor").click());
+    expect(done().dataset.variant).toBe("default");
+    // Still so after going back and returning to what was found.
+    await act(async () => named("Back to Add devices").click());
+    expect(done().dataset.variant).toBe("outline");
+    await way("Devices found");
+    expect(done().dataset.variant).toBe("default");
+  });
+
   it("asks a key on its card, says why one is refused and keeps it to correct", async () => {
     core.answers["living-room"] = ({ answers }) =>
       (answers as { key: string }).key === "the right key"

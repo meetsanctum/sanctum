@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   core,
   joiningDevice,
+  live,
   named,
   page,
   show,
   way,
 } from "./add-devices-support";
+import { light } from "./settings-devices-fixtures";
 
 describe("Add devices, letting a radio's devices join", () => {
   it("lets a radio's devices join from its card, and stops them when its page is left", async () => {
@@ -35,6 +37,33 @@ describe("Add devices, letting a radio's devices join", () => {
     expect(page().querySelector("h3")!.textContent).toBe(
       "What are you adding?",
     );
+  });
+
+  it("makes Done the primary action once a joined device is ready, while still looking", async () => {
+    core.adding.joined = [{ ...joiningDevice, stage: "interviewing" }];
+    const dialog = await show();
+    await way("Zigbee");
+    const button = (text: string) =>
+      [...dialog.querySelectorAll("button")].find(
+        (each) => each.textContent === text,
+      )!;
+    expect(button("Done").dataset.variant).toBe("outline");
+
+    const device = light("hall", "Hall Light");
+    core.devices = [device];
+    core.adding = {
+      ...core.adding,
+      joined: [{ ...joiningDevice, stage: "ready", deviceId: device.id }],
+    };
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: core.adding }),
+    );
+    await show();
+    expect(page().querySelector("h3")!.textContent).toContain(
+      "Looking for devices",
+    );
+    expect(button("Stop looking").dataset.variant).toBe("outline");
+    expect(button("Done").dataset.variant).toBe("default");
   });
 
   it.each(["no joins", "a failed join"])(

@@ -744,8 +744,10 @@ describe("Settings → Devices", () => {
       json: { id: "bulb", roomId: "office" },
     });
 
-    // While it looks, Done is outlined beside Stop looking.
-    expect(button("Done").dataset.variant).toBe("outline");
+    // With a device ready, Done leads while it still looks, beside an
+    // outlined Stop looking.
+    expect(button("Done").dataset.variant).toBe("default");
+    expect(button("Stop looking").dataset.variant).toBe("outline");
     await act(async () => button("Stop looking").click());
     expect(dialog.querySelector("h3")?.textContent).toBe("Stopped looking");
     // With devices joined, closing is what is left: Done leads, and starting
