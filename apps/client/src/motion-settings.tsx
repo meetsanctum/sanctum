@@ -369,7 +369,7 @@ export function MotionSettings(props: {
                   value: level,
                   label: sensitivityLabel(level),
                 }))}
-                value={shown("sensitivity") as MotionSensitivity | undefined}
+                value={shown("sensitivity")}
                 onValueChange={(sensitivity) => void send({ sensitivity })}
                 fill
               />

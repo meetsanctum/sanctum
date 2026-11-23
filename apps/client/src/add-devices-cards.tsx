@@ -325,14 +325,11 @@ function UnusableCardContent(props: { device: DeviceInfo; work: CardWork }) {
 // What a device is shown as, where its type may be shown as another: the
 // choices side by side under their label, the one in effect chosen.
 function ShowAsChoice(props: { device: DeviceInfo; work: CardWork }) {
-  const id = useId();
   const showAs = showAsOf(props.device);
   if (!showAs) return null;
   return (
     <div className="flex flex-col gap-1 text-start">
-      <span id={id} className="text-xs font-medium text-(--silver)">
-        Show as
-      </span>
+      <span className="text-xs font-medium text-(--silver)">Show as</span>
       <SegmentedControl
         fill
         label={`${props.device.name}: show as`}
