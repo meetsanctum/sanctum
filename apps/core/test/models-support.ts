@@ -17,9 +17,11 @@ export type FakeAnswer = {
   // It sends its first piece of text, then nothing until it's stopped.
   hangs?: boolean;
   // Anthropic's only: it thinks first, and why it stops instead of the
-  // usual end of a turn or a tool call.
+  // usual end of a turn or a tool call. Null omits the stop reason.
   thinks?: boolean;
-  stopReason?: string;
+  stopReason?: string | null;
+  // Releases the rest of Claude's events after the first text delta.
+  afterFirstText?: Promise<void>;
 };
 
 export type FakeSources = {
@@ -207,7 +209,10 @@ function anthropicEvents(answer: FakeAnswer, tool: string) {
         type: "message_delta",
         delta: {
           stop_reason:
-            answer.stopReason ?? (answer.callsTool ? "tool_use" : "end_turn"),
+            answer.stopReason === null
+              ? undefined
+              : (answer.stopReason ??
+                (answer.callsTool ? "tool_use" : "end_turn")),
           stop_sequence: null,
         },
         usage: { output_tokens: answer.tokens?.written ?? 8 },
@@ -215,12 +220,21 @@ function anthropicEvents(answer: FakeAnswer, tool: string) {
     ],
     ["message_stop", { type: "message_stop" }],
   );
-  const text = events
-    .map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`)
-    .join("");
+  const chunks = events.map(
+    ([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
+  );
   return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(text));
+    async start(controller) {
+      if (answer.afterFirstText) {
+        const first = chunks.findIndex((chunk) =>
+          chunk.includes('"text_delta"'),
+        );
+        controller.enqueue(
+          encoder.encode(chunks.splice(0, first + 1).join("")),
+        );
+        await answer.afterFirstText;
+      }
+      controller.enqueue(encoder.encode(chunks.join("")));
       controller.close();
     },
   });

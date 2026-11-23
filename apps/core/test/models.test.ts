@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
+import { maxResponseBytes } from "../src/models/client.js";
+import { listModels } from "../src/models/endpoints.js";
 import { modelSources, modelTokens } from "../src/models/schema.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
@@ -426,5 +428,78 @@ describe("AI models", () => {
     expect(again.models.info().sources).toMatchObject([
       { modelName: "Qwen3 8B", inUse: true, check: { outcome: "answered" } },
     ]);
+  });
+});
+
+describe("Anthropic model discovery", () => {
+  it.each([
+    { data: [], has_more: false },
+    {},
+    { data: [{ display_name: "Claude" }] },
+    { data: [{ id: "" }] },
+  ])(
+    "distinguishes an empty model list from a malformed page (%j)",
+    async (page) => {
+      const sources = fakeSources();
+      sources.fetchers.internet = async () => Response.json(page);
+      const { core, token } = await home(sources);
+
+      const look = await post(
+        core,
+        "/api/models/look",
+        { kind: "anthropic", key: sources.anthropic.key },
+        { token },
+      );
+      expect(look.json<ModelSourceLook>()).toEqual(
+        page.data?.length === 0
+          ? { found: true, models: [] }
+          : { found: false, problem: "answer" },
+      );
+    },
+  );
+
+  it("reads later pages using the previous page's cursor", async () => {
+    const sources = fakeSources();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const cursor = new URL(String(input)).searchParams.get("after_id");
+      return Response.json(
+        cursor === "sonnet"
+          ? { data: [{ id: "haiku" }], has_more: false }
+          : { data: [{ id: "sonnet" }], has_more: true, last_id: "sonnet" },
+      );
+    });
+    await expect(
+      listModels(
+        { kind: "anthropic", key: sources.anthropic.key },
+        { ...sources.fetchers, internet: fetcher },
+      ),
+    ).resolves.toEqual([
+      { id: "haiku", name: "haiku" },
+      { id: "sonnet", name: "sonnet" },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("limits the total bytes read across model pages", async () => {
+    const sources = fakeSources();
+    const padding = "x".repeat(maxResponseBytes / 2);
+    sources.fetchers.internet = async (input) => {
+      const cursor = new URL(String(input)).searchParams.get("after_id");
+      return Response.json({
+        data: [{ id: cursor === "sonnet" ? "haiku" : "sonnet" }],
+        has_more: cursor === null,
+        last_id: "sonnet",
+        padding,
+      });
+    };
+    await expect(
+      listModels(
+        { kind: "anthropic", key: sources.anthropic.key },
+        sources.fetchers,
+      ),
+    ).rejects.toMatchObject({
+      problem: "answer",
+      message: "the source's answer was too large",
+    });
   });
 });

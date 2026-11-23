@@ -52,23 +52,21 @@ export type KeptAnswers = Map<
   }
 >;
 
-// The SDK's fetch: the internet's, never following a redirect, and reading
-// no more of an answer than the OpenAI-compatible client would.
+// One byte budget for each answer or model lookup, including all its pages.
 function boundedFetch(endpoint: AnthropicEndpoint): typeof fetch {
+  let size = 0;
   return async (input, init) => {
-    // The SDK also reads custom headers from the environment. The household's
-    // key must be the only credential, and the URL supplies the host.
-    const headers = new Headers(init?.headers);
-    headers.set("authorization", `Bearer ${endpoint.key}`);
-    headers.delete("x-api-key");
-    headers.delete("host");
+    // Build the API headers here so the SDK's environment headers stay local.
     const response = await endpoint.fetch(input, {
       ...init,
-      headers,
+      headers: {
+        authorization: `Bearer ${endpoint.key}`,
+        "anthropic-version": "2026-10-21",
+        ...(init?.body == null ? {} : { "content-type": "application/json" }),
+      },
       redirect: "error",
     });
     if (!response.body) return response;
-    let size = 0;
     const body = response.body.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         transform(bytes, controller) {
@@ -124,6 +122,20 @@ function problemOf(error: unknown, signal?: AbortSignal): ModelError {
     );
   }
   return new ModelError("answer", "the source stopped with an error");
+}
+
+const continueDraft: MessageParam = {
+  role: "user",
+  content: "Please continue the assistant's draft.",
+};
+
+function endsWithDraft(messages: readonly MessageParam[]) {
+  const last = messages.at(-1);
+  return (
+    last?.role === "assistant" &&
+    Array.isArray(last.content) &&
+    last.content.every((block) => block.type === "text")
+  );
 }
 
 /**
@@ -185,15 +197,24 @@ export function messagesOf(
       ];
       const [first] = message.toolCalls ?? [];
       const answered = first && kept?.get(first.id);
+      const continued =
+        answered &&
+        answered.messages.length === wire.length + 1 &&
+        endsWithDraft(wire);
       // A thinking block is tied to the conversation that produced it. If
       // the app edits that conversation, send the app's version on its own.
       if (
         answered &&
         answered.system === (system.join("\n\n") || undefined) &&
         isDeepStrictEqual(answered.tools, tools) &&
-        isDeepStrictEqual(answered.messages, wire) &&
+        isDeepStrictEqual(
+          answered.messages,
+          continued ? [...wire, continueDraft] : wire,
+        ) &&
         isDeepStrictEqual(answered.visible, content)
       ) {
+        // Restore the prompt that accompanied a draft when Claude answered it.
+        if (continued) wire.push(continueDraft);
         wire.push({ role: "assistant", content: answered.content });
       } else if (content.length > 0) {
         wire.push({ role: "assistant", content });
@@ -208,7 +229,7 @@ export function messagesOf(
   };
 }
 
-function stopOf(reason: StopReason | null, calledTool: boolean) {
+function stopOf(reason: StopReason | null | undefined, calledTool: boolean) {
   switch (reason) {
     case "max_tokens":
     case "model_context_window_exceeded":
@@ -216,6 +237,7 @@ function stopOf(reason: StopReason | null, calledTool: boolean) {
     case "refusal":
       return "unavailable" as const;
     case null:
+    case undefined:
       throw new ModelError("answer", "the answer broke off");
     case "tool_use":
       return "tool" as const;
@@ -243,60 +265,88 @@ export async function* anthropicChat(
   onFirstPiece?: () => void,
 ): AsyncGenerator<ModelPiece> {
   const tools: Tool[] | undefined = request.tools?.length
-    ? request.tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: { ...tool.input, type: "object" },
-      }))
+    ? request.tools.map((tool) => {
+        const { type = "object" } = tool.input;
+        if (type !== "object") {
+          throw new ModelError(
+            "answer",
+            "Claude's tools require object inputs",
+          );
+        }
+        return {
+          name: tool.name,
+          description: tool.description,
+          input_schema: { ...tool.input, type },
+        };
+      })
     : undefined;
-  const { system, messages } = messagesOf(
+  const { system, messages: history } = messagesOf(
     request.messages,
     request.kept,
     tools,
   );
   const toolInputs = new Map<number, { json: string; isClosed: boolean }>();
+  function firstPiece() {
+    onFirstPiece?.();
+    onFirstPiece = undefined;
+  }
+  const client = clientOf(endpoint);
+  let messages = history;
   let final;
-  try {
-    const stream = clientOf(endpoint).messages.stream(
-      {
-        model: request.model,
-        max_tokens: request.maxTokens,
-        system,
-        messages,
-        tools,
-        // The tools and the start of the conversation stay the same from one
-        // answer to the next, so Anthropic reuses them.
-        cache_control: { type: "ephemeral" },
-      },
-      { signal },
-    );
-    for await (const event of stream) {
-      // Thinking counts as the start of an answer: Claude is answering.
-      if (event.type === "content_block_start") {
-        onFirstPiece?.();
-        onFirstPiece = undefined;
-        if (event.content_block.type === "tool_use") {
-          toolInputs.set(event.index, { json: "", isClosed: false });
-        }
-        if (event.content_block.type === "text" && event.content_block.text) {
-          yield { type: "text", text: event.content_block.text };
-        }
-      } else if (event.type === "content_block_delta") {
-        if (event.delta.type === "text_delta" && event.delta.text) {
-          yield { type: "text", text: event.delta.text };
-        }
-        if (event.delta.type === "input_json_delta") {
+  for (;;) {
+    try {
+      const stream = client.messages.stream(
+        {
+          model: request.model,
+          max_tokens: request.maxTokens,
+          system,
+          messages,
+          tools,
+        },
+        { signal },
+      );
+      for await (const event of stream) {
+        if (event.type === "content_block_start") {
+          if (event.content_block.type === "tool_use") {
+            firstPiece();
+            toolInputs.set(event.index, { json: "", isClosed: false });
+          }
+          if (event.content_block.type === "text" && event.content_block.text) {
+            firstPiece();
+            yield { type: "text", text: event.content_block.text };
+          }
+        } else if (event.type === "content_block_delta") {
+          if (event.delta.type === "text_delta" && event.delta.text) {
+            firstPiece();
+            yield { type: "text", text: event.delta.text };
+          }
+          if (event.delta.type === "input_json_delta") {
+            const input = toolInputs.get(event.index);
+            if (input) input.json += event.delta.partial_json;
+          }
+        } else if (event.type === "content_block_stop") {
           const input = toolInputs.get(event.index);
-          if (input) input.json += event.delta.partial_json;
+          if (input) input.isClosed = true;
         }
-      } else if (event.type === "content_block_stop") {
-        const input = toolInputs.get(event.index);
-        if (input) input.isClosed = true;
       }
+      final = await stream.finalMessage();
+      break;
+    } catch (error) {
+      // Some models reject a draft as the last message before streaming starts.
+      if (
+        !signal.aborted &&
+        messages === history &&
+        endsWithDraft(history) &&
+        error instanceof APIError &&
+        error.status === 400 &&
+        error.type === "invalid_request_error" &&
+        error.message.includes("does not support assistant message prefill")
+      ) {
+        messages = [...history, continueDraft];
+        continue;
+      }
+      throw problemOf(error, signal);
     }
-    final = await stream.finalMessage();
-  } catch (error) {
-    throw problemOf(error, signal);
   }
 
   const stop = stopOf(
@@ -365,6 +415,17 @@ export async function* anthropicChat(
   };
 }
 
+const modelList = z.object({
+  data: z.array(
+    z.object({
+      id: z.string().min(1).max(256),
+      display_name: z.string().optional(),
+    }),
+  ),
+  has_more: z.boolean().optional(),
+  last_id: z.string().min(1).nullish(),
+});
+
 /** The models a key may use, for the household to choose from. */
 export async function anthropicModels(
   endpoint: AnthropicEndpoint,
@@ -374,11 +435,27 @@ export async function anthropicModels(
   const both = signal ? AbortSignal.any([signal, timeout]) : timeout;
   const models: ModelChoice[] = [];
   try {
-    for await (const model of clientOf(endpoint).models.list(
-      { limit: 1000 },
-      { signal: both },
-    )) {
-      models.push({ id: model.id, name: model.display_name || model.id });
+    const client = clientOf(endpoint);
+    const seen = new Set<string>();
+    let after: string | undefined;
+    for (;;) {
+      const page = modelList.safeParse(
+        await client.get<unknown>("/v1/models", {
+          query: { limit: 1000, after_id: after },
+          signal: both,
+        }),
+      );
+      if (!page.success) throw new ModelError("answer", "not a model list");
+      for (const model of page.data.data) {
+        models.push({ id: model.id, name: model.display_name || model.id });
+      }
+      if (!page.data.has_more) break;
+      const next = page.data.last_id;
+      if (!next || seen.has(next)) {
+        throw new ModelError("answer", "the model list did not advance");
+      }
+      seen.add(next);
+      after = next;
     }
   } catch (error) {
     const problem = problemOf(error, both);

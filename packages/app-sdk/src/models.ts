@@ -143,6 +143,7 @@ export type ModelMessage =
 export type ModelTool = {
   name: string;
   description: string;
+  /** Claude requires object input and uses that type when it is omitted. */
   input: Record<string, unknown>;
 };
 

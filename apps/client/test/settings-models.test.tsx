@@ -40,6 +40,15 @@ const router: ModelSourceInfo = {
   check: { at: "2026-11-23T11:00:00Z", outcome: "noTool", firstWordMs: 800 },
   tokens: { today: 0, month: 18_400 },
 };
+const anthropic: ModelSourceInfo = {
+  id: "anthropic",
+  kind: "anthropic",
+  model: "claude-sonnet-5-5",
+  modelName: "Claude Sonnet 5.5",
+  keyEnd: "7c1d",
+  inUse: false,
+  tokens: { today: 0, month: 0 },
+};
 
 // Thirty days of tokens, the same each day, for each source and app.
 function usageOf(
@@ -175,6 +184,9 @@ beforeEach(() => {
       ];
       return info() as never;
     }
+    if (path === "/api/models/sources/anthropic" && method === "PATCH") {
+      return info() as never;
+    }
     throw new Error(`Unexpected request: ${method} ${path}`);
   });
   container = document.createElement("div");
@@ -231,9 +243,9 @@ const labelled = (name: string) =>
     (input) => input.labels?.[0]?.textContent === name,
   )!;
 
-async function selectMenuItem(action: string) {
+async function selectMenuItem(action: string, source = mac) {
   const trigger = document.querySelector<HTMLButtonElement>(
-    `button[aria-label="${sourceName(mac)}: more"]`,
+    `button[aria-label="${sourceName(source)}: more"]`,
   )!;
   await act(async () => {
     trigger.dispatchEvent(
@@ -480,6 +492,24 @@ describe("Settings → AI models", () => {
     ]);
   });
 
+  it("replaces the key for a saved Anthropic source", async () => {
+    sources.push(anthropic);
+    await show();
+    await selectMenuItem("Replace key", anthropic);
+    await type(
+      document.querySelector<HTMLInputElement>('input[aria-label="API key"]')!,
+      "sk-ant-api03-new-test-key",
+    );
+    await click(button("Save"));
+
+    expect(requests).toContainEqual([
+      "PATCH",
+      "/api/models/sources/anthropic",
+      { key: "sk-ant-api03-new-test-key" },
+    ]);
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
   it("adds a computer once Sanctum has found Ollama there", async () => {
     await show();
     await click(button("Add a source"));
@@ -538,6 +568,31 @@ describe("Settings → AI models", () => {
         key: "sk-or-v1-test-key-4f2a",
         model: "llama3.2:3b",
       },
+    ]);
+  });
+
+  it("checks only the key entered for the selected provider", async () => {
+    await show();
+    await click(button("Add a source"));
+    await click(
+      document.querySelectorAll<HTMLInputElement>('input[name="where"]')[2]!,
+    );
+    await click(button("Continue"));
+    const key = labelled("API key");
+    await type(key, "sk-or-v1-test-key-4f2a");
+    await click(button("Anthropic"));
+    expect(key.value).toBe("");
+    expect(button("Check key").disabled).toBe(true);
+    expect(requests.filter(([, path]) => path === "/api/models/look")).toEqual(
+      [],
+    );
+
+    await type(key, "sk-ant-api03-test-key-7c1d");
+    await click(button("Check key"));
+    expect(requests).toContainEqual([
+      "POST",
+      "/api/models/look",
+      { kind: "anthropic", key: "sk-ant-api03-test-key-7c1d" },
     ]);
   });
 
