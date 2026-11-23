@@ -114,7 +114,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     added: (mac) => devices.has(mac),
     hasKeptKey: async (mac) =>
       Boolean((await givenKey(mac)) ?? (await ctx.secrets.get(setupOf(mac)))),
-    makerOf: (info) => makerOf(info).manufacturer,
   });
 
   const keying = createKeying({
@@ -346,7 +345,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     // waits to be given a key: it's given one only once its card says so.
     if (session.info.apiEncryptionProvisionable === true) {
       session.client.disconnect();
-      finds.learn(mac, "waits");
+      finds.learn(mac, "waits", makerOf(session.info).manufacturer);
       await finds.list();
       return refused("changed");
     }
@@ -363,8 +362,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   }
 
   // A device from a session checked under its key, or under none: the
-  // core's from now on, and its connection that session. Its page says how
-  // its first key reached it where that's worth saying.
+  // core's from now on, and its connection that session.
   async function take(mac: string, session: Session) {
     try {
       const mapping = mapEntities(session.entities);
@@ -575,8 +573,8 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         }
         return refused("hasKey");
       }
-      // Older firmware after all, as one reset since it was given a key:
-      // its card now says so, and Add does what it says.
+      // Older firmware after all, as one reset since it was given a key.
+      // Another Add confirms the change before sending a setup key.
       if (now.says === "older") return refused("changed");
       // An answer in the clear, from a device whose record says it takes a
       // key, says only that it was busy or restarting, or that something
@@ -654,7 +652,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         }
       } else if (keys.length) {
         kept.add(key);
-        finds.learn(key, "key");
+        finds.learn(key, "key", owned.maker);
       }
       owned.connection.stop();
       await owned.setup;

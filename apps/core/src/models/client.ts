@@ -1,4 +1,10 @@
-import type { ModelProblem } from "@meetsanctum/app-sdk";
+import type {
+  ModelMessage,
+  ModelProblem,
+  ModelTokens,
+  ModelTool,
+  ModelToolCall,
+} from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 // The client for OpenAI's chat completions, which Ollama, OpenAI and
@@ -7,22 +13,6 @@ import { z } from "zod";
 // input is whole, then one end with why it stopped and the tokens counted.
 // Messages and tools pass through unchanged, in the order given, so a source
 // that caches the start of a prompt can reuse it.
-
-export type ModelToolCall = { id: string; name: string; input: unknown };
-
-export type ModelMessage =
-  | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string; toolCalls?: ModelToolCall[] }
-  | { role: "tool"; toolCallId: string; content: string };
-
-export type ModelTool = {
-  name: string;
-  description: string;
-  // A JSON Schema for the tool's input.
-  input: Record<string, unknown>;
-};
-
-export type ModelTokens = { read: number; written: number };
 
 export type ModelPiece =
   | { type: "text"; text: string }
@@ -92,7 +82,9 @@ function wireMessage(message: ModelMessage) {
                 type: "function",
                 function: {
                   name: call.name,
-                  arguments: JSON.stringify(call.input ?? {}),
+                  arguments: JSON.stringify(
+                    call.input === undefined ? {} : call.input,
+                  ),
                 },
               })),
             }
@@ -140,11 +132,22 @@ const streamChunk = z.object({
   error: z.unknown().optional(),
 });
 
+// Providers enforce their token limits. Bound the bytes the core reads too,
+// including unfinished lines and tool arguments spread across many chunks.
+// Each streamed piece from a provider carries a few hundred bytes around a
+// token or two, so a whole answer of 4,096 tokens can pass 1 MiB.
+export const maxResponseBytes = 8 * 1024 * 1024;
+
 /** The lines of an event stream's data, one JSON chunk or [DONE] each. */
 async function* dataLines(body: ReadableStream<Uint8Array>) {
   const decoder = new TextDecoder();
   let rest = "";
+  let size = 0;
   for await (const bytes of body as unknown as AsyncIterable<Uint8Array>) {
+    size += bytes.byteLength;
+    if (size > maxResponseBytes) {
+      throw new ModelError("answer", "the source's answer was too large");
+    }
     rest += decoder.decode(bytes, { stream: true });
     let end: number;
     while ((end = rest.indexOf("\n")) >= 0) {

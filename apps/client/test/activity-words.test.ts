@@ -297,6 +297,34 @@ describe("an entry's words", () => {
     );
   });
 
+  it("says how an app's turn with the AI model went, never what was said", () => {
+    const turn = (outcome: "ok" | "failed", detail: Record<string, unknown>) =>
+      activityWords(entry({ action: "models.turn", outcome, detail })).title;
+    const asked = {
+      app: "sanctum.example",
+      appName: "Example",
+      kind: "computer",
+      model: "Qwen3 8B",
+      computer: "Office Mac",
+      answers: 2,
+      tokens: 1_234,
+      ms: 4_200,
+    };
+
+    expect(turn("ok", asked)).toBe(
+      "Example asked Qwen3 8B on Office Mac: 1,234 tokens in 4.2 s",
+    );
+    expect(turn("failed", asked)).toBe(
+      "Qwen3 8B on Office Mac didn't answer Example",
+    );
+    expect(turn("failed", { appName: "Example", answers: 1 })).toBe(
+      "Example asked the AI model, but none was in use",
+    );
+    expect(
+      turn("ok", { ...asked, models: [asked, { model: "Llama3.2 3B" }] }),
+    ).toBe("Example asked multiple AI models: 1,234 tokens in 4.2 s");
+  });
+
   it("names what an AI agent wasn't allowed, by its switch's words", () => {
     const words = (items: string[]) =>
       activityWords(

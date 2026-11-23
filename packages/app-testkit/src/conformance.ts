@@ -69,6 +69,14 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
     },
     joining: done,
     ...createSecretCalls(manifest.id).calls,
+    // A home without an AI model, and no turn: the core opens one only for
+    // a person's or a shared device's call.
+    modelSource: async () => null,
+    openModel: async () => {
+      throw new ActionError("no_turn");
+    },
+    readModel: notFound,
+    cancelModel: notFound,
   };
 }
 

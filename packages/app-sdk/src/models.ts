@@ -3,6 +3,10 @@
 // the tokens it used. A source is Ollama on a computer in the home, reached
 // at a private address, or a provider reached with an API key; the core
 // keeps the key and never hands it back.
+//
+// Apps that hold `models.use` ask the source in use through the core, with
+// ctx.models, and only within a turn: a call from a person or a shared
+// device to an action that declares `turn: true`. Answers stream by handle.
 
 /** The providers a source can be, with Ollama on a computer in the home. */
 export const modelProviders = ["openrouter", "openai"] as const;
@@ -60,7 +64,14 @@ export type ModelSourceInfo = {
   tokens: { today: number; month: number };
 };
 
-export type ModelsInfo = { sources: ModelSourceInfo[] };
+/** An app that may use the home's AI model, with the tokens its answers took. */
+export type ModelAppInfo = {
+  id: string;
+  name: string;
+  tokens: { today: number; month: number };
+};
+
+export type ModelsInfo = { sources: ModelSourceInfo[]; apps: ModelAppInfo[] };
 
 /** Looking at a source before adding it: a computer's address, or a key. */
 export type LookAtModelSource =
@@ -79,3 +90,77 @@ export type ChangeModelSource = {
   key?: string;
   model?: string;
 };
+
+/** What lets an app ask the home's AI model, within a turn. */
+export const modelsUsePermission = "models.use";
+
+/**
+ * The caps on a turn: the time to an answer's first piece, in the home and
+ * with a provider; the whole turn, which is its action's time too; the tokens
+ * one answer may write; and how many answers a turn may ask for.
+ */
+export const turnLimits = {
+  firstPieceInHomeMs: 90_000,
+  firstPieceWithProviderMs: 30_000,
+  turnMs: 180_000,
+  maxTokens: 4_096,
+  answers: 8,
+} as const;
+
+/** A call the model made to one of the tools it was given. */
+export type ModelToolCall = { id: string; name: string; input: unknown };
+
+/** One message of what the model is given, in order. */
+export type ModelMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string; toolCalls?: ModelToolCall[] }
+  | { role: "tool"; toolCallId: string; content: string };
+
+/** A tool the model may call: its name, what it does, and its input's JSON Schema. */
+export type ModelTool = {
+  name: string;
+  description: string;
+  input: Record<string, unknown>;
+};
+
+/** The tokens an answer read and wrote. */
+export type ModelTokens = { read: number; written: number };
+
+/**
+ * Why an answer stopped: it was done, it called tools, it reached its
+ * tokens, it was cancelled (including when permission is taken away or the
+ * turn ends), or no usable answer came from the source.
+ */
+export type ModelStop = "done" | "tool" | "limit" | "cancelled" | "unavailable";
+
+/** A piece of an answer: text as it comes, each tool call whole, then one end. */
+export type ModelAnswerPiece =
+  | { type: "text"; text: string }
+  | ({ type: "tool" } & ModelToolCall)
+  | { type: "end"; stop: ModelStop; tokens: ModelTokens };
+
+/** What an app asks the model. */
+export type ModelQuestion = {
+  messages: ModelMessage[];
+  tools?: ModelTool[];
+  /** At most `turnLimits.maxTokens`, which it is when left out. */
+  maxTokens?: number;
+};
+
+/** The source in use as apps see it, never its address or key. */
+export type ModelSourceShown = {
+  /** A computer's name, or the provider's, such as Office Mac or OpenRouter. */
+  name: string;
+  /** The model, such as Qwen3 8B. */
+  model: string;
+  /** Whether it runs on a computer in the home. */
+  inHome: boolean;
+};
+
+/** An answer under way. Each reader sees its pieces from the start. */
+export interface ModelAnswer extends AsyncIterable<ModelAnswerPiece> {
+  /** Waits for the whole answer and gives its text. */
+  text(): Promise<string>;
+  /** Stops the answer; its end says `cancelled`. */
+  cancel(): Promise<void>;
+}

@@ -1,11 +1,6 @@
-import type { ModelCheck } from "@meetsanctum/app-sdk";
+import type { ModelCheck, ModelTokens } from "@meetsanctum/app-sdk";
 
-import {
-  chat,
-  ModelError,
-  type ModelEndpoint,
-  type ModelTokens,
-} from "./client.js";
+import { chat, ModelError, type ModelEndpoint } from "./client.js";
 
 // Settings' check of a source: a short question with one tool, as an app's
 // turn would ask, timed to the first piece of the answer. A model that

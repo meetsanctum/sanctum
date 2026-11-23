@@ -41,6 +41,7 @@ describe("service connections from ended contexts", () => {
         watch: () => ({ signal: new AbortController().signal, done() {} }),
         pairing: () => core.pairing,
         secrets: { get: () => null, put() {}, remove() {} },
+        models: { source: () => null },
         log() {},
       });
       const requested = calls.serviceConnection("mosquitto");

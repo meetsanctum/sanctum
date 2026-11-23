@@ -70,6 +70,10 @@ export const coreCallMethods = [
   "putSecret",
   "removeSecret",
   "putBlob",
+  "modelSource",
+  "openModel",
+  "readModel",
+  "cancelModel",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 

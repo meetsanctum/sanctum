@@ -40,18 +40,20 @@ const router: ModelSourceInfo = {
 let container: HTMLDivElement;
 let root: Root;
 let sources: ModelSourceInfo[];
+let apps: ModelsInfo["apps"];
 let requests: [string, string, unknown][];
 const live = createLiveFeed();
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   sources = [mac, router];
+  apps = [];
   requests = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
     const method = init.method ?? "GET";
     requests.push([method, path, init.json]);
-    const info = (): ModelsInfo => ({ sources });
+    const info = (): ModelsInfo => ({ sources, apps });
     if (path === "/api/models") return info() as never;
     if (path === "/api/models/look") {
       const asked = init.json as { kind: string; address?: string };
@@ -226,6 +228,26 @@ describe("Settings → AI models", () => {
     ]);
     expect(container.textContent).toContain("Qwen3 8B on Office Mac");
     expect(button("Use")).toBeDefined();
+  });
+
+  it("lists the apps that may use it, with their tokens", async () => {
+    apps = [
+      {
+        id: "sanctum.example",
+        name: "Example",
+        tokens: { today: 1_234, month: 5_678 },
+      },
+    ];
+    await show();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Apps that use it");
+    expect(text).toContain("Example");
+    expect(text).toContain("Today 1,234 · last 30 days 5,678");
+  });
+
+  it("leaves Apps that use it out while none may", async () => {
+    await show();
+    expect(container.textContent).not.toContain("Apps that use it");
   });
 
   it("says when the home has no model yet", async () => {

@@ -34,6 +34,13 @@ import type {
   Actor,
   EventDefinition,
 } from "./index.js";
+import { modelAnswerOf } from "./model-answers.js";
+import type {
+  ModelAnswer,
+  ModelAnswerPiece,
+  ModelQuestion,
+  ModelSourceShown,
+} from "./models.js";
 import type { NetRequest, NetResponse } from "./net.js";
 import type { DeviceJoining } from "./pairing.js";
 import type { PersonInfo } from "./people.js";
@@ -132,6 +139,17 @@ export interface CoreCalls {
   removeSecret(name: string): Promise<void>;
   /** Hands the core a blob, its bytes in base64 (blobs.ts). */
   putBlob(blob: BlobOnTheWire): Promise<PutBlob>;
+  /** The home's AI model in use, or null when there's none; needs `models.use`. */
+  modelSource(): Promise<ModelSourceShown | null>;
+  /** Starts an answer within the call's turn, and gives its handle; needs `models.use`. */
+  openModel(question: ModelQuestion): Promise<{ handle: string }>;
+  /** The answer's pieces after the first `after`, waiting a moment for one when there's none yet. */
+  readModel(read: {
+    handle: string;
+    after: number;
+  }): Promise<ModelAnswerPiece[]>;
+  /** Stops an answer. */
+  cancelModel(handle: string): Promise<void>;
   log(message: string): void;
 }
 
@@ -361,6 +379,23 @@ export interface AppContext {
   readonly blobs: {
     put(blob: AppBlob): Promise<PutBlob>;
   };
+  /**
+   * The home's AI model, the one the household chose in Settings; needs
+   * `models.use`. The core asks it for the app, which never learns its
+   * address or key. An answer needs a turn: only an action that declares
+   * `turn: true`, called by a person or a shared device, opens one, and
+   * anything else is refused `no_turn`. A turn asks for at most
+   * `turnLimits.answers` answers, refused `limited` after that.
+   */
+  readonly models: {
+    /** The source in use, by name and model, or null when there's none. */
+    source(): Promise<ModelSourceShown | null>;
+    /**
+     * Asks the model, and gives the answer at once, to read in pieces as
+     * they come. Messages stay in order and tools are sorted by name.
+     */
+    answer(question: ModelQuestion): ModelAnswer;
+  };
   log(message: string): void;
 }
 
@@ -532,6 +567,10 @@ export function createAppContext(options: {
           data: Buffer.from(data).toString("base64"),
         });
       },
+    },
+    models: {
+      source: () => core.modelSource(),
+      answer: (question) => modelAnswerOf(core, question),
     },
     log: (message) => core.log(message),
   };

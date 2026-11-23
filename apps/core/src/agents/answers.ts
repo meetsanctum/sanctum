@@ -42,6 +42,10 @@ const refusals: Record<ActionCallErrorCode, [string, string]> = {
     "limited",
     "AI agents sent too many device commands in the last minute, so some may not have gone. Try again in a minute.",
   ],
+  no_turn: [
+    "not_allowed",
+    "This asks your home's AI model, which only someone at a screen can do.",
+  ],
   unavailable: [
     "unavailable",
     "The app isn't running just now. Try again in a while.",

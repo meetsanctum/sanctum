@@ -6,6 +6,7 @@ import {
   controlPermission,
   coreEventNames,
   entityReadPermission,
+  modelsUsePermission,
   peopleReadPermission,
   placesLocationPermission,
   placesReadPermission,
@@ -20,6 +21,7 @@ import {
   type CoreCalls,
   type CoreEventName,
   type DeviceInfo,
+  type ModelSourceShown,
   type ServiceConnection,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
@@ -38,6 +40,7 @@ import type { People } from "../people/people.js";
 import type { PlacesModule } from "../places/places.js";
 import { ActionCallError } from "./errors.js";
 import type { JobCalls, KeptWorkflowCalls } from "./app-work.js";
+import type { Turn } from "../models/turns.js";
 import type { NetFetch, NetHolds } from "./net.js";
 import type { Blobs } from "../blobs/blobs.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
@@ -186,6 +189,8 @@ export function createCoreCalls(options: {
   blobs?: () => Blobs | undefined;
   // What AI agents can use, which an AI agent's call holds to.
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
+  // The home's AI model, and the turn this call opened, if it opened one.
+  models: { source: () => ModelSourceShown | null; turn?: Turn };
   log: (message: string) => void;
 }): CoreCalls {
   const { appId, actor, devices, agents } = options;
@@ -562,6 +567,38 @@ export function createCoreCalls(options: {
         throw new Error(`${appId} handed over a blob the core cannot keep`);
       }
       return { hash: blobs.put(appId, kept.type, kept.bytes) };
+    },
+
+    // The home's AI model answers only within a turn: an AI agent's call,
+    // a workflow's, a job's or another app's has none.
+    async modelSource() {
+      need(modelsUsePermission);
+      return options.models.source();
+    },
+
+    async openModel(question) {
+      need(modelsUsePermission);
+      const { turn } = options.models;
+      if (!turn) throw new ActionError("no_turn");
+      return {
+        handle: turn.open(question, () => options.watch(modelsUsePermission)),
+      };
+    },
+
+    async readModel(read) {
+      need(modelsUsePermission);
+      const { turn } = options.models;
+      if (!turn) throw new ActionError("no_turn");
+      const pieces = await turn.read(read?.handle, read?.after);
+      need(modelsUsePermission);
+      return pieces;
+    },
+
+    async cancelModel(handle) {
+      need(modelsUsePermission);
+      const { turn } = options.models;
+      if (!turn) throw new ActionError("no_turn");
+      turn.cancel(handle);
     },
 
     log: options.log,

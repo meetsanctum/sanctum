@@ -10,9 +10,12 @@ export type FakeAnswer = {
   text?: string[];
   // Whether it calls the tool it was given.
   callsTool?: boolean;
+  toolArguments?: string;
   tokens?: { read: number; written: number };
   // How long it waits before the first piece.
   delayMs?: number;
+  // It sends its first piece of text, then nothing until it's stopped.
+  hangs?: boolean;
 };
 
 export type FakeSources = {
@@ -28,11 +31,32 @@ export type FakeSources = {
   requests: { method: string; url: string; authorization?: string }[];
   // Each chat's body as sent.
   chats: Record<string, unknown>[];
+  // How many answers that hung were stopped by the core.
+  stopped: number;
 };
 
 export const officeMac = "192.168.1.40";
 
 const encoder = new TextEncoder();
+
+function hanging(
+  answer: FakeAnswer,
+  signal: AbortSignal | null | undefined,
+  sources: FakeSources,
+) {
+  const first = JSON.stringify({
+    choices: [{ delta: { content: answer.text?.[0] ?? "It's " } }],
+  });
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${first}\n\n`));
+      signal?.addEventListener("abort", () => {
+        sources.stopped += 1;
+        controller.error(signal.reason);
+      });
+    },
+  });
+}
 
 function events(answer: FakeAnswer, signal?: AbortSignal | null) {
   const chunks: string[] = [];
@@ -62,7 +86,13 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
           {
             delta: {
               tool_calls: [
-                { index: 0, function: { name: "time", arguments: "{}" } },
+                {
+                  index: 0,
+                  function: {
+                    name: "time",
+                    arguments: answer.toolArguments ?? "{}",
+                  },
+                },
               ],
             },
           },
@@ -124,6 +154,7 @@ export function fakeSources(): FakeSources {
     openRouter: { key: "sk-or-v1-test-key-4f2a", answer: { callsTool: true } },
     requests: [],
     chats: [],
+    stopped: 0,
     fetchers: {
       async home(input, init) {
         const url = new URL(String(input));
@@ -136,7 +167,11 @@ export function fakeSources(): FakeSources {
         }
         if (url.pathname === "/v1/chat/completions") {
           sources.chats.push(JSON.parse(String(init?.body)));
-          return new Response(events(sources.ollama.answer, init?.signal), {
+          const { answer } = sources.ollama;
+          const body = answer.hangs
+            ? hanging(answer, init?.signal, sources)
+            : events(answer, init?.signal);
+          return new Response(body, {
             headers: { "content-type": "text/event-stream" },
           });
         }

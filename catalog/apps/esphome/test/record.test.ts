@@ -36,6 +36,17 @@ async function listedAs(key: string, description: string) {
 }
 
 describe("a record from before a key was given or taken off", () => {
+  it("lists the known maker after removal with a kept key and a fresh record", async () => {
+    home = await startHome();
+    const device = await home.plugIn({ psk: null, waiting: true });
+    const key = keyOf(device.options.mac);
+    await home.core.add(key, {});
+    await announce(home.core, device);
+
+    await home.core.remove(key, true);
+    expect(listed(key)).toMatchObject({ description: "Espressif", asks: [] });
+  });
+
   it("adds one removed anyway with the key it was given, its record still saying it waits", async () => {
     home = await startHome();
     const device = await waitingDevice();
@@ -50,9 +61,8 @@ describe("a record from before a key was given or taken off", () => {
     await announce(home.core, device);
 
     expect(device.sighting().txt.api_provisioning).toBeDefined();
-    expect(
-      await listedAs(key, "Has the key it was given before"),
-    ).toMatchObject({ asks: [] });
+    // Listed again, asking nothing: Add tries the key it was given.
+    await home.core.until(() => listed(key)?.asks.length === 0, "listed");
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toEqual([{ key: given, encrypted: true }]);
@@ -115,7 +125,7 @@ describe("a record from before a key was given or taken off", () => {
     });
     expect(home.core.registered.has(key)).toBe(false);
     expect(device.keysSent).toEqual([]);
-    expect(listed(key)?.description).toBe("Gets an encryption key of its own");
+    expect(listed(key)).toMatchObject({ description: "Espressif", asks: [] });
     await home.core.add(key, {});
     expect(home.core.registered.has(key)).toBe(true);
     expect(device.keysSent).toEqual([
