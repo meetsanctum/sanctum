@@ -18,7 +18,6 @@ import {
   Blocks,
   Footprints,
   House,
-  Mic,
   Play,
   Sun,
   Thermometer,
@@ -45,6 +44,7 @@ import {
   MediaPlaying,
   MediaRemote,
   MediaVolume,
+  MicrophonesToggle,
   missingArtworkTint,
   RemoteIcon,
 } from "./media-detail";
@@ -58,7 +58,6 @@ import {
   primaryKindOf,
   tileKey,
 } from "./device-tiles";
-import { isAudio, MicrophonesPage } from "./microphones-detail";
 import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
@@ -71,8 +70,7 @@ import type { Devices } from "./use-devices";
 // in the header with Done, and opposite Done, Add to Home, which says On
 // Home while it is. Its pages are the device's, in one order whichever
 // tile opened it: its light's or switch's controls, a media player's
-// Playing and its Remote or Volume (media-detail.tsx), a smart speaker's
-// Microphones (microphones-detail.tsx), its Motion
+// Playing and its Remote or Volume (media-detail.tsx), its Motion
 // (motion-detail.tsx), its Contact (contact-detail.tsx), its Readings and
 // their history (sensor-detail.tsx), the pages apps add for its kinds, each
 // drawn by its app in the app's scope, such as Moods' Presses, its light's
@@ -206,7 +204,6 @@ export function DeviceDetail(props: {
   // The media player whose tile opened it, or the device's first.
   const openedPlayer = capability?.kind === "media" ? capability : undefined;
   const player = openedPlayer ?? device?.capabilities.find(isMedia);
-  const microphones = device?.capabilities.find(isAudio);
   const playerTile =
     device &&
     player &&
@@ -312,6 +309,39 @@ export function DeviceDetail(props: {
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
+  const hasVolume =
+    mediaProps &&
+    !mediaProps.capability.features.power &&
+    (mediaProps.capability.features.volume !== null ||
+      mediaProps.capability.features.mute);
+  const audio = device?.capabilities.find(
+    (each) =>
+      each.kind === "audio" &&
+      each.features.mutes &&
+      each.observed?.muted !== undefined,
+  );
+  const microphones = device && audio?.kind === "audio" && (
+    <MicrophonesToggle
+      key={tileKey(device.id, audio.id)}
+      name={mediaProps ? mediaProps.name : device.name}
+      muted={audio.observed?.muted === true}
+      disabled={device.availability === "offline" || audio.sync === "pending"}
+      failures={devices.failures.get(tileKey(device.id, audio.id))}
+      onMute={(muted) =>
+        void devices
+          .command(
+            {
+              key: tileKey(device.id, audio.id),
+              deviceId: device.id,
+              capabilityId: audio.id,
+              kind: "audio",
+            },
+            { muted },
+          )
+          .catch(() => undefined)
+      }
+    />
+  );
   // Every page after its controls'.
   const after = device
     ? [
@@ -339,11 +369,15 @@ export function DeviceDetail(props: {
                       id: "remote",
                       label: "Remote",
                       icon: RemoteIcon,
-                      content: <MediaRemote {...mediaProps} />,
+                      content: (
+                        <MediaRemote
+                          {...mediaProps}
+                          microphones={microphones}
+                        />
+                      ),
                     },
                   ]
-                : mediaProps.capability.features.volume !== null ||
-                    mediaProps.capability.features.mute
+                : hasVolume
                   ? [
                       {
                         id: "volume",
@@ -353,28 +387,12 @@ export function DeviceDetail(props: {
                           <MediaVolume
                             key={`${device.id}/volume`}
                             {...mediaProps}
+                            microphones={microphones}
                           />
                         ),
                       },
                     ]
                   : []),
-            ]
-          : []),
-        ...(microphones
-          ? [
-              {
-                id: "microphones",
-                label: "Microphones",
-                icon: Mic,
-                content: (
-                  <MicrophonesPage
-                    key={`${device.id}/${microphones.id}`}
-                    device={device}
-                    capability={microphones}
-                    now={now}
-                  />
-                ),
-              },
             ]
           : []),
         ...(motion

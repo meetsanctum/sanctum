@@ -252,10 +252,14 @@ it.each([
   ]);
 });
 
-it("shows a smart speaker with a button by its playback, and mutes from Microphones", async () => {
-  const speaker = mediaPlayer("speaker", "Speaker", "office", {
-    activity: "idle",
-  });
+it("shows a smart speaker with a button by its playback, and mutes its microphones from Volume", async () => {
+  const speaker = mediaPlayer(
+    "speaker",
+    "Speaker",
+    "office",
+    { activity: "idle", volume: 40, muted: false },
+    { power: false, volume: "level", mute: true },
+  );
   devices = [
     {
       ...speaker,
@@ -268,17 +272,162 @@ it("shows a smart speaker with a button by its playback, and mutes from Micropho
     [["media", "player"]],
   );
   await open("speaker/player");
+  expect(tabs().map(([label]) => label)).not.toContain("Microphones");
   const tab = dialog().querySelector<HTMLButtonElement>(
-    '[role="tab"][aria-label="Microphones"]',
+    '[role="tab"][aria-label="Volume"]',
   )!;
   await act(async () => tab.click());
-  const microphones =
-    dialog().querySelector<HTMLButtonElement>('[role="switch"]')!;
-  expect(microphones.getAttribute("aria-checked")).toBe("true");
+  const microphones = dialog().querySelector<HTMLButtonElement>(
+    '[aria-label="Mute Speaker\'s microphones"]',
+  )!;
+  expect(microphones.getAttribute("aria-pressed")).toBe("false");
+  expect(microphones.querySelector("svg")?.classList).toContain("lucide-mic");
+  expect(microphones.previousElementSibling?.getAttribute("aria-label")).toBe(
+    "Mute Speaker",
+  );
   await act(async () => microphones.click());
   expect(posted()).toEqual([
     { device: "speaker", capability: "audio", command: { muted: true } },
   ]);
+});
+
+const microphonesButton = () =>
+  dialog().querySelector<HTMLButtonElement>(
+    '[aria-label="Mute Speaker\'s microphones"]',
+  );
+
+describe("microphone mute in device detail", () => {
+  const speaker = (features: Parameters<typeof mediaPlayer>[4] = {}) =>
+    mediaPlayer(
+      "speaker",
+      "Speaker",
+      "office",
+      { activity: "idle" },
+      { power: false, ...features },
+      "smart-speaker",
+    );
+  const withAudio = (capability: CapabilityInfo) => {
+    const device = speaker({ mute: true });
+    return { ...device, capabilities: [...device.capabilities, capability] };
+  };
+  const select = (label: string) =>
+    act(async () =>
+      dialog()
+        .querySelector<HTMLButtonElement>(
+          `[role="tab"][aria-label="${label}"]`,
+        )!
+        .click(),
+    );
+  const muted = { ...audio, state: { muted: true }, observed: { muted: true } };
+  const pending = {
+    ...muted,
+    state: { muted: false },
+    desired: { muted: false },
+    sync: "pending" as const,
+  };
+  const conflict = { ...muted, sync: "conflict" as const };
+  const publish = (capability: CapabilityInfo) =>
+    live.publish({
+      type: "device",
+      id: "speaker",
+      device: withAudio(capability),
+    });
+  const alert = () => dialog().querySelector('[role="alert"]')!;
+
+  it("mutes microphones beside power on a smart speaker with a Remote, with no page of their own", async () => {
+    const device = speaker({ power: true });
+    devices = [{ ...device, capabilities: [...device.capabilities, audio] }];
+    await open("speaker/player");
+    expect(tabs().map(([label]) => label)).not.toContain("Volume");
+    expect(tabs().map(([label]) => label)).not.toContain("Microphones");
+    await select("Remote");
+    await act(async () => microphonesButton()!.click());
+    expect(posted()).toEqual([
+      { device: "speaker", capability: "audio", command: { muted: true } },
+    ]);
+  });
+
+  it.each([
+    { features: { mutes: false, muteSwitch: false } },
+    { observed: { heardAt: "2026-11-24T09:00:00Z" } },
+  ])("hides the button until mute is supported and known", async (change) => {
+    devices = [withAudio({ ...audio, ...change })];
+    await open("speaker/player");
+    await select("Volume");
+    expect(microphonesButton()).toBeNull();
+  });
+
+  describe("failure feedback", () => {
+    const animate = vi.fn(function (this: Element, _frames: Keyframe[]) {});
+    let original: PropertyDescriptor | undefined;
+
+    beforeEach(async () => {
+      animate.mockClear();
+      original = Object.getOwnPropertyDescriptor(Element.prototype, "animate");
+      Object.defineProperty(Element.prototype, "animate", {
+        configurable: true,
+        value: animate,
+      });
+      devices = [withAudio(muted)];
+      await open("speaker/player");
+      await select("Volume");
+    });
+
+    afterEach(() => {
+      if (original)
+        Object.defineProperty(Element.prototype, "animate", original);
+      else Reflect.deleteProperty(Element.prototype, "animate");
+    });
+
+    it("keeps the reported mute state, shakes red and announces each refused unmute", async () => {
+      vi.mocked(coreJson).mockRejectedValue(new Error("conflict"));
+      const button = microphonesButton()!;
+      await act(async () => button.click());
+
+      expect(button.getAttribute("aria-pressed")).toBe("true");
+      expect(animate.mock.contexts).toEqual([
+        button.querySelector('span[aria-hidden="true"]'),
+        button,
+      ]);
+      expect(animate.mock.calls[0]?.[0]).toContainEqual(
+        expect.objectContaining({ opacity: 0.65 }),
+      );
+      expect(animate.mock.calls[1]?.[0]).toContainEqual({
+        transform: "translateX(-6px)",
+      });
+      const firstAnnouncement = alert().firstElementChild;
+      expect(firstAnnouncement?.textContent).toBe(
+        "Couldn't change the microphone mute.",
+      );
+      await act(async () => button.click());
+      expect(alert().firstElementChild).not.toBe(firstAnnouncement);
+      expect(animate).toHaveBeenCalledTimes(4);
+    });
+
+    it("shows a live conflict once for an accepted command from this client", async () => {
+      const button = microphonesButton()!;
+      await act(async () => {
+        publish(pending);
+        publish(conflict);
+      });
+      expect(alert().textContent).toBe("");
+      expect(animate).not.toHaveBeenCalled();
+
+      vi.mocked(coreJson).mockResolvedValueOnce(pending);
+      await act(async () => button.click());
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute("aria-pressed")).toBe("true");
+      expect(button.querySelector("svg")?.classList).toContain(
+        "lucide-mic-off",
+      );
+
+      await act(async () => publish(conflict));
+      expect(button.disabled).toBe(false);
+      expect(alert().textContent).toBe("Couldn't change the microphone mute.");
+      await act(async () => publish(conflict));
+      expect(animate).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 it.each(["player", "relay"])(

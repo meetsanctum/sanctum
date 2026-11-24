@@ -201,6 +201,8 @@ export class EmulatedDevice {
    * switch holds its microphones muted.
    */
   readonly held = new Map<number, Record<string, FieldValue>>();
+  /** Entities that receive commands without reporting a state in response. */
+  readonly silent = new Set<number>();
   /** Responses and events the voice assistant received, in wire order. */
   readonly voiceMessages: (
     | { type: "response"; isDeclined: boolean }
@@ -728,6 +730,7 @@ export class EmulatedDevice {
       if (value !== undefined) said[name] = value;
     }
     this.commands.push({ type: entry.type, key, fields: said });
+    if (this.silent.has(key)) return;
     const held = this.held.get(key);
     if (held) {
       this.setState(key, held);

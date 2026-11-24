@@ -16,6 +16,7 @@ export * from "./presses";
 export * from "./section-button";
 export * from "./section-tile";
 export * from "./segmented-control";
+export { useShowFailed } from "./show-failed";
 export * from "./swipe-pages";
 export * from "./temperature-unit";
 export * from "./tile-icons";
