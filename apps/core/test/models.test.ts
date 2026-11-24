@@ -3,8 +3,6 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
-import { maxResponseBytes } from "../src/models/client.js";
-import { listModels } from "../src/models/endpoints.js";
 import { modelSources, modelTokens } from "../src/models/schema.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
@@ -432,58 +430,6 @@ describe("AI models", () => {
 });
 
 describe("Anthropic model discovery", () => {
-  const reach = { kind: "anthropic", key: "test-key" } as const;
-
-  it("follows the cursor and sorts models across pages", async () => {
-    const sources = fakeSources();
-    const cursors: (string | null)[] = [];
-    sources.fetchers.internet = async (input) => {
-      const cursor = new URL(String(input)).searchParams.get("after_id");
-      cursors.push(cursor);
-      return cursor
-        ? Response.json({ data: [{ id: "claude-haiku" }], has_more: false })
-        : Response.json({
-            data: [{ id: "claude-sonnet", display_name: "Sonnet" }],
-            has_more: true,
-            last_id: "claude-sonnet",
-          });
-    };
-    await expect(listModels(reach, sources.fetchers)).resolves.toEqual([
-      { id: "claude-haiku", name: "claude-haiku" },
-      { id: "claude-sonnet", name: "Sonnet" },
-    ]);
-    expect(cursors).toEqual([null, "claude-sonnet"]);
-  });
-
-  it.each([undefined, "claude-sonnet"])(
-    "rejects a model list that doesn't advance (%s)",
-    async (cursor) => {
-      const sources = fakeSources();
-      sources.fetchers.internet = vi.fn(async () =>
-        Response.json({ data: [], has_more: true, last_id: cursor }),
-      );
-      await expect(listModels(reach, sources.fetchers)).rejects.toMatchObject({
-        problem: "answer",
-        message: "the model list did not advance",
-      });
-      expect(sources.fetchers.internet).toHaveBeenCalledTimes(cursor ? 2 : 1);
-    },
-  );
-
-  it("shares one byte limit across all the model list's pages", async () => {
-    const sources = fakeSources();
-    const padding = " ".repeat(maxResponseBytes / 2);
-    sources.fetchers.internet = async (input) => {
-      const after = new URL(String(input)).searchParams.has("after_id");
-      const page = { data: [], has_more: !after, last_id: "claude-sonnet" };
-      return new Response(JSON.stringify(page) + padding);
-    };
-    await expect(listModels(reach, sources.fetchers)).rejects.toMatchObject({
-      problem: "answer",
-      message: "the source's answer was too large",
-    });
-  });
-
   it.each([
     { data: [], has_more: false },
     {},

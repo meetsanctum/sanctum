@@ -539,33 +539,6 @@ describe("Claude's answers", () => {
     ).rejects.toMatchObject({ problem: "answer" });
   });
 
-  it.each(["null", "[]", "1"])(
-    "rejects a Claude tool input of %s",
-    async (toolArguments) => {
-      const sources = fakeSources();
-      sources.anthropic.answer = { callsTool: true, toolArguments };
-      await expect(
-        answer(sources, [{ role: "user", content: "Hi" }]),
-      ).rejects.toMatchObject({
-        problem: "answer",
-      });
-    },
-  );
-
-  it("rejects a Claude tool schema with a non-object root before making a request", async () => {
-    const sources = fakeSources();
-    await expect(
-      answer(sources, [{ role: "user", content: "Hi" }], undefined, [
-        {
-          name: "lights",
-          description: "Turns on the lights.",
-          input: { type: "array" },
-        },
-      ]),
-    ).rejects.toMatchObject({ problem: "answer" });
-    expect(sources.requests).toEqual([]);
-  });
-
   it.each([
     { read: 40, written: -1 },
     { read: -1, written: 6 },

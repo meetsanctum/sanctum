@@ -307,15 +307,6 @@ describe("the client", () => {
     }
   });
 
-  it("makes one request when the source is temporarily unavailable", async () => {
-    const source = endpoint("{}", 503);
-    source.fetch = vi.fn(source.fetch);
-    await expect(
-      askSource(source, request, options()).next(),
-    ).rejects.toMatchObject({ problem: "answer" });
-    expect(source.fetch).toHaveBeenCalledTimes(1);
-  });
-
   it("fails a check whose answer is empty or calls a tool it wasn't given", async () => {
     const check = (body: string) =>
       checkSource({

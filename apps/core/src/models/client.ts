@@ -148,37 +148,6 @@ export function boundedFetch(fetcher: typeof fetch): typeof fetch {
   };
 }
 
-// A compatible source can reuse call indices or IDs. The SDK may scan all
-// calls it has seen for each delta, so bound that work before it sees a chunk.
-function compatibleStreamGuard() {
-  // Allow 32 calls' worth of lookups even if every output token arrives in
-  // its own delta, with room for extra metadata-only deltas.
-  const maxWork = 32 * 8_192;
-  let namedDeltas = 0;
-  let deltasSeen = 0;
-  return {
-    processChunk(chunk: unknown) {
-      const { choices } = chunk as {
-        choices?: {
-          delta?: { tool_calls?: { function?: { name?: unknown } }[] };
-        }[];
-      };
-      const deltas = choices?.[0]?.delta?.tool_calls;
-      if (!Array.isArray(deltas)) return;
-      for (const delta of deltas) {
-        if (typeof delta?.function?.name === "string") namedDeltas += 1;
-        deltasSeen += 1;
-        // Each named delta could start a call. Pending deltas can be
-        // processed after all those calls have started.
-        if (deltasSeen * Math.max(1, namedDeltas) > maxWork) {
-          throw new ModelError("answer", "too many tool call pieces");
-        }
-      }
-    },
-    buildMetadata: () => undefined,
-  };
-}
-
 function languageModel(endpoint: ModelEndpoint, model: string): LanguageModel {
   // The base address and key are always given, so neither comes from the
   // environment, such as ANTHROPIC_BASE_URL or OPENAI_API_KEY.
@@ -199,31 +168,21 @@ function languageModel(endpoint: ModelEndpoint, model: string): LanguageModel {
         apiKey: endpoint.key,
         name: "compatible",
         includeUsage: true,
-        metadataExtractor: {
-          extractMetadata: async () => undefined,
-          createStreamExtractor: compatibleStreamGuard,
-        },
       }).chatModel(model);
   }
 }
 
-function toolsOf(
-  tools: readonly ModelTool[] | undefined,
-  api: ModelApi,
-): ToolSet | undefined {
+function toolsOf(tools: readonly ModelTool[] | undefined): ToolSet | undefined {
   if (!tools?.length) return undefined;
   // No `execute`: the SDK hands each call back, and the app runs it.
   return Object.fromEntries(
-    tools.map(({ name, description, input }) => {
-      const { type = "object" } = input;
-      if (api === "anthropic" && type !== "object") {
-        throw new ModelError("answer", "Claude's tools require object inputs");
-      }
-      return [
-        name,
-        { description, inputSchema: jsonSchema({ ...input, type }) },
-      ];
-    }),
+    tools.map((tool) => [
+      tool.name,
+      {
+        description: tool.description,
+        inputSchema: jsonSchema({ type: "object", ...tool.input }),
+      },
+    ]),
   );
 }
 
@@ -287,7 +246,7 @@ export async function* ask(
   request: ModelRequest,
   options: AskOptions,
 ): AsyncGenerator<ModelPiece> {
-  const tools = toolsOf(request.tools, endpoint.api);
+  const tools = toolsOf(request.tools);
   const asked = conversationOf(request.messages, request.tools, options.kept);
   const first = new AbortController();
   const signal = AbortSignal.any([options.signal, first.signal]);
@@ -309,7 +268,6 @@ export async function* ask(
       messages: asked.messages,
       ...(tools ? { tools } : {}),
       maxOutputTokens: request.maxTokens,
-      maxRetries: 0,
       abortSignal: signal,
       ...(options.wholeMs ? { timeout: { totalMs: options.wholeMs } } : {}),
       providerOptions: {
@@ -344,16 +302,9 @@ export async function* ask(
           break;
         case "tool-call":
           firstPiece();
-          if (
-            part.invalid ||
-            part.providerExecuted ||
-            !tools ||
-            !Object.hasOwn(tools, part.toolName) ||
-            (endpoint.api === "anthropic" &&
-              (typeof part.input !== "object" ||
-                part.input === null ||
-                Array.isArray(part.input)))
-          ) {
+          // Input that isn't whole JSON, a tool the app didn't offer, or one
+          // the provider ran itself: no app's tool runs on it.
+          if (part.invalid || part.providerExecuted) {
             isBroken = true;
             break;
           }
