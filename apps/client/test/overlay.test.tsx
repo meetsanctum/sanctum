@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { WeekColumnsChart } from "@meetsanctum/ui-sdk/charts";
+
 import { Overlay } from "../src/overlay";
 
 // How long an overlay says it covers the window, which keeps the macOS
@@ -225,4 +227,65 @@ describe("pointer events behind the veil", () => {
       "container lets go",
     ]);
   });
+});
+
+it("leaves the first Escape to a pinned chart and closes on the next", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const onClose = vi.fn();
+  const day = 24 * 60 * 60_000;
+  const now = Date.parse("2026-11-18T15:30:00Z");
+  await act(async () => {
+    root.render(
+      <Overlay
+        container={container}
+        open
+        onClose={onClose}
+        onCovering={onCovering}
+        title="Office door"
+      >
+        <WeekColumnsChart
+          days={[2, 1, 0].map((back) => ({
+            start: now - back * day,
+            value: 3,
+          }))}
+          now={now}
+          scale="counts"
+          label="How often it opened each day"
+          text={(each) => `${each.value} times`}
+          spoken={(each) => `opened ${each.value} times`}
+          width={340}
+        />
+      </Overlay>,
+    );
+  });
+  const chart = container.querySelector<HTMLElement>('[role="group"]')!;
+  const escape = () =>
+    act(async () => {
+      chart.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+  await act(async () => {
+    chart.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: 50, detail: 1 }),
+    );
+  });
+  expect(chart.hasAttribute("data-pinned")).toBe(true);
+
+  await escape();
+  expect(chart.hasAttribute("data-pinned")).toBe(false);
+  expect(onClose).not.toHaveBeenCalled();
+
+  await escape();
+  expect(onClose).toHaveBeenCalledOnce();
 });

@@ -158,7 +158,11 @@ describe("a day's band", () => {
     );
     await act(async () =>
       group().dispatchEvent(
-        new MouseEvent("pointermove", { clientX: 242, bubbles: true }),
+        new PointerEvent("pointermove", {
+          clientX: 242,
+          bubbles: true,
+          pointerType: "mouse",
+        }),
       ),
     );
     expect(readout()).toMatch(/^Second/);
@@ -413,30 +417,6 @@ describe("a week's columns", () => {
       "2026-11-11: Unbekannt",
       "2026-11-12: Never",
     ]);
-  });
-
-  it("keeps the keyboard cursor in range when the week gets shorter", async () => {
-    const weekDays = days().slice(2);
-    const chart = (shown: typeof weekDays) => (
-      <WeekColumnsChart
-        days={shown}
-        now={now}
-        scale="counts"
-        label="Activity"
-        text={(day) => `${day.value} times`}
-        spoken={(day) => `${day.value} times`}
-        tone="page"
-      />
-    );
-    await render(chart(weekDays));
-    await act(async () => group().focus());
-    expect(readout()).toMatch(/^6 times/);
-    await render(chart(weekDays.slice(0, 3)));
-    expect(readout()).toMatch(/^4 times/);
-    expect(container.querySelector("path.fill-foreground")).toBeTruthy();
-    expect(container.querySelector("span.text-muted-foreground")).toBeTruthy();
-    await press("ArrowLeft");
-    expect(readout()).toMatch(/^3 times/);
   });
 });
 

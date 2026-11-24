@@ -1,13 +1,14 @@
 import { memo } from "react";
 
-import { plotClass, Readout, useCursor, useWidth } from "./frame";
+import { SpokenPin } from "./cursor";
+import { plotClass, Readout, useWidth } from "./frame";
 import { dateText } from "./time";
-import { WeekNames, weekSlots } from "./week";
+import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
 // A week as a column a day, as tall as that day's value on a round scale
 // whose top shows at the right: hours, such as how long a light was on, or
-// counts, such as how often a door opened. It shows a day's value under the
-// pointer or, with the arrow keys, under a cursor, and lists the days for
+// counts, such as how often a door opened. It shows a day's value under a
+// mouse or where a tap or the arrow keys pin it, and lists the days for
 // screen readers.
 
 /**
@@ -92,7 +93,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
-  const cursor = useCursor(days.length || 1);
+  const cursor = useWeekCursor(days);
   const plot = Math.max(0, width - gutter);
   const { slot, markWidth } = weekSlots(plot, days.length);
   const counts = props.scale === "counts";
@@ -109,7 +110,8 @@ export function WeekColumnsChart<Day extends WeekColumn>(
       : day.value === 0
         ? (props.none ?? "Off")
         : text(day);
-  const pointed = cursor.at === null ? undefined : days[cursor.at];
+  const pointed = cursor.step === null ? undefined : days[cursor.step];
+  const pinned = days.find((day) => day.start === cursor.pin);
 
   return (
     <div ref={box} className="relative">
@@ -119,7 +121,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
         aria-label={props.label}
         className={plotClass}
         style={{ width: plot, height: columnsHeight }}
-        {...cursor.handlers(plot)}
+        {...cursor.plot(plot)}
       >
         <svg
           aria-hidden="true"
@@ -154,7 +156,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
         </svg>
         {pointed && (
           <Readout
-            x={Math.round(slot * (cursor.at! + 0.5))}
+            x={Math.round(slot * (cursor.step! + 0.5))}
             width={plot}
             value={valueOf(pointed)}
             about={date(pointed.start)}
@@ -175,6 +177,10 @@ export function WeekColumnsChart<Day extends WeekColumn>(
         labelClass={labelClass}
         today={props.today}
         dayName={props.dayName}
+      />
+      <SpokenPin
+        pin={cursor.pin}
+        text={pinned ? `${date(pinned.start)}: ${valueOf(pinned)}` : ""}
       />
       <ul className="sr-only">
         {days.map((day) => (

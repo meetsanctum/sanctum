@@ -1,3 +1,4 @@
+import { useCursor } from "./cursor";
 import { midnight, weekdayText } from "./time";
 
 // What a week's charts share: a slot a day across the plot, a mark up to 24
@@ -39,4 +40,24 @@ export function WeekNames(props: {
       ))}
     </div>
   );
+}
+
+/** A week's cursor, which points at a day by its start. */
+export function useWeekCursor(days: readonly { start: number }[]) {
+  const keyAt = (step: number) => days[step]?.start ?? Number.NaN;
+  return useCursor<number>({
+    steps: days.length,
+    keyAt,
+    stepOf: (start) => {
+      const step = days.findIndex((day) => day.start === start);
+      return step < 0 ? null : step;
+    },
+    keyAtX: (pointerX, wide) =>
+      keyAt(
+        Math.min(
+          days.length - 1,
+          Math.floor((pointerX / wide) * Math.max(1, days.length)),
+        ),
+      ),
+  });
 }

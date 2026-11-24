@@ -1,14 +1,15 @@
 import { memo, useMemo } from "react";
 
-import { plotClass, Readout, useCursor, useWidth } from "./frame";
+import { SpokenPin } from "./cursor";
+import { plotClass, Readout, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
 import { scaleFraction, scaleOf, type ChartScale } from "./scale";
 import { dateText } from "./time";
-import { WeekNames, weekSlots } from "./week";
+import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
 // A week as a bar a day from its lowest to its highest, such as a sensor's
 // readings, on round gridlines with their values at the right. It shows a
-// day's range under the pointer or, with the arrow keys, under a cursor,
+// day's range under a mouse or where a tap or the arrow keys pin it,
 // and lists the days for screen readers.
 
 /** A day of a week's ranges, from its local midnight: its lowest and highest, or none when nothing was known. */
@@ -107,7 +108,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
-  const cursor = useCursor(days.length || 1);
+  const cursor = useWeekCursor(days);
   const plot = Math.max(0, width - format.gutter);
   const { slot, markWidth: barWidth } = weekSlots(plot, days.length);
   const scale = useMemo(() => {
@@ -122,7 +123,8 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
     day.min === null
       ? (props.unknown ?? "Not known")
       : format.range(day.min, day.max);
-  const pointed = cursor.at === null ? undefined : days[cursor.at];
+  const pointed = cursor.step === null ? undefined : days[cursor.step];
+  const pinned = days.find((day) => day.start === cursor.pin);
 
   return (
     <div ref={box} className="relative">
@@ -135,7 +137,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
         }
         className={plotClass}
         style={{ width: plot, height: barsHeight }}
-        {...cursor.handlers(plot)}
+        {...cursor.plot(plot)}
       >
         <svg
           aria-hidden="true"
@@ -158,7 +160,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
         </svg>
         {pointed && (
           <Readout
-            x={Math.round(slot * (cursor.at! + 0.5))}
+            x={Math.round(slot * (cursor.step! + 0.5))}
             width={plot}
             value={valueOf(pointed)}
             about={date(pointed.start)}
@@ -183,6 +185,10 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
         labelClass={labelClass}
         today={props.today}
         dayName={props.dayName}
+      />
+      <SpokenPin
+        pin={cursor.pin}
+        text={pinned ? `${date(pinned.start)}: ${valueOf(pinned)}` : ""}
       />
       <ul className="sr-only">
         {days.map((day) => (
