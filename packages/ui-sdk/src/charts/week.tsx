@@ -43,9 +43,13 @@ export function WeekNames(props: {
 }
 
 /** A week's cursor, which points at a day by its start. */
-export function useWeekCursor(days: readonly { start: number }[]) {
+export function useWeekCursor(
+  days: readonly { start: number }[],
+  plot: number,
+) {
   const keyAt = (step: number) => days[step]?.start ?? Number.NaN;
   return useCursor<number>({
+    width: plot,
     steps: days.length,
     keyAt,
     stepOf: (start) => {

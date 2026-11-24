@@ -93,8 +93,8 @@ export function WeekColumnsChart<Day extends WeekColumn>(
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
-  const cursor = useWeekCursor(days);
   const plot = Math.max(0, width - gutter);
+  const cursor = useWeekCursor(days, plot);
   const { slot, markWidth } = weekSlots(plot, days.length);
   const counts = props.scale === "counts";
   const most = Math.max(0, ...days.map((day) => day.value ?? 0));
@@ -121,7 +121,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
         aria-label={props.label}
         className={plotClass}
         style={{ width: plot, height: columnsHeight }}
-        {...cursor.plot(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"

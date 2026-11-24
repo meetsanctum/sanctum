@@ -188,9 +188,9 @@ export function DayBandChart<Span extends BandSpan>(
     );
     return near >= 0 ? near : inside;
   };
-  // The cursor holds a time: where the pointer was over the span it shows,
-  // or the middle of the span the arrow keys stepped to.
+  // A pin holds a time inside its span, even if the pointer snapped to it.
   const cursor = useCursor<BandKey>({
+    width: plot,
     steps: spans.length,
     keyAt: (step) => {
       const span = spans[step];
@@ -203,14 +203,25 @@ export function DayBandChart<Span extends BandSpan>(
       const found = spanAt(key);
       return found < 0 ? null : found;
     },
-    keyAtX: (pointerX) => ({
-      at: from + (pointerX / Math.max(1, plot)) * (to - from),
+    keyAtX: (pointerX, wide) => ({
+      at: from + (pointerX / wide) * (to - from),
       snaps: true,
     }),
+    keyToPin: ({ at }, step) => {
+      const span = spans[step]!;
+      // Keep the selected span even when its distance in pixels changes.
+      const inside = span.from <= at && at < span.to;
+      return {
+        at: inside
+          ? at
+          : (Math.max(span.from, from) + Math.min(span.to, to)) / 2,
+        snaps: false,
+      };
+    },
   });
   const pointed = cursor.step === null ? undefined : spans[cursor.step];
   const markAt = cursor.shown === null ? null : x(cursor.shown.at);
-  const pinned = cursor.pin === null ? undefined : spans[spanAt(cursor.pin)];
+  const pinned = cursor.pinStep === null ? undefined : spans[cursor.pinStep];
 
   return (
     <div ref={box} className="relative">
@@ -220,7 +231,7 @@ export function DayBandChart<Span extends BandSpan>(
         aria-label={props.label}
         className={plotClass}
         style={{ width: plot, height: bandHeight }}
-        {...cursor.plot(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"

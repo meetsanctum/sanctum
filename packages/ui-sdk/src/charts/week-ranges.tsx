@@ -108,8 +108,8 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
-  const cursor = useWeekCursor(days);
   const plot = Math.max(0, width - format.gutter);
+  const cursor = useWeekCursor(days, plot);
   const { slot, markWidth: barWidth } = weekSlots(plot, days.length);
   const scale = useMemo(() => {
     const shown = days.flatMap((day) =>
@@ -137,7 +137,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
         }
         className={plotClass}
         style={{ width: plot, height: barsHeight }}
-        {...cursor.plot(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"

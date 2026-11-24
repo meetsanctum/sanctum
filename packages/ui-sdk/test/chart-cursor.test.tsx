@@ -171,7 +171,7 @@ describe("a chart's cursor", () => {
     expect(readout()).toMatch(/^2 times/);
   });
 
-  it("pins nothing for a swipe of the pages around it, which ends in a click", async () => {
+  it("ignores a swipe's click and pins again when the original plot receives focus", async () => {
     await render(
       <SwipePages
         label="Device"
@@ -191,12 +191,26 @@ describe("a chart's cursor", () => {
     await pointer("pointerup", 200, "touch", surface);
     await click(200, plot);
     expect(container.querySelector("[data-pinned]")).toBeNull();
+    expect(
+      container
+        .querySelector('[aria-label="Second"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
     // A tap with no move pins as anywhere else.
-    const shown = group();
+    const shown = container.querySelector(
+      '[role="tabpanel"]:not([inert]) [role="group"]',
+    )!;
     await pointer("pointerdown", dayX(3), "touch", shown);
     await pointer("pointerup", dayX(3), "touch", shown);
     await click(dayX(3), shown);
-    expect(container.querySelector("[data-pinned]")).not.toBeNull();
+    expect(shown.hasAttribute("data-pinned")).toBe(true);
+    const firstTab = container.querySelector<HTMLElement>(
+      '[role="tab"][aria-label="First"]',
+    )!;
+    await click(0, firstTab);
+    await act(async () => firstTab.focus());
+    await act(async () => plot.focus());
+    expect(readout()).toBe("7 timesWed 18 Nov");
   });
 
   it("takes the first Escape to clear its pin and leaves the next to what is around it", async () => {
@@ -255,6 +269,32 @@ describe("a chart's cursor", () => {
     await click(dayX(6));
     expect(readout()).toBe("7 timesWed 18 Nov");
     expect(pinned()).toBe(true);
+  });
+
+  it("pins on focus after a mouse press is released outside the plot", async () => {
+    await render(columns(week()));
+    await pointer("pointerdown", dayX(1));
+    await act(async () => group().focus());
+    expect(readout()).toBeNull();
+    await pointer("pointerup", 600, "mouse", document.body);
+    await act(async () => group().blur());
+    await act(async () => group().focus());
+    expect(readout()).toBe("7 timesWed 18 Nov");
+  });
+
+  it("updates the pinned count without announcing a refresh", async () => {
+    const days = week();
+    await render(columns(days));
+    await tap(dayX(2));
+    expect(readout()).toBe("3 timesSat 14 Nov");
+    expect(spoken()).toBe("Sat 14 Nov: 3 times");
+    await render(
+      columns(
+        days.map((day, index) => (index === 2 ? { ...day, value: 4 } : day)),
+      ),
+    );
+    expect(readout()).toBe("4 timesSat 14 Nov");
+    expect(spoken()).toBe("Sat 14 Nov: 3 times");
   });
 
   it("keeps a pinned day as the week moves on, and clears it once the day has gone", async () => {
@@ -330,10 +370,66 @@ describe("a pinned line", () => {
     expect(readout()).toBeNull();
     expect(pinned()).toBe(false);
   });
+
+  it("updates a stationary mouse's readout and pins that reading on click", async () => {
+    const x = width / 2;
+    const runs = runsAt(now);
+    await render(line(now, runs));
+    await pointer("pointermove", x);
+    expect(readout()).toBe("723°C03:32");
+    await render(line(now + 5 * minute, runs));
+    expect(readout()).toBe("728°C03:37");
+    await click(x);
+    expect(readout()).toBe("728°C03:37");
+    expect(spoken()).toBe("03:37: 728°C");
+    await leave();
+    expect(readout()).toBe("728°C03:37");
+  });
+
+  it("steps left past a reading on the next slot's boundary", async () => {
+    const at = now + 2.5 * minute;
+    await render(
+      line(at, [
+        [
+          { at: at - 5 * minute, value: 12 },
+          { at, value: 15 },
+        ],
+      ]),
+    );
+    await press("End");
+    await press("ArrowLeft");
+    expect(readout()).toBe("12°C15:27");
+    await press("ArrowLeft");
+    expect(readout()).toBe("Not known15:25");
+    await press("ArrowLeft");
+    expect(readout()).toBe("Not known15:20");
+  });
+
+  it("clears a historical pin when the window moves back past it", async () => {
+    await render(line(now));
+    await tap(width - 1);
+    expect(readout()).toBe("1438°C15:27");
+    await render(line(now - hour));
+    expect(readout()).toBeNull();
+    expect(pinned()).toBe(false);
+  });
+
+  it("keeps Now pinned as the reading changes and clears it when the reading is gone", async () => {
+    await render(line(now, [...runsAt(now), [{ at: now, value: 18 }]]));
+    await tap(width - 1);
+    expect(readout()).toBe("18°CNow");
+    const later = now + minute;
+    await render(line(later, [...runsAt(later), [{ at: later, value: 19 }]]));
+    expect(readout()).toBe("19°CNow");
+    expect(pinned()).toBe(true);
+    await render(line(later));
+    expect(readout()).toBeNull();
+    expect(pinned()).toBe(false);
+  });
 });
 
 describe("the other charts' pins", () => {
-  it("holds a band's span, and steps from span to span", async () => {
+  it("holds a snapped band pin through a resize and steps from span to span", async () => {
     const from = now - 24 * hour;
     const spans: (BandSpan & { said: string })[] = [
       { from, to: from + 9 * hour, level: "off", said: "Quiet" },
@@ -345,18 +441,20 @@ describe("the other charts' pins", () => {
       },
       { from: from + 10 * hour, to: now, level: "off", said: "Quiet" },
     ];
-    const band = (at: number) => (
+    const band = (at: number, width = 480) => (
       <DayBandChart
         spans={spans}
         from={at - 24 * hour}
         to={at}
         label="Motion over the last 24 hours"
         text={(span) => span.said}
-        width={480}
+        width={width}
       />
     );
+    await render(band(now, 240));
+    await tap(87);
+    expect(readout()).toBe("Motion00:30–01:30");
     await render(band(now));
-    await tap(190);
     expect(readout()).toBe("Motion00:30–01:30");
     await render(band(now + minute));
     expect(readout()).toBe("Motion00:30–01:30");
@@ -393,9 +491,12 @@ describe("the other charts' pins", () => {
     expect(readout()).toBe("Quiet15:24–now");
     await press("ArrowLeft");
     expect(readout()).toBe("Motion15:10–15:24");
-    await leave();
+    await press("ArrowRight");
+    expect(readout()).toBe("Quiet15:24–now");
     await pointer("pointermove", 479);
     expect(readout()).toBe("Motion15:10–15:24");
+    await leave();
+    expect(readout()).toBe("Quiet15:24–now");
   });
 
   it("holds a strip's quarter hour as the day moves on", async () => {
@@ -421,5 +522,8 @@ describe("the other charts' pins", () => {
     expect(held).toMatch(/^Off\d\d:\d\d$/);
     await render(strip(now + 5 * minute));
     expect(readout()).toBe(held);
+    await render(strip(now - 20 * hour));
+    expect(readout()).toBeNull();
+    expect(pinned()).toBe(false);
   });
 });

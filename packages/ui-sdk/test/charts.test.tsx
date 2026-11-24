@@ -452,6 +452,39 @@ describe("a week's ranges", () => {
     expect(readout()).toBe("18–21°Thu 12 Nov");
   });
 
+  it("announces the date and range of a tapped day", async () => {
+    await render(
+      <WeekRangeChart
+        days={days()}
+        now={now}
+        format={format}
+        name="Temperature"
+        width={456}
+      />,
+    );
+    const plot = group();
+    // The fourth of seven 60 px days; a tap goes straight to click.
+    await act(async () => {
+      for (const type of ["pointerdown", "pointerup"]) {
+        plot.dispatchEvent(
+          new PointerEvent(type, {
+            clientX: 210,
+            bubbles: true,
+            pointerType: "touch",
+            isPrimary: true,
+            pointerId: 1,
+          }),
+        );
+      }
+      plot.dispatchEvent(
+        new MouseEvent("click", { clientX: 210, bubbles: true, detail: 1 }),
+      );
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Sun 15 Nov: 19.5–22.5°",
+    );
+  });
+
   it("says its words as the caller's props say them", async () => {
     await render(
       <WeekRangeChart

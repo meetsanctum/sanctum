@@ -136,10 +136,11 @@ export function DayStripChart<Span extends StripSpan>(
   // day moves on.
   const keyAt = (step: number) => from + (step + 0.5) * quarterMs;
   const cursor = useCursor<number>({
+    width: plot,
     steps: quarters,
     keyAt,
     stepOf: (at) =>
-      at < from
+      at < from || at >= to
         ? null
         : Math.min(quarters - 1, Math.floor((at - from) / quarterMs)),
     keyAtX: (pointerX, wide) =>
@@ -174,7 +175,7 @@ export function DayStripChart<Span extends StripSpan>(
         }
         className={plotClass}
         style={{ width: plot, height }}
-        {...cursor.plot(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"

@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -23,6 +24,8 @@ import {
 
 /** What a chart says its points are to its cursor. */
 export type CursorPoints<Key> = {
+  /** The plot's width in pixels. */
+  width: number;
   /** How many steps the arrow keys move through. */
   steps: number;
   /** What a step points at now. */
@@ -31,6 +34,8 @@ export type CursorPoints<Key> = {
   stepOf: (key: Key) => number | null;
   /** What a pointer at `x` of `width` px points at. */
   keyAtX: (x: number, width: number) => Key;
+  /** A pointer's key as a saved pin, when it differs from the hover key. */
+  keyToPin?: (key: Key, step: number) => Key;
 };
 
 /**
@@ -38,28 +43,26 @@ export type CursorPoints<Key> = {
  * plot's handlers, which mark it `data-pinned` while it holds a pin.
  */
 export function useCursor<Key>(points: CursorPoints<Key>) {
-  const { steps, keyAt, stepOf, keyAtX } = points;
-  const [hover, setHover] = useState<Key | null>(null);
+  const { width, steps, keyAt, stepOf, keyAtX, keyToPin } = points;
+  const [hoverX, setHoverX] = useState<number | null>(null);
   const [pinState, setPin] = useState<Key | null>(null);
-  // Whether a press is under way, whose focus is the pointer's and pins
-  // nothing of its own: the click that ends it does. It lasts until that
-  // click, since a tap focuses after its finger has lifted.
-  const pressing = useRef(false);
-  let pin = pinState;
-  if (pin !== null && stepOf(pin) === null) {
-    pin = null;
-    setPin(null);
-  }
+  const pressing = useRef<AbortController | null>(null);
+  useEffect(() => () => pressing.current?.abort(), []);
+
+  const pinStep = pinState === null ? null : stepOf(pinState);
+  const pin = pinStep === null ? null : pinState;
+  if (pin === null && pinState !== null) setPin(null);
+
+  const keyAtPosition = (x: number) =>
+    keyAtX(Math.max(0, Math.min(width - 1, x)), width);
+  const hover = hoverX === null || width <= 0 ? null : keyAtPosition(hoverX);
   const hoverStep = hover === null ? null : stepOf(hover);
   const shown = hoverStep !== null ? hover : pin;
-  const step = hoverStep ?? (pin === null ? null : stepOf(pin));
+  const step = hoverStep ?? pinStep;
 
-  const xOf = (event: MouseEvent<HTMLDivElement>, width: number) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    return Math.max(0, Math.min(width - 1, event.clientX - box.left));
-  };
+  const xOf = (event: MouseEvent<HTMLDivElement>) =>
+    event.clientX - event.currentTarget.getBoundingClientRect().left;
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    pressing.current = false;
     if (event.key === "Escape") {
       if (pin === null) return;
       // Taken here, so the overlay or shell waits for the next Escape.
@@ -83,7 +86,7 @@ export function useCursor<Key>(points: CursorPoints<Key>) {
               : null;
     if (next === null) return;
     event.preventDefault();
-    setHover(null);
+    setHoverX(null);
     setPin(keyAt(Math.max(0, Math.min(steps - 1, next))));
   };
 
@@ -94,26 +97,57 @@ export function useCursor<Key>(points: CursorPoints<Key>) {
     step,
     /** What it holds pinned. */
     pin,
-    /** The plot's handlers, for `width` px of it. */
-    plot: (width: number) => ({
+    /** The step of the pin. */
+    pinStep,
+    /** The plot's handlers. */
+    plot: {
       "data-pinned": pin === null ? undefined : "",
       onPointerMove: (event: PointerEvent<HTMLDivElement>) => {
-        if (event.pointerType === "mouse")
-          setHover(keyAtX(xOf(event, width), width));
+        if (event.pointerType === "mouse") setHoverX(xOf(event));
       },
-      onPointerLeave: () => setHover(null),
-      onPointerDown: () => {
-        pressing.current = true;
-      },
-      onPointerCancel: () => {
-        pressing.current = false;
+      onPointerLeave: () => setHoverX(null),
+      onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0 || event.isPrimary === false) return;
+        pressing.current?.abort();
+        const press = new AbortController();
+        pressing.current = press;
+        const plot = event.currentTarget;
+        const { ownerDocument } = plot;
+        const { pointerId } = event;
+        const end = () => {
+          press.abort();
+          pressing.current = null;
+        };
+        const options = { capture: true, signal: press.signal };
+        // A tap can focus after release, before click. Listen on the
+        // document so a release elsewhere or a swipe can end the press too.
+        ownerDocument.addEventListener(
+          "pointerup",
+          (up) => {
+            if (up.pointerId !== pointerId) return;
+            if (!(up.target instanceof Node) || !plot.contains(up.target))
+              end();
+          },
+          options,
+        );
+        ownerDocument.addEventListener(
+          "pointercancel",
+          (cancel) => {
+            if (cancel.pointerId === pointerId) end();
+          },
+          options,
+        );
+        ownerDocument.addEventListener("click", end, options);
+        ownerDocument.addEventListener("keydown", end, options);
       },
       onClick: (event: MouseEvent<HTMLDivElement>) => {
-        pressing.current = false;
-        const key = keyAtX(xOf(event, width), width);
+        if (width <= 0) return;
+        const x = xOf(event);
+        if (hoverX !== null) setHoverX(x);
+        const key = keyAtPosition(x);
         const at = stepOf(key);
         setPin(
-          at === null || (pin !== null && stepOf(pin) === at) ? null : key,
+          at === null || pinStep === at ? null : (keyToPin?.(key, at) ?? key),
         );
       },
       onFocus: () => {
@@ -127,7 +161,7 @@ export function useCursor<Key>(points: CursorPoints<Key>) {
         setPin(null);
       },
       onKeyDown,
-    }),
+    },
   };
 }
 
