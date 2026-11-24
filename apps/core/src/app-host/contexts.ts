@@ -1,11 +1,14 @@
 import {
   createAppContext,
+  createRequestContext,
   shownProblem,
   shownQuestions,
   shownRefusals,
   type Actor,
   type AppContext,
   type CoreCalls,
+  type RequestContext,
+  type RequestReply,
   type HostResources,
   type ModelSourceShown,
 } from "@meetsanctum/app-sdk";
@@ -44,6 +47,18 @@ import type { Turn } from "../models/turns.js";
 // events, and how it follows one.
 export type Following = ReturnType<EventsForApps["start"]>;
 
+type CallStorage = ReturnType<AppStorage["call"]>;
+type RequestScope = { readonly ended: boolean; query?: never };
+type ContextOptions = {
+  held?: EmittedEvent[];
+  following?: Following;
+  snapshot?: ReadSnapshot;
+  withinMs?: number;
+  turn?: Turn;
+  // A request's: how its reply reaches whoever asked.
+  reply?: (reply: RequestReply) => void;
+};
+
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -81,8 +96,8 @@ export function createAppContexts(options: {
   const { log, now } = options;
   // The core's calls behind each context, which an app apart's calls back are
   // tied to by the id of the call they came with.
-  const cores = new WeakMap<AppContext, CoreCalls>();
-  const deadlines = new WeakMap<AppContext, number>();
+  const cores = new WeakMap<RequestContext, CoreCalls>();
+  const deadlines = new WeakMap<RequestContext, number>();
 
   const withoutThoseOff = (entities: Entities): Entities => ({
     ...entities,
@@ -147,20 +162,20 @@ export function createAppContexts(options: {
   function contextFor(
     entry: InstalledApp,
     actor: Actor,
-    storage: ReturnType<AppStorage["call"]>,
-    {
-      held,
-      following,
-      snapshot,
-      withinMs,
-      turn,
-    }: {
-      held?: EmittedEvent[];
-      following?: Following;
-      snapshot?: ReadSnapshot;
-      withinMs?: number;
-      turn?: Turn;
-    } = {},
+    scope: CallStorage,
+    options?: ContextOptions,
+  ): AppContext;
+  function contextFor(
+    entry: InstalledApp,
+    actor: Actor,
+    scope: RequestScope,
+    options: ContextOptions,
+  ): RequestContext;
+  function contextFor(
+    entry: InstalledApp,
+    actor: Actor,
+    scope: CallStorage | RequestScope,
+    { held, following, snapshot, withinMs, turn, reply }: ContextOptions = {},
   ) {
     const appId = entry.app.id;
     const core = createCoreCalls({
@@ -169,8 +184,12 @@ export function createAppContexts(options: {
       protocol: entry.manifest.protocol,
       permissions: () => entry.granted,
       permissionsRevision: () => entry.grantsRevision,
-      query: storage.query,
-      ended: () => storage.ended,
+      query:
+        scope.query ??
+        (async () => {
+          throw new Error("App data goes through actions");
+        }),
+      ended: () => scope.ended,
       services: entry.services,
       claims: () => entry.updating?.claims,
       people: snapshot?.people ?? options.people,
@@ -228,10 +247,12 @@ export function createAppContexts(options: {
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       assistant: options.assistant,
+      ...(reply ? { reply } : {}),
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });
-    const ctx = createAppContext({
+    const createContext = scope.query ? createAppContext : createRequestContext;
+    const ctx = createContext({
       appId,
       actor,
       // Its own schemas are on its side of the socket.
@@ -247,8 +268,8 @@ export function createAppContexts(options: {
     settingsOf,
     deliver,
     contextFor,
-    coreOf: (ctx: AppContext) => cores.get(ctx)!,
-    timeLeft(ctx: AppContext) {
+    coreOf: (ctx: RequestContext) => cores.get(ctx)!,
+    timeLeft(ctx: RequestContext) {
       const deadline = deadlines.get(ctx);
       return deadline === undefined
         ? undefined

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   createAppContext,
+  createRequestContext,
   type AppContext,
   type CoreCalls,
 } from "./context.js";
@@ -17,6 +18,7 @@ import type { DriverDiscovery } from "./discovery.js";
 import type { DriverAdd } from "./found-devices.js";
 import type { DriverCommand, DriverMove } from "./devices.js";
 import type { DriverDevice } from "./firmware.js";
+import type { AssistantRequest } from "./requests.js";
 import {
   isActionError,
   isNotReady,
@@ -44,7 +46,9 @@ import type { AppStorage } from "./storage.js";
 // running out, or its end, rolls back what it left open.
 
 type StorageCall = ReturnType<AppStorage["call"]>;
-type Scope = { id: string; storage: StorageCall };
+type CallLifetime = Pick<StorageCall, "ended" | "end"> &
+  Partial<Pick<StorageCall, "query">>;
+type Scope = { id: string; call: CallLifetime };
 
 // The context from `start` until `stop`, which the app's handlers close over.
 type Running = {
@@ -184,7 +188,7 @@ export function createCallHost(options: {
             throw new Error("The connection to the core has gone");
           }
           const hasEnded = () =>
-            scope.storage.ended || lifetime?.storage.ended === true;
+            scope.call.ended || lifetime?.call.ended === true;
           if (hasEnded()) {
             throw new Error(`This call to ${appId} has ended`);
           }
@@ -194,7 +198,11 @@ export function createCallHost(options: {
     );
     return {
       ...remote,
-      query: (query) => current().storage.query(query),
+      async query(query: Parameters<CoreCalls["query"]>[0]) {
+        const run = current().call.query;
+        if (!run) throw new Error("App data goes through actions");
+        return run(query);
+      },
       log: options.log,
     } as CoreCalls;
   }
@@ -206,15 +214,16 @@ export function createCallHost(options: {
     id: string,
     deadlineMs: number,
     work: (scope: Scope) => Promise<T>,
+    lifetime: CallLifetime = storage.call(),
   ) {
-    const scope = { id, storage: storage.call() };
+    const scope = { id, call: lifetime };
     open.add(scope);
-    const timer = setTimeout(() => scope.storage.end(), deadlineMs);
+    const timer = setTimeout(() => lifetime.end(), deadlineMs);
     try {
       return await work(scope);
     } finally {
       clearTimeout(timer);
-      scope.storage.end();
+      lifetime.end();
       open.delete(scope);
     }
   }
@@ -261,7 +270,7 @@ export function createCallHost(options: {
       return failureOf(`${appId} has already started`);
     }
     const open = opened;
-    const lifetime = { id, storage: storage.call() };
+    const lifetime = { id, call: storage.call() };
     const handlers: CoreEventHandlers = new Map();
     const ctx = createAppContext({
       appId,
@@ -288,7 +297,7 @@ export function createCallHost(options: {
     // calls this again when it tries again.
     if (!outcome.ok && outcome.code === "not_ready") {
       running = undefined;
-      lifetime.storage.end();
+      lifetime.call.end();
       return outcome;
     }
     open();
@@ -331,12 +340,12 @@ export function createCallHost(options: {
     // It can start again, and nothing reaches it until it has.
     afterStart = new Promise<void>((open) => (opened = open));
     const { lifetime, ctx } = current;
-    const timer = setTimeout(() => lifetime.storage.end(), deadlineMs);
+    const timer = setTimeout(() => lifetime.call.end(), deadlineMs);
     stopping = outcomeOf(async () => {
       await app.stop?.(ctx, info);
     }).finally(() => {
       clearTimeout(timer);
-      lifetime.storage.end();
+      lifetime.call.end();
       stopping = undefined;
     });
     return stopping;
@@ -389,6 +398,43 @@ export function createCallHost(options: {
       );
     }
     return { ok: true, value: output.result.data };
+  }
+
+  // Someone's request, for Sanctum's Assistant: its handler answers with
+  // request.reply, a call to the core like any other of the call's.
+  async function request(
+    { id, actor }: CallMessage,
+    deadlineMs: number,
+    asked: AssistantRequest,
+  ): Promise<Outcome> {
+    const handler = app.requests;
+    if (!handler) {
+      return failureOf(`${appId} answers no requests`, "unavailable");
+    }
+    let ended = false;
+    const outcome = await inCall(
+      id,
+      deadlineMs,
+      (scope) => {
+        const core = callsOf(() => scope);
+        const ctx = createRequestContext({ appId, actor, app, core });
+        return outcomeOf(() =>
+          handler.call(app, ctx, {
+            ...asked,
+            reply: (reply) => core.replyRequest(reply),
+          }),
+        );
+      },
+      {
+        get ended() {
+          return ended;
+        },
+        end() {
+          ended = true;
+        },
+      },
+    );
+    return outcome.ok ? { ok: true, value: null } : outcome;
   }
 
   function driverCall(
@@ -485,6 +531,8 @@ export function createCallHost(options: {
         return action(message, left, body.action, body.input);
       case "driver":
         return driverCall(message, left, body.hook, body.params);
+      case "request":
+        return request(message, left, body.request);
       case "uninstall":
         return uninstall(message, left);
       case "event":
@@ -521,7 +569,7 @@ export function createCallHost(options: {
       // Release calls waiting for this connection's start so they can end too.
       opened();
       afterStart = new Promise<void>((open) => (opened = open));
-      for (const scope of open) scope.storage.end();
+      for (const scope of open) scope.call.end();
       open.clear();
       // A start the core no longer waits for finishes first, so the stop that
       // follows finds what it set going.

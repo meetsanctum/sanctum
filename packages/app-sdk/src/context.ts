@@ -38,6 +38,7 @@ import type {
   EventDefinition,
 } from "./index.js";
 import type { HostResources } from "./host.js";
+import type { RequestReply } from "./requests.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type { AiToolAnswer } from "./ai-agents.js";
 import type {
@@ -167,6 +168,8 @@ export interface CoreCalls {
     name: string;
     input: Record<string, unknown>;
   }): Promise<AiToolAnswer>;
+  /** Answers the request this call runs for, once; Sanctum's Assistant only. */
+  replyRequest(reply: RequestReply): Promise<void>;
   log(message: string): void;
 }
 
@@ -399,9 +402,9 @@ export interface AppContext {
   /**
    * The home's AI model, the one the household chose in Settings; needs
    * `models.use`. The core asks it for the app, which never learns its
-   * address or key. An answer needs a turn: only an action that declares
-   * `turn: true`, called by a person or a shared device, opens one, and
-   * anything else is refused `no_turn`. A turn asks for at most
+   * address or key. An answer needs a turn opened for a person's or shared
+   * device's request to the Assistant or call to an action with `turn: true`.
+   * Other calls are refused `no_turn`. A turn asks for at most
    * `turnLimits.answers` answers, refused `limited` after that.
    */
   readonly models: {
@@ -464,11 +467,10 @@ function fits(schema: z.ZodType, value: unknown, refusal: string) {
   return parsed.data;
 }
 
-/**
- * Builds an app's context for one call on top of the core's calls. Only the
- * start hook's context has `handlers`, where ctx.events.on() keeps them.
- */
-export function createAppContext(options: {
+/** An Assistant request can use the core's calls. App data goes through actions. */
+export type RequestContext = Omit<AppContext, "storage">;
+
+type ContextOptions = {
   appId: string;
   actor: Actor;
   core: CoreCalls;
@@ -477,7 +479,26 @@ export function createAppContext(options: {
   // refinements, defaults and transforms only it can run, and the core checks
   // what results against its manifest.
   app?: AppDefinition;
-}): AppContext {
+};
+
+/**
+ * Builds an app's context for one call on top of the core's calls. Only the
+ * start hook's context has `handlers`, where ctx.events.on() keeps them.
+ */
+export function createAppContext(options: ContextOptions): AppContext {
+  return Object.assign(createRequestContext(options), {
+    storage: {
+      db: drizzle(async (sql, params, method) => {
+        const { rows } = await options.core.query({ sql, params, method });
+        // `get` answers with no row at all when nothing matched, which
+        // Drizzle expects.
+        return { rows: rows as unknown[] };
+      }),
+    },
+  });
+}
+
+export function createRequestContext(options: ContextOptions): RequestContext {
   const { core, handlers, app, appId } = options;
   const publish = (entity: EntityPublication) => {
     const type = app && entityTypeOf(app, entity.type);
@@ -497,14 +518,6 @@ export function createAppContext(options: {
   return {
     appId: options.appId,
     actor: options.actor,
-    storage: {
-      db: drizzle(async (sql, params, method) => {
-        const { rows } = await core.query({ sql, params, method });
-        // `get` answers with no row at all when nothing matched, which
-        // Drizzle expects.
-        return { rows: rows as unknown[] };
-      }),
-    },
     services: { connection: (name) => core.serviceConnection(name) },
     settings: {
       get: async () => {

@@ -121,6 +121,7 @@ function home(
     hostResources: unused,
     aiTools: unused,
     callAiTool: unused,
+    replyRequest: unused,
     log() {},
   };
   return {

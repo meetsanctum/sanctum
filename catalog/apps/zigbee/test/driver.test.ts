@@ -601,6 +601,7 @@ describe("re-registering a device", () => {
           hostResources: absent,
           aiTools: absent,
           callAiTool: absent,
+          replyRequest: absent,
           press: absent,
           release: absent,
           firmware: absent,

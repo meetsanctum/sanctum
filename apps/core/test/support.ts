@@ -79,9 +79,14 @@ async function dataFolder() {
 }
 
 export function deferredDelivery() {
-  let resolve!: () => void;
+  const pending = deferredResult<void>();
+  return { ...pending, resolve: () => pending.resolve(undefined) };
+}
+
+export function deferredResult<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<void>((accept, refuse) => {
+  const promise = new Promise<T>((accept, refuse) => {
     resolve = accept;
     reject = refuse;
   });

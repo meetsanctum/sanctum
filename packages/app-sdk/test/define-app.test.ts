@@ -704,6 +704,7 @@ const noCore: CoreCalls = {
   hostResources: unused,
   aiTools: unused,
   callAiTool: unused,
+  replyRequest: unused,
   log() {},
 };
 

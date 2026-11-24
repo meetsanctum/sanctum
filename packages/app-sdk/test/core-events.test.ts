@@ -61,6 +61,7 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     hostResources: unused,
     aiTools: unused,
     callAiTool: unused,
+    replyRequest: unused,
     log() {},
   };
   return createAppContext({

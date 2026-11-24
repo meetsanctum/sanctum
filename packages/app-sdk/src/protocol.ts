@@ -8,6 +8,7 @@ import {
   startReasons,
   stopReasons,
 } from "./index.js";
+import { assistantRequestSchema } from "./requests.js";
 
 // What an app's runner and the core say to each other over the Unix socket
 // between them: one JSON message a line. Both ends parse what arrives with
@@ -77,6 +78,7 @@ export const coreCallMethods = [
   "hostResources",
   "aiTools",
   "callAiTool",
+  "replyRequest",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 
@@ -179,6 +181,8 @@ export const callBodySchema = z.discriminatedUnion("kind", [
     hook: z.enum(driverHooks),
     params: z.unknown().optional(),
   }),
+  // Someone's request, for Sanctum's Assistant (protocol 21).
+  z.object({ kind: z.literal("request"), request: assistantRequestSchema }),
   z.object({
     kind: z.literal("event"),
     event: z.custom<CoreEvent>(
