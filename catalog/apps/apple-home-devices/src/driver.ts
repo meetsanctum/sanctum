@@ -352,7 +352,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (question === undefined) {
           throw new Error(
             refusal === "notAllowed"
-              ? `${box.name} refused pairing`
+              ? `${box.name} didn't let Sanctum pair`
               : `${box.name} couldn't be reached`,
           );
         }

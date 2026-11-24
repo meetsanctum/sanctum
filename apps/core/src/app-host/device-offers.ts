@@ -1,6 +1,5 @@
 import {
   discoveredServices,
-  foundDevice,
   type AvailableApp,
   type DeviceOffer,
   type Sighting,
@@ -20,42 +19,6 @@ import type { AvailableApps } from "./available.js";
 const againMs = 60_000;
 
 type Offered = { app: string; name: string; services: readonly string[] };
-
-const hostOf = ({ host }: Sighting) => host.toLowerCase().replace(/\.$/, "");
-
-// AirPlay alone also finds Macs and HomePods. Only tvOS devices with a
-// Companion endpoint can be added through the Apple Home Devices offer.
-function countAppleTvs(sightings: readonly Sighting[]) {
-  const companionHosts = new Set(
-    sightings
-      .filter(({ service }) => service === "_companion-link._tcp")
-      .map(hostOf),
-  );
-  const devices = new Set<string>();
-  for (const each of sightings) {
-    if (each.service !== "_airplay._tcp" || !companionHosts.has(hostOf(each))) {
-      continue;
-    }
-    const txt = Object.fromEntries(
-      Object.entries(each.txt).map(([key, value]) => [
-        key.toLowerCase(),
-        value,
-      ]),
-    );
-    const model = /^AppleTV(\d+),\d+$/.exec(txt.model ?? "");
-    const deviceId = txt.deviceid?.toUpperCase();
-    if (
-      model &&
-      Number(model[1]) >= 5 &&
-      deviceId &&
-      /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(deviceId) &&
-      foundDevice.shape.name.safeParse(each.name).success
-    ) {
-      devices.add(deviceId);
-    }
-  }
-  return devices.size;
-}
 
 const offeredOf = (apps: readonly AvailableApp[]): Offered[] =>
   apps.flatMap((app) => {
@@ -152,13 +115,11 @@ export function createDeviceOffers(options: {
       return current().flatMap(({ app, name, services }) => {
         // A device that announces two of its services is one device: each
         // counts once, by the host it announces.
-        const matching = sightings.filter((each) =>
-          services.includes(each.service),
-        );
-        const found =
-          app === "sanctum.apple-home-devices"
-            ? countAppleTvs(matching)
-            : new Set(matching.map((each) => each.host.toLowerCase())).size;
+        const found = new Set(
+          sightings
+            .filter((each) => services.includes(each.service))
+            .map((each) => each.host.toLowerCase()),
+        ).size;
         return found > 0 ? [{ app, name, found }] : [];
       });
     },

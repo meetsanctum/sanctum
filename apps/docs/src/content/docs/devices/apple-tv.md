@@ -24,14 +24,14 @@ HomePods are listed in **Add devices** too, but can't be added.
 Once both codes match, the Apple TV is added. Put it in a room as you would
 any device.
 
-If adding says the TV refused pairing, open **Settings** on the TV,
+If adding says the TV didn't let Sanctum pair, open **Settings** on the TV,
 then **AirPlay and HomeKit**, and allow access to everyone on the same
 network.
 
 ## When it's no longer paired
 
-If Sanctum's pairing is removed on the TV or the TV is reset, look under
-**Needs Attention** in Settings for the TV that needs to be paired again.
+If Sanctum's pairing is removed on the TV, or the TV is reset, Sanctum says
+the TV is no longer paired with it, under **Needs Attention** in Settings.
 Press **Repair**: the TV shows the same two codes as when it was added.
 
 ## Removing it
