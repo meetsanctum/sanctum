@@ -7,13 +7,13 @@ import {
   type Room,
   type Zone,
 } from "@meetsanctum/app-sdk";
+import { homeClock, hourCycles } from "@meetsanctum/app-sdk/clock";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import type { ChangedBy, RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
-import { hostTimeZone } from "../workflows/time.js";
 import { suggestLocation } from "./location.js";
 import { floors, home, rooms, zoneRooms, zones } from "./schema.js";
 
@@ -48,10 +48,11 @@ export const homeChanges = z
     timeZone: timeZone.nullable().optional(),
     coordinates: coordinates.nullable().optional(),
     temperatureUnit: z.enum(temperatureUnits).optional(),
+    hourCycle: z.enum(hourCycles).optional(),
   })
   .refine(
     (changes) => Object.values(changes).some((value) => value !== undefined),
-    "change the name, the time zone, the coordinates or the temperature unit",
+    "change the name, the time zone, the coordinates, the temperature unit or the hours",
   );
 // A new floor goes last unless it says where.
 export const newFloor = z.object({ name, level: level.optional() });
@@ -224,15 +225,25 @@ export function createPlaces(
   const now = options.now ?? (() => new Date());
 
   // The home's name; the time zone its days run in: the one the household
-  // set, or the host's while there is none, as the workflows engine and
-  // apps' jobs count it; and how it shows temperatures.
+  // set, or the host's while there is none, as the home clock counts it;
+  // how it shows temperatures; and how it writes times.
   function homeOf(row: typeof home.$inferSelect | undefined): Places["home"] {
     return {
       name: row?.name ?? defaultHomeName,
-      timeZone: options.timeZone?.() ?? row?.timeZone ?? hostTimeZone(),
+      timeZone: clockOf(row).timeZone,
       temperatureUnit: row?.temperatureUnit ?? "celsius",
+      hourCycle: row?.hourCycle ?? "24h",
     };
   }
+
+  // The home clock: the home's time zone, the host's while it has none,
+  // its hours and the core's time.
+  const clockOf = (row: typeof home.$inferSelect | undefined) =>
+    homeClock({
+      timeZone: options.timeZone?.() ?? row?.timeZone,
+      hourCycle: row?.hourCycle ?? "24h",
+      now,
+    });
 
   // What reading the places and the home takes, each compiled once: apps
   // ask where the home is and what a room is called as they work, and so
@@ -363,12 +374,19 @@ export function createPlaces(
       timeZone: row?.timeZone ?? null,
       coordinates: row ? coordinatesOf(row) : null,
       temperatureUnit: row?.temperatureUnit ?? "celsius",
+      hourCycle: row?.hourCycle ?? "24h",
     };
   }
 
   return {
     list,
     home: homeInfo,
+
+    /**
+     * The home clock, which everything in the core that works out days and
+     * times uses: the home's zone, or the host's while it has none.
+     */
+    clock: () => clockOf(read.home.get()),
 
     location: locationNow,
 
@@ -443,6 +461,9 @@ export function createPlaces(
           ...(changes.temperatureUnit === undefined
             ? {}
             : { temperatureUnit: changes.temperatureUnit }),
+          ...(changes.hourCycle === undefined
+            ? {}
+            : { hourCycle: changes.hourCycle }),
           timeZone: zone,
           latitude: at?.latitude ?? null,
           longitude: at?.longitude ?? null,

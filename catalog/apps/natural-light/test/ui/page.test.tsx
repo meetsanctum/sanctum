@@ -372,6 +372,7 @@ describe("natural light's page", () => {
         name: "Home",
         timeZone: "Europe/Zurich",
         temperatureUnit: "celsius",
+        hourCycle: "24h",
       },
       floors: [],
       zones: [],

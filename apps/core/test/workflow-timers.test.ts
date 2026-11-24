@@ -170,6 +170,26 @@ describe("time triggers", () => {
     expect(sample.noted).toHaveLength(1);
   });
 
+  it("move to the home's new time zone when it changes", async () => {
+    const core = await testCore({ apps: [samplePackage], timeZone: null });
+    const { token } = await claimed(core);
+    const zone = (timeZone: string) =>
+      post(core, "/api/places/home/update", { timeZone }, { token });
+    await zone("UTC");
+    await addWorkflow(core, token, {
+      graph: steps(trigger("t", "time", { time: "14:00" }), noteStep("note")),
+    });
+    await tick(core);
+    // Set for 14:00 UTC, then the home moves to Berlin, where 14:00 is
+    // 13:00 UTC in winter.
+    expect((await zone("Europe/Berlin")).statusCode).toBe(200);
+    await tick(core);
+
+    core.advance(minutes(60) + 5_000);
+    await tick(core);
+    expect(sample.noted).toHaveLength(1);
+  });
+
   it("move on without running while the workflow is off", async () => {
     const { core, token, id } = await at13({ enabled: false });
     core.advance(minutes(61));

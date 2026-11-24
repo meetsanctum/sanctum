@@ -10,6 +10,7 @@ import type {
   ModelTokens,
   ModelUsage,
 } from "@meetsanctum/app-sdk";
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -121,14 +122,9 @@ export function createModels(
     for (const listener of leaving) listener(sourceId);
   };
 
-  function dayOf(date: Date) {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: options.timeZone() ?? undefined,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
+  // A day of the home's, such as 2026-11-24, on the home clock.
+  const dayOf = (date: Date) =>
+    homeClock({ timeZone: options.timeZone() }).date(date);
 
   const rows = () =>
     db.select().from(modelSources).orderBy(modelSources.createdAt).all();

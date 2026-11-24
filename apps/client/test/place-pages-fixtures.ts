@@ -16,7 +16,12 @@ export function copyWithoutScreenReaderText(element: Element) {
 }
 
 export const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [

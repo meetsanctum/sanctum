@@ -46,7 +46,12 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
     permissionsRevision: async () => 0,
     people: async () => [],
     places: async () => ({
-      home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+      home: {
+        name: "Home",
+        timeZone: "UTC",
+        temperatureUnit: "celsius",
+        hourCycle: "24h",
+      },
       floors: [],
       rooms: [],
       zones: [],

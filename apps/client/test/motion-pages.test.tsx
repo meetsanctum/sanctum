@@ -31,7 +31,12 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 const minute = 60_000;
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [

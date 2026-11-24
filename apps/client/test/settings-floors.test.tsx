@@ -34,6 +34,7 @@ const home = {
   name: "Home",
   timeZone: "UTC",
   temperatureUnit: "celsius",
+  hourCycle: "24h",
 } as const;
 
 describe("a floor's line and order", () => {

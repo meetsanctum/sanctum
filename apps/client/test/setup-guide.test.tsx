@@ -24,7 +24,12 @@ vi.mock("../src/core-fetch", async (original) => ({
 
 const room = (id: string, name: string) => ({ id, name, floorId: null });
 const placesWith = (rooms: Places["rooms"]): Places => ({
-  home: { name: "Home", timeZone: "Europe/Zurich", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "Europe/Zurich",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms,

@@ -1,4 +1,5 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   index,
   integer,
@@ -36,6 +37,8 @@ export const home = sqliteTable("home", {
     .$type<TemperatureUnit>()
     .notNull()
     .default("celsius"),
+  // Whether the home writes times in 24 hours or 12, everywhere.
+  hourCycle: text("hour_cycle").$type<HourCycle>().notNull().default("24h"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

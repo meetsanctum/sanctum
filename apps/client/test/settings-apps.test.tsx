@@ -101,7 +101,12 @@ const moods: AppInfo = {
 };
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [
     { id: "office", name: "Office", floorId: null },

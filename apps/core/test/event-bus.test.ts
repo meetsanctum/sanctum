@@ -12,7 +12,12 @@ import {
 
 const lamp = { id: "lamp", name: "Lamp" } as DeviceInfo;
 const places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [],
   zones: [],

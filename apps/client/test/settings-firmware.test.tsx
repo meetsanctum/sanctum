@@ -34,7 +34,12 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
 
 const office = { id: "office", name: "Office", floorId: null };
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [office],
   zones: [],

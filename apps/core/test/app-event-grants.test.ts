@@ -20,7 +20,12 @@ function busFor(events: EventsForApps) {
 }
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [],
   zones: [],

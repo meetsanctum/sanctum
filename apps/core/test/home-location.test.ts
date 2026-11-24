@@ -81,6 +81,7 @@ describe("the home's location", () => {
       timeZone: null,
       coordinates: null,
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
 
     const set = await post(core, "/api/places/home/update", atZurich, maya);
@@ -88,12 +89,14 @@ describe("the home's location", () => {
       name: "Home",
       ...atZurich,
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
     await post(core, "/api/places/home/update", { name: "Lake house" }, maya);
     expect((await get(core, "/api/places/home", maya)).json()).toEqual({
       name: "Lake house",
       ...atZurich,
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
     expect(core.places.location()).toEqual(zurich);
 
@@ -103,6 +106,7 @@ describe("the home's location", () => {
       timeZone: "Europe/Zurich",
       coordinates: null,
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
     expect(entries(core).map((entry) => entry.action)).toEqual([
       "home.update",
@@ -190,6 +194,7 @@ describe("the home's location", () => {
       name: "Home",
       timeZone: "Europe/Zurich",
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
   });
 
@@ -284,6 +289,7 @@ describe("the location suggestion", () => {
       timeZone: null,
       coordinates: null,
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     });
     expect(entries(core)[0]).toMatchObject({
       action: "home.suggestLocation",

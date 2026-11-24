@@ -34,7 +34,12 @@ describe("places", () => {
     const { core, maya } = await home();
 
     expect((await get(core, "/api/places", maya)).json()).toEqual({
-      home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+      home: {
+        name: "Home",
+        timeZone: "UTC",
+        temperatureUnit: "celsius",
+        hourCycle: "24h",
+      },
       floors: [],
       rooms: [],
       zones: [],
@@ -69,6 +74,7 @@ describe("places", () => {
         name: "Linden Street",
         timeZone: "UTC",
         temperatureUnit: "celsius",
+        hourCycle: "24h",
       },
       floors: [
         { id: ground.id, name: "Ground floor", level: 0 },

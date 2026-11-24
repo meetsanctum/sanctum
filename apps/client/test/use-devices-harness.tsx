@@ -13,7 +13,12 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 // from here, and the tiles they fail.
 
 export const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [{ id: "room", name: "Room", floorId: null }],

@@ -211,6 +211,31 @@ export function createTimers(
     },
 
     /**
+     * Every time trigger's timer as the home's clock now reads, as the
+     * home's time zone changes: 07:30 is the new zone's 07:30. One that's
+     * due stays, for the tick to run or skip.
+     */
+    followZone() {
+      const at = clock.now();
+      for (const timer of db.select().from(workflowTimers).all()) {
+        if (timer.nextAt && timer.nextAt <= at) continue;
+        const node = db
+          .select()
+          .from(workflows)
+          .where(eq(workflows.id, timer.workflowId))
+          .get()
+          ?.graph.nodes.find((each) => each.id === timer.node);
+        if (node?.piece !== "time" || node.app || !pieces.find(node)) {
+          continue;
+        }
+        const { nextAt } = nextFor(node, at);
+        if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
+          db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
+        }
+      }
+    },
+
+    /**
      * When each workflow's time and sun triggers next start it: the
      * earliest of its timers, by its workflow, in one query.
      */

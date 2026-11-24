@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  addLocalDays,
-  localDate,
-  sunDay,
-  sunTimes,
-  sunType,
-  zonedDateToUtc,
-  type SunTimes,
-} from "../src/index.js";
+import { localDate } from "../src/clock.js";
+import { sunDay, sunTimes, sunType, type SunTimes } from "../src/index.js";
 
 // The sun around the home's day, from NOAA's Solar Calculator, and checked
 // against published times.
@@ -275,34 +268,6 @@ describe("sun times", () => {
     expect(day.sunset).not.toBeNull();
     expect(Math.abs(at(day.sunset) - at("2026-03-12T22:41:22Z"))).toBeLessThan(
       second,
-    );
-  });
-});
-
-describe("local dates", () => {
-  it("are read in the home's time zone", () => {
-    const instant = new Date("2026-10-29T23:30:00Z");
-    expect(localDate("Europe/Zurich", instant)).toBe("2026-10-30");
-    expect(localDate("America/New_York", instant)).toBe("2026-10-29");
-    expect(localDate("UTC", instant)).toBe("2026-10-29");
-  });
-
-  it("add up across months and years", () => {
-    expect(addLocalDays("2026-10-31", 1)).toBe("2026-11-01");
-    expect(addLocalDays("2026-12-31", 1)).toBe("2027-01-01");
-    expect(addLocalDays("2028-02-28", 1)).toBe("2028-02-29");
-  });
-
-  it("turn into instants across daylight saving changes", () => {
-    // Noon in Zurich is 10:00 UTC in summer time and 11:00 in winter.
-    expect(
-      zonedDateToUtc("2026-03-29", 12, 0, "Europe/Zurich").toISOString(),
-    ).toBe("2026-03-29T10:00:00.000Z");
-    expect(
-      zonedDateToUtc("2026-10-25", 12, 0, "Europe/Zurich").toISOString(),
-    ).toBe("2026-10-25T11:00:00.000Z");
-    expect(zonedDateToUtc("2026-10-29", 0, 5, "Asia/Tokyo").toISOString()).toBe(
-      "2026-10-28T15:05:00.000Z",
     );
   });
 });

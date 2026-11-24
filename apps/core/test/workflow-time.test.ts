@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { nextSun, refreshSunTimer } from "../src/workflows/jobs.js";
-import {
-  isTimeZone,
-  nextDaily,
-  nextEvery,
-  withinTimes,
-  zonedTime,
-} from "../src/workflows/time.js";
+import { nextDaily, nextEvery, withinTimes } from "../src/workflows/time.js";
 
 // Times of day in the home's time zone.
 
@@ -41,9 +35,6 @@ describe("nextDaily", () => {
   it("runs a time the clocks skip as much later as they moved", () => {
     // Berlin skips 02:00 to 03:00 on 2026-03-29.
     expect(nextDaily(at("2026-03-28T12:00:00Z"), "02:30", berlin)).toEqual(
-      at("2026-03-29T01:30:00Z"),
-    );
-    expect(zonedTime({ year: 2026, month: 3, day: 29 }, 2, 30, berlin)).toEqual(
       at("2026-03-29T01:30:00Z"),
     );
   });
@@ -170,12 +161,5 @@ describe("refreshSunTimer", () => {
       nextAt: at("2026-10-26T16:40:00Z"),
       sunDay: "2026-10-26",
     });
-  });
-});
-
-describe("isTimeZone", () => {
-  it("knows IANA time zones", () => {
-    expect(isTimeZone(berlin)).toBe(true);
-    expect(isTimeZone("Mars/Olympus")).toBe(false);
   });
 });

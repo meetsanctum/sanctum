@@ -1,12 +1,14 @@
 import {
-  addLocalDays,
-  localDate,
   turnOnType,
-  zonedDateToUtc,
   type AppContext,
   type DeviceInfo,
   type TurnOn,
 } from "@meetsanctum/app-sdk";
+import {
+  addLocalDays,
+  localDate,
+  zonedDateToUtc,
+} from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 

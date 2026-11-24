@@ -31,7 +31,7 @@ import { createKeptGrants } from "./kept-grants.js";
 import { createPieces } from "./pieces.js";
 import { createRuns } from "./runs.js";
 import { workflows, workflowsOffForApps } from "./schema.js";
-import { hostTimeZone } from "./time.js";
+import { hostTimeZone } from "@meetsanctum/app-sdk/clock";
 import { createTimers, lateness } from "./timers.js";
 
 // The Workflows module: the household's rules and apps' jobs. It keeps
@@ -121,6 +121,8 @@ export function createWorkflows(
     timeZone: () => options.timeZone?.() ?? hostTimeZone(),
     sun: () => options.sun?.() ?? null,
   };
+  // The time zone the time triggers' timers were last set in.
+  let armedIn = clock.timeZone();
   const runs = createRuns(db, now);
   const pieces = createPieces({
     host,
@@ -712,11 +714,19 @@ export function createWorkflows(
       list: (app: string) => jobs.list(app),
     },
 
-    /** Fires due timers and runs due jobs. */
+    /**
+     * Fires due timers and runs due jobs, first moving time triggers to
+     * the home's new time zone when it has changed.
+     */
     tick() {
       if (interrupted) return;
       const at = now();
       try {
+        const zone = clock.timeZone();
+        if (zone !== armedIn) {
+          armedIn = zone;
+          timers.followZone();
+        }
         timers.fire(at);
         runJobs(at);
       } catch (error) {

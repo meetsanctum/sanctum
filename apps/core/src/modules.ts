@@ -484,7 +484,7 @@ export async function createModules(
       internet: publicInternet(),
     },
     record: activity.for("models"),
-    timeZone: options.timeZone ?? (() => places.timeZone()),
+    timeZone: () => places.clock().timeZone,
     appsUsing: () =>
       apps
         .list()
@@ -635,7 +635,7 @@ export async function createModules(
     now,
     // The home's time zone, which Places keeps, and its sunrises and
     // sunsets from whichever app provides the standard sun entity.
-    timeZone: options.timeZone ?? (() => places.timeZone()),
+    timeZone: () => places.clock().timeZone,
     sun: options.sun ?? (() => sunDays(entities)),
   });
   const activityViews = createActivityViews(activity, {
