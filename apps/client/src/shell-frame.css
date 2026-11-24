@@ -274,9 +274,14 @@
 
 /* An overlay under Reduce effects is solid Carbon (src/veil.tsx), so the
    screen behind it can't be seen: it is not drawn at all while one is open,
-   and a device's change behind it costs no painting. */
+   and a device's change behind it costs no painting. content-visibility,
+   which nothing inherits and which keeps what it hides laid out, so neither
+   hiding nor showing it again styles the screen afresh; visibility, which
+   every element inherits, did, and made opening a device's detail twice as
+   slow on a wall display. Each part takes its size from where it is placed,
+   not from what it holds. */
 [data-effects="reduced"]
   .home-screen[data-covered]
   > :is(.frame, .frame-top, .sidebar-column, .panel) {
-  visibility: hidden;
+  content-visibility: hidden;
 }
