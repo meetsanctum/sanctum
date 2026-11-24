@@ -294,9 +294,8 @@ describe("a player's volume", () => {
       expect(buttons(chooser)).not.toContain(
         "Set Living Room Box's volume to 30%",
       );
-      const unassigned = chooser.querySelector('[aria-label="No room"]')!;
-      await press("Set Spare Speaker's volume to 30%", unassigned);
-      await press("Spare Speaker", container);
+      await press("Set Office Speaker's volume to 30%", chooser);
+      await press("Office Speaker", container);
       const picker = document.querySelector(
         '[role="listbox"][aria-label="Device"]',
       )!;

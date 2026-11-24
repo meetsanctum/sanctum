@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import { noRoomName } from "../device-tiles";
 import type { Home } from "./fields";
 import { PieceIcon } from "./parts";
 import {
@@ -214,8 +213,7 @@ function sectionsFor(
   const rooms = [...(home.places?.rooms ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const locations = [...rooms, { id: null, name: noRoomName }];
-  const roomSections: Section[] = locations.map((room) => {
+  const roomSections: Section[] = rooms.map((room) => {
     const entries: Entry[] = [];
     for (const piece of ofKind) {
       const { device: deviceField, place } = deviceFields(piece);
@@ -255,7 +253,7 @@ function sectionsFor(
               });
             }
           }
-        } else if (place && room.id !== null) {
+        } else if (place) {
           const config = { ...base, [place]: { kind: "room", id: room.id } };
           entries.push({
             key: `${piece.app}:${piece.id}:${preset?.title}:${room.id}`,
@@ -266,11 +264,7 @@ function sectionsFor(
         }
       }
     }
-    return {
-      id: room.id === null ? "no-room" : `room-${room.id}`,
-      title: room.name,
-      entries,
-    };
+    return { id: `room-${room.id}`, title: room.name, entries };
   });
 
   // Each piece by its group or its app, filled in on its card. A core
