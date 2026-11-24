@@ -49,14 +49,7 @@ describe("what the page says", () => {
 
   // A window whose system turns reduced transparency on and off.
   function windowWith(userAgent: string, search = "") {
-    const listeners = new Set<() => void>();
-    const query = {
-      matches: false,
-      addEventListener: (_: string, listener: () => void) =>
-        listeners.add(listener),
-      removeEventListener: (_: string, listener: () => void) =>
-        listeners.delete(listener),
-    };
+    const query = Object.assign(new EventTarget(), { matches: false });
     const win = {
       matchMedia: (media: string) => {
         expect(media).toBe("(prefers-reduced-transparency: reduce)");
@@ -68,9 +61,9 @@ describe("what the page says", () => {
     } as unknown as Window;
     const setReduced = (matches: boolean) => {
       query.matches = matches;
-      for (const listener of listeners) listener();
+      query.dispatchEvent(new Event("change"));
     };
-    return { win, setReduced, listeners };
+    return { win, setReduced };
   }
 
   it("says reduced on <html> on a Shelly, before anything is drawn", () => {
@@ -79,7 +72,7 @@ describe("what the page says", () => {
   });
 
   it("follows the system's reduced transparency as it changes", () => {
-    const { win, setReduced, listeners } = windowWith(browser);
+    const { win, setReduced } = windowWith(browser);
     const stop = followEffects(win);
     expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
 
@@ -89,6 +82,7 @@ describe("what the page says", () => {
     expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
 
     stop();
-    expect(listeners.size).toBe(0);
+    setReduced(true);
+    expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
   });
 });

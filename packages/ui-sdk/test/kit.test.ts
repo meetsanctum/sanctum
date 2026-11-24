@@ -115,6 +115,12 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(fonts.every((name) => name.endsWith(".woff2"))).toBe(true);
   });
 
+  it("turns off frosted blur on app pages in the frame", () => {
+    expect(read("kit.css")).toMatch(
+      /\.frame-page \.frosted[^{}]*\{-webkit-backdrop-filter:none;backdrop-filter:none\}/,
+    );
+  });
+
   it("writes colours with alpha as rgba() or transparent, never as hex", () => {
     // The Shelly Wall Display's web view drops `#0000` and `#ffffff24`.
     const css = read("kit.css");

@@ -61,6 +61,14 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
+it("uses the shared frosted blur that turns off under Reduce effects", async () => {
+  await show(true);
+
+  const classes = [...dialog()!.classList];
+  expect(classes).toContain("frosted");
+  expect(classes.some((name) => name.includes("backdrop-blur"))).toBe(false);
+});
+
 describe("what an overlay says about covering the window", () => {
   it("says nothing while it is closed", async () => {
     await show(false);

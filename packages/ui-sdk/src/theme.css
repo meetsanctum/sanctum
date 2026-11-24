@@ -13,8 +13,8 @@
 /* Frosted glass's blur, the one place a live blur is declared, and gone
    under Reduce effects, where the glass keeps only its fill. */
 @utility frosted {
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px) var(--frosted-extra-filter,);
+  backdrop-filter: blur(24px) var(--frosted-extra-filter,);
 
   @variant reduce-effects {
     -webkit-backdrop-filter: none;

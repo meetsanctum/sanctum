@@ -16,10 +16,17 @@ const kind = `${location.pathname}/`.startsWith(`${builtPath}/`)
 const load = Math.random().toString(36).slice(2, 10);
 
 let control = { label: "", blur: true, masks: true, prompt: "", reload: 0 };
+let blurEnabled = hasBlur(control);
 let seenReload;
 let runStart = 0;
 let isRecording = !document.hidden;
 let batch = { frames: [], moves: [], events: [], loafs: [] };
+
+function hasBlur(settings) {
+  return (
+    settings.blur && document.documentElement.dataset.effects !== "reduced"
+  );
+}
 
 function percentile(sorted, share) {
   if (sorted.length === 0) return 0;
@@ -199,7 +206,7 @@ function send(keepalive = false) {
     load,
     page: kind,
     label: control.label,
-    blur: control.blur,
+    blur: blurEnabled,
     masks: control.masks,
     frames,
     moves,
@@ -233,6 +240,13 @@ function flushTimings(keepalive) {
   send(keepalive);
   lastFrame = undefined;
   lastMove = undefined;
+}
+
+function startRun(blur) {
+  flushTimings();
+  shown = "";
+  runStart = performance.now();
+  blurEnabled = blur;
 }
 
 const styles = {
@@ -282,18 +296,21 @@ async function follow() {
     const isReloading = seenReload !== undefined && next.reload > seenReload;
     if (isChangingPage || isReloading) {
       flushTimings(true);
-      if (isChangingPage) location.assign(next.path);
-      else location.reload();
+      if (isChangingPage) {
+        const target = new URL(next.path, location.href);
+        const effects = new URLSearchParams(location.search).get("effects");
+        if (effects !== null) target.searchParams.set("effects", effects);
+        location.assign(target.href);
+      } else location.reload();
       return;
     }
+    const nextBlur = hasBlur(next);
     if (
       next.label !== control.label ||
-      next.blur !== control.blur ||
+      nextBlur !== blurEnabled ||
       next.masks !== control.masks
     ) {
-      flushTimings();
-      shown = "";
-      runStart = performance.now();
+      startRun(nextBlur);
     }
     control = next;
     turnOff("blur", !control.blur);
@@ -306,6 +323,12 @@ async function follow() {
     isFollowing = false;
   }
 }
+
+// The system's reduced transparency can change between control polls.
+new MutationObserver(() => {
+  const blur = hasBlur(control);
+  if (blur !== blurEnabled) startRun(blur);
+}).observe(document.documentElement, { attributeFilter: ["data-effects"] });
 
 void follow();
 setInterval(() => {

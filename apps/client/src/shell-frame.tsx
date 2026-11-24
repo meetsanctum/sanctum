@@ -150,7 +150,7 @@ export function ShellFrame(props: {
                   } as CSSProperties)
                 : undefined
             }
-            className="sidebar-float outline-none duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] data-open:animate-in data-open:slide-in-from-left-[264px] data-closed:animate-out data-closed:slide-out-to-left-[264px] data-instant:data-closed:animate-none motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
+            className="sidebar-float frosted outline-none duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] data-open:animate-in data-open:slide-in-from-left-[264px] data-closed:animate-out data-closed:slide-out-to-left-[264px] data-instant:data-closed:animate-none motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
           >
             <DialogPrimitive.Title className="sr-only">
               Sidebar

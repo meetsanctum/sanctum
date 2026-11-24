@@ -278,18 +278,16 @@ describe("the frame's backing under the glass in the built CSS", () => {
   });
 });
 
-// The declarations for `selector` outside any media query, in the order the
-// build wrote them, from the rules under `supports`, by default none, and
-// outside starting styles unless requested.
 // Reduce effects (src/effects.ts): the frosted glass's one blur, gone where
 // <html> says data-effects="reduced", where floating glass is denser.
 describe("Reduce effects in the built CSS", () => {
   const reduced = ":where([data-effects=reduced],[data-effects=reduced] *)";
 
   it("blurs frosted glass, and doesn't under Reduce effects or on an app's page", () => {
+    const blur = "blur(24px)var(--frosted-extra-filter,)";
     expect(declarationsOf(".frosted")).toEqual([
-      ["-webkit-backdrop-filter", "blur(24px)"],
-      ["backdrop-filter", "blur(24px)"],
+      ["-webkit-backdrop-filter", blur],
+      ["backdrop-filter", blur],
     ]);
     expect(css).toContain(
       `.frosted${reduced}{-webkit-backdrop-filter:none;backdrop-filter:none}`,
@@ -315,17 +313,19 @@ describe("Reduce effects in the built CSS", () => {
   it("makes the floating sidebar solid, in a place's deepened background", () => {
     expect(declarationsOf("[data-effects=reduced] .sidebar-float")).toEqual([
       ["background", "var(--float-solid,var(--card))"],
-      ["-webkit-backdrop-filter", "none"],
-      ["backdrop-filter", "none"],
     ]);
     // A place's glass over it, else the mode's card as glass.
-    const background = declarationsOf(".sidebar-float").find(
-      ([property]) => property === "background",
-    );
-    expect(background?.[1]).toMatch(/^var\(--float-glass,/);
+    const sidebar = new Map(declarationsOf(".sidebar-float"));
+    expect(sidebar.get("background")).toMatch(/^var\(--float-glass,/);
+    expect(sidebar.get("--frosted-extra-filter")).toBe("saturate(1.4)");
+    expect(sidebar.has("backdrop-filter")).toBe(false);
+    expect(sidebar.has("-webkit-backdrop-filter")).toBe(false);
   });
 });
 
+// The declarations for `selector` outside any media query, in the order the
+// build wrote them, from the rules under `supports`, by default none, and
+// outside starting styles unless requested.
 function declarationsOf(
   selector: string,
   supports = "",
@@ -345,7 +345,7 @@ function declarationsOf(
         return [
           declaration.slice(0, colon).trim(),
           normalise(declaration.slice(colon + 1)),
-        ];
+        ] as const;
       }),
     );
 }
