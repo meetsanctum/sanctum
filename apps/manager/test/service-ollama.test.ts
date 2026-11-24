@@ -33,10 +33,10 @@ const app = "sanctum.example";
 const other = "sanctum.example-two";
 const folder = "0.1.0+1a2b3c4d5e6f7a8b";
 const gib = 1024 ** 3;
-const olderImage = "ollama/ollama:0.40.15";
+const olderImage = "ollama/ollama:0.40.16";
 
 async function startOlderOllama(docker: FakeDocker) {
-  docker.load(olderImage, { title: "ollama", version: "0.40.15" });
+  docker.load(olderImage, { title: "ollama", version: "0.40.16" });
   await ensureNetwork(docker, sanctumNetworkName);
   const { id } = await docker.createContainer(
     serviceContainerOptions("ollama", {
@@ -69,7 +69,7 @@ async function home(
   docker.load(nodeImage, { title: "node", version: "24" });
   docker.publish(mosquittoImage, { title: "mosquitto", version: "2.1.2" });
   docker.publish(zigbee2mqttImage, { title: "zigbee2mqtt", version: "2.14.2" });
-  docker.publish(ollamaImage, { title: "ollama", version: "0.40.16" });
+  docker.publish(ollamaImage, { title: "ollama", version: "0.40.18" });
   const dataDir = await mkdtemp(join(tmpdir(), "sanctum-ollama-"));
   for (const [id, asked] of Object.entries(permissions)) {
     const staged = join(dataDir, "packages", id, folder);

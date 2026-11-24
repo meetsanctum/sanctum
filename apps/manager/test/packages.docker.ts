@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { nodeImage } from "../src/apps/containers.js";
+import { ollamaImage } from "../src/services/ollama.js";
 import type { PackagesState } from "../src/update/packages.js";
 import { realStack } from "./real-stack.js";
 
@@ -149,6 +150,17 @@ describe("the apps' packages on real images", () => {
   // The host is claimed once, by whichever test needs a client first.
   let token: string | undefined;
   const signedIn = async () => (token ??= await claim());
+  const call = async (path: string, body?: object) => {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: body ? "POST" : "GET",
+      headers: {
+        authorization: `Bearer ${await signedIn()}`,
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: response.status, body: await response.json() };
+  };
 
   beforeAll(async () => {
     await build("apps/core/Dockerfile", coreImage);
@@ -317,19 +329,6 @@ describe("the apps' packages on real images", () => {
   });
 
   it("answers through the apps' own copies of the SDK, their refusals included", async () => {
-    const token = await signedIn();
-    const call = async (path: string, body?: object) => {
-      const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-        method: body ? "POST" : "GET",
-        headers: {
-          authorization: `Bearer ${token}`,
-          ...(body ? { "content-type": "application/json" } : {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      return { status: response.status, body: await response.json() };
-    };
-
     // Zigbee waits for Zigbee2MQTT, which has no stick here.
     const states = await waitFor("every app to have started", async () => {
       const { body } = await call("/api/apps");
@@ -360,6 +359,26 @@ describe("the apps' packages on real images", () => {
     );
     expect(refused.status).toBe(404);
   });
+
+  it("starts the pinned Ollama image, which has no models yet", async () => {
+    // The image is gigabytes, downloaded while the test waits: it took nearly
+    // four minutes on a home connection.
+    await vi.waitFor(
+      async () => {
+        expect(await api("GET", "/api/services/ollama")).toMatchObject({
+          status: 200,
+          body: { service: { state: "running", image: ollamaImage } },
+        });
+        expect(
+          await call("/api/apps/sanctum.ollama/actions/ollama.status", {}),
+        ).toMatchObject({
+          status: 200,
+          body: { isAnswering: true, models: [] },
+        });
+      },
+      { timeout: 480_000, interval: 1_000 },
+    );
+  }, 540_000);
 
   it("runs each app through its socket in the container the manager makes", async () => {
     // The test plays the core's end of each app's socket now.

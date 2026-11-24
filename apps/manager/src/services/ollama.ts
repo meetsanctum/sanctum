@@ -11,7 +11,7 @@ import { stacked } from "../stack.js";
 // reaches it on a network shared only with Ollama (apps/service-networks.ts).
 // Ollama downloads models over the `sanctum` network.
 
-export const ollamaImage = "ollama/ollama:0.40.16";
+export const ollamaImage = "ollama/ollama:0.40.18";
 const port = 11434;
 export const ollamaUrl = `http://${stacked("sanctum-ollama")}:${port}`;
 export const ollamaData = stacked("sanctum-ollama-data");
