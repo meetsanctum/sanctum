@@ -3,8 +3,10 @@ import { memo, useId, useMemo } from "react";
 
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
+import { DaysLineChart, type DaysLineChartProps } from "./days-line";
 import { plotClass, Readout, useWidth } from "./frame";
-import { scaleFraction, scaleOf, type ChartScale } from "./scale";
+import { LineGridLabels, LineGridMarks } from "./line-grid";
+import { scaleOf, yOn, type ChartScale } from "./scale";
 import { dayMs, hourMs, timeText } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
@@ -78,16 +80,7 @@ const LineMarks = memo(function LineMarks(props: {
   });
   return (
     <>
-      {scale?.lines.map((value) => (
-        <rect
-          key={value}
-          x={0}
-          y={gridYOn(scale, height, value) - 0.5}
-          width={plot}
-          height={1}
-          className={page ? "fill-foreground/12" : "fill-white/12"}
-        />
-      ))}
+      <LineGridMarks scale={scale} height={height} page={page} plot={plot} />
       <g
         className={cn(
           page ? "stroke-foreground/85" : "stroke-white/85",
@@ -117,22 +110,6 @@ const LineMarks = memo(function LineMarks(props: {
     </>
   );
 });
-
-// Where a value in the unit shown sits, from the top, kept within the scale.
-function yOn(scale: ChartScale | null, height: number, shownValue: number) {
-  return scale
-    ? height -
-        scaleFraction(
-          scale,
-          Math.min(scale.max, Math.max(scale.min, shownValue)),
-        ) *
-          height
-    : height / 2;
-}
-
-// A gridline's middle, on a pixel's so it is sharp at 1×.
-const gridYOn = (scale: ChartScale | null, height: number, value: number) =>
-  Math.round(yOn(scale, height, value)) + 0.5;
 
 // The nearest reading within [at - half a slot, at + half a slot).
 function nearest(points: readonly LinePoint[], at: number) {
@@ -189,8 +166,21 @@ export type LineChartProps = {
   width?: number;
 };
 
-/** A day as a line, with its gridlines, hours and a cursor. */
-export function LineChart(props: LineChartProps) {
+export type DayLineChartProps = LineChartProps;
+
+type LineChartInput = (LineChartProps & { mode?: never }) | DaysLineChartProps;
+
+/** A day as a line, or days as lines, with their gridlines, times and a cursor. */
+export function LineChart(props: LineChartInput) {
+  return props.mode === "days" ? (
+    <DaysLineChart {...props} />
+  ) : (
+    <DayLineChart {...props} />
+  );
+}
+
+// A day as a line, with its gridlines, hours and a cursor.
+function DayLineChart(props: LineChartProps) {
   const { runs, now, format, height, time = timeText } = props;
   const page = props.tone === "page";
   const { box, width } = useWidth(props.width);
@@ -321,19 +311,12 @@ export function LineChart(props: LineChartProps) {
           />
         )}
       </div>
-      {scale?.lines.map((value) => (
-        <span
-          key={value}
-          aria-hidden="true"
-          style={{ top: gridYOn(scale, height, value) }}
-          className={cn(
-            "absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] tabular-nums",
-            label,
-          )}
-        >
-          {format.grid(value)}
-        </span>
-      ))}
+      <LineGridLabels
+        scale={scale}
+        height={height}
+        page={page}
+        format={format}
+      />
       {props.hours !== false && (
         <TimeTicks
           from={from}

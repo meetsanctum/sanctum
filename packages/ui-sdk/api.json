@@ -1,5 +1,5 @@
 {
-  "version": "0.1.26",
+  "version": "0.1.27",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -109,13 +109,16 @@
       "DayBandChartProps",
       "DayBandMarks",
       "DayBandMarksProps",
+      "DayLineChartProps",
       "DayStripChart",
       "DayStripChartProps",
       "DayTimeAxis",
       "DayTimeAxisProps",
+      "DaysLineChartProps",
       "LineChart",
       "LineChartProps",
       "LinePoint",
+      "LineSeries",
       "StripMark",
       "StripSpan",
       "WeekColumn",
@@ -2380,16 +2383,43 @@
       "};",
       "export declare function DayBandChart<Span extends BandSpan>(props: DayBandChartProps<Span>): import(\"react\").JSX.Element;"
     ],
+    "charts/days-line.d.ts": [
+      "import type { ChartFormat } from \"./line\";",
+      "import { type ChartScale } from \"./scale\";",
+      "export type LineSeries = {",
+      "    key: string;",
+      "    name: string;",
+      "    values: readonly (number | null)[];",
+      "};",
+      "export type DaysLineChartProps = {",
+      "    mode: \"days\";",
+      "    days: readonly number[];",
+      "    series: readonly [] | readonly [LineSeries] | readonly [LineSeries, LineSeries] | readonly [LineSeries, LineSeries, LineSeries];",
+      "    format: ChartFormat;",
+      "    name: string;",
+      "    height: number;",
+      "    scale?: ChartScale;",
+      "    label?: string;",
+      "    unknown?: string;",
+      "    today?: string;",
+      "    date?: (start: number) => string;",
+      "    width?: number;",
+      "    tone?: \"glass\" | \"page\";",
+      "};",
+      "export declare function DaysLineChart(props: DaysLineChartProps): import(\"react\").JSX.Element;"
+    ],
     "charts/index.d.ts": [
       "export { DayBandChart, DayBandMarks, type BandLevel, type BandSpan, type DayBandChartProps, type DayBandMarksProps, } from \"./band\";",
       "export { DayTimeAxis, type DayTimeAxisProps } from \"./axis\";",
       "export { DayStripChart, type DayStripChartProps, type StripMark, type StripSpan, } from \"./strip\";",
-      "export { LineChart, type ChartFormat, type LineChartProps, type LinePoint, } from \"./line\";",
+      "export { LineChart, type ChartFormat, type DayLineChartProps, type LineChartProps, type LinePoint, } from \"./line\";",
+      "export type { DaysLineChartProps, LineSeries } from \"./days-line\";",
       "export type { ChartScale } from \"./scale\";",
       "export { WeekColumnsChart, type WeekColumn, type WeekColumnsChartProps, } from \"./week-columns\";",
       "export { WeekRangeChart, type WeekRange, type WeekRangeChartProps, type WeekRangeFormat, } from \"./week-ranges\";"
     ],
     "charts/line.d.ts": [
+      "import { type DaysLineChartProps } from \"./days-line\";",
       "import { type ChartScale } from \"./scale\";",
       "export type LinePoint = {",
       "    at: number;",
@@ -2421,7 +2451,12 @@
       "    time?: (at: number) => string;",
       "    width?: number;",
       "};",
-      "export declare function LineChart(props: LineChartProps): import(\"react\").JSX.Element;"
+      "export type DayLineChartProps = LineChartProps;",
+      "type LineChartInput = (LineChartProps & {",
+      "    mode?: never;",
+      "}) | DaysLineChartProps;",
+      "export declare function LineChart(props: LineChartInput): import(\"react\").JSX.Element;",
+      "export {};"
     ],
     "charts/scale.d.ts": [
       "export type ChartScale = {",
@@ -2430,7 +2465,9 @@
       "    lines: number[];",
       "};",
       "export declare function scaleOf(min: number, max: number): ChartScale;",
-      "export declare function scaleFraction({ min, max }: ChartScale, value: number): number;"
+      "export declare function scaleFraction({ min, max }: ChartScale, value: number): number;",
+      "export declare function yOn(scale: ChartScale | null, height: number, shownValue: number): number;",
+      "export declare const gridYOn: (scale: ChartScale | null, height: number, value: number) => number;"
     ],
     "charts/strip.d.ts": [
       "export type StripMark = \"unknown\" | \"off\" | {",

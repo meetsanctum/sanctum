@@ -52,3 +52,26 @@ export function scaleFraction({ min, max }: ChartScale, value: number) {
     ? (value - min) / span
     : (value / 2 - min / 2) / (max / 2 - min / 2);
 }
+
+// Where a value in the unit shown sits, from the top, kept within the scale.
+export function yOn(
+  scale: ChartScale | null,
+  height: number,
+  shownValue: number,
+) {
+  return scale
+    ? height -
+        scaleFraction(
+          scale,
+          Math.min(scale.max, Math.max(scale.min, shownValue)),
+        ) *
+          height
+    : height / 2;
+}
+
+// A gridline's middle, on a pixel's so it is sharp at 1×.
+export const gridYOn = (
+  scale: ChartScale | null,
+  height: number,
+  value: number,
+) => Math.round(yOn(scale, height, value)) + 0.5;

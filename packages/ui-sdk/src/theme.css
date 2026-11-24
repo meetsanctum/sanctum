@@ -107,6 +107,12 @@
   --blossom-text: var(--blossom-on-white);
   --iris-text: var(--iris-on-white);
   --graphite-text: var(--graphite-on-white);
+  /* A chart's lines where it has several, in their order: neither blue,
+     which is for what can be pressed, nor orange or red, which say what
+     doesn't fit. */
+  --series-1: #1baf7a;
+  --series-2: #6250d6;
+  --series-3: #e87ba4;
 }
 
 [data-mode="evening"] {
@@ -125,6 +131,9 @@
   --blossom-text: var(--blossom-on-carbon);
   --iris-text: var(--iris-on-carbon);
   --graphite-text: var(--graphite-on-carbon);
+  --series-1: #199e70;
+  --series-2: #9085e9;
+  --series-3: #d55181;
 }
 
 :root,
