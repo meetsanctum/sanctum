@@ -1,5 +1,5 @@
 {
-  "version": "0.1.24",
+  "version": "0.1.25",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -94,6 +94,7 @@
       "useAppClient",
       "useAppSettings",
       "usePhone",
+      "useReducedEffects",
       "useShowFailed",
       "useTemperatureUnit",
       "whiteOf",
@@ -2808,6 +2809,7 @@
       "export * from \"./page-bar\";",
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
+      "export * from \"./reduce-effects\";",
       "export * from \"./section-button\";",
       "export * from \"./section-tile\";",
       "export * from \"./segmented-control\";",
@@ -2945,6 +2947,9 @@
       "export declare function capturePresses(bridge: Pick<CoreBridge, \"json\" | \"live\">, device: string, listener: PressCaptureListener, app?: string): {",
       "    stop(): Promise<void>;",
       "};"
+    ],
+    "reduce-effects.d.ts": [
+      "export declare function useReducedEffects(): boolean;"
     ],
     "section-button.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",

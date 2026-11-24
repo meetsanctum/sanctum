@@ -89,6 +89,31 @@ describe("a row's edge fade", () => {
     expect(second!.style.maskImage).toBe("");
   });
 
+  it("cuts hard under Reduce effects, and fades again once it is off", async () => {
+    await act(async () => root.render(<Row />));
+    const row = container.firstElementChild as HTMLElement;
+    const [first] = [...row.children] as HTMLElement[];
+    layOut(row, 0, 412);
+    row.dispatchEvent(new Event("scroll"));
+    expect(first!.style.maskImage).not.toBe("");
+
+    try {
+      await act(async () => {
+        document.documentElement.dataset.effects = "reduced";
+      });
+      expect(first!.style.maskImage).toBe("");
+      row.dispatchEvent(new Event("scroll"));
+      expect(first!.style.maskImage).toBe("");
+    } finally {
+      await act(async () => {
+        delete document.documentElement.dataset.effects;
+      });
+    }
+    expect(first!.style.maskImage).toBe(
+      "linear-gradient(to right, black 0px, black 276px, transparent 300px)",
+    );
+  });
+
   it("follows a row when it appears and a tile when it is added and resizes", async () => {
     const observed = new Set<Element>();
     let resize: (tile: Element) => void = () => {};

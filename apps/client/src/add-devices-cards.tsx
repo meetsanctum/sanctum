@@ -86,11 +86,11 @@ type Tone = "neutral" | "success" | "error";
 
 const tones: Record<Tone, string> = {
   neutral:
-    "from-white/12 to-white/6 shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)]",
+    "from-white/12 to-white/6 shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)]",
   success:
-    "from-(--leaf)/20 to-(--leaf)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(52_199_89/0.42),0_16px_40px_rgb(0_0_0/0.24)]",
+    "from-(--leaf)/20 to-(--leaf)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(52_199_89/0.42),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(52_199_89/0.42)]",
   error:
-    "from-(--ruby)/20 to-(--ruby)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(255_59_48/0.45),0_16px_40px_rgb(0_0_0/0.24)]",
+    "from-(--ruby)/20 to-(--ruby)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(255_59_48/0.45),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(255_59_48/0.45)]",
 };
 
 const rounds: Record<Tone, string> = {

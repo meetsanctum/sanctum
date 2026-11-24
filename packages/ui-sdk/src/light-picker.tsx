@@ -455,7 +455,7 @@ function Middle(props: {
     >
       <Pencil
         aria-hidden="true"
-        className="size-7 drop-shadow-[0_1px_4px_rgb(0_0_0/0.65)]"
+        className="size-7 drop-shadow-[0_1px_4px_rgb(0_0_0/0.65)] reduce-effects:drop-shadow-none"
       />
     </button>
   );

@@ -207,6 +207,21 @@ body {
   mask-image: none;
 }
 
+/* Under Reduce effects a hard cut instead, with no mask or gradient: the band
+   is solid down to the page's top edge, so what scrolls under the top bar
+   ends there. */
+[data-effects="reduced"] .top-fade {
+  inset: 0 0 auto;
+  height: var(--page-top);
+  mask-image: none;
+}
+
+[data-effects="reduced"] .panel[data-flat] .top-fade {
+  inset: 0 0 auto;
+  height: var(--page-top);
+  background: var(--background);
+}
+
 /* The band follows the page from beside it, so it needs timeline-scope as
    well, which came a version after scroll timelines in Chromium. */
 @supports not ((animation-timeline: scroll()) and (timeline-scope: --page)) {

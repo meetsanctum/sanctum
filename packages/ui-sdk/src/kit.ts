@@ -13,6 +13,7 @@ export * from "./light-picker";
 export * from "./page-bar";
 export * from "./page-section";
 export * from "./presses";
+export * from "./reduce-effects";
 export * from "./section-button";
 export * from "./section-tile";
 export * from "./segmented-control";

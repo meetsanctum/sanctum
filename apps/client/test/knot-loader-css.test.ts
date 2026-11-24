@@ -348,9 +348,36 @@ describe("Reduce effects in the built CSS", () => {
     );
   });
 
+  it("draws nothing of the screen behind an open overlay", () => {
+    expect(
+      css.match(
+        /\[data-effects=reduced\] \.home-screen\[data-covered\]>:is\(([^)]*)\)\{visibility:hidden\}/,
+      )?.[1],
+    ).toBe(".frame,.frame-top,.sidebar-column,.panel");
+  });
+
+  it("cuts the top fade hard, down to the page's top edge", () => {
+    // The minifier orders a rule's declarations its own way.
+    const sorted = (selector: string) => declarationsOf(selector).sort();
+    expect(sorted("[data-effects=reduced] .top-fade")).toEqual([
+      ["-webkit-mask-image", "none"],
+      ["height", "var(--page-top)"],
+      ["inset", "0 0 auto"],
+      ["mask-image", "none"],
+    ]);
+    expect(
+      sorted("[data-effects=reduced] .panel[data-flat] .top-fade"),
+    ).toEqual([
+      ["background", "var(--background)"],
+      ["height", "var(--page-top)"],
+      ["inset", "0 0 auto"],
+    ]);
+  });
+
   it("makes the floating sidebar solid, in a place's deepened background", () => {
     expect(declarationsOf("[data-effects=reduced] .sidebar-float")).toEqual([
       ["background", "var(--float-solid,var(--card))"],
+      ["box-shadow", "inset 0 0 0 1px var(--hairline)"],
     ]);
     // A place's glass over it, else the mode's card as glass.
     const sidebar = new Map(declarationsOf(".sidebar-float"));

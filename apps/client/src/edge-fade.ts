@@ -1,3 +1,4 @@
+import { useReducedEffects } from "@meetsanctum/ui-sdk";
 import { useLayoutEffect, useRef, type RefObject } from "react";
 
 // A row that scrolls sideways fades its tiles out over 24 px at an edge
@@ -9,7 +10,8 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 // time, and the row's and its tiles' sizes and which tiles it has, and go
 // once the row fits. A row is followed from when it appears until it goes,
 // not set up again on each render, which on a slow tablet measured every
-// tile each time the home changed.
+// tile each time the home changed. Under Reduce effects a row has no fade,
+// and its tiles end in a hard cut at its edge.
 
 const fade = 24;
 
@@ -17,16 +19,23 @@ export function useEdgeFade(
   ref: RefObject<HTMLElement | null>,
   { focusWhenScrollable = false } = {},
 ) {
-  const followed = useRef<{ row: HTMLElement; stop: () => void } | null>(null);
-  // Each render only checks the row is still the one followed: a row can
-  // appear, go or be replaced as what it shows changes.
-  // focusWhenScrollable is read when the hook starts following a row.
+  const reduced = useReducedEffects();
+  const followed = useRef<{
+    row: HTMLElement;
+    reduced: boolean;
+    stop: () => void;
+  } | null>(null);
+  // Each render only checks the row is still the one followed, with the
+  // same effects: a row can appear, go or be replaced as what it shows
+  // changes. focusWhenScrollable is read when the hook starts following.
   useLayoutEffect(() => {
     const row = ref.current;
-    if (followed.current?.row === row) return;
+    if (followed.current?.row === row && followed.current.reduced === reduced) {
+      return;
+    }
     followed.current?.stop();
     followed.current = row
-      ? { row, stop: follow(row, focusWhenScrollable) }
+      ? { row, reduced, stop: follow(row, focusWhenScrollable, !reduced) }
       : null;
   });
   useLayoutEffect(
@@ -38,7 +47,11 @@ export function useEdgeFade(
   );
 }
 
-function follow(row: HTMLElement, focusWhenScrollable: boolean) {
+function follow(
+  row: HTMLElement,
+  focusWhenScrollable: boolean,
+  fades: boolean,
+) {
   let frame = 0;
   const paint = () => {
     frame = 0;
@@ -57,7 +70,7 @@ function follow(row: HTMLElement, focusWhenScrollable: boolean) {
     for (const tile of row.children) {
       if (!(tile instanceof HTMLElement)) continue;
       let mask = "";
-      if (before || after) {
+      if (fades && (before || after)) {
         const at = tile.getBoundingClientRect();
         const start = box.left - at.left;
         const end = box.right - at.left;

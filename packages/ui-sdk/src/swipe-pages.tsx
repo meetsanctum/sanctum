@@ -47,7 +47,7 @@ export type SwipePage = {
 const pageScroll = cn(
   "h-full",
   "[&>[data-slot=scroll-area-viewport]>div]:flex! [&>[data-slot=scroll-area-viewport]>div]:min-h-full",
-  "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_40px,black_calc(100%-40px),transparent)]",
+  "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_40px,black_calc(100%-40px),transparent)] reduce-effects:[&>[data-slot=scroll-area-viewport]]:[mask-image:none]",
 );
 
 type Swipe = {
@@ -250,7 +250,7 @@ export function SwipePages(props: {
         className={cn(
           "min-h-0 flex-1 overflow-hidden [touch-action:pan-y]",
           pages.length > 1 &&
-            "[mask-image:linear-gradient(to_right,transparent,black_40px,black_calc(100%-40px),transparent)]",
+            "[mask-image:linear-gradient(to_right,transparent,black_40px,black_calc(100%-40px),transparent)] reduce-effects:[mask-image:none]",
         )}
       >
         {/* The pages share one cell, the room above the tabs, each moved
@@ -298,7 +298,7 @@ export function SwipePages(props: {
       {pages.length > 1 && (
         <div
           ref={tabRow}
-          className="relative shrink-0 overflow-x-auto pt-2 pb-[calc(24px+env(safe-area-inset-bottom))] [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative shrink-0 overflow-x-auto pt-2 pb-[calc(24px+env(safe-area-inset-bottom))] [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)] reduce-effects:[mask-image:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <div
             role="tablist"
