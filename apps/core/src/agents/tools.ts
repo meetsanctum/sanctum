@@ -43,7 +43,7 @@ type AgentToolsOptions = {
     name: (appId: string) => string | undefined;
     action: (appId: string, actionId: string) => DeclaredAction | undefined;
     call: (request: {
-      principal: Caller;
+      caller: Caller;
       appId: string;
       actionId: string;
       input: unknown;
@@ -201,7 +201,7 @@ export function createAgentTools(options: AgentToolsOptions) {
       try {
         return answer(
           await apps.call({
-            principal: agent,
+            caller: agent,
             appId: offer.app,
             actionId: offer.id,
             input: input ?? {},

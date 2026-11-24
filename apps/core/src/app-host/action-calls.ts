@@ -122,12 +122,12 @@ export function createActionCalls(options: {
     // Runs one action for who is behind a request, a client's principal or
     // an AI agent: the gate admits the caller as an actor first.
     async call(request: {
-      principal: Caller;
+      caller: Caller;
       appId: string;
       actionId: string;
       input: unknown;
     }): Promise<unknown> {
-      const caller = request.principal;
+      const { caller } = request;
       const { entry, action } = find(request.appId, request.actionId);
       const who = isAgentCaller(caller)
         ? options.agentWho(caller.id)

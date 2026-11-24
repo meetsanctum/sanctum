@@ -211,6 +211,8 @@ describe("an agent", () => {
       throw new Error("Expected an agent principal");
     }
     const caller = agentOf(principal);
+    // An agent's principal and the agent built from it run as the same actor.
+    expect(core.gate.admit(principal, { tier: "write" })).toEqual(caller.actor);
     const actor = core.gate.admit(caller, { tier: "write" });
 
     await post(core, "/api/auth/clients/revoke", { id: client.id }, maya);
@@ -237,7 +239,7 @@ describe("an agent", () => {
     await expect.poll(() => core.apps.isRunning(app.id)).toBe(false);
 
     const call = core.apps.call({
-      principal: core.auth.clients.authenticate(token)!,
+      caller: core.auth.clients.authenticate(token)!,
       appId: app.id,
       actionId: "sample.note",
       input: { text: "Tidy the office" },
@@ -471,13 +473,13 @@ describe("the activity log", () => {
     });
 
     await core.apps.call({
-      principal: core.auth.clients.authenticate(token)!,
+      caller: core.auth.clients.authenticate(token)!,
       appId: samplePackage.app.id,
       actionId: "sample.note",
       input: { text: "Tidy the office" },
     });
     await core.apps.call({
-      principal: core.auth.clients.authenticate(token)!,
+      caller: core.auth.clients.authenticate(token)!,
       appId: samplePackage.app.id,
       actionId: "sample.note",
       input: { text: "Water the plants" },

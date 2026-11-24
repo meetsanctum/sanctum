@@ -128,7 +128,7 @@ type Principal = NonNullable<
 
 function run(core: TestCore, principal: Principal, actionId: string) {
   return core.apps.call({
-    principal,
+    caller: principal,
     appId: "sanctum.example",
     actionId,
     input: {},
