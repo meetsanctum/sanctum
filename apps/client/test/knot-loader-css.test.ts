@@ -361,14 +361,14 @@ describe("Reduce effects in the built CSS", () => {
     const sorted = (selector: string) => declarationsOf(selector).sort();
     expect(sorted("[data-effects=reduced] .top-fade")).toEqual([
       ["-webkit-mask-image", "none"],
-      ["height", "var(--page-top)"],
-      ["inset", "0 0 auto"],
+      ["clip-path", "inset(0 0 calc(100% - var(--page-top))0)"],
       ["mask-image", "none"],
     ]);
     expect(
       sorted("[data-effects=reduced] .panel[data-flat] .top-fade"),
     ).toEqual([
       ["background", "var(--background)"],
+      ["clip-path", "none"],
       ["height", "var(--page-top)"],
       ["inset", "0 0 auto"],
     ]);
