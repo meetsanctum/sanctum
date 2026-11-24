@@ -52,6 +52,35 @@ export const appIconSchema = z.object({
 });
 export type AppIcon = z.infer<typeof appIconSchema>;
 
+// WCAG's relative luminance of a #rrggbb colour.
+function luminance(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((at) => {
+    const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+const hexColor = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, "use a colour such as #0a5c7a");
+
+/**
+ * The colours of the page the shell draws for an app without a page of its
+ * own, from its bottom left to its top right. The app's name stands in white
+ * on the first, so it must be dark enough for white text to read at 4.5:1.
+ */
+export const appBackdropSchema = z.strictObject({
+  from: hexColor.refine(
+    (hex) => 1.05 / (luminance(hex) + 0.05) >= 4.5,
+    "use a colour dark enough for white text, at 4.5:1 or more",
+  ),
+  to: hexColor,
+});
+export type AppBackdrop = z.infer<typeof appBackdropSchema>;
+
 /**
  * The version of the app API this core serves, which a manifest's `core`
  * range must include for the core to run the app. It moves on its own,
@@ -98,6 +127,9 @@ export const appManifestSchema = z.object({
   // core applies it.
   migrations: packageFolder.optional(),
   icon: appIconSchema.optional(),
+  // Its own colours, such as its brand's, for the page the shell draws when
+  // it brings none; without them that page takes its icon's colour.
+  backdrop: appBackdropSchema.optional(),
   // The pages its UI brings, by name. The app overview lists an app that has
   // a `main` page and opens it there.
   pages: z

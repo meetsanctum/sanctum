@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "core": "^2.0.0",
   "protocol": 22,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -96,6 +96,10 @@
   "icon": {
     "glyph": "cpu",
     "color": "graphite"
+  },
+  "backdrop": {
+    "from": "#0A5C7A",
+    "to": "#18BCF2"
   },
   "pages": [],
   "settings": null,

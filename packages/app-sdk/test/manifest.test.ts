@@ -93,6 +93,23 @@ describe("an app's static manifest", () => {
     });
   });
 
+  it("has the colours it names for the page the shell draws", () => {
+    const backdrop = { from: "#0A5C7A", to: "#18BCF2" };
+    expect(toStaticManifest(defineApp(lamp({ backdrop })))).toMatchObject({
+      backdrop,
+    });
+    expect(toStaticManifest(defineApp(lamp()))).not.toHaveProperty("backdrop");
+  });
+
+  it("refuses colours that aren't #rrggbb, or too light under white text", () => {
+    expect(() =>
+      defineApp(lamp({ backdrop: { from: "teal", to: "#18BCF2" } })),
+    ).toThrow(/#0a5c7a/);
+    expect(() =>
+      defineApp(lamp({ backdrop: { from: "#18BCF2", to: "#0A5C7A" } })),
+    ).toThrow(/dark enough for white text/);
+  });
+
   it("names the driver hooks a driver has", () => {
     const manifest = toStaticManifest(
       defineApp(

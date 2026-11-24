@@ -43,10 +43,12 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
   return defineApp({
     id: "sanctum.apple-home-devices",
     name: "Apple Home Devices",
-    version: "0.1.0",
+    version: "0.1.1",
     core: "^2.0.0",
     summary: "Brings your Apple TVs and HomePods into your home.",
     icon: { glyph: "tv", color: "graphite" },
+    // Amber, as Apple's Home app.
+    backdrop: { from: "#B45309", to: "#FFB340" },
     permissions: [
       {
         id: "devices.register",

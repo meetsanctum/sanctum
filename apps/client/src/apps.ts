@@ -36,5 +36,13 @@ export function hostedApps(
 export const hasPage = (app: HostedApp | undefined, page: string) =>
   !!app?.info.pages.includes(page);
 
-/** Whether the app overview opens the app's own page: it has a main page. */
-export const opens = (app: HostedApp) => hasPage(app, mainPage);
+/**
+ * Whether the shell draws the app's main page, the default page, since the
+ * version it runs brings none of its own.
+ */
+export const hasDefaultPage = (app: HostedApp | undefined) =>
+  !!app && !app.info.pages.includes(mainPage);
+
+/** Whether a page can be shown: the app's own, or the shell's default. */
+export const showsPage = (app: HostedApp | undefined, page: string) =>
+  hasPage(app, page) || (page === mainPage && hasDefaultPage(app));

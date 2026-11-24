@@ -228,6 +228,13 @@ describe("Settings' pages", () => {
     await openFromOverview("Settings");
     await openArea("Devices");
     await openFromOverview("Moods");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Moods settings"]',
+        )!
+        .click(),
+    );
     expect(pageTitle()).toBe("Moods Settings");
 
     await act(async () =>
@@ -277,12 +284,23 @@ describe("an app's preferences", () => {
     expect(pageTitle()).toBe("Apps");
   });
 
-  it("are the page Apps opens for an app without one of its own, over Apps, so Done returns there", async () => {
+  it("open over the default page Apps shows for an app without one of its own, and Done returns there", async () => {
     await openFromOverview("Moods");
+    // The shell's own page: the app's name and version, no settings yet.
+    expect(pageTitle()).toBe("Moods");
+    expect(container.querySelector("main")?.textContent).toContain(
+      `Version ${moods.version}`,
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Moods settings"]',
+        )!
+        .click(),
+    );
     expect(pageTitle()).toBe("Moods Settings");
-    expect(backShown()).toBe(false);
     await done();
-    expect(pageTitle()).toBe("Apps");
+    expect(pageTitle()).toBe("Moods");
   });
 
   it("open from the same button at the end of the bar on every app page, never on Sanctum's own", async () => {
@@ -364,19 +382,28 @@ describe("the home's installed apps", () => {
     expect(pageTitle()).toBe("Kitchen");
   });
 
-  it.each([
-    { name: "app", apps: [moods] },
-    { name: "page", apps: [moods, { ...weather, pages: [] }] },
-  ])("returns home when the current $name disappears", async ({ apps }) => {
+  it("returns home when the current app disappears", async () => {
     homeData.installed = [moods, weather];
     await refresh();
     await openFromOverview("Weather");
     expect(pageTitle()).toBe("Weather");
-    homeData.installed = apps;
+    homeData.installed = [moods];
     await refresh();
     expect(pageTitle()).toBe("Home");
     expect(container.querySelector("header")?.textContent).toBe("Home");
     expect(backShown()).toBe(false);
+  });
+
+  it("shows the default page when the app's own main page disappears", async () => {
+    homeData.installed = [moods, weather];
+    await refresh();
+    await openFromOverview("Weather");
+    homeData.installed = [moods, { ...weather, pages: [] }];
+    await refresh();
+    expect(pageTitle()).toBe("Weather");
+    expect(container.querySelector("main")?.textContent).toContain(
+      `Version ${weather.version}`,
+    );
   });
 
   it("ignores an older app list that arrives after a newer refresh", async () => {
@@ -765,11 +792,11 @@ describe("the pinned apps", () => {
     expect(tile("Apps").getAttribute("aria-current")).toBeNull();
   });
 
-  it("mark an app without a page of its own while its settings are on show", async () => {
+  it("mark an app without a page of its own while its default page is on show", async () => {
     homeData.pins = ["sanctum.settings", "sanctum.moods"];
     await refresh();
     await press(tile("Moods"));
-    expect(pageTitle()).toBe("Moods Settings");
+    expect(pageTitle()).toBe("Moods");
     expect(tile("Moods").getAttribute("aria-current")).toBe("page");
     expect(tile("Settings").getAttribute("aria-current")).toBeNull();
     expect(tile("Apps").getAttribute("aria-current")).toBeNull();

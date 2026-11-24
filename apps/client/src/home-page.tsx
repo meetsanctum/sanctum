@@ -2,6 +2,7 @@ import type { AppInfo, DashboardInfo } from "@meetsanctum/app-sdk";
 import type { Me } from "@meetsanctum/auth-protocol";
 import {
   Button,
+  mainPage,
   type createLiveFeed,
   type PageParams,
   type Tile,
@@ -9,8 +10,9 @@ import {
 import { Component, Suspense, useEffect, type ReactNode } from "react";
 
 import { AppNotice, WhileNotRunning } from "./app-state";
-import type { HostedApp, Route } from "./apps";
+import { hasDefaultPage, type HostedApp, type Route } from "./apps";
 import { AppsPage, appsPage, type ListedApp } from "./apps-page";
+import { DefaultAppPage } from "./default-app-page";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
 import { EditHome } from "./edit-home";
@@ -32,6 +34,7 @@ import type { useSettingsNavigation } from "./settings-navigation";
 import { SetupGuide, SetupLeft } from "./setup-guide";
 import {
   automationsApp,
+  devicesSettingsPage,
   maintenanceSettingsPage,
   settingsApp,
   statusSettingsPage,
@@ -241,6 +244,22 @@ function HomePageWithDevices({
             back={back}
           />
         )
+      ) : route &&
+        routeApp &&
+        isAppPage &&
+        route.page === mainPage &&
+        hasDefaultPage(routeApp) ? (
+        <DefaultAppPage
+          app={routeApp.info}
+          deviceCount={
+            devices.devices.filter(
+              (device) => device.driver === routeApp.info.id,
+            ).length
+          }
+          openDevices={() => opener(settingsApp.id)(devicesSettingsPage)}
+          openSettings={settingsOf(route.app)}
+          openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+        />
       ) : route && routeApp && isAppPage ? (
         <>
           {/* Its top bar keeps the page's way out, and the gear. */}

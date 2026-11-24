@@ -10,6 +10,7 @@ import {
   appManifestSchema,
   defaultData,
   defaultMemory,
+  type AppBackdrop,
   type AppIcon,
 } from "./app-manifest.js";
 import type { AppContext } from "./context.js";
@@ -285,6 +286,8 @@ export type AppInfo = {
   /** The oldest version of its pages that work with it, if any don't. */
   oldestPage?: string;
   icon: AppIcon | null;
+  /** Its own colours for the page the shell draws when it brings none. */
+  backdrop?: AppBackdrop;
   pages: string[];
   /**
    * What the core lets it do now, its grants among what it asks for, which
@@ -493,6 +496,7 @@ export function toStaticManifest(app: AppDefinition) {
       : null,
     permissions: app.permissions.map(permissionInfo),
     icon: app.icon ?? null,
+    ...(app.backdrop ? { backdrop: app.backdrop } : {}),
     pages: [...(app.pages ?? [])],
     settings: app.settings ? settingsSchemaOf(app.settings) : null,
     actions: app.actions.map((action) => ({

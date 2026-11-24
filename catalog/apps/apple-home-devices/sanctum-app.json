@@ -1,7 +1,7 @@
 {
   "id": "sanctum.apple-home-devices",
   "name": "Apple Home Devices",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "core": "^2.0.0",
   "protocol": 22,
   "summary": "Brings your Apple TVs and HomePods into your home.",
@@ -108,6 +108,10 @@
   "icon": {
     "glyph": "tv",
     "color": "graphite"
+  },
+  "backdrop": {
+    "from": "#B45309",
+    "to": "#FFB340"
   },
   "pages": [],
   "settings": null,
