@@ -597,6 +597,24 @@ describe("connected", () => {
     await first.core.start();
     expect(first.core.problems.get(box.key)?.id).toBe("pairingLost");
   });
+
+  it("connects other TVs when a startup pairing problem cannot be reported", async () => {
+    const missing = livingRoom();
+    const kept = gym();
+    const { core } = await homeWith([missing, kept], (ctx) => {
+      vi.spyOn(ctx.devices, "problem").mockRejectedValueOnce(
+        new ActionError("not_found", "The device no longer exists"),
+      );
+    });
+    await added(core, missing);
+    await added(core, kept);
+    await core.stop();
+    core.secrets.delete(`box:${missing.key}`);
+
+    await core.start();
+    await core.discovered({ found: kept.sightings(), lost: [] });
+    await core.until(() => kept.links.length === 1, "connected again");
+  });
 });
 
 describe("a lost pairing", () => {
@@ -605,12 +623,15 @@ describe("a lost pairing", () => {
     const { core } = await home(box);
     await added(core, box);
     const kept = core.secrets.get(`box:${box.key}`);
+    const before = box.connects;
     box.forget();
+    expect(core.problems.has(box.key)).toBe(false);
     await core.until(
       () => core.problems.get(box.key)?.id === "pairingLost",
       "lost",
     );
     const tries = box.connects;
+    expect(tries).toBe(before + 1);
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(box.connects).toBe(tries);
 

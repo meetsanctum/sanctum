@@ -54,8 +54,8 @@ export interface Link {
   readonly volume: BoxVolume;
   /** Something it says changed: its power or its volume. */
   on(event: "change", listener: () => void): this;
-  /** It closed, by either side; the error says why where there is one. */
-  on(event: "close", listener: (error?: Error) => void): this;
+  /** Either side closed the connection. */
+  on(event: "close", listener: () => void): this;
   wake(): Promise<void>;
   sleep(): Promise<void>;
   volumeUp(): Promise<void>;

@@ -191,16 +191,11 @@ export function createConnection(options: ConnectionOptions) {
     opened.on("change", () => {
       if (link === opened) say();
     });
-    opened.on("close", (error) => {
+    opened.on("close", () => {
       if (link !== opened) return;
       link = null;
       if (stopped) return;
-      if (error instanceof PairingLost) {
-        lost = true;
-        news.lost();
-      } else {
-        later();
-      }
+      later();
       goingOffline();
     });
     news.online(true);

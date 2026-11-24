@@ -253,10 +253,14 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         });
         box.connection.start(keys?.companion ?? null);
         if (!keys) {
-          await ctx.devices.problem({
-            key: device.key,
-            problem: "pairingLost",
-          });
+          try {
+            await ctx.devices.problem({
+              key: device.key,
+              problem: "pairingLost",
+            });
+          } catch (error) {
+            logFailure("Couldn't report lost pairing for " + box.name, error);
+          }
         }
       }
       loading = false;

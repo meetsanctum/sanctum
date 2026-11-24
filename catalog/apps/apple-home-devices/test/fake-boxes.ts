@@ -118,7 +118,7 @@ export class FakeBox {
   /** Forgets every key it gave, as after removing Sanctum on the TV. */
   forget() {
     for (const each of this.known.values()) each.clear();
-    for (const link of [...this.links]) link.drop(new PairingLost("forgot"));
+    this.dropAll();
   }
 
   /** Drops every connection to it, as when the network goes. */
@@ -213,11 +213,11 @@ export class FakeLink extends EventEmitter implements Link {
     if (!this.closed) this.emit("change");
   }
 
-  drop(error?: Error) {
+  drop() {
     if (this.closed) return;
     this.closed = true;
     this.box.links.splice(this.box.links.indexOf(this), 1);
-    this.emit("close", error);
+    this.emit("close");
   }
 
   private async press(what: string) {

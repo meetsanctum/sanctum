@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import {
   CodeExpired,
   NotAllowed,
@@ -55,6 +57,13 @@ export type PairingOptions = {
 export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
   const retryMs = options.retryMs ?? 1_000;
   const open = new Map<string, Open>();
+  const shutdown = new AbortController();
+
+  function keep(key: string, next: Open) {
+    if (shutdown.signal.aborted) next.pairing.close();
+    shutdown.signal.throwIfAborted();
+    open.set(key, next);
+  }
 
   function close(key: string) {
     open.get(key)?.pairing.close();
@@ -74,11 +83,13 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
   // A new Companion code. Right after one expires the box may still be
   // closing it, so a failure is tried once more after a moment.
   async function companionPairing(box: Endpoint) {
+    shutdown.signal.throwIfAborted();
     try {
       return await boxes.pairCompanion(box);
     } catch (error) {
       if (error instanceof NotAllowed) throw error;
-      await new Promise((resolve) => setTimeout(resolve, retryMs));
+      await delay(retryMs, undefined, { signal: shutdown.signal });
+      shutdown.signal.throwIfAborted();
       return boxes.pairCompanion(box);
     }
   }
@@ -86,7 +97,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
   async function begin(key: string, box: Endpoint, attempt: string) {
     try {
       const pairing = await boxes.pairAirPlay(box);
-      open.set(key, { attempt, step: "airplay", pairing });
+      keep(key, { attempt, step: "airplay", pairing });
       return { asks: [airplayCode] };
     } catch (error) {
       return refusalOf(error);
@@ -112,7 +123,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
     }
     try {
       const pairing = await companionPairing(box);
-      open.set(key, {
+      keep(key, {
         attempt: now.attempt,
         step: "companion",
         pairing,
@@ -149,7 +160,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       // asked for at once.
       try {
         const pairing = await companionPairing(box);
-        open.set(key, { ...now, pairing, endpoint: box });
+        keep(key, { ...now, pairing, endpoint: box });
         return {
           asks: [companionCode],
           refused: { question: companionCode, refusal },
@@ -159,6 +170,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       }
     }
     open.delete(key);
+    shutdown.signal.throwIfAborted();
     await done({ airplay: now.airplay, companion: keys }, now.endpoint);
     return undefined;
   }
@@ -171,6 +183,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       { attempt, answers, again }: PairingStep,
       done: Paired,
     ): Promise<PairingAnswer> {
+      shutdown.signal.throwIfAborted();
       // The core names an attempt for every flow that asks once started.
       if (attempt === undefined) throw new Error("Pairing needs an attempt");
       const now = open.get(key);
@@ -185,7 +198,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
         now.pairing.close();
         try {
           const pairing = await companionPairing(box);
-          open.set(key, { ...now, pairing, endpoint: box });
+          keep(key, { ...now, pairing, endpoint: box });
           return { asks: [companionCode] };
         } catch (error) {
           open.delete(key);
@@ -212,6 +225,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
 
     /** Closes every pairing still open, as the app stops. */
     closeAll() {
+      shutdown.abort();
       for (const key of [...open.keys()]) close(key);
     },
   };
