@@ -3,6 +3,7 @@ import type {
   DashboardInfo,
   EntityInfo,
   LiveMessage,
+  Places,
 } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -80,6 +81,19 @@ export const homeData = {
   pins: [] as string[],
 };
 
+export function placesSnapshot(): Places {
+  return {
+    home: {
+      name: "Our home",
+      timeZone: "UTC",
+      temperatureUnit: "celsius",
+    },
+    rooms: homeData.rooms,
+    floors: [],
+    zones: [],
+  };
+}
+
 function renderHome() {
   root.render(
     <Home
@@ -137,16 +151,7 @@ beforeEach(async () => {
       case "/api/apps/sanctum.natural-light/actions/naturalLight.preview":
         return null;
       case "/api/places":
-        return {
-          home: {
-            name: "Our home",
-            timeZone: "UTC",
-            temperatureUnit: "celsius",
-          },
-          rooms: homeData.rooms,
-          floors: [],
-          zones: [],
-        };
+        return placesSnapshot();
       default:
         throw new Error(`Unexpected request: ${path}`);
     }

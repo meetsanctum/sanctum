@@ -14,6 +14,7 @@ import {
   container,
   homeData,
   mockCoreJson,
+  placesSnapshot,
   publishCoreStatus,
   pushLive,
   refresh,
@@ -446,6 +447,18 @@ describe("apps' widgets", () => {
     expect(shown.parentElement).toBe(
       container.querySelector("main")?.lastElementChild,
     );
+
+    const places = placesSnapshot();
+    await act(async () =>
+      pushLive({
+        type: "places",
+        places: {
+          ...places,
+          home: { ...places.home, temperatureUnit: "fahrenheit" },
+        },
+      }),
+    );
+    expect(cardOnHome()?.textContent).toBe("Weather47°No forecast yet.");
 
     await act(async () =>
       pushLive({

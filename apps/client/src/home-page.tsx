@@ -16,6 +16,7 @@ import { dashboardBackground, type OnHome } from "./dashboards";
 import { EditHome } from "./edit-home";
 import { AppFrame } from "./frames/app-frame";
 import { HomeRooms } from "./home-dashboard";
+import { useHomeDevices } from "./home-devices";
 import { HomeWidgets, type ShownCard } from "./home-widgets";
 import { lazyPage } from "./lazy-page";
 import {
@@ -36,7 +37,6 @@ import {
   statusSettingsPage,
 } from "./system-apps";
 import type { SystemStatus } from "./system-status";
-import type { Devices } from "./use-devices";
 
 // The system apps load the first time one opens, so Home has less to load
 // and run, and in idle time once Home has its devices, so opening one need
@@ -61,46 +61,7 @@ export function usePreloadSystemPages(ready: boolean) {
   }, [ready]);
 }
 
-export function HomePage({
-  route,
-  routeDepth,
-  routeApp,
-  isAppPage,
-  openedByItsApp,
-  back,
-  opener,
-  setRoutes,
-  settingsOf,
-  settings,
-  listed,
-  appsWaiting,
-  installed,
-  pins,
-  changePins,
-  appChanged,
-  appAdded,
-  devices,
-  live,
-  ask,
-  core,
-  shownStatus,
-  statusFailed,
-  setUpdateRunning,
-  me,
-  dashboard,
-  dashboards,
-  home,
-  isEditingHome,
-  showDashboard,
-  setEditingHome,
-  openDevice,
-  openRoomDevice,
-  sectionEntities,
-  widgetCards,
-  hostUrl,
-  deviceMode,
-  isVeiled,
-}: {
+type HomePageProps = {
   route: Route | undefined;
   routeDepth: number;
   routeApp: HostedApp | undefined;
@@ -118,7 +79,6 @@ export function HomePage({
   changePins: (next: string[]) => Promise<unknown>;
   appChanged: (app: AppInfo) => void;
   appAdded: (app: AppInfo) => void;
-  devices: Devices;
   live: ReturnType<typeof createLiveFeed>;
   ask: (app: string, permissions: readonly string[]) => Promise<boolean>;
   core: CoreStatus;
@@ -139,24 +99,71 @@ export function HomePage({
   hostUrl: string;
   deviceMode: "day" | "evening";
   isVeiled: boolean;
-}) {
-  const onDashboard = routeDepth === 0;
-  const routeKey = `${routeDepth}:${JSON.stringify(route)}`;
+};
+
+export function HomePage(props: HomePageProps) {
+  const { route, routeDepth, dashboard, isEditingHome } = props;
   return (
     <Suspense fallback={null}>
-      {onDashboard && dashboard && (
+      {routeDepth === 0 && dashboard && (
         <h1 className="sr-only">
           {isEditingHome ? `Edit ${dashboard.name}` : dashboard.name}
         </h1>
       )}
       {route?.app === appsPage ? (
         <AppsPage
-          apps={listed}
-          starting={appsWaiting && installed.length === 0}
-          pins={pins}
-          onPins={(next) => void changePins(next).catch(() => undefined)}
+          apps={props.listed}
+          starting={props.appsWaiting && props.installed.length === 0}
+          pins={props.pins}
+          onPins={(next) => void props.changePins(next).catch(() => undefined)}
         />
-      ) : route?.app === automationsApp.id ? (
+      ) : (
+        <HomePageWithDevices {...props} />
+      )}
+    </Suspense>
+  );
+}
+
+function HomePageWithDevices({
+  route,
+  routeDepth,
+  routeApp,
+  isAppPage,
+  openedByItsApp,
+  back,
+  opener,
+  setRoutes,
+  settingsOf,
+  settings,
+  installed,
+  appChanged,
+  appAdded,
+  live,
+  ask,
+  core,
+  shownStatus,
+  statusFailed,
+  setUpdateRunning,
+  me,
+  dashboards,
+  home,
+  isEditingHome,
+  showDashboard,
+  setEditingHome,
+  openDevice,
+  openRoomDevice,
+  sectionEntities,
+  widgetCards,
+  hostUrl,
+  deviceMode,
+  isVeiled,
+}: HomePageProps) {
+  const devices = useHomeDevices();
+  const onDashboard = routeDepth === 0;
+  const routeKey = `${routeDepth}:${JSON.stringify(route)}`;
+  return (
+    <>
+      {route?.app === automationsApp.id ? (
         <SystemPageBoundary key={routeKey} name="Automations">
           <AutomationsPage
             page={route.page}
@@ -352,7 +359,7 @@ export function HomePage({
           </>
         ))
       )}
-    </Suspense>
+    </>
   );
 }
 
