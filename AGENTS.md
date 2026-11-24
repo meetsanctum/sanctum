@@ -109,9 +109,10 @@ What is under which licence, and what neither covers, is in
   loop before finishing the turn, unless the user asks to keep them running.
   `pnpm dev:stop` stops a worktree's stack, and `pnpm dev:down` removes it.
 - Before presenting a concept that involves UI or UX elements, run it and its
-  mockups through a review against Apple's Human Interface Guidelines (the
-  `apple-design-guidelines` skill, where it's installed) and fix what the
-  review finds.
+  mockups through a review against Apple's
+  [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
+  (the `apple-design-guidelines` skill, where it's installed) and fix what the
+  review finds. The UI Guidelines below win where the two disagree.
 
 ## UI Guidelines
 
