@@ -92,13 +92,11 @@ export function createRequests(options: {
   // The request of each device, running or about to.
   const runs = new Map<string, Run>();
 
-  function invalidateHistory() {
+  // The Assistant or the core stops: its requests end, and every window
+  // goes, including what a request still waiting would have added.
+  function stopRequests() {
     historyGeneration += 1;
     windows.clear();
-  }
-
-  function stopRequests() {
-    invalidateHistory();
     for (const run of runs.values()) {
       endRun(run, new ActionCallError("unavailable"));
     }
@@ -258,9 +256,6 @@ export function createRequests(options: {
       if (entry.app.id !== assistantAppId) return;
       stopRequests();
     },
-
-    /** An access switch can make an earlier tool answer or reply private. */
-    invalidateHistory,
 
     /**
      * Runs a request for whoever asked, and resolves with the Assistant's

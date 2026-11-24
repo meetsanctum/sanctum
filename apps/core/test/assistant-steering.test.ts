@@ -463,7 +463,7 @@ describe("putting back without a change", () => {
           : await ctx.ai.call("device_command", {
               device: request.text === "Turn on the lamp" ? lamp : plug,
               capability:
-                request.text === "Turn on the lamp" ? "light" : "switch",
+                request.text === "Turn on the lamp" ? "light" : "power",
               command: { on: true },
             });
       await request.reply({ text: answer.isError ? "No." : "Done." });
