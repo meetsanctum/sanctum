@@ -19,7 +19,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { Row } from "./components";
 import { useAgents } from "./agents/data";
-import { agentsTitle } from "./agents/words";
+import { agentsTitle, assistantAppsOf } from "./agents/words";
 import { useModels } from "./models/data";
 import { modelsTitle, sourceName } from "./models/words";
 import { coreJson } from "./core-fetch";
@@ -87,7 +87,7 @@ export function SettingsOverview(props: {
   const unit = useTemperatureUnit() ?? "celsius";
   const others = useOtherClients(props.live);
   const { agents } = useAgents(props.live);
-  const agentCount = agents?.length;
+  const agentCount = (agents?.length ?? 0) + assistantAppsOf(props.apps).length;
   const models = useModels(props.live).info?.sources;
   const modelInUse = models?.find((source) => source.inUse);
   const updates = props.apps.filter((app) => app.waiting).length;
@@ -156,11 +156,11 @@ export function SettingsOverview(props: {
           "agents",
           Bot,
           agentsTitle,
-          agentCount === undefined
-            ? ""
-            : agentCount === 0
+          agentCount > 0
+            ? counted(agentCount, "agent")
+            : agents
               ? "None yet"
-              : counted(agentCount, "agent"),
+              : "",
         )}
         {row(
           "ai-models",

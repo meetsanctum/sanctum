@@ -1,4 +1,8 @@
-import type { AiOfferInfo, AppInfo } from "@meetsanctum/app-sdk";
+import {
+  aiAssistantPermission,
+  type AiOfferInfo,
+  type AppInfo,
+} from "@meetsanctum/app-sdk";
 import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
@@ -21,6 +25,7 @@ import {
 
 export function AppCanUseSection(props: {
   app: AppInfo;
+  apps: readonly AppInfo[];
   live: LiveFeed;
   // Opens What AI agents can use, where the core's areas are switched.
   onOpenCanUse?: () => void;
@@ -30,7 +35,15 @@ export function AppCanUseSection(props: {
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
   const [problem, setProblem] = useState<string>();
   const offers = offersOf(canUse, props.app.id);
-  if (!canUse || !agents?.length || offers.length === 0) return null;
+  const hasAgent =
+    (agents?.length ?? 0) > 0 ||
+    // An assistant app never uses its own offers.
+    props.apps.some(
+      (app) =>
+        app.id !== props.app.id &&
+        app.permissions.includes(aiAssistantPermission),
+    );
+  if (!canUse || !hasAgent || offers.length === 0) return null;
 
   const change = async (offer: AiOfferInfo, on: boolean) => {
     setPending({ id: offer.id, on });

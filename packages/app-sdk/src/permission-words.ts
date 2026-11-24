@@ -125,13 +125,13 @@ const fixed: Record<string, PermissionWords> = {
   [modelsUsePermission]: {
     title: "Use your home's AI model",
     detail:
-      "Lets this app send what it's asked to your home's AI model and read the answers. Your home's limits apply.",
+      "Lets this app send what it's asked to your home's AI model and read the answers. Your home's limits apply",
     icon: "sparkles",
   },
   [aiAssistantPermission]: {
     title: "Act as your AI assistant",
     detail:
-      "Lets this app run actions and read information in your home, but only what Settings and each app allow for AI agents.",
+      "Lets this app run actions and read information in your home, but only what Settings and each app allow for AI agents",
     icon: "bot",
   },
 };

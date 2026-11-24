@@ -1,17 +1,22 @@
 import {
   activityReadPermission,
   aiAreas,
+  aiAssistantPermission,
   controlPermission,
   historyReadPermission,
+  pausedBy,
   peopleReadPermission,
   permissionWords,
   placesReadPermission,
   readPermission,
   type AiCanUse,
   type AiOfferInfo,
+  type AppInfo,
 } from "@meetsanctum/app-sdk";
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 
+import { isGivenUp } from "../app-state";
+import { productName } from "../brand";
 import { seenText } from "../settings-clients";
 
 // The words Settings uses for AI agents and what they can use. The core's
@@ -20,6 +25,32 @@ import { seenText } from "../settings-clients";
 
 export const agentsTitle = "AI Agents";
 export const canUseTitle = "What AI Agents Can Use";
+
+/**
+ * The apps that act as the household's AI assistant: those that hold
+ * `ai.assistant`, and one paused while it's off, which stays in its place.
+ */
+export function assistantAppsOf(apps: readonly AppInfo[]) {
+  return apps.filter(
+    (app) =>
+      app.permissions.includes(aiAssistantPermission) ||
+      (app.state === "paused" &&
+        pausedBy(app.requests, app.permissions).includes(
+          aiAssistantPermission,
+        )),
+  );
+}
+
+/** Under an assistant app's name: whose app it is. */
+export const assistantAppDetail = `${productName} app`;
+
+/** After an assistant app's name, while it isn't working. */
+export function assistantAppState(app: AppInfo) {
+  if (app.state === "paused") return "paused";
+  if (app.state === "off") return "off";
+  if (isGivenUp(app)) return "not running";
+  return null;
+}
 
 /** What each of the core's areas covers, under its title. */
 export const areaDetail: Record<string, string> = {
