@@ -1,7 +1,6 @@
 import type {
   ActionDefinition,
   AppContext,
-  AssistantRequest,
   AssistantRequestCall,
   AppDefinition,
   CoreCalls,
@@ -10,7 +9,10 @@ import type {
   StaticManifest,
   StopInfo,
 } from "@meetsanctum/app-sdk";
-import type { CallBody, DriverHook } from "@meetsanctum/app-sdk/protocol";
+import type {
+  DriverHook,
+  OutboundCallBody,
+} from "@meetsanctum/app-sdk/protocol";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 import { z } from "zod";
 
@@ -47,7 +49,7 @@ export function apartApp(
 ): AppDefinition {
   const call = (
     ctx: RequestContext,
-    body: CallBody,
+    body: OutboundCallBody,
     deadlineMs = timeoutOf(ctx),
     signal?: AbortSignal,
   ) => link.call(coreOf(ctx), ctx.actor, body, deadlineMs, signal);
@@ -107,9 +109,8 @@ export function apartApp(
           ) => {
             const asked = { text, language, clientName };
             // An older runner's schema takes no more than those.
-            const request = (
-              manifest.protocol < earlierFrom ? asked : { ...asked, earlier }
-            ) as AssistantRequest;
+            const request =
+              manifest.protocol < earlierFrom ? asked : { ...asked, earlier };
             await call(
               ctx,
               { kind: "request", request },

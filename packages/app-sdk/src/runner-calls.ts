@@ -218,10 +218,14 @@ export function createCallHost(options: {
     deadlineMs: number,
     work: (scope: Scope) => Promise<T>,
     lifetime: CallLifetime = storage.call(),
+    onTimeout?: () => void,
   ) {
     const scope = { id, call: lifetime };
     open.add(scope);
-    const timer = setTimeout(() => lifetime.end(), deadlineMs);
+    const timer = setTimeout(() => {
+      lifetime.end();
+      onTimeout?.();
+    }, deadlineMs);
     try {
       return await work(scope);
     } finally {
@@ -409,42 +413,38 @@ export function createCallHost(options: {
     { id, actor }: CallMessage,
     deadlineMs: number,
     asked: AssistantRequest,
+    steering: AbortController,
   ): Promise<Outcome> {
     const handler = app.requests;
     if (!handler) {
       return failureOf(`${appId} answers no requests`, "unavailable");
     }
     let ended = false;
-    const steering = new AbortController();
-    requestsUnderWay.set(id, steering);
-    try {
-      const outcome = await inCall(
-        id,
-        deadlineMs,
-        (scope) => {
-          const core = callsOf(() => scope);
-          const ctx = createRequestContext({ appId, actor, app, core });
-          return outcomeOf(() =>
-            handler.call(app, ctx, {
-              ...asked,
-              signal: steering.signal,
-              reply: (reply) => core.replyRequest(reply),
-            }),
-          );
+    const outcome = await inCall(
+      id,
+      deadlineMs,
+      (scope) => {
+        const core = callsOf(() => scope);
+        const ctx = createRequestContext({ appId, actor, app, core });
+        return outcomeOf(() =>
+          handler.call(app, ctx, {
+            ...asked,
+            signal: steering.signal,
+            reply: (reply) => core.replyRequest(reply),
+          }),
+        );
+      },
+      {
+        get ended() {
+          return ended;
         },
-        {
-          get ended() {
-            return ended;
-          },
-          end() {
-            ended = true;
-          },
+        end() {
+          ended = true;
         },
-      );
-      return outcome.ok ? { ok: true, value: null } : outcome;
-    } finally {
-      requestsUnderWay.delete(id);
-    }
+      },
+      () => steering.abort(),
+    );
+    return outcome.ok ? { ok: true, value: null } : outcome;
   }
 
   function driverCall(
@@ -506,7 +506,11 @@ export function createCallHost(options: {
     return failure ?? { ok: true as const };
   }
 
-  async function handle(message: CallMessage, on: number): Promise<Outcome> {
+  async function handle(
+    message: CallMessage,
+    on: number,
+    steering?: AbortController,
+  ): Promise<Outcome> {
     const { id, actor, deadlineMs, body } = message;
     if (body.kind === "start") {
       const { reason, from, update } = body;
@@ -542,7 +546,9 @@ export function createCallHost(options: {
       case "driver":
         return driverCall(message, left, body.hook, body.params);
       case "request":
-        return request(message, left, body.request);
+        if (steering!.signal.aborted)
+          return failureOf("The turn has ended", "turn_ended");
+        return request(message, left, body.request, steering!);
       case "uninstall":
         return uninstall(message, left);
       case "event":
@@ -565,8 +571,16 @@ export function createCallHost(options: {
       answer: (outcome: Outcome) => void = (outcome) =>
         options.answer(message.id, outcome),
     ) {
-      void handle(message, connection)
+      const steering =
+        message.body.kind === "request" ? new AbortController() : undefined;
+      if (steering) requestsUnderWay.set(message.id, steering);
+      void handle(message, connection, steering)
         .catch((error: unknown) => failureOf(error))
+        .finally(() => {
+          if (steering && requestsUnderWay.get(message.id) === steering) {
+            requestsUnderWay.delete(message.id);
+          }
+        })
         .then(answer);
     },
 
@@ -588,6 +602,7 @@ export function createCallHost(options: {
       open.clear();
       // Its requests end with the connection that brought them.
       for (const steering of requestsUnderWay.values()) steering.abort();
+      requestsUnderWay.clear();
       // A start the core no longer waits for finishes first, so the stop that
       // follows finds what it set going.
       if (starting && !(await within(starting, capMs))) return false;

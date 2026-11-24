@@ -24,7 +24,7 @@ export const replyTextMaxLength = 4_000;
 
 /**
  * A tool the Assistant called in an earlier exchange, with how it ended:
- * its answer, `too_long` for an answer over 4 KB, which is left out, or
+ * its answer, `too_long` for an answer left out to fit the window, or
  * `unknown` for one still running when a newer request cut the exchange off.
  */
 export type EarlierToolCall = {
@@ -68,16 +68,19 @@ export type AssistantRequestCall = AssistantRequest & {
   reply(reply: RequestReply): Promise<void>;
   /**
    * Aborts when the request ends before the handler does: a newer request
-   * from the same device took over, or the Assistant stopped. The core
-   * refuses its later calls `turn_ended`.
+   * from the same device took over, the Assistant stopped, or time ran out.
+   * The core refuses its later calls `turn_ended`.
    */
   signal: AbortSignal;
 };
 
-const toolCallSchema = z.strictObject({
+/** A tool call from the Assistant, in a live request or its history. */
+export const aiToolCallSchema = z.strictObject({
   name: z.string().min(1).max(64),
   input: z.record(z.string(), z.unknown()),
 });
+
+export const earlierToolLimit = 512;
 
 export const earlierExchangeSchema = z.strictObject({
   asked: z.string().max(requestTextMaxLength),
@@ -85,19 +88,19 @@ export const earlierExchangeSchema = z.strictObject({
   tools: z
     .array(
       z.discriminatedUnion("outcome", [
-        toolCallSchema.extend({
+        aiToolCallSchema.extend({
           outcome: z.literal("answered"),
           text: z.string(),
           isError: z.boolean(),
         }),
-        toolCallSchema.extend({
+        aiToolCallSchema.extend({
           outcome: z.literal("too_long"),
           isError: z.boolean(),
         }),
-        toolCallSchema.extend({ outcome: z.literal("unknown") }),
+        aiToolCallSchema.extend({ outcome: z.literal("unknown") }),
       ]),
     )
-    .max(512),
+    .max(earlierToolLimit),
   reply: z.string().max(replyTextMaxLength).nullable(),
   cutOff: z.boolean(),
 }) satisfies z.ZodType<EarlierExchange>;

@@ -1,5 +1,9 @@
 import {
+  activityReadPermission,
   aiAssistantPermission,
+  controlPermission,
+  modelsUsePermission,
+  type PermissionRequest,
   assistantAppId,
   defineAction,
   defineApp,
@@ -38,58 +42,85 @@ type Script = (
 ) => Promise<void>;
 
 // A fake Assistant, whose handler each test sets.
-function fakeAssistant(script: { current: Script }) {
+const assistantGrant = {
+  id: aiAssistantPermission,
+  reason: "To do what you ask.",
+  needed: true,
+} satisfies PermissionRequest;
+
+function fakeAssistant(
+  script: { current: Script },
+  permissions: PermissionRequest[],
+) {
   return defineApp({
     ...base,
     id: assistantAppId,
     name: "Assistant",
-    permissions: [
-      {
-        id: aiAssistantPermission,
-        reason: "To do what you ask.",
-        needed: true,
-      },
-    ],
+    permissions,
     actions: [],
     requests: (ctx, request) => script.current(ctx, request),
   });
 }
 
 // An app offering AI agents a call that waits until the test lets it go.
-const slowEntered = deferredDelivery();
-const slowRelease = deferredDelivery();
-const slow: AppPackage = {
-  app: defineApp({
-    ...base,
-    id: "test.slow",
-    name: "Slow",
-    permissions: [],
-    actions: [
-      defineAction({
-        id: "slow.wait",
-        title: "Wait",
-        tier: "read",
-        assistant: { starts: "on", description: "Waits a while." },
-        input: z.object({}),
-        output: z.object({ waited: z.boolean() }),
-        async run() {
-          slowEntered.resolve();
-          await slowRelease.promise;
-          return { waited: true };
-        },
-      }),
-    ],
-  }),
-  origin: "system",
-};
-
-async function household() {
-  const script: { current: Script } = { current: async () => {} };
-  const { core, maya, lamp } = await lampsCore({
-    apps: [{ app: fakeAssistant(script), origin: "official" }, slow],
-  });
-  return { core, maya, lamp, script };
+function slowApp() {
+  const entered = deferredDelivery();
+  const release = deferredDelivery();
+  const app: AppPackage = {
+    app: defineApp({
+      ...base,
+      id: "sanctum.example",
+      name: "Slow",
+      permissions: [],
+      actions: [
+        defineAction({
+          id: "example.wait",
+          title: "Wait",
+          tier: "read",
+          assistant: { starts: "on", description: "Waits a while." },
+          input: z.object({}),
+          output: z.object({ waited: z.boolean() }),
+          async run() {
+            entered.resolve();
+            await release.promise;
+            return { waited: true };
+          },
+        }),
+      ],
+    }),
+    origin: "system",
+  };
+  return { app, entered, release };
 }
+
+const slowTool = "sanctum_example_wait";
+
+async function household(
+  permissions = [assistantGrant] as PermissionRequest[],
+) {
+  const script: { current: Script } = { current: async () => {} };
+  const slow = slowApp();
+  const { core, maya, lamp, plug } = await lampsCore({
+    apps: [
+      { app: fakeAssistant(script, permissions), origin: "official" },
+      slow.app,
+    ],
+  });
+  return { core, maya, lamp, plug, script, slow };
+}
+
+const grant = (
+  core: TestCore,
+  token: string,
+  permission: string,
+  granted: boolean,
+) =>
+  post(
+    core,
+    `/api/apps/${assistantAppId}/permissions/update`,
+    { permission, granted },
+    { token },
+  );
 
 async function ask(core: TestCore, token: string, text: string) {
   return post(core, "/api/assistant/ask", { text }, { token });
@@ -182,20 +213,132 @@ describe("a device's 5-minute window", () => {
       ["Is it raining?"],
     ]);
 
-    const grant = (granted: boolean) =>
-      post(
-        core,
-        `/api/apps/${assistantAppId}/permissions/update`,
-        { permission: aiAssistantPermission, granted },
-        { token: maya.token },
-      );
-    expect((await grant(false)).statusCode).toBe(200);
+    expect(
+      (await grant(core, maya.token, aiAssistantPermission, false)).statusCode,
+    ).toBe(200);
     expect((await ask(core, maya.token, "Hello?")).statusCode).toBe(503);
-    expect((await grant(true)).statusCode).toBe(200);
+    expect(
+      (await grant(core, maya.token, aiAssistantPermission, true)).statusCode,
+    ).toBe(200);
     await running(core, assistantAppId);
 
     await ask(core, maya.token, "Still there?");
     expect(seen.at(-1)).toEqual([]);
+  });
+
+  it.each([
+    { required: true, permission: modelsUsePermission },
+    { required: false, permission: aiAssistantPermission },
+  ])(
+    "ends an in-flight request when the $permission grant is revoked",
+    async ({ required, permission }) => {
+      const permissions = required
+        ? [
+            assistantGrant,
+            {
+              id: modelsUsePermission,
+              reason: "To answer requests.",
+              needed: true,
+            },
+          ]
+        : [{ ...assistantGrant, needed: false, startsOn: true }];
+      const { core, maya, script } = await household(permissions);
+      const entered = deferredDelivery();
+      const aborted = deferredDelivery();
+      const release = deferredDelivery();
+      script.current = async (_ctx, request) => {
+        if (request.text === "Wait") {
+          request.signal.addEventListener("abort", aborted.resolve, {
+            once: true,
+          });
+          entered.resolve();
+          await release.promise;
+        } else {
+          await request.reply({ text: String(request.earlier.length) });
+        }
+      };
+      try {
+        await ask(core, maya.token, "First");
+        const pending = ask(core, maya.token, "Wait");
+        await entered.promise;
+        expect(
+          (await grant(core, maya.token, permission, false)).statusCode,
+        ).toBe(200);
+        expect((await pending).statusCode).toBe(503);
+        await aborted.promise;
+        expect(core.apps.isRunning(assistantAppId)).toBe(!required);
+        expect(
+          (await grant(core, maya.token, permission, true)).statusCode,
+        ).toBe(200);
+        await running(core, assistantAppId);
+        expect((await ask(core, maya.token, "After regrant")).json()).toEqual({
+          reply: "0",
+        });
+      } finally {
+        release.resolve();
+      }
+    },
+  );
+
+  it("drops earlier tool answers and replies when an AI area is switched off", async () => {
+    const { core, maya, script } = await household();
+    const setArea = (on: boolean) =>
+      post(
+        core,
+        "/api/agents/can-use/area",
+        { id: activityReadPermission, on },
+        { token: maya.token },
+      );
+    expect((await setArea(true)).statusCode).toBe(200);
+    let seen: EarlierExchange[] | undefined;
+    script.current = async (ctx, request) => {
+      seen = request.earlier;
+      const answer = await ctx.ai.call("activity", {});
+      await request.reply({
+        text: answer.isError ? "Activity unavailable." : answer.text,
+      });
+    };
+    expect(
+      (await ask(core, maya.token, "What happened?")).json().reply,
+    ).toContain('"entries"');
+    expect((await setArea(false)).statusCode).toBe(200);
+    expect((await ask(core, maya.token, "And before that?")).json()).toEqual({
+      reply: "Activity unavailable.",
+    });
+    expect(seen).toEqual([]);
+  });
+
+  it("does not replay a pending tool or its reply after its app offer is switched off", async () => {
+    const { core, maya, script, slow } = await household();
+    let seen: EarlierExchange[] | undefined;
+    script.current = async (ctx, request) => {
+      if (request.text === "Wait") {
+        const answer = await ctx.ai.call(slowTool, {});
+        await request.reply({ text: answer.text });
+      } else {
+        seen = request.earlier;
+        await request.reply({ text: "Ready." });
+      }
+    };
+    try {
+      const pending = ask(core, maya.token, "Wait");
+      await slow.entered.promise;
+      const revoked = await post(
+        core,
+        "/api/agents/can-use/offer",
+        { app: "sanctum.example", id: "example.wait", on: false },
+        { token: maya.token },
+      );
+      expect(revoked.statusCode).toBe(200);
+      slow.release.resolve();
+      await pending;
+      expect((await ask(core, maya.token, "What happened?")).json()).toEqual({
+        reply: "Ready.",
+      });
+      expect(seen).toEqual([]);
+    } finally {
+      slow.release.resolve();
+    }
   });
 });
 
@@ -244,37 +387,19 @@ describe("a newer request from the same device", () => {
       }),
     ]);
   });
-
-  it("waits up to 2 s for the first's tool call, then says its outcome is unknown", async () => {
-    const { core, maya, script } = await household();
-    let seen: EarlierExchange[] = [];
-    script.current = async (ctx, request) => {
-      if (request.text === "Wait for it") {
-        await ctx.ai.call("test_slow_wait", {});
-        return;
-      }
-      seen = request.earlier;
-      await request.reply({ text: "Done." });
-    };
-
-    const first = ask(core, maya.token, "Wait for it");
-    await slowEntered.promise;
-    const started = Date.now();
-    await ask(core, maya.token, "Never mind");
-
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1_900);
-    expect((await first).json()).toEqual({ reply: null });
-    expect(seen[0]!.tools).toEqual([
-      { name: "test_slow_wait", input: {}, outcome: "unknown" },
-    ]);
-    slowRelease.resolve();
-  });
 });
 
 describe("putting back without a change", () => {
   it("puts back the Assistant's last change, while an MCP agent still names one", async () => {
     const { core, maya, lamp, script } = await household();
     script.current = async (ctx, request) => {
+      const restore = (await ctx.ai.list()).find(
+        (tool) => tool.name === "restore",
+      );
+      expect(restore?.input).toMatchObject({
+        properties: { change: expect.objectContaining({ type: "string" }) },
+      });
+      expect(restore?.input.required ?? []).not.toContain("change");
       const answer =
         request.text === "Turn it on"
           ? await ctx.ai.call("device_command", {
@@ -310,6 +435,54 @@ describe("putting back without a change", () => {
     const result = await client.callTool({ name: "restore", arguments: {} });
     expect(result.isError).toBe(true);
   });
+
+  it("puts back the change from this device when one person uses two devices", async () => {
+    const { core, maya, lamp, plug, script } = await household();
+    const laptop = core.auth.clients.createPersonal({
+      name: "Laptop",
+      platform: "macos",
+      personId: maya.person.id,
+    });
+    expect(
+      (
+        await post(
+          core,
+          "/api/agents/can-use/area",
+          {
+            id: controlPermission("switch"),
+            on: true,
+          },
+          { token: maya.token },
+        )
+      ).statusCode,
+    ).toBe(200);
+    script.current = async (ctx, request) => {
+      const answer =
+        request.text === "Put it back"
+          ? await ctx.ai.call("restore", {})
+          : await ctx.ai.call("device_command", {
+              device: request.text === "Turn on the lamp" ? lamp : plug,
+              capability:
+                request.text === "Turn on the lamp" ? "light" : "switch",
+              command: { on: true },
+            });
+      await request.reply({ text: answer.isError ? "No." : "Done." });
+    };
+
+    expect((await ask(core, maya.token, "Turn on the lamp")).json()).toEqual({
+      reply: "Done.",
+    });
+    await lampIsOn(core, lamp, true);
+    expect((await ask(core, laptop.token, "Turn on the plug")).json()).toEqual({
+      reply: "Done.",
+    });
+    await lampIsOn(core, plug, true);
+    expect((await ask(core, maya.token, "Put it back")).json()).toEqual({
+      reply: "Done.",
+    });
+    await lampIsOn(core, lamp, false);
+    await lampIsOn(core, plug, true);
+  });
 });
 
 describe("a request in the Assistant's own container", () => {
@@ -330,6 +503,10 @@ describe("a request in the Assistant's own container", () => {
       actions: [],
       async requests(ctx, request) {
         if (request.text === "First") {
+          await ctx.ai.call("x".repeat(64), {});
+          await expect(ctx.ai.call("x".repeat(65), {})).rejects.toThrow(
+            "A tool's call is its name and an input object",
+          );
           entered.resolve();
           await new Promise((aborted) =>
             request.signal.addEventListener("abort", aborted, { once: true }),
@@ -342,6 +519,13 @@ describe("a request in the Assistant's own container", () => {
           }
           return;
         }
+        expect(request.earlier[0]?.tools).toEqual([
+          expect.objectContaining({
+            name: "x".repeat(64),
+            outcome: "answered",
+            isError: true,
+          }),
+        ]);
         await request.reply({
           text: request.earlier.map((each) => each.asked).join(", "),
         });

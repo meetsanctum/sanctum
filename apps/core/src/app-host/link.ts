@@ -18,7 +18,7 @@ import {
   oldestProtocolVersion,
   protocolVersion,
   type AppMessage,
-  type CallBody,
+  type OutboundCallBody,
   type CoreMessage,
   type Outcome,
 } from "@meetsanctum/app-sdk/protocol";
@@ -426,7 +426,7 @@ export function createAppLink(options: {
     call(
       core: CoreCalls,
       actor: Actor,
-      body: CallBody,
+      body: OutboundCallBody,
       deadlineMs: number,
       signal?: AbortSignal,
     ) {

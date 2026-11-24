@@ -1,7 +1,8 @@
-import type {
-  AiToolAnswer,
-  EarlierExchange,
-  EarlierToolCall,
+import {
+  earlierToolLimit,
+  type AiToolAnswer,
+  type EarlierExchange,
+  type EarlierToolCall,
 } from "@meetsanctum/app-sdk";
 
 // The 5-minute window: each device's recent requests to the Assistant, so
@@ -25,6 +26,7 @@ export const windowLimits = {
 type KeptTool = {
   name: string;
   input: Record<string, unknown>;
+  bytes: number;
   answer?: AiToolAnswer | { tooLong: true; isError: boolean };
 };
 
@@ -35,6 +37,8 @@ export type Exchange = {
   tools: KeptTool[];
   reply: string | null;
   cutOff: boolean;
+  toolBytes: number;
+  baseBytes: number;
 };
 
 type Window = {
@@ -109,7 +113,11 @@ export function createRequestWindows(options: { now?: () => Date } = {}) {
         tools: [],
         reply: null,
         cutOff: false,
+        toolBytes: 0,
+        baseBytes: 0,
       };
+      // Leave room for the enclosing array and the longer cutOff value.
+      exchange.baseBytes = sizeOf(shown(exchange)) + 2;
       if (window) {
         clearTimeout(window.timer);
         window.timer = expiring(device);
@@ -129,15 +137,59 @@ export function createRequestWindows(options: { now?: () => Date } = {}) {
 
     /** Keeps a tool call as it starts; its answer goes in as it returns. */
     tool(exchange: Exchange, name: string, input: Record<string, unknown>) {
-      const kept: KeptTool = { name, input };
+      const skip = () => {};
+      if (exchange.tools.length >= earlierToolLimit) return skip;
+      const room = windowLimits.bytes - exchange.baseBytes - exchange.toolBytes;
+      let encoded: string;
+      try {
+        encoded = JSON.stringify({
+          name,
+          input,
+          outcome: "too_long",
+          isError: false,
+        });
+      } catch {
+        // An input that cannot cross the socket cannot be replayed.
+        return skip;
+      }
+      // Reserve space for the answer stub even while the call is still running.
+      const bytes = Buffer.byteLength(encoded) + 1;
+      if (bytes > room) return skip;
+      const kept: KeptTool = {
+        name,
+        input: (JSON.parse(encoded) as EarlierToolCall).input,
+        bytes,
+      };
+      exchange.toolBytes += bytes;
       exchange.tools.push(kept);
       return (answer: AiToolAnswer | null) => {
-        const given = answer ?? refused;
-        kept.answer =
-          Buffer.byteLength(given.text) > windowLimits.answerBytes
-            ? { tooLong: true, isError: given.isError }
-            : given;
+        if (!exchange.tools.includes(kept)) return;
+        const { text, isError } = answer ?? refused;
+        kept.answer = { tooLong: true, isError };
+        if (Buffer.byteLength(text) > windowLimits.answerBytes) return;
+        const answered = { ...kept, answer: { text, isError } };
+        const answeredBytes = sizeOf(toolShown(answered)) + 1;
+        const extra = answeredBytes - bytes;
+        if (
+          exchange.baseBytes + exchange.toolBytes + extra <=
+          windowLimits.bytes
+        ) {
+          kept.answer = answered.answer;
+          kept.bytes = answeredBytes;
+          exchange.toolBytes += extra;
+        }
       };
+    },
+
+    /** Keeps the reply, making room by dropping tool entries if needed. */
+    reply(exchange: Exchange, text: string) {
+      exchange.reply = text;
+      exchange.baseBytes += sizeOf(text) - sizeOf(null);
+      while (exchange.baseBytes + exchange.toolBytes > windowLimits.bytes) {
+        const tool = exchange.tools.pop();
+        if (!tool) break;
+        exchange.toolBytes -= tool.bytes;
+      }
     },
 
     /** Drops every window: the Assistant stopped, or the core is stopping. */

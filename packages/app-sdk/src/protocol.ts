@@ -2,13 +2,9 @@ import { z } from "zod";
 
 import type { CoreCalls } from "./context.js";
 import type { CoreEvent } from "./core-events.js";
-import {
-  actionErrorCodes,
-  actorSchema,
-  startReasons,
-  stopReasons,
-} from "./index.js";
-import { assistantRequestSchema } from "./requests.js";
+import { actionErrorCodes } from "./action-errors.js";
+import { actorSchema, startReasons, stopReasons } from "./index.js";
+import { assistantRequestSchema, type AssistantRequest } from "./requests.js";
 
 // What an app's runner and the core say to each other over the Unix socket
 // between them: one JSON message a line. Both ends parse what arrives with
@@ -192,6 +188,10 @@ export const callBodySchema = z.discriminatedUnion("kind", [
 ]);
 export type CallBody = z.infer<typeof callBodySchema>;
 
+/** A call sent by the core, which also supports protocol 21 requests. */
+export type OutboundCallBody =
+  CallBody | { kind: "request"; request: Omit<AssistantRequest, "earlier"> };
+
 const callMessage = z.object({
   type: z.literal("call"),
   // Issued by the core. Whatever the app does for this call names it.
@@ -220,6 +220,9 @@ export const coreMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("end"), call: callId }),
 ]);
 export type CoreMessage = z.infer<typeof coreMessageSchema>;
+type OutboundCoreMessage =
+  | Exclude<CoreMessage, CallMessage>
+  | (Omit<CallMessage, "body"> & { body: OutboundCallBody });
 
 /** What an app's runner says to the core. */
 export const appMessageSchema = z.discriminatedUnion("type", [
@@ -258,7 +261,7 @@ export type AppMessage = z.infer<typeof appMessageSchema>;
 export class MessageTooLarge extends Error {}
 
 /** A message as a line for the socket. */
-export function encodeMessage(message: AppMessage | CoreMessage) {
+export function encodeMessage(message: AppMessage | OutboundCoreMessage) {
   const text = JSON.stringify(message);
   if (Buffer.byteLength(text) > maxMessageBytes) {
     throw new MessageTooLarge(

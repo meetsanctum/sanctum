@@ -1,4 +1,5 @@
 import {
+  aiAssistantPermission,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
@@ -303,6 +304,12 @@ export function createAppHost(options: {
   const choices = createAppChoices({
     installed,
     ...runChoices,
+    onPermission(entry, permission, granted) {
+      if (!granted && permission === aiAssistantPermission) {
+        requests.stopped(entry);
+      }
+      runChoices.onPermission(entry, permission, granted);
+    },
     ...createAppUpdateChoices({
       installed,
       updates: options.updates,
@@ -634,6 +641,7 @@ export function createAppHost(options: {
     /** Someone's request, for Sanctum's Assistant (requests.ts). */
     ask: requests.ask,
     stopRequests: requests.close,
+    invalidateRequestHistory: requests.invalidateHistory,
 
     /** One of an installed app's actions. */
     action(appId: string, actionId: string) {

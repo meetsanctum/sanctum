@@ -62,6 +62,7 @@ type ContextOptions = {
   // calls are kept for the device's next requests.
   reply?: (reply: RequestReply) => void;
   recordTool?: ToolRecorder;
+  requestClientId?: string;
 };
 
 function message(error: unknown) {
@@ -188,6 +189,7 @@ export function createAppContexts(options: {
       turn,
       reply,
       recordTool,
+      requestClientId,
     }: ContextOptions = {},
   ) {
     const appId = entry.app.id;
@@ -262,6 +264,7 @@ export function createAppContexts(options: {
       assistant: options.assistant,
       ...(reply ? { reply } : {}),
       ...(recordTool ? { recordTool } : {}),
+      ...(requestClientId === undefined ? {} : { requestClientId }),
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });

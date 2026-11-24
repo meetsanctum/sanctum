@@ -32,8 +32,8 @@ export const settleWithinMs = 2_000;
 
 type Run = {
   device: string;
-  // Aborts as a newer request takes over (`turn_ended`) or the Assistant
-  // stops (`unavailable`).
+  // Aborts when a newer request takes over, the deadline expires, or the
+  // Assistant stops.
   steering: AbortController;
   // Its turn's calls are refused from here on.
   ended: boolean;
@@ -68,6 +68,7 @@ export function createRequests(options: {
       turn: Turn;
       reply: (reply: RequestReply) => void;
       recordTool: ToolRecorder;
+      requestClientId: string;
     },
   ) => RequestContext;
   coreOf: (ctx: RequestContext) => {
@@ -87,8 +88,21 @@ export function createRequests(options: {
     homeAtOnce: 4,
   });
   const windows = createRequestWindows();
+  let historyGeneration = 0;
   // The request of each device, running or about to.
   const runs = new Map<string, Run>();
+
+  function invalidateHistory() {
+    historyGeneration += 1;
+    windows.clear();
+  }
+
+  function stopRequests() {
+    invalidateHistory();
+    for (const run of runs.values()) {
+      endRun(run, new ActionCallError("unavailable"));
+    }
+  }
 
   function canAnswer(entry: InstalledApp) {
     return (
@@ -155,10 +169,11 @@ export function createRequests(options: {
       {
         withinMs: turnLimits.turnMs,
         turn,
+        requestClientId: run.device,
         reply(answer) {
           if (answered) throw new Error("A request is answered once");
           answered = true;
-          exchange.reply = answer.text;
+          windows.reply(exchange, answer.text);
           resolveReply(answer);
         },
         recordTool(name, input) {
@@ -192,6 +207,9 @@ export function createRequests(options: {
       const error = failure?.error;
       run.finished = true;
       run.ended = true;
+      if (error instanceof TimedOut) {
+        endRun(run, new ActionCallError("turn_ended"));
+      }
       try {
         turn.end();
       } catch {
@@ -229,10 +247,7 @@ export function createRequests(options: {
      */
     close() {
       closed = true;
-      for (const run of runs.values()) {
-        endRun(run, new ActionCallError("unavailable"));
-      }
-      windows.clear();
+      stopRequests();
     },
 
     /**
@@ -241,11 +256,11 @@ export function createRequests(options: {
      */
     stopped(entry: InstalledApp) {
       if (entry.app.id !== assistantAppId) return;
-      for (const run of runs.values()) {
-        endRun(run, new ActionCallError("unavailable"));
-      }
-      windows.clear();
+      stopRequests();
     },
+
+    /** An access switch can make an earlier tool answer or reply private. */
+    invalidateHistory,
 
     /**
      * Runs a request for whoever asked, and resolves with the Assistant's
@@ -265,6 +280,7 @@ export function createRequests(options: {
       }
       const device = request.who.clientId;
       if (limiter.takeRequest(device)) throw new ActionCallError("limited");
+      const generation = historyGeneration;
 
       let release!: () => void;
       const run: Run = {
@@ -291,8 +307,13 @@ export function createRequests(options: {
         const reason: unknown = signal.reason;
         if (!(reason instanceof ActionCallError)) throw reason;
         if (reason.code !== "turn_ended") throw reason;
-        windows.begin(device, entry.runId, request.asked.text).exchange.cutOff =
-          true;
+        if (generation === historyGeneration) {
+          windows.begin(
+            device,
+            entry.runId,
+            request.asked.text,
+          ).exchange.cutOff = true;
+        }
         return null;
       };
 
@@ -309,14 +330,14 @@ export function createRequests(options: {
         if (!accepts(entry)) {
           const arrived = await options.arrives(entry, signal);
           if (signal.aborted) return steeredFirst();
-          if (
-            !arrived ||
-            installed.get(assistantAppId) !== entry ||
-            !canAnswer(entry) ||
-            !accepts(entry)
-          ) {
-            throw new ActionCallError("unavailable");
-          }
+          if (!arrived) throw new ActionCallError("unavailable");
+        }
+        if (
+          installed.get(assistantAppId) !== entry ||
+          !canAnswer(entry) ||
+          !accepts(entry)
+        ) {
+          throw new ActionCallError("unavailable");
         }
         request.checkClient();
         const { exchange, earlier } = windows.begin(

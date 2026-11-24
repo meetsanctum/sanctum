@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { earlierToolLimit } from "@meetsanctum/app-sdk";
 
 import {
   createRequestWindows,
@@ -52,7 +53,7 @@ describe("a device's request window", () => {
     });
     windows.tool(exchange, "lights", { on: true })(null);
     windows.tool(exchange, "history", {});
-    exchange.reply = "Here's the home.";
+    windows.reply(exchange, "Here's the home.");
 
     const [shown] = windows.begin("tablet", 1, "And now?").earlier;
     expect(shown).toEqual({
@@ -101,6 +102,37 @@ describe("a device's request window", () => {
     expect(Buffer.byteLength(JSON.stringify(earlier))).toBeLessThanOrEqual(
       windowLimits.bytes,
     );
+  });
+
+  it("bounds tool inputs and answers as they are recorded", () => {
+    const windows = createRequestWindows();
+    const { exchange } = windows.begin("tablet", 1, "Look around");
+    const answer = {
+      text: "x".repeat(windowLimits.answerBytes),
+      isError: false,
+    };
+    windows.tool(exchange, "large", { text: "x".repeat(windowLimits.bytes) })(
+      answer,
+    );
+    expect(exchange.tools).toHaveLength(0);
+
+    for (let call = 0; call < 20; call += 1) {
+      windows.tool(exchange, "small", { call })(answer);
+    }
+    expect(exchange.tools).toHaveLength(20);
+    const { earlier } = windows.begin("tablet", 1, "And now?");
+    expect(Buffer.byteLength(JSON.stringify(earlier))).toBeLessThanOrEqual(
+      windowLimits.bytes,
+    );
+    expect(earlier[0]?.tools.some((tool) => tool.outcome === "too_long")).toBe(
+      true,
+    );
+
+    const next = windows.begin("phone", 1, "Look around").exchange;
+    for (let call = 0; call <= earlierToolLimit; call += 1) {
+      windows.tool(next, "x", {});
+    }
+    expect(next.tools).toHaveLength(earlierToolLimit);
   });
 
   it("goes 5 minutes after the device's last request, or as the Assistant runs anew", () => {

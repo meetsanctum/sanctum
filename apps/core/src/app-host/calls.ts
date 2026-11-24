@@ -1,5 +1,6 @@
 import {
   aiAssistantPermission,
+  aiToolCallSchema,
   requestReplySchema,
   blobOf,
   ActionError,
@@ -50,12 +51,6 @@ import type { Turn } from "../models/turns.js";
 import type { NetFetch, NetHolds } from "./net.js";
 import type { Blobs } from "../blobs/blobs.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
-
-// An assistant app's call of a tool, from its untrusted socket.
-const aiToolCall = z.strictObject({
-  name: z.string().min(1).max(128),
-  input: z.record(z.string(), z.unknown()),
-});
 
 const isTurnOpener = (actor: Actor): actor is TurnOpener =>
   actor.kind === "user" || actor.kind === "client";
@@ -209,6 +204,7 @@ export function createCoreCalls(options: {
   models: { source: () => ModelSourceShown | null; turn?: Turn };
   // The tools an assistant app calls, within the turn this call opened.
   assistant: AssistantCalls;
+  requestClientId?: string;
   // How a request's reply reaches whoever asked, for the call that runs it.
   reply?: (reply: RequestReply) => void;
   // Keeps a request's tool call as it starts, and its answer, or null for a
@@ -665,7 +661,7 @@ export function createCoreCalls(options: {
       if (!options.models.turn || !isTurnOpener(actor)) {
         throw new ActionError("no_turn");
       }
-      const parsed = aiToolCall.safeParse(call);
+      const parsed = aiToolCallSchema.safeParse(call);
       if (!parsed.success) {
         throw new Error("A tool's call is its name and an input object");
       }
@@ -681,6 +677,7 @@ export function createCoreCalls(options: {
           parsed.data.name,
           parsed.data.input,
           options.ended,
+          options.requestClientId,
         );
       } catch (error) {
         answered?.(null);

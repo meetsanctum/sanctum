@@ -70,8 +70,9 @@ it("runs the Assistant's method and sends its reply without opening app storage"
   );
 });
 
-it("aborts a request's signal when the core ends its call", async () => {
-  const aborted = vi.fn();
+function startableRunner(
+  handler: NonNullable<Parameters<typeof createCallHost>[0]["app"]["requests"]>,
+) {
   const app = defineApp({
     id: assistantAppId,
     name: "Assistant",
@@ -80,12 +81,7 @@ it("aborts a request's signal when the core ends its call", async () => {
     permissions: [],
     actions: [],
     events: [],
-    async requests(_ctx, request) {
-      await new Promise((ended) =>
-        request.signal.addEventListener("abort", ended, { once: true }),
-      );
-      aborted(request.signal.aborted);
-    },
+    requests: handler,
   });
   const runner = createCallHost({
     app,
@@ -98,22 +94,20 @@ it("aborts a request's signal when the core ends its call", async () => {
     log: vi.fn(),
     answer: vi.fn(),
   });
-  const call = (id: string, body: CallBody) =>
+  const call = (id: string, body: CallBody, deadlineMs = 1_000) =>
     new Promise<Outcome>((resolve) => {
       runner.take(
         {
           type: "call",
           id,
-          deadlineMs: 1_000,
+          deadlineMs,
           actor: { kind: "client", id: "tablet" },
           body,
         },
         resolve,
       );
     });
-  await call("1.1", { kind: "start", reason: "started" });
-
-  const answered = call("1.2", {
+  const requestBody = {
     kind: "request",
     request: {
       text: "Hello",
@@ -121,11 +115,107 @@ it("aborts a request's signal when the core ends its call", async () => {
       clientName: "Tablet",
       earlier: [],
     },
-  });
-  await vi.waitFor(() => {
-    runner.end("1.2");
-    expect(aborted).toHaveBeenCalledWith(true);
-  });
+  } satisfies CallBody;
+  return {
+    runner,
+    start: () => call("1.1", { kind: "start", reason: "started" }),
+    request: (deadlineMs?: number) => call("1.2", requestBody, deadlineMs),
+  };
+}
 
+it("aborts a request's signal when the core ends its call", async () => {
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => (started = resolve));
+  const aborted = vi.fn();
+  const { runner, start, request } = startableRunner(async (_ctx, asked) => {
+    started();
+    await new Promise((ended) =>
+      asked.signal.addEventListener("abort", ended, { once: true }),
+    );
+    aborted(asked.signal.aborted);
+  });
+  await start();
+  const answered = request();
+  await entered;
+  runner.end("1.2");
   expect(await answered).toEqual({ ok: true, value: null });
+  expect(aborted).toHaveBeenCalledWith(true);
+});
+
+it("skips a request the core ends before the handler starts", async () => {
+  const handled = vi.fn();
+  const { runner, start, request } = startableRunner(handled);
+  await start();
+  const answered = request();
+  runner.end("1.2");
+  await expect(answered).resolves.toMatchObject({
+    ok: false,
+    code: "turn_ended",
+  });
+  expect(handled).not.toHaveBeenCalled();
+});
+
+it("aborts the request's signal at the runner deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    const aborted = vi.fn();
+    const { start, request } = startableRunner(async (_ctx, asked) => {
+      await new Promise((ended) =>
+        asked.signal.addEventListener("abort", ended, { once: true }),
+      );
+      aborted();
+    });
+    await start();
+    const answered = request(100);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(aborted).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(aborted).toHaveBeenCalledOnce();
+    await expect(answered).resolves.toEqual({ ok: true, value: null });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps a new request cancellable after an old request with the same id finishes", async () => {
+  let firstEntered!: () => void;
+  let secondEntered!: () => void;
+  let releaseFirst!: () => void;
+  const firstStarted = new Promise<void>((resolve) => (firstEntered = resolve));
+  const secondStarted = new Promise<void>(
+    (resolve) => (secondEntered = resolve),
+  );
+  const firstReleased = new Promise<void>(
+    (resolve) => (releaseFirst = resolve),
+  );
+  let firstSignal: AbortSignal | undefined;
+  const secondAborted = vi.fn();
+  const { runner, request, start } = startableRunner(async (_ctx, asked) => {
+    if (!firstSignal) {
+      firstSignal = asked.signal;
+      firstEntered();
+      await firstReleased;
+      return;
+    }
+    secondEntered();
+    await new Promise((ended) =>
+      asked.signal.addEventListener("abort", ended, { once: true }),
+    );
+    secondAborted();
+  });
+  await start();
+  const old = request();
+  await firstStarted;
+  expect(await runner.lost(100)).toBe(true);
+  expect(firstSignal?.aborted).toBe(true);
+  await start();
+  const current = request();
+  await secondStarted;
+  releaseFirst();
+  await old;
+
+  runner.end("1.2");
+  await new Promise((done) => setImmediate(done));
+  expect(secondAborted).toHaveBeenCalledOnce();
+  await current;
 });

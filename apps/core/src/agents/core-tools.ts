@@ -219,7 +219,7 @@ export function createCoreTools(options: CoreToolsOptions) {
         view(),
       );
       const change = options.changes.record(
-        agent.id,
+        agent,
         outcomes.flatMap(({ device, capability, change }) =>
           change ? [{ device, capability, kind: "light", ...change }] : [],
         ),
@@ -306,9 +306,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       const { kind } = capability;
       const change =
         accepted && (kind === "light" || kind === "switch")
-          ? options.changes.record(agent.id, [
-              { ...address, kind, ...accepted },
-            ])
+          ? options.changes.record(agent, [{ ...address, kind, ...accepted }])
           : null;
       return answer({
         change,
@@ -325,8 +323,8 @@ export function createCoreTools(options: CoreToolsOptions) {
   const changeId = z.string().min(1).max(64);
   const restoreInput = z.strictObject({ change: changeId });
   // An assistant app may leave the change out, for the last one it made for
-  // whoever opened its turn: a person says "put it back" after the window of
-  // its earlier exchanges has gone.
+  // this device: a person says "put it back" after the window of its earlier
+  // exchanges has gone.
   const assistantRestoreInput = z.strictObject({ change: changeId.optional() });
 
   const putBack = createRestoreCapability({
@@ -362,8 +360,8 @@ export function createCoreTools(options: CoreToolsOptions) {
       const asked = parsed.data.change;
       const change =
         asked === undefined
-          ? options.changes.last(agent.id)
-          : options.changes.find(agent.id, asked);
+          ? options.changes.last(agent)
+          : options.changes.find(agent, asked);
       if (!change) {
         return toolError(
           "change_gone",
