@@ -357,23 +357,44 @@ describe("an app's settings page", () => {
     await show(moods, opened);
     expect(button("What AI Agents Can Use")).toBeUndefined();
 
-    await show(
-      {
-        ...moods,
-        requests: [
-          ...moods.requests,
-          {
-            id: "ai.assistant",
-            reason: "To do what you ask.",
-            needed: true,
-            asked: null,
-            startsOn: false,
-          },
-        ],
+    const example: AppInfo = {
+      id: "sanctum.example",
+      name: "Example",
+      version: "1.0.0",
+      icon: null,
+      pages: [],
+      permissions: ["ai.assistant", "models.use"],
+      requests: [
+        {
+          id: "ai.assistant",
+          reason: "To do what you ask.",
+          needed: true,
+          asked: null,
+          startsOn: false,
+        },
+        {
+          id: "models.use",
+          reason: "To understand what you ask.",
+          needed: true,
+          asked: null,
+          startsOn: false,
+        },
+      ],
+      state: "running",
+      settings: null,
+      provides: {
+        entities: [],
+        widgets: [],
+        roomSections: [],
+        devicePages: [],
       },
-      opened,
-    );
+    };
+    await show(example, opened);
     expect(text()).toContain("Act as your AI assistant");
+    expect(text()).toContain("allow for AI agents. To do what you ask.");
+    expect(text()).toContain(
+      "Your home's limits apply. To understand what you ask.",
+    );
     await act(async () => button("What AI Agents Can Use").click());
     expect(opened).toHaveBeenCalledOnce();
   });

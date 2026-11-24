@@ -277,6 +277,7 @@ export function AppPage(props: {
       )}
       <AppCanUseSection
         app={app}
+        apps={props.apps}
         live={props.live}
         onOpenCanUse={props.openCanUse}
       />

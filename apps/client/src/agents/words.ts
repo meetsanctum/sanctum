@@ -4,6 +4,7 @@ import {
   aiAssistantPermission,
   controlPermission,
   historyReadPermission,
+  pausedBy,
   peopleReadPermission,
   permissionWords,
   placesReadPermission,
@@ -14,6 +15,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 
+import { isGivenUp } from "../app-state";
 import { productName } from "../brand";
 import { seenText } from "../settings-clients";
 
@@ -31,9 +33,11 @@ export const canUseTitle = "What AI Agents Can Use";
 export function assistantAppsOf(apps: readonly AppInfo[]) {
   return apps.filter(
     (app) =>
-      app.requests.some(({ id }) => id === aiAssistantPermission) &&
-      (app.permissions.includes(aiAssistantPermission) ||
-        app.state === "paused"),
+      app.permissions.includes(aiAssistantPermission) ||
+      (app.state === "paused" &&
+        pausedBy(app.requests, app.permissions).includes(
+          aiAssistantPermission,
+        )),
   );
 }
 
@@ -44,6 +48,7 @@ export const assistantAppDetail = `${productName} app`;
 export function assistantAppState(app: AppInfo) {
   if (app.state === "paused") return "paused";
   if (app.state === "off") return "off";
+  if (isGivenUp(app)) return "not running";
   return null;
 }
 
