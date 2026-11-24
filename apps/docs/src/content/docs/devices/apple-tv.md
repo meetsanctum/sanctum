@@ -6,12 +6,34 @@ sidebar:
 ---
 
 The Apple Home Devices app brings Apple TVs into Sanctum as media players.
-You can turn one on and off. The volume buttons work when the Apple TV
-reports that it can turn the volume up and down. Show it as a TV to see it
-under TVs in the Media category.
+Sanctum shows what one plays, plays and pauses it, skips and moves within
+what plays, and turns it on and off. Show it as a TV to see it under TVs in
+the Media category.
 
 Any Apple TV from the Apple TV HD on works, on the same network as Sanctum.
 HomePods are listed in **Add devices** too, but can't be added.
+
+## What Sanctum shows
+
+While the Apple TV plays something, Sanctum shows what it is, the app it
+plays in, how far along it is, and its picture where the app gives one. How
+much each app tells differs:
+
+- The TV app tells the title and gives a picture.
+- YouTube tells the title and the channel, without a picture.
+- Netflix tells only that it plays.
+
+An app doesn't take every control at every moment, and a control it doesn't
+take says it didn't work. Netflix, for one, doesn't say how far along it is,
+so there's no point in it to move to.
+
+The volume buttons work where the Apple TV passes the volume on to the TV or
+its speakers over HDMI. Where the TV's remote sets the volume by infrared,
+the Apple TV can't, and the buttons are dimmed.
+
+An Apple TV with tvOS 27 tells Sanctum when it's turned on with its own
+remote. One with tvOS 26 shows as off in Sanctum until something plays on
+it.
 
 ## Adding an Apple TV
 

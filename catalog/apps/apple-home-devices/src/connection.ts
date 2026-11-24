@@ -1,5 +1,6 @@
 import {
   PairingLost,
+  type BoxPower,
   type BoxVolume,
   type Boxes,
   type Endpoint,
@@ -36,8 +37,16 @@ export const defaultTimings: Timings = {
 /** What the connection says of the box, for the driver to pass on. */
 export type BoxNews = {
   online(online: boolean): void;
-  /** Its power, or null where it's not known, and whether it takes volume steps. */
-  state(state: { on: boolean | null; volume: BoxVolume }): void;
+  /**
+   * Its power, or null where it's not known, what the box itself says of
+   * it, whether it takes volume steps, and its media controls.
+   */
+  state(state: {
+    on: boolean | null;
+    power: BoxPower;
+    volume: BoxVolume;
+    controls: number | null;
+  }): void;
   /** It no longer knows Sanctum's keys. */
   lost(): void;
   log(message: string): void;
@@ -102,7 +111,12 @@ export function createConnection(options: ConnectionOptions) {
     if (!link) return;
     const on =
       link.power === "on" ? true : link.power === "off" ? false : assumed;
-    news.state({ on, volume: link.volume });
+    news.state({
+      on,
+      power: link.power,
+      volume: link.volume,
+      controls: link.controls,
+    });
   }
 
   function later() {
@@ -246,6 +260,11 @@ export function createConnection(options: ConnectionOptions) {
       }
       goingOffline();
       void open(endpoint);
+    },
+
+    /** What the box last said of its power elsewhere, for when this doesn't. */
+    assume(on: boolean) {
+      assumed = on;
     },
 
     /** Turns the box on or off. */
