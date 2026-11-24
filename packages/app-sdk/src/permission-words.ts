@@ -1,4 +1,8 @@
-import { activityReadPermission, historyReadPermission } from "./ai-agents.js";
+import {
+  activityReadPermission,
+  aiAssistantPermission,
+  historyReadPermission,
+} from "./ai-agents.js";
 import type { CapabilityKind } from "./devices.js";
 import { lanRange } from "./lan.js";
 import { modelsUsePermission } from "./models.js";
@@ -34,6 +38,7 @@ export const permissionIcons = [
   "tv",
   "sparkles",
   "mic",
+  "bot",
 ] as const;
 export type PermissionIcon = (typeof permissionIcons)[number];
 
@@ -122,6 +127,12 @@ const fixed: Record<string, PermissionWords> = {
     detail:
       "Lets this app send what it's asked to your home's AI model and read the answers. Your home's limits apply.",
     icon: "sparkles",
+  },
+  [aiAssistantPermission]: {
+    title: "Act as your AI assistant",
+    detail:
+      "Lets this app run actions and read information in your home, but only what Settings and each app allow for AI agents.",
+    icon: "bot",
   },
 };
 

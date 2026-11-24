@@ -12,13 +12,10 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
-import { createAgentsCanUse } from "./agents/can-use.js";
+import { assembleAgentTools, createAgentAccess } from "./agents/assembly.js";
+import type { AgentCommandLimits } from "./agents/limits.js";
+import type { AgentTools } from "./agents/tools.js";
 import { createBlobs } from "./blobs/blobs.js";
-import {
-  createAgentCommandLimiter,
-  createLimitedLog,
-  type AgentCommandLimits,
-} from "./agents/limits.js";
 import { createRemovedApps } from "./app-host/removed.js";
 import { createAddedApps } from "./app-host/added.js";
 import { createAppList } from "./app-host/app-list.js";
@@ -241,35 +238,16 @@ export async function createModules(
     space: createSpace({ manager: options.manager, record }),
     record,
   };
-  // What AI agents can use, of each installed app's and of the core's.
-  const agentsCanUse = createAgentsCanUse(db, {
-    record: activity.for("agents"),
-    apps: () => apps.offers(),
+  const agentAccess = createAgentAccess(db, {
+    activity,
+    auth,
+    apps: () => apps,
+    tools: () => agentTools,
+    commandLimits: options.agentCommandLimits,
     now,
   });
-  // The device commands AI agents send, held to a limit a minute: by the
-  // test's clock where a test moves the core's.
-  const ticks = now && (() => now().getTime());
-  const agentCommands = createAgentCommandLimiter(
-    options.agentCommandLimits,
-    ticks,
-  );
-  const logAgentLimited = createLimitedLog({
-    record: activity.for("agents"),
-    agentWho: activity.agentWho,
-    now: ticks,
-  });
-  function checkAgentCommand(agentId: string, shouldCount = true) {
-    const refusal = agentCommands.takeCommand(agentId, shouldCount);
-    if (!refusal) return;
-    logAgentLimited(agentId, refusal.limited);
-    throw new ActionCallError("limited");
-  }
-  const gate = createGate(
-    people,
-    auth.clients.isActiveAgent,
-    agentsCanUse.areaOn,
-  );
+  const { canUse: agentsCanUse, checkAgentCommand } = agentAccess;
+  const gate = createGate(people, agentAccess.isActive, agentsCanUse.areaOn);
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -525,6 +503,7 @@ export async function createModules(
     gate,
     activity,
     turns,
+    assistant: agentAccess.assistant,
     agents: agentsCanUse,
     manager: options.manager,
     people,
@@ -675,9 +654,16 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
-  activity.nameClients({
-    name: auth.clients.name,
-    agentAdder: auth.agentAdder,
+  const agentTools: AgentTools = assembleAgentTools(agentAccess, {
+    apps,
+    places,
+    devices,
+    lights,
+    entities,
+    activity,
+    activityViews,
+    history,
+    now,
   });
   // Live clients hear of a committed entry and the entries it adds to.
   activity.follow((entry) => {
@@ -748,7 +734,8 @@ export async function createModules(
     blobs,
     activityViews,
     agentsCanUse,
-    logAgentLimited,
+    agentTools,
+    logAgentLimited: agentAccess.logLimited,
     models,
     turns,
     managerAudit,

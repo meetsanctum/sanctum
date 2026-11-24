@@ -119,6 +119,8 @@ function home(
     readModel: unused,
     cancelModel: unused,
     hostResources: unused,
+    aiTools: unused,
+    callAiTool: unused,
     log() {},
   };
   return {

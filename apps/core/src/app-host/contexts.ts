@@ -33,6 +33,7 @@ import type { AppSettingsStore } from "./settings.js";
 import type { Blobs } from "../blobs/blobs.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
+import type { AssistantCalls } from "../agents/assistants.js";
 import type { Turn } from "../models/turns.js";
 
 // What each call of an app's code gets from the core: a context acting as
@@ -68,6 +69,8 @@ export function createAppContexts(options: {
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model in use, as apps see it.
   modelSource: () => ModelSourceShown | null;
+  // The tools an assistant app calls within its turns.
+  assistant: AssistantCalls;
   // What the machine Sanctum runs on has now.
   host: () => Promise<HostResources>;
   log: (message: string) => void;
@@ -224,6 +227,7 @@ export function createAppContexts(options: {
       blobs: () => (options.isInstalled(entry) ? options.blobs : undefined),
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
+      assistant: options.assistant,
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });
