@@ -161,6 +161,7 @@ test("lists what it found as what each is", () => {
     [
       ["office-air", "sensor"],
       ["desk-plug", "plug"],
+      ["den-tv", "media-player"],
     ],
   );
 });
@@ -184,7 +185,10 @@ test("adds a climate sensor with its readings, and a plug that turns on and off"
   await core.command("desk-plug", "power", "switch", { on: false });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: false });
 
-  assert.deepEqual(core.found, []);
+  assert.deepEqual(
+    core.found.map(({ key }) => key),
+    ["den-tv"],
+  );
   assert.deepEqual(core.refused, []);
 });
 
@@ -209,7 +213,10 @@ test("starts with previously added devices even when their stored type is outdat
       "online",
     );
   }
-  assert.deepEqual(core.found, []);
+  assert.deepEqual(
+    core.found.map(({ key }) => key),
+    ["den-tv"],
+  );
   await core.command("desk-plug", "power", "switch", { on: true });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: true });
 });

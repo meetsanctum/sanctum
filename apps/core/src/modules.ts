@@ -1,5 +1,7 @@
 import {
+  answersTo,
   modelsUsePermission,
+  shownQuestions,
   sunTimesSchema,
   sunType,
 } from "@meetsanctum/app-sdk";
@@ -45,6 +47,7 @@ import { createDashboards } from "./dashboards/dashboards.js";
 import type { CoreDatabase } from "./database.js";
 import { createDevices } from "./devices/devices.js";
 import { createFirmware } from "./devices/firmware.js";
+import { createAsking } from "./devices/asking.js";
 import { createProblems } from "./devices/problems.js";
 import { createFound } from "./devices/found.js";
 import {
@@ -304,6 +307,8 @@ export async function createModules(
     driverRun: (driver) => apps.driverRun(driver),
     removeFromDriver: (driver, removal, actor, hold) =>
       apps.removeDevice(driver, removal, actor, hold),
+    endAsking: (device, actor, hold) =>
+      asking.endWithin(device, "removed", actor, hold),
     onReport: (id) => firmware.reported(id),
     beforeCommand(device, capability, actor, shouldLeaveMoving) {
       if (holds.isMoving(device, capability)) {
@@ -320,6 +325,20 @@ export async function createModules(
     confirmMs: options.confirmMs,
     now,
   });
+  // Adding and repairing that ask once started: the attempts open while the
+  // person reads a code off the device.
+  const asking = createAsking({ turns: devices.turns, answersTo, now });
+  // What a driver taking calls now may ask once adding or a repair started.
+  const laterOf = (driver: string, problem?: string) => {
+    const declared = apps.drivingNow(driver)?.driver;
+    const later =
+      problem === undefined
+        ? declared?.addLater
+        : Object.hasOwn(declared?.problems ?? {}, problem)
+          ? declared!.problems![problem]!.repair?.later
+          : undefined;
+    return shownQuestions(declared, later ?? []);
+  };
   const history = createHistory(db, {
     devices,
     record: activity.for("history"),
@@ -361,9 +380,15 @@ export async function createModules(
     db,
     devices,
     drivers: {
-      repair: (driver, repair, actor, hold) =>
-        apps.repair(driver, repair, actor, hold),
+      run: (driver) =>
+        apps.isRunning(driver) ? apps.driverRun(driver) : undefined,
+      repair: (driver, repair, actor, hold, withinMs) =>
+        apps.repair(driver, repair, actor, hold, withinMs),
+      cancelRepair: (driver, cancel, actor, hold) =>
+        apps.cancelRepair(driver, cancel, actor, hold),
+      laterOf: (driver, problem) => laterOf(driver, problem),
     },
+    asking,
     record: activity.for("devices"),
   });
   // What drivers found and could add, and adding it, in its turn with
@@ -373,8 +398,13 @@ export async function createModules(
     drivers: {
       run: (driver) =>
         apps.isRunning(driver) ? apps.driverRun(driver) : undefined,
-      add: (driver, add, actor, hold) => apps.add(driver, add, actor, hold),
+      add: (driver, add, actor, hold, withinMs) =>
+        apps.add(driver, add, actor, hold, withinMs),
+      cancelAdd: (driver, cancel, actor, hold) =>
+        apps.cancelAdd(driver, cancel, actor, hold),
+      laterOf: (driver) => laterOf(driver),
     },
+    asking,
     record: activity.for("devices"),
     onChange: () => pairing.refresh(),
   });
@@ -695,6 +725,7 @@ export async function createModules(
     ["stop workflows", () => workflows.close()],
     ["stop holds", () => holds.close()],
     ["finish changes to apps", () => listTurns.settled()],
+    ["stop adding and repairing that ask", () => asking.close()],
     ["stop the app host", () => apps.close()],
     ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],

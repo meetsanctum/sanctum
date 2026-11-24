@@ -6,6 +6,8 @@ import {
   type DriverCommand,
   type DriverDevice,
   type DriverAdd,
+  type DriverCancelAdd,
+  type DriverCancelRepair,
   type DriverMove,
   type DriverDiscovery,
   type DriverRemoval,
@@ -22,8 +24,12 @@ import { deviceCommandRule, type Gate } from "./gate.js";
 // one and adding one it found. Only a driver that takes calls gets them: one
 // that is paused or stopped is unavailable for them.
 
-// Adding a device may give it its key first, then reach it again with it.
+// Adding a device may give it its key first, then reach it again with it, and
+// a step of repairing one that asks may pair with it again.
 const addWithinMs = 60_000;
+
+// Ending an attempt that asks closes what the driver opened for it.
+const cancelWithinMs = 10_000;
 
 // What a device's turn holds on to (devices/turns.ts).
 type Hold = (running: Promise<unknown>) => void;
@@ -273,7 +279,13 @@ export function createDriverCalls<Entry extends Driving>(options: {
     // Hands a driver someone's answers to add one of the devices it found,
     // with a minute to do it. A failure is logged without its words, which
     // could repeat an answer.
-    add(driverId: string, add: DriverAdd, actor: Actor, hold?: Hold) {
+    add(
+      driverId: string,
+      add: DriverAdd,
+      actor: Actor,
+      hold?: Hold,
+      withinMs = addWithinMs,
+    ) {
       return toDriver(
         driverId,
         actor,
@@ -284,13 +296,21 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.add(ctx, add);
         },
-        { quiet: true, withinMs: addWithinMs, hold },
+        { quiet: true, withinMs, hold },
       );
     },
 
     // Hands a driver someone's answers to set one of its devices right. A
-    // failure is logged without its words, which could repeat an answer.
-    repair(driverId: string, repair: DriverRepair, actor: Actor, hold?: Hold) {
+    // failure is logged without its words, which could repeat an answer. A
+    // step of a repair that asks (`withinMs` given) may take as long as
+    // adding's.
+    repair(
+      driverId: string,
+      repair: DriverRepair,
+      actor: Actor,
+      hold?: Hold,
+      withinMs?: number,
+    ) {
       return toDriver(
         driverId,
         actor,
@@ -301,7 +321,49 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.repair(ctx, repair);
         },
-        { quiet: true, hold },
+        { quiet: true, hold, ...(withinMs ? { withinMs } : {}) },
+      );
+    },
+
+    // Has a driver close what it opened for adding or repairing a device
+    // that asked, quietly, as an earlier answer could be in its words.
+    cancelAdd(
+      driverId: string,
+      cancel: DriverCancelAdd,
+      actor: Actor,
+      hold?: Hold,
+    ) {
+      return toDriver(
+        driverId,
+        actor,
+        "stop adding a device",
+        (driver, ctx) => {
+          if (!driver.cancelAdd) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.cancelAdd(ctx, cancel);
+        },
+        { quiet: true, withinMs: cancelWithinMs, hold },
+      );
+    },
+
+    cancelRepair(
+      driverId: string,
+      cancel: DriverCancelRepair,
+      actor: Actor,
+      hold?: Hold,
+    ) {
+      return toDriver(
+        driverId,
+        actor,
+        "stop repairing a device",
+        (driver, ctx) => {
+          if (!driver.cancelRepair) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.cancelRepair(ctx, cancel);
+        },
+        { quiet: true, withinMs: cancelWithinMs, hold },
       );
     },
   };

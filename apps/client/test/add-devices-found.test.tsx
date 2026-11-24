@@ -57,7 +57,12 @@ describe("Add devices, adding what drivers found", () => {
 
     expect(core.requests).toContainEqual({
       path: "/api/devices/add",
-      json: { driver: "sanctum.example", key: "kitchen", answers: {} },
+      json: {
+        driver: "sanctum.example",
+        key: "kitchen",
+        answers: {},
+        attempt: expect.any(String),
+      },
     });
     expect(changed).toHaveBeenCalledWith(added);
     // Gone from what was found, it keeps its place to be named.
@@ -135,6 +140,7 @@ describe("Add devices, adding what drivers found", () => {
           driver: "sanctum.example",
           key: "living-room",
           answers: { key: "a wrong key" },
+          attempt: expect.any(String),
         },
       },
       {
@@ -143,6 +149,7 @@ describe("Add devices, adding what drivers found", () => {
           driver: "sanctum.example",
           key: "living-room",
           answers: { key: "the right key" },
+          attempt: expect.any(String),
         },
       },
     ]);
@@ -204,6 +211,7 @@ describe("Add devices, adding what drivers found", () => {
         driver: "sanctum.example",
         key: "living-room",
         answers: { label: "new answer" },
+        attempt: expect.any(String),
       },
     });
   });
@@ -224,7 +232,12 @@ describe("Add devices, adding what drivers found", () => {
     await act(async () => named("Add Living room plug").click());
     expect(core.requests.at(-1)).toEqual({
       path: "/api/devices/add",
-      json: { driver: "sanctum.example", key: "living-room", answers: {} },
+      json: {
+        driver: "sanctum.example",
+        key: "living-room",
+        answers: {},
+        attempt: expect.any(String),
+      },
     });
     expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });

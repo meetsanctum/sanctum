@@ -28,6 +28,8 @@ const device: DeviceInfo = {
           help: null,
           placeholder: null,
           refusals: { wrongKey: "That key doesn't match." },
+          length: null,
+          lasts: null,
         },
       ],
     },
@@ -136,5 +138,74 @@ describe("Repair's dialog", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(document.querySelector("input")!.value).toBe("new answer");
     expect(submit().disabled).toBe(false);
+  });
+
+  it("asks each code once the repair has started, and ends it as the dialog closes", async () => {
+    const lost: DeviceInfo = {
+      ...device,
+      problem: {
+        id: "pairingLost",
+        words: "Its pairing was removed",
+        repair: { help: "Pair it again.", asks: [] },
+      },
+    };
+    const code = {
+      id: "first",
+      label: "Code on the TV (1 of 2)",
+      kind: "code" as const,
+      length: 4,
+      help: null,
+      placeholder: null,
+      refusals: {},
+      lasts: null,
+    };
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({
+        attempt: "a",
+        step: 1,
+        asks: [code],
+        withinMs: 180_000,
+        lastsMs: null,
+      })
+      .mockResolvedValueOnce({ repaired: { ...lost, problem: null } });
+    const sent = vi
+      .spyOn(await import("../src/core-fetch"), "coreFetch")
+      .mockResolvedValue(new Response("{}"));
+    await show(lost);
+
+    await act(async () => submit().click());
+    const button = () =>
+      [...document.querySelectorAll("button")].find(
+        (each) => each.textContent === "Continue",
+      )!;
+    expect(button().disabled).toBe(true);
+    await typeAnswer("1234");
+    await act(async () => button().click());
+
+    expect(
+      vi.mocked(coreJson).mock.calls.map(([, init]) => init!.json),
+    ).toEqual([
+      { id: lost.id, answers: {}, attempt: expect.any(String) },
+      { id: lost.id, attempt: "a", step: 1, answers: { first: "1234" } },
+    ]);
+    expect(onRepaired).toHaveBeenCalled();
+    // Repaired, nothing is left to end.
+    expect(sent).not.toHaveBeenCalled();
+
+    vi.mocked(coreJson).mockResolvedValueOnce({
+      attempt: "b",
+      step: 1,
+      asks: [code],
+      withinMs: 180_000,
+      lastsMs: null,
+    });
+    await show(lost);
+    await act(async () => submit().click());
+    await show();
+    expect(sent).toHaveBeenCalledWith("/api/devices/repair/cancel", {
+      method: "POST",
+      json: { id: lost.id, attempt: expect.any(String) },
+      keepalive: true,
+    });
   });
 });

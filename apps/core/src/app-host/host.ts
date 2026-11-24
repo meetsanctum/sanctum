@@ -635,6 +635,15 @@ export function createAppHost(options: {
       return installed.get(driverId)?.runId;
     },
 
+    // What a driver app that takes calls now declares of its driver, with
+    // the run that does, or nothing while none does (devices/asking.ts).
+    drivingNow(driverId: string) {
+      const entry = installed.get(driverId);
+      return entry && accepts(entry) && entry.manifest.driver
+        ? { run: entry.runId, driver: entry.manifest.driver }
+        : undefined;
+    },
+
     // The event bus's follower that hands running apps what happened to the
     // core's nouns, once it has committed (events-for-apps.ts).
     eventsForApps: eventsForApps.follower,

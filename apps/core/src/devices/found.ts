@@ -1,13 +1,16 @@
 import {
   answersTo,
+  attemptId,
   deviceKey,
   foundDevices,
   isDeclaredAddRefusal,
+  problemId,
   type Actor,
   type AddResult,
   type DeviceQuestion,
   type DriverAdd,
   type DriverAddResult,
+  type DriverCancelAdd,
   type FoundDevice,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
@@ -16,6 +19,7 @@ import type { ActivityAuthor, RecordActivity } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
+import type { Asker, Asking, AskingFlow } from "./asking.js";
 import type { Devices } from "./devices.js";
 import type { Hold } from "./turns.js";
 
@@ -28,16 +32,42 @@ import type { Hold } from "./turns.js";
 // driver a minute, as it may give the device its key first: it registers the
 // device, then answers. Adding one the home has gives that device back. The
 // answers reach no log, no activity entry and no live update, and a refusal
-// comes back only as one the question declares.
+// comes back only as one the question declares. Adding may ask once it has
+// started, of the questions the driver declares for it (asking.ts): each
+// answer then comes in a request of its own, naming the client's attempt.
 
 // Every client adds devices, shared ones too, as it lets them join; removing
 // one undoes it.
 export const addRule: Rule = { tier: "write" };
 
-export const addRequest = z.object({
-  driver: z.string().min(1).max(128),
-  key: deviceKey,
-  answers: z.unknown().optional(),
+const device = { driver: z.string().min(1).max(128), key: deviceKey };
+
+// Starting names the attempt where the client can answer what adding asks
+// once started; each later step names the step it answers, with the answers
+// or a question to ask again.
+export const addRequest = z.union([
+  z.strictObject({
+    ...device,
+    answers: z.unknown().optional(),
+    attempt: attemptId.optional(),
+  }),
+  z.strictObject({
+    ...device,
+    attempt: attemptId,
+    step: z.number().int().min(1).max(1_000),
+    answers: z.unknown(),
+  }),
+  z.strictObject({
+    ...device,
+    attempt: attemptId,
+    step: z.number().int().min(1).max(1_000),
+    again: z.string().regex(problemId),
+  }),
+]);
+
+export const cancelAddRequest = z.strictObject({
+  ...device,
+  attempt: attemptId,
 });
 
 export type AddDrivers = {
@@ -48,7 +78,16 @@ export type AddDrivers = {
     add: DriverAdd,
     actor: Actor,
     hold?: Hold,
+    withinMs?: number,
   ): Promise<DriverAddResult>;
+  cancelAdd(
+    driver: string,
+    cancel: DriverCancelAdd,
+    actor: Actor,
+    hold?: Hold,
+  ): Promise<void>;
+  /** What adding may ask once started, of the version taking calls now. */
+  laterOf(driver: string): DeviceQuestion[];
 };
 
 /** What the core knows of the driver that lists devices, from the version running. */
@@ -63,11 +102,12 @@ export type Lister = {
 export function createFound(options: {
   devices: Pick<Devices, "idFor" | "get" | "turns">;
   drivers: AddDrivers;
+  asking: Asking;
   record: RecordActivity;
   // What Add devices shows may have changed.
   onChange: () => void;
 }) {
-  const { devices, drivers, record } = options;
+  const { devices, drivers, record, asking } = options;
   const lists = new Map<string, { run: number; found: FoundDevice[] }>();
 
   function log(
@@ -145,49 +185,107 @@ export function createFound(options: {
       options.onChange();
     },
 
-    /** For someone the gate has let through: adds a found device with their answers. */
-    async add(
-      actor: Actor,
-      who: ActivityAuthor,
-      input: unknown,
-    ): Promise<AddResult> {
+    /**
+     * For someone the gate has let through: adds a found device with their
+     * answers, or takes the answer to what adding asked once started.
+     */
+    async add(actor: Actor, who: Asker, input: unknown): Promise<AddResult> {
       const parsed = addRequest.safeParse(input);
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
       }
-      const { driver, key } = parsed.data;
+      const request = parsed.data;
+      const { driver, key } = request;
+      if ("step" in request) {
+        const result = await asking.next(
+          { driver, key },
+          who.clientId,
+          request,
+          actor,
+        );
+        if (result === "gone") return addedOr(driver, key, "not_found");
+        return "done" in result ? (result.done as AddResult) : result;
+      }
       return devices.turns.take({ driver, key }, async (hold) => {
         // As it is once its turn comes: an add before may have added it.
         const had = devices.idFor(driver, key);
         const device = had ? devices.get(had) : null;
         if (device) return { added: device };
         const found = listed(driver, key);
-        const answers = answersTo(found.asks, parsed.data.answers ?? {});
+        const answers = answersTo(found.asks, request.answers ?? {});
         if (!answers) {
           log(found, "refused", who, "invalid_request");
           throw new ActionCallError("invalid_request");
         }
-        let result: unknown;
-        try {
-          result = await drivers.add(driver, { key, answers }, actor, hold);
-        } catch (error) {
-          const failure =
-            error instanceof ActionCallError
-              ? error
-              : new ActionCallError("app_failed");
-          log(
-            found,
-            failure.status >= 500 ? "failed" : "refused",
-            who,
-            failure.code,
-          );
-          throw failure;
-        }
+        return asking.start(
+          flowOf(found, lists.get(driver)!.run, who),
+          {
+            attempt: request.attempt,
+            client: who.clientId,
+            answers,
+            asks: found.asks,
+          },
+          actor,
+          hold,
+        ) as Promise<AddResult>;
+      });
+    },
+
+    /**
+     * Ends the client's attempt to add a found device, as its card's Cancel
+     * or its closing asks. One that added the device in the meantime gives
+     * the device.
+     */
+    async cancel(actor: Actor, who: Asker, input: unknown): Promise<AddResult> {
+      const parsed = cancelAddRequest.safeParse(input);
+      if (!parsed.success) {
+        throw new ActionCallError("invalid_request");
+      }
+      const { driver, key, attempt } = parsed.data;
+      const ended = await asking.cancel(
+        { driver, key },
+        who.clientId,
+        attempt,
+        actor,
+      );
+      return addedOr(driver, key, ended);
+    },
+  };
+
+  // The device where adding it got there in the meantime, else `otherwise`.
+  function addedOr(
+    driver: string,
+    key: string,
+    otherwise: "not_found" | AddResult,
+  ): AddResult {
+    const id = devices.idFor(driver, key);
+    const device = id ? devices.get(id) : null;
+    if (device) return { added: device };
+    if (otherwise === "not_found") throw new ActionCallError("not_found");
+    return otherwise;
+  }
+
+  // What adding a found device does for the attempt that asks once started.
+  function flowOf(
+    found: FoundDevice,
+    run: number,
+    who: ActivityAuthor,
+  ): AskingFlow<AddResult> {
+    const { driver, key } = found;
+    return {
+      driver,
+      key,
+      run,
+      later: drivers.laterOf(driver),
+      runNow: () => drivers.run(driver),
+      call: (step, actor, hold, withinMs) =>
+        drivers.add(driver, { key, ...step }, actor, hold, withinMs),
+      finish(result, answered) {
         if (result !== undefined) {
           const said = z.object({ refused: z.unknown() }).safeParse(result);
           if (
             !said.success ||
-            !isDeclaredAddRefusal(found.asks, found.refusals, said.data.refused)
+            !isDeclaredAddRefusal(answered, found.refusals, said.data.refused)
           ) {
             log(found, "failed", who, "app_failed");
             throw new ActionCallError("app_failed");
@@ -210,9 +308,26 @@ export function createFound(options: {
         }
         log({ name: added.name, id }, "ok", who);
         return { added };
-      });
-    },
-  };
+      },
+      failed(error) {
+        const failure =
+          error instanceof ActionCallError
+            ? error
+            : new ActionCallError("app_failed");
+        log(
+          found,
+          failure.status >= 500 ? "failed" : "refused",
+          who,
+          failure.code,
+        );
+        return failure;
+      },
+      standing: () => null,
+      cancel: (attempt, actor, hold) =>
+        drivers.cancelAdd(driver, { key, attempt }, actor, hold),
+      refused: (refusal) => log(found, "refused", who, refusal),
+    };
+  }
 }
 
 export type Found = ReturnType<typeof createFound>;

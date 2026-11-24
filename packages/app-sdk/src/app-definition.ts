@@ -2,6 +2,7 @@ import type { z } from "zod";
 
 import type { AppManifestFields } from "./app-manifest.js";
 import type { AppContext } from "./context.js";
+import type { DriverCancelAdd, DriverCancelRepair } from "./device-asking.js";
 import type { DevicePageDefinition } from "./device-pages.js";
 import type { DriverCommand, DriverMove } from "./devices.js";
 import type { Provides } from "./entities.js";
@@ -145,8 +146,14 @@ export interface AppDefinition extends AppManifestFields {
      * names for a device with ctx.devices.problem (device-problems.ts).
      */
     readonly problems?: Readonly<Record<string, DriverProblem>>;
-    /** What repairing one of its devices may ask, by id. */
+    /** What adding or repairing one of its devices may ask, by id. */
     readonly questions?: Readonly<Record<string, DriverQuestion>>;
+    /**
+     * What adding a device it found may ask once it has started, by id
+     * among its questions, such as a code a TV shows only once pairing
+     * begins (device-asking.ts). A driver that declares any has cancelAdd.
+     */
+    readonly addLater?: readonly string[];
     /**
      * Why it may refuse adding a device it found, whatever adding it asks,
      * by id, in the words the shell then shows with the device: "It stopped
@@ -159,6 +166,14 @@ export interface AppDefinition extends AppManifestFields {
      */
     repair?(ctx: AppContext, repair: DriverRepair): Promise<DriverRepairResult>;
     /**
+     * Ends repairing one of its devices that asked once it had started, as
+     * someone cancels, its time runs out or the device is removed: it closes
+     * whatever it opened for that attempt, such as a pairing connection, and
+     * resolves once it has. It is there exactly when a problem's repair has
+     * later questions.
+     */
+    cancelRepair?(ctx: AppContext, cancel: DriverCancelRepair): Promise<void>;
+    /**
      * What it finds on the home's network, of the services it holds
      * discover:mdns:<service> for: every sighting as it starts, then each one
      * found, changed or lost, in order (discovery.ts). It resolves once it
@@ -168,8 +183,17 @@ export interface AppDefinition extends AppManifestFields {
     /**
      * Adds one of the devices it found (ctx.devices.found), with the answers
      * to what adding it asks: it registers the device, then resolves, or
-     * resolves with the answer it refuses. The core gives it a minute.
+     * resolves with the answer it refuses, or with what it asks next of its
+     * addLater questions, keeping what it opened for the attempt until the
+     * next answer. The core gives each call a minute.
      */
     add?(ctx: AppContext, add: DriverAdd): Promise<DriverAddResult>;
+    /**
+     * Ends adding a device that asked once it had started, as someone
+     * cancels, its time runs out or a newer attempt starts: it closes
+     * whatever it opened for that attempt, such as a pairing connection, and
+     * resolves once it has. It is there exactly when addLater is.
+     */
+    cancelAdd?(ctx: AppContext, cancel: DriverCancelAdd): Promise<void>;
   };
 }

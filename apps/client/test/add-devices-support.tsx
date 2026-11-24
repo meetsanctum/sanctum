@@ -30,6 +30,8 @@ export const key = {
   help: "Under api: encryption: key in its configuration.",
   placeholder: null,
   refusals: { wrongKey: "That key doesn't match. Copy it again." },
+  length: null,
+  lasts: null,
 };
 const sensor: FoundDevice = {
   driver: "sanctum.example",

@@ -534,10 +534,7 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
     );
   }
   if (manifest.driver) {
-    assertDriverProblems(
-      manifest.driver,
-      manifest.driver.hooks.includes("repair"),
-    );
+    assertDriverProblems(manifest.driver, manifest.driver.hooks);
   }
   checkPieces(manifest);
   return manifest;

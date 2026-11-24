@@ -7,7 +7,9 @@ import type { ReactNode } from "react";
 // label, its field, and under it where to find the answer or, once the
 // driver refused what was typed, why, in the words the question declares.
 // A secret's field hides what's typed, and nothing in it is corrected or
-// filled in for someone.
+// filled in for someone. A code a device shows gets a number pad, and where
+// it lasts only a while, the time remaining follows its help, until the time
+// is up and the field empties.
 
 /** The words a refusal says, under the question it's about. */
 export type Refused = { question: string; refusal: string };
@@ -24,12 +26,18 @@ export function QuestionField(props: {
   // The field shares a narrow card with what is beside it, rather than
   // taking a line of its own.
   narrow?: boolean;
+  disabled?: boolean;
+  // The seconds a question that lasts has left, or that its time is up.
+  remaining?: number | "up";
 }) {
-  const { id, question, refused } = props;
+  const { id, question, refused, remaining } = props;
   const why =
     refused?.question === question.id
       ? question.refusals[refused.refusal]
       : undefined;
+  const isCode = question.kind === "code";
+  const isUp = remaining === "up";
+  const help = isUp ? "Time to enter this code is up." : question.help;
   const said = why ? `${id}-refused` : `${id}-help`;
   return (
     <div className="flex flex-col gap-2">
@@ -47,15 +55,22 @@ export function QuestionField(props: {
           <Input
             id={id}
             type={question.kind === "secret" ? "password" : "text"}
-            value={props.value}
+            value={isUp ? "" : props.value}
             placeholder={question.placeholder ?? undefined}
+            // Not one-time-code: a phone would offer codes from its messages.
             autoComplete="off"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
+            inputMode={isCode ? "numeric" : undefined}
+            maxLength={isCode ? (question.length ?? undefined) : undefined}
+            className={isCode ? "tabular-nums" : undefined}
+            disabled={props.disabled || isUp}
             autoFocus={props.autoFocus}
             aria-invalid={why ? true : undefined}
-            aria-describedby={why || question.help ? said : undefined}
+            aria-describedby={
+              why || help || typeof remaining === "number" ? said : undefined
+            }
             onChange={(event) => props.onChange(event.target.value)}
           />
         </div>
@@ -74,9 +89,23 @@ export function QuestionField(props: {
           <span>{why}</span>
         </p>
       ) : (
-        question.help && (
+        (help || typeof remaining === "number") && (
           <p id={said} className="m-0 text-sm text-muted-foreground">
-            {question.help}
+            {help}
+            {typeof remaining === "number" && (
+              <>
+                {help && " "}
+                <span
+                  className={
+                    remaining <= 10
+                      ? "text-(--sun-text) tabular-nums"
+                      : "tabular-nums"
+                  }
+                >
+                  {remaining} s remaining
+                </span>
+              </>
+            )}
           </p>
         )
       )}

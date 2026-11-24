@@ -1,4 +1,9 @@
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import type {
+  AttemptEnded,
+  DeviceAsking,
+  DeviceInfo,
+  DeviceQuestion,
+} from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -11,6 +16,21 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
+import {
+  answersFor,
+  askingOf,
+  AskingFields,
+  cancelQuietly,
+  endedWords,
+  isAsking,
+  isComplete,
+  isEnded,
+  isLastsUp,
+  lastingOf,
+  newAttemptId,
+  useNow,
+  type Asking,
+} from "./device-asking";
 import { deviceProblem } from "./device-parts";
 import { QuestionField, type Refused } from "./device-questions";
 
@@ -18,9 +38,14 @@ import { QuestionField, type Refused } from "./device-questions";
 // declares. The answers go to the core once, in the body of one request, and
 // stay nowhere: the fields empty as the dialog closes, however it closes. A
 // refused answer says why under its field, which keeps what was typed so it
-// can be corrected.
+// can be corrected. Where the repair asks once started, as a TV shows a code
+// only once pairing begins, the dialog asks each step in turn, and closing it
+// ends the attempt it named from the first press.
 
-type RepairResult = { repaired: DeviceInfo } | { refused: Refused };
+type RepairResult =
+  { repaired: DeviceInfo } | { refused: Refused } | DeviceAsking | AttemptEnded;
+
+const cancelPath = "/api/devices/repair/cancel";
 
 function repairProblem(error: unknown, appName: string | null) {
   if (error instanceof CoreError) {
@@ -33,6 +58,8 @@ function repairProblem(error: unknown, appName: string | null) {
         return "It doesn't need repairing any more.";
       case "app_failed":
         return `${appName ?? "Its app"} couldn't repair it. Try again.`;
+      case "limited":
+        return "Too many devices are being added or repaired at once. Try again in a few minutes.";
     }
   }
   return deviceProblem(error);
@@ -55,10 +82,26 @@ export function RepairDevice(props: {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [refused, setRefused] = useState<Refused>();
   const [failure, setFailure] = useState<string>();
-  const [working, setWorking] = useState(false);
+  const [doing, setDoing] = useState<
+    "repairing" | "checking" | "asking" | "stopping" | null
+  >(null);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  // The attempt open from the first press until it ends.
+  const attempt = useRef<{ id: string; device: string } | null>(null);
   const current = useRef(props.device);
   current.current = props.device;
   const request = useRef(0);
+
+  // An attempt still open ends with the dialog, however it closes.
+  const endAttempt = () => {
+    if (attempt.current) {
+      cancelQuietly(cancelPath, {
+        id: attempt.current.device,
+        attempt: attempt.current.id,
+      });
+      attempt.current = null;
+    }
+  };
 
   // Opening and closing both start afresh, so no answer outlives the dialog.
   useEffect(() => {
@@ -66,31 +109,65 @@ export function RepairDevice(props: {
     setAnswers({});
     setRefused(undefined);
     setFailure(undefined);
-    setWorking(false);
+    setDoing(null);
+    setAsking(null);
     return () => {
       request.current += 1;
+      endAttempt();
     };
   }, [props.device?.id, !!props.device]);
 
+  const now = useNow(asking !== null);
+  // The attempt's time ran out: the core ended it.
+  useEffect(() => {
+    if (asking && now >= asking.until) {
+      attempt.current = null;
+      setAsking(null);
+      setAnswers({});
+      setFailure(endedWords("repairing", "time", props.appName) ?? undefined);
+    }
+  }, [asking, now, props.appName]);
+
   const answerTo = (id: string) =>
     Object.hasOwn(answers, id) ? answers[id]! : "";
-  const complete = asks.every((question) => answerTo(question.id) !== "");
+  const complete = asking
+    ? isComplete(asking.asks, answers)
+    : isComplete(asks, answers);
+  const lastsUp = asking !== null && isLastsUp(asking, now);
+  const lasting = asking ? lastingOf(asking) : null;
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const send = async (
+    what: "repairing" | "checking" | "asking" | "stopping",
+    path: "/api/devices/repair" | typeof cancelPath,
+    json: Record<string, unknown>,
+    answered: readonly DeviceQuestion[],
+  ) => {
     const repairing = props.device;
-    if (!repairing || !complete || working) return;
+    if (!repairing || doing) return;
     const pending = ++request.current;
-    setWorking(true);
+    setDoing(what);
     setRefused(undefined);
     setFailure(undefined);
     try {
-      const result = await coreJson<RepairResult>("/api/devices/repair", {
+      const result = await coreJson<RepairResult>(path, {
         method: "POST",
-        json: { id: repairing.id, answers },
+        json: { id: repairing.id, ...json },
       });
       if (current.current !== repairing || request.current !== pending) return;
-      setWorking(false);
+      setDoing(null);
+      if (isAsking(result)) {
+        setAsking(askingOf(result, answered));
+        setAnswers({});
+        return;
+      }
+      attempt.current = null;
+      setAsking(null);
+      if (isEnded(result)) {
+        setAnswers({});
+        const words = endedWords("repairing", result.ended, props.appName);
+        if (words) setFailure(words);
+        return;
+      }
       if ("refused" in result) {
         setRefused(result.refused);
         return;
@@ -99,16 +176,61 @@ export function RepairDevice(props: {
       props.onClose();
     } catch (error) {
       if (current.current !== repairing || request.current !== pending) return;
-      setWorking(false);
+      setDoing(null);
+      endAttempt();
+      setAsking(null);
       setFailure(repairProblem(error, props.appName));
     }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const repairing = props.device;
+    if (!repairing || doing) return;
+    if (asking) {
+      if (lastsUp && lasting) {
+        void send(
+          "asking",
+          "/api/devices/repair",
+          { attempt: asking.attempt, step: asking.step, again: lasting.id },
+          asking.asks,
+        );
+      } else if (complete) {
+        void send(
+          "checking",
+          "/api/devices/repair",
+          {
+            attempt: asking.attempt,
+            step: asking.step,
+            answers: answersFor(asking.asks, answers),
+          },
+          asking.asks,
+        );
+      }
+      return;
+    }
+    if (!complete) return;
+    const id = newAttemptId();
+    attempt.current = { id, device: repairing.id };
+    void send(
+      "repairing",
+      "/api/devices/repair",
+      { answers: answersFor(asks, answers), attempt: id },
+      asks,
+    );
+  };
+
+  // Cancel ends the attempt first, where one asks; the dialog closes either way.
+  const cancel = () => {
+    endAttempt();
+    props.onClose();
   };
 
   return (
     <Dialog
       open={!!props.device}
       onOpenChange={(open) => {
-        if (!open) props.onClose();
+        if (!open) cancel();
       }}
     >
       <DialogContent>
@@ -119,30 +241,56 @@ export function RepairDevice(props: {
               {repair?.help ?? device?.problem?.words}
             </DialogDescription>
           </DialogHeader>
-          {asks.map((question, index) => (
-            <QuestionField
-              key={question.id}
-              id={`${ids}-${question.id}`}
-              question={question}
-              value={answerTo(question.id)}
-              refused={refused}
-              autoFocus={index === 0}
-              onChange={(value) =>
-                setAnswers((before) => ({ ...before, [question.id]: value }))
+          {asking ? (
+            <AskingFields
+              idPrefix={ids}
+              asking={asking}
+              answers={answers}
+              now={now}
+              disabled={doing !== null}
+              onChange={(question, value) =>
+                setAnswers((before) => ({ ...before, [question]: value }))
               }
             />
-          ))}
+          ) : (
+            asks.map((question, index) => (
+              <QuestionField
+                key={question.id}
+                id={`${ids}-${question.id}`}
+                question={question}
+                value={answerTo(question.id)}
+                refused={refused}
+                autoFocus={index === 0}
+                onChange={(value) =>
+                  setAnswers((before) => ({ ...before, [question.id]: value }))
+                }
+              />
+            ))
+          )}
           {failure && (
             <p role="alert" className="m-0 text-sm text-destructive">
               {failure}
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={props.onClose}>
+            <Button type="button" variant="outline" onClick={cancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={working || !complete}>
-              {working ? "Repairing…" : "Repair"}
+            <Button
+              type="submit"
+              disabled={doing !== null || (!lastsUp && !complete)}
+            >
+              {doing === "repairing"
+                ? "Repairing…"
+                : doing === "checking"
+                  ? "Checking…"
+                  : doing === "asking"
+                    ? "Asking…"
+                    : asking
+                      ? lastsUp && lasting?.lasts
+                        ? lasting.lasts.again
+                        : "Continue"
+                      : "Repair"}
             </Button>
           </DialogFooter>
         </form>
