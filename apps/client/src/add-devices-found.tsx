@@ -34,7 +34,7 @@ import {
   type Asking,
 } from "./device-asking";
 import { deviceProblem } from "./device-parts";
-import { QuestionField, type Refused } from "./device-questions";
+import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 // Add devices' page of what drivers found, as on the home's network: a card
 // for each, with Add, which asks in place what its driver needs, such as its
@@ -205,15 +205,16 @@ function FoundCard(props: {
     }
     attempt.current = null;
     setAsking(null);
-    // A refused answer stays in its field, to be corrected.
-    if (!("refused" in result)) setAnswers({});
+    // Only the initial fields stay on the card for someone to correct.
+    if (asking || !("refused" in result)) setAnswers({});
     if ("added" in result) {
       props.onAdded(result.added);
     } else if ("refused" in result) {
       // A refusal of adding it at all is said under its card, in its words.
       const refusal = result.refused;
       if ("question" in refusal) {
-        setRefused(refusal);
+        if (asking) setFailure(refusalWords(answered, refusal));
+        else setRefused(refusal);
       } else {
         setFailure(found.refusals[refusal.refusal]);
       }

@@ -21,15 +21,6 @@ export type DriverQuestion = {
   /** What the field is called: "Encryption key". */
   readonly label: string;
   /**
-   * A secret answer goes to the driver once and nowhere else: the core
-   * neither keeps nor logs it, and the field empties once it's done. A code
-   * is digits a device shows, such as a TV's, `length` of them, typed on a
-   * number pad and shown as typed.
-   */
-  readonly kind: "secret" | "text" | "code";
-  /** How many digits a code has, 1 to 12; only a code has it. */
-  readonly length?: number;
-  /**
    * How long the device keeps what it showed for this question, in seconds
    * from when the driver asks it, 10 to 120, and the words of the button
    * that has it show a new one once that time is up: "Show a new code".
@@ -43,7 +34,19 @@ export type DriverQuestion = {
    * field then shows: "That key doesn't match…".
    */
   readonly refusals: Readonly<Record<string, string>>;
-};
+} & (
+  | {
+      /** Digits a device shows, typed on a number pad and shown as typed. */
+      readonly kind: "code";
+      /** How many digits a code has, 1 to 12. */
+      readonly length: number;
+    }
+  | {
+      /** A secret answer goes only to the driver and the field empties once it's done. */
+      readonly kind: "secret" | "text";
+      readonly length?: never;
+    }
+);
 
 /** Something that can be wrong with one of a driver's devices. */
 export type DriverProblem = {

@@ -73,14 +73,21 @@ describe("what a driver asks once started", () => {
   it.each([
     [
       "a code without its length",
-      { questions: { first: { ...code, length: undefined } } },
+      { questions: { ...questions, first: { ...code, length: undefined } } },
     ],
-    ["a length on text", { questions: { first: { ...code, kind: "text" } } }],
-    ["a code of 13 digits", { questions: { first: { ...code, length: 13 } } }],
+    [
+      "a length on text",
+      { questions: { ...questions, first: { ...code, kind: "text" } } },
+    ],
+    [
+      "a code of 13 digits",
+      { questions: { ...questions, first: { ...code, length: 13 } } },
+    ],
     [
       "a code lasting 5 seconds",
       {
         questions: {
+          ...questions,
           first: { ...code, lasts: { seconds: 5, again: "Again" } },
         },
       },

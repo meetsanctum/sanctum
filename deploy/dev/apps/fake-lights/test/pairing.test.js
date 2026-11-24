@@ -46,13 +46,18 @@ test("adds the TV box with two codes, a wrong first one showing a new one", asyn
 
 test("closes the pairing it opened as adding is cancelled", async () => {
   const adding = await core.startAdd("den-tv");
+  await adding.answer({ firstCode: "1234" });
   await adding.cancel();
 
-  const again = await core.startAdd("den-tv");
-  assert.deepEqual(
-    again.asks.map(({ id }) => id),
-    ["firstCode"],
+  // A late answer tests the cancelled pairing itself.
+  const refused = await app.driver.add(
+    { devices: { register: async () => assert.fail("The TV was registered") } },
+    { key: "den-tv", answers: { secondCode: "5678" }, attempt: adding.id },
   );
+  assert.deepEqual(refused, {
+    refused: { question: "secondCode", refusal: "wrongCode" },
+  });
+  assert.equal(core.registered.has("den-tv"), false);
 });
 
 test("starts a later run with the TV box's pairing lost, which Repair sets right", async () => {

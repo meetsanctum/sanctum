@@ -20,8 +20,6 @@ type Step = {
   again?: string;
 };
 
-const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
 class Screens {
   // What the core asked, in order: "add tv-1", "add tv-1 firstCode", "add
   // tv-1 again secondCode", "cancelAdd tv-1".
@@ -33,19 +31,24 @@ class Screens {
   readonly open = new Map<string, string>();
   firstCode = "1234";
   secondCode = "0042";
-  // How long each step takes the TV.
-  stepMs = 0;
+  // Holds a driver step until the test lets it proceed.
+  beforeStep?: () => Promise<void>;
   // Asks what it doesn't declare, as a careless driver would.
   asksUndeclared = false;
   // Throws, as a driver whose connection broke would.
   fails = false;
   private ctx?: AppContext;
 
+  get running() {
+    return this.ctx !== undefined;
+  }
+
   attach(ctx: AppContext) {
     this.ctx = ctx;
   }
 
   detach() {
+    this.open.clear();
     this.ctx = undefined;
   }
 
@@ -56,7 +59,7 @@ class Screens {
     this.open.clear();
     this.firstCode = "1234";
     this.secondCode = "0042";
-    this.stepMs = 0;
+    this.beforeStep = undefined;
     this.asksUndeclared = false;
     this.fails = false;
   }
@@ -93,7 +96,7 @@ class Screens {
     );
     this.attempts.push(step.attempt);
     this.actors.push(actor);
-    if (this.stepMs > 0) await wait(this.stepMs);
+    await this.beforeStep?.();
     if (this.fails)
       throw new Error(`pairing with code ${step.answers.firstCode} broke`);
     if (this.asksUndeclared) return { asks: ["volume"] };
@@ -136,7 +139,7 @@ const code = (label: string) => ({
 });
 
 export default defineApp({
-  id: "test.tvs",
+  id: "sanctum.example",
   name: "TVs",
   version: "0.1.0",
   core: "^2.0.0",

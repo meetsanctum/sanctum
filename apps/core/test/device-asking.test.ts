@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { lampsCore, settled } from "./devices-support.js";
 import { screens } from "./fixtures/apps/tvs/index.js";
 import { loadAppPackage } from "./runner-apps.js";
-import { fixtureApps, post, sharedClient, type TestCore } from "./support.js";
+import {
+  deferredDelivery,
+  fixtureApps,
+  post,
+  sharedClient,
+  type TestCore,
+} from "./support.js";
 
 // Adding and repairing that ask once they have started, with the TVs driver:
 // a TV shows a first code once pairing starts, then a second that lasts 35
@@ -16,7 +22,7 @@ afterEach(() => vi.useRealTimers());
 
 async function tvsCore() {
   screens.reset();
-  const tvs = await loadAppPackage(join(fixtureApps, "tvs"), "system");
+  const tvs = await loadAppPackage(join(fixtureApps, "tvs"), "official");
   const home = await lampsCore({ apps: [tvs] });
   await screens.sayFound([{ key: "tv-1", name: "Living Room" }]);
   await settled();
@@ -29,7 +35,7 @@ const add = (core: TestCore, who: Who, body: Record<string, unknown>) =>
   post(
     core,
     "/api/devices/add",
-    { driver: "test.tvs", key: "tv-1", ...body },
+    { driver: "sanctum.example", key: "tv-1", ...body },
     who,
   );
 
@@ -37,7 +43,7 @@ const cancelAdd = (core: TestCore, who: Who, attempt: string) =>
   post(
     core,
     "/api/devices/add/cancel",
-    { driver: "test.tvs", key: "tv-1", attempt },
+    { driver: "sanctum.example", key: "tv-1", attempt },
     who,
   );
 
@@ -244,15 +250,44 @@ describe("adding that asks", () => {
     const attempt = randomUUID();
     await add(core, maya, { attempt });
     await add(core, maya, { attempt, step: 1, answers: { firstCode: "1234" } });
-    screens.stepMs = 50;
+    const entered = deferredDelivery();
+    const release = deferredDelivery();
+    screens.beforeStep = () => {
+      entered.resolve();
+      return release.promise;
+    };
 
-    const [answered, cancelled] = await Promise.all([
-      add(core, maya, { attempt, step: 2, answers: { secondCode: "0042" } }),
-      cancelAdd(core, maya, attempt),
-    ]);
+    const answer = add(core, maya, {
+      attempt,
+      step: 2,
+      answers: { secondCode: "0042" },
+    });
+    await entered.promise;
+    const turns = core.devices.turns;
+    const take = turns.take.bind(turns);
+    const queued = deferredDelivery();
+    const spy = vi.spyOn(turns, "take").mockImplementation((device, work) => {
+      const result = take(device, work);
+      queued.resolve();
+      return result;
+    });
+    let cancelled = false;
+    const cancel = cancelAdd(core, maya, attempt).then((response) => {
+      cancelled = true;
+      return response;
+    });
+    try {
+      await queued.promise;
+      await settled();
+      expect(cancelled).toBe(false);
+      expect(screens.calls).not.toContain("cancelAdd tv-1");
+    } finally {
+      release.resolve();
+      spy.mockRestore();
+    }
 
-    expect(answered.json()).toHaveProperty("added");
-    expect(cancelled.json()).toHaveProperty("added");
+    expect((await answer).json()).toHaveProperty("added");
+    expect((await cancel).json()).toHaveProperty("added");
     expect(screens.calls).not.toContain("cancelAdd tv-1");
   });
 
@@ -267,7 +302,10 @@ describe("adding that asks", () => {
     await settled();
 
     expect(screens.calls).toEqual(["add tv-1", "cancelAdd tv-1"]);
-    expect(screens.actors.at(-1)).toEqual({ kind: "app", id: "test.tvs" });
+    expect(screens.actors.at(-1)).toEqual({
+      kind: "app",
+      id: "sanctum.example",
+    });
     core.advance(180_000);
     const after = await add(core, maya, {
       attempt,
@@ -314,6 +352,118 @@ describe("adding that asks", () => {
     expect(old.json()).toEqual({ ended: "replaced" });
     expect(screens.calls).toEqual(["add tv-1", "cancelAdd tv-1", "add tv-1"]);
     expect(screens.attempts).toEqual([first, first, second]);
+  });
+
+  it("leaves the current pairing open when a start is rejected", async () => {
+    const { core, maya } = await tvsCore();
+    const tablet = sharedClient(core);
+    const attempt = randomUUID();
+    await add(core, maya, { attempt });
+
+    expect((await add(core, maya, { attempt })).json()).toEqual({
+      error: "conflict",
+    });
+    const cancelled = randomUUID();
+    await cancelAdd(core, tablet, cancelled);
+    expect((await add(core, tablet, { attempt: cancelled })).json()).toEqual({
+      ended: "cancelled",
+    });
+    expect(screens.calls).toEqual(["add tv-1"]);
+    expect(screens.open.get("tv-1")).toBe(attempt);
+  });
+
+  it("reserves the client's slots before the driver asks its first questions", async () => {
+    const { core, maya } = await tvsCore();
+    const keys = ["tv-1", "tv-2", "tv-3", "tv-4", "tv-5"];
+    await screens.sayFound(keys.map((key) => ({ key, name: key })));
+    const entered = deferredDelivery();
+    const overLimit = deferredDelivery();
+    const release = deferredDelivery();
+    screens.beforeStep = () => {
+      if (screens.calls.length === 4) entered.resolve();
+      if (screens.calls.length === 5) overLimit.resolve();
+      return release.promise;
+    };
+    const starts = keys
+      .slice(0, 4)
+      .map((key) => add(core, maya, { key, attempt: randomUUID() }));
+    await entered.promise;
+    const extra = add(core, maya, { key: "tv-5", attempt: randomUUID() });
+    try {
+      expect(
+        await Promise.race([
+          extra.then((reply) => reply.json()),
+          overLimit.promise.then(() => "called the driver"),
+        ]),
+      ).toEqual({
+        error: "limited",
+      });
+    } finally {
+      release.resolve();
+    }
+    for (const response of await Promise.all(starts)) {
+      expect(response.json()).toMatchObject({ step: 1 });
+    }
+    expect(screens.calls).toHaveLength(4);
+  });
+
+  it("closes pairing after the driver finishes a step that timed out", async () => {
+    const { core, maya } = await tvsCore();
+    const entered = deferredDelivery();
+    const release = deferredDelivery();
+    screens.beforeStep = () => {
+      entered.resolve();
+      return release.promise;
+    };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = randomUUID();
+    const started = add(core, maya, { attempt });
+    await entered.promise;
+    try {
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect((await started).json()).toEqual({ error: "timeout" });
+      expect(screens.calls).toEqual(["add tv-1"]);
+    } finally {
+      release.resolve();
+      vi.useRealTimers();
+    }
+    await vi.waitFor(() =>
+      expect(screens.calls).toEqual(["add tv-1", "cancelAdd tv-1"]),
+    );
+    expect(screens.open.size).toBe(0);
+  });
+
+  it("ends an open attempt when the driver restarts", async () => {
+    const { core, maya } = await tvsCore();
+    const attempt = randomUUID();
+    await add(core, maya, { attempt });
+    const id = "sanctum.example";
+    const run = core.apps.driverRun(id);
+    const stopped = await post(
+      core,
+      `/api/apps/${id}/off`,
+      { off: true },
+      maya,
+    );
+    expect(stopped.statusCode).toBe(200);
+    await vi.waitFor(() => expect(screens.running).toBe(false));
+    const started = await post(
+      core,
+      `/api/apps/${id}/off`,
+      { off: false },
+      maya,
+    );
+    expect(started.statusCode).toBe(200);
+    await vi.waitFor(() => expect(core.apps.isRunning(id)).toBe(true));
+    expect(core.apps.driverRun(id)).not.toBe(run);
+
+    const answer = await add(core, maya, {
+      attempt,
+      step: 1,
+      answers: { firstCode: "1234" },
+    });
+    expect(answer.json()).toEqual({ ended: "stopped" });
+    expect(screens.calls).toEqual(["add tv-1"]);
   });
 
   it("is the driver's failure where it asks what it doesn't declare, and ends", async () => {
@@ -395,6 +545,13 @@ describe("repairing that asks", () => {
 
     expect(removed.statusCode).toBe(200);
     expect(screens.calls).toEqual(["repair tv-9", "cancelRepair tv-9"]);
+    const after = await post(
+      core,
+      "/api/devices/repair",
+      { id: tv, attempt, step: 1, answers: { firstCode: "1234" } },
+      maya,
+    );
+    expect(after.json()).toEqual({ ended: "removed" });
   });
 
   it("ends where the problem cleared outside it", async () => {
@@ -402,7 +559,8 @@ describe("repairing that asks", () => {
     const attempt = randomUUID();
     await post(core, "/api/devices/repair", { id: tv, attempt }, maya);
     await screens.sayProblem("tv-9", null);
-    await settled();
+    await vi.waitFor(() => expect(screens.open.size).toBe(0));
+    await screens.sayProblem("tv-9", "pairingLost");
 
     const answered = await post(
       core,
@@ -413,6 +571,31 @@ describe("repairing that asks", () => {
 
     expect(answered.json()).toEqual({ ended: "settled" });
     expect(screens.calls).toEqual(["repair tv-9", "cancelRepair tv-9"]);
+  });
+
+  it("keeps Add requests from advancing or cancelling a Repair attempt", async () => {
+    const { core, maya, tv } = await lostTv();
+    const attempt = randomUUID();
+    await post(core, "/api/devices/repair", { id: tv, attempt }, maya);
+    const step = { attempt, step: 1, answers: { firstCode: "1234" } };
+
+    const wrong = await add(core, maya, { ...step, key: "tv-9" });
+    expect(wrong.json()).toHaveProperty("added");
+    await post(
+      core,
+      "/api/devices/add/cancel",
+      { driver: "sanctum.example", key: "tv-9", attempt },
+      maya,
+    );
+    expect(screens.calls).toEqual(["repair tv-9"]);
+
+    const right = await post(
+      core,
+      "/api/devices/repair",
+      { id: tv, ...step },
+      maya,
+    );
+    expect(right.json()).toMatchObject({ step: 2 });
   });
 
   it("ends as Cancel asks", async () => {

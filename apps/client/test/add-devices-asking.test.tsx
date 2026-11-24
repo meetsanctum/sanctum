@@ -125,14 +125,16 @@ describe("Add devices, adding a device that asks once started", () => {
     core.answers.tv = () => steps.shift()!();
     await addTv();
     await type(field(), "1234");
-    const answered = act(async () => button("Continue").click());
+    await act(async () => button("Continue").click());
 
     core.adding = { ...core.adding, found: [] };
     await act(async () =>
       live.publish({ type: "pairing", pairing: core.adding }),
     );
-    answer({ added: light("tv", "Living Room") });
-    await answered;
+    expect(page().textContent).toContain(first.label);
+    expect(button("Checking…").disabled).toBe(true);
+
+    await act(async () => answer({ added: light("tv", "Living Room") }));
 
     expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });
@@ -177,6 +179,44 @@ describe("Add devices, adding a device that asks once started", () => {
     );
   });
 
+  it("shows the timer for a replacement code alongside its refusal", async () => {
+    const steps = [
+      asking(1, [second]),
+      {
+        ...asking(2, [second]),
+        refused: { question: "second", refusal: "wrongCode" },
+      },
+    ];
+    core.answers.tv = () => steps.shift();
+    await addTv();
+    await type(field(), "9999");
+    await act(async () => button("Continue").click());
+
+    expect(page().textContent).toContain("That code didn't match.");
+    expect(page().textContent).toContain("35 s remaining");
+    await act(async () => vi.advanceTimersByTime(35_000));
+    expect(page().textContent).toContain("Time to enter this code is up.");
+    expect(button("Show a new code")).toBeDefined();
+  });
+
+  it("shows why the second code ended pairing and offers Add again", async () => {
+    const steps = [
+      asking(1, [first]),
+      asking(2, [second]),
+      { refused: { question: "second", refusal: "wrongCode" } },
+    ];
+    core.answers.tv = () => steps.shift();
+    await addTv();
+    await type(field(), "1234");
+    await act(async () => button("Continue").click());
+    await type(field(), "9999");
+    await act(async () => button("Continue").click());
+
+    expect(page().textContent).toContain("That code didn't match.");
+    expect(field()).toBeNull();
+    expect(named("Add Living Room")).not.toBeNull();
+  });
+
   it("says why adding stopped, and offers Add again", async () => {
     const steps: unknown[] = [asking(1, [first]), { ended: "replaced" }];
     core.answers.tv = () => steps.shift();
@@ -201,10 +241,7 @@ describe("Add devices, adding a device that asks once started", () => {
     );
   });
 
-  it("ends the attempt with Cancel, and as the overlay goes", async () => {
-    const sent = vi
-      .spyOn(coreFetch, "coreFetch")
-      .mockResolvedValue(new Response("{}"));
+  it("ends the attempt with Cancel", async () => {
     core.answers.tv = () => asking(1, [first]);
     await addTv();
 
@@ -214,14 +251,30 @@ describe("Add devices, adding a device that asks once started", () => {
       json: { driver: "sanctum.example", key: "tv", attempt: "ignored" },
     });
     expect(named("Add Living Room")).not.toBeNull();
+  });
 
-    await act(async () => named("Add Living Room").click());
+  it("cancels the starting attempt when the overlay closes before the first question", async () => {
+    const sent = vi
+      .spyOn(coreFetch, "coreFetch")
+      .mockResolvedValue(new Response("{}"));
+    let respond!: (value: DeviceAsking) => void;
+    const response = new Promise<DeviceAsking>((resolve) => {
+      respond = resolve;
+    });
+    core.answers.tv = () => response;
+    await addTv();
+    const start = core.requests.find(
+      (each) => each.path === "/api/devices/add",
+    );
+    const { attempt } = start!.json as { attempt: string };
+    expect(attempt).toMatch(/^[0-9a-f-]{36}$/);
     await act(async () => root.unmount());
     expect(sent).toHaveBeenCalledWith("/api/devices/add/cancel", {
       method: "POST",
-      json: expect.objectContaining({ key: "tv", attempt: expect.any(String) }),
+      json: { driver: tv.driver, key: tv.key, attempt },
       keepalive: true,
     });
+    await act(async () => respond(asking(1, [first])));
   });
 
   it("keeps Done outlined while a card asks", async () => {

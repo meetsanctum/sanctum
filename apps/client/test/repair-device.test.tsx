@@ -79,10 +79,30 @@ async function typeAnswer(value: string) {
   });
 }
 
-const submit = () =>
+const button = (label: string) =>
   [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Repair",
+    (each) => each.textContent === label,
   )!;
+const submit = () => button("Repair");
+
+const lost: DeviceInfo = {
+  ...device,
+  problem: {
+    id: "pairingLost",
+    words: "Its pairing was removed",
+    repair: { help: "Pair it again.", asks: [] },
+  },
+};
+const code = {
+  id: "first",
+  label: "Code on the TV (1 of 2)",
+  kind: "code" as const,
+  length: 4,
+  help: null,
+  placeholder: null,
+  refusals: { wrongCode: "That code didn't match." },
+  lasts: null,
+};
 
 describe("Repair's dialog", () => {
   it.each(["secret", "text"] as const)(
@@ -141,24 +161,6 @@ describe("Repair's dialog", () => {
   });
 
   it("asks each code once the repair has started, and ends it as the dialog closes", async () => {
-    const lost: DeviceInfo = {
-      ...device,
-      problem: {
-        id: "pairingLost",
-        words: "Its pairing was removed",
-        repair: { help: "Pair it again.", asks: [] },
-      },
-    };
-    const code = {
-      id: "first",
-      label: "Code on the TV (1 of 2)",
-      kind: "code" as const,
-      length: 4,
-      help: null,
-      placeholder: null,
-      refusals: {},
-      lasts: null,
-    };
     vi.mocked(coreJson)
       .mockResolvedValueOnce({
         attempt: "a",
@@ -174,13 +176,9 @@ describe("Repair's dialog", () => {
     await show(lost);
 
     await act(async () => submit().click());
-    const button = () =>
-      [...document.querySelectorAll("button")].find(
-        (each) => each.textContent === "Continue",
-      )!;
-    expect(button().disabled).toBe(true);
+    expect(button("Continue").disabled).toBe(true);
     await typeAnswer("1234");
-    await act(async () => button().click());
+    await act(async () => button("Continue").click());
 
     expect(
       vi.mocked(coreJson).mock.calls.map(([, init]) => init!.json),
@@ -207,5 +205,34 @@ describe("Repair's dialog", () => {
       json: { id: lost.id, attempt: expect.any(String) },
       keepalive: true,
     });
+  });
+
+  it("shows why the second code ended pairing and offers Repair again", async () => {
+    const timing = { withinMs: 180_000, lastsMs: null };
+    const second = { ...code, id: "second", label: "Code on the TV (2 of 2)" };
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({ attempt: "a", step: 1, asks: [code], ...timing })
+      .mockResolvedValueOnce({
+        attempt: "a",
+        step: 2,
+        asks: [second],
+        ...timing,
+      })
+      .mockResolvedValueOnce({
+        refused: { question: "second", refusal: "wrongCode" },
+      });
+    await show(lost);
+    await act(async () => submit().click());
+    await typeAnswer("1234");
+    await act(async () => button("Continue").click());
+    await typeAnswer("9999");
+    await act(async () => button("Continue").click());
+
+    expect(document.querySelector("[role=dialog]")!.textContent).toContain(
+      "That code didn't match.",
+    );
+    expect(document.querySelector("input")).toBeNull();
+    expect(submit().disabled).toBe(false);
+    expect(onRepaired).not.toHaveBeenCalled();
   });
 });

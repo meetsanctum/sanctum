@@ -21,17 +21,15 @@ export function createTurns() {
     ): Promise<T> {
       const turn = `${device.driver}\u0000${device.key}`;
       const before = last.get(turn) ?? Promise.resolve();
-      const holds: Promise<unknown>[] = [];
+      const holds: Promise<void>[] = [];
+      const release = () => undefined;
       const mine = before.then(() =>
-        work((running) => void holds.push(running)),
+        work((running) => void holds.push(running.then(release, release))),
       );
-      const ended = mine
-        .then(
-          () => undefined,
-          () => undefined,
-        )
-        .then(() => Promise.allSettled(holds))
-        .then(() => undefined);
+      const ended = mine.then(release, release).then(async () => {
+        // Cleanup can add work once a timed-out driver call settles.
+        for (const running of holds) await running;
+      });
       last.set(turn, ended);
       void ended.then(() => {
         if (last.get(turn) === ended) last.delete(turn);

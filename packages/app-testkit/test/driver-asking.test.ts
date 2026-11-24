@@ -10,7 +10,13 @@ import { createDriverCore } from "../src/index.js";
 // The suite core's adding and repairing that ask once started, with a TV
 // that shows a first code once pairing starts, then a second that lasts.
 
-function setup(options: { asks?: string } = {}) {
+type DriverOptions = {
+  asks?: string;
+  startError?: Error;
+  refuseRefresh?: boolean;
+};
+
+function setup(options: DriverOptions = {}) {
   const calls: string[] = [];
   const attempts: string[] = [];
   let context!: AppContext;
@@ -58,7 +64,14 @@ function setup(options: { asks?: string } = {}) {
             `add ${Object.keys(answers).join(" ")}${again ?? ""}`.trim(),
           );
           attempts.push(attempt!);
+          if (options.startError) throw options.startError;
           if (options.asks) return { asks: [options.asks] };
+          if (again && options.refuseRefresh) {
+            return {
+              asks: [again],
+              refused: { question: again, refusal: "wrongCode" },
+            };
+          }
           if (again) return { asks: [again] };
           if (answers.first !== undefined) {
             return answers.first === "1234"
@@ -99,7 +112,7 @@ function setup(options: { asks?: string } = {}) {
   return { core, calls, attempts, context: () => context };
 }
 
-async function foundTv(options: { asks?: string } = {}) {
+async function foundTv(options: DriverOptions = {}) {
   const made = setup(options);
   await made.core.start();
   await made.context().devices.found([{ key: "tv", name: "Living Room" }]);
@@ -176,16 +189,37 @@ describe("the suite's adding that asks", () => {
   });
 
   it("refuses a driver that asks what it doesn't declare for adding", async () => {
-    const { core } = await foundTv({ asks: "volume" });
+    const { core, calls, attempts } = await foundTv({ asks: "volume" });
 
     await expect(core.startAdd("tv")).rejects.toThrow(/doesn't declare/);
     expect(core.refused).toHaveLength(1);
+    expect(calls).toEqual(["add", "cancelAdd"]);
+    expect(attempts[1]).toBe(attempts[0]);
+  });
+
+  it("cancels the attempt when the first driver step throws", async () => {
+    const startError = new Error("Pairing failed");
+    const { core, calls, attempts } = await foundTv({ startError });
+
+    await expect(core.startAdd("tv")).rejects.toBe(startError);
+    expect(calls).toEqual(["add", "cancelAdd"]);
+    expect(attempts[1]).toBe(attempts[0]);
+  });
+
+  it("rejects a refusal for a refresh that sent no answers", async () => {
+    const { core, calls } = await foundTv({ refuseRefresh: true });
+    const attempt = await core.startAdd("tv");
+    await attempt.answer({ first: "1234" });
+
+    await expect(attempt.again("second")).rejects.toThrow(/doesn't declare/);
+    expect(calls.at(-1)).toBe("cancelAdd");
   });
 
   it("tells a one-shot add that adding asks more", async () => {
-    const { core } = await foundTv();
+    const { core, calls } = await foundTv();
 
     await expect(core.add("tv")).rejects.toThrow(/startAdd/);
+    expect(calls).toEqual([]);
   });
 });
 
@@ -203,6 +237,8 @@ describe("the suite's repairing that asks", () => {
     });
     await context().devices.problem({ key: "tv", problem: "pairingLost" });
 
+    await expect(core.repair("tv", {})).rejects.toThrow(/startRepair/);
+    expect(calls).toEqual([]);
     const attempt = await core.startRepair("tv");
     await attempt.answer({ first: "1234" });
     await attempt.answer({ second: "0042" });

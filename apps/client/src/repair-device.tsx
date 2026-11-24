@@ -32,7 +32,7 @@ import {
   type Asking,
 } from "./device-asking";
 import { deviceProblem } from "./device-parts";
-import { QuestionField, type Refused } from "./device-questions";
+import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 // Repair: what a device's driver asks to set it right, in the words it
 // declares. The answers go to the core once, in the body of one request, and
@@ -169,7 +169,12 @@ export function RepairDevice(props: {
         return;
       }
       if ("refused" in result) {
-        setRefused(result.refused);
+        if (asking) {
+          setAnswers({});
+          setFailure(refusalWords(answered, result.refused));
+        } else {
+          setRefused(result.refused);
+        }
         return;
       }
       props.onRepaired(result.repaired);

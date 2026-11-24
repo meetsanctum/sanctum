@@ -4,9 +4,11 @@ import {
   isAsked,
   maxWrongAnswers,
   type Actor,
+  type AddResult,
   type AttemptEnd,
   type AttemptEnded,
   type DeviceAsking,
+  type DeviceInfo,
   type DeviceQuestion,
 } from "@meetsanctum/app-sdk";
 
@@ -46,10 +48,28 @@ const inAll = 32;
 // card's next request learns how it ended.
 const rememberedMax = 256;
 
+type Device = { driver: string; key: string };
+type Target =
+  | ({ operation: "add" } & Device)
+  | {
+      operation: "repair";
+      id: string;
+    };
+
+export type AddDone = Extract<
+  AddResult,
+  { added: DeviceInfo } | { refused: unknown }
+>;
+export type RepairDone =
+  { repaired: DeviceInfo } | { refused: { question: string; refusal: string } };
+
+type Completion =
+  | { operation: "add"; done: AddDone }
+  | { operation: "repair"; done: RepairDone };
+
 /** What adding or repairing does for the attempts it opens. */
-export type AskingFlow<Done> = {
-  driver: string;
-  key: string;
+export type AskingFlow<Done extends Completion> = Device & {
+  target: Extract<Target, { operation: Done["operation"] }>;
   /** The run of the driver it began with. */
   run: number;
   /** The questions it may ask once started. */
@@ -80,11 +100,11 @@ export type AskingFlow<Done> = {
   refused(refusal: string): void;
 };
 
-type Open = {
+type Attempt = {
   id: string;
   client: string;
   turn: string;
-  flow: AskingFlow<unknown>;
+  flow: AskingFlow<Completion>;
   step: number;
   asks: DeviceQuestion[];
   deadline: number;
@@ -92,12 +112,18 @@ type Open = {
   wrong: number;
   // The refusal of the last answer refused, if one was.
   refusal: string | null;
+  settled: boolean;
+  cleanup?: Promise<void>;
   timer: NodeJS.Timeout | undefined;
 };
 
-type Device = { driver: string; key: string };
-
 const turnOf = (device: Device) => `${device.driver}\u0000${device.key}`;
+const targetOf = (target: Target) =>
+  target.operation === "add"
+    ? JSON.stringify(["add", target.driver, target.key])
+    : JSON.stringify(["repair", target.id]);
+const cancelKey = (target: string, client: string, id: string) =>
+  JSON.stringify([target, client, id]);
 
 /** Who adds or repairs a device: an attempt is the client's that started it. */
 export type Asker = ActivityAuthor & { clientId: string };
@@ -121,12 +147,13 @@ export function createAsking(options: {
 }) {
   const { turns } = options;
   const now = () => (options.now?.() ?? new Date()).getTime();
-  const open = new Map<string, Open>();
+  const open = new Map<string, Attempt>();
+  const starting = new Map<string, Attempt>();
   const ended = new Map<
     string,
-    { client: string; end: AttemptEnd; at: number }
+    { target: string; client: string; end: AttemptEnd; at: number }
   >();
-  const earlyCancels = new Map<string, { client: string; at: number }>();
+  const earlyCancels = new Map<string, { at: number }>();
   let closed = false;
 
   // What is remembered lasts an attempt's time, and is bounded.
@@ -139,7 +166,7 @@ export function createAsking(options: {
     }
   }
 
-  function asking(attempt: Open): DeviceAsking {
+  function asking(attempt: Attempt): DeviceAsking {
     const at = now();
     return {
       attempt: attempt.id,
@@ -153,28 +180,55 @@ export function createAsking(options: {
     };
   }
 
+  function forget(attempt: Attempt) {
+    if (open.get(attempt.turn) === attempt) open.delete(attempt.turn);
+    clearTimeout(attempt.timer);
+  }
+
+  function remember(attempt: Attempt, why: AttemptEnd): AttemptEnded {
+    prune();
+    ended.set(attempt.id, {
+      client: attempt.client,
+      target: targetOf(attempt.flow.target),
+      end: why,
+      at: now(),
+    });
+    return { ended: why };
+  }
+
+  function endedFor(target: string, client: string, id: string) {
+    prune();
+    const before = ended.get(id);
+    return before?.client === client && before.target === target
+      ? { ended: before.end }
+      : undefined;
+  }
+
+  async function cancelDriver(attempt: Attempt, actor: Actor, hold: Hold) {
+    const { flow } = attempt;
+    if (flow.runNow() === flow.run) {
+      await flow.cancel(attempt.id, actor, hold).catch(() => {});
+    }
+  }
+
   // Ends an attempt within its device's turn. The driver closes what it
   // opened, unless its run is gone, which closed it. A failure to close is
   // the driver's, which the host logs without its words.
   async function end(
-    attempt: Open,
+    attempt: Attempt,
     why: AttemptEnd,
     actor: Actor,
     hold: Hold,
   ): Promise<AttemptEnded> {
-    if (open.get(attempt.turn) === attempt) open.delete(attempt.turn);
-    clearTimeout(attempt.timer);
-    prune();
-    ended.set(attempt.id, { client: attempt.client, end: why, at: now() });
+    forget(attempt);
+    const outcome = remember(attempt, why);
     if (attempt.refusal !== null) attempt.flow.refused(attempt.refusal);
-    if (why !== "stopped" && attempt.flow.runNow() === attempt.flow.run) {
-      await attempt.flow.cancel(attempt.id, actor, hold).catch(() => {});
-    }
-    return { ended: why };
+    if (why !== "stopped") await cancelDriver(attempt, actor, hold);
+    return outcome;
   }
 
   // The time an attempt has runs out as a step of its own.
-  function expire(attempt: Open) {
+  function expire(attempt: Attempt) {
     const device = { driver: attempt.flow.driver, key: attempt.flow.key };
     void turns
       .take(device, async (hold) => {
@@ -187,44 +241,56 @@ export function createAsking(options: {
 
   // Takes what the driver answered a step: what it asks next keeps the
   // attempt open, and anything else ends it.
-  async function answered<Done>(
+  async function answered<Done extends Completion>(
     flow: AskingFlow<Done>,
     step: {
-      client: string;
-      attempt: string | undefined;
-      // What the step answered, or asked again.
       asks: readonly DeviceQuestion[];
-      deadline: number;
-      previous: Open | null;
+      answers: Record<string, string>;
+      again?: string;
     },
-    call: (withinMs: number | undefined) => Promise<unknown>,
+    attempt: Attempt | undefined,
     actor: Actor,
     hold: Hold,
   ): Promise<Done | DeviceAsking | AttemptEnded> {
-    const { attempt, previous } = step;
-    const mayAsk = attempt !== undefined && flow.later.length > 0;
     // Whatever ends it here, a driver that may have opened something for
     // it closes it.
     const close = async () => {
-      if (previous) {
-        if (open.get(previous.turn) === previous) open.delete(previous.turn);
-        clearTimeout(previous.timer);
-      }
-      if (mayAsk && flow.runNow() === flow.run) {
-        await flow.cancel(attempt, actor, hold).catch(() => {});
-      }
+      if (!attempt) return;
+      forget(attempt);
+      await cancelDriver(attempt, actor, hold);
     };
+    const running: Promise<unknown>[] = [];
     let result: unknown;
     try {
-      result = await call(
-        mayAsk
-          ? Math.max(1, Math.min(stepWithinMs, step.deadline - now()))
+      result = await flow.call(
+        {
+          answers: step.answers,
+          ...(attempt ? { attempt: attempt.id } : {}),
+          ...(step.again !== undefined ? { again: step.again } : {}),
+        },
+        actor,
+        (call) => {
+          running.push(call);
+          hold(call);
+        },
+        attempt
+          ? Math.max(1, Math.min(stepWithinMs, attempt.deadline - now()))
           : undefined,
       );
     } catch (error) {
       const failure = flow.failed(error);
-      await close();
+      if (attempt && failure.code === "timeout") {
+        // The response times out before the driver stops. Close pairing
+        // after that work ends, still in the same device turn.
+        attempt.cleanup = Promise.allSettled(running).then(close);
+        hold(attempt.cleanup);
+      } else {
+        await close();
+      }
       throw failure;
+    }
+    if (attempt?.settled && result !== undefined) {
+      return end(attempt, "settled", actor, hold);
     }
     if (!isAsked(result)) {
       let done: Done;
@@ -234,52 +300,42 @@ export function createAsking(options: {
         await close();
         throw error;
       }
-      if (typeof done === "object" && done && "refused" in done) {
+      if ("refused" in done.done) {
         await close();
-      } else if (previous) {
-        if (open.get(previous.turn) === previous) open.delete(previous.turn);
-        clearTimeout(previous.timer);
+      } else if (attempt) {
+        forget(attempt);
       }
       return done;
     }
-    const asked = mayAsk ? askedOf(result, flow.later, step.asks) : null;
-    if (!asked) {
+    const asked = askedOf(result, flow.later, step.asks);
+    if (!attempt || !asked) {
       const failure = flow.failed(new Error("asked what it may not"));
       await close();
       throw failure;
     }
+    if (closed || flow.runNow() !== flow.run) {
+      return end(attempt, "stopped", actor, hold);
+    }
     const at = now();
     const lasting = asked.asks.find((question) => question.lasts);
-    const next: Open = previous ?? {
-      id: attempt!,
-      client: step.client,
-      turn: turnOf(flow),
-      flow: flow as AskingFlow<unknown>,
-      step: 0,
-      asks: [],
-      deadline: step.deadline,
-      lastsUntil: null,
-      wrong: 0,
-      refusal: null,
-      timer: undefined,
-    };
-    next.step += 1;
-    next.asks = asked.asks;
-    next.lastsUntil = lasting ? at + lasting.lasts!.seconds * 1_000 : null;
+    attempt.step += 1;
+    attempt.asks = asked.asks;
+    attempt.lastsUntil = lasting ? at + lasting.lasts!.seconds * 1_000 : null;
     if (asked.refused) {
-      next.wrong += 1;
-      next.refusal = asked.refused.refusal;
-      if (next.wrong >= maxWrongAnswers) {
-        return end(next, "wrong", actor, hold);
+      attempt.wrong += 1;
+      attempt.refusal = asked.refused.refusal;
+      if (attempt.wrong >= maxWrongAnswers) {
+        return end(attempt, "wrong", actor, hold);
       }
     }
-    if (!previous) {
-      open.set(next.turn, next);
-      next.timer = setTimeout(() => expire(next), next.deadline - at);
-      next.timer.unref?.();
+    if (attempt.step === 1) {
+      starting.delete(attempt.turn);
+      open.set(attempt.turn, attempt);
+      attempt.timer = setTimeout(() => expire(attempt), attempt.deadline - at);
+      attempt.timer.unref?.();
     }
     return {
-      ...asking(next),
+      ...asking(attempt),
       ...(asked.refused ? { refused: asked.refused } : {}),
     };
   }
@@ -292,7 +348,7 @@ export function createAsking(options: {
      * gets questions; for one that doesn't, a flow that may ask is refused
      * before the driver is called, as such a client couldn't answer.
      */
-    async start<Done>(
+    async start<Done extends Completion>(
       flow: AskingFlow<Done>,
       step: {
         attempt: string | undefined;
@@ -308,56 +364,81 @@ export function createAsking(options: {
       if (flow.later.length > 0 && attempt === undefined) {
         throw new ActionCallError("invalid_request");
       }
-      const had = open.get(turnOf(flow));
-      if (had) await end(had, "replaced", actor, hold);
+      const turn = turnOf(flow);
+      const had = open.get(turn);
+      const target = targetOf(flow.target);
       prune();
       if (attempt !== undefined) {
-        const cancelled = earlyCancels.get(attempt);
-        if (cancelled?.client === client) {
-          earlyCancels.delete(attempt);
-          return { ended: "cancelled" };
-        }
-        // An id names one attempt, ever.
+        // An id belongs to a single pending, open or remembered attempt.
         if (
           ended.has(attempt) ||
-          [...open.values()].some((each) => each.id === attempt)
+          [...open.values(), ...starting.values()].some(
+            (each) => each.id === attempt,
+          )
         ) {
           throw new ActionCallError("conflict");
         }
+        if (earlyCancels.has(cancelKey(target, client, attempt))) {
+          return { ended: "cancelled" };
+        }
       }
-      if (flow.later.length > 0) {
-        const all = [...open.values()];
+      let pending: Attempt | undefined;
+      if (attempt !== undefined && flow.later.length > 0) {
+        const all = [...open.values(), ...starting.values()].filter(
+          (each) => each !== had,
+        );
         if (
           all.length >= inAll ||
           all.filter((each) => each.client === client).length >= perClient
         ) {
           throw new ActionCallError("limited");
         }
-      }
-      return answered(
-        flow,
-        {
+        pending = {
+          id: attempt,
           client,
-          attempt,
-          asks: step.asks,
+          turn,
+          flow,
+          step: 0,
+          asks: [],
           deadline: now() + attemptMs,
-          previous: null,
-        },
-        (withinMs) =>
-          flow.call(
-            {
-              answers: step.answers,
-              ...(attempt !== undefined && flow.later.length > 0
-                ? { attempt }
-                : {}),
-            },
+          lastsUntil: null,
+          wrong: 0,
+          refusal: null,
+          settled: false,
+          timer: undefined,
+        };
+        starting.set(turn, pending);
+      }
+      const release = () => {
+        if (pending && starting.get(turn) === pending) starting.delete(turn);
+      };
+      try {
+        if (had) {
+          const cancelling: Promise<unknown>[] = [];
+          await end(
+            had,
+            had.settled ? "settled" : "replaced",
             actor,
-            hold,
-            withinMs,
-          ),
-        actor,
-        hold,
-      );
+            (call) => {
+              cancelling.push(call);
+              hold(call);
+            },
+          );
+          await Promise.allSettled(cancelling);
+        }
+        const fell =
+          flow.runNow() !== flow.run
+            ? "stopped"
+            : pending?.settled
+              ? "settled"
+              : flow.standing();
+        if (fell) return pending ? remember(pending, fell) : { ended: fell };
+        if (pending) pending.deadline = now() + attemptMs;
+        return await answered(flow, step, pending, actor, hold);
+      } finally {
+        if (pending?.cleanup) void pending.cleanup.then(release, release);
+        else release();
+      }
     },
 
     /**
@@ -368,18 +449,23 @@ export function createAsking(options: {
      */
     next(
       device: Device,
+      target: Target,
       client: string,
       request: AskingStep,
       actor: Actor,
-    ): Promise<DeviceAsking | AttemptEnded | { done: unknown } | "gone"> {
+    ): Promise<DeviceAsking | AttemptEnded | Completion | "gone"> {
+      const key = targetOf(target);
       return turns.take(device, async (hold) => {
         const attempt = open.get(turnOf(device));
         if (!attempt || attempt.id !== request.attempt) {
-          prune();
-          const before = ended.get(request.attempt);
-          return before?.client === client ? { ended: before.end } : "gone";
+          return endedFor(key, client, request.attempt) ?? "gone";
         }
-        if (attempt.client !== client) return "gone";
+        if (
+          attempt.client !== client ||
+          targetOf(attempt.flow.target) !== key
+        ) {
+          return "gone";
+        }
         if (request.step !== attempt.step) {
           throw new ActionCallError("conflict");
         }
@@ -387,7 +473,7 @@ export function createAsking(options: {
         if (flow.runNow() !== flow.run) {
           return end(attempt, "stopped", actor, hold);
         }
-        const fell = flow.standing();
+        const fell = attempt.settled ? "settled" : flow.standing();
         if (fell) return end(attempt, fell, actor, hold);
         const at = now();
         if (at >= attempt.deadline) return end(attempt, "time", actor, hold);
@@ -411,36 +497,17 @@ export function createAsking(options: {
           }
           answers = checked;
         }
-        const result = await answered(
+        return answered(
           flow,
           {
-            client,
-            attempt: attempt.id,
-            asks: attempt.asks,
-            deadline: attempt.deadline,
-            previous: attempt,
+            answers,
+            asks: request.again === undefined ? attempt.asks : [],
+            ...(request.again !== undefined ? { again: request.again } : {}),
           },
-          (withinMs) =>
-            flow.call(
-              {
-                answers,
-                attempt: attempt.id,
-                ...(request.again !== undefined
-                  ? { again: request.again }
-                  : {}),
-              },
-              actor,
-              hold,
-              withinMs,
-            ),
+          attempt,
           actor,
           hold,
         );
-        return typeof result === "object" &&
-          result !== null &&
-          ("asks" in result || "ended" in result)
-          ? (result as DeviceAsking | AttemptEnded)
-          : { done: result };
       });
     },
 
@@ -452,21 +519,68 @@ export function createAsking(options: {
      */
     cancel(
       device: Device,
+      target: Target,
       client: string,
       id: string,
       actor: Actor,
     ): Promise<AttemptEnded> {
+      const key = targetOf(target);
       return turns.take(device, async (hold) => {
         const attempt = open.get(turnOf(device));
-        if (attempt?.id === id && attempt.client === client) {
-          return end(attempt, "cancelled", actor, hold);
+        if (
+          attempt?.id === id &&
+          attempt.client === client &&
+          targetOf(attempt.flow.target) === key
+        ) {
+          return end(
+            attempt,
+            attempt.settled ? "settled" : "cancelled",
+            actor,
+            hold,
+          );
         }
-        prune();
-        const before = ended.get(id);
-        if (before?.client === client) return { ended: before.end };
-        if (!before) earlyCancels.set(id, { client, at: now() });
+        const before = endedFor(key, client, id);
+        if (before) return before;
+        if (!ended.has(id))
+          earlyCancels.set(cancelKey(key, client, id), { at: now() });
         return { ended: "cancelled" };
       });
+    },
+
+    /** Looks up an ended Repair after its device is gone. */
+    endedRepair(device: string, client: string, id: string) {
+      return endedFor(
+        targetOf({ operation: "repair", id: device }),
+        client,
+        id,
+      );
+    },
+
+    /** A problem changed outside its repair. Let a driver step in progress finish. */
+    settleRepair(device: Device, id: string) {
+      const turn = turnOf(device);
+      const attempt = starting.get(turn) ?? open.get(turn);
+      const target = attempt?.flow.target;
+      if (
+        !attempt ||
+        target?.operation !== "repair" ||
+        target.id !== id ||
+        attempt.settled
+      )
+        return;
+      attempt.settled = true;
+      void turns
+        .take(device, async (hold) => {
+          if (open.get(turn) === attempt) {
+            await end(
+              attempt,
+              "settled",
+              { kind: "app", id: device.driver },
+              hold,
+            );
+          }
+        })
+        .catch(() => {});
     },
 
     /** Ends the device's attempt within a turn already taken, as Remove does. */
@@ -485,6 +599,7 @@ export function createAsking(options: {
       closed = true;
       for (const attempt of open.values()) clearTimeout(attempt.timer);
       open.clear();
+      starting.clear();
     },
   };
 }

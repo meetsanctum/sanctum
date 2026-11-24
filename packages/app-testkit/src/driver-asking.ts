@@ -74,7 +74,7 @@ export function createAttempt(flow: AttemptFlow) {
   }
 
   // Takes what the driver answered a step.
-  async function answered(result: unknown, answeredAsks: DeviceQuestion[]) {
+  function answered(result: unknown, answeredAsks: readonly DeviceQuestion[]) {
     if (isAsked(result)) {
       const asked = askedOf(result, flow.later, answeredAsks);
       if (!asked) {
@@ -87,7 +87,8 @@ export function createAttempt(flow: AttemptFlow) {
       lastsUntil = lasting ? clock + lasting.lasts!.seconds * 1_000 : null;
       if (asked.refused) {
         wrong += 1;
-        if (wrong >= maxWrongAnswers) return end("wrong");
+        if (wrong >= maxWrongAnswers)
+          return (state = { kind: "ended", why: "wrong" });
       }
       state = {
         kind: "asking",
@@ -107,7 +108,6 @@ export function createAttempt(flow: AttemptFlow) {
         new Error(`${flow.what} refused in words it doesn't declare`),
       );
     }
-    await flow.cancel(id);
     const { question, refusal } = refused as {
       question?: string;
       refusal: string;
@@ -118,6 +118,28 @@ export function createAttempt(flow: AttemptFlow) {
       ...(question !== undefined ? { question } : {}),
     };
     return state;
+  }
+
+  async function takeStep(
+    answers: Record<string, string>,
+    answeredAsks: readonly DeviceQuestion[],
+    again?: string,
+  ) {
+    let next: AttemptState;
+    try {
+      const result = await flow.call({
+        answers,
+        attempt: id,
+        ...(again !== undefined ? { again } : {}),
+      });
+      next = answered(result, answeredAsks);
+    } catch (error) {
+      state = null;
+      await flow.cancel(id).catch(() => {});
+      throw error;
+    }
+    if (next.kind === "refused" || next.kind === "ended") await flow.cancel(id);
+    return next;
   }
 
   function stillAsking() {
@@ -142,9 +164,7 @@ export function createAttempt(flow: AttemptFlow) {
     async start(answers: Record<string, string> = {}) {
       const checked = answersTo(flow.first, answers);
       if (!checked) throw new Error(`The answers to ${flow.what} are invalid`);
-      return answered(await flow.call({ answers: checked, attempt: id }), [
-        ...flow.first,
-      ]);
+      return takeStep(checked, flow.first);
     },
 
     /** Answers what it asks now, as Continue does. */
@@ -156,11 +176,7 @@ export function createAttempt(flow: AttemptFlow) {
       if (lastsUntil !== null && clock > lastsUntil) {
         throw new Error("The time of the question that lasts is up");
       }
-      const answering = asks;
-      return answered(
-        await flow.call({ answers: checked, attempt: id }),
-        answering,
-      );
+      return takeStep(checked, asks);
     },
 
     /** Asks a question that lasts again, as Show a new code does. */
@@ -170,11 +186,7 @@ export function createAttempt(flow: AttemptFlow) {
       if (!asks.some((each) => each.id === question && each.lasts)) {
         throw new Error(`${question} isn't asked now, or doesn't last`);
       }
-      const answering = asks;
-      return answered(
-        await flow.call({ answers: {}, attempt: id, again: question }),
-        answering,
-      );
+      return takeStep({}, [], question);
     },
 
     /** Ends it, as Cancel or the card closing does. */

@@ -14,6 +14,15 @@ import type { ReactNode } from "react";
 /** The words a refusal says, under the question it's about. */
 export type Refused = { question: string; refusal: string };
 
+export function refusalWords(
+  asks: readonly DeviceQuestion[],
+  refused: Refused,
+) {
+  return asks.find((question) => question.id === refused.question)?.refusals[
+    refused.refusal
+  ];
+}
+
 export function QuestionField(props: {
   id: string;
   question: DeviceQuestion;
@@ -37,8 +46,17 @@ export function QuestionField(props: {
       : undefined;
   const isCode = question.kind === "code";
   const isUp = remaining === "up";
-  const help = isUp ? "Time to enter this code is up." : question.help;
-  const said = why ? `${id}-refused` : `${id}-help`;
+  const help = isUp
+    ? "Time to enter this code is up."
+    : why
+      ? null
+      : question.help;
+  const showHelp = help || typeof remaining === "number";
+  const refusalId = `${id}-refused`;
+  const helpId = `${id}-help`;
+  const describedBy = [why ? refusalId : null, showHelp ? helpId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
@@ -68,17 +86,15 @@ export function QuestionField(props: {
             disabled={props.disabled || isUp}
             autoFocus={props.autoFocus}
             aria-invalid={why ? true : undefined}
-            aria-describedby={
-              why || help || typeof remaining === "number" ? said : undefined
-            }
+            aria-describedby={describedBy || undefined}
             onChange={(event) => props.onChange(event.target.value)}
           />
         </div>
         {props.beside}
       </div>
-      {why ? (
+      {why && (
         <p
-          id={said}
+          id={refusalId}
           role="alert"
           className="m-0 flex items-start gap-1.5 text-sm text-destructive"
         >
@@ -88,26 +104,25 @@ export function QuestionField(props: {
           />
           <span>{why}</span>
         </p>
-      ) : (
-        (help || typeof remaining === "number") && (
-          <p id={said} className="m-0 text-sm text-muted-foreground">
-            {help}
-            {typeof remaining === "number" && (
-              <>
-                {help && " "}
-                <span
-                  className={
-                    remaining <= 10
-                      ? "whitespace-nowrap text-(--sun-text) tabular-nums"
-                      : "whitespace-nowrap tabular-nums"
-                  }
-                >
-                  {remaining} s remaining
-                </span>
-              </>
-            )}
-          </p>
-        )
+      )}
+      {showHelp && (
+        <p id={helpId} className="m-0 text-sm text-muted-foreground">
+          {help}
+          {typeof remaining === "number" && (
+            <>
+              {help && " "}
+              <span
+                className={
+                  remaining <= 10
+                    ? "whitespace-nowrap text-(--sun-text) tabular-nums"
+                    : "whitespace-nowrap tabular-nums"
+                }
+              >
+                {remaining} s remaining
+              </span>
+            </>
+          )}
+        </p>
       )}
     </div>
   );

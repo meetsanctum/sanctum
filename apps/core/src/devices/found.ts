@@ -19,7 +19,7 @@ import type { ActivityAuthor, RecordActivity } from "../activity/activity.js";
 import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
-import type { Asker, Asking, AskingFlow } from "./asking.js";
+import type { AddDone, Asker, Asking, AskingFlow } from "./asking.js";
 import type { Devices } from "./devices.js";
 import type { Hold } from "./turns.js";
 
@@ -77,14 +77,16 @@ export type AddDrivers = {
     driver: string,
     add: DriverAdd,
     actor: Actor,
-    hold?: Hold,
-    withinMs?: number,
+    hold: Hold,
+    withinMs: number | undefined,
+    run: number,
   ): Promise<DriverAddResult>;
   cancelAdd(
     driver: string,
     cancel: DriverCancelAdd,
     actor: Actor,
-    hold?: Hold,
+    hold: Hold,
+    run: number,
   ): Promise<void>;
   /** What adding may ask once started, of the version taking calls now. */
   laterOf(driver: string): DeviceQuestion[];
@@ -199,12 +201,15 @@ export function createFound(options: {
       if ("step" in request) {
         const result = await asking.next(
           { driver, key },
+          { operation: "add", driver, key },
           who.clientId,
           request,
           actor,
         );
         if (result === "gone") return addedOr(driver, key, "not_found");
-        return "done" in result ? (result.done as AddResult) : result;
+        if (!("done" in result)) return result;
+        if (result.operation !== "add") throw new ActionCallError("not_found");
+        return result.done;
       }
       return devices.turns.take({ driver, key }, async (hold) => {
         // As it is once its turn comes: an add before may have added it.
@@ -217,7 +222,7 @@ export function createFound(options: {
           log(found, "refused", who, "invalid_request");
           throw new ActionCallError("invalid_request");
         }
-        return asking.start(
+        const result = await asking.start(
           flowOf(found, lists.get(driver)!.run, who),
           {
             attempt: request.attempt,
@@ -227,7 +232,8 @@ export function createFound(options: {
           },
           actor,
           hold,
-        ) as Promise<AddResult>;
+        );
+        return "done" in result ? result.done : result;
       });
     },
 
@@ -244,6 +250,7 @@ export function createFound(options: {
       const { driver, key, attempt } = parsed.data;
       const ended = await asking.cancel(
         { driver, key },
+        { operation: "add", driver, key },
         who.clientId,
         attempt,
         actor,
@@ -270,16 +277,17 @@ export function createFound(options: {
     found: FoundDevice,
     run: number,
     who: ActivityAuthor,
-  ): AskingFlow<AddResult> {
+  ): AskingFlow<{ operation: "add"; done: AddDone }> {
     const { driver, key } = found;
     return {
+      target: { operation: "add", driver, key },
       driver,
       key,
       run,
       later: drivers.laterOf(driver),
       runNow: () => drivers.run(driver),
       call: (step, actor, hold, withinMs) =>
-        drivers.add(driver, { key, ...step }, actor, hold, withinMs),
+        drivers.add(driver, { key, ...step }, actor, hold, withinMs, run),
       finish(result, answered) {
         if (result !== undefined) {
           const said = z.object({ refused: z.unknown() }).safeParse(result);
@@ -293,10 +301,13 @@ export function createFound(options: {
           const refused = said.data.refused;
           log(found, "refused", who, refused.refusal);
           return {
-            refused:
-              "question" in refused
-                ? { question: refused.question, refusal: refused.refusal }
-                : { refusal: refused.refusal },
+            operation: "add",
+            done: {
+              refused:
+                "question" in refused
+                  ? { question: refused.question, refusal: refused.refusal }
+                  : { refusal: refused.refusal },
+            },
           };
         }
         // It registers the device before it answers.
@@ -307,7 +318,7 @@ export function createFound(options: {
           throw new ActionCallError("app_failed");
         }
         log({ name: added.name, id }, "ok", who);
-        return { added };
+        return { operation: "add", done: { added } };
       },
       failed(error) {
         const failure =
@@ -324,7 +335,7 @@ export function createFound(options: {
       },
       standing: () => null,
       cancel: (attempt, actor, hold) =>
-        drivers.cancelAdd(driver, { key, attempt }, actor, hold),
+        drivers.cancelAdd(driver, { key, attempt }, actor, hold, run),
       refused: (refusal) => log(found, "refused", who, refusal),
     };
   }

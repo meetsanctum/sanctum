@@ -7,7 +7,6 @@ import {
   type Actor,
   type AttemptEnded,
   type DeviceAsking,
-  type DeviceInfo,
   type DeviceProblem,
   type DeviceQuestion,
   type DriverCancelRepair,
@@ -22,7 +21,7 @@ import type { Outcome } from "../activity/schema.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Rule } from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
-import type { Asker, Asking, AskingFlow } from "./asking.js";
+import type { Asker, Asking, AskingFlow, RepairDone } from "./asking.js";
 import type { Devices } from "./devices.js";
 import { devices as deviceTable } from "./schema.js";
 import type { Hold } from "./turns.js";
@@ -78,14 +77,16 @@ export type RepairDrivers = {
     driver: string,
     repair: DriverRepair,
     actor: Actor,
-    hold?: Hold,
-    withinMs?: number,
+    hold: Hold,
+    withinMs: number | undefined,
+    run: number,
   ): Promise<DriverRepairResult>;
   cancelRepair(
     driver: string,
     cancel: DriverCancelRepair,
     actor: Actor,
-    hold?: Hold,
+    hold: Hold,
+    run: number,
   ): Promise<void>;
   /** What repairing a problem may ask once started, of the version taking calls now. */
   laterOf(driver: string, problem: string): DeviceQuestion[];
@@ -95,11 +96,7 @@ export type RepairDrivers = {
  * Where a repair got to: the device as it is now, the answer its driver
  * refused, what it asks next, or why it ended without either.
  */
-export type RepairResult =
-  | { repaired: DeviceInfo }
-  | { refused: { question: string; refusal: string } }
-  | DeviceAsking
-  | AttemptEnded;
+export type RepairResult = RepairDone | DeviceAsking | AttemptEnded;
 
 export function createProblems(options: {
   db: CoreDatabase;
@@ -164,6 +161,9 @@ export function createProblems(options: {
           .where(eq(deviceTable.id, id))
           .run(),
       );
+      if (row.problem && row.problem.id !== problem?.id) {
+        asking.settleRepair({ driver, key }, id);
+      }
       if (problem && row.problem?.id !== problem.id) {
         record({
           action: "device.problem",
@@ -197,12 +197,25 @@ export function createProblems(options: {
       const { id } = request;
       const device = devices.row(id);
       if (!device) {
+        if ("step" in request) {
+          const ended = asking.endedRepair(id, who.clientId, request.attempt);
+          if (ended) return ended;
+        }
         throw new ActionCallError("not_found");
       }
       if ("step" in request) {
-        const result = await asking.next(device, who.clientId, request, actor);
+        const result = await asking.next(
+          device,
+          { operation: "repair", id },
+          who.clientId,
+          request,
+          actor,
+        );
         if (result === "gone") throw new ActionCallError("not_found");
-        return "done" in result ? (result.done as RepairResult) : result;
+        if (!("done" in result)) return result;
+        if (result.operation !== "repair")
+          throw new ActionCallError("not_found");
+        return result.done;
       }
       return devices.turns.take(device, async (hold) => {
         // As it is once its turn comes: a repair before may have set it right.
@@ -225,7 +238,7 @@ export function createProblems(options: {
           log(id, "refused", who, "unavailable");
           throw new ActionCallError("unavailable");
         }
-        return asking.start(
+        const result = await asking.start(
           flowOf(
             id,
             row.driver,
@@ -242,7 +255,8 @@ export function createProblems(options: {
           },
           actor,
           hold,
-        ) as Promise<RepairResult>;
+        );
+        return "done" in result ? result.done : result;
       });
     },
 
@@ -256,11 +270,20 @@ export function createProblems(options: {
       if (!parsed.success) {
         throw new ActionCallError("invalid_request");
       }
-      const device = devices.row(parsed.data.id);
+      const { id, attempt } = parsed.data;
+      const device = devices.row(id);
       if (!device) {
-        return { ended: "removed" };
+        return (
+          asking.endedRepair(id, who.clientId, attempt) ?? { ended: "removed" }
+        );
       }
-      return asking.cancel(device, who.clientId, parsed.data.attempt, actor);
+      return asking.cancel(
+        device,
+        { operation: "repair", id },
+        who.clientId,
+        attempt,
+        actor,
+      );
     },
   };
 
@@ -272,8 +295,9 @@ export function createProblems(options: {
     problem: DeviceProblem & { repair: NonNullable<DeviceProblem["repair"]> },
     run: number,
     who: ActivityAuthor,
-  ): AskingFlow<RepairResult> {
+  ): AskingFlow<{ operation: "repair"; done: RepairDone }> {
     return {
+      target: { operation: "repair", id },
       driver,
       key,
       run,
@@ -286,6 +310,7 @@ export function createProblems(options: {
           actor,
           hold,
           withinMs,
+          run,
         ),
       finish(result, answered) {
         if (result !== undefined) {
@@ -299,10 +324,13 @@ export function createProblems(options: {
           }
           const { question, refusal } = parsed.data.refused;
           log(id, "refused", who, refusal);
-          return { refused: { question, refusal } };
+          return {
+            operation: "repair",
+            done: { refused: { question, refusal } },
+          };
         }
         log(id, "ok", who);
-        return { repaired: devices.get(id)! };
+        return { operation: "repair", done: { repaired: devices.get(id)! } };
       },
       failed(error) {
         const failure =
@@ -324,7 +352,13 @@ export function createProblems(options: {
         return row.problem?.id === problem.id ? null : "settled";
       },
       cancel: (attempt, actor, hold) =>
-        drivers.cancelRepair(driver, { key, device: id, attempt }, actor, hold),
+        drivers.cancelRepair(
+          driver,
+          { key, device: id, attempt },
+          actor,
+          hold,
+          run,
+        ),
       refused: (refusal) => log(id, "refused", who, refusal),
     };
   }

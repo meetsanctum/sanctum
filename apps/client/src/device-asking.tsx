@@ -8,7 +8,7 @@ import { CircleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { coreFetch } from "./core-fetch";
-import { QuestionField } from "./device-questions";
+import { QuestionField, refusalWords } from "./device-questions";
 
 // Adding and repairing that ask once they have started, as a TV shows a code
 // only once pairing begins: the questions of the step on the screen, with
@@ -51,9 +51,7 @@ export function askingOf(
   const { refused } = result;
   const apart =
     refused && !result.asks.some((each) => each.id === refused.question)
-      ? (answered.find((each) => each.id === refused.question)?.refusals[
-          refused.refusal
-        ] ?? null)
+      ? (refusalWords(answered, refused) ?? null)
       : null;
   return {
     ...result,

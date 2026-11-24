@@ -382,10 +382,10 @@ export async function createModules(
     drivers: {
       run: (driver) =>
         apps.isRunning(driver) ? apps.driverRun(driver) : undefined,
-      repair: (driver, repair, actor, hold, withinMs) =>
-        apps.repair(driver, repair, actor, hold, withinMs),
-      cancelRepair: (driver, cancel, actor, hold) =>
-        apps.cancelRepair(driver, cancel, actor, hold),
+      repair: (driver, repair, actor, hold, withinMs, run) =>
+        apps.repair(driver, repair, actor, hold, withinMs, run),
+      cancelRepair: (driver, cancel, actor, hold, run) =>
+        apps.cancelRepair(driver, cancel, actor, hold, run),
       laterOf: (driver, problem) => laterOf(driver, problem),
     },
     asking,
@@ -398,10 +398,10 @@ export async function createModules(
     drivers: {
       run: (driver) =>
         apps.isRunning(driver) ? apps.driverRun(driver) : undefined,
-      add: (driver, add, actor, hold, withinMs) =>
-        apps.add(driver, add, actor, hold, withinMs),
-      cancelAdd: (driver, cancel, actor, hold) =>
-        apps.cancelAdd(driver, cancel, actor, hold),
+      add: (driver, add, actor, hold, withinMs, run) =>
+        apps.add(driver, add, actor, hold, withinMs, run),
+      cancelAdd: (driver, cancel, actor, hold, run) =>
+        apps.cancelAdd(driver, cancel, actor, hold, run),
       laterOf: (driver) => laterOf(driver),
     },
     asking,

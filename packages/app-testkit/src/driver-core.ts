@@ -624,7 +624,7 @@ export function createDriverCore(
      * the question it names declares.
      */
     async repair(key: string, answers: Record<string, string>) {
-      const repair = driver().repair;
+      const { repair, problems: declared } = driver();
       const problem = problems.get(key);
       if (!repair || !problem?.repair) {
         throw new Error(`${key} has nothing to repair`);
@@ -632,6 +632,11 @@ export function createDriverCore(
       const checked = answersTo(problem.repair.asks, answers);
       if (!checked) {
         refuse(new Error("Repair's answers are invalid"));
+      }
+      if (declared?.[problem.id]?.repair?.later?.length) {
+        refuse(
+          new Error(`Repairing ${key} asks more: start it with startRepair`),
+        );
       }
       const result = await repair(person(), {
         key,
@@ -663,7 +668,7 @@ export function createDriverCore(
      */
     async add(key: string, answers: Record<string, string> = {}) {
       if (registered.has(key)) return;
-      const add = driver().add;
+      const { add, addLater } = driver();
       const listed = found.find((each) => each.key === key);
       if (!add || !listed) {
         throw new Error(`${app.id} found no device ${key} to add`);
@@ -671,6 +676,9 @@ export function createDriverCore(
       const checked = answersTo(listed.asks, answers);
       if (!checked) {
         refuse(new Error("Adding's answers are invalid"));
+      }
+      if (addLater?.length) {
+        refuse(new Error(`Adding ${key} asks more: start it with startAdd`));
       }
       const result = await add(person(), { key, answers: checked });
       if (isAsked(result)) {

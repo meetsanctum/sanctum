@@ -34,7 +34,7 @@ const cancelWithinMs = 10_000;
 // What a device's turn holds on to (devices/turns.ts).
 type Hold = (running: Promise<unknown>) => void;
 
-type Driving = { app: AppDefinition; storage: AppStorage };
+type Driving = { app: AppDefinition; storage: AppStorage; runId: number };
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -84,15 +84,17 @@ export function createDriverCalls<Entry extends Driving>(options: {
       quiet = false,
       withinMs: callMs = timeoutMs,
       hold,
+      run,
     }: {
       quiet?: boolean;
       withinMs?: number;
       hold?: (running: Promise<unknown>) => void;
+      run?: number;
     } = {},
   ): Promise<T> {
     const deadline = Date.now() + callMs;
     let entry = driving(driverId);
-    if (!entry) {
+    if (!entry && run === undefined) {
       const waiting = installed.get(driverId);
       if (waiting && (await options.arrives(waiting))) entry = waiting;
     }
@@ -103,6 +105,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
       !driver ||
       installed.get(driverId) !== entry ||
       !accepts(entry) ||
+      (run !== undefined && entry.runId !== run) ||
       withinMs <= 0
     ) {
       throw new ActionCallError("unavailable");
@@ -110,7 +113,17 @@ export function createDriverCalls<Entry extends Driving>(options: {
     const storage = entry.storage.call();
     const ctx = options.contextFor(entry, actor, storage, { withinMs });
     try {
-      const running = Promise.resolve().then(() => call(driver, ctx));
+      const running = Promise.resolve().then(() => {
+        if (
+          run !== undefined &&
+          (installed.get(driverId) !== entry ||
+            !accepts(entry) ||
+            entry.runId !== run)
+        ) {
+          throw new ActionCallError("unavailable");
+        }
+        return call(driver, ctx);
+      });
       hold?.(running);
       return await options.track(entry, withTimeout(running, withinMs));
     } catch (error) {
@@ -283,8 +296,9 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driverId: string,
       add: DriverAdd,
       actor: Actor,
-      hold?: Hold,
-      withinMs = addWithinMs,
+      hold: Hold,
+      withinMs: number | undefined,
+      run: number,
     ) {
       return toDriver(
         driverId,
@@ -296,7 +310,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.add(ctx, add);
         },
-        { quiet: true, withinMs, hold },
+        { quiet: true, withinMs: withinMs ?? addWithinMs, hold, run },
       );
     },
 
@@ -308,8 +322,9 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driverId: string,
       repair: DriverRepair,
       actor: Actor,
-      hold?: Hold,
-      withinMs?: number,
+      hold: Hold,
+      withinMs: number | undefined,
+      run: number,
     ) {
       return toDriver(
         driverId,
@@ -321,7 +336,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.repair(ctx, repair);
         },
-        { quiet: true, hold, ...(withinMs ? { withinMs } : {}) },
+        { quiet: true, hold, run, ...(withinMs ? { withinMs } : {}) },
       );
     },
 
@@ -331,7 +346,8 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driverId: string,
       cancel: DriverCancelAdd,
       actor: Actor,
-      hold?: Hold,
+      hold: Hold,
+      run: number,
     ) {
       return toDriver(
         driverId,
@@ -343,7 +359,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.cancelAdd(ctx, cancel);
         },
-        { quiet: true, withinMs: cancelWithinMs, hold },
+        { quiet: true, withinMs: cancelWithinMs, hold, run },
       );
     },
 
@@ -351,7 +367,8 @@ export function createDriverCalls<Entry extends Driving>(options: {
       driverId: string,
       cancel: DriverCancelRepair,
       actor: Actor,
-      hold?: Hold,
+      hold: Hold,
+      run: number,
     ) {
       return toDriver(
         driverId,
@@ -363,7 +380,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.cancelRepair(ctx, cancel);
         },
-        { quiet: true, withinMs: cancelWithinMs, hold },
+        { quiet: true, withinMs: cancelWithinMs, hold, run },
       );
     },
   };
