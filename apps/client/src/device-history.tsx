@@ -37,6 +37,7 @@ import {
   type Live,
   type Span,
 } from "./device-history-data";
+import { BandTicks } from "./motion-band";
 import { everyWhileShown } from "./while-shown";
 
 // A light's or a switch's History page in its detail, from core History: the
@@ -147,11 +148,11 @@ export function useDayAndWeek(
     };
     void load();
     const stopReloads = everyWhileShown(refreshMs, () => void load());
-    const tick = setInterval(() => setNow(Date.now()), minute);
+    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     return () => {
       current = false;
       stopReloads();
-      clearInterval(tick);
+      stopTicks();
     };
   }, [device.id, capability.id, weekOfChanges]);
 
@@ -289,7 +290,7 @@ export function Readout(props: {
     <div
       aria-hidden="true"
       style={{ left }}
-      className="pointer-events-none absolute -top-14 z-10 flex w-32 flex-col rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5"
+      className="pointer-events-none absolute -top-14 z-10 flex w-32 flex-col rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white)"
     >
       <span className="flex items-center gap-1.5 text-[15px] leading-5">
         {props.colour && (
@@ -378,12 +379,6 @@ function Strip(props: {
       : from + ((cursor.at + 0.5) / quarters) * (to - from);
   const pointedSpan = pointed === null ? undefined : spanAt(pointed);
   const marks = marksOf(spans, x, height);
-  // Every 6 hours of the day, away from the ends.
-  const ticks: number[] = [];
-  for (let at = midnight(from); at < to; at += 6 * 60 * minute) {
-    const left = x(at);
-    if (at > from && left > 20 && left < plot - 20) ticks.push(at);
-  }
 
   return (
     <div ref={box} className="relative">
@@ -449,21 +444,12 @@ function Strip(props: {
           100%
         </span>
       )}
-      <div
-        aria-hidden="true"
-        className="relative mt-2 h-[18px]"
-        style={{ width: plot }}
-      >
-        {ticks.map((at) => (
-          <span
-            key={at}
-            style={{ left: x(at) }}
-            className="absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
-          >
-            {timeText(at)}
-          </span>
-        ))}
-      </div>
+      <BandTicks
+        from={from}
+        to={to}
+        plot={plot}
+        className="mt-2 text-(--pewter)"
+      />
       <ul className="sr-only">
         {spans.map((span) => (
           // One text each, not one for every part of it.
@@ -572,7 +558,8 @@ export function Columns(props: {
   const most = Math.max(0, ...days.map(amountOf));
   const scale = counts
     ? (countScales.find((count) => count >= most) ?? most)
-    : (scales.find((hours) => hours >= most) ?? 24);
+    : // The day the clocks go back has 25 hours, which one on all day fills.
+      (scales.find((hours) => hours >= most) ?? Math.ceil(most));
   const today = midnight(now);
   const nameOf = (day: Day) =>
     day.start === today ? "Today" : weekday.format(day.start);

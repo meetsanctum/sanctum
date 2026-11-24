@@ -141,10 +141,10 @@ function useLastDay(sensors: readonly Sensor[]) {
   }, [wanted]);
 
   useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), minute);
+    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     const stopReloads = everyWhileShown(refreshMs, () => refresh.current());
     return () => {
-      clearInterval(tick);
+      stopTicks();
       stopReloads();
     };
   }, []);

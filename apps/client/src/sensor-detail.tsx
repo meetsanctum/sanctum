@@ -199,11 +199,11 @@ function SensorReading(props: {
     };
     void load();
     const stopReloads = everyWhileShown(refreshMs, () => void load());
-    const tick = setInterval(() => setNow(Date.now()), minute);
+    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     return () => {
       current = false;
       stopReloads();
-      clearInterval(tick);
+      stopTicks();
     };
   }, [device.id, sensor.id]);
 

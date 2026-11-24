@@ -214,6 +214,19 @@ export function midnight(at: number, daysBack = 0) {
   return date.getTime();
 }
 
+/** The local hours every 6 within the day, whatever the clocks did. */
+export function sixHours(from: number, now: number) {
+  const start = midnight(from);
+  const hours: number[] = [];
+  for (let hour = 0; ; hour += 6) {
+    const date = new Date(start);
+    date.setHours(hour);
+    const at = date.getTime();
+    if (at >= now) return hours;
+    if (at > from) hours.push(at);
+  }
+}
+
 /**
  * The last 7 local days, today last: the hourly roll-ups of whether it was
  * on, saw motion, was open or played, by `field`, and the spans for the

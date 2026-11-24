@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { sixHours } from "../src/day-line";
-import { timeText } from "../src/device-history-data";
+import { sixHours, timeText } from "../src/device-history-data";
 import {
   memoryChart,
   memorySummary,

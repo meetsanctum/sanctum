@@ -2,7 +2,9 @@
 // a window behind others, minimised or on a tablet whose screen is off asks
 // nothing, and once it is shown again it asks at once, so what it shows is
 // fresh. Clocks that only redraw "12 min ago" keep going, since they ask
-// nothing and must be right the moment the window is seen.
+// nothing and must be right the moment the window is seen. A chart's minute,
+// which redraws the whole chart, waits while hidden instead: it runs at once
+// when the window is shown again.
 
 /** Whether the window is shown now. */
 export const isShown = () =>
