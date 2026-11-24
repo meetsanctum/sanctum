@@ -11,6 +11,7 @@ import type {
   CoreEventHandler,
   CoreEventHandlers,
 } from "./core-events.js";
+import type { DriverCancelAdd, DriverCancelRepair } from "./device-asking.js";
 import type { DriverRepair } from "./device-problems.js";
 import type { DriverDiscovery } from "./discovery.js";
 import type { DriverAdd } from "./found-devices.js";
@@ -89,6 +90,12 @@ const driverHooks: Record<DriverHook, (driver: Driver) => Hook | undefined> = {
     ((ctx, params) => driver.discovered!(ctx, params as DriverDiscovery)),
   add: (driver) =>
     driver.add && ((ctx, params) => driver.add!(ctx, params as DriverAdd)),
+  cancelAdd: (driver) =>
+    driver.cancelAdd &&
+    ((ctx, params) => driver.cancelAdd!(ctx, params as DriverCancelAdd)),
+  cancelRepair: (driver) =>
+    driver.cancelRepair &&
+    ((ctx, params) => driver.cancelRepair!(ctx, params as DriverCancelRepair)),
 };
 
 // How work ended. A refusal keeps its code; anything else is the app's failure.

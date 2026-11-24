@@ -3,7 +3,7 @@
   "name": "Fake lights",
   "version": "0.1.0",
   "core": "^2.0.0",
-  "protocol": 17,
+  "protocol": 18,
   "summary": null,
   "runtime": {
     "memory": 128,
@@ -15,8 +15,24 @@
       "command",
       "pairing",
       "identify",
-      "add"
+      "repair",
+      "add",
+      "cancelAdd",
+      "cancelRepair"
     ],
+    "problems": {
+      "pairingLost": {
+        "words": "Its pairing was removed",
+        "repair": {
+          "help": "Pair it again. The TV shows two codes, one after the other.",
+          "asks": [],
+          "later": [
+            "firstCode",
+            "secondCode"
+          ]
+        }
+      }
+    },
     "questions": {
       "key": {
         "label": "Key",
@@ -25,8 +41,34 @@
         "refusals": {
           "wrongKey": "That key doesn't match. Check it and try again."
         }
+      },
+      "firstCode": {
+        "label": "Code on the TV (1 of 2)",
+        "kind": "code",
+        "length": 4,
+        "help": "The TV shows a four-digit code. Any but 0000 works here.",
+        "refusals": {
+          "wrongCode": "That code didn't match."
+        }
+      },
+      "secondCode": {
+        "label": "Code on the TV (2 of 2)",
+        "kind": "code",
+        "length": 4,
+        "help": "A new code is on the TV.",
+        "lasts": {
+          "seconds": 35,
+          "again": "Show a new code"
+        },
+        "refusals": {
+          "wrongCode": "That code didn't match."
+        }
       }
-    }
+    },
+    "addLater": [
+      "firstCode",
+      "secondCode"
+    ]
   },
   "permissions": [
     {

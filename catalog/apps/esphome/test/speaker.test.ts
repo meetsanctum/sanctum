@@ -129,6 +129,82 @@ describe("a smart speaker", () => {
     );
   });
 
+  it("is doing what it did before while it announces, idle or playing", async () => {
+    home = await startHome();
+    const device = await speaker();
+    const key = await add(home.core, device);
+    const capability = "media-media_player";
+    await home.core.until(
+      () => home.core.latest(key, capability) !== undefined,
+      "its state",
+    );
+    const activities = () =>
+      home.core.reports
+        .map((each) => each.states[capability] as { activity?: string })
+        .filter((state) => state !== undefined)
+        .map((state) => state.activity);
+
+    // An answer or a timer's chime while it is idle is not playing.
+    device.setState(201, { state: MediaPlayerState.ANNOUNCING, volume: 0.5 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 50,
+      "its announcement",
+    );
+    expect(activities()).not.toContain("playing");
+    device.setState(201, { state: MediaPlayerState.IDLE, volume: 0.6 });
+
+    // One in the middle of music leaves it playing.
+    device.setState(201, { state: MediaPlayerState.PLAYING });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.activity === "playing",
+      "playing",
+    );
+    device.setState(201, { state: MediaPlayerState.ANNOUNCING, volume: 0.7 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 70,
+      "its announcement over music",
+    );
+    expect(home.core.latest(key, capability)?.activity).toBe("playing");
+    expect(activities().slice(-2)).toEqual(["playing", "playing"]);
+
+    const reports = activities().length;
+    device.reboot();
+    await announce(home.core, device);
+    await home.core.until(
+      () => activities().length > reports,
+      "its state after reconnecting",
+    );
+    expect(activities().slice(reports)).toEqual(["playing"]);
+  });
+
+  it("keeps a speaker's activity separate from another speaker with the same capability", async () => {
+    home = await startHome();
+    const first = await speaker();
+    const firstKey = await add(home.core, first);
+    const second = await home.plugIn({
+      entities: [player],
+      states: { 201: { state: MediaPlayerState.IDLE } },
+    });
+    const secondKey = await add(home.core, second);
+    const capability = "media-media_player";
+
+    await home.core.until(
+      () => home.core.latest(secondKey, capability)?.activity === "idle",
+      "second speaker idle",
+    );
+    first.setState(201, { state: MediaPlayerState.PLAYING });
+    await home.core.until(
+      () => home.core.latest(firstKey, capability)?.activity === "playing",
+      "first speaker playing",
+    );
+    second.setState(201, { state: MediaPlayerState.ANNOUNCING, volume: 0.55 });
+    await home.core.until(
+      () => home.core.latest(secondKey, capability)?.volume === 55,
+      "second speaker announcing",
+    );
+    expect(home.core.latest(secondKey, capability)?.activity).toBe("idle");
+  });
+
   it("is a media player, and nobody follows its requests, when it has no voice assistant", async () => {
     home = await startHome();
     const device = await home.plugIn({

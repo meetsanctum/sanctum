@@ -496,11 +496,12 @@ export function AddDevices(props: {
             kind: "closed",
             why: failed ? "failed" : stopped ? "stopped" : "time",
           };
-  // Done leads once a device is added. After looking stops, it also leads
-  // while a device finishes joining. Failed joins call for another try.
+  // Done leads once a device is added, unless a card still asks or adds,
+  // which closing would stop. After looking stops, it also leads while a
+  // device finishes joining. Failed joins call for another try.
   const isDonePrimary =
     page.kind === "found"
-      ? Object.keys(added).length > 0
+      ? Object.keys(added).length > 0 && pendingAdds.size === 0
       : joinedHere.some((device) =>
           joining.kind === "closed"
             ? device.stage !== "failed"

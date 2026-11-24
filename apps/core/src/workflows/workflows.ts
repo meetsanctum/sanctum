@@ -19,6 +19,7 @@ import type { CoreDatabase } from "../database.js";
 import type { Devices } from "../devices/devices.js";
 import type { Lights } from "../devices/lights.js";
 import type { Motion } from "../devices/motion.js";
+import type { View } from "../devices/views.js";
 import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import { createEngine, type WorkflowRow } from "./engine.js";
@@ -196,6 +197,7 @@ export function createWorkflows(
     record,
     turnedOn: (workflowId, graph) => timers.set(row(workflowId), graph),
     endRuns(workflowId) {
+      firing.forget(workflowId);
       engine.cancelRuns(workflowId);
       engine.forget(workflowId);
     },
@@ -245,11 +247,15 @@ export function createWorkflows(
   // Workflows as clients see them, with their latest run and, while they
   // are on, their next one. A workflow that is off keeps its timers, which
   // move on without running it.
-  function infos(found: WorkflowRow[], workflowId?: string): WorkflowInfo[] {
+  function infos(
+    found: WorkflowRow[],
+    workflowId?: string,
+    view?: View,
+  ): WorkflowInfo[] {
     const last = runs.latest(workflowId);
     const next = timers.next(workflowId);
     return found.map((workflow) => {
-      const { problems, warnings } = pieces.check(workflow.graph);
+      const { problems, warnings } = pieces.check(workflow.graph, { view });
       const nextAt = workflow.enabled ? next.get(workflow.id) : undefined;
       return {
         id: workflow.id,
@@ -445,6 +451,9 @@ export function createWorkflows(
           subjectId: input.id,
         });
       });
+      if (graphChanged || input.enabled === false) {
+        firing.forget(input.id);
+      }
       if (graphChanged) {
         engine.forget(input.id);
       }
@@ -465,6 +474,7 @@ export function createWorkflows(
           detail: { name },
         });
       });
+      firing.forget(input.id);
     },
 
     /**
@@ -530,12 +540,6 @@ export function createWorkflows(
             `${app}'s workflow ${key} uses ${foreign.app}'s ${foreign.piece}, which only that app may`,
           );
         }
-        const { problems } = pieces.check(graph, { saving: true });
-        if (problems.length > 0) {
-          throw new Error(
-            `${app}'s workflow ${key} is not whole: ${problems.map((problem) => problem.message).join("; ")}`,
-          );
-        }
         // It acts with the app's grants, which must cover it. A call that
         // outlived the app's removal keeps nothing.
         const holding = host.holds(app);
@@ -546,6 +550,13 @@ export function createWorkflows(
         if (refused.length > 0) {
           throw new Error(
             `${app}'s workflow ${key} goes beyond what it holds: ${refused.map((problem) => problem.message).join("; ")}`,
+          );
+        }
+        const view = keptGrants.view(holding);
+        const { problems } = pieces.check(graph, { saving: true, view });
+        if (problems.length > 0) {
+          throw new Error(
+            `${app}'s workflow ${key} is not whole: ${problems.map((problem) => problem.message).join("; ")}`,
           );
         }
         const by = { actor: `app:${app}` };
@@ -563,7 +574,7 @@ export function createWorkflows(
           )
         ) {
           // Nothing changed, so nothing is written or logged.
-          return module.get(current.id);
+          return infos([current], current.id, view)[0]!;
         }
         if (current) {
           const graphChanged = !sameValue(graph, current.graph);
@@ -584,10 +595,13 @@ export function createWorkflows(
               subjectId: current.id,
             });
           });
+          if (graphChanged || !fields.enabled) {
+            firing.forget(current.id);
+          }
           if (graphChanged) {
             engine.forget(current.id);
           }
-          return module.get(current.id);
+          return infos([row(current.id)], current.id, view)[0]!;
         }
         const at = now();
         const workflowId = randomUUID();
@@ -613,7 +627,7 @@ export function createWorkflows(
             subjectId: workflowId,
           });
         });
-        return module.get(workflowId);
+        return infos([row(workflowId)], workflowId, view)[0]!;
       },
 
       remove(app: string, key: string) {
@@ -632,6 +646,7 @@ export function createWorkflows(
           });
         });
         // Once it's really gone, so a failure above leaves its runs going.
+        firing.forget(current.id);
         engine.cancelRuns(current.id);
         engine.forget(current.id);
       },
@@ -658,6 +673,7 @@ export function createWorkflows(
         }
         return () => {
           for (const { id } of going) {
+            firing.forget(id);
             engine.cancelRuns(id);
             engine.forget(id);
           }
@@ -665,9 +681,15 @@ export function createWorkflows(
       },
 
       list(app: string): WorkflowInfo[] {
-        return infos(rows().filter((workflow) => workflow.app === app)).sort(
-          (a, b) => a.name.localeCompare(b.name),
-        );
+        const holding = host.holds(app);
+        const view = holding
+          ? keptGrants.view(holding)
+          : { kinds: new Set<never>() };
+        return infos(
+          rows().filter((workflow) => workflow.app === app),
+          undefined,
+          view,
+        ).sort((a, b) => a.name.localeCompare(b.name));
       },
     },
 
@@ -710,6 +732,7 @@ export function createWorkflows(
      */
     hold() {
       held = true;
+      firing.stop();
     },
 
     /**
@@ -722,6 +745,7 @@ export function createWorkflows(
       held = true;
       clearInterval(timer);
       timer = undefined;
+      firing.stop();
       engine.interrupt();
     },
 
@@ -732,6 +756,7 @@ export function createWorkflows(
     start(startOptions: { ticking?: boolean } = {}) {
       if (interrupted) return;
       held = false;
+      firing.start();
       timers.followQuiet();
       const ended = runs.interrupted();
       if (ended > 0) {
@@ -757,6 +782,7 @@ export function createWorkflows(
     close() {
       clearInterval(timer);
       timer = undefined;
+      firing.stop();
     },
   };
   return module;

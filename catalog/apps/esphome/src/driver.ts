@@ -10,6 +10,7 @@ import {
   type DriverRepair,
   type DriverRepairResult,
   type DriverRemoval,
+  type MediaActivity,
 } from "@meetsanctum/app-sdk";
 import { entityId } from "esphome-client";
 
@@ -74,6 +75,9 @@ type Owned = {
   sleeps: boolean;
   setup: Promise<void>;
   lastSpeaker: SpeakerState | null;
+  // Playback activity survives reconnects because an announcement
+  // leaves it unchanged.
+  activities: Map<string, MediaActivity>;
   speakerChange: Promise<void>;
   // When a smart speaker last heard its wake word, kept with its facts.
   heardAt: number | null;
@@ -155,7 +159,17 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     const work = async () => {
       if (!current()) return;
       const sleeps = session.info.hasDeepSleep === true;
-      await ctx.devices.register(registrationOf(owned.mac, session, mapping));
+      const registration = registrationOf(owned.mac, session, mapping);
+      await ctx.devices.register(registration);
+      for (const id of owned.activities.keys()) {
+        if (
+          !registration.capabilities.some(
+            (part) => part.id === id && part.kind === "media",
+          )
+        ) {
+          owned.activities.delete(id);
+        }
+      }
       if (!current()) return;
       if (!(await finishSetup(owned.mac, session))) {
         await facts.save(owned.mac, {
@@ -234,6 +248,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
       lastSpeaker: device.type === "smart-speaker" ? { ring: null } : null,
+      activities: new Map(
+        device.capabilities.flatMap((part) =>
+          part.kind === "media" && part.observed
+            ? [[part.id, part.observed.activity] as const]
+            : [],
+        ),
+      ),
       speakerChange: Promise.resolve(),
       heardAt: null,
       removing: false,
@@ -275,7 +296,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           ) {
             owned.lastSpeaker = speakerStateOf(session, parts);
           }
-          report(ctx, facts, mac, mapping, event, session, owned.heardAt);
+          report(ctx, facts, mac, mapping, event, session, {
+            activities: owned.activities,
+            heardAt: owned.heardAt,
+          });
         },
         reachable: (reachable) => {
           const availability = reachable

@@ -107,6 +107,8 @@ export function apartApp(
             ...has("repair", { repair: hook("repair") }),
             ...has("discovered", { discovered: hook("discovered") }),
             ...has("add", { add: hook("add") }),
+            ...has("cancelAdd", { cancelAdd: hook("cancelAdd") }),
+            ...has("cancelRepair", { cancelRepair: hook("cancelRepair") }),
           },
         }
       : {}),

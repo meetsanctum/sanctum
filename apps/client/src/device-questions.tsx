@@ -7,10 +7,21 @@ import type { ReactNode } from "react";
 // label, its field, and under it where to find the answer or, once the
 // driver refused what was typed, why, in the words the question declares.
 // A secret's field hides what's typed, and nothing in it is corrected or
-// filled in for someone.
+// filled in for someone. A code a device shows gets a number pad, and where
+// it lasts only a while, the time remaining follows its help, until the time
+// is up and the field empties.
 
 /** The words a refusal says, under the question it's about. */
 export type Refused = { question: string; refusal: string };
+
+export function refusalWords(
+  asks: readonly DeviceQuestion[],
+  refused: Refused,
+) {
+  return asks.find((question) => question.id === refused.question)?.refusals[
+    refused.refusal
+  ];
+}
 
 export function QuestionField(props: {
   id: string;
@@ -24,13 +35,28 @@ export function QuestionField(props: {
   // The field shares a narrow card with what is beside it, rather than
   // taking a line of its own.
   narrow?: boolean;
+  disabled?: boolean;
+  // The seconds a question that lasts has left, or that its time is up.
+  remaining?: number | "up";
 }) {
-  const { id, question, refused } = props;
+  const { id, question, refused, remaining } = props;
   const why =
     refused?.question === question.id
       ? question.refusals[refused.refusal]
       : undefined;
-  const said = why ? `${id}-refused` : `${id}-help`;
+  const isCode = question.kind === "code";
+  const isUp = remaining === "up";
+  const help = isUp
+    ? "Time to enter this code is up."
+    : why
+      ? null
+      : question.help;
+  const showHelp = help || typeof remaining === "number";
+  const refusalId = `${id}-refused`;
+  const helpId = `${id}-help`;
+  const describedBy = [why ? refusalId : null, showHelp ? helpId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
@@ -47,23 +73,28 @@ export function QuestionField(props: {
           <Input
             id={id}
             type={question.kind === "secret" ? "password" : "text"}
-            value={props.value}
+            value={isUp ? "" : props.value}
             placeholder={question.placeholder ?? undefined}
+            // Not one-time-code: a phone would offer codes from its messages.
             autoComplete="off"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
+            inputMode={isCode ? "numeric" : undefined}
+            maxLength={isCode ? (question.length ?? undefined) : undefined}
+            className={isCode ? "tabular-nums" : undefined}
+            disabled={props.disabled || isUp}
             autoFocus={props.autoFocus}
             aria-invalid={why ? true : undefined}
-            aria-describedby={why || question.help ? said : undefined}
+            aria-describedby={describedBy || undefined}
             onChange={(event) => props.onChange(event.target.value)}
           />
         </div>
         {props.beside}
       </div>
-      {why ? (
+      {why && (
         <p
-          id={said}
+          id={refusalId}
           role="alert"
           className="m-0 flex items-start gap-1.5 text-sm text-destructive"
         >
@@ -73,12 +104,25 @@ export function QuestionField(props: {
           />
           <span>{why}</span>
         </p>
-      ) : (
-        question.help && (
-          <p id={said} className="m-0 text-sm text-muted-foreground">
-            {question.help}
-          </p>
-        )
+      )}
+      {showHelp && (
+        <p id={helpId} className="m-0 text-sm text-muted-foreground">
+          {help}
+          {typeof remaining === "number" && (
+            <>
+              {help && " "}
+              <span
+                className={
+                  remaining <= 10
+                    ? "whitespace-nowrap text-(--sun-text) tabular-nums"
+                    : "whitespace-nowrap tabular-nums"
+                }
+              >
+                {remaining} s remaining
+              </span>
+            </>
+          )}
+        </p>
       )}
     </div>
   );

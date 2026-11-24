@@ -1,4 +1,4 @@
-import type { AppContext } from "@meetsanctum/app-sdk";
+import type { AppContext, MediaActivity } from "@meetsanctum/app-sdk";
 import type { TelemetryEvent } from "esphome-client";
 
 import type { Session } from "./connection.js";
@@ -12,8 +12,9 @@ import { stateOf } from "./states.js";
 
 /**
  * Reports one thing a session's device said, read by that session's own
- * parts. A smart speaker's microphones carry when it last heard its wake
- * word along with whether they're muted.
+ * parts, with what it said before: what each media part was doing, which
+ * an announcement leaves as it was, and when a smart speaker last heard its
+ * wake word, which its microphones carry along with whether they're muted.
  */
 export function report(
   ctx: AppContext,
@@ -22,7 +23,10 @@ export function report(
   mapping: Mapping,
   event: TelemetryEvent,
   session: Session,
-  heardAt: number | null,
+  said: {
+    activities: Map<string, MediaActivity>;
+    heardAt: number | null;
+  },
 ) {
   // A state event names its entity by its key, which a type keeps apart.
   if (
@@ -60,8 +64,11 @@ export function report(
       : (() => {
           const now =
             mapped.capability.kind === "audio" && event.type === "switch"
-              ? audioStateOf(event.state === true, heardAt)
-              : stateOf(mapped, event);
+              ? audioStateOf(event.state === true, said.heardAt)
+              : stateOf(mapped, event, said.activities.get(capability));
+          if (now && "activity" in now) {
+            said.activities.set(capability, now.activity);
+          }
           return now
             ? ctx.devices.report({
                 key: mac,

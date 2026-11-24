@@ -9,6 +9,7 @@ import {
   defineEvent,
   defineTrigger,
   jobWhen,
+  percentField,
   toStaticManifest,
   workflowGraph,
   type CoreCalls,
@@ -177,6 +178,20 @@ describe("an app's workflow pieces", () => {
       "condition example.hasItems",
       "step example.addItem",
     ]);
+  });
+});
+
+describe("the markers a piece's fields carry", () => {
+  it("say a level in percent, a whole number from 0 to 100", () => {
+    expect(z.toJSONSchema(percentField)).toMatchObject({
+      type: "integer",
+      minimum: 0,
+      maximum: 100,
+      percent: true,
+    });
+    expect(percentField.safeParse(30).success).toBe(true);
+    expect(percentField.safeParse(30.5).success).toBe(false);
+    expect(percentField.safeParse(101).success).toBe(false);
   });
 });
 

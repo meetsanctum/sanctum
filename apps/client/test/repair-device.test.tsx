@@ -28,6 +28,8 @@ const device: DeviceInfo = {
           help: null,
           placeholder: null,
           refusals: { wrongKey: "That key doesn't match." },
+          length: null,
+          lasts: null,
         },
       ],
     },
@@ -77,10 +79,30 @@ async function typeAnswer(value: string) {
   });
 }
 
-const submit = () =>
+const button = (label: string) =>
   [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Repair",
+    (each) => each.textContent === label,
   )!;
+const submit = () => button("Repair");
+
+const lost: DeviceInfo = {
+  ...device,
+  problem: {
+    id: "pairingLost",
+    words: "Its pairing was removed",
+    repair: { help: "Pair it again.", asks: [] },
+  },
+};
+const code = {
+  id: "first",
+  label: "Code on the TV (1 of 2)",
+  kind: "code" as const,
+  length: 4,
+  help: null,
+  placeholder: null,
+  refusals: { wrongCode: "That code didn't match." },
+  lasts: null,
+};
 
 describe("Repair's dialog", () => {
   it.each(["secret", "text"] as const)(
@@ -136,5 +158,81 @@ describe("Repair's dialog", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(document.querySelector("input")!.value).toBe("new answer");
     expect(submit().disabled).toBe(false);
+  });
+
+  it("asks each code once the repair has started, and ends it as the dialog closes", async () => {
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({
+        attempt: "a",
+        step: 1,
+        asks: [code],
+        withinMs: 180_000,
+        lastsMs: null,
+      })
+      .mockResolvedValueOnce({ repaired: { ...lost, problem: null } });
+    const sent = vi
+      .spyOn(await import("../src/core-fetch"), "coreFetch")
+      .mockResolvedValue(new Response("{}"));
+    await show(lost);
+
+    await act(async () => submit().click());
+    expect(button("Continue").disabled).toBe(true);
+    await typeAnswer("1234");
+    await act(async () => button("Continue").click());
+
+    expect(
+      vi.mocked(coreJson).mock.calls.map(([, init]) => init!.json),
+    ).toEqual([
+      { id: lost.id, answers: {}, attempt: expect.any(String) },
+      { id: lost.id, attempt: "a", step: 1, answers: { first: "1234" } },
+    ]);
+    expect(onRepaired).toHaveBeenCalled();
+    // Repaired, nothing is left to end.
+    expect(sent).not.toHaveBeenCalled();
+
+    vi.mocked(coreJson).mockResolvedValueOnce({
+      attempt: "b",
+      step: 1,
+      asks: [code],
+      withinMs: 180_000,
+      lastsMs: null,
+    });
+    await show(lost);
+    await act(async () => submit().click());
+    await show();
+    expect(sent).toHaveBeenCalledWith("/api/devices/repair/cancel", {
+      method: "POST",
+      json: { id: lost.id, attempt: expect.any(String) },
+      keepalive: true,
+    });
+  });
+
+  it("shows why the second code ended pairing and offers Repair again", async () => {
+    const timing = { withinMs: 180_000, lastsMs: null };
+    const second = { ...code, id: "second", label: "Code on the TV (2 of 2)" };
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({ attempt: "a", step: 1, asks: [code], ...timing })
+      .mockResolvedValueOnce({
+        attempt: "a",
+        step: 2,
+        asks: [second],
+        ...timing,
+      })
+      .mockResolvedValueOnce({
+        refused: { question: "second", refusal: "wrongCode" },
+      });
+    await show(lost);
+    await act(async () => submit().click());
+    await typeAnswer("1234");
+    await act(async () => button("Continue").click());
+    await typeAnswer("9999");
+    await act(async () => button("Continue").click());
+
+    expect(document.querySelector("[role=dialog]")!.textContent).toContain(
+      "That code didn't match.",
+    );
+    expect(document.querySelector("input")).toBeNull();
+    expect(submit().disabled).toBe(false);
+    expect(onRepaired).not.toHaveBeenCalled();
   });
 });
