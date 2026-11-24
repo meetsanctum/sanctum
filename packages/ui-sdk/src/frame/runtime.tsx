@@ -196,9 +196,12 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
     // Device and context updates keep the client's identity, so effects
     // that load app data don't run again for unrelated page updates.
     if (!client || client.app !== shown.app) client = clientOf(shown.app);
-    document.documentElement.dataset.mode = shown.context.mode;
+    const { dataset } = document.documentElement;
+    dataset.mode = shown.context.mode;
+    if (shown.context.effects === "reduced") dataset.effects = "reduced";
+    else delete dataset.effects;
     // A device page lies over the device's detail, which shows through.
-    if (shown.device) document.documentElement.dataset.surface = "detail";
+    if (shown.device) dataset.surface = "detail";
     if (!root) {
       const holder = document.body.appendChild(document.createElement("div"));
       sizes.observe(holder);

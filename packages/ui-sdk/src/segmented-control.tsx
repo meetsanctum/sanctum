@@ -103,7 +103,7 @@ export function SegmentedControl<T extends string>(props: {
           value={`:${option.value}`}
           className={cn(
             "rounded-sm font-medium text-foreground hover:bg-foreground/5 hover:text-foreground pointer-coarse:h-10",
-            "data-[state=on]:bg-background data-[state=on]:shadow-[0_1px_3px_rgb(0_0_0/12%)] data-[state=on]:hover:bg-background",
+            "data-[state=on]:bg-background data-[state=on]:shadow-[0_1px_3px_rgb(0_0_0/12%)] reduce-effects:data-[state=on]:shadow-none data-[state=on]:hover:bg-background",
             "dark:data-[state=on]:bg-foreground/16 dark:data-[state=on]:hover:bg-foreground/16",
             sizes[props.size ?? "default"],
             props.wraps &&

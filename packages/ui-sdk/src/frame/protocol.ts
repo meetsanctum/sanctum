@@ -26,6 +26,7 @@ export type FramePort = { sanctum: "port"; bridge: number };
 /** What the shell tells a page about where it's shown. */
 export type FrameContext = {
   mode: "day" | "evening";
+  effects?: "regular" | "reduced";
   temperatureUnit: TemperatureUnit | null;
   timeZone: string | null;
 };

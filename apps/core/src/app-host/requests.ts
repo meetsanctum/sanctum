@@ -12,12 +12,48 @@ import type { ActivityAuthor } from "../activity/activity.js";
 import type { TurnOpener } from "../agents/assistants.js";
 import { createAgentLimiter } from "../agents/limits.js";
 import type { Turn } from "../models/turns.js";
+import type { ToolRecorder } from "./contexts.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { InstalledApp } from "./installed.js";
+import { createRequestWindows, type Exchange } from "./request-window.js";
 
 // A typed request runs the Assistant's handler within a turn for whoever
 // asked. The reply goes back as soon as the handler gives it. The turn and
 // its admission slot stay open until the handler finishes or its time is up.
+//
+// Each device is a conversation of its own. A newer request from it takes
+// over from one still running: that one's turn ends, its signal aborts and
+// its later calls are refused `turn_ended`. Its tool calls under way can't be
+// pulled back, so the newer one waits up to 2 s for them to settle, and gets
+// it in `earlier` with the device's other recent exchanges (request-window.ts).
+
+/** How long a newer request waits for the tool calls of the one it ends. */
+export const settleWithinMs = 2_000;
+
+type Run = {
+  device: string;
+  // Aborts when a newer request takes over, the deadline expires, or the
+  // Assistant stops.
+  steering: AbortController;
+  // Its turn's calls are refused from here on.
+  ended: boolean;
+  // Its handler is done, by itself or as its turn ended.
+  finished: boolean;
+  exchange?: Exchange;
+  // Its tool calls under way.
+  tools: Set<Promise<void>>;
+  // Settles once its slot is free and it has left `runs`.
+  done: Promise<void>;
+};
+
+function delay(ms: number) {
+  let timer: NodeJS.Timeout | undefined;
+  const waited = new Promise<void>((done) => {
+    timer = setTimeout(done, ms);
+    timer.unref();
+  });
+  return { waited, clear: () => clearTimeout(timer) };
+}
 
 export function createRequests(options: {
   installed: ReadonlyMap<string, InstalledApp>;
@@ -31,6 +67,8 @@ export function createRequests(options: {
       withinMs: number;
       turn: Turn;
       reply: (reply: RequestReply) => void;
+      recordTool: ToolRecorder;
+      requestClientId: string;
     },
   ) => RequestContext;
   coreOf: (ctx: RequestContext) => {
@@ -41,8 +79,7 @@ export function createRequests(options: {
   log: (message: string) => void;
 }) {
   const { installed, accepts } = options;
-  const stopping = new AbortController();
-  const { signal } = stopping;
+  let closed = false;
   // Leave room for other clients when one client has a request under way.
   const limiter = createAgentLimiter({
     agentPerMinute: 12,
@@ -50,6 +87,25 @@ export function createRequests(options: {
     agentAtOnce: 1,
     homeAtOnce: 4,
   });
+  const windows = createRequestWindows();
+  let historyGeneration = 0;
+  // The request of each device, running or about to.
+  const runs = new Map<string, Run>();
+
+  // Every window goes, including what a request still waiting would have
+  // added.
+  function clearWindows() {
+    historyGeneration += 1;
+    windows.clear();
+  }
+
+  // The Assistant or the core stops: its requests end, and every window goes.
+  function stopRequests() {
+    clearWindows();
+    for (const run of runs.values()) {
+      endRun(run, new ActionCallError("unavailable"));
+    }
+  }
 
   function canAnswer(entry: InstalledApp) {
     return (
@@ -58,8 +114,32 @@ export function createRequests(options: {
     );
   }
 
+  // Ends a run before its handler is done: its calls are refused from now,
+  // and its handler hears it through its signal.
+  function endRun(run: Run, reason: ActionCallError) {
+    if (run.steering.signal.aborted) return;
+    run.ended = true;
+    if (reason.code === "turn_ended" && run.exchange && !run.finished) {
+      run.exchange.cutOff = true;
+    }
+    run.steering.abort(reason);
+  }
+
+  // What a newer request waits for: the older one's tool calls, for up to
+  // 2 s, and its slot.
+  async function settled(run: Run) {
+    if (run.tools.size > 0) {
+      const { waited, clear } = delay(settleWithinMs);
+      await Promise.race([Promise.allSettled([...run.tools]), waited]);
+      clear();
+    }
+    await run.done;
+  }
+
   function dispatch(
     entry: InstalledApp,
+    run: Run,
+    exchange: Exchange,
     request: {
       actor: TurnOpener;
       who: ActivityAuthor;
@@ -67,6 +147,7 @@ export function createRequests(options: {
     },
   ) {
     const app = entry.app;
+    const { signal } = run.steering;
     const turn = options.turnFor(entry, request.who);
     let resolveReply!: (answer: RequestReply | null) => void;
     let rejectReply!: (error: ActionCallError) => void;
@@ -74,48 +155,64 @@ export function createRequests(options: {
       resolveReply = resolve;
       rejectReply = reject;
     });
-    let cancel!: () => void;
-    const cancelled = new Promise<never>((_, reject) => {
-      cancel = () => reject(signal.reason);
+    const aborted = new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
     });
-    let ended = false;
     let answered = false;
     const ctx = options.contextFor(
       entry,
       request.actor,
       {
         get ended() {
-          return ended;
+          return run.ended;
         },
       },
       {
         withinMs: turnLimits.turnMs,
         turn,
+        requestClientId: run.device,
         reply(answer) {
           if (answered) throw new Error("A request is answered once");
           answered = true;
+          windows.reply(exchange, answer.text);
           resolveReply(answer);
+        },
+        recordTool(name, input) {
+          const answer = windows.tool(exchange, name, input);
+          let settle!: () => void;
+          const underWay = new Promise<void>((done) => (settle = done));
+          run.tools.add(underWay);
+          return (given) => {
+            answer(given);
+            run.tools.delete(underWay);
+            settle();
+          };
         },
       },
     );
     const core = options.coreOf(ctx);
-    signal.addEventListener("abort", cancel, { once: true });
     const work = Promise.resolve().then(() => {
       signal.throwIfAborted();
       return app.requests!(ctx, {
         ...request.asked,
+        signal,
         reply: (answer) => core.replyRequest(answer),
       });
     });
     const running = options.track(
       entry,
-      withTimeout(Promise.race([work, cancelled]), turnLimits.turnMs),
+      withTimeout(Promise.race([work, aborted]), turnLimits.turnMs),
     );
 
     function finish(failure?: { error: unknown }) {
       const error = failure?.error;
-      signal.removeEventListener("abort", cancel);
-      ended = true;
+      run.finished = true;
+      run.ended = true;
+      if (error instanceof TimedOut) {
+        endRun(run, new ActionCallError("turn_ended"));
+      }
       try {
         turn.end();
       } catch {
@@ -125,7 +222,11 @@ export function createRequests(options: {
           rejectReply(error);
         } else {
           resolveReply(null);
-          if (failure && !isActionError(error)) {
+          if (
+            failure &&
+            !isActionError(error) &&
+            !(error instanceof ActionCallError)
+          ) {
             const reason = error instanceof TimedOut ? "timed out" : "failed";
             options.log(`apps: ${assistantAppId} request ${reason}`);
           }
@@ -143,52 +244,123 @@ export function createRequests(options: {
   }
 
   return {
-    /** Stops new requests and releases callers before the HTTP server closes. */
+    /**
+     * Stops new requests and ends those under way, releasing callers before
+     * the HTTP server closes. The windows go with them.
+     */
     close() {
-      stopping.abort(new ActionCallError("unavailable"));
+      closed = true;
+      stopRequests();
     },
 
     /**
+     * The Assistant stops: paused, restarted, removed or without its
+     * permission. Its requests end and every device's window goes.
+     */
+    stopped(entry: InstalledApp) {
+      if (entry.app.id !== assistantAppId) return;
+      stopRequests();
+    },
+
+    /**
+     * Something AI agents could use was switched off: every window goes, so
+     * no later request carries what the Assistant heard through it.
+     */
+    clearWindows,
+
+    /**
      * Runs a request for whoever asked, and resolves with the Assistant's
-     * reply, or null when it gave none; `unavailable` when it's off.
+     * reply, or null when it gave none or a newer request from the same
+     * device took over; `unavailable` when it's off.
      */
     async ask(request: {
       actor: TurnOpener;
       who: ActivityAuthor & { clientId: string };
-      asked: AssistantRequest;
+      asked: Omit<AssistantRequest, "earlier">;
       checkClient: () => void;
     }): Promise<RequestReply | null> {
-      signal.throwIfAborted();
+      if (closed) throw new ActionCallError("unavailable");
       const entry = installed.get(assistantAppId);
       if (!entry || !canAnswer(entry)) {
         throw new ActionCallError("unavailable");
       }
-      const client = request.who.clientId;
-      if (limiter.takeRequest(client)) throw new ActionCallError("limited");
-      const slot = limiter.begin(client);
-      if (!("done" in slot)) throw new ActionCallError("limited");
+      const device = request.who.clientId;
+      if (limiter.takeRequest(device)) throw new ActionCallError("limited");
+      const generation = historyGeneration;
+
+      let release!: () => void;
+      const run: Run = {
+        device,
+        steering: new AbortController(),
+        ended: false,
+        finished: false,
+        tools: new Set(),
+        done: new Promise<void>((done) => (release = done)),
+      };
+      const { signal } = run.steering;
+      const previous = runs.get(device);
+      runs.set(device, run);
+      let slot: { done: () => void } | undefined;
+      let dispatched = false;
+      const leave = () => {
+        slot?.done();
+        if (runs.get(device) === run) runs.delete(device);
+        release();
+      };
+
+      // Taken over before it ran: kept for the next request, unanswered.
+      const steeredFirst = () => {
+        const reason: unknown = signal.reason;
+        if (!(reason instanceof ActionCallError)) throw reason;
+        if (reason.code !== "turn_ended") throw reason;
+        if (generation === historyGeneration) {
+          windows.begin(
+            device,
+            entry.runId,
+            request.asked.text,
+          ).exchange.cutOff = true;
+        }
+        return null;
+      };
 
       try {
+        if (previous) {
+          endRun(previous, new ActionCallError("turn_ended"));
+          await settled(previous);
+        }
+        if (signal.aborted) return steeredFirst();
+        const admitted = limiter.begin(device);
+        if (!("done" in admitted)) throw new ActionCallError("limited");
+        slot = admitted;
+
         if (!accepts(entry)) {
-          if (!(await options.arrives(entry, signal))) {
-            throw new ActionCallError("unavailable");
-          }
-          signal.throwIfAborted();
-          if (
-            installed.get(assistantAppId) !== entry ||
-            !canAnswer(entry) ||
-            !accepts(entry)
-          ) {
-            throw new ActionCallError("unavailable");
-          }
+          const arrived = await options.arrives(entry, signal);
+          if (signal.aborted) return steeredFirst();
+          if (!arrived) throw new ActionCallError("unavailable");
+        }
+        if (
+          installed.get(assistantAppId) !== entry ||
+          !canAnswer(entry) ||
+          !accepts(entry)
+        ) {
+          throw new ActionCallError("unavailable");
         }
         request.checkClient();
-        const { reply, finished } = dispatch(entry, request);
-        void finished.then(slot.done, slot.done);
-        return reply;
-      } catch (error) {
-        slot.done();
-        throw error;
+        const { exchange, earlier } = windows.begin(
+          device,
+          entry.runId,
+          request.asked.text,
+        );
+        run.exchange = exchange;
+        const { reply, finished } = dispatch(entry, run, exchange, {
+          ...request,
+          asked: { ...request.asked, earlier },
+        });
+        dispatched = true;
+        void finished.then(leave, leave);
+        return await reply;
+      } finally {
+        if (!dispatched) leave();
       }
     },
   };

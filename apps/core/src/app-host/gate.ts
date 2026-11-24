@@ -25,13 +25,14 @@ export type Rule = Pick<ActionDefinition, "tier"> & { agentArea?: string };
 
 /**
  * The AI agent behind a call, whatever it reaches the core through: its id,
- * which the limits, its changes and the activity log key on, its name, and
- * the actor its calls run as.
+ * which the limits and the activity log key on, its name, and the actor
+ * its calls run as. Changes from Assistant requests stay on their device.
  */
 export type AgentCaller = {
   id: string;
   name: string;
   actor: Extract<Actor, { kind: "assistant-run" }>;
+  requestClientId?: string;
 };
 
 // The turn belongs to this delegated actor, even when another turn uses the

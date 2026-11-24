@@ -37,6 +37,9 @@
 // tools AI agents may use and calls them within a turn.
 // 21 brings requests: Sanctum's Assistant answers what someone said or
 // typed, with request.reply.
-export const protocolVersion = 21;
+// 22 lets a newer request from the same device take over: the core ends the
+// older one's call with `end` and refuses its later calls `turn_ended`, and a
+// request carries the device's earlier exchanges.
+export const protocolVersion = 22;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

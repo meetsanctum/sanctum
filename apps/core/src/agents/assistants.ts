@@ -117,9 +117,12 @@ export function createAssistantCalls(options: {
       name: string,
       input: Record<string, unknown>,
       ended: () => boolean,
+      requestClientId?: string,
     ): Promise<AiToolAnswer> {
       const refusal = takeRequest(appId, who);
       const agent = assistantAgent(appId, options.appName(appId) ?? appId, who);
+      if (requestClientId !== undefined)
+        agent.requestClientId = requestClientId;
       const admitted = refusal ?? options.limiter.begin(agent.id);
       if ("limited" in admitted) {
         if (!refusal) options.logLimited(agent.id, admitted.limited);

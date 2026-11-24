@@ -2,9 +2,11 @@
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import {
   frameBridge,
+  Input,
   PageBar,
   startFrame,
   useAppClient,
+  useReducedEffects,
   type AppUi,
   type DevicePageProps,
   type PageProps,
@@ -77,6 +79,40 @@ describe("a page in its frame", () => {
     // Its title is the shell's to show; the frame draws none.
     expect(document.querySelector("h1")).toBeNull();
     expect(document.documentElement.dataset.mode).toBe("day");
+  });
+
+  it("applies Reduce effects to a framed input on setup and context updates", async () => {
+    function Editor() {
+      const reduced = useReducedEffects();
+      return <Input aria-label="Name" data-reduced={reduced} />;
+    }
+    const { bridge } = framed(
+      async () => ({ default: { ...ui, pages: { main: Editor } } }),
+      info,
+      { ...context, effects: "reduced" },
+    );
+    const input = () => document.querySelector('input[aria-label="Name"]');
+    const reducedShadow = String.raw`.reduce-effects\:shadow-none:where([data-effects="reduced"], [data-effects="reduced"] *)`;
+
+    await vi.waitFor(() => {
+      expect(input()?.matches(reducedShadow)).toBe(true);
+      expect(input()?.getAttribute("data-reduced")).toBe("true");
+    });
+    bridge.send({
+      type: "context",
+      context: { ...context, effects: "regular" },
+    });
+    await vi.waitFor(() => {
+      expect(input()?.matches(reducedShadow)).toBe(false);
+      expect(input()?.getAttribute("data-reduced")).toBe("false");
+    });
+    bridge.send({
+      type: "context",
+      context: { ...context, effects: "reduced" },
+    });
+    await vi.waitFor(() => expect(input()?.matches(reducedShadow)).toBe(true));
+    bridge.send({ type: "context", context });
+    await vi.waitFor(() => expect(input()?.matches(reducedShadow)).toBe(false));
   });
 
   it("hears the shell's live updates while it listens, and none once closed", async () => {

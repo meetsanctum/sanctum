@@ -298,6 +298,9 @@ export function runSession(options: {
       case "reply":
         replied(message.id, message.outcome);
         return;
+      case "end":
+        host?.end(message.call);
+        return;
       case "ping":
         send({ type: "pong", beat: message.beat });
     }

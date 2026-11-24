@@ -185,6 +185,9 @@ What is under which licence, and what neither covers, is in
   dashboard's frosted glass, through the `frosted` utility, which draws no
   blur under Reduce effects (`data-effects="reduced"` on `<html>`, set by
   `apps/client/src/effects.ts`; `reduce-effects:` styles a part there).
+  Every part has its look under Reduce effects: no live blur, mask or soft
+  shadow, hairlines kept (`apps/client/test/reduce-effects-source.test.ts`
+  checks the sources; a script that draws one reads `useReducedEffects`).
   Animate only `transform` and `opacity`. The knot loader drawing its line
   and the page's edge going with the sidebar are the exceptions.
 - Destructive operations must be explicit, gated and unsurprising.
