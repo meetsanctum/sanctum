@@ -22,7 +22,7 @@ import type {
 } from "../activity/activity.js";
 import type { ActivityViews } from "../activity/views.js";
 import { ActionCallError } from "../app-host/errors.js";
-import type { Principal } from "../auth/clients.js";
+import type { AgentCaller } from "../app-host/gate.js";
 import type { CommandChange, Devices } from "../devices/devices.js";
 import {
   lightsPlace,
@@ -59,8 +59,6 @@ import { createRestoreCapability } from "./restore.js";
 // tool called while it's switched off answers `not_allowed`, with where it's
 // decided.
 
-type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
-
 type CoreToolsOptions = {
   readableDeviceKinds: () => ReadonlySet<CapabilityKind>;
   appName: (appId: string) => string | undefined;
@@ -84,7 +82,7 @@ type CoreTool = {
   /** Why it can't be used, when it's called anyway. */
   refusal: (canUse: AiCanUse) => Refused;
   run: (
-    principal: AgentPrincipal,
+    agent: AgentCaller,
     input: Record<string, unknown>,
     canUse: AiCanUse,
   ) => Promise<CallToolResult>;
@@ -205,18 +203,18 @@ export function createCoreTools(options: CoreToolsOptions) {
     }),
     usable: (canUse) => isOn(canUse, controlPermission("light")),
     refusal: () => areasOff([controlPermission("light")]),
-    async run(principal, input) {
+    async run(agent, input) {
       const parsed = lightsInput.safeParse(input);
       if (!parsed.success) return invalidInput();
       const { place, ...ask } = parsed.data;
       const outcomes = await options.lights.changeFor(
-        principal,
+        agent,
         place,
         ask,
         view(),
       );
       const change = options.changes.record(
-        principal.client.id,
+        agent.id,
         outcomes.flatMap(({ device, capability, change }) =>
           change ? [{ device, capability, kind: "light", ...change }] : [],
         ),
@@ -266,7 +264,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     },
     usable: (canUse) => controlKinds(canUse).length > 0,
     refusal: () => areasOff(deviceCommandAreas),
-    async run(principal, input, canUse) {
+    async run(agent, input, canUse) {
       const parsed = commandInput.safeParse(input);
       if (!parsed.success) return invalidInput();
       const { device: id, capability: capabilityId, command } = parsed.data;
@@ -292,7 +290,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       const address = { device: device.id, capability: capability.id };
       let accepted: CommandChange | undefined;
       const after = await options.devices.commandFor(
-        principal,
+        agent,
         { ...address, command },
         {
           accepted: (change) => {
@@ -303,7 +301,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       const { kind } = capability;
       const change =
         accepted && (kind === "light" || kind === "switch")
-          ? options.changes.record(principal.client.id, [
+          ? options.changes.record(agent.id, [
               { ...address, kind, ...accepted },
             ])
           : null;
@@ -342,13 +340,10 @@ export function createCoreTools(options: CoreToolsOptions) {
     }),
     usable: (canUse) => controlKinds(canUse).length > 0,
     refusal: () => areasOff(deviceCommandAreas),
-    async run(principal, input, canUse) {
+    async run(agent, input, canUse) {
       const parsed = restoreInput.safeParse(input);
       if (!parsed.success) return invalidInput();
-      const change = options.changes.find(
-        principal.client.id,
-        parsed.data.change,
-      );
+      const change = options.changes.find(agent.id, parsed.data.change);
       if (!change) {
         return toolError(
           "change_gone",
@@ -360,7 +355,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       ].filter((area) => !isOn(canUse, area));
       if (off.length > 0) throw areasOff(off);
       change.restored ??= Promise.all(
-        change.changed.map((item) => putBack(principal, item)),
+        change.changed.map((item) => putBack(agent, item)),
       )
         .then((changed) => {
           // A wholly refused restore can be tried again after the limit resets.
@@ -427,7 +422,7 @@ export function createCoreTools(options: CoreToolsOptions) {
         ),
         [],
       ),
-    async run(_principal, input, canUse) {
+    async run(_agent, input, canUse) {
       const parsed = entitiesInput.safeParse(input);
       if (!parsed.success) return invalidInput();
       const readable = new Set(
@@ -503,7 +498,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     }),
     usable: (canUse) => isOn(canUse, activityReadPermission),
     refusal: () => areasOff([activityReadPermission]),
-    async run(principal, input, canUse) {
+    async run(agent, input, canUse) {
       const parsed = activityInput.safeParse(input);
       if (!parsed.success) return invalidInput();
       const seen = view();
@@ -524,7 +519,7 @@ export function createCoreTools(options: CoreToolsOptions) {
         (devices.get(id) ?? options.devices.get(id, seen))?.capabilities.some(
           (capability) => capability.kind === "button",
         ) === true;
-      const self = principal.client.id;
+      const self = agent.id;
       const page = options.activity.page({
         kind: "devices",
         subjectId: deviceId,
@@ -581,7 +576,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     }),
     usable: (canUse) => isOn(canUse, historyReadPermission),
     refusal: () => areasOff([historyReadPermission]),
-    async run(_principal, input) {
+    async run(_agent, input) {
       const parsed = historyInput.safeParse(input);
       if (!parsed.success) return invalidInput();
       const {
@@ -625,12 +620,12 @@ export function createCoreTools(options: CoreToolsOptions) {
   };
 
   // A refusal goes to the activity log once, under the agent's name.
-  function refused(principal: AgentPrincipal, tool: string, refusal: Refused) {
+  function refused(agent: AgentCaller, tool: string, refusal: Refused) {
     options.record({
       action: "agents.refused",
       outcome: "refused",
       reason: "forbidden",
-      ...options.agentWho(principal.client.id),
+      ...options.agentWho(agent.id),
       detail: { tool, items: [...refusal.items] },
     });
     return refusal.answer;
@@ -646,19 +641,19 @@ export function createCoreTools(options: CoreToolsOptions) {
     /** Runs one, answering its refusals and failures by their code. */
     async call(
       name: string,
-      principal: AgentPrincipal,
+      agent: AgentCaller,
       input: Record<string, unknown>,
       canUse: AiCanUse,
     ): Promise<CallToolResult | undefined> {
       if (!Object.hasOwn(tools, name)) return undefined;
       const tool = tools[name]!;
       if (!tool.usable(canUse)) {
-        return refused(principal, name, tool.refusal(canUse));
+        return refused(agent, name, tool.refusal(canUse));
       }
       try {
-        return await tool.run(principal, input, canUse);
+        return await tool.run(agent, input, canUse);
       } catch (error) {
-        if (error instanceof Refused) return refused(principal, name, error);
+        if (error instanceof Refused) return refused(agent, name, error);
         return errorAnswer(error);
       }
     },

@@ -19,7 +19,11 @@ import {
 import { z } from "zod";
 
 import { ActionCallError } from "../app-host/errors.js";
-import { deviceCommandRule, type Gate } from "../app-host/gate.js";
+import {
+  deviceCommandRule,
+  type AgentCaller,
+  type Gate,
+} from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { Entities } from "../entities/entities.js";
 import { roomsOfPlace, type PlacesModule } from "../places/places.js";
@@ -480,13 +484,13 @@ export function createLights(options: {
     // so the agent's change can be put back; or left alone, and why; or
     // offline.
     async changeFor(
-      principal: Principal,
+      agent: AgentCaller,
       place: LightsPlace,
       ask: LightsAsk,
       view: View,
     ): Promise<LightOutcome[]> {
       const rule = deviceCommandRule("light");
-      const actor = gate.admit(principal, rule);
+      const actor = gate.admit(agent, rule);
       if (ask.to === "brighter" || ask.to === "dimmer") {
         const lights = lightsIn(place, view);
         if (
@@ -529,7 +533,7 @@ export function createLights(options: {
             let isConfirmed = false;
             try {
               const after = await devices.commandFor(
-                principal,
+                agent,
                 {
                   device: address.device,
                   capability: address.capability,

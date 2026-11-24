@@ -1,12 +1,11 @@
 import { turnLimits, type Actor } from "@meetsanctum/app-sdk";
 
 import type { Activity, ActivityAuthor } from "../activity/activity.js";
-import type { Principal } from "../auth/clients.js";
 import type { createActionRunner } from "./actions.js";
 import { appStateOf } from "./app-info.js";
 import type { DeclaredAction } from "./contract.js";
 import { ActionCallError } from "./errors.js";
-import type { Gate } from "./gate.js";
+import { isAgentCaller, type Caller, type Gate } from "./gate.js";
 import type { InstalledApp } from "./installed.js";
 import type { Supervisor } from "./supervisor.js";
 import { opensTurn } from "../models/turns.js";
@@ -120,22 +119,23 @@ export function createActionCalls(options: {
   }
 
   return {
-    // Runs one action for the principal behind a request: the gate admits
-    // the caller as an actor first.
+    // Runs one action for who is behind a request, a client's principal or
+    // an AI agent: the gate admits the caller as an actor first.
     async call(request: {
-      principal: Principal;
+      principal: Caller;
       appId: string;
       actionId: string;
       input: unknown;
     }): Promise<unknown> {
-      const { principal } = request;
+      const caller = request.principal;
       const { entry, action } = find(request.appId, request.actionId);
-      const who =
-        principal.scope === "agent"
-          ? options.agentWho(principal.client.id)
-          : { personId: principal.person?.id, clientId: principal.client.id };
+      const who = isAgentCaller(caller)
+        ? options.agentWho(caller.id)
+        : caller.scope === "agent"
+          ? options.agentWho(caller.client.id)
+          : { personId: caller.person?.id, clientId: caller.client.id };
       const actor = check(entry, action, who, request.input, () =>
-        admits(entry, action, gate.admit(principal, action)),
+        admits(entry, action, gate.admit(caller, action)),
       );
       return run(entry, action, actor, who, request.input);
     },
