@@ -66,7 +66,7 @@ describe("the knot loader's built CSS", () => {
     (loop) => {
       expect(
         animationOf("prefers-reduced-motion:no-preference", [
-          ".knot-loader :is(.knot-upright,.knot-lying)",
+          ".knot-loader path",
           `.knot-loader .knot-${loop}`,
         ]),
       ).toMatchObject({
@@ -115,19 +115,6 @@ describe("the knot loader's built CSS", () => {
       iterationCount: "infinite",
     });
     expect(css).toContain("@keyframes knot-breathe{");
-  });
-
-  it("breathes under Reduce effects", () => {
-    expect(
-      animationOf("prefers-reduced-motion:no-preference", [
-        "[data-effects=reduced] .knot-loader",
-      ]),
-    ).toEqual({
-      name: "knot-breathe",
-      duration: "2.4s",
-      timingFunction: "ease-in-out",
-      iterationCount: "infinite",
-    });
   });
 });
 

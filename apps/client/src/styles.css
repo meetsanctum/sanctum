@@ -261,9 +261,9 @@ body {
    the point where it vanished. The drawing turns at the instant the line has
    no length.
    Drawing a stroke is the one animation of something other than transform
-   and opacity. With Reduce effects or reduced motion, the whole knot
-   breathes, opacity only. */
-.knot-loader :is(.knot-upright, .knot-lying) {
+   and opacity; where motion is reduced the whole knot breathes, opacity
+   only. */
+.knot-loader path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -280,7 +280,7 @@ body {
     animation: knot-turns 19.2s step-end infinite;
   }
 
-  .knot-loader :is(.knot-upright, .knot-lying) {
+  .knot-loader path {
     stroke-dashoffset: 60.3;
     animation: knot-line 4.8s infinite;
   }
@@ -292,10 +292,6 @@ body {
   .knot-loader .knot-lying {
     stroke-dasharray: 32.1 61 28.2 0;
   }
-}
-
-[data-effects="reduced"] .knot-loader {
-  animation: knot-breathe 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

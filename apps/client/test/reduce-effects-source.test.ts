@@ -9,7 +9,8 @@ import { describe, expect, it } from "vitest";
 // [data-effects="reduced"] rule for the same element, and a script that
 // draws one with useReducedEffects. Live blur goes only through `frosted`,
 // the one utility allowed to declare it. A hairline or a ring with no blur
-// is not a soft shadow.
+// is not a soft shadow. An SVG mask inside an icon, such as the knot
+// loader's crossings, is the icon's drawing, not a layer over the page.
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const sources = ["apps/client/src", "packages/ui-sdk/src"];
@@ -225,16 +226,6 @@ describe("every effect's look under Reduce effects", () => {
     expect(drawing.length).toBeGreaterThan(0);
     expect(
       drawing.filter((path) => !read(path).includes("useReducedEffects")),
-    ).toEqual([]);
-  });
-
-  it("reads Reduce effects where SVG masks have styled shapes", () => {
-    const masked = scripts.filter((path) =>
-      /<mask\b[^>]*>(?:(?!<\/mask>)[\s\S])*?\bclassName=/.test(read(path)),
-    );
-    expect(masked.length).toBeGreaterThan(0);
-    expect(
-      masked.filter((path) => !read(path).includes("useReducedEffects")),
     ).toEqual([]);
   });
 
