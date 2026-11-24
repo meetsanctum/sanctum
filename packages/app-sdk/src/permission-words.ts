@@ -33,6 +33,7 @@ export const permissionIcons = [
   "history",
   "tv",
   "sparkles",
+  "mic",
 ] as const;
 export type PermissionIcon = (typeof permissionIcons)[number];
 
@@ -55,6 +56,7 @@ const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
     "door-closed",
   ],
   media: ["See your media players", "tv"],
+  audio: ["See your smart speakers' microphones", "mic"],
 };
 
 const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
@@ -65,6 +67,7 @@ const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
   motion: ["Change your motion sensors", "activity"],
   contact: ["Change your contact sensors", "door-closed"],
   media: ["Control your media players", "tv"],
+  audio: ["Mute your smart speakers' microphones", "mic"],
 };
 
 // The services the manager runs, by the names their makers give them.

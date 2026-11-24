@@ -19,7 +19,7 @@ afterEach(async () => {
 const speaker = () => voicePe(home);
 
 describe("a smart speaker", () => {
-  it("is a smart speaker that plays and is pressed, its ring and mute its own", async () => {
+  it("is a smart speaker that plays, is pressed and has microphones, its ring its own", async () => {
     home = await startHome();
     const device = await speaker();
     const key = await add(home.core, device);
@@ -45,6 +45,8 @@ describe("a smart speaker", () => {
           holds: [],
         },
       },
+      // Its Mute switch, which its side switch turns on too.
+      { kind: "audio", features: { mutes: true, muteSwitch: true } },
     ]);
 
     await home.core.until(() => device.voiceFollowed, "its requests followed");

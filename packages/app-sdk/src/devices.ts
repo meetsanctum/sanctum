@@ -4,6 +4,13 @@ import type { DeviceProblem } from "./device-problems.js";
 import type { DeviceType } from "./device-types.js";
 import type { FirmwareInfo } from "./firmware.js";
 import type { Actor, Tier } from "./index.js";
+import {
+  audio,
+  audioFeatures,
+  type AudioCommand,
+  type AudioFeatures,
+  type AudioState,
+} from "./audio.js";
 import { buttonAction } from "./presses.js";
 import {
   media,
@@ -436,6 +443,7 @@ export const capabilities = {
   motion,
   contact,
   media,
+  audio,
 } as const;
 
 export type CapabilityKind = keyof typeof capabilities;
@@ -457,6 +465,7 @@ type Kinds = {
   };
   contact: { features: ContactFeatures; state: ContactState; command: never };
   media: { features: MediaFeatures; state: MediaState; command: MediaCommand };
+  audio: { features: AudioFeatures; state: AudioState; command: AudioCommand };
 };
 export type FeaturesOf<K extends CapabilityKind> = Kinds[K]["features"];
 export type StateOf<K extends CapabilityKind> = Kinds[K]["state"];
@@ -668,6 +677,11 @@ export const capabilityRegistration = z.discriminatedUnion("kind", [
     id: capabilityId,
     kind: z.literal("media"),
     features: mediaFeatures.default(() => mediaFeatures.parse({})),
+  }),
+  z.strictObject({
+    id: capabilityId,
+    kind: z.literal("audio"),
+    features: audioFeatures.default(() => audioFeatures.parse({})),
   }),
 ]);
 

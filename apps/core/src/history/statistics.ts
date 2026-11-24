@@ -31,7 +31,8 @@ export type Recorded = {
 // it is on. A button has no state, so it records nothing; a sensor records
 // its reading, a motion sensor whether it saw someone, a contact
 // sensor whether it was open, and a media player whether it was playing
-// and, where it has power, whether it was on.
+// and, where it has power, whether it was on. A smart speaker's
+// microphones record nothing.
 const values: {
   [K in CapabilityKind]:
     | ((recorded: Recorded) => Partial<Record<HistoryField, number | null>>)
@@ -76,6 +77,7 @@ const values: {
           : 0
         : null,
   }),
+  audio: null,
 };
 
 function known(

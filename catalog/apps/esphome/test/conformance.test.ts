@@ -26,7 +26,16 @@ afterEach(async () => {
 
 describeDriver({
   app: app(),
-  kinds: ["light", "switch", "button", "sensor", "motion", "contact", "media"],
+  kinds: [
+    "light",
+    "switch",
+    "button",
+    "sensor",
+    "motion",
+    "contact",
+    "media",
+    "audio",
+  ],
   migrationsFolder,
   async add(kind, core) {
     const device = await Device.start({

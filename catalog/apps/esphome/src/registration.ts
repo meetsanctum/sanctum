@@ -53,9 +53,9 @@ export const hasVoiceAssistant = (
 ) => ((info.voiceAssistantFeatureFlags ?? 0) & voiceAssistantFlag) !== 0;
 
 /**
- * What a device is. A device with a voice assistant that plays is a smart
- * speaker, which no part tells apart from a media player. A plug switches
- * like any switch, so its switches' class says so first: a device whose
+ * What a device is. A device with microphones, its `audio` part, is a smart
+ * speaker. A plug switches like any switch, so its switches' class says so
+ * first: a device whose
  * every switch is an outlet is a plug, and one with any other class is what
  * its kinds make it. Where none of its switches has a class, a whole word in
  * its name or model says so. A light among its capabilities makes it a light
@@ -65,10 +65,9 @@ export function typeOf(
   mapping: Mapping,
   name: string,
   model: string | null,
-  voiceAssistant = false,
 ): DeclaredType {
   const kinds = mapping.mapped.map((each) => each.capability.kind);
-  if (voiceAssistant && kinds.includes("media")) return "smart-speaker";
+  if (kinds.includes("audio")) return "smart-speaker";
   // Only a switch entity has a class to read.
   const classes = mapping.mapped.flatMap((each) =>
     each.entity.type === "switch" ? [each.entity.deviceClass ?? ""] : [],
@@ -98,7 +97,7 @@ export function registrationOf(
     key: mac,
     name,
     ...maker,
-    type: typeOf(mapping, name, maker.model, hasVoiceAssistant(info)),
+    type: typeOf(mapping, name, maker.model),
     capabilities: mapping.mapped.map((each) => each.capability),
     firmware: {
       version: label(info.esphomeVersion),

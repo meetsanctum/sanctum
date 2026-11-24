@@ -1,9 +1,9 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "core": "^2.0.0",
-  "protocol": 16,
+  "protocol": 17,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
   "runtime": {
     "memory": 128,
@@ -194,12 +194,6 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "microphones": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
           "ring": {
             "anyOf": [
               {
@@ -229,76 +223,14 @@
                 "type": "null"
               }
             ]
-          },
-          "heardWakeWordAt": {
-            "type": [
-              "number",
-              "null"
-            ]
           }
         },
         "required": [
-          "microphones",
-          "ring",
-          "heardWakeWordAt"
+          "ring"
         ],
         "additionalProperties": false
       },
       "assistant": null
-    },
-    {
-      "id": "esphome.muteMicrophones",
-      "title": "Mute its microphones",
-      "tier": "write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "device": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "device"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "assistant": null,
-      "aboutDevice": {
-        "done": "Muted its microphones"
-      }
-    },
-    {
-      "id": "esphome.unmuteMicrophones",
-      "title": "Turn on its microphones",
-      "tier": "write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "device": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "device"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "assistant": null,
-      "aboutDevice": {
-        "done": "Turned on its microphones"
-      }
     },
     {
       "id": "esphome.changeRing",
@@ -357,5 +289,5 @@
     "conditions": [],
     "steps": []
   },
-  "oldestPage": "0.8.0"
+  "oldestPage": "0.9.0"
 }

@@ -4,6 +4,7 @@ import type { TelemetryEvent } from "esphome-client";
 import type { Session } from "./connection.js";
 import { signalOf, type Mapping } from "./entities.js";
 import type { Facts } from "./facts.js";
+import { audioStateOf } from "./speaker.js";
 import { stateOf } from "./states.js";
 
 // What a device says, told to the core: each part's state, each press once,
@@ -11,7 +12,8 @@ import { stateOf } from "./states.js";
 
 /**
  * Reports one thing a session's device said, read by that session's own
- * parts.
+ * parts. A smart speaker's microphones carry when it last heard its wake
+ * word along with whether they're muted.
  */
 export function report(
   ctx: AppContext,
@@ -20,6 +22,7 @@ export function report(
   mapping: Mapping,
   event: TelemetryEvent,
   session: Session,
+  heardAt: number | null,
 ) {
   // A state event names its entity by its key, which a type keeps apart.
   if (
@@ -55,7 +58,10 @@ export function report(
           })
         : null
       : (() => {
-          const now = stateOf(mapped, event);
+          const now =
+            mapped.capability.kind === "audio" && event.type === "switch"
+              ? audioStateOf(event.state === true, heardAt)
+              : stateOf(mapped, event);
           return now
             ? ctx.devices.report({
                 key: mac,

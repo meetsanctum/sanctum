@@ -7,6 +7,7 @@ import {
   History,
   Lightbulb,
   List,
+  Mic,
   MapPin,
   Network,
   Radar,
@@ -45,4 +46,5 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   history: History,
   tv: Tv,
   sparkles: Sparkles,
+  mic: Mic,
 };

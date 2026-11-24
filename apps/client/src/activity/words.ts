@@ -193,12 +193,22 @@ const moveWords: Record<string, { done: string; verb: string }> = {
   stop: { done: "Stopped", verb: "stop" },
 };
 
+// A smart speaker's microphones muted or turned on.
+function microphoneWords(muted: boolean) {
+  return muted
+    ? { done: "Muted its microphones", verb: "mute its microphones" }
+    : { done: "Turned on its microphones", verb: "turn on its microphones" };
+}
+
 function commandEntry(entry: ActivityInfo, where: Where): Words {
   const asked = (entry.detail?.asked ?? {}) as Asked;
+  const muted = (asked as { muted?: unknown }).muted;
   const move =
     typeof entry.detail?.move === "string"
       ? moveWords[entry.detail.move]
-      : undefined;
+      : entry.detail?.capabilityKind === "audio" && typeof muted === "boolean"
+        ? microphoneWords(muted)
+        : undefined;
   // One its device did not confirm in time went again: it says so, however
   // it ended.
   const by = [byWords(entry), entry.detail?.resent === true ? "Sent again" : ""]

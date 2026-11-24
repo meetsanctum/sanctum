@@ -50,8 +50,9 @@ the same words.
 For a contact sensor, declare `contact`. The household can
 [choose to show it as a door or window](/devices/types/#door-and-window).
 
-Declare `smart-speaker` for a voice-enabled speaker, or `media-player` for
-another playback device. The household can
+Declare `smart-speaker` for a device with a microphones part (`audio`),
+which is what makes it one, or `media-player` for another playback
+device. The household can
 [show a media player as a TV or a speaker](/devices/types/#tv-and-speaker).
 
 ## What Sanctum checks
@@ -105,6 +106,7 @@ The types, categories and parts are defined in `@meetsanctum/app-sdk`
 | `devices.ts`             | The parts: what each can do, says and is asked          |
 | `device-registration.ts` | What a driver registers, and the check of its type      |
 | `media.ts`               | The media part: what a player can do, says and is asked |
+| `audio.ts`               | The microphones part: muting, and the wake word heard   |
 | `blobs.ts`               | Pictures a driver hands over, and their limits          |
 
 The Zigbee and ESPHome drivers, in `catalog/apps/zigbee` and

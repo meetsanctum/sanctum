@@ -85,6 +85,8 @@ const players = new Map([
         mute: true,
       },
       state: { activity: "idle", volume: 40, muted: false },
+      // A smart speaker has microphones, which it mutes when asked.
+      microphones: { muted: false },
     },
   ],
 ]);
@@ -518,16 +520,24 @@ export default defineApp({
       await reportPlug(ctx, key);
     }
     for (const [key, name] of playerNames) {
-      const { type, features } = players.get(key);
+      const { type, features, microphones } = players.get(key);
       await ctx.devices.register({
         key,
         name,
         manufacturer: "Sanctum",
         model: "Fake media player",
         type,
-        capabilities: [{ id: "player", kind: "media", features }],
+        capabilities: [
+          { id: "player", kind: "media", features },
+          ...(microphones
+            ? [{ id: "microphones", kind: "audio", features: { mutes: true } }]
+            : []),
+        ],
       });
       await reportPlayer(ctx, key, true);
+      if (microphones) {
+        await ctx.devices.report({ key, states: { microphones } });
+      }
     }
     const previouslyAdded = new Set(
       (await ctx.devices.list())
@@ -594,6 +604,14 @@ export default defineApp({
       if (command.kind === "media" && player) {
         play(player, command.command);
         await reportPlayer(ctx, command.key);
+        return;
+      }
+      if (command.kind === "audio" && player?.microphones) {
+        player.microphones = { muted: command.command.muted };
+        await ctx.devices.report({
+          key: command.key,
+          states: { microphones: player.microphones },
+        });
         return;
       }
       const light = lights.get(command.key);

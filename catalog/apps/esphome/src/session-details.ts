@@ -2,7 +2,10 @@ import type { Session } from "./connection.js";
 import { mapEntities } from "./entities.js";
 import { speakerPartsOf } from "./speaker.js";
 
-// Each connection has its own entity keys and capabilities.
+// Each connection has its own entity keys and capabilities. A device with a
+// voice assistant that plays has microphones, its `audio` part: its Mute
+// switch where it has one, a setting of its own that no other device's
+// switch would be, which Sanctum then mutes it with.
 const sessions = new WeakMap<
   Session,
   {
@@ -20,6 +23,22 @@ export function describeSession(session: Session) {
   )
     ? speakerPartsOf(session)
     : null;
+  const player = mapping.mapped.find(
+    ({ capability }) => capability.kind === "media",
+  );
+  if (parts && player) {
+    const mutes = parts.mute !== null;
+    mapping.mapped.push({
+      capability: {
+        id: "audio",
+        kind: "audio",
+        features: { mutes, muteSwitch: mutes },
+      },
+      // Its media player's stands in where it has no Mute switch, whose
+      // reports are the media part's.
+      entity: parts.mute ?? player.entity,
+    });
+  }
   const details = { parts, mapping };
   sessions.set(session, details);
   return details;

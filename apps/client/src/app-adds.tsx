@@ -71,6 +71,7 @@ const kindNouns: Record<CapabilityKind, [string, string]> = {
   motion: ["motion sensor", "motion sensors"],
   contact: ["contact sensor", "contact sensors"],
   media: ["media player", "media players"],
+  audio: ["smart speaker", "smart speakers"],
 };
 
 function list(words: readonly string[]) {

@@ -43,14 +43,13 @@ type DeviceTypeDefinition = {
 
 const types = [
   { id: "light", title: "Light", noun: "light", needs: ["light"] },
-  // A voice-enabled speaker. Its media part alone cannot distinguish it
-  // from any other media player, so its driver says what it is.
+  // A speaker that listens for its wake word: its microphones tell it from
+  // any other media player, whether or not it plays.
   {
     id: "smart-speaker",
     title: "Smart speaker",
     noun: "speaker",
-    needs: ["media"],
-    declaredOnly: true,
+    needs: ["audio"],
   },
   // A TV box or speaker defaults to a media player even if it has a button
   // or a settings switch.
@@ -165,6 +164,10 @@ export function fitsType(
   kinds: ReadonlySet<CapabilityKind>,
 ): boolean {
   if (type === "unknown") return kinds.size === 0;
+  // A driver built before microphones were a part of their own, protocol
+  // 16 and older, says a smart speaker has only its media part, so it keeps
+  // its type and name until the driver says its microphones too.
+  if (type === "smart-speaker" && kinds.has("media")) return true;
   const { needs } = deviceTypes.find((each) => each.id === type)!;
   return needs.every((kind) => kinds.has(kind));
 }

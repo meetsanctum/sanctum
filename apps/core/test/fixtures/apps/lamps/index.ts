@@ -26,7 +26,7 @@ import {
 // A driver app for the tests, loaded from its package like a catalog app. It
 // brings lamps, plugs, remotes, climate sensors, motion sensors (motion,
 // light level and temperature, with their settings), contact sensors and
-// media players from a pretend radio, the
+// media players and microphones from a pretend radio, the
 // way the Zigbee app brings them from Zigbee2MQTT: it registers them when it
 // starts and says those are all it has, carries out the commands the core hands
 // it, and reports what the devices say back, remotes' presses and releases, and
@@ -49,6 +49,7 @@ type Gadget = {
     | "motion"
     | "contact"
     | "media"
+    | "audio"
     | "purifier";
   name: string;
   // What the driver says it is, if it says.
@@ -63,6 +64,7 @@ const capabilityIds = {
   switch: "power",
   button: "button",
   media: "media",
+  audio: "audio",
 } as const;
 // What a remote's button can do, and which of that is a hold.
 export const remoteActions = ["single", "double", "hold"];
@@ -89,6 +91,7 @@ const models = {
   motion: "Motion sensor",
   contact: "Contact sensor",
   media: "Media box",
+  audio: "Microphone",
   purifier: "Air purifier",
 };
 // A climate sensor's two readings and its battery, as it first says them.
@@ -194,7 +197,9 @@ class Radio {
                 ? { open: false, battery: 95 }
                 : kind === "media"
                   ? { on: true, activity: "idle", volume: 30, muted: false }
-                  : { on: false },
+                  : kind === "audio"
+                    ? { muted: false }
+                    : { on: false },
       answers: true,
     });
     if (this.ctx) {
@@ -557,28 +562,36 @@ class Radio {
                         features: mediaFeatures,
                       },
                     ]
-                  : [
-                      gadget.kind === "light"
-                        ? {
-                            id: capabilityIds.light,
-                            kind: "light",
-                            features: {
-                              brightness: true,
-                              colorTemperature: { min: 153, max: 500 },
-                              color: true,
-                            },
-                          }
-                        : gadget.kind === "button"
+                  : gadget.kind === "audio"
+                    ? [
+                        {
+                          id: capabilityIds.audio,
+                          kind: "audio",
+                          features: { mutes: true },
+                        },
+                      ]
+                    : [
+                        gadget.kind === "light"
                           ? {
-                              id: capabilityIds.button,
-                              kind: "button",
+                              id: capabilityIds.light,
+                              kind: "light",
                               features: {
-                                actions: remoteActions,
-                                holds: remoteHolds,
+                                brightness: true,
+                                colorTemperature: { min: 153, max: 500 },
+                                color: true,
                               },
                             }
-                          : { id: capabilityIds.switch, kind: "switch" },
-                    ],
+                          : gadget.kind === "button"
+                            ? {
+                                id: capabilityIds.button,
+                                kind: "button",
+                                features: {
+                                  actions: remoteActions,
+                                  holds: remoteHolds,
+                                },
+                              }
+                            : { id: capabilityIds.switch, kind: "switch" },
+                      ],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)

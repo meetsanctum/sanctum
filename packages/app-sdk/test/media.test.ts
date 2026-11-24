@@ -162,9 +162,12 @@ describe("where a media player is", () => {
     expect(first.features.playback).not.toBe(second.features.playback);
   });
 
-  it("is a media player, or a smart speaker where its driver says so", () => {
+  it("is a media player, or a smart speaker with microphones", () => {
     expect(deviceTypeOf(["media"])).toBe("media-player");
     expect(deviceTypeOf(["media", "sensor"])).toBe("media-player");
+    expect(deviceTypeOf(["media", "audio"])).toBe("smart-speaker");
+    expect(fitsType("smart-speaker", new Set(["media", "audio"]))).toBe(true);
+    // As a driver built before microphones were a part says one.
     expect(fitsType("smart-speaker", new Set(["media"]))).toBe(true);
     expect(fitsType("smart-speaker", new Set(["sensor"]))).toBe(false);
   });
