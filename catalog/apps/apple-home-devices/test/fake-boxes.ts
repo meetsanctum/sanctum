@@ -53,8 +53,6 @@ export class FakeBox {
   readonly pressed: string[] = [];
   reachable = true;
   allowsPairing = true;
-  /** Whether it shows a new AirPlay code right after a wrong one. */
-  pairsAgainAfterWrong = true;
   /** Whether it tells its power, as tvOS 27 does and tvOS 26 doesn't. */
   tellsPower = true;
   on = true;
@@ -135,13 +133,20 @@ export class FakeBox {
     for (const link of this.links) link.changed();
   }
 
+  // An AirPlay code it no longer takes after a wrong one, which stays on
+  // screen while any pairing is open, as tvOS 27 does: a pairing opened then
+  // gets a code of its own that the screen doesn't show.
+  private dead: string | null = null;
+
   pair(protocol: Protocol): Pairing {
     if (!this.reachable) throw new Unreachable("connect ECONNREFUSED");
     if (!this.allowsPairing)
       throw new NotAllowed("HTTP 470 from /pair-pin-start");
     codes = codes >= 9998 ? 1000 : codes + 1;
     const code = String(codes);
-    this.showing.set(protocol, code);
+    if (protocol !== "airplay" || this.dead === null) {
+      this.showing.set(protocol, code);
+    }
     this.open += 1;
     let closed = false;
     const close = () => {
@@ -149,19 +154,25 @@ export class FakeBox {
       closed = true;
       this.open -= 1;
       if (this.showing.get(protocol) === code) this.showing.delete(protocol);
+      if (this.open === 0 && this.dead !== null) {
+        this.showing.delete("airplay");
+        this.dead = null;
+      }
     };
     return {
       finish: async (given) => {
         if (closed) throw new Error("The pairing is closed");
         const expired = this.showing.get(protocol) !== code;
-        close();
-        if (expired) throw new CodeExpired("the PIN expired");
+        if (expired) {
+          close();
+          throw new CodeExpired("the PIN expired");
+        }
         if (given !== code) {
-          if (protocol === "airplay" && !this.pairsAgainAfterWrong) {
-            this.refusesNext = true;
-          }
+          if (protocol === "airplay") this.dead = code;
+          close();
           throw new WrongCode("M4 missing Proof (error=2)");
         }
+        close();
         this.clients += 1;
         const clientId = `${protocol}-client-${this.clients}`;
         this.known.get(protocol)!.add(clientId);
@@ -176,9 +187,6 @@ export class FakeBox {
       close,
     };
   }
-
-  // Set after a wrong AirPlay code on a box that won't pair again at once.
-  refusesNext = false;
 }
 
 export class FakeLink extends EventEmitter implements Link {
@@ -242,12 +250,7 @@ export function createFakeBoxes(...list: FakeBox[]) {
 
   const boxes: Boxes = {
     async pairAirPlay(endpoint) {
-      const box = boxOf(endpoint);
-      if (box.refusesNext) {
-        box.refusesNext = false;
-        throw new Error("M2 missing Salt or PublicKey (error=6)");
-      }
-      return box.pair("airplay");
+      return boxOf(endpoint).pair("airplay");
     },
     async pairCompanion(endpoint) {
       return boxOf(endpoint).pair("companion");

@@ -56,10 +56,12 @@ const isKeys = (value: unknown): value is BoxKeys => {
   return fine(keys.airplay) && fine(keys.companion);
 };
 
-// A box's volume as the media kind has it: steps wherever the box doesn't
-// say it has none, as one that passes them on to the TV over HDMI does.
+// A box's volume as the media kind has it: steps where the box says it takes
+// them, as one that passes them on to the TV over HDMI does. One whose
+// remote sets the TV's volume by infrared never says so, and its steps do
+// nothing.
 const volumeOf = (volume: BoxVolume) =>
-  volume === "unavailable" ? null : ("steps" as const);
+  volume === "available" ? ("steps" as const) : null;
 
 type Owned = {
   key: string;
@@ -119,7 +121,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   function own(device: { key: string; name: string; model: string }) {
     const box: Owned = {
       ...device,
-      volume: "steps",
+      volume: null,
       connection: createConnection({
         key: device.key,
         boxes,
@@ -152,9 +154,10 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   }
 
   // Passes on what a box said, registering it again where its volume changed.
+  // Asleep, a box offers no volume, so it keeps what it had while it's off.
   async function said(box: Owned, on: boolean | null, volume: "steps" | null) {
     try {
-      if (volume !== box.volume) {
+      if (volume !== box.volume && on !== false) {
         box.volume = volume;
         await ctx.devices.register(registration(box));
       }
@@ -188,7 +191,9 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         type: "media-player",
       });
     }
-    await ctx.devices.found(found.slice(0, 64));
+    await ctx.devices.found(found.slice(0, 64)).catch((error: unknown) => {
+      ctx.log(`Couldn't list the boxes found: ${String(error)}`);
+    });
   }
 
   function boxOf(key: string): Box {

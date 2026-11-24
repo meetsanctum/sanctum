@@ -97,18 +97,10 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
     } catch (error) {
       open.delete(key);
       if (!(error instanceof WrongCode)) throw error;
-      // Where the box shows a new code at once, ask for it; where it won't
-      // pair again, the attempt ends and Add starts over.
-      try {
-        const pairing = await boxes.pairAirPlay(box);
-        open.set(key, { attempt: now.attempt, step: "airplay", pairing });
-        return {
-          asks: [airplayCode],
-          refused: { question: airplayCode, refusal: "wrongCode" },
-        };
-      } catch {
-        return { refused: { question: airplayCode, refusal: "wrongCode" } };
-      }
+      // tvOS keeps the code it no longer takes on screen while any pairing
+      // is open, and a new one pairs against a code it doesn't show; so the
+      // attempt ends, and Add, with every pairing closed, gets a new code.
+      return { refused: { question: airplayCode, refusal: "wrongCode" } };
     }
     try {
       const pairing = await companionPairing(box);

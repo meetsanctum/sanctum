@@ -43,6 +43,19 @@ const {
 // What each official app's manifest says, in the worktree.
 const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
   folder,
+  // Pages are built from a package's ./ui export, which an app without a
+  // page of its own, such as a driver with nothing to show, doesn't have.
+  hasPages: Object.hasOwn(
+    (
+      JSON.parse(
+        readFileSync(
+          join(root, "catalog/apps", folder, "package.json"),
+          "utf8",
+        ),
+      ) as { exports: Record<string, unknown> }
+    ).exports,
+    "./ui",
+  ),
   ...(JSON.parse(
     readFileSync(
       join(root, "catalog/apps", folder, "sanctum-app.json"),
@@ -215,7 +228,7 @@ describe("the apps' packages on real images", () => {
       ),
     ) as { version: string; imports: Record<string, string> };
     expect(kit.imports["@meetsanctum/ui-sdk"]).toBe("ui-sdk.js");
-    for (const { id } of shipped) {
+    for (const { id } of shipped.filter((each) => each.hasPages)) {
       const folder = staged.apps[id]!.current.folder;
       const inPages = (...command: string[]) =>
         docker(
@@ -281,7 +294,7 @@ describe("the apps' packages on real images", () => {
       "text/javascript; charset=utf-8",
     );
 
-    for (const { id } of shipped) {
+    for (const { id } of shipped.filter((each) => each.hasPages)) {
       const folder = staged.apps[id]!.current.folder;
       const { digest, entry } = JSON.parse(
         await docker(

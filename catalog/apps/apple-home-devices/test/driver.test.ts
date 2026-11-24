@@ -144,6 +144,15 @@ describe("adding", () => {
       companionCode: box.code("companion"),
     });
     expect(state.kind).toBe("done");
+    // Its volume steps come once the TV says it takes them.
+    await core.until(
+      () =>
+        (
+          core.registered.get(box.key)?.capabilities[0]?.features as
+            { volume?: unknown } | undefined
+        )?.volume === "steps",
+      "registered with volume steps",
+    );
     expect(core.registered.get(box.key)).toMatchObject({
       name: "Living Room",
       manufacturer: "Apple",
@@ -175,35 +184,26 @@ describe("adding", () => {
     expect(core.found).toEqual([]);
   });
 
-  it("asks the first code again where the TV shows a new one after a wrong one", async () => {
+  it("ends after a wrong first code, and Add gets a new one that works", async () => {
     const box = livingRoom();
     const { core } = await home(box);
     const attempt = await core.startAdd(box.key);
     const first = box.code("airplay");
     const state = await attempt.answer({ airplayCode: box.wrong("airplay") });
     expect(state).toEqual({
-      kind: "asking",
-      asks: [expect.objectContaining({ id: "airplayCode" })],
-      refused: { question: "airplayCode", refusal: "wrongCode" },
-    });
-    expect(box.code("airplay")).not.toBe(first);
-    await attempt.answer({ airplayCode: box.code("airplay") });
-    expect(attempt.asks.map((each) => each.id)).toEqual(["companionCode"]);
-  });
-
-  it("ends with the refusal where the TV won't show a new code after a wrong one", async () => {
-    const box = livingRoom();
-    box.pairsAgainAfterWrong = false;
-    const { core } = await home(box);
-    const attempt = await core.startAdd(box.key);
-    const state = await attempt.answer({ airplayCode: box.wrong("airplay") });
-    expect(state).toEqual({
       kind: "refused",
       question: "airplayCode",
       refusal: "wrongCode",
     });
+    // Every pairing is closed, so the TV takes the old code off the screen.
     expect(box.open).toBe(0);
+    expect(box.showing.has("airplay")).toBe(false);
     expect(core.secrets.size).toBe(0);
+
+    const again = await core.startAdd(box.key);
+    expect(box.code("airplay")).not.toBe(first);
+    await again.answer({ airplayCode: box.code("airplay") });
+    expect(again.asks.map((each) => each.id)).toEqual(["companionCode"]);
   });
 
   it("shows a new second code when asked, and after a wrong or late one", async () => {
@@ -358,6 +358,40 @@ describe("connected", () => {
       on: false,
       activity: "idle",
     });
+  });
+
+  it("keeps the TV's volume while it's off, when it offers none", async () => {
+    const box = livingRoom();
+    const { core } = await home(box);
+    await added(core, box);
+    const volume = () =>
+      (
+        core.registered.get(box.key)!.capabilities[0]!.features as {
+          volume: unknown;
+        }
+      ).volume;
+    await core.until(() => volume() === "steps", "registered with steps");
+    const registered = core.registered.get(box.key);
+    box.on = false;
+    box.setVolume("unavailable");
+    await core.until(() => core.latest(box.key, "media")?.on === false, "off");
+    expect(volume()).toBe("steps");
+    expect(core.registered.get(box.key)).toBe(registered);
+  });
+
+  it("registers no volume for a TV that never says it takes steps", async () => {
+    const box = gym();
+    box.volume = "unknown";
+    const { core } = await home(box);
+    await added(core, box);
+    await core.until(() => core.latest(box.key, "media") !== undefined, "said");
+    expect(
+      (
+        core.registered.get(box.key)!.capabilities[0]!.features as {
+          volume: unknown;
+        }
+      ).volume,
+    ).toBeNull();
   });
 
   it("registers the TV again without volume where it says it has none", async () => {
