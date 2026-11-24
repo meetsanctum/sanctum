@@ -190,7 +190,7 @@ function Chart(props: { series: Series[]; days: string[]; label: string }) {
             className={
               shown === undefined
                 ? "sr-only"
-                : "pointer-events-none absolute top-0 z-10 min-w-44 -translate-x-1/2 rounded-md bg-popover px-2.5 py-2 text-[12px] leading-4 text-popover-foreground shadow-md"
+                : "pointer-events-none absolute top-0 z-10 min-w-44 -translate-x-1/2 rounded-md bg-popover px-2.5 py-2 text-[12px] leading-4 text-popover-foreground shadow-md reduce-effects:shadow-none"
             }
             style={
               shown === undefined

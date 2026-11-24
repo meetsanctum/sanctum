@@ -69,7 +69,7 @@ const closePairing = () =>
 const pageScroll = cn(
   "min-h-0 flex-1",
   "[&>[data-slot=scroll-area-viewport]>div]:flex! [&>[data-slot=scroll-area-viewport]>div]:min-h-full",
-  "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-32px),transparent)]",
+  "[&>[data-slot=scroll-area-viewport]]:[mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-32px),transparent)] reduce-effects:[&>[data-slot=scroll-area-viewport]]:[mask-image:none]",
 );
 
 export function AddDevices(props: {

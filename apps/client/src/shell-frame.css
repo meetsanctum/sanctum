@@ -264,8 +264,19 @@
     0 16px 48px rgb(0 0 0 / 30%);
 }
 
-/* Under Reduce effects it is solid: the mode's card, or over a
-   place its deepened background, as the frame beside it is. */
+/* Under Reduce effects it is solid: the mode's card, or over a place its
+   deepened background, as the frame beside it is, and keeps its hairline
+   without its soft shadow. */
 [data-effects="reduced"] .sidebar-float {
   background: var(--float-solid, var(--card));
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+/* An overlay under Reduce effects is solid Carbon (src/veil.tsx), so the
+   screen behind it can't be seen: it is not drawn at all while one is open,
+   and a device's change behind it costs no painting. */
+[data-effects="reduced"]
+  .home-screen[data-covered]
+  > :is(.frame, .frame-top, .sidebar-column, .panel) {
+  visibility: hidden;
 }

@@ -30,7 +30,7 @@ const buttonVariants = cva(
         // The mode's background in a hairline: the other actions, and Done.
         // On, as Add to Home is once a device is on Home, it turns the ink.
         outline: cn(
-          "border-border bg-background text-foreground shadow-xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-border bg-background text-foreground shadow-xs reduce-effects:shadow-none hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
           "aria-pressed:border-transparent data-on:border-transparent dark:aria-pressed:border-transparent dark:data-on:border-transparent",
           pressed,
         ),
@@ -81,7 +81,7 @@ const buttonVariants = cva(
         // hairline, a little lighter under the pointer, such as a way to add
         // devices. What it leads to is said on it in the primary look.
         choice:
-          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] hover:from-white/15 hover:to-white/8 active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
+          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)] hover:from-white/15 hover:to-white/8 active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
       },
       size: {
         // Words, with or without an icon, such as Done.
