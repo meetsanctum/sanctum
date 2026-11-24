@@ -16,6 +16,7 @@ import {
 import { createBoxes, type BoxVolume, type Boxes } from "./boxes.js";
 import {
   createConnection,
+  logText,
   type Connection,
   type Timings,
 } from "./connection.js";
@@ -56,21 +57,16 @@ const isKeys = (value: unknown): value is BoxKeys => {
   return fine(keys.airplay) && fine(keys.companion);
 };
 
-// A box's volume as the media kind has it: steps where the box says it takes
-// them, as one that passes them on to the TV over HDMI does. One whose
-// remote sets the TV's volume by infrared never says so, and its steps do
-// nothing.
-const volumeOf = (volume: BoxVolume) =>
-  volume === "available" ? ("steps" as const) : null;
-
 type Owned = {
   key: string;
   name: string;
   // Its model's name, as the core shows it: "Apple TV 4K".
   model: string;
   connection: Connection;
-  // The volume it was last registered with.
+  // The last registered volume. A box can report steps when it passes them
+  // on over HDMI, but a remote that sets volume by infrared can't report them.
   volume: "steps" | null;
+  updates: Promise<void>;
 };
 
 export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
@@ -118,10 +114,18 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     }
   }
 
-  function own(device: { key: string; name: string; model: string }) {
+  function logFailure(message: string, error: unknown) {
+    ctx.log(
+      logText(message) +
+        ": " +
+        logText(error instanceof Error ? error.message : String(error)),
+    );
+  }
+
+  function own(device: Pick<Owned, "key" | "name" | "model" | "volume">) {
     const box: Owned = {
       ...device,
-      volume: null,
+      updates: Promise.resolve(),
       connection: createConnection({
         key: device.key,
         boxes,
@@ -137,7 +141,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
               .catch(() => {});
           },
           state({ on, volume }) {
-            void said(box, on, volumeOf(volume));
+            box.updates = box.updates.then(() => said(box, on, volume));
           },
           lost() {
             void ctx.devices
@@ -149,18 +153,28 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }),
     };
     owned.set(device.key, box);
-    box.connection.seen(sightings.boxes().get(device.key) ?? null);
+    const seen = sightings.boxes().get(device.key);
+    box.connection.seen(seen?.kind === "tv" ? seen : null);
     return box;
   }
 
   // Passes on what a box said, registering it again where its volume changed.
-  // Asleep, a box offers no volume, so it keeps what it had while it's off.
-  async function said(box: Owned, on: boolean | null, volume: "steps" | null) {
-    try {
-      if (volume !== box.volume && on !== false) {
-        box.volume = volume;
-        await ctx.devices.register(registration(box));
+  // Asleep or with volume unknown, a box keeps the capability it last gave.
+  async function said(box: Owned, on: boolean | null, volume: BoxVolume) {
+    if (owned.get(box.key) !== box) return;
+    const nextVolume = volume === "available" ? "steps" : null;
+    if (on !== false && volume !== "unknown" && nextVolume !== box.volume) {
+      try {
+        await ctx.devices.register(
+          registration({ ...box, volume: nextVolume }),
+        );
+        box.volume = nextVolume;
+      } catch (error) {
+        logFailure("Couldn't update volume for " + box.name, error);
       }
+    }
+    if (owned.get(box.key) !== box) return;
+    try {
       await ctx.devices.report({
         key: box.key,
         states: {
@@ -168,7 +182,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         },
       });
     } catch (error) {
-      ctx.log(`Couldn't pass on ${box.name}: ${(error as Error).message}`);
+      logFailure("Couldn't pass on " + box.name, error);
     }
   }
 
@@ -176,6 +190,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     const box = owned.get(key);
     owned.delete(key);
     box?.connection.stop();
+    await box?.updates;
   }
 
   // Every box Add devices lists: those seen that the home hasn't added.
@@ -223,10 +238,18 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       await ctx.devices.present({ keys: kept.map((device) => device.key) });
       for (const device of kept) {
         const keys = await keysOf(device.key);
+        const media = device.capabilities.find(
+          (capability) =>
+            capability.kind === "media" && capability.id === mediaId,
+        );
         const box = own({
           key: device.key,
           name: device.driverName ?? device.name,
           model: device.model ?? "Apple TV",
+          volume:
+            media?.kind === "media" && media.features.volume === "steps"
+              ? "steps"
+              : null,
         });
         box.connection.start(keys?.companion ?? null);
         if (!keys) {
@@ -253,11 +276,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         const box = owned.get(key);
         const seen = now.get(key);
         if (!box) continue;
-        if (seen) {
+        if (seen?.kind === "tv") {
           box.name = seen.name;
           box.model = modelName(seen.model);
+          box.connection.seen(seen);
         }
-        box.connection.seen(seen ?? null);
       }
       await listFound();
     },
@@ -266,15 +289,35 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       if (owned.has(add.key)) return;
       const box = boxOf(add.key);
       if (box.kind === "homepod") return { refused: { refusal: "homePod" } };
-      return pairings.step(add.key, box, add, async (keys) => {
-        await ctx.secrets.set(secretOf(add.key), JSON.stringify(keys));
-        const added = own({
+      return pairings.step(add.key, box, add, async (keys, pairedAt) => {
+        const secret = secretOf(add.key);
+        const device = {
           key: add.key,
           name: box.name,
           model: modelName(box.model),
-        });
-        await ctx.devices.register(registration(added));
-        added.connection.start(keys.companion);
+          volume: null,
+        };
+        await ctx.secrets.set(secret, JSON.stringify(keys));
+        try {
+          await ctx.devices.register(registration(device));
+        } catch (error) {
+          // If the answer was lost, keep the keys for a device the core added.
+          const devices = await ctx.devices.list().catch(() => null);
+          if (
+            !devices?.some(
+              (each) => each.driver === ctx.appId && each.key === add.key,
+            )
+          ) {
+            if (devices) {
+              await ctx.secrets.delete(secret).catch((failure: unknown) => {
+                logFailure("Couldn't remove unused pairing keys", failure);
+              });
+            }
+            throw error;
+          }
+        }
+        const added = own(device);
+        added.connection.start(keys.companion, pairedAt);
         await listFound();
       });
     },
@@ -286,14 +329,21 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     async repair(repair: DriverRepair): Promise<DriverRepairResult> {
       const box = owned.get(repair.key);
       if (!box) throw new ActionError("not_found", `No device ${repair.key}`);
+      const seen = boxOf(repair.key);
+      if (seen.kind !== "tv") {
+        throw new ActionError(
+          "not_found",
+          "The TV isn't on the home's network",
+        );
+      }
       const answer = await pairings.step(
         repair.key,
-        boxOf(repair.key),
+        seen,
         repair,
-        async (keys) => {
+        async (keys, pairedAt) => {
           await ctx.secrets.set(secretOf(repair.key), JSON.stringify(keys));
+          box.connection.rekey(keys.companion, pairedAt);
           await ctx.devices.problem({ key: repair.key, problem: null });
-          box.connection.rekey(keys.companion);
         },
       );
       // Repairing asks nothing that ends it with a refusal of adding.
@@ -302,7 +352,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         if (question === undefined) {
           throw new Error(
             refusal === "notAllowed"
-              ? `${box.name} didn't let Sanctum pair`
+              ? `${box.name} refused pairing`
               : `${box.name} couldn't be reached`,
           );
         }

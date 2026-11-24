@@ -1,9 +1,182 @@
+diff --git a/dist/companion/connection.js b/dist/companion/connection.js
+--- a/dist/companion/connection.js
++++ b/dist/companion/connection.js
+@@ -8,7 +8,7 @@
+ import { generateKeyPairSync, diffieHellman, sign, verify as cryptoVerify, } from 'node:crypto';
+ import { TlvTag, tlvEncode, tlvDecode } from '../util/tlv.js';
+ import { hkdfSha512, encryptChaCha20, decryptChaCha20, x25519PublicKeyFromRaw, ed25519PublicKeyFromRaw, ed25519PrivateKeyFromSeed } from '../util/crypto.js';
+-import { FrameType, encodeFrame, parseFrames } from './framing.js';
++import { FrameType, encodeFrame, MAX_PAIRING_FRAME_SIZE, parseFrames } from './framing.js';
+ import { CompanionSession } from './companion-session.js';
+ import { opackEncode, opackDecode, } from './opack.js';
+ /** Largest request ID an Apple TV echoes unchanged (one-byte OPACK integers are signed). */
+@@ -404,7 +404,15 @@
+     }
+     /** Parse buffered plaintext frames and hand each to a waiter of the same type, if any. */
+     processRawFrames() {
+-        const { frames, remainder } = parseFrames(this.buffer);
++        let parsed;
++        try {
++            parsed = parseFrames(this.buffer, MAX_PAIRING_FRAME_SIZE);
++        }
++        catch (error) {
++            this.fail(error);
++            return;
++        }
++        const { frames, remainder } = parsed;
+         this.buffer = remainder;
+         for (const frame of frames) {
+             const idx = this.pendingFrameResolvers.findIndex((r) => r.type === frame.type);
+diff --git a/dist/companion/framing.d.ts b/dist/companion/framing.d.ts
+--- a/dist/companion/framing.d.ts
++++ b/dist/companion/framing.d.ts
+@@ -31,7 +31,8 @@
+  * Payloads and the remainder are copies, so the caller may discard `buffer`.
+  * @returns the complete frames, plus any trailing bytes of a partial frame to prepend to the next read
+  */
+-export declare function parseFrames(buffer: Buffer): {
++export declare const MAX_PAIRING_FRAME_SIZE = 4096;
++export declare function parseFrames(buffer: Buffer, maxPayloadLength?: number): {
+     frames: Frame[];
+     remainder: Buffer;
+ };
+diff --git a/dist/companion/framing.js b/dist/companion/framing.js
+--- a/dist/companion/framing.js
++++ b/dist/companion/framing.js
+@@ -19,6 +19,8 @@
+ })(FrameType || (FrameType = {}));
+ /** Frame header length: 1 byte type + 3 bytes length. */
+ const HEADER_SIZE = 4;
++/** Pairing messages contain keys and proofs and fit within 4 KiB. */
++export const MAX_PAIRING_FRAME_SIZE = 4096;
+ /**
+  * Build a frame from a type and payload.
+  * @throws {RangeError} if the payload does not fit the 3-byte length field (max 16 MiB - 1)
+@@ -40,7 +42,7 @@
+  * Payloads and the remainder are copies, so the caller may discard `buffer`.
+  * @returns the complete frames, plus any trailing bytes of a partial frame to prepend to the next read
+  */
+-export function parseFrames(buffer) {
++export function parseFrames(buffer, maxPayloadLength = 0xffffff) {
+     const frames = [];
+     let offset = 0;
+     while (offset + HEADER_SIZE <= buffer.length) {
+@@ -48,6 +50,8 @@
+         const length = (buffer[offset + 1] << 16) |
+             (buffer[offset + 2] << 8) |
+             buffer[offset + 3];
++        if (length > maxPayloadLength)
++            throw new RangeError('Companion frame exceeds the payload limit');
+         if (offset + HEADER_SIZE + length > buffer.length) {
+             break; // incomplete frame
+         }
 diff --git a/dist/companion/pair-setup.js b/dist/companion/pair-setup.js
-index 2a4027ece806814233d067ae25356875030ed4bf..ffa811b8e67a2fa66cca66c953b455524d08f223 100644
 --- a/dist/companion/pair-setup.js
 +++ b/dist/companion/pair-setup.js
-@@ -261,6 +261,9 @@ export class CompanionPairSetup {
-         const { frames, remainder } = parseFrames(this.buffer);
+@@ -10,8 +10,11 @@
+ import { TlvTag, tlvEncode, tlvDecode } from '../util/tlv.js';
+ import { hkdfSha512, encryptChaCha20, decryptChaCha20, ed25519PrivateKeyFromSeed } from '../util/crypto.js';
+ import { SRPClient } from '../auth/srp.js';
+-import { FrameType, encodeFrame, parseFrames } from './framing.js';
++import { FrameType, encodeFrame, MAX_PAIRING_FRAME_SIZE, parseFrames } from './framing.js';
+ import { opackEncode, opackDecode } from './opack.js';
++
++const MAX_QUEUED_FRAMES = 8;
++const MAX_QUEUED_BYTES = 16 * 1024;
+ /**
+  * One pair-setup attempt over its own TCP connection. Call start(), show the user the
+  * PIN the Apple TV displays, then finish(pin). Generates a fresh client ID and Ed25519
+@@ -37,6 +40,7 @@
+     serverPublicKey;
+     /** Queued frames that arrived before anyone was waiting for them. */
+     frameQueue = [];
++    queuedBytes = 0;
+     /** Waiters for the next frame, served in FIFO order regardless of frame type. */
+     pendingFrameResolvers = [];
+     constructor(host, port, options = {}) {
+@@ -60,10 +64,14 @@
+     }
+     /** Connect the socket (Nagle off, 5 s timeout) and feed incoming data to the frame parser. */
+     async openSocket() {
+-        this.socket = await connectSocket(this.host, this.port);
+-        this.socket.on('error', () => { }); // Post-connect errors surface as reply timeouts.
+-        this.socket.on('close', () => { this.ended = true; });
+-        this.socket.on('data', (data) => {
++        const socket = this.socket = await connectSocket(this.host, this.port);
++        socket.on('error', (error) => { if (this.socket === socket)
++            this.destroy(error); });
++        socket.on('close', () => { if (this.socket === socket)
++            this.destroy(); });
++        socket.on('data', (data) => {
++            if (this.ended)
++                return;
+             this.buffer = Buffer.concat([this.buffer, data]);
+             this.processFrames();
+         });
+@@ -227,9 +235,16 @@
+         }
+     }
+     /** Close the socket. Safe to call more than once. */
+-    destroy() {
+-        this.socket?.destroy();
++    destroy(error = new Error('Companion pairing connection closed')) {
++        this.ended = true;
++        const socket = this.socket;
+         this.socket = undefined;
++        socket?.destroy();
++        this.buffer = Buffer.alloc(0);
++        this.frameQueue.length = 0;
++        this.queuedBytes = 0;
++        for (const waiter of this.pendingFrameResolvers.splice(0))
++            waiter.reject(error);
+     }
+     /** Frame and write a payload; a no-op once the socket is gone. */
+     writeFrame(type, payload) {
+@@ -238,35 +253,56 @@
+     }
+     /** Resolve with the next frame of any type, taking from the queue first. */
+     waitForAnyFrame(timeoutMs = 10000) {
+-        if (this.frameQueue.length > 0) {
+-            return Promise.resolve(this.frameQueue.shift());
++        if (this.ended)
++            return Promise.reject(new Error('Companion pairing connection closed'));
++        const frame = this.frameQueue.shift();
++        if (frame) {
++            this.queuedBytes -= frame.payload.length;
++            return Promise.resolve(frame);
+         }
+         return new Promise((resolve, reject) => {
+-            const onFrame = (frame) => {
+-                clearTimeout(timer);
+-                resolve(frame);
++            const waiter = {
++                resolve: (frame) => { clearTimeout(timer); resolve(frame); },
++                reject: (error) => { clearTimeout(timer); reject(error); },
+             };
+             const timer = setTimeout(() => {
+-                const idx = this.pendingFrameResolvers.indexOf(onFrame);
++                const idx = this.pendingFrameResolvers.indexOf(waiter);
+                 if (idx >= 0)
+                     this.pendingFrameResolvers.splice(idx, 1);
+                 reject(new Error('Companion PS timeout waiting for response frame'));
+             }, timeoutMs);
+-            this.pendingFrameResolvers.push(onFrame);
++            this.pendingFrameResolvers.push(waiter);
+             this.processFrames();
+         });
+     }
+     /** Parse buffered frames, handing each to the oldest waiter or queuing it. */
+     processFrames() {
+-        const { frames, remainder } = parseFrames(this.buffer);
++        let parsed;
++        try {
++            parsed = parseFrames(this.buffer, MAX_PAIRING_FRAME_SIZE);
++        }
++        catch (error) {
++            this.destroy(error);
++            return;
++        }
++        const { frames, remainder } = parsed;
          this.buffer = remainder;
          for (const frame of frames) {
 +            // tvOS 27 answers PS_Start with an empty 0x01 frame before M2; it carries no pairing data.
@@ -11,4 +184,47 @@ index 2a4027ece806814233d067ae25356875030ed4bf..ffa811b8e67a2fa66cca66c953b45552
 +                continue;
              const resolver = this.pendingFrameResolvers.shift();
              if (resolver) {
-                 resolver(frame);
+-                resolver(frame);
++                resolver.resolve(frame);
+             }
+             else {
++                if (this.frameQueue.length >= MAX_QUEUED_FRAMES ||
++                    this.queuedBytes + frame.payload.length > MAX_QUEUED_BYTES) {
++                    this.destroy(new Error('Companion pairing queue limit exceeded'));
++                    return;
++                }
+                 this.frameQueue.push(frame);
++                this.queuedBytes += frame.payload.length;
+             }
+         }
+     }
+diff --git a/dist/util/tlv.js b/dist/util/tlv.js
+--- a/dist/util/tlv.js
++++ b/dist/util/tlv.js
+@@ -52,7 +52,7 @@
+  * @throws if an item is truncated (header or value runs past the end of `buf`)
+  */
+ export function tlvDecode(buf) {
+-    const result = {};
++    const fragments = {};
+     let offset = 0;
+     while (offset < buf.length) {
+         if (offset + 2 > buf.length)
+@@ -62,14 +62,9 @@
+         if (offset + 2 + length > buf.length)
+             throw new Error(`TLV truncated: tag ${tag} needs ${length} bytes`);
+         const value = buf.subarray(offset + 2, offset + 2 + length);
+-        if (result[tag]) {
+-            result[tag] = Buffer.concat([result[tag], value]);
+-        }
+-        else {
+-            result[tag] = Buffer.from(value);
+-        }
++        (fragments[tag] ??= []).push(value);
+         offset += 2 + length;
+     }
+-    return result;
++    return Object.fromEntries(Object.entries(fragments).map(([tag, chunks]) => [tag, Buffer.concat(chunks)]));
+ }
+ //# sourceMappingURL=tlv.js.map
+\ No newline at end of file

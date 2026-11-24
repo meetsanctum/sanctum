@@ -45,12 +45,12 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
     name: "Apple Home Devices",
     version: "0.1.0",
     core: "^2.0.0",
-    summary: "Brings your Apple TVs and HomePods into your home.",
+    summary: "Brings your Apple TVs into your home.",
     icon: { glyph: "tv", color: "graphite" },
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your Apple TVs and HomePods and keep their state.",
+        reason: "To add your Apple TVs and keep their state.",
         needed: true,
       },
       {
@@ -132,14 +132,14 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
       addLater: [airplayCode, companionCode],
       refusals: {
         notAllowed:
-          "The TV didn't let Sanctum pair. On the TV, open Settings, then AirPlay and HomeKit, and allow access to everyone on the same network.",
+          "The TV refused pairing. On the TV, open Settings, then AirPlay and HomeKit, and allow access to everyone on the same network.",
         unreachable:
-          "Sanctum can't reach the TV. Check that it's plugged in and on the same network, then add it again.",
-        homePod: "HomePods are not yet supported by Sanctum.",
+          "The TV couldn't be reached. Check that it's plugged in and on the same network, then add it again.",
+        homePod: "HomePods can't be added.",
       },
       problems: {
         pairingLost: {
-          words: "It's no longer paired with Sanctum",
+          words: "It needs to be paired again",
           repair: {
             help: "Pair it again. The TV shows two codes, one after the other.",
             asks: [],

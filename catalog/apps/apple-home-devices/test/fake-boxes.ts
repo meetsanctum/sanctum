@@ -57,7 +57,7 @@ export class FakeBox {
   tellsPower = true;
   on = true;
   volume: BoxVolume = "available";
-  connects = 0;
+  readonly endpoints: Endpoint[] = [];
   private clients = 0;
 
   constructor(options: FakeBoxOptions) {
@@ -70,6 +70,10 @@ export class FakeBox {
 
   get key() {
     return this.deviceId.toLowerCase();
+  }
+
+  get connects() {
+    return this.endpoints.length;
   }
 
   /** What it announces, AirPlay and Companion. */
@@ -257,7 +261,7 @@ export function createFakeBoxes(...list: FakeBox[]) {
     },
     async connect(endpoint, keys: Keys) {
       const box = boxOf(endpoint);
-      box.connects += 1;
+      box.endpoints.push(endpoint);
       if (!box.reachable) throw new Unreachable("connect ETIMEDOUT");
       if (!box.known.get("companion")!.has(keys.clientId)) {
         throw new PairingLost("Companion pair-verify M4 error: 2");

@@ -101,9 +101,11 @@ export class PairingLost extends Error {
 const pairingName = "Sanctum";
 
 // HAP's TLV error 2, Authentication: a wrong code in pair-setup's M4, and
-// keys the box doesn't know in pair-verify's M4.
+// keys the box doesn't know in pair-verify's M4. A box whose identity was
+// reset also fails the signature check in M2.
 const wrongCodeMessage = /M4 missing Proof \(error=2\)/;
-const lostMessage = /pair-verify M4 error: 2\b/i;
+const lostMessage =
+  /pair-verify M4 error: 2\b|^Companion server signature verification failed$/i;
 const expiredMessage = /PIN expired/;
 // /pair-pin-start refused: the box's AirPlay access setting allows no
 // pairing from here.
@@ -200,9 +202,6 @@ class CompanionLink extends EventEmitter implements Link {
       this.volume = volume;
       this.emit("change");
     });
-    tv.on("companionError", (error: unknown) => {
-      if (!this.closed) this.end(errorOf(error) as Error);
-    });
     tv.on("companionClose", () => this.end());
   }
 
@@ -211,15 +210,16 @@ class CompanionLink extends EventEmitter implements Link {
     // tvOS 26 has no handler for this, and tells power only by its events,
     // if at all.
     const power = await this.tv.fetchPowerState().catch(() => null);
+    if (this.closed) throw new Unreachable("Companion closed during setup");
     if (power) this.power = powerOf(power);
     this.volume = volumeOf(this.tv);
   }
 
-  private end(error?: Error) {
+  private end() {
     if (this.closed) return;
     this.closed = true;
     void this.tv.close();
-    this.emit("close", error);
+    this.emit("close");
   }
 
   wake = () => translated(() => this.tv.wake());

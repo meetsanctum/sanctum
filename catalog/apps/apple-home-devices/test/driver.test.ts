@@ -1,7 +1,9 @@
+import { ActionError, type AppContext } from "@meetsanctum/app-sdk";
 import { createDriverCore, type DriverCore } from "@meetsanctum/app-testkit";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppleHomeDevicesApp } from "../src/index.js";
+import { createSightings } from "../src/sightings.js";
 import { createFakeBoxes, FakeBox } from "./fake-boxes.js";
 
 // Apple TVs found, added with both of their codes, kept connected, turned
@@ -36,15 +38,27 @@ function gym() {
 }
 
 async function home(...boxes: FakeBox[]): Promise<Home> {
+  return homeWith(boxes);
+}
+
+async function homeWith(
+  boxes: FakeBox[],
+  onStart?: (ctx: AppContext) => void,
+): Promise<Home> {
   const fake = createFakeBoxes(...boxes);
-  const core = createDriverCore(
-    createAppleHomeDevicesApp({
-      boxes: fake.boxes,
-      timings,
-      random: () => 0.5,
-      pairing: { retryMs: 5 },
-    }),
-  );
+  const app = createAppleHomeDevicesApp({
+    boxes: fake.boxes,
+    timings,
+    random: () => 0.5,
+    pairing: { retryMs: 5 },
+  });
+  const core = createDriverCore({
+    ...app,
+    async start(ctx, info) {
+      onStart?.(ctx);
+      await app.start!(ctx, info);
+    },
+  });
   await core.start();
   await core.discovered({
     found: boxes.flatMap((box) => box.sightings()),
@@ -65,6 +79,16 @@ async function added(core: DriverCore, box: FakeBox) {
 }
 
 describe("finding", () => {
+  it("keeps valid TVs listed when another service has a blank name", async () => {
+    const box = livingRoom();
+    const blank = new FakeBox({
+      deviceId: "11:22:33:44:55:66",
+      name: "  ",
+    });
+    const { core } = await home(box, blank);
+    expect(core.found.map((each) => each.key)).toEqual([box.key]);
+  });
+
   it("lists Apple TVs and HomePods by their name and model, not Macs", async () => {
     const mac = new FakeBox({
       deviceId: "11:22:33:44:55:66",
@@ -120,9 +144,54 @@ describe("finding", () => {
     await core.discovered({ found: [companion!], lost: [] });
     expect(core.found.map((each) => each.key)).toEqual([box.key]);
   });
+
+  it("keeps a matched Companion endpoint briefly after it disappears", () => {
+    const sightings = createSightings();
+    const announced = livingRoom();
+    const unmatched = gym();
+    const [airplay, companion] = announced.sightings();
+    const [otherAirplay, otherCompanion] = unmatched.sightings();
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      sightings.take({
+        found: [airplay!, companion!, otherCompanion!],
+        lost: [],
+      });
+      sightings.take({
+        found: [],
+        lost: [companion!, otherCompanion!],
+      });
+      sightings.take({ found: [otherAirplay!], lost: [] });
+      expect([...sightings.boxes().keys()]).toEqual([announced.key]);
+      now.mockReturnValue(5 * 60_000);
+      expect(sightings.boxes().size).toBe(0);
+    } finally {
+      now.mockRestore();
+    }
+  });
 });
 
 describe("adding", () => {
+  it("can add the same TV after registration is refused", async () => {
+    const box = livingRoom();
+    const { core } = await homeWith([box], (ctx) => {
+      vi.spyOn(ctx.devices, "register").mockRejectedValueOnce(
+        new ActionError("forbidden", "Registration refused"),
+      );
+    });
+    const first = await core.startAdd(box.key);
+    await first.answer({ airplayCode: box.code("airplay") });
+    await expect(
+      first.answer({ companionCode: box.code("companion") }),
+    ).rejects.toThrow("Registration refused");
+    expect(core.registered.has(box.key)).toBe(false);
+    expect(core.secrets.size).toBe(0);
+    expect(core.found.map((each) => each.key)).toEqual([box.key]);
+
+    await added(core, box);
+    expect(core.registered.has(box.key)).toBe(true);
+  });
+
   it("asks AirPlay's code, then Companion's, and adds the TV once both pass", async () => {
     const box = livingRoom();
     const { core } = await home(box);
@@ -338,6 +407,46 @@ describe("connected", () => {
     await core.until(() => core.latest(box.key, "media")?.on === true, "on");
   });
 
+  it("reports power in order while a volume registration is pending", async () => {
+    const box = livingRoom();
+    box.on = false;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let finishRegistration!: () => void;
+    const finish = new Promise<void>((resolve) => {
+      finishRegistration = resolve;
+    });
+    const { core } = await homeWith([box], (ctx) => {
+      const register = ctx.devices.register;
+      vi.spyOn(ctx.devices, "register").mockImplementation(async (input) => {
+        const media = input.capabilities[0];
+        if (media?.kind === "media" && media.features?.volume === "steps") {
+          markStarted();
+          await finish;
+        }
+        return register(input);
+      });
+    });
+    await added(core, box);
+    await core.until(() => core.latest(box.key, "media")?.on === false, "off");
+    const before = core.reports.length;
+    box.setPower(true);
+    try {
+      await started;
+      box.setPower(false);
+    } finally {
+      finishRegistration();
+    }
+    const updates = () =>
+      core.reports
+        .slice(before)
+        .flatMap(({ states }) => (states.media ? [states.media.on] : []));
+    await core.until(() => updates().length === 2, "both power changes");
+    expect(updates()).toEqual([true, false]);
+  });
+
   it("takes a TV that doesn't tell its power to be what it was last turned to", async () => {
     const box = gym();
     box.tellsPower = false;
@@ -349,11 +458,13 @@ describe("connected", () => {
     );
     expect(core.latest(box.key, "media")).toEqual({ activity: "idle" });
     await core.command(box.key, "media", "media", { on: true });
+    await core.until(() => core.latest(box.key, "media")?.on === true, "on");
     expect(core.latest(box.key, "media")).toEqual({
       on: true,
       activity: "idle",
     });
     await core.command(box.key, "media", "media", { on: false });
+    await core.until(() => core.latest(box.key, "media")?.on === false, "off");
     expect(core.latest(box.key, "media")).toEqual({
       on: false,
       activity: "idle",
@@ -396,7 +507,6 @@ describe("connected", () => {
 
   it("registers the TV again without volume where it says it has none", async () => {
     const box = gym();
-    box.volume = "unavailable";
     const { core } = await home(box);
     await added(core, box);
     const volume = () =>
@@ -405,9 +515,36 @@ describe("connected", () => {
           volume: unknown;
         }
       ).volume;
+    await core.until(() => volume() === "steps", "registered with steps");
+    const reports = core.reports.length;
+    box.setVolume("unknown");
+    await core.until(
+      () => core.reports.length > reports,
+      "said with unknown volume",
+    );
+    expect(volume()).toBe("steps");
+    box.setVolume("unavailable");
     await core.until(() => volume() === null, "registered without volume");
     box.setVolume("available");
     await core.until(() => volume() === "steps", "registered with steps");
+  });
+
+  it("clears unavailable volume steps saved before a restart", async () => {
+    const box = livingRoom();
+    const { core } = await home(box);
+    const volume = () => {
+      const capability = core.devices()[0]?.capabilities[0];
+      return capability?.kind === "media"
+        ? capability.features.volume
+        : undefined;
+    };
+    await added(core, box);
+    await core.until(() => volume() === "steps", "saved steps");
+    await core.stop();
+    box.volume = "unavailable";
+    await core.start();
+    await core.discovered({ found: box.sightings(), lost: [] });
+    await core.until(() => volume() === null, "saved volume cleared");
   });
 
   it("goes offline after a drop and comes back by itself", async () => {
@@ -442,6 +579,7 @@ describe("connected", () => {
     });
     await core.until(() => box.connects === tries + 1, "connected anew");
     await core.until(() => box.links.length === 1, "one connection");
+    expect(box.endpoints.at(-1)?.companionAddress).toBe("192.168.1.50");
   });
 
   it("connects the TVs it has as it starts, and says one without its keys lost them", async () => {

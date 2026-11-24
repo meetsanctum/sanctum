@@ -37,7 +37,15 @@ export const companionCode = "companionCode";
 
 type Open =
   | { attempt: string; step: "airplay"; pairing: Pairing }
-  | { attempt: string; step: "companion"; pairing: Pairing; airplay: Keys };
+  | {
+      attempt: string;
+      step: "companion";
+      pairing: Pairing;
+      airplay: Keys;
+      endpoint: Endpoint;
+    };
+
+type Paired = (keys: BoxKeys, endpoint: Endpoint) => Promise<void>;
 
 export type PairingOptions = {
   /** How long to wait before trying a Companion pairing again, in ms. */
@@ -109,6 +117,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
         step: "companion",
         pairing,
         airplay: keys,
+        endpoint: box,
       });
       return { asks: [companionCode] };
     } catch (error) {
@@ -122,7 +131,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
     box: Endpoint,
     now: Extract<Open, { step: "companion" }>,
     code: string,
-    done: (keys: BoxKeys) => Promise<void>,
+    done: Paired,
   ): Promise<PairingAnswer> {
     let keys: Keys;
     try {
@@ -140,7 +149,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       // asked for at once.
       try {
         const pairing = await companionPairing(box);
-        open.set(key, { ...now, pairing });
+        open.set(key, { ...now, pairing, endpoint: box });
         return {
           asks: [companionCode],
           refused: { question: companionCode, refusal },
@@ -150,7 +159,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       }
     }
     open.delete(key);
-    await done({ airplay: now.airplay, companion: keys });
+    await done({ airplay: now.airplay, companion: keys }, now.endpoint);
     return undefined;
   }
 
@@ -160,7 +169,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
       key: string,
       box: Endpoint,
       { attempt, answers, again }: PairingStep,
-      done: (keys: BoxKeys) => Promise<void>,
+      done: Paired,
     ): Promise<PairingAnswer> {
       // The core names an attempt for every flow that asks once started.
       if (attempt === undefined) throw new Error("Pairing needs an attempt");
@@ -176,7 +185,7 @@ export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
         now.pairing.close();
         try {
           const pairing = await companionPairing(box);
-          open.set(key, { ...now, pairing });
+          open.set(key, { ...now, pairing, endpoint: box });
           return { asks: [companionCode] };
         } catch (error) {
           open.delete(key);

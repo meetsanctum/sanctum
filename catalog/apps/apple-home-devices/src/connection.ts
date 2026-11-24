@@ -10,10 +10,10 @@ import {
 // One added box's Companion connection, kept open while the app runs: it
 // opens once the box is seen, and after a drop it tries again after 15 s,
 // then after doubling waits up to 5 minutes, each spread by up to a third
-// either way so boxes that dropped together don't come back in step. A box
-// seen at a new address is tried at once. Without a connection for 30 s it
-// is offline. A box that no longer knows Sanctum's keys stops being tried
-// until it's paired again.
+// either way so boxes that dropped together don't come back in step. A new
+// address is tried at once, keeping the current link until it verifies.
+// Without a connection for 30 s the box is offline. A box that no longer
+// knows Sanctum's keys stops being tried until it's paired again.
 //
 // Power comes from the box where it tells it (tvOS 27 answers; tvOS 26
 // doesn't). Where it doesn't, the box is taken to be what Sanctum last
@@ -52,15 +52,31 @@ export type ConnectionOptions = {
   random?: () => number;
 };
 
+function sameAddress(a: Endpoint | null, b: Endpoint | null) {
+  return (
+    a?.companionAddress === b?.companionAddress &&
+    a?.companionPort === b?.companionPort
+  );
+}
+
+export function logText(text: string) {
+  return text.replace(
+    /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu,
+    (character) => "\\u{" + character.codePointAt(0)!.toString(16) + "}",
+  );
+}
+
 export function createConnection(options: ConnectionOptions) {
   const { boxes, news } = options;
   const timings = { ...defaultTimings, ...options.timings };
   const random = options.random ?? Math.random;
 
   let endpoint: Endpoint | null = null;
+  let verified: Endpoint | null = null;
   let keys: Keys | null = null;
   let link: Link | null = null;
   let connecting = false;
+  let generation = 0;
   let stopped = true;
   let lost = false;
   let failures = 0;
@@ -100,35 +116,74 @@ export function createConnection(options: ConnectionOptions) {
     failures += 1;
     retry = setTimeout(() => {
       retry = null;
-      void open();
+      void open(verified ?? endpoint);
     }, base * spread);
   }
 
-  async function open() {
-    if (stopped || lost || link || connecting || !endpoint || !keys) return;
-    connecting = true;
-    const at = endpoint;
-    let opened: Link;
-    try {
-      opened = await boxes.connect(at, keys);
-    } catch (error) {
-      connecting = false;
-      if (stopped) return;
-      if (error instanceof PairingLost) {
-        lost = true;
-        news.lost();
-        return;
-      }
-      news.log(`Couldn't reach ${at.name}: ${(error as Error).message}`);
-      later();
+  async function open(at: Endpoint | null) {
+    if (
+      stopped ||
+      lost ||
+      connecting ||
+      !at ||
+      !keys ||
+      (link && sameAddress(at, verified))
+    ) {
       return;
+    }
+    connecting = true;
+    const attempt = generation;
+    const withKeys = keys;
+    const current = () => !stopped && !lost && attempt === generation;
+    let opened: Link | undefined;
+    let pairingRejected = false;
+    // If the first address fails, try the other one before reporting a
+    // lost pairing. Only a rejection at the known address counts once
+    // an address has been verified.
+    const other = sameAddress(at, verified) ? endpoint : verified;
+    for (const address of [at, sameAddress(at, other) ? null : other]) {
+      if (!current() || !address) break;
+      if (link && sameAddress(address, verified)) break;
+      try {
+        opened = await boxes.connect(address, withKeys);
+      } catch (error) {
+        if (!current()) break;
+        if (
+          error instanceof PairingLost &&
+          (!verified || sameAddress(address, verified))
+        ) {
+          pairingRejected = true;
+        }
+        news.log(
+          "Couldn't reach " +
+            logText(address.name) +
+            ": " +
+            logText(error instanceof Error ? error.message : String(error)),
+        );
+        continue;
+      }
+      if (current()) verified = address;
+      break;
     }
     connecting = false;
-    if (stopped || lost) {
-      opened.close();
+    if (!current()) {
+      opened?.close();
+      void open(endpoint);
       return;
     }
+    if (!opened) {
+      if (link) return;
+      if (pairingRejected) {
+        lost = true;
+        news.lost();
+      } else {
+        later();
+      }
+      return;
+    }
+    const was = link;
     link = opened;
+    was?.close();
     failures = 0;
     retry = clear(retry);
     offline = clear(offline);
@@ -143,10 +198,10 @@ export function createConnection(options: ConnectionOptions) {
       if (error instanceof PairingLost) {
         lost = true;
         news.lost();
-        return;
+      } else {
+        later();
       }
       goingOffline();
-      later();
     });
     news.online(true);
     say();
@@ -158,38 +213,34 @@ export function createConnection(options: ConnectionOptions) {
     },
 
     /** Starts keeping the connection open with these keys. */
-    start(withKeys: Keys | null) {
+    start(withKeys: Keys | null, pairedAt: Endpoint | null = null) {
       stopped = false;
       keys = withKeys;
+      verified = pairedAt;
+      generation += 1;
       lost = keys === null;
       goingOffline();
-      void open();
+      void open(verified ?? endpoint);
     },
 
     /** Where the box is now, or null once it's no longer announced. */
     seen(now: Endpoint | null) {
-      const moved =
-        now !== null &&
-        (endpoint === null ||
-          now.companionAddress !== endpoint.companionAddress ||
-          now.companionPort !== endpoint.companionPort);
-      endpoint = now ?? endpoint;
+      if (!now) return;
+      const moved = !sameAddress(now, endpoint);
+      endpoint = now;
       if (!moved || stopped) return;
-      // A new address is tried at once, dropping a link to the old one.
-      if (link) {
-        const was = link;
-        link = null;
-        was.close();
-        goingOffline();
-      }
+      generation += 1;
       failures = 0;
       retry = clear(retry);
-      void open();
+      void open(endpoint);
     },
 
     /** Takes new keys, as after a repair, and connects with them. */
-    rekey(withKeys: Keys) {
+    rekey(withKeys: Keys, pairedAt: Endpoint) {
       keys = withKeys;
+      endpoint = pairedAt;
+      verified = pairedAt;
+      generation += 1;
       lost = false;
       failures = 0;
       retry = clear(retry);
@@ -198,14 +249,15 @@ export function createConnection(options: ConnectionOptions) {
         link = null;
         was.close();
       }
-      void open();
+      goingOffline();
+      void open(endpoint);
     },
 
     /** Turns the box on or off. */
     async power(on: boolean) {
       const now = connected();
       await (on ? now.wake() : now.sleep());
-      if (now.power === "unknown") {
+      if (link === now && now.power === "unknown") {
         assumed = on;
         say();
       }
@@ -218,6 +270,7 @@ export function createConnection(options: ConnectionOptions) {
 
     stop() {
       stopped = true;
+      generation += 1;
       retry = clear(retry);
       offline = clear(offline);
       const was = link;

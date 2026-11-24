@@ -6,8 +6,9 @@ sidebar:
 ---
 
 The Apple Home Devices app brings Apple TVs into Sanctum as media players.
-You can turn one on and off, and step its volume up and down. Show it as a
-TV to see it under TVs in the Media category.
+You can turn one on and off. The volume buttons work when the Apple TV
+reports that it can turn the volume up and down. Show it as a TV to see it
+under TVs in the Media category.
 
 Any Apple TV from the Apple TV HD on works, on the same network as Sanctum.
 HomePods are listed in **Add devices** too, but can't be added.
@@ -23,14 +24,14 @@ HomePods are listed in **Add devices** too, but can't be added.
 Once both codes match, the Apple TV is added. Put it in a room as you would
 any device.
 
-If adding says the TV didn't let Sanctum pair, open **Settings** on the TV,
+If adding says the TV refused pairing, open **Settings** on the TV,
 then **AirPlay and HomeKit**, and allow access to everyone on the same
 network.
 
 ## When it's no longer paired
 
-If Sanctum's pairing is removed on the TV, or the TV is reset, Sanctum says
-the TV is no longer paired with it, under **Needs Attention** in Settings.
+If Sanctum's pairing is removed on the TV or the TV is reset, look under
+**Needs Attention** in Settings for the TV that needs to be paired again.
 Press **Repair**: the TV shows the same two codes as when it was added.
 
 ## Removing it

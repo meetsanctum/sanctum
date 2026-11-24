@@ -43,19 +43,8 @@ const {
 // What each official app's manifest says, in the worktree.
 const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
   folder,
-  // Pages are built from a package's ./ui export, which an app without a
-  // page of its own, such as a driver with nothing to show, doesn't have.
-  hasPages: Object.hasOwn(
-    (
-      JSON.parse(
-        readFileSync(
-          join(root, "catalog/apps", folder, "package.json"),
-          "utf8",
-        ),
-      ) as { exports: Record<string, unknown> }
-    ).exports,
-    "./ui",
-  ),
+  // Apple Home Devices uses the shell's media controls and has no pages.
+  hasPages: folder !== "apple-home-devices",
   ...(JSON.parse(
     readFileSync(
       join(root, "catalog/apps", folder, "sanctum-app.json"),

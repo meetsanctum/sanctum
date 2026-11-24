@@ -100,6 +100,60 @@ describe("Add devices' offers", () => {
     ]);
   });
 
+  it("offers Apple Home Devices only for Apple TVs with matching Companion sightings", async () => {
+    const { offers, state } = home();
+    const airplay = "_airplay._tcp";
+    const companion = "_companion-link._tcp";
+    state.available = [
+      {
+        ...finder,
+        id: "sanctum.apple-home-devices",
+        name: "Apple Home Devices",
+        requests: [
+          { id: "devices.register" },
+          { id: "discover:mdns:_airplay._tcp" },
+          { id: "discover:mdns:_companion-link._tcp" },
+        ],
+      } as AvailableApp,
+    ];
+    await offers.check();
+    expect(offers.services()).toEqual([airplay, companion]);
+    state.sightings = [
+      {
+        ...sighting("studio", airplay),
+        txt: { model: "Mac16,10", deviceid: "11:22:33:44:55:66" },
+      },
+      {
+        ...sighting("kitchen", airplay),
+        txt: { model: "AudioAccessory5,1", deviceid: "02:22:33:44:55:66" },
+      },
+      {
+        ...sighting("den", airplay),
+        txt: { model: "AppleTV3,2", deviceid: "03:22:33:44:55:66" },
+      },
+      sighting("den", companion),
+    ];
+    expect(offers.list()).toEqual([]);
+
+    const tv: Sighting = {
+      ...sighting("living-room", airplay),
+      txt: { Model: "AppleTV14,1", DeviceId: "04:22:33:44:55:66" },
+    };
+    state.sightings.push(tv, sighting("somewhere-else", companion));
+    expect(offers.list()).toEqual([]);
+    state.sightings.push({
+      ...sighting("remote", companion),
+      host: "LIVING-ROOM.local.",
+    });
+    expect(offers.list()).toEqual([
+      {
+        app: "sanctum.apple-home-devices",
+        name: "Apple Home Devices",
+        found: 1,
+      },
+    ]);
+  });
+
   it("offers nothing once the app is added, and again once it's removed", async () => {
     const { offers, state } = home();
     state.sightings = [sighting("kitchen")];
