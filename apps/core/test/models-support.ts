@@ -36,10 +36,11 @@ export type FakeSources = {
   openRouter: { key: string; answer: FakeAnswer };
   anthropic: { key: string; answer: FakeAnswer };
   openAi: { key: string; answer: FakeAnswer };
-  // Every request, as method and URL, with the key it carried.
+  // Every request, with the key it carried and how it handles redirects.
   requests: {
     method: string;
     url: string;
+    redirect?: RequestInit["redirect"];
     authorization?: string;
     apiKey?: string;
   }[];
@@ -509,6 +510,7 @@ export function fakeSources(): FakeSources {
     sources.requests.push({
       method: init?.method ?? "GET",
       url: url.toString(),
+      ...(init?.redirect ? { redirect: init.redirect } : {}),
       ...(authorization ? { authorization } : {}),
       ...(apiKey ? { apiKey } : {}),
     });

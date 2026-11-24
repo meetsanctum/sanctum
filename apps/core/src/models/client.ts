@@ -14,6 +14,7 @@ import {
   RetryError,
   streamText,
   type LanguageModel,
+  type LanguageModelUsage,
   type ToolSet,
 } from "ai";
 
@@ -117,15 +118,14 @@ export function problemOfError(error: unknown, signal?: AbortSignal) {
 export const maxResponseBytes = 8 * 1024 * 1024;
 
 /**
- * The fetch the SDK gets: the core's own, never following a redirect, which
- * would carry the key to another host, and reading no more than
- * `maxResponseBytes` of an answer.
+ * Never follow redirects, which would carry the key to another host. Share
+ * one byte budget across the requests for an answer or a model list.
  */
-function boundedFetch(fetcher: typeof fetch): typeof fetch {
+export function boundedFetch(fetcher: typeof fetch): typeof fetch {
+  let size = 0;
   return async (input, init) => {
     const response = await fetcher(input, { ...init, redirect: "error" });
     if (!response.body) return response;
-    let size = 0;
     const body = response.body.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         transform(bytes, controller) {
@@ -145,6 +145,37 @@ function boundedFetch(fetcher: typeof fetch): typeof fetch {
       statusText: response.statusText,
       headers: response.headers,
     });
+  };
+}
+
+// A compatible source can reuse call indices or IDs. The SDK may scan all
+// calls it has seen for each delta, so bound that work before it sees a chunk.
+function compatibleStreamGuard() {
+  // Allow 32 calls' worth of lookups even if every output token arrives in
+  // its own delta, with room for extra metadata-only deltas.
+  const maxWork = 32 * 8_192;
+  let namedDeltas = 0;
+  let deltasSeen = 0;
+  return {
+    processChunk(chunk: unknown) {
+      const { choices } = chunk as {
+        choices?: {
+          delta?: { tool_calls?: { function?: { name?: unknown } }[] };
+        }[];
+      };
+      const deltas = choices?.[0]?.delta?.tool_calls;
+      if (!Array.isArray(deltas)) return;
+      for (const delta of deltas) {
+        if (typeof delta?.function?.name === "string") namedDeltas += 1;
+        deltasSeen += 1;
+        // Each named delta could start a call. Pending deltas can be
+        // processed after all those calls have started.
+        if (deltasSeen * Math.max(1, namedDeltas) > maxWork) {
+          throw new ModelError("answer", "too many tool call pieces");
+        }
+      }
+    },
+    buildMetadata: () => undefined,
   };
 }
 
@@ -168,21 +199,31 @@ function languageModel(endpoint: ModelEndpoint, model: string): LanguageModel {
         apiKey: endpoint.key,
         name: "compatible",
         includeUsage: true,
+        metadataExtractor: {
+          extractMetadata: async () => undefined,
+          createStreamExtractor: compatibleStreamGuard,
+        },
       }).chatModel(model);
   }
 }
 
-function toolsOf(tools: readonly ModelTool[] | undefined): ToolSet | undefined {
+function toolsOf(
+  tools: readonly ModelTool[] | undefined,
+  api: ModelApi,
+): ToolSet | undefined {
   if (!tools?.length) return undefined;
   // No `execute`: the SDK hands each call back, and the app runs it.
   return Object.fromEntries(
-    tools.map((tool) => [
-      tool.name,
-      {
-        description: tool.description,
-        inputSchema: jsonSchema({ type: "object", ...tool.input }),
-      },
-    ]),
+    tools.map(({ name, description, input }) => {
+      const { type = "object" } = input;
+      if (api === "anthropic" && type !== "object") {
+        throw new ModelError("answer", "Claude's tools require object inputs");
+      }
+      return [
+        name,
+        { description, inputSchema: jsonSchema({ ...input, type }) },
+      ];
+    }),
   );
 }
 
@@ -190,7 +231,7 @@ export type AskOptions = {
   signal: AbortSignal;
   /** How long until the first piece, thinking included. */
   firstPieceMs: number;
-  /** How long the whole answer may take, retries included. */
+  /** How long the whole answer may take. */
   wholeMs?: number;
   onFirstPiece?: () => void;
   /** Answers of this turn that called a tool, to give back as they came. */
@@ -215,6 +256,27 @@ function stopOf(
   }
 }
 
+function tokensOf(usage: LanguageModelUsage, api: ModelApi): ModelTokens {
+  const read = usage.inputTokens ?? 0;
+  const written = usage.outputTokens ?? 0;
+  const counts = [read, written, read + written];
+  if (api === "anthropic") {
+    // Claude's read total includes cache counts. A bad count can't be
+    // allowed to cancel out a good one.
+    const { noCacheTokens, cacheReadTokens, cacheWriteTokens } =
+      usage.inputTokenDetails;
+    counts.push(
+      noCacheTokens ?? 0,
+      cacheReadTokens ?? 0,
+      cacheWriteTokens ?? 0,
+    );
+  }
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) {
+    throw new ModelError("answer", "invalid token counts");
+  }
+  return { read, written };
+}
+
 /**
  * Asks a source and yields the answer in pieces, ending with one `end`.
  * Throws a ModelError when the source can't be reached, refuses, or its
@@ -225,59 +287,73 @@ export async function* ask(
   request: ModelRequest,
   options: AskOptions,
 ): AsyncGenerator<ModelPiece> {
-  const { signal } = options;
-  const tools = toolsOf(request.tools);
+  const tools = toolsOf(request.tools, endpoint.api);
   const asked = conversationOf(request.messages, request.tools, options.kept);
-  let onFirstPiece = options.onFirstPiece;
-  const result = streamText({
-    model: languageModel(endpoint, request.model),
-    instructions: asked.instructions,
-    messages: asked.messages,
-    ...(tools ? { tools } : {}),
-    maxOutputTokens: request.maxTokens,
-    abortSignal: signal,
-    timeout: {
-      firstChunkMs: options.firstPieceMs,
-      ...(options.wholeMs ? { totalMs: options.wholeMs } : {}),
-    },
-    providerOptions: {
-      // The tools and the start of the conversation stay the same from one
-      // answer to the next, so Anthropic reuses them.
-      anthropic: { cacheControl: { type: "ephemeral" } },
-      // OpenAI keeps nothing; a reasoning model's reasoning comes back
-      // sealed for the next answer instead.
-      openai: { store: false },
-    },
-    // The stream's error part reaches the core; the SDK's default would
-    // print the error with the whole conversation in it.
-    onError: () => {},
-    telemetry: { isEnabled: false },
-  });
+  const first = new AbortController();
+  const signal = AbortSignal.any([options.signal, first.signal]);
+  let firstTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(
+    () => first.abort(new ModelError("timeout")),
+    options.firstPieceMs,
+  );
+  function firstPiece() {
+    if (firstTimer === undefined) return;
+    clearTimeout(firstTimer);
+    firstTimer = undefined;
+    options.onFirstPiece?.();
+  }
 
-  const calls: ModelToolCall[] = [];
-  let isBroken = false;
-  let end: Extract<ModelPiece, { type: "end" }> | undefined;
   try {
+    const result = streamText({
+      model: languageModel(endpoint, request.model),
+      instructions: asked.instructions,
+      messages: asked.messages,
+      ...(tools ? { tools } : {}),
+      maxOutputTokens: request.maxTokens,
+      maxRetries: 0,
+      abortSignal: signal,
+      ...(options.wholeMs ? { timeout: { totalMs: options.wholeMs } } : {}),
+      providerOptions: {
+        // The tools and the start of the conversation stay the same from one
+        // answer to the next, so Anthropic reuses them.
+        anthropic: { cacheControl: { type: "ephemeral" } },
+        // OpenAI keeps nothing; a reasoning model's reasoning comes back
+        // sealed for the next answer instead.
+        openai: { store: false },
+      },
+      // The stream's error part reaches the core; the SDK's default would
+      // print the error with the whole conversation in it.
+      onError: () => {},
+      telemetry: { isEnabled: false },
+    });
+    const calls: ModelToolCall[] = [];
+    let isBroken = false;
+    let end: Extract<ModelPiece, { type: "end" }> | undefined;
     for await (const part of result.stream) {
       switch (part.type) {
         case "reasoning-delta":
         case "tool-input-start":
           // Thinking counts as the start of an answer: the model is
           // answering.
-          onFirstPiece?.();
-          onFirstPiece = undefined;
+          firstPiece();
           break;
         case "text-delta":
-          onFirstPiece?.();
-          onFirstPiece = undefined;
-          if (part.text) yield { type: "text", text: part.text };
+          if (part.text) {
+            firstPiece();
+            yield { type: "text", text: part.text };
+          }
           break;
         case "tool-call":
-          onFirstPiece?.();
-          onFirstPiece = undefined;
-          // Input that isn't whole JSON, or a tool the app didn't offer:
-          // no app's tool runs on it.
-          if (part.invalid) {
+          firstPiece();
+          if (
+            part.invalid ||
+            part.providerExecuted ||
+            !tools ||
+            !Object.hasOwn(tools, part.toolName) ||
+            (endpoint.api === "anthropic" &&
+              (typeof part.input !== "object" ||
+                part.input === null ||
+                Array.isArray(part.input)))
+          ) {
             isBroken = true;
             break;
           }
@@ -288,35 +364,35 @@ export async function* ask(
           });
           break;
         case "error":
-          throw problemOfError(part.error, signal);
+          throw part.error;
         case "abort":
-          throw problemOfError(
-            new DOMException("timed out", "TimeoutError"),
-            signal,
-          );
+          throw new DOMException("timed out", "TimeoutError");
         case "finish":
           end = {
             type: "end",
             stop: stopOf(part.finishReason, calls.length > 0),
-            tokens: {
-              read: part.totalUsage.inputTokens ?? 0,
-              written: part.totalUsage.outputTokens ?? 0,
-            },
+            tokens: tokensOf(part.totalUsage, endpoint.api),
           };
           break;
       }
     }
+    clearTimeout(firstTimer);
+    if (!end) throw new ModelError("answer", "the answer broke off");
+    if (end.stop !== "unavailable") {
+      // A call cut off by the token limit is left out. The SDK's saved
+      // answer may still contain it, so replay only what the app saw.
+      if (isBroken && end.stop !== "limit") {
+        throw new ModelError("answer", "a tool call isn't whole");
+      }
+      if (!isBroken && calls.length > 0 && options.kept) {
+        keep(options.kept, asked, calls, await result.responseMessages);
+      }
+      for (const call of calls) yield { type: "tool", ...call };
+    }
+    yield end;
   } catch (error) {
     throw problemOfError(error, signal);
+  } finally {
+    clearTimeout(firstTimer);
   }
-  if (!end) throw new ModelError("answer", "the answer broke off");
-  // A call cut off by the token limit is left out, and the end says so.
-  if (isBroken && end.stop !== "limit") {
-    throw new ModelError("answer", "a tool call isn't whole");
-  }
-  if (calls.length > 0 && options.kept) {
-    keep(options.kept, asked, calls, await result.responseMessages);
-  }
-  for (const call of calls) yield { type: "tool", ...call };
-  yield end;
 }

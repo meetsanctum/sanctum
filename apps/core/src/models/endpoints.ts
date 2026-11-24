@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
+  boundedFetch,
   ModelError,
   problemOfError,
   problemOfStatus,
@@ -69,26 +70,30 @@ export function endpointOf(
 
 const listTimeoutMs = 10_000;
 
+function listSignal(signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(listTimeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
 async function getJson(
   fetcher: typeof fetch,
   url: string,
   key: string | undefined,
-  signal?: AbortSignal,
+  signal: AbortSignal,
   headers: Record<string, string> = key
     ? { authorization: `Bearer ${key}` }
     : {},
 ) {
-  const timeout = AbortSignal.timeout(listTimeoutMs);
-  const both = signal ? AbortSignal.any([signal, timeout]) : timeout;
   let response: Response;
   try {
+    signal.throwIfAborted();
     response = await fetcher(url, {
       headers,
       redirect: "error",
-      signal: both,
+      signal,
     });
   } catch (error) {
-    throw problemOfError(error, both);
+    throw problemOfError(error, signal);
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
@@ -98,7 +103,8 @@ async function getJson(
   try {
     return (await response.json()) as unknown;
   } catch (error) {
-    if (both.aborted) throw problemOfError(error, both);
+    if (signal.aborted) throw problemOfError(error, signal);
+    if (error instanceof ModelError) throw error;
     throw new ModelError("answer", "the list isn't JSON");
   }
 }
@@ -120,6 +126,8 @@ const anthropicModels = z.object({
   data: z.array(
     z.object({ id: z.string().min(1), display_name: z.string().optional() }),
   ),
+  has_more: z.boolean().optional(),
+  last_id: z.string().min(1).nullish(),
 });
 
 /**
@@ -149,7 +157,12 @@ async function ollamaModels(
   signal?: AbortSignal,
 ): Promise<ModelChoice[]> {
   const found = ollamaTags.safeParse(
-    await getJson(fetcher, `${baseUrl}/api/tags`, undefined, signal),
+    await getJson(
+      fetcher,
+      `${baseUrl}/api/tags`,
+      undefined,
+      listSignal(signal),
+    ),
   );
   if (!found.success) throw new ModelError("answer", "not Ollama's list");
   return found.data.models
@@ -213,14 +226,14 @@ export async function listModels(
         fetchers.internet,
         `${providers.openrouter.baseUrl}/key`,
         reach.key,
-        signal,
+        listSignal(signal),
       );
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
           `${providers.openrouter.baseUrl}/models?supported_parameters=tools`,
           reach.key,
-          signal,
+          listSignal(signal),
         ),
       );
       if (!found.success) throw new ModelError("answer", "not a model list");
@@ -229,23 +242,32 @@ export async function listModels(
         .sort((a, b) => a.name.localeCompare(b.name));
     }
     case "anthropic": {
-      // Anthropic's own headers; a key's models fit in one page of 1,000.
-      const found = anthropicModels.safeParse(
-        await getJson(
-          fetchers.internet,
-          `${providers.anthropic.baseUrl}/models?limit=1000`,
-          reach.key,
-          signal,
-          { "x-api-key": reach.key, "anthropic-version": "2023-06-01" },
-        ),
-      );
-      if (!found.success) throw new ModelError("answer", "not a model list");
-      return found.data.data
-        .map((model) => ({
-          id: model.id,
-          name: model.display_name || model.id,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const fetcher = boundedFetch(fetchers.internet);
+      const deadline = listSignal(signal);
+      const headers = {
+        "x-api-key": reach.key,
+        "anthropic-version": "2023-06-01",
+      };
+      const url = new URL(`${providers.anthropic.baseUrl}/models?limit=1000`);
+      const models: ModelChoice[] = [];
+      const seen = new Set<string>();
+      for (;;) {
+        const page = anthropicModels.safeParse(
+          await getJson(fetcher, url.href, reach.key, deadline, headers),
+        );
+        if (!page.success) throw new ModelError("answer", "not a model list");
+        for (const model of page.data.data) {
+          models.push({ id: model.id, name: model.display_name || model.id });
+        }
+        if (!page.data.has_more) break;
+        const next = page.data.last_id;
+        if (!next || seen.has(next)) {
+          throw new ModelError("answer", "the model list did not advance");
+        }
+        seen.add(next);
+        url.searchParams.set("after_id", next);
+      }
+      return models.sort((a, b) => a.name.localeCompare(b.name));
     }
     case "openai": {
       const found = openAiModels.safeParse(
@@ -253,7 +275,7 @@ export async function listModels(
           fetchers.internet,
           `${providers.openai.baseUrl}/models`,
           reach.key,
-          signal,
+          listSignal(signal),
         ),
       );
       if (!found.success) throw new ModelError("answer", "not a model list");

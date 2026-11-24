@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AddressProblem,
@@ -12,7 +12,9 @@ import {
   ModelError,
   type ModelEndpoint,
   type ModelPiece,
+  type ModelRequest,
 } from "../src/models/client.js";
+import type { KeptAnswers } from "../src/models/conversation.js";
 import { ollamaModelName } from "../src/models/endpoints.js";
 
 // The pieces of reaching a model: where a computer in the home may be, how
@@ -118,28 +120,29 @@ describe("the client", () => {
         headers: { "content-type": "text/event-stream" },
       })) as typeof fetch,
   });
-  const ask = async (body: string, status?: number) => {
-    const pieces: ModelPiece[] = [];
-    for await (const piece of askSource(
-      endpoint(body, status),
+  const request: ModelRequest = {
+    model: "qwen3:8b",
+    messages: [{ role: "user", content: "Hi" }],
+    tools: [
       {
-        model: "qwen3:8b",
-        messages: [{ role: "user", content: "Hi" }],
-        tools: [
-          {
-            name: "lights",
-            description: "Turns the lights on or off.",
-            input: { type: "object", properties: { to: { type: "string" } } },
-          },
-        ],
-        maxTokens: 64,
+        name: "lights",
+        description: "Turns the lights on or off.",
+        input: { type: "object", properties: { to: { type: "string" } } },
       },
-      { signal: AbortSignal.timeout(5_000), firstPieceMs: 5_000 },
-    )) {
-      pieces.push(piece);
-    }
+    ],
+    maxTokens: 64,
+  };
+  const options = () => ({
+    signal: AbortSignal.timeout(5_000),
+    firstPieceMs: 5_000,
+  });
+  const collect = async (stream: AsyncIterable<ModelPiece>) => {
+    const pieces: ModelPiece[] = [];
+    for await (const piece of stream) pieces.push(piece);
     return pieces;
   };
+  const ask = (body: string, status?: number) =>
+    collect(askSource(endpoint(body, status), request, options()));
 
   it("streams text, then each tool call whole, then the end", async () => {
     const pieces = await ask(
@@ -184,6 +187,44 @@ describe("the client", () => {
     ]);
   });
 
+  it("can follow up with the complete tool call from a truncated answer", async () => {
+    const kept: KeptAnswers = new Map();
+    const first = await collect(
+      askSource(
+        endpoint(
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"lights","arguments":"{}"}},{"index":1,"id":"b","function":{"name":"lights","arguments":"{"}}]},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+        ),
+        request,
+        { ...options(), kept },
+      ),
+    );
+    expect(first).toEqual([
+      { type: "tool", id: "a", name: "lights", input: {} },
+      { type: "end", stop: "limit", tokens: { read: 0, written: 0 } },
+    ]);
+    const followed = await collect(
+      askSource(
+        endpoint(
+          'data: {"choices":[{"delta":{"content":"Done."},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        ),
+        {
+          ...request,
+          messages: [
+            ...request.messages,
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [{ id: "a", name: "lights", input: {} }],
+            },
+            { role: "tool", toolCallId: "a", content: "On" },
+          ],
+        },
+        { ...options(), kept },
+      ),
+    );
+    expect(followed).toContainEqual({ type: "text", text: "Done." });
+  });
+
   it("fails a tool call that isn't whole, or to a tool it wasn't given", async () => {
     for (const call of [
       '{"index":0,"id":"a","function":{"name":"lights","arguments":"{"}}',
@@ -197,16 +238,82 @@ describe("the client", () => {
     }
   });
 
-  it("refuses malformed token usage, and ends a filtered answer as unavailable", async () => {
-    await expect(
-      ask(
-        `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: "40", completion_tokens: 6 } })}\n\ndata: [DONE]\n\n`,
-      ),
-    ).rejects.toMatchObject({ problem: "answer" });
-    const filtered = await ask(
-      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "content_filter" }] })}\n\ndata: [DONE]\n\n`,
+  const toolAnswer = (stop: string, promptTokens: number | string = 40) =>
+    [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"lights","arguments":"{}"}}]}}]}',
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: stop }] })}`,
+      `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: promptTokens, completion_tokens: 6 } })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+
+  it.each(["40", -1, 1.5, Number.MAX_SAFE_INTEGER, 2 ** 53])(
+    "rejects an answer with invalid usage (%j) before giving the app a tool call",
+    async (count) => {
+      const stream = askSource(
+        endpoint(toolAnswer("tool_calls", count)),
+        request,
+        options(),
+      );
+      await expect(stream.next()).rejects.toMatchObject({ problem: "answer" });
+    },
+  );
+
+  it("ends a filtered answer without delivering or keeping its tool call", async () => {
+    const kept: KeptAnswers = new Map();
+    const pieces = await collect(
+      askSource(endpoint(toolAnswer("content_filter")), request, {
+        ...options(),
+        kept,
+      }),
     );
-    expect(filtered.at(-1)).toMatchObject({ type: "end", stop: "unavailable" });
+    expect(pieces).toEqual([
+      { type: "end", stop: "unavailable", tokens: { read: 40, written: 6 } },
+    ]);
+    expect(kept.size).toBe(0);
+  });
+
+  it("times out a request that hasn't received response headers", async () => {
+    const caller = new AbortController();
+    let started!: (signal: AbortSignal) => void;
+    const sent = new Promise<AbortSignal>((resolve) => {
+      started = resolve;
+    });
+    const source = endpoint("");
+    source.fetch = async (_input, init) => {
+      const signal = init!.signal!;
+      return new Promise<Response>((_, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+        started(signal);
+      });
+    };
+    vi.useFakeTimers();
+    try {
+      const outcome = askSource(source, request, {
+        signal: caller.signal,
+        firstPieceMs: 50,
+      })
+        .next()
+        .catch((error: unknown) => error);
+      const signal = await sent;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(signal.aborted).toBe(true);
+      await expect(outcome).resolves.toMatchObject({ problem: "timeout" });
+    } finally {
+      caller.abort();
+      vi.useRealTimers();
+    }
+  });
+
+  it("makes one request when the source is temporarily unavailable", async () => {
+    const source = endpoint("{}", 503);
+    source.fetch = vi.fn(source.fetch);
+    await expect(
+      askSource(source, request, options()).next(),
+    ).rejects.toMatchObject({ problem: "answer" });
+    expect(source.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("fails a check whose answer is empty or calls a tool it wasn't given", async () => {

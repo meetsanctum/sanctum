@@ -129,7 +129,11 @@ describe("OpenAI as a source", () => {
       kept,
     );
 
-    const [, second] = sources.chats as { store: boolean; input: unknown[] }[];
+    const [initial, second] = sources.chats;
+    expect(initial).toMatchObject({
+      store: false,
+      include: expect.arrayContaining(["reasoning.encrypted_content"]),
+    });
     expect(second?.store).toBe(false);
     expect(second?.input).toContainEqual(
       expect.objectContaining({

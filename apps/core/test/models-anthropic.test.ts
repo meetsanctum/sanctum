@@ -243,6 +243,7 @@ describe("Anthropic as a source", () => {
       expect.objectContaining({
         url: "https://api.anthropic.com/v1/messages",
         apiKey: sources.anthropic.key,
+        redirect: "error",
       }),
     ]);
   });
@@ -449,6 +450,15 @@ describe("Claude's answers", () => {
     ).rejects.toMatchObject({ problem: "answer" });
   });
 
+  it("ends a refusal without giving the app a tool call", async () => {
+    const sources = fakeSources();
+    sources.anthropic.answer = { callsTool: true, stopReason: "refusal" };
+    const pieces = await answer(sources, [{ role: "user", content: "Hi" }]);
+
+    expect(pieces.map(({ type }) => type)).toEqual(["text", "text", "end"]);
+    expect(pieces.at(-1)).toMatchObject({ type: "end", stop: "unavailable" });
+  });
+
   it("rejects a stream over the response byte limit", async () => {
     const sources = fakeSources();
     sources.anthropic.answer = { text: ["x".repeat(maxResponseBytes)] };
@@ -528,6 +538,57 @@ describe("Claude's answers", () => {
       answer(sources, [{ role: "user", content: "Lights on" }]),
     ).rejects.toMatchObject({ problem: "answer" });
   });
+
+  it.each(["null", "[]", "1"])(
+    "rejects a Claude tool input of %s",
+    async (toolArguments) => {
+      const sources = fakeSources();
+      sources.anthropic.answer = { callsTool: true, toolArguments };
+      await expect(
+        answer(sources, [{ role: "user", content: "Hi" }]),
+      ).rejects.toMatchObject({
+        problem: "answer",
+      });
+    },
+  );
+
+  it("rejects a Claude tool schema with a non-object root before making a request", async () => {
+    const sources = fakeSources();
+    await expect(
+      answer(sources, [{ role: "user", content: "Hi" }], undefined, [
+        {
+          name: "lights",
+          description: "Turns on the lights.",
+          input: { type: "array" },
+        },
+      ]),
+    ).rejects.toMatchObject({ problem: "answer" });
+    expect(sources.requests).toEqual([]);
+  });
+
+  it.each([
+    { read: 40, written: -1 },
+    { read: -1, written: 6 },
+  ])(
+    "rejects negative Claude token counts before giving the app a tool call (%j)",
+    async (tokens) => {
+      const sources = fakeSources();
+      sources.anthropic.answer = { callsTool: true, tokens };
+      const pieces: ModelPiece[] = [];
+      const read = async () => {
+        for await (const piece of askClaude(sources, [
+          { role: "user", content: "Hi" },
+        ])) {
+          pieces.push(piece);
+        }
+      };
+      await expect(read()).rejects.toMatchObject({
+        problem: "answer",
+        message: "invalid token counts",
+      });
+      expect(pieces.map(({ type }) => type)).toEqual(["text", "text"]);
+    },
+  );
 
   it.each(["system", "tools", "user", "assistant"] as const)(
     "leave out kept thinking when the app changes the %s",
