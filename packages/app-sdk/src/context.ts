@@ -430,7 +430,11 @@ export interface AppContext {
      * rejects with `limited` when that limit is reached.
      */
     list(): Promise<ModelTool[]>;
-    /** Calls one. Tool refusals, limits and failures set `isError`. */
+    /**
+     * Calls one. Tool refusals, limits and failures set `isError`; the call
+     * itself rejects `forbidden` once whoever opened the turn has left the
+     * home.
+     */
     call(name: string, input?: Record<string, unknown>): Promise<AiToolAnswer>;
   };
   readonly host: {
