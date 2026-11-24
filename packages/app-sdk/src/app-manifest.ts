@@ -67,17 +67,26 @@ const hexColor = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "use a colour such as #0a5c7a");
 
+// The shade the shell lays along the page's top, black at 24%, leaves this
+// share of a colour's luminance under it.
+const underShade = 0.76 ** 2.2;
+
 /**
  * The colours of the page the shell draws for an app without a page of its
  * own, from its bottom left to its top right. The app's name stands in white
- * on the first, so it must be dark enough for white text to read at 4.5:1.
+ * on the first, so it must be dark enough for white text to read at 4.5:1;
+ * the top bar's white buttons stand on the second under a faint shade, so it
+ * must leave them at 3:1.
  */
 export const appBackdropSchema = z.strictObject({
   from: hexColor.refine(
     (hex) => 1.05 / (luminance(hex) + 0.05) >= 4.5,
     "use a colour dark enough for white text, at 4.5:1 or more",
   ),
-  to: hexColor,
+  to: hexColor.refine(
+    (hex) => 1.05 / (luminance(hex) * underShade + 0.05) >= 3,
+    "use a colour dark enough for the top bar's white buttons, at 3:1 or more",
+  ),
 });
 export type AppBackdrop = z.infer<typeof appBackdropSchema>;
 

@@ -108,6 +108,9 @@ describe("an app's static manifest", () => {
     expect(() =>
       defineApp(lamp({ backdrop: { from: "#18BCF2", to: "#0A5C7A" } })),
     ).toThrow(/dark enough for white text/);
+    expect(() =>
+      defineApp(lamp({ backdrop: { from: "#0A5C7A", to: "#FFFFFF" } })),
+    ).toThrow(/top bar's white buttons/);
   });
 
   it("names the driver hooks a driver has", () => {

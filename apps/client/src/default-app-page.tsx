@@ -70,9 +70,9 @@ export function DefaultAppPage(props: {
         <h1 className="m-0 text-[34px] leading-10 font-medium tracking-[-0.01em] sm:text-[44px] sm:leading-[52px]">
           {app.name}
         </h1>
-        <p className="m-0 text-[15px] leading-5 text-muted-foreground">
-          Version {app.version}
-        </p>
+        {/* In the ink, not the secondary grey: the app's first colour is
+            dark enough for white at 4.5:1, not for grey. */}
+        <p className="m-0 text-[15px] leading-5">Version {app.version}</p>
         <Button variant="outline" className="mt-3" disabled>
           Look for updates
         </Button>
