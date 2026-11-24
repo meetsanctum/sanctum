@@ -506,19 +506,36 @@ export function useDevices(live: LiveFeed) {
   useLayoutEffect(() => {
     kept.current = new Map(tiles.map((tile) => [tile.key, tile]));
   }, [tiles]);
-  return {
-    places,
-    devices,
-    loaded,
-    tiles,
-    load,
-    apply,
-    command,
-    toggle,
-    dim,
-    switchLights,
-    fail,
-  };
+  // The same object while nothing in it changed, so what reads it is not
+  // drawn again for a render that changed nothing here.
+  return useMemo(
+    () => ({
+      places,
+      devices,
+      loaded,
+      tiles,
+      load,
+      apply,
+      command,
+      toggle,
+      dim,
+      switchLights,
+      fail,
+    }),
+    [
+      places,
+      devices,
+      loaded,
+      tiles,
+      load,
+      apply,
+      command,
+      toggle,
+      dim,
+      switchLights,
+      fail,
+    ],
+  );
 }
 
 export type Devices = ReturnType<typeof useDevices>;

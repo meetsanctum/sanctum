@@ -36,7 +36,7 @@ import {
   statusSettingsPage,
 } from "./system-apps";
 import type { SystemStatus } from "./system-status";
-import type { Devices } from "./use-devices";
+import { useHomeDevices } from "./home-devices";
 
 // The system apps load the first time one opens, so Home has less to load
 // and run, and in idle time once Home has its devices, so opening one need
@@ -79,7 +79,6 @@ export function HomePage({
   changePins,
   appChanged,
   appAdded,
-  devices,
   live,
   ask,
   core,
@@ -118,7 +117,6 @@ export function HomePage({
   changePins: (next: string[]) => Promise<unknown>;
   appChanged: (app: AppInfo) => void;
   appAdded: (app: AppInfo) => void;
-  devices: Devices;
   live: ReturnType<typeof createLiveFeed>;
   ask: (app: string, permissions: readonly string[]) => Promise<boolean>;
   core: CoreStatus;
@@ -140,6 +138,7 @@ export function HomePage({
   deviceMode: "day" | "evening";
   isVeiled: boolean;
 }) {
+  const devices = useHomeDevices();
   const onDashboard = routeDepth === 0;
   const routeKey = `${routeDepth}:${JSON.stringify(route)}`;
   return (

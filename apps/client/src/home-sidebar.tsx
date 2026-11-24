@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import type { DashboardInfo } from "@meetsanctum/app-sdk";
 
 import type { Route } from "./apps";
@@ -8,7 +9,7 @@ import { placePages, SidebarPlaces } from "./place-pages";
 import { SidebarContent } from "./sidebar";
 import { SidebarPins } from "./sidebar-pins";
 import type { SidebarLayout } from "./sidebar-state";
-import type { Devices } from "./use-devices";
+import { useHomeDevices } from "./home-devices";
 import type { Account } from "./user-menu";
 
 // The signed-in screen's sidebar, docked or floating: the household's pins
@@ -29,7 +30,6 @@ export function HomeSidebar(props: {
   shown: DashboardInfo | undefined;
   showDashboard: (id: string) => void;
   go: (routes: Route[]) => void;
-  devices: Devices;
   account?: Account;
 }) {
   const { layout, routes, go } = props;
@@ -100,8 +100,7 @@ export function HomeSidebar(props: {
       }
       onMenuOpenChange={layout.hold}
     >
-      <SidebarPlaces
-        devices={props.devices}
+      <HomeSidebarPlaces
         current={
           routes.length === 1 && route?.app === placePages
             ? { page: route.page, params: route.params }
@@ -114,4 +113,13 @@ export function HomeSidebar(props: {
       />
     </SidebarContent>
   );
+}
+
+// The categories and rooms, the sidebar's only part that a device's change
+// draws again.
+function HomeSidebarPlaces(
+  props: Omit<ComponentProps<typeof SidebarPlaces>, "devices">,
+) {
+  const devices = useHomeDevices();
+  return <SidebarPlaces {...props} devices={devices} />;
 }

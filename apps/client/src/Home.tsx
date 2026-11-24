@@ -35,6 +35,7 @@ import {
 } from "./dashboards";
 import { connectLive } from "./live";
 import { HomePage, usePreloadSystemPages } from "./home-page";
+import { HomeDevicesProvider, useDevicesSummary } from "./home-devices";
 import { HomeSidebar } from "./home-sidebar";
 import { useWidgetCards } from "./home-widgets";
 import { OpenDeviceDetail, useOpenDevice } from "./open-device";
@@ -52,7 +53,6 @@ import { ShellFrame } from "./shell-frame";
 import { useSidebarLayout } from "./sidebar-state";
 import { useSystemStatus } from "./system-status";
 import { TopBar } from "./top-bar";
-import { useDevices } from "./use-devices";
 import { isShown, onShown } from "./while-shown";
 import {
   activitySettingsPage,
@@ -97,8 +97,9 @@ function useCoreStatus() {
 // has first connected to the stored host, and whenever the core is away after
 // that, such as when an update restarts it, the connection veil covers the
 // screen and it reconnects by itself; it offers a way out once the home has
-// not answered for a while.
-export function Home(props: {
+// not answered for a while. The home's devices are held around the screen
+// (home-devices.tsx), so a device's change draws only what shows it.
+type HomeProps = {
   host: StoredHost;
   onHostMoved: (host: StoredHost) => void;
   onSignedOut: () => void;
@@ -109,8 +110,21 @@ export function Home(props: {
     url: string,
     found?: FoundHost,
   ) => void;
-}) {
-  const { host, onHostMoved, onCertificateChanged } = props;
+};
+
+export function Home(props: HomeProps) {
+  const live = useMemo(() => createLiveFeed(), []);
+  return (
+    <HomeDevicesProvider live={live}>
+      <HomeScreen {...props} live={live} />
+    </HomeDevicesProvider>
+  );
+}
+
+function HomeScreen(
+  props: HomeProps & { live: ReturnType<typeof createLiveFeed> },
+) {
+  const { host, onHostMoved, onCertificateChanged, live } = props;
   const { status: core, checkNow } = useCoreStatus();
   const [updateRunning, setUpdateRunning] = useState(false);
   const liveConnection = useRef<ReturnType<typeof connectLive>>(undefined);
@@ -122,7 +136,6 @@ export function Home(props: {
   // A device's detail covers the screen, inside it.
   const [screen, setScreen] = useState<HTMLDivElement | null>(null);
   const sidebarTrigger = useRef<HTMLButtonElement>(null);
-  const live = useMemo(() => createLiveFeed(), []);
   const {
     installed,
     isWaiting: appsWaiting,
@@ -138,8 +151,8 @@ export function Home(props: {
     useCurrentDashboard(dashboards);
   // Edit Home, until Done, or until the page or dashboard on show changes.
   const [editingHome, setEditingHome] = useState(false);
-  const devices = useDevices(live);
-  usePreloadSystemPages(devices.loaded);
+  const devicesSummary = useDevicesSummary();
+  usePreloadSystemPages(devicesSummary.loaded);
   // A restart or shutdown someone asked for, which the veil says.
   const going = useGoing(live, core.state);
   // How the machine Sanctum runs on is doing, for the dashboard's Attention
@@ -155,7 +168,11 @@ export function Home(props: {
   const openedDevice = useOpenDevice();
   const { open: openDevice, openFromRoom: openRoomDevice } = openedDevice;
   const closeDevice = openedDevice.close;
-  const sectionEntities = useSectionEntities(live, installed, devices.fail);
+  const sectionEntities = useSectionEntities(
+    live,
+    installed,
+    devicesSummary.fail,
+  );
   const widgetCards = useWidgetCards(live, installed);
 
   useEffect(() => {
@@ -425,7 +442,7 @@ export function Home(props: {
 
   return (
     // How the household reads things, for the shell's pages and apps' alike.
-    <Household home={devices.places?.home}>
+    <Household home={devicesSummary.household}>
       <OverlayHostProvider value={overlayHost}>
         <ShellFrame
           screenRef={setScreen}
@@ -452,7 +469,6 @@ export function Home(props: {
               shown={dashboard}
               showDashboard={showDashboard}
               go={go}
-              devices={devices}
               account={
                 me?.person
                   ? {
@@ -477,7 +493,7 @@ export function Home(props: {
                   isVeiled={isVeiled}
                   onRename={rename}
                   onEditHome={{
-                    disabled: !devices.loaded || devices.devices.length === 0,
+                    disabled: !devicesSummary.loaded || devicesSummary.none,
                     open: () => setEditingHome(true),
                   }}
                   editingHome={
@@ -518,7 +534,6 @@ export function Home(props: {
                       changePins={changePins}
                       appChanged={appChanged}
                       appAdded={appAdded}
-                      devices={devices}
                       live={live}
                       ask={ask}
                       core={core}
@@ -560,7 +575,6 @@ export function Home(props: {
           <OpenDeviceDetail
             opened={openedDevice}
             container={screen}
-            devices={devices}
             apps={apps}
             live={live}
             home={home}

@@ -2,6 +2,7 @@ import type { Tile } from "@meetsanctum/ui-sdk";
 import { useMemo, useSyncExternalStore, type ComponentProps } from "react";
 
 import { DeviceDetail } from "./device-detail";
+import { useHomeDevices } from "./home-devices";
 import { tileKey } from "./device-tiles";
 
 type Opened = {
@@ -54,14 +55,16 @@ export function useOpenDevice() {
 export function OpenDeviceDetail(
   props: Omit<
     ComponentProps<typeof DeviceDetail>,
-    "tileKey" | "openFirstPage" | "open" | "onClose"
+    "tileKey" | "openFirstPage" | "open" | "onClose" | "devices"
   > & { opened: OpenDevice },
 ) {
   const { opened, ...detail } = props;
   const current = useSyncExternalStore(opened.subscribe, opened.read);
+  const devices = useHomeDevices();
   return (
     <DeviceDetail
       {...detail}
+      devices={devices}
       tileKey={current.key}
       openFirstPage={current.openFirstPage}
       open={current.open}
