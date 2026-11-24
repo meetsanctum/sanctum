@@ -332,6 +332,39 @@ describe("a device's detail", () => {
     );
   });
 
+  it("draws a day of many changes as a few paths, each listed in one text", async () => {
+    // Every 5 minutes for two hours, as a light that follows daylight
+    // changes, then off.
+    const changes = Array.from({ length: 24 }, (_, index) => ({
+      at: new Date(Date.now() - (3 * 60 - index * 5) * 60_000).toISOString(),
+      availability: "online",
+      state: { ...lampState, on: index < 23, brightness: 20 + index },
+    }));
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) =>
+      path.startsWith("/api/history/states")
+        ? { ...historyAnswer(path), states: changes }
+        : original(path, init),
+    );
+    await show();
+    await click(button("Lamp, 40%"));
+    await click(button("History", dialog()!));
+
+    const strip = dialog()!.querySelector(
+      '[aria-label="Brightness over the last 24 hours"]',
+    )!;
+    // Its level and top edge in its one colour, and the line where it was
+    // off; the rest is the 100% line.
+    expect(strip.querySelectorAll("path")).toHaveLength(3);
+    expect(strip.querySelectorAll("rect")).toHaveLength(1);
+    const items = [...strip.parentElement!.querySelectorAll("ul > li")];
+    expect(items.length).toBeGreaterThanOrEqual(24);
+    expect(items.every((item) => item.childNodes.length === 1)).toBe(true);
+    expect(items.map((item) => item.textContent)).toContain(
+      `${timeText(Date.parse(changes[1]!.at))} to ${timeText(Date.parse(changes[2]!.at))}: 21%`,
+    );
+  });
+
   it("says when the household doesn't keep a device's history", async () => {
     kept = false;
     await show();

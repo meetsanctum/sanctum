@@ -7,6 +7,7 @@ import type {
 import type { SwipePage } from "@meetsanctum/ui-sdk";
 import { History } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useId,
   useLayoutEffect,
@@ -376,6 +377,7 @@ function Strip(props: {
       ? null
       : from + ((cursor.at + 0.5) / quarters) * (to - from);
   const pointedSpan = pointed === null ? undefined : spanAt(pointed);
+  const marks = marksOf(spans, x, height);
   // Every 6 hours of the day, away from the ends.
   const ticks: number[] = [];
   for (let at = midnight(from); at < to; at += 6 * 60 * minute) {
@@ -408,46 +410,13 @@ function Strip(props: {
               className="fill-white/8"
             />
           )}
-          {spans.map((span) => {
-            const left = x(span.from);
-            const right = Math.max(left + 1, x(span.to));
-            if (!span.known) return null;
-            if (!span.on) {
-              return (
-                <rect
-                  key={span.from}
-                  x={left}
-                  y={height - 1}
-                  width={right - left}
-                  height={1}
-                  className="fill-white/14"
-                />
-              );
-            }
-            const level =
-              span.brightness === null
-                ? height
-                : Math.max(2, Math.round((height * span.brightness) / 100));
-            return (
-              <g key={span.from}>
-                <rect
-                  x={left}
-                  y={height - level}
-                  width={right - left}
-                  height={level}
-                  fill={span.colour}
-                  fillOpacity={0.4}
-                />
-                <rect
-                  x={left}
-                  y={height - level}
-                  width={right - left}
-                  height={2}
-                  fill={span.colour}
-                />
-              </g>
-            );
-          })}
+          {marks.off && <path d={marks.off} className="fill-white/14" />}
+          {[...marks.on].map(([colour, each]) => (
+            <Fragment key={colour}>
+              <path d={each.fill} fill={colour} fillOpacity={0.4} />
+              <path d={each.top} fill={colour} />
+            </Fragment>
+          ))}
           {pointed !== null && (
             <rect
               x={Math.min(plot - 1, x(pointed))}
@@ -493,13 +462,45 @@ function Strip(props: {
       </div>
       <ul className="sr-only">
         {spans.map((span) => (
+          // One text each, not one for every part of it.
           <li key={span.from}>
-            {timeText(span.from)} to {timeText(span.to)}: {spanText(span)}
+            {`${timeText(span.from)} to ${timeText(span.to)}: ${spanText(span)}`}
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+// The strip's marks as a few paths, a light's level and its top edge in
+// each colour it had and a line where it was off, rather than an element or
+// two for every span: a light that follows daylight changes every few
+// minutes, and its hundreds of spans made its page slow to draw.
+function marksOf(
+  spans: readonly Span[],
+  x: (at: number) => number,
+  height: number,
+) {
+  let off = "";
+  const on = new Map<string, { fill: string; top: string }>();
+  for (const span of spans) {
+    if (!span.known) continue;
+    const left = x(span.from);
+    const width = Math.max(left + 1, x(span.to)) - left;
+    if (!span.on) {
+      off += `M${left} ${height - 1}h${width}v1h${-width}z`;
+      continue;
+    }
+    const level =
+      span.brightness === null
+        ? height
+        : Math.max(2, Math.round((height * span.brightness) / 100));
+    const each = on.get(span.colour) ?? { fill: "", top: "" };
+    each.fill += `M${left} ${height - level}h${width}v${level}h${-width}z`;
+    each.top += `M${left} ${height - level}h${width}v2h${-width}z`;
+    on.set(span.colour, each);
+  }
+  return { off, on };
 }
 
 // The columns' scale: the least of these hours that holds the longest day.

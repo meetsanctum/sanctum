@@ -33,6 +33,30 @@ function WhileCovering(props: { onCovering: (covering: boolean) => void }) {
   return null;
 }
 
+// While a modal dialog is open Radix turns pointer events off on <body>,
+// so nothing outside it takes a press. Every element inherits that, so the
+// whole screen behind would be styled again as an overlay opened and again
+// as it went. The veil covers the window already, so the container keeps
+// pointer events itself while any overlay's content is there (data-holds-
+// pointer, shell-frame.css), and what is behind it keeps its styles. Set
+// from inside the content, which Radix's own layer contains: it is set
+// before Radix turns them off and cleared after it turns them back on.
+const holding = new WeakMap<HTMLElement, number>();
+function HoldsPointer(props: { container: HTMLElement | null }) {
+  const { container } = props;
+  useEffect(() => {
+    if (!container) return;
+    holding.set(container, (holding.get(container) ?? 0) + 1);
+    container.dataset.holdsPointer = "";
+    return () => {
+      const left = (holding.get(container) ?? 1) - 1;
+      holding.set(container, left);
+      if (left === 0) delete container.dataset.holdsPointer;
+    };
+  }, [container]);
+  return null;
+}
+
 // The overlays open over a container, which says it is covered while any
 // is (data-covered, shell-frame.css), from as one opens until as it starts
 // to go.
@@ -114,6 +138,7 @@ export function Overlay(props: {
             className="overlay z-10 flex flex-col outline-none [-webkit-app-region:no-drag] animation-duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
           >
             <WhileCovering onCovering={props.onCovering} />
+            <HoldsPointer container={props.container} />
             {/* Its sides keep their buttons' width, and the title takes what
               is left, ending in an ellipsis where it does not fit. It is
               centred on the top bar's row, which a phone's has higher. */}
