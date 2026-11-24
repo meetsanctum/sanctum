@@ -34,6 +34,14 @@ export type AgentCaller = {
   actor: Extract<Actor, { kind: "assistant-run" }>;
 };
 
+// The turn belongs to this delegated actor, even when another turn uses the
+// same agent id. Keep it off the actor sent to apps and stored in the log.
+const turnEndChecks = new WeakMap<AgentCaller["actor"], () => boolean>();
+
+export function bindAgentToTurn(agent: AgentCaller, ended: () => boolean) {
+  turnEndChecks.set(agent.actor, ended);
+}
+
 /** Who is behind a call: a client's principal, or an AI agent. */
 export type Caller = Principal | AgentCaller;
 
@@ -99,8 +107,8 @@ export function createGate(
     }
   }
 
-  function requireActiveAgent(id: string) {
-    if (!isActiveAgent(id)) {
+  function requireActiveAgent(actor: AgentCaller["actor"]) {
+    if (turnEndChecks.get(actor)?.() || !isActiveAgent(actor.id)) {
       throw new ActionCallError("forbidden");
     }
   }
@@ -113,7 +121,7 @@ export function createGate(
     if (actor.kind === "user" && !people.get(actor.id)) {
       throw new ActionCallError("forbidden");
     }
-    if (actor.kind === "assistant-run") requireActiveAgent(actor.id);
+    if (actor.kind === "assistant-run") requireActiveAgent(actor);
     weigh(actor, rule);
   }
 

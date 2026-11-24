@@ -34,7 +34,13 @@ const readBytes = 64 * 1024;
 // the piece, array brackets and one extra code unit to keep a pair whole.
 const textUnits = Math.floor(readBytes / 6) - 8;
 
-const toolName = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+export const modelToolLimits = {
+  count: 64,
+  name: /^[A-Za-z0-9_-]{1,64}$/,
+  description: 2_048,
+};
+
+const toolName = z.string().regex(modelToolLimits.name);
 const content = z.string().max(200_000);
 
 const question = z.object({
@@ -69,11 +75,11 @@ const question = z.object({
     .array(
       z.object({
         name: toolName,
-        description: z.string().max(2_048),
+        description: z.string().max(modelToolLimits.description),
         input: z.record(z.string(), z.unknown()),
       }),
     )
-    .max(64)
+    .max(modelToolLimits.count)
     .refine(
       (tools) => new Set(tools.map((tool) => tool.name)).size === tools.length,
       "each tool has a name of its own",

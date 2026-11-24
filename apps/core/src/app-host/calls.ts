@@ -631,7 +631,7 @@ export function createCoreCalls(options: {
       if (!options.models.turn || !isTurnOpener(actor)) {
         throw new ActionError("no_turn");
       }
-      return options.assistant.list(appId);
+      return options.assistant.list(appId, actor);
     },
 
     async callAiTool(call) {
@@ -648,6 +648,7 @@ export function createCoreCalls(options: {
         actor,
         parsed.data.name,
         parsed.data.input,
+        options.ended,
       );
       need(aiAssistantPermission);
       return answer;

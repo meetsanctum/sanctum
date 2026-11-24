@@ -1,6 +1,12 @@
-import type { Actor, AiToolAnswer, ModelTool } from "@meetsanctum/app-sdk";
+import {
+  ActionError,
+  type Actor,
+  type AiToolAnswer,
+  type ModelTool,
+} from "@meetsanctum/app-sdk";
 
-import type { AgentCaller } from "../app-host/gate.js";
+import { bindAgentToTurn, type AgentCaller } from "../app-host/gate.js";
+import { modelToolLimits } from "../models/turns.js";
 import { toolError } from "./answers.js";
 import type { AgentLimiter, LimitedLog } from "./limits.js";
 import type { AgentTools } from "./tools.js";
@@ -50,13 +56,6 @@ export function assistantAgent(
   };
 }
 
-// `ctx.models` takes this many tools at most, each named within these
-// characters and described in this many. A tool named past them, from a
-// long app or action id, is left out rather than failing the whole question.
-const toolsAtMost = 64;
-const nameRule = /^[A-Za-z0-9_-]{1,64}$/;
-const descriptionAtMost = 2_048;
-
 const unknownTool = (name: string) =>
   answerOf(toolError("unknown_tool", `There's no tool called "${name}".`));
 
@@ -75,22 +74,35 @@ function answerOf(result: {
 export function createAssistantCalls(options: {
   tools: () => AgentTools;
   appName: (appId: string) => string | undefined;
+  canActFor: (who: TurnOpener) => boolean;
   limiter: AgentLimiter;
   logLimited: LimitedLog;
   duringCall: <T>(callId: string, work: () => Promise<T>) => Promise<T>;
   newCallId: () => string;
 }) {
+  function takeRequest(appId: string, who: TurnOpener) {
+    if (!options.canActFor(who)) throw new ActionError("forbidden");
+    const id = assistantAgentId(appId, who);
+    const refusal = options.limiter.takeRequest(id);
+    if (refusal) options.logLimited(id, refusal.limited);
+    return refusal;
+  }
+
   return {
-    /** The tools for an assistant app, in `ctx.models`' shape, but its own. */
-    list(appId: string): ModelTool[] {
+    /** The tools for an assistant app, in the shape accepted by `ctx.models`. */
+    list(appId: string, who: TurnOpener): ModelTool[] {
+      if (takeRequest(appId, who)) throw new ActionError("limited");
       return options
         .tools()
         .list({ apart: appId })
-        .filter((tool) => nameRule.test(tool.name))
-        .slice(0, toolsAtMost)
+        .filter((tool) => modelToolLimits.name.test(tool.name))
+        .slice(0, modelToolLimits.count)
         .map((tool) => ({
           name: tool.name,
-          description: (tool.description ?? "").slice(0, descriptionAtMost),
+          description: (tool.description ?? "").slice(
+            0,
+            modelToolLimits.description,
+          ),
           input: tool.inputSchema as Record<string, unknown>,
         }));
     },
@@ -104,12 +116,13 @@ export function createAssistantCalls(options: {
       who: TurnOpener,
       name: string,
       input: Record<string, unknown>,
+      ended: () => boolean,
     ): Promise<AiToolAnswer> {
+      const refusal = takeRequest(appId, who);
       const agent = assistantAgent(appId, options.appName(appId) ?? appId, who);
-      const refusal = options.limiter.takeRequest(agent.id);
       const admitted = refusal ?? options.limiter.begin(agent.id);
       if ("limited" in admitted) {
-        options.logLimited(agent.id, admitted.limited);
+        if (!refusal) options.logLimited(agent.id, admitted.limited);
         return answerOf(
           toolError(
             "limited",
@@ -118,6 +131,7 @@ export function createAssistantCalls(options: {
         );
       }
       try {
+        bindAgentToTurn(agent, ended);
         const result = await options.duringCall(options.newCallId(), () =>
           options.tools().call(agent, name, input, { apart: appId }),
         );

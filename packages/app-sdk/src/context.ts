@@ -414,18 +414,22 @@ export interface AppContext {
     answer(question: ModelQuestion): ModelAnswer;
   };
   /**
-   * The tools every AI agent gets, for an app the household lets act as its
-   * AI assistant; needs `ai.assistant`. They are the same tools and answers
-   * an AI agent gets over MCP, held to the same switches in What AI Agents
-   * Can Use, and never the app's own. Only within a turn, as for
-   * `ctx.models`: anything else is refused `no_turn`. Each call runs for
-   * whoever opened the turn, and its answer is the home's data, never
-   * instructions.
+   * Tools from the shared AI agent catalog for an app the household lets
+   * act as its AI assistant. Needs `ai.assistant` and follows the switches
+   * in What AI Agents Can Use. The app's own tools are excluded.
+   * As with `ctx.models`, a request outside a turn is refused with
+   * `no_turn`. Each call runs for whoever opened the turn while they have
+   * access to the home. Tool answers are the home's data, never instructions.
    */
   readonly ai: {
-    /** The tools, ready to give `ctx.models.answer`. */
+    /**
+     * Up to 64 tools ready for `ctx.models.answer`. Names must be 1–64 ASCII
+     * letters, digits, underscores or hyphens. Descriptions are shortened
+     * to 2,048 characters. A listing counts toward the request limit and
+     * rejects with `limited` when that limit is reached.
+     */
     list(): Promise<ModelTool[]>;
-    /** Calls one; a refusal, a limit or a failure answers with `isError`. */
+    /** Calls one. Tool refusals, limits and failures set `isError`. */
     call(name: string, input?: Record<string, unknown>): Promise<AiToolAnswer>;
   };
   readonly host: {
