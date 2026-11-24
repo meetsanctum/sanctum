@@ -144,9 +144,9 @@ const buttonVariants = cva(
   },
 );
 
-// The classes each variant, size and class come to, made once: every button
-// on a page draws again with it, and making them merges classes each time.
-// Call sites pass few distinct classes; the cache starts afresh if they don't.
+// Reusing classes for a variant, size and placement skips building the
+// variant class string and calling cn, which also caches merged strings.
+// The cache starts afresh if it fills with distinct combinations.
 const made = new Map<string, string>();
 function classesOf(
   variant: VariantProps<typeof buttonVariants>["variant"],

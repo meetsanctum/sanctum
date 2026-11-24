@@ -23,6 +23,8 @@ describe("a button's classes", () => {
   it.each([
     [{}, undefined],
     [{ variant: "outline", size: "sm" }, undefined],
+    [{ variant: "ghost", size: "sm" }, undefined],
+    [{ variant: "outline", size: "lg" }, undefined],
     [{ variant: "ghost", size: "bar" }, "ms-auto self-start"],
   ] as const)(
     "are the variants' classes, merged: %o %s",
@@ -61,6 +63,20 @@ describe("a button's classes", () => {
     const first = draw();
     expect(merge).toHaveBeenCalledTimes(1);
     expect(draw()).toBe(first);
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  it("recomputes earlier classes when the cache fills", () => {
+    const draw = (className: string) =>
+      renderToStaticMarkup(<Button className={className}>Go</Button>);
+    const first = draw("order-first");
+    for (let index = 0; index < 1000; index += 1) {
+      draw(`order-[${index}]`);
+    }
+
+    const merge = vi.mocked(cn);
+    merge.mockClear();
+    expect(draw("order-first")).toBe(first);
     expect(merge).toHaveBeenCalledTimes(1);
   });
 });

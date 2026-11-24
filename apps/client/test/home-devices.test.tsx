@@ -14,11 +14,14 @@ import {
   remountHome,
 } from "./home-shell-harness";
 import * as appsPage from "../src/apps-page";
+import { useArtwork } from "../src/artwork";
 import * as deviceDetail from "../src/device-detail";
 import * as placePages from "../src/place-pages";
 import * as shellFrame from "../src/shell-frame";
 import * as topBar from "../src/top-bar";
 import { homeDashboard } from "./home-shell-fixtures";
+import { finishFade, withFade } from "./overlay-fade";
+import { mediaPlayer } from "./place-pages-fixtures";
 import { light } from "./settings-devices-fixtures";
 
 vi.mock(import("../src/device-detail"), async (original) => {
@@ -29,6 +32,7 @@ vi.mock(import("../src/apps-page"), async (original) => {
   const actual = await original();
   return { ...actual, AppsPage: vi.fn(actual.AppsPage) };
 });
+vi.mock("../src/artwork", () => ({ useArtwork: vi.fn(() => null) }));
 vi.mock(import("../src/place-pages"), async (original) => {
   const actual = await original();
   return { ...actual, SidebarPlaces: vi.fn(actual.SidebarPlaces) };
@@ -43,6 +47,27 @@ vi.mock(import("../src/top-bar"), async (original) => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+const dialog = () => container.ownerDocument.querySelector('[role="dialog"]');
+
+function withDeviceDetailFade() {
+  withFade();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+}
+
+function pressDone(opened: Element) {
+  return act(async () =>
+    [...opened.querySelectorAll("button")]
+      .find((button) => button.textContent === "Done")!
+      .click(),
+  );
+}
 
 it("draws a device's change without redrawing the frame or top bar", async () => {
   homeData.rooms = [{ id: "kitchen", name: "Kitchen", floorId: null }];
@@ -191,27 +216,7 @@ it("draws device detail only from opening through its exit fade", async () => {
   );
   expect(details).not.toHaveBeenCalled();
 
-  // The built CSS supplies these animations in the browser.
-  const computed = window.getComputedStyle.bind(window);
-  vi.stubGlobal("CSS", { escape: (name: string) => name });
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
-  vi.spyOn(window, "getComputedStyle").mockImplementation((element) =>
-    element.getAttribute("role") === "dialog"
-      ? ({
-          get animationName() {
-            return element.getAttribute("data-state") === "closed"
-              ? "exit"
-              : "enter";
-          },
-        } as CSSStyleDeclaration)
-      : computed(element),
-  );
+  withDeviceDetailFade();
   await act(async () =>
     container
       .querySelector<HTMLButtonElement>(
@@ -220,23 +225,14 @@ it("draws device detail only from opening through its exit fade", async () => {
       .click(),
   );
   expect(details).toHaveBeenCalled();
-  const dialog = () => container.ownerDocument.querySelector('[role="dialog"]');
-  const opened = dialog();
+  const opened = dialog()!;
   expect(opened).not.toBeNull();
 
-  await act(async () =>
-    [...opened!.querySelectorAll("button")]
-      .find((button) => button.textContent === "Done")!
-      .click(),
-  );
+  await pressDone(opened);
   expect(dialog()).toBe(opened);
-  expect(opened?.getAttribute("data-state")).toBe("closed");
+  expect(opened.getAttribute("data-state")).toBe("closed");
 
-  await act(async () =>
-    opened!.dispatchEvent(
-      Object.assign(new Event("animationend"), { animationName: "exit" }),
-    ),
-  );
+  await finishFade(opened);
   expect(dialog()).toBeNull();
   details.mockClear();
 
@@ -247,4 +243,43 @@ it("draws device detail only from opening through its exit fade", async () => {
     container.querySelector('main [aria-label="Lamp, Off"]'),
   ).not.toBeNull();
   expect(details).not.toHaveBeenCalled();
+});
+
+it("keeps the player's artwork and tint visible through the exit fade", async () => {
+  const hash = "a".repeat(64);
+  const artwork = { url: "blob:artwork", colour: "oklch(0.4 0.1 80)" };
+  vi.mocked(useArtwork).mockImplementation((requested) =>
+    requested === hash ? artwork : null,
+  );
+  const player = mediaPlayer("player", "Speaker", "kitchen", {
+    on: true,
+    activity: "playing",
+    media: { artwork: hash },
+  });
+  homeData.devices = [player];
+  homeData.dashboards = [
+    { ...homeDashboard, kind: "home", devices: [player.id] },
+  ];
+  await refresh();
+  withDeviceDetailFade();
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('main [aria-label="Speaker, Playing"]')!
+      .click(),
+  );
+  const opened = dialog()!;
+  const image = () => opened.querySelector("img");
+  const tint = () => opened.querySelector("[data-tint]:not(.opacity-0)");
+  expect(image()?.getAttribute("src")).toBe(artwork.url);
+  expect(tint()?.getAttribute("data-tint")).toBe(artwork.colour);
+
+  await pressDone(opened);
+  expect(dialog()).toBe(opened);
+  expect(opened.getAttribute("data-state")).toBe("closed");
+  expect(image()?.getAttribute("src")).toBe(artwork.url);
+  expect(tint()?.getAttribute("data-tint")).toBe(artwork.colour);
+
+  await finishFade(opened);
+  expect(dialog()).toBeNull();
 });

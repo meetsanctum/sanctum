@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Overlay } from "../src/overlay";
+import { finishFade, withFade } from "./overlay-fade";
 
 // How long an overlay says it covers the window, which keeps the macOS
 // traffic lights hidden (src/sidebar-state.ts).
@@ -28,23 +29,6 @@ const show = (open: boolean) =>
   });
 
 const dialog = () => container.querySelector('[role="dialog"]');
-
-// The fade the built CSS gives it, which jsdom doesn't know.
-function withFade() {
-  const computed = window.getComputedStyle.bind(window);
-  vi.stubGlobal("CSS", { escape: (name: string) => name });
-  vi.spyOn(window, "getComputedStyle").mockImplementation((element) =>
-    element.getAttribute("role") === "dialog"
-      ? ({
-          get animationName() {
-            return element.getAttribute("data-state") === "closed"
-              ? "exit"
-              : "enter";
-          },
-        } as CSSStyleDeclaration)
-      : computed(element),
-  );
-}
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -102,11 +86,7 @@ describe("what an overlay says about covering the window", () => {
     expect(dialog()).not.toBeNull();
     expect(onCovering.mock.calls).toEqual([[true]]);
 
-    await act(async () => {
-      dialog()!.dispatchEvent(
-        Object.assign(new Event("animationend"), { animationName: "exit" }),
-      );
-    });
+    await finishFade(dialog()!);
 
     expect(dialog()).toBeNull();
     expect(onCovering.mock.calls).toEqual([[true], [false]]);
@@ -209,11 +189,7 @@ describe("pointer events behind the veil", () => {
     expect(document.body.style.pointerEvents).toBe("");
     expect(container.hasAttribute("data-holds-pointer")).toBe(true);
 
-    await act(async () => {
-      dialog()!.dispatchEvent(
-        Object.assign(new Event("animationend"), { animationName: "exit" }),
-      );
-    });
+    await finishFade(dialog()!);
     expect(container.hasAttribute("data-holds-pointer")).toBe(false);
 
     note(watch.takeRecords());
