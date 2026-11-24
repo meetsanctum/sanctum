@@ -1,30 +1,27 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
-import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { DayBandChart, WeekColumnsChart } from "@meetsanctum/ui-sdk/charts";
+import { useId } from "react";
 
 import { productName } from "./brand";
 import {
-  Columns,
+  columnsOf,
   Notice,
   Part,
-  Readout,
   useDayAndWeek,
-  useWidth,
   width,
   type ColumnWords,
 } from "./device-history";
 import {
+  bandSpan,
   countedDays,
   dayMs,
   daysOf,
   joinedSpans,
   midnight,
   spansOf,
-  spanTimes,
-  timeText,
   type Day,
   type Span,
 } from "./device-history-data";
-import { BandMarks, bandHeight, BandTicks } from "./motion-band";
 import { Battery } from "./sensor-detail";
 
 // The first page of a sensor that says one thing or its opposite over
@@ -61,10 +58,6 @@ export type DayAndWeekWords = {
    */
   counted?: boolean;
 };
-
-// How near a White span the pointer has to be to show it, in px: a minute
-// of motion is narrower than a pixel.
-const snap = 4;
 
 export function DayAndWeek(props: {
   device: DeviceInfo;
@@ -120,143 +113,24 @@ export function DayAndWeek(props: {
             <p className="m-0 mb-4 text-[15px] leading-[22px] text-(--silver)">
               {words.sentence(spans, from, now)}
             </p>
-            <Band
-              spans={joinedSpans(spans).filter((span) => span.to > span.from)}
+            <DayBandChart
+              spans={joinedSpans(spans)
+                .filter((span) => span.to > span.from)
+                .map(bandSpan)}
               from={from}
               to={now}
               label={words.band}
-              words={words.span}
+              text={words.span}
             />
           </>
         )}
       </section>
       {loaded?.states.kept && (
         <Part title="Last 7 days" headline={words.week(days, now)}>
-          <Columns days={days} now={now} words={words.columns} />
+          <WeekColumnsChart now={now} {...columnsOf(days, words.columns)} />
         </Part>
       )}
       <Battery device={device} />
-    </div>
-  );
-}
-
-// Where the band's readout is: a span, and the pointer's place over it, or
-// none for the arrow keys, which show it at its middle.
-type Cursor = { index: number; x: number | null };
-
-// The day as a band 40 px tall: motion, or being open, as White spans, the
-// rest as a hairline along its foot, and nothing where nothing was known.
-// The pointer shows the span under it, a White span within a few pixels
-// before the rest; the arrow keys step from span to span. A media player's
-// History draws its playing as one too (media-history.tsx).
-export function Band(props: {
-  spans: readonly Span[];
-  from: number;
-  to: number;
-  label: string;
-  words: (span: Span) => string;
-}) {
-  const { spans, from, to, words } = props;
-  const { box, width: plot } = useWidth();
-  const [cursor, setCursor] = useState<Cursor | null>(null);
-  const x = (at: number) => ((at - from) / (to - from)) * plot;
-  const index =
-    cursor && spans.length > 0 ? Math.min(cursor.index, spans.length - 1) : -1;
-  const pointed = index >= 0 ? spans[index] : undefined;
-
-  const spanAt = (left: number) => {
-    const near = spans.findIndex(
-      (span) =>
-        span.on && x(span.from) - snap <= left && left <= x(span.to) + snap,
-    );
-    if (near >= 0) return near;
-    const at = from + (left / Math.max(1, plot)) * (to - from);
-    return spans.findIndex((span) => span.from <= at && at < span.to);
-  };
-  const fromPointer = (event: PointerEvent<HTMLDivElement>) => {
-    const left =
-      event.clientX - event.currentTarget.getBoundingClientRect().left;
-    const found = spanAt(Math.max(0, Math.min(plot, left)));
-    setCursor(found >= 0 ? { index: found, x: left } : null);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (spans.length === 0) return;
-    const current = index >= 0 ? index : spans.length - 1;
-    const next =
-      event.key === "ArrowLeft"
-        ? current - 1
-        : event.key === "ArrowRight"
-          ? current + 1
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? spans.length - 1
-              : null;
-    if (next === null) return;
-    event.preventDefault();
-    setCursor({
-      index: Math.max(0, Math.min(spans.length - 1, next)),
-      x: null,
-    });
-  };
-  const markAt = pointed
-    ? (cursor?.x ?? (x(pointed.from) + x(pointed.to)) / 2)
-    : null;
-
-  return (
-    <div ref={box} className="relative">
-      <div
-        tabIndex={0}
-        role="group"
-        aria-label={props.label}
-        className="relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        style={{ width: plot, height: bandHeight }}
-        onPointerMove={fromPointer}
-        onPointerDown={fromPointer}
-        onPointerLeave={() => setCursor(null)}
-        onFocus={() =>
-          setCursor(
-            (current) =>
-              current ??
-              (spans.length > 0 ? { index: spans.length - 1, x: null } : null),
-          )
-        }
-        onBlur={() => setCursor(null)}
-        onKeyDown={onKeyDown}
-      >
-        <BandMarks spans={spans} x={x} plot={plot} pointed={pointed}>
-          {pointed && !pointed.on && markAt !== null && (
-            <rect
-              x={Math.min(plot - 1, Math.round(markAt))}
-              y={0}
-              width={1}
-              height={bandHeight}
-              className="fill-white/40"
-            />
-          )}
-        </BandMarks>
-        {pointed && markAt !== null && (
-          <Readout
-            x={markAt}
-            width={plot}
-            value={words(pointed)}
-            about={spanTimes(pointed, to)}
-          />
-        )}
-      </div>
-      <BandTicks
-        from={from}
-        to={to}
-        plot={plot}
-        className="mt-2 text-(--pewter)"
-      />
-      <ul className="sr-only">
-        {spans.map((span) => (
-          <li key={span.from}>
-            {timeText(span.from)} to {timeText(span.to)}: {words(span)}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

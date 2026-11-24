@@ -117,6 +117,30 @@ describe("an app's pages", () => {
     );
   }, 60_000);
 
+  it("leave ui-sdk's charts out for the kit's charts module to answer", async () => {
+    const dir = await app(`
+import { defineAppUi } from "@meetsanctum/ui-sdk";
+import { LineChart } from "@meetsanctum/ui-sdk/charts";
+function MainPage() {
+  return (
+    <LineChart
+      runs={[]}
+      now={0}
+      format={{ gutter: 36, shown: (v) => v, text: String, grid: String }}
+      name="Example"
+      height={72}
+    />
+  );
+}
+export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { main: MainPage } });
+`);
+    await buildPages(dir);
+    const code = readFileSync(join(dir, "pages/index.js"), "utf8");
+    expect(code).toMatch(/from"@meetsanctum\/ui-sdk\/charts"/);
+    expect(code).not.toContain("over the last 24 hours");
+    expect(code.length).toBeLessThan(1_000);
+  }, 60_000);
+
   it("carry only their own classes, on Sanctum's theme, not the kit's", async () => {
     const dir = await app(page);
     await buildPages(dir);

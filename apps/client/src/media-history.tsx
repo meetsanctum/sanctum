@@ -1,18 +1,24 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 import type { SwipePage } from "@meetsanctum/ui-sdk";
+import { DayBandChart, WeekColumnsChart } from "@meetsanctum/ui-sdk/charts";
 import { History } from "lucide-react";
 
 import { productName } from "./brand";
-import { Band } from "./day-and-week";
 import {
-  Columns,
+  columnsOf,
   Notice,
   Part,
   useDayAndWeek,
   width,
   type ColumnWords,
 } from "./device-history";
-import { dayMs, daysOf, joinedSpans, spansOf } from "./device-history-data";
+import {
+  bandSpan,
+  dayMs,
+  daysOf,
+  joinedSpans,
+  spansOf,
+} from "./device-history-data";
 import {
   mediaSentence,
   mediaSpanText,
@@ -91,16 +97,18 @@ function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
           capability.features.power,
         )}
       >
-        <Band
-          spans={joinedSpans(spans).filter((span) => span.to > span.from)}
+        <DayBandChart
+          spans={joinedSpans(spans)
+            .filter((span) => span.to > span.from)
+            .map(bandSpan)}
           from={from}
           to={now}
           label="Playing over the last 24 hours"
-          words={mediaSpanText}
+          text={mediaSpanText}
         />
       </Part>
       <Part title="Last 7 days" headline={playedWeekHeadline(days, now)}>
-        <Columns days={days} now={now} words={playedWords} />
+        <WeekColumnsChart now={now} {...columnsOf(days, playedWords)} />
       </Part>
     </div>
   );

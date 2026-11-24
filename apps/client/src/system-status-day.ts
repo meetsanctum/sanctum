@@ -1,9 +1,9 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 import { convertTemperature, formatTemperature } from "@meetsanctum/ui-sdk";
+import type { ChartFormat } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useRef, useState } from "react";
 
 import { coreJson } from "./core-fetch";
-import type { ChartFormat } from "./day-line";
 import { dayMs, timeText } from "./device-history-data";
 import type { DayLine, Point } from "./sensor-history-data";
 import {

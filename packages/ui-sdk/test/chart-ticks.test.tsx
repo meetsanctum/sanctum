@@ -3,14 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Columns } from "../src/device-history";
-import {
-  midnight,
-  sixHours,
-  timeText,
-  type Day,
-} from "../src/device-history-data";
-import { BandTicks } from "../src/motion-band";
+import { DayTimeAxis, WeekColumnsChart } from "../src/charts";
+import { midnight, sixHours, timeText } from "../src/charts/time";
 
 const hour = 60 * 60_000;
 let container: HTMLDivElement;
@@ -44,7 +38,7 @@ afterEach(async () => {
 async function ticksUntil(to: string) {
   const end = Date.parse(to);
   await act(async () =>
-    root.render(<BandTicks from={end - 24 * hour} to={end} plot={480} />),
+    root.render(<DayTimeAxis from={end - 24 * hour} to={end} width={480} />),
   );
   return [...container.querySelectorAll("span")].map(
     (each) => each.textContent,
@@ -96,14 +90,24 @@ describe("a day's hours", () => {
 describe("a week of columns", () => {
   it("fits a light on all through the 25 hours of the day the clocks go back", async () => {
     const now = Date.parse("2026-10-27T12:00:00+01:00");
-    const days: Day[] = [6, 5, 4, 3, 2, 1, 0].map((back) => {
+    const days = [6, 5, 4, 3, 2, 1, 0].map((back) => {
       const start = midnight(now, back);
       const length = midnight(now, back - 1) - start;
-      const on = back === 2 ? length / 1000 : 0;
-      return { start, on, known: length / 1000 };
+      return { start, value: back === 2 ? length / hour : 0 };
     });
-    expect(days[4]!.on).toBe(25 * 3600);
-    await act(async () => root.render(<Columns days={days} now={now} />));
+    expect(days[4]!.value).toBe(25);
+    await act(async () =>
+      root.render(
+        <WeekColumnsChart
+          days={days}
+          now={now}
+          scale="hours"
+          label="How long it was on each day"
+          text={(day) => `${day.value} h`}
+          spoken={(day) => `on for ${day.value} h`}
+        />,
+      ),
+    );
     const scale = [...container.querySelectorAll("span")].find((each) =>
       each.textContent?.endsWith(" h"),
     );
@@ -111,5 +115,19 @@ describe("a week of columns", () => {
     const bar = container.querySelector("path")!.getAttribute("d")!;
     const top = /Q-?[\d.]+,(-?[\d.]+)/.exec(bar)?.[1];
     expect(Number(top)).toBe(0);
+  });
+});
+
+describe("the hours under a day", () => {
+  it("stay on the clock's 6 hours on the day the clocks go back", () => {
+    vi.stubEnv("TZ", "Europe/Berlin");
+    // Summer time ended at 03:00 on 25 October 2026.
+    const to = Date.parse("2026-10-25T20:00:00+01:00");
+    expect(sixHours(to - 24 * hour, to).map((at) => timeText(at))).toEqual([
+      "00:00",
+      "06:00",
+      "12:00",
+      "18:00",
+    ]);
   });
 });

@@ -4,12 +4,13 @@ import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import ts from "typescript";
 
-import { lucideIcons } from "./icons.js";
-import { sdkRoot, sdkVersion } from "./kit.js";
+import { lucideIcons, sdkModule } from "./icons.js";
+import { chartsModule, sdkRoot, sdkVersion } from "./kit.js";
 
-// ui-sdk's report of what the kit offers pages: its exports, their
-// declarations as TypeScript emits them, Lucide's icons by name and React's
-// version. Pages built against one version of the kit open on any later one
+// ui-sdk's report of what the kit offers pages: each module's exports, by
+// the import a page makes, ui-sdk's own and its charts', their declarations
+// as TypeScript emits them, Lucide's icons by name and React's version.
+// Pages built against one version of the kit open on any later one
 // of its major, so what a version takes away needs a new major, and what it
 // adds or changes at least a new minor: below 1.0, a new minor and a new
 // patch. `api` writes the report and refuses a change its version doesn't
@@ -23,10 +24,24 @@ export const reportFile = "api.json";
 export type ApiReport = {
   version: string;
   react: string;
-  exports: string[];
+  /** Each module's exports, by the import a page makes. */
+  exports: Record<string, string[]>;
   icons: string[];
   declarations: Record<string, string[]>;
 };
+
+// The files each module the kit offers starts from.
+const entries: Readonly<Record<string, string>> = {
+  [sdkModule]: "src/kit.ts",
+  [chartsModule]: "src/charts/index.ts",
+};
+
+// A report's exports by module. A report from before the kit had more than
+// one module lists ui-sdk's alone.
+const exportsOf = (report: ApiReport): Record<string, string[]> =>
+  Array.isArray(report.exports)
+    ? { [sdkModule]: report.exports as string[] }
+    : report.exports;
 
 type Change = "none" | "addition" | "removal";
 
@@ -47,9 +62,9 @@ export function apiOf(): ApiReport {
     },
   );
   if (!parsed) throw new Error("No tsconfig.json in ui-sdk");
-  const entry = join(sdkRoot, "src/kit.ts");
+  const files = Object.values(entries).map((file) => join(sdkRoot, file));
   const outDir = join(sdkRoot, "dist/api");
-  const program = ts.createProgram([entry], {
+  const program = ts.createProgram(files, {
     ...parsed.options,
     noEmit: false,
     declaration: true,
@@ -61,13 +76,20 @@ export function apiOf(): ApiReport {
     rootDir: join(sdkRoot, "src"),
   });
   const checker = program.getTypeChecker();
-  const source = program.getSourceFile(entry);
-  const moduleSymbol = source && checker.getSymbolAtLocation(source);
-  if (!moduleSymbol) throw new Error("ui-sdk's src/kit.ts has no exports");
-  const exports = checker
-    .getExportsOfModule(moduleSymbol)
-    .map((symbol) => symbol.name)
-    .sort();
+  const exports = Object.fromEntries(
+    Object.entries(entries).map(([module, file]) => {
+      const source = program.getSourceFile(join(sdkRoot, file));
+      const moduleSymbol = source && checker.getSymbolAtLocation(source);
+      if (!moduleSymbol) throw new Error(`ui-sdk's ${file} has no exports`);
+      return [
+        module,
+        checker
+          .getExportsOfModule(moduleSymbol)
+          .map((symbol) => symbol.name)
+          .sort(),
+      ];
+    }),
+  );
 
   const declarations: Record<string, string[]> = {};
   const emitted = program.emit(
@@ -116,8 +138,12 @@ const majorOf = (version: string) => Number(version.split(".")[0]);
 export function changeBetween(before: ApiReport, after: ApiReport): Change {
   const gone = (from: string[], to: string[]) =>
     from.some((name) => !to.includes(name));
+  const exportsBefore = exportsOf(before);
+  const exportsAfter = exportsOf(after);
   if (
-    gone(before.exports, after.exports) ||
+    Object.entries(exportsBefore).some(([module, names]) =>
+      gone(names, exportsAfter[module] ?? []),
+    ) ||
     gone(before.icons, after.icons) ||
     majorOf(before.react) !== majorOf(after.react)
   ) {
@@ -125,7 +151,7 @@ export function changeBetween(before: ApiReport, after: ApiReport): Change {
   }
   const same =
     before.react === after.react &&
-    JSON.stringify(before.exports) === JSON.stringify(after.exports) &&
+    JSON.stringify(exportsBefore) === JSON.stringify(exportsAfter) &&
     JSON.stringify(before.icons) === JSON.stringify(after.icons) &&
     JSON.stringify(before.declarations) === JSON.stringify(after.declarations);
   return same ? "none" : "addition";

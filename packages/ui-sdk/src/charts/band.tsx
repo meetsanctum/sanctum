@@ -1,0 +1,279 @@
+import { memo, useState, type KeyboardEvent, type PointerEvent } from "react";
+
+import { TimeTicks } from "./axis";
+import { plotClass, Readout, useWidth } from "./frame";
+import { timeText } from "./time";
+
+// A day as a band 40 px tall: what is on as White spans, what is faint as a
+// faint fill across the band, the rest as a hairline along its foot, and
+// nothing where nothing was known. As a whole chart it has the time every 6
+// hours under it, a readout under the pointer or the arrow keys, and the
+// spans listed for screen readers; its marks alone go inside something that
+// is itself the control, such as a row's button, with one axis over them all.
+
+/** How a band draws a span. */
+export type BandLevel = "on" | "faint" | "off" | "unknown";
+
+/** A span of a day's band, from one time to another, in ms since the epoch. */
+export type BandSpan = { from: number; to: number; level: BandLevel };
+
+const bandHeight = 40;
+
+// How near an on span the pointer has to be to show it, in px: a minute of
+// it is narrower than a pixel.
+const snap = 4;
+
+// The band's marks across `plot` px, the span pointed at in full White.
+const BandRects = memo(function BandRects(props: {
+  spans: readonly BandSpan[];
+  from: number;
+  to: number;
+  plot: number;
+  pointed?: BandSpan;
+}) {
+  const { spans, from, to, plot } = props;
+  const x = (at: number) => ((at - from) / (to - from)) * plot;
+  return spans.map((span) => {
+    if (span.level === "unknown") return null;
+    const left = Math.round(x(span.from));
+    const right = Math.round(x(span.to));
+    if (span.level === "faint") {
+      // Faint across the band, and within it however short.
+      const fillWidth = Math.max(1, right - left);
+      return (
+        <rect
+          key={span.from}
+          x={Math.min(left, plot - fillWidth)}
+          y={0}
+          width={fillWidth}
+          height={bandHeight}
+          className={span === props.pointed ? "fill-white/24" : "fill-white/16"}
+        />
+      );
+    }
+    if (span.level === "off") {
+      return (
+        <rect
+          key={span.from}
+          x={left}
+          y={bandHeight - 1}
+          width={Math.max(0, right - left)}
+          height={1}
+          className="fill-white/30"
+        />
+      );
+    }
+    const spanWidth = Math.max(2, right - left);
+    return (
+      <rect
+        key={span.from}
+        x={left}
+        y={0}
+        width={spanWidth}
+        height={bandHeight}
+        rx={Math.min(3, spanWidth / 2)}
+        className={span === props.pointed ? "fill-white" : "fill-white/70"}
+      />
+    );
+  });
+});
+
+/** What a day's band marks take. */
+export type DayBandMarksProps = {
+  spans: readonly BandSpan[];
+  /** When the day starts and ends, in ms since the epoch. */
+  from: number;
+  to: number;
+  /** Its width in px; without one it measures its box. */
+  width?: number;
+  /** Its box's classes, which size it: `block h-10 w-full` unless said. */
+  className?: string;
+};
+
+/**
+ * A day's band, marks only: no focus, no list and nothing to press, so it
+ * can go inside a button. What it shows is for the control around it to say.
+ */
+export function DayBandMarks(props: DayBandMarksProps) {
+  const { box, width } = useWidth<HTMLSpanElement>(props.width);
+  return (
+    <span
+      ref={box}
+      aria-hidden="true"
+      className={props.className ?? "block h-10 w-full"}
+    >
+      <svg
+        aria-hidden="true"
+        width={width}
+        height={bandHeight}
+        className="block overflow-visible"
+      >
+        {width > 0 && (
+          <BandRects
+            spans={props.spans}
+            from={props.from}
+            to={props.to}
+            plot={width}
+          />
+        )}
+      </svg>
+    </span>
+  );
+}
+
+/** What a day's band chart takes. */
+export type DayBandChartProps<Span extends BandSpan> = {
+  /** Its spans in time order, each the caller's own, which `text` gets back. */
+  spans: readonly Span[];
+  /** When the day starts and ends, in ms since the epoch. */
+  from: number;
+  to: number;
+  /** What the band is, for a screen reader. */
+  label: string;
+  /** What a span is, in the readout and the screen reader's list. */
+  text: (span: Span) => string;
+  /** When a span was, under its readout: 09:05–10:40, or to now. */
+  about?: (span: Span) => string;
+  /** A time of day as the chart says it: 07:30 unless said. */
+  time?: (at: number) => string;
+  /** Its width in px; without one it measures its box. */
+  width?: number;
+};
+
+// Where the band's readout is: a span, and the pointer's place over it, or
+// none for the arrow keys, which show it at its middle.
+type Cursor = { index: number; x: number | null };
+
+/**
+ * A day as a band with its hours under it. The pointer shows the span
+ * under it, an on span within a few pixels before the rest; the arrow keys
+ * step from span to span.
+ */
+export function DayBandChart<Span extends BandSpan>(
+  props: DayBandChartProps<Span>,
+) {
+  const { spans, from, to, text, time = timeText } = props;
+  const about =
+    props.about ??
+    ((span: Span) =>
+      `${time(span.from)}–${span.to >= to ? "now" : time(span.to)}`);
+  const { box, width: plot } = useWidth(props.width);
+  const [cursor, setCursor] = useState<Cursor | null>(null);
+  const x = (at: number) => ((at - from) / (to - from)) * plot;
+  const index =
+    cursor && spans.length > 0 ? Math.min(cursor.index, spans.length - 1) : -1;
+  const pointed = index >= 0 ? spans[index] : undefined;
+
+  const spanAt = (left: number) => {
+    const near = spans.findIndex(
+      (span) =>
+        span.level === "on" &&
+        x(span.from) - snap <= left &&
+        left <= x(span.to) + snap,
+    );
+    if (near >= 0) return near;
+    const at = from + (left / Math.max(1, plot)) * (to - from);
+    return spans.findIndex((span) => span.from <= at && at < span.to);
+  };
+  const fromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const left =
+      event.clientX - event.currentTarget.getBoundingClientRect().left;
+    const found = spanAt(Math.max(0, Math.min(plot, left)));
+    setCursor(found >= 0 ? { index: found, x: left } : null);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (spans.length === 0) return;
+    const current = index >= 0 ? index : spans.length - 1;
+    const next =
+      event.key === "ArrowLeft"
+        ? current - 1
+        : event.key === "ArrowRight"
+          ? current + 1
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? spans.length - 1
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    setCursor({
+      index: Math.max(0, Math.min(spans.length - 1, next)),
+      x: null,
+    });
+  };
+  const markAt = pointed
+    ? (cursor?.x ?? (x(pointed.from) + x(pointed.to)) / 2)
+    : null;
+
+  return (
+    <div ref={box} className="relative">
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={props.label}
+        className={plotClass}
+        style={{ width: plot, height: bandHeight }}
+        onPointerMove={fromPointer}
+        onPointerDown={fromPointer}
+        onPointerLeave={() => setCursor(null)}
+        onFocus={() =>
+          setCursor(
+            (current) =>
+              current ??
+              (spans.length > 0 ? { index: spans.length - 1, x: null } : null),
+          )
+        }
+        onBlur={() => setCursor(null)}
+        onKeyDown={onKeyDown}
+      >
+        <svg
+          aria-hidden="true"
+          width={plot}
+          height={bandHeight}
+          className="block overflow-visible"
+        >
+          {plot > 0 && (
+            <BandRects
+              spans={spans}
+              from={from}
+              to={to}
+              plot={plot}
+              pointed={pointed}
+            />
+          )}
+          {pointed && pointed.level !== "on" && markAt !== null && (
+            <rect
+              x={Math.min(plot - 1, Math.round(markAt))}
+              y={0}
+              width={1}
+              height={bandHeight}
+              className="fill-white/40"
+            />
+          )}
+        </svg>
+        {pointed && markAt !== null && (
+          <Readout
+            x={markAt}
+            width={plot}
+            value={text(pointed)}
+            about={about(pointed)}
+          />
+        )}
+      </div>
+      <TimeTicks
+        from={from}
+        to={to}
+        plot={plot}
+        time={time}
+        className="mt-2 text-(--pewter)"
+      />
+      <ul className="sr-only">
+        {spans.map((span) => (
+          <li key={span.from}>
+            {time(span.from)} to {time(span.to)}: {text(span)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

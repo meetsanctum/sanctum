@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { sixHours, timeText } from "../src/device-history-data";
+import { timeText } from "../src/device-history-data";
 import {
   memoryChart,
   memorySummary,
@@ -198,21 +198,5 @@ describe("the host's day", () => {
       "4 GB",
       "7.64 GB",
     ]);
-  });
-});
-
-describe("the hours under a day", () => {
-  const zone = process.env.TZ;
-  afterEach(() => {
-    process.env.TZ = zone;
-  });
-
-  it("stay on the clock's 6 hours on the day the clocks go back", () => {
-    process.env.TZ = "Europe/Berlin";
-    // Summer time ended at 03:00 on 25 October 2026.
-    const to = Date.parse("2026-10-25T20:00:00+01:00");
-    expect(
-      sixHours(to - 24 * 60 * minute, to).map((at) => timeText(at)),
-    ).toEqual(["00:00", "06:00", "12:00", "18:00"]);
   });
 });

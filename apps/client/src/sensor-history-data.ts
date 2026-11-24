@@ -10,7 +10,6 @@ import { dayMs, midnight } from "./device-history-data";
 // standard unit; the page converts temperatures as it draws.
 
 const fiveMinutes = 5 * 60_000;
-const hourMs = 60 * 60_000;
 
 /** One reading on the day's line: a 5 minutes' mean at its middle, or what it reads now. */
 export type Point = { at: number; value: number };
@@ -122,49 +121,4 @@ export function weekRange(days: readonly DayRange[]) {
         max: Math.max(...known.map((day) => day.max!)),
       }
     : null;
-}
-
-/** Each hour's mean of the day, for a screen reader, which a line of 5 minutes would drown. */
-export function hourlyMeans(line: DayLine) {
-  const hours = new Map<number, { sum: number; count: number }>();
-  for (const point of line.runs.flat()) {
-    const hour = Math.floor(point.at / hourMs) * hourMs;
-    const each = hours.get(hour) ?? { sum: 0, count: 0 };
-    each.sum += point.value;
-    each.count += 1;
-    hours.set(hour, each);
-  }
-  return [...hours].map(([at, each]) => ({ at, value: each.sum / each.count }));
-}
-
-/**
- * Round values for a chart's gridlines: as many steps of one size as fit
- * two or three within what it shows, or, when none falls within, the one
- * nearest its middle; and the range the chart then spans, with room either
- * side so the line never runs along an edge.
- */
-export function scaleOf(min: number, max: number) {
-  const span = Math.max(max - min, 0.5);
-  const step =
-    [
-      0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000,
-      20_000, 50_000,
-    ].find((each) => span / each <= 2.5) ?? 100_000;
-  const lines: number[] = [];
-  for (
-    let value = Math.ceil(min / step) * step;
-    value <= max + step / 1000;
-    value += step
-  ) {
-    lines.push(Math.round(value * 10) / 10);
-  }
-  if (lines.length === 0) {
-    lines.push(Math.round((min + max) / 2 / step) * step);
-  }
-  const pad = Math.max(step / 2, (max - min) * 0.1);
-  return {
-    lines,
-    min: Math.min(min, ...lines) - pad,
-    max: Math.max(max, ...lines) + pad,
-  };
 }

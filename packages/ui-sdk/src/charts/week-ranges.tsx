@@ -1,0 +1,194 @@
+import { memo, useMemo } from "react";
+
+import { plotClass, Readout, useCursor, useWidth } from "./frame";
+import type { ChartFormat } from "./line";
+import { scaleOf, type ChartScale } from "./scale";
+import { dateText } from "./time";
+import { WeekNames, weekSlots } from "./week";
+
+// A week as a bar a day from its lowest to its highest, such as a sensor's
+// readings, on round gridlines with their values at the right. It shows a
+// day's range under the pointer or, with the arrow keys, under a cursor,
+// and lists the days for screen readers.
+
+/** A day of a week's ranges, from its local midnight: its lowest and highest, or none when nothing was known. */
+export type WeekRange = {
+  start: number;
+  min: number | null;
+  max: number | null;
+};
+
+/** How a week's ranges show their values: as a day's line does, with a range in words. */
+export type WeekRangeFormat = Pick<ChartFormat, "gutter" | "shown" | "grid"> & {
+  range: (min: number, max: number) => string;
+};
+
+const barsHeight = 96;
+
+// Where a value in the unit shown sits, from the top.
+const yOn = (scale: ChartScale | null, shownValue: number) =>
+  scale
+    ? barsHeight -
+      ((shownValue - scale.min) / (scale.max - scale.min)) * barsHeight
+    : 0;
+
+const RangeMarks = memo(function RangeMarks(props: {
+  days: readonly WeekRange[];
+  plot: number;
+  slot: number;
+  barWidth: number;
+  scale: ChartScale | null;
+  shown: (value: number) => number;
+  pointed?: WeekRange;
+}) {
+  const { plot, slot, barWidth, scale, shown } = props;
+  return (
+    <>
+      {scale?.lines.map((value) => (
+        <rect
+          key={value}
+          x={0}
+          y={Math.round(yOn(scale, value))}
+          width={plot}
+          height={1}
+          className="fill-white/12"
+        />
+      ))}
+      {props.days.map((day, index) => {
+        if (day.min === null || day.max === null) return null;
+        const top = Math.round(yOn(scale, shown(day.max)));
+        const height = Math.max(
+          4,
+          Math.round(yOn(scale, shown(day.min))) - top,
+        );
+        const left = Math.round(slot * index + (slot - barWidth) / 2);
+        return (
+          <rect
+            key={day.start}
+            x={left}
+            y={top}
+            width={barWidth}
+            height={height}
+            rx={4}
+            className={props.pointed === day ? "fill-white" : "fill-white/70"}
+          />
+        );
+      })}
+    </>
+  );
+});
+
+/** What a week's range chart takes. */
+export type WeekRangeChartProps = {
+  /** The week's days in order. */
+  days: readonly WeekRange[];
+  /** Now, which says which day is today. */
+  now: number;
+  format: WeekRangeFormat;
+  /** What it charts, as its label says it: Temperature. */
+  name: string;
+  /** What it is, for a screen reader: each day's lowest and highest of its name unless said. */
+  label?: string;
+  /** A day nothing was known of: Not known unless said. */
+  unknown?: string;
+  /** Today's name under its bar: Today unless said. */
+  today?: string;
+  /** A day's name under its bar: Mon unless said. */
+  dayName?: (start: number) => string;
+  /** A day and its date, in the readout and the list: Mon 3 Nov unless said. */
+  date?: (start: number) => string;
+  /** Its width in px; without one it measures its box. */
+  width?: number;
+};
+
+/** Each day of the week as a bar from its lowest to its highest. */
+export function WeekRangeChart(props: WeekRangeChartProps) {
+  const { days, now, format, date = dateText } = props;
+  const { box, width } = useWidth(props.width);
+  const cursor = useCursor(days.length || 1);
+  const plot = Math.max(0, width - format.gutter);
+  const { slot, markWidth: barWidth } = weekSlots(plot, days.length);
+  const scale = useMemo(() => {
+    const shown = days.flatMap((day) =>
+      day.min !== null && day.max !== null
+        ? [format.shown(day.min), format.shown(day.max)]
+        : [],
+    );
+    return shown.length > 0
+      ? scaleOf(Math.min(...shown), Math.max(...shown))
+      : null;
+  }, [days, format]);
+  const valueOf = (day: WeekRange) =>
+    day.min === null || day.max === null
+      ? (props.unknown ?? "Not known")
+      : format.range(day.min, day.max);
+  const pointed = cursor.at === null ? undefined : days[cursor.at];
+
+  return (
+    <div ref={box} className="relative">
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={
+          props.label ??
+          `Each day's lowest and highest ${props.name.toLowerCase()}`
+        }
+        className={plotClass}
+        style={{ width: plot, height: barsHeight }}
+        {...cursor.handlers(plot)}
+      >
+        <svg
+          aria-hidden="true"
+          width={plot}
+          height={barsHeight}
+          className="block"
+        >
+          {plot > 0 && (
+            <RangeMarks
+              days={days}
+              plot={plot}
+              slot={slot}
+              barWidth={barWidth}
+              scale={scale}
+              shown={format.shown}
+              pointed={pointed}
+            />
+          )}
+        </svg>
+        {pointed && (
+          <Readout
+            x={Math.round(slot * (cursor.at! + 0.5))}
+            width={plot}
+            value={valueOf(pointed)}
+            about={date(pointed.start)}
+          />
+        )}
+      </div>
+      {scale?.lines.map((value) => (
+        <span
+          key={value}
+          aria-hidden="true"
+          style={{ top: Math.round(yOn(scale, value)) }}
+          className="absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
+        >
+          {format.grid(value)}
+        </span>
+      ))}
+      <WeekNames
+        days={days}
+        now={now}
+        plot={plot}
+        slot={slot}
+        today={props.today}
+        dayName={props.dayName}
+      />
+      <ul className="sr-only">
+        {days.map((day) => (
+          <li key={day.start}>
+            {date(day.start)}: {valueOf(day)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
