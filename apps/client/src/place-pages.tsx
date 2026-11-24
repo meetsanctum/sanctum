@@ -62,6 +62,7 @@ import { statusRow, statusTile, StatusTileWords } from "./status-tile";
 import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import { useTileHandlers, type Devices } from "./use-devices";
+import { useKeyedHandlers } from "./keyed-handlers";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, what its sensors
@@ -479,7 +480,7 @@ export function RoomPage(props: {
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
       />
       {!isRowEmpty(row) && (
-        <RoomRow row={row} roomName={room.name} entities={entities} />
+        <RoomRow row={row} roomName={room.name} press={entities.press} />
       )}
       <Sections
         sections={sectionsOfRoom(own, devices.devices)}
@@ -738,6 +739,15 @@ export function SidebarPlaces(props: {
     }))
     .filter((category) => category.tiles.length > 0);
   const hasNoRoom = inNoRoom(devices).length > 0;
+  // Keep callbacks stable for the items still in the sidebar.
+  const openCategory = useKeyedHandlers(
+    (id: string) => open("category", { id }),
+    shown.map(({ id }) => id),
+  );
+  const openNoRoom = useKeyedHandlers(
+    () => open(noRoomPage, {}),
+    [noRoomPage],
+  )(noRoomPage);
   return (
     <>
       {shown.length > 0 && <SidebarHeading>Categories</SidebarHeading>}
@@ -751,7 +761,7 @@ export function SidebarPlaces(props: {
           current={
             current?.page === "category" && current.params.id === category.id
           }
-          onSelect={() => open("category", { id: category.id })}
+          onSelect={openCategory(category.id)}
         />
       ))}
       <SidebarRooms
@@ -762,7 +772,7 @@ export function SidebarPlaces(props: {
         hasNoRoom={hasNoRoom}
         isNoRoomCurrent={current?.page === noRoomPage}
         openRoom={(id) => open("room", { id })}
-        openNoRoom={() => open(noRoomPage, {})}
+        openNoRoom={openNoRoom}
       />
     </>
   );

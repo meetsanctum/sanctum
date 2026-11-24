@@ -1,7 +1,15 @@
-import type { AppInfo, Floor } from "@meetsanctum/app-sdk";
+import type { AppInfo, Floor, Room } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -13,8 +21,10 @@ import {
   isRowEmpty,
   RoomRow,
   roomRowOf,
+  sameRoomRow,
   type SectionEntities,
 } from "./room-sections";
+import { sameData, sameItems } from "./same-data";
 import { useTileHandlers, type Devices } from "./use-devices";
 
 // Home's rooms: after the home's status, each room by name that has
@@ -54,16 +64,13 @@ export function HomeRooms(props: {
   // Devices with no room have no line of their own and no sections.
   const shown = places.flatMap((place) => {
     const { room, own, onHome } = place;
+    const lights = own.filter((tile) => tile.kind === "light");
     const row = room
       ? roomRowOf(
           props.apps,
           entities,
           room.id,
-          roomLightsButton(
-            own.filter((tile) => tile.kind === "light"),
-            room,
-            devices,
-          ),
+          roomLightsButton(lights, room, devices),
         )
       : null;
     const motion = room ? placeMotionText(own, now) : null;
@@ -74,7 +81,11 @@ export function HomeRooms(props: {
     return hasLine || hasRow || onHome.length > 0
       ? [
           {
-            ...place,
+            id: place.id,
+            name: place.name,
+            room,
+            onHome,
+            lights,
             row: hasRow ? row : null,
             motion,
             contact,
@@ -99,63 +110,33 @@ export function HomeRooms(props: {
     );
   };
 
-  // A room's section; its heading is a level down under a floor's.
-  const roomSection = (place: (typeof shown)[number], level: 2 | 3) => {
-    const headingId = `home-${place.id}`;
-    const { room } = place;
-    const Heading = level === 3 ? "h3" : "h2";
-    return (
-      <RoomSection key={place.id} aria-labelledby={headingId}>
-        <Heading
-          id={headingId}
-          className="m-0 text-[15px] leading-5 font-medium"
-        >
-          <Button
-            variant="ghost"
-            size="inline"
-            type="button"
-            onClick={() =>
-              room ? props.openRoom(room.id) : props.openNoRoom()
-            }
-          >
-            {place.name}
-            <icons.ChevronRight
-              aria-hidden="true"
-              className="size-4 text-white/65"
-            />
-          </Button>
-        </Heading>
-        {place.hasLine && (
-          <PlaceReadings
-            motion={place.motion}
-            contact={place.contact}
-            readings={place.readings}
-            className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
-          />
-        )}
-        {place.row && (
-          <RoomRow row={place.row} roomName={place.name} entities={entities} />
-        )}
-        {place.onHome.length > 0 && (
-          <div
-            role="group"
-            aria-label="On Home"
-            className="tile-grid auto-rows-(--cell)"
-          >
-            {place.onHome.map((tile) => (
-              <DeviceTile
-                key={tile.key}
-                tile={tile}
-                onToggle={onToggle}
-                onDim={onDim}
-                onOpen={props.openDevice}
-              />
-            ))}
-          </div>
-        )}
-      </RoomSection>
-    );
-  };
+  // The same functions each time, calling the latest the page gave, so a
+  // room that didn't change isn't drawn again.
+  const opens = useRef({
+    openRoom: props.openRoom,
+    openNoRoom: props.openNoRoom,
+  });
+  useLayoutEffect(() => {
+    opens.current = { openRoom: props.openRoom, openNoRoom: props.openNoRoom };
+  });
+  const openRoom = useCallback(
+    (roomId: string) => opens.current.openRoom(roomId),
+    [],
+  );
+  const openNoRoom = useCallback(() => opens.current.openNoRoom(), []);
+  const roomSection = (place: (typeof shown)[number], level: 2 | 3) => (
+    <HomeRoom
+      key={place.id}
+      place={place}
+      level={level}
+      press={entities.press}
+      onToggle={onToggle}
+      onDim={onDim}
+      openDevice={props.openDevice}
+      openRoom={openRoom}
+      openNoRoom={openNoRoom}
+    />
+  );
 
   return (
     <>
@@ -188,6 +169,110 @@ export function HomeRooms(props: {
     </>
   );
 }
+
+type HomeRoomProps = {
+  place: {
+    id: string;
+    name: string;
+    room: Room | null;
+    /** Its devices on Home, in the household's order. */
+    onHome: Tile[];
+    /** Its lights, which its lights button switches. */
+    lights: Tile[];
+    row: ReturnType<typeof roomRowOf> | null;
+    motion: string | null;
+    contact: ReturnType<typeof placeContacts> | null;
+    readings: ReturnType<typeof readingsOf>;
+    hasLine: boolean;
+  };
+  /** Its heading's level, a level down under a floor's. */
+  level: 2 | 3;
+  press: SectionEntities["press"];
+  onToggle: (tile: Tile) => void;
+  onDim: (tile: Tile, brightness: number) => void;
+  openDevice: (tile: Tile) => void;
+  openRoom: (roomId: string) => void;
+  openNoRoom: () => void;
+};
+
+// A room draws again only when what it shows changed: its tiles and lights
+// keep their identity while unchanged, as do its app entries' source objects.
+// The lights button's press is made from the room and its lights.
+function sameRoom(before: HomeRoomProps, after: HomeRoomProps) {
+  const { onHome, lights, row, ...place } = before.place;
+  const {
+    onHome: nextOnHome,
+    lights: nextLights,
+    row: nextRow,
+    ...nextPlace
+  } = after.place;
+  return (
+    before.level === after.level &&
+    before.press === after.press &&
+    before.onToggle === after.onToggle &&
+    before.onDim === after.onDim &&
+    before.openDevice === after.openDevice &&
+    before.openRoom === after.openRoom &&
+    before.openNoRoom === after.openNoRoom &&
+    sameItems(onHome, nextOnHome) &&
+    sameItems(lights, nextLights) &&
+    sameRoomRow(row, nextRow) &&
+    sameData(place, nextPlace)
+  );
+}
+
+const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
+  const { place } = props;
+  const headingId = `home-${place.id}`;
+  const { room } = place;
+  const Heading = props.level === 3 ? "h3" : "h2";
+  return (
+    <RoomSection aria-labelledby={headingId}>
+      <Heading id={headingId} className="m-0 text-[15px] leading-5 font-medium">
+        <Button
+          variant="ghost"
+          size="inline"
+          type="button"
+          onClick={() => (room ? props.openRoom(room.id) : props.openNoRoom())}
+        >
+          {place.name}
+          <icons.ChevronRight
+            aria-hidden="true"
+            className="size-4 text-white/65"
+          />
+        </Button>
+      </Heading>
+      {place.hasLine && (
+        <PlaceReadings
+          motion={place.motion}
+          contact={place.contact}
+          readings={place.readings}
+          className="text-[13px] leading-[18px] font-medium [&_svg]:size-3.5"
+        />
+      )}
+      {place.row && (
+        <RoomRow row={place.row} roomName={place.name} press={props.press} />
+      )}
+      {place.onHome.length > 0 && (
+        <div
+          role="group"
+          aria-label="On Home"
+          className="tile-grid auto-rows-(--cell)"
+        >
+          {place.onHome.map((tile) => (
+            <DeviceTile
+              key={tile.key}
+              tile={tile}
+              onToggle={props.onToggle}
+              onDim={props.onDim}
+              onOpen={props.openDevice}
+            />
+          ))}
+        </div>
+      )}
+    </RoomSection>
+  );
+}, sameRoom);
 
 /**
  * The home's rooms by name, then devices with no room, each with its tiles

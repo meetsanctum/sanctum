@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
-import { createLiveFeed } from "@meetsanctum/ui-sdk";
-import { act } from "react";
+import { createLiveFeed, icons } from "@meetsanctum/ui-sdk";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,22 @@ import {
 } from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
+vi.mock("@meetsanctum/ui-sdk", async (original) => {
+  const actual = await original<typeof import("@meetsanctum/ui-sdk")>();
+  const { Lightbulb, Thermometer } = actual.icons;
+  return {
+    ...actual,
+    icons: {
+      ...actual.icons,
+      Lightbulb: vi.fn((props: ComponentProps<typeof Lightbulb>) => (
+        <Lightbulb {...props} />
+      )),
+      Thermometer: vi.fn((props: ComponentProps<typeof Thermometer>) => (
+        <Thermometer {...props} />
+      )),
+    },
+  };
+});
 
 let root: Root;
 let container: HTMLDivElement;
@@ -112,6 +128,32 @@ describe("the home's status", () => {
     );
     await click(tiles()[1] as HTMLElement);
     expect(openCategory).toHaveBeenCalledWith("environment");
+  });
+
+  it("redraws the Environment status and skips unchanged Lights contents", async () => {
+    const thermometer = sensor("desk", "office", 21.5, 48);
+    devices = [lamp, thermometer];
+    const lightbulb = vi.mocked(icons.Lightbulb);
+    const temperature = vi.mocked(icons.Thermometer);
+    lightbulb.mockClear();
+    temperature.mockClear();
+    await showStatus();
+    expect(tiles().map(shown)).toEqual(["Lights1 on", "Environment21.5°"]);
+    expect(lightbulb).toHaveBeenCalled();
+    expect(temperature).toHaveBeenCalled();
+    lightbulb.mockClear();
+    temperature.mockClear();
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: thermometer.id,
+        device: sensor(thermometer.id, "office", 22, 48),
+      });
+    });
+    expect(tiles().map(shown)).toEqual(["Lights1 on", "Environment22°"]);
+    expect(temperature).toHaveBeenCalledOnce();
+    expect(lightbulb).not.toHaveBeenCalled();
   });
 
   it("has Lights' card, with a switch that turns the home's lights off, which opens Lights' page", async () => {

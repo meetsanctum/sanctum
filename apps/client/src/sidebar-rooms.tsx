@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { noRoomName } from "./device-tiles";
 import { getShell } from "./shell";
 import { SidebarHeading, SidebarItem } from "./sidebar-item";
+import { useKeyedHandlers } from "./keyed-handlers";
 
 // The sidebar's rooms, under its Rooms heading. Once the home has floors,
 // each floor is a row in its order, with the layers mark, its name and a
@@ -88,6 +89,10 @@ export function SidebarRooms(props: {
 }) {
   const { folded, toggle } = useFolded();
   const rooms = props.places?.rooms ?? [];
+  const openRoom = useKeyedHandlers(
+    props.openRoom,
+    rooms.map(({ id }) => id),
+  );
   const floors = props.places?.floors ?? [];
   if (rooms.length === 0 && !props.hasNoRoom) return null;
   const known = new Set(floors.map((floor) => floor.id));
@@ -97,7 +102,7 @@ export function SidebarRooms(props: {
       icon={icons.DoorOpen}
       name={room.name}
       current={props.currentRoom === room.id}
-      onSelect={() => props.openRoom(room.id)}
+      onSelect={openRoom(room.id)}
     />
   );
   return (

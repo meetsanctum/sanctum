@@ -12,13 +12,14 @@ import {
   tileIconOf,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
 import { LightsButton, type LightsButtonState } from "./lights-button";
+import { sameData } from "./same-data";
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow): buttons as chips
@@ -130,12 +131,14 @@ export function useSectionEntities(
     [entities],
   );
 
-  return {
-    tilesIn,
-    press,
-    failuresOf: (entity: SectionEntity) =>
-      failures.get(entityKey(entity.app, entity.key)),
-  };
+  const failuresOf = useCallback(
+    (entity: SectionEntity) => failures.get(entityKey(entity.app, entity.key)),
+    [failures],
+  );
+  return useMemo(
+    () => ({ tilesIn, press, failuresOf }),
+    [tilesIn, press, failuresOf],
+  );
 }
 
 export type SectionEntities = ReturnType<typeof useSectionEntities>;
@@ -153,7 +156,10 @@ function failedDevices(output: unknown): string[] {
 }
 
 /** One of a room's buttons or tiles, from an app's room section. */
-type RowEntry = AppSection & { entity: SectionEntity };
+type RowEntry = AppSection & {
+  entity: SectionEntity;
+  failures: number | undefined;
+};
 
 /** A room's row: its lights button, then apps' buttons, then apps' tiles. */
 type RoomRowParts = {
@@ -169,9 +175,12 @@ function entriesIn(
   roomId: string,
 ): RowEntry[] {
   return sections.flatMap(({ app, section }) =>
-    entities
-      .tilesIn(app.id, section, roomId)
-      .map((entity) => ({ app, section, entity })),
+    entities.tilesIn(app.id, section, roomId).map((entity) => ({
+      app,
+      section,
+      entity,
+      failures: entities.failuresOf(entity),
+    })),
   );
 }
 
@@ -192,6 +201,35 @@ export function roomRowOf(
 export const isRowEmpty = (row: RoomRowParts) =>
   !row.lights && row.buttons.length === 0 && row.tiles.length === 0;
 
+function sameEntries(before: readonly RowEntry[], after: readonly RowEntry[]) {
+  return (
+    before.length === after.length &&
+    before.every(({ app, section, entity, failures }, index) => {
+      const next = after[index]!;
+      return (
+        app === next.app &&
+        section === next.section &&
+        entity === next.entity &&
+        failures === next.failures
+      );
+    })
+  );
+}
+
+export function sameRoomRow(
+  before: RoomRowParts | null,
+  after: RoomRowParts | null,
+) {
+  if (before === after) return true;
+  return (
+    before !== null &&
+    after !== null &&
+    sameData(before.lights, after.lights, { functionsAlike: true }) &&
+    sameEntries(before.buttons, after.buttons) &&
+    sameEntries(before.tiles, after.tiles)
+  );
+}
+
 /**
  * A room's row, under its name on its page and on Home: on its first line
  * its lights button, a chip that says what it does ("Turn off lights") and
@@ -208,15 +246,15 @@ export const isRowEmpty = (row: RoomRowParts) =>
 export function RoomRow(props: {
   row: RoomRowParts;
   roomName: string;
-  entities: SectionEntities;
+  press: SectionEntities["press"];
 }) {
-  const { row, roomName, entities } = props;
+  const { row, roomName, press } = props;
   const dark = row.lights?.isDisabled === true;
   const active = [...row.buttons, ...row.tiles].filter(
     ({ entity }) => entity.tile.active,
   );
   const lit = active.find(({ app }) => looksRunning(app)) ?? active[0];
-  const entryOf = ({ app, section, entity }: RowEntry) => {
+  const entryOf = ({ app, section, entity, failures }: RowEntry) => {
     const notRunning = stateShort(app);
     const label = `${entity.tile.name} in ${roomName}`;
     const shared = {
@@ -225,8 +263,8 @@ export function RoomRow(props: {
       label: notRunning ? `${label}, ${notRunning.toLowerCase()}` : label,
       active: lit?.entity === entity,
       disabled: notRunning !== null || dark,
-      failures: entities.failuresOf(entity),
-      onClick: () => void entities.press(app.id, section, entity),
+      failures,
+      onClick: () => void press(app.id, section, entity),
     };
     const key = entityKey(entity.app, entity.key);
     // Buttons are chips beside the lights button, tiles tiles under them.

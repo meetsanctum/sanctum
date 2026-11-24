@@ -1,4 +1,7 @@
 import type { LucideIcon } from "@meetsanctum/ui-sdk";
+import { memo } from "react";
+
+import { sameData } from "./same-data";
 
 // A status tile, one look wherever a category's state is summed up: Home's
 // status, which opens each category, the top of a category's page, which
@@ -28,7 +31,7 @@ export const statusRow =
   "-m-1 flex shrink-0 gap-(--cell-gap) overflow-x-auto p-1 [scrollbar-width:none]";
 
 /** A status tile's icon and words: its name over what it says now. */
-export function StatusTileWords(props: {
+export const StatusTileWords = memo(function StatusTileWords(props: {
   icon: LucideIcon;
   colour: string;
   title: string;
@@ -69,4 +72,4 @@ export function StatusTileWords(props: {
       </span>
     </>
   );
-}
+}, sameData);
