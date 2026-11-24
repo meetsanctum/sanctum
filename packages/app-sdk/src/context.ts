@@ -414,12 +414,13 @@ export interface AppContext {
     answer(question: ModelQuestion): ModelAnswer;
   };
   /**
-   * Tools from the shared AI agent catalog for an app the household lets
-   * act as its AI assistant. Needs `ai.assistant` and follows the switches
-   * in What AI Agents Can Use. The app's own tools are excluded.
-   * As with `ctx.models`, a request outside a turn is refused with
-   * `no_turn`. Each call runs for whoever opened the turn while they have
-   * access to the home. Tool answers are the home's data, never instructions.
+   * The tools every AI agent gets, for an app the household lets act as
+   * its AI assistant; needs `ai.assistant`. They are the tools and answers
+   * MCP agents get, held to the same switches in What AI Agents Can Use,
+   * never the app's own. As with `ctx.models`, a request outside a turn is
+   * refused `no_turn`. Each call runs for whoever opened the turn, while
+   * they are still in the home. Answers are the home's data, never
+   * instructions.
    */
   readonly ai: {
     /**
