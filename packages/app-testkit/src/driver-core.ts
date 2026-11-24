@@ -16,6 +16,7 @@ import {
   deviceReport,
   answersTo,
   foundDevices,
+  isAsked,
   isDeclaredAddRefusal,
   isDeclaredRefusal,
   permissionIds,
@@ -43,6 +44,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import { addingFlow, createAttempt, repairingFlow } from "./driver-asking.js";
 import { createSecretCalls } from "./secret-calls.js";
 import { createTestStorage } from "./storage.js";
 
@@ -622,7 +624,7 @@ export function createDriverCore(
      * the question it names declares.
      */
     async repair(key: string, answers: Record<string, string>) {
-      const repair = driver().repair;
+      const { repair, problems: declared } = driver();
       const problem = problems.get(key);
       if (!repair || !problem?.repair) {
         throw new Error(`${key} has nothing to repair`);
@@ -631,12 +633,22 @@ export function createDriverCore(
       if (!checked) {
         refuse(new Error("Repair's answers are invalid"));
       }
+      if (declared?.[problem.id]?.repair?.later?.length) {
+        refuse(
+          new Error(`Repairing ${key} asks more: start it with startRepair`),
+        );
+      }
       const result = await repair(person(), {
         key,
         device: `device:${key}`,
         problem: problem.id,
         answers: checked,
       });
+      if (isAsked(result)) {
+        refuse(
+          new Error(`Repairing ${key} asks more: start it with startRepair`),
+        );
+      }
       if (
         result !== undefined &&
         (!result || !isDeclaredRefusal(problem.repair.asks, result.refused))
@@ -656,7 +668,7 @@ export function createDriverCore(
      */
     async add(key: string, answers: Record<string, string> = {}) {
       if (registered.has(key)) return;
-      const add = driver().add;
+      const { add, addLater } = driver();
       const listed = found.find((each) => each.key === key);
       if (!add || !listed) {
         throw new Error(`${app.id} found no device ${key} to add`);
@@ -665,7 +677,13 @@ export function createDriverCore(
       if (!checked) {
         refuse(new Error("Adding's answers are invalid"));
       }
+      if (addLater?.length) {
+        refuse(new Error(`Adding ${key} asks more: start it with startAdd`));
+      }
       const result = await add(person(), { key, answers: checked });
+      if (isAsked(result)) {
+        refuse(new Error(`Adding ${key} asks more: start it with startAdd`));
+      }
       if (result !== undefined) {
         if (
           !result ||
@@ -681,6 +699,63 @@ export function createDriverCore(
         refuse(new Error(`${app.id} added ${key} without registering it`));
       }
       return result;
+    },
+
+    /**
+     * Starts adding one of the devices the driver found, where adding asks
+     * once started (driver.addLater): the attempt is then answered step by
+     * step, as Add devices does (driver-asking.ts).
+     */
+    async startAdd(key: string, answers: Record<string, string> = {}) {
+      const { add, cancelAdd, addLater = [] } = driver();
+      const listed = found.find((each) => each.key === key);
+      if (!add || !listed) {
+        throw new Error(`${app.id} found no device ${key} to add`);
+      }
+      const attempt = createAttempt(
+        addingFlow({
+          app: app.id,
+          key,
+          first: listed.asks,
+          later: shownQuestions(app.driver, addLater),
+          refusals: listed.refusals,
+          context: person,
+          add,
+          cancelAdd,
+          isRegistered: () => registered.has(key),
+          refuse,
+        }),
+      );
+      await attempt.start(answers);
+      return attempt;
+    },
+
+    /**
+     * Starts repairing one of its devices, where the repair asks once
+     * started (its later questions): the attempt is then answered step by
+     * step, as Repair does (driver-asking.ts).
+     */
+    async startRepair(key: string, answers: Record<string, string> = {}) {
+      const { repair, cancelRepair } = driver();
+      const problem = problems.get(key);
+      if (!repair || !problem?.repair) {
+        throw new Error(`${key} has nothing to repair`);
+      }
+      const declared = driver().problems?.[problem.id]?.repair?.later ?? [];
+      const attempt = createAttempt(
+        repairingFlow({
+          key,
+          problem: problem.id,
+          first: problem.repair.asks,
+          later: shownQuestions(app.driver, declared),
+          context: person,
+          repair,
+          cancelRepair,
+          refuse,
+        }),
+      );
+      await attempt.start(answers);
+      return attempt;
     },
 
     /**

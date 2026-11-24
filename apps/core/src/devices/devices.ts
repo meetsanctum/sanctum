@@ -27,7 +27,11 @@ import { createDriverReports } from "./driver-reports.js";
 import { createNaming } from "./naming.js";
 import { createPresence } from "./presence.js";
 import { createDeviceReads } from "./reads.js";
-import { createRemoval, type RemoveFromDriver } from "./removal.js";
+import {
+  createRemoval,
+  type EndAsking,
+  type RemoveFromDriver,
+} from "./removal.js";
 import { commandRequest, deviceChanges } from "./requests.js";
 import { createTurns } from "./turns.js";
 import { deviceCapabilities, devices, type StoredSetBy } from "./schema.js";
@@ -96,6 +100,8 @@ export function createDevices(
     // when the driver is added back.
     hiddenDrivers?: () => ReadonlySet<string>;
     removeFromDriver?: RemoveFromDriver;
+    // Ends an attempt to repair a device that asks, as it is removed.
+    endAsking?: EndAsking;
     // Called after a change has committed, so live clients can follow.
     onChange?: (change: DeviceChange) => void;
     // Called after a device's report has committed: it answered.
@@ -242,6 +248,7 @@ export function createDevices(
     record,
     turns,
     removeFromDriver: options.removeFromDriver,
+    endAsking: options.endAsking,
     nameOf: (id) => load(id)?.name ?? null,
     changing,
     forget: (id, capability) => commands.forget(id, capability),

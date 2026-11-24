@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import type {
+  AttemptEnded,
+  DeviceAsking,
+  DriverAsked,
+} from "./device-asking.js";
 import {
   maxQuestions,
   problemId,
@@ -69,16 +74,27 @@ export type FoundDevice = {
 export type DriverAdd = {
   /** The device, by the driver's own key. */
   key: string;
-  /** An answer to each question adding it asks, by its id. */
+  /** An answer to each question adding it, or its last step, asks, by its id. */
   answers: Record<string, string>;
+  /**
+   * Which attempt this is, where adding may ask once it has started: a new
+   * one means starting afresh, dropping whatever an earlier one left.
+   */
+  attempt?: string;
+  /** The question whose time is up, when someone asks for it again, with no answers. */
+  again?: string;
 };
 
 /**
- * Nothing once the driver has registered the device, or the refusal it
+ * Nothing once the driver has registered the device, the refusal it
  * declares: for the answer to one of the questions it asked, or for adding
- * it at all (driver.refusals).
+ * it at all (driver.refusals), or what it asks next (device-asking.ts).
  */
-export type DriverAddResult = void | { refused: AddRefusal };
+export type DriverAddResult = void | { refused: AddRefusal } | DriverAsked;
 
-/** How adding a found device ended (POST /api/devices/add): the device, or its driver's refusal. */
-export type AddResult = { added: DeviceInfo } | { refused: AddRefusal };
+/**
+ * Where adding a found device got to (POST /api/devices/add): the device,
+ * its driver's refusal, what it asks next, or why it ended without either.
+ */
+export type AddResult =
+  { added: DeviceInfo } | { refused: AddRefusal } | DeviceAsking | AttemptEnded;

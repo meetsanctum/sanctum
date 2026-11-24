@@ -6,10 +6,13 @@ import {
   type DriverCommand,
   type DriverDevice,
   type DriverAdd,
+  type DriverCancelAdd,
+  type DriverCancelRepair,
   type DriverMove,
   type DriverDiscovery,
   type DriverRemoval,
   type DriverRepair,
+  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
@@ -22,13 +25,22 @@ import { deviceCommandRule, type Gate } from "./gate.js";
 // one and adding one it found. Only a driver that takes calls gets them: one
 // that is paused or stopped is unavailable for them.
 
-// Adding a device may give it its key first, then reach it again with it.
+// Adding a device may give it its key first, then reach it again with it, and
+// a step of repairing one that asks may pair with it again.
 const addWithinMs = 60_000;
+
+// Ending an attempt that asks closes what the driver opened for it.
+const cancelWithinMs = 10_000;
 
 // What a device's turn holds on to (devices/turns.ts).
 type Hold = (running: Promise<unknown>) => void;
 
-type Driving = { app: AppDefinition; storage: AppStorage };
+type Driving = {
+  app: AppDefinition;
+  manifest: StaticManifest;
+  storage: AppStorage;
+  runId: number;
+};
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -73,20 +85,23 @@ export function createDriverCalls<Entry extends Driving>(options: {
     call: (
       driver: NonNullable<AppDefinition["driver"]>,
       ctx: AppContext,
+      manifest: StaticManifest,
     ) => Promise<T>,
     {
       quiet = false,
       withinMs: callMs = timeoutMs,
       hold,
+      run,
     }: {
       quiet?: boolean;
       withinMs?: number;
       hold?: (running: Promise<unknown>) => void;
+      run?: number;
     } = {},
   ): Promise<T> {
     const deadline = Date.now() + callMs;
     let entry = driving(driverId);
-    if (!entry) {
+    if (!entry && run === undefined) {
       const waiting = installed.get(driverId);
       if (waiting && (await options.arrives(waiting))) entry = waiting;
     }
@@ -97,6 +112,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
       !driver ||
       installed.get(driverId) !== entry ||
       !accepts(entry) ||
+      (run !== undefined && entry.runId !== run) ||
       withinMs <= 0
     ) {
       throw new ActionCallError("unavailable");
@@ -104,7 +120,17 @@ export function createDriverCalls<Entry extends Driving>(options: {
     const storage = entry.storage.call();
     const ctx = options.contextFor(entry, actor, storage, { withinMs });
     try {
-      const running = Promise.resolve().then(() => call(driver, ctx));
+      const running = Promise.resolve().then(() => {
+        if (
+          run !== undefined &&
+          (installed.get(driverId) !== entry ||
+            !accepts(entry) ||
+            entry.runId !== run)
+        ) {
+          throw new ActionCallError("unavailable");
+        }
+        return call(driver, ctx, entry.manifest);
+      });
       hold?.(running);
       return await options.track(entry, withTimeout(running, withinMs));
     } catch (error) {
@@ -273,7 +299,14 @@ export function createDriverCalls<Entry extends Driving>(options: {
     // Hands a driver someone's answers to add one of the devices it found,
     // with a minute to do it. A failure is logged without its words, which
     // could repeat an answer.
-    add(driverId: string, add: DriverAdd, actor: Actor, hold?: Hold) {
+    add(
+      driverId: string,
+      add: DriverAdd,
+      actor: Actor,
+      hold: Hold,
+      withinMs: number | undefined,
+      run: number,
+    ) {
       return toDriver(
         driverId,
         actor,
@@ -284,24 +317,86 @@ export function createDriverCalls<Entry extends Driving>(options: {
           }
           return driver.add(ctx, add);
         },
-        { quiet: true, withinMs: addWithinMs, hold },
+        { quiet: true, withinMs: withinMs ?? addWithinMs, hold, run },
       );
     },
 
     // Hands a driver someone's answers to set one of its devices right. A
-    // failure is logged without its words, which could repeat an answer.
-    repair(driverId: string, repair: DriverRepair, actor: Actor, hold?: Hold) {
+    // failure is logged without its words, which could repeat an answer. A
+    // step of a repair that asks (`withinMs` given) may take as long as
+    // adding's.
+    repair(
+      driverId: string,
+      repair: DriverRepair,
+      actor: Actor,
+      hold: Hold,
+      withinMs: number | undefined,
+      run: number | undefined,
+    ) {
       return toDriver(
         driverId,
         actor,
         "repair a device",
-        (driver, ctx) => {
+        (driver, ctx, manifest) => {
           if (!driver.repair) {
+            throw new ActionCallError("unavailable");
+          }
+          // The installed version can change while a one-shot repair waits.
+          const problems = manifest.driver?.problems ?? {};
+          if (
+            run === undefined &&
+            Object.hasOwn(problems, repair.problem) &&
+            problems[repair.problem]!.repair?.later?.length
+          ) {
             throw new ActionCallError("unavailable");
           }
           return driver.repair(ctx, repair);
         },
-        { quiet: true, hold },
+        { quiet: true, hold, run, ...(withinMs ? { withinMs } : {}) },
+      );
+    },
+
+    // Has a driver close what it opened for adding or repairing a device
+    // that asked, quietly, as an earlier answer could be in its words.
+    cancelAdd(
+      driverId: string,
+      cancel: DriverCancelAdd,
+      actor: Actor,
+      hold: Hold,
+      run: number,
+    ) {
+      return toDriver(
+        driverId,
+        actor,
+        "stop adding a device",
+        (driver, ctx) => {
+          if (!driver.cancelAdd) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.cancelAdd(ctx, cancel);
+        },
+        { quiet: true, withinMs: cancelWithinMs, hold, run },
+      );
+    },
+
+    cancelRepair(
+      driverId: string,
+      cancel: DriverCancelRepair,
+      actor: Actor,
+      hold: Hold,
+      run: number,
+    ) {
+      return toDriver(
+        driverId,
+        actor,
+        "stop repairing a device",
+        (driver, ctx) => {
+          if (!driver.cancelRepair) {
+            throw new ActionCallError("unavailable");
+          }
+          return driver.cancelRepair(ctx, cancel);
+        },
+        { quiet: true, withinMs: cancelWithinMs, hold, run },
       );
     },
   };

@@ -26,6 +26,9 @@
 // and `no_turn` for a call outside a turn.
 // 15 lets a driver hand the core a picture (ctx.blobs.put).
 // 16 tells an app what the host has (ctx.host.resources).
-export const protocolVersion = 16;
+// 17 lets adding and repairing ask once they have started (driver.addLater,
+// a repair's later questions), and ends them with driver.cancelAdd and
+// driver.cancelRepair.
+export const protocolVersion = 17;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

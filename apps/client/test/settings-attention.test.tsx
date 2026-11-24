@@ -432,6 +432,8 @@ describe("Needs attention", () => {
             help: null,
             placeholder: "44 characters, ending in =",
             refusals: { wrongKey: "That key doesn't match." },
+            length: null,
+            lasts: null,
           },
         ],
       },
@@ -465,7 +467,11 @@ describe("Needs attention", () => {
     await act(async () => buttonIn(dialog, "Repair").click());
     expect(requests.at(-1)).toEqual({
       path: "/api/devices/repair",
-      json: { id: "kettle", answers: { key: "a wrong key" } },
+      json: {
+        id: "kettle",
+        answers: { key: "a wrong key" },
+        attempt: expect.any(String),
+      },
     });
     expect(dialog.querySelector("[role=alert]")?.textContent).toBe(
       "That key doesn't match.",

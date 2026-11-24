@@ -161,12 +161,13 @@ test("lists what it found as what each is", () => {
     [
       ["office-air", "sensor"],
       ["desk-plug", "plug"],
+      ["den-tv", "media-player"],
     ],
   );
 });
 
 test("adds a climate sensor with its readings, and a plug that turns on and off", async () => {
-  await core.add("office-air");
+  await core.startAdd("office-air");
   assert.equal(typeOf("office-air"), "sensor");
   assert.deepEqual(
     core.registered.get("office-air").capabilities.map(({ id }) => id),
@@ -174,23 +175,29 @@ test("adds a climate sensor with its readings, and a plug that turns on and off"
   );
   assert.deepEqual(core.latest("office-air", "temperature"), { value: 22.5 });
 
-  assert.deepEqual(await core.add("desk-plug", { key: "nope" }), {
-    refused: { question: "key", refusal: "wrongKey" },
+  const refused = await core.startAdd("desk-plug", { key: "nope" });
+  assert.deepEqual(refused.state, {
+    kind: "refused",
+    question: "key",
+    refusal: "wrongKey",
   });
-  await core.add("desk-plug", { key: "sanctum" });
+  await core.startAdd("desk-plug", { key: "sanctum" });
   assert.equal(typeOf("desk-plug"), "plug");
   await core.command("desk-plug", "power", "switch", { on: true });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: true });
   await core.command("desk-plug", "power", "switch", { on: false });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: false });
 
-  assert.deepEqual(core.found, []);
+  assert.deepEqual(
+    core.found.map(({ key }) => key),
+    ["den-tv"],
+  );
   assert.deepEqual(core.refused, []);
 });
 
 test("starts with previously added devices even when their stored type is outdated", async () => {
-  await core.add("office-air");
-  await core.add("desk-plug", { key: "sanctum" });
+  await core.startAdd("office-air");
+  await core.startAdd("desk-plug", { key: "sanctum" });
   await core.stop();
 
   // The saved registration can predate the plug's switch capability.
@@ -209,7 +216,10 @@ test("starts with previously added devices even when their stored type is outdat
       "online",
     );
   }
-  assert.deepEqual(core.found, []);
+  assert.deepEqual(
+    core.found.map(({ key }) => key),
+    ["den-tv"],
+  );
   await core.command("desk-plug", "power", "switch", { on: true });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: true });
 });

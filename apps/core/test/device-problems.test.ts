@@ -1,8 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { devicesSeenBy, lampsCore } from "./devices-support.js";
 import { radio } from "./fixtures/apps/lamps/index.js";
-import { post, sharedClient, type TestCore } from "./support.js";
+import {
+  deferredDelivery,
+  post,
+  sharedClient,
+  type TestCore,
+} from "./support.js";
 
 // What's wrong with a device, in the words its driver declares, and Repair,
 // with the lamps driver's pretend radio: a lamp whose key changed says so,
@@ -37,9 +43,11 @@ describe("a device's problem", () => {
             id: "key",
             label: "Key",
             kind: "secret",
+            length: null,
             help: null,
             placeholder: "On its label",
             refusals: { wrongKey: "That key doesn't match. Check its label." },
+            lasts: null,
           },
         ],
       },
@@ -141,6 +149,53 @@ describe("Repair", () => {
 
     expect(repaired.statusCode).toBe(200);
     expect(repaired.json().repaired.problem).toBeNull();
+  });
+
+  it("waits for a restarting driver when repair has no later questions", async () => {
+    const { core, maya, lamp } = await lampsCore({ origin: "official" });
+    await radio.rekey("lamp-1", secret);
+    const driver = "test.lamps";
+    const offPath = `/api/apps/${driver}/off`;
+    expect((await post(core, offPath, { off: true }, maya)).statusCode).toBe(
+      200,
+    );
+    await vi.waitFor(() => expect(radio.stopped).toBe(1));
+
+    const ready = deferredDelivery();
+    const attach = radio.attach.bind(radio);
+    const starting = vi
+      .spyOn(radio, "attach")
+      .mockImplementationOnce(async (ctx) => {
+        await ready.promise;
+        await attach(ctx);
+      });
+    try {
+      expect((await post(core, offPath, { off: false }, maya)).statusCode).toBe(
+        200,
+      );
+      await vi.waitFor(() => expect(starting).toHaveBeenCalledOnce());
+      expect(core.apps.isRunning(driver)).toBe(false);
+
+      const turn = vi.spyOn(core.devices.turns, "take");
+      const result = repair(core, maya, {
+        id: lamp,
+        attempt: randomUUID(),
+        answers: { key: secret },
+      });
+      await vi.waitFor(() => expect(turn).toHaveBeenCalled());
+      expect(radio.repairs).toEqual([]);
+      ready.resolve();
+
+      const repaired = await result;
+      expect(repaired.statusCode).toBe(200);
+      expect(repaired.json().repaired).toMatchObject({
+        id: lamp,
+        problem: null,
+      });
+      expect(radio.repairs).toHaveLength(1);
+    } finally {
+      ready.resolve();
+    }
   });
 
   it.each([
