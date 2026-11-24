@@ -1,6 +1,7 @@
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
 import {
   Bot,
   ChevronRight,
@@ -17,6 +18,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { AppIcon, plainIcon } from "../app-icon";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { Row, Section } from "../components";
 import {
@@ -36,13 +38,22 @@ import {
 import { coreJson } from "../core-fetch";
 import { AddAgent } from "./add-agent";
 import { useAgents, useAiCanUse } from "./data";
-import { agentDetail, agentsTitle, canUseTitle, onCount } from "./words";
+import {
+  agentDetail,
+  agentsTitle,
+  assistantAppDetail,
+  assistantAppState,
+  assistantAppsOf,
+  canUseTitle,
+  onCount,
+} from "./words";
 
 // Settings → AI agents: the AI programs on computers at home that use the
 // home over MCP, each with who added it and when it was last seen, and a
-// menu to rename or remove it, then what they can use. Add an agent starts
-// a setup whose prompt the person pastes into the agent. Every client sees
-// and manages every agent.
+// menu to rename or remove it, then the apps acting as the household's AI
+// assistant, each opening its own page, where it's removed, then what they
+// can use. Add an agent starts a setup whose prompt the person pastes into
+// the agent. Every client sees and manages every agent.
 
 type Editing = {
   action: "rename" | "remove";
@@ -55,6 +66,8 @@ export function AgentsPage(props: {
   live: LiveFeed;
   // Opens What AI agents can use.
   onOpenCanUse: () => void;
+  // Opens an app's page, whose Back names this one.
+  onOpenApp: (appId: string) => void;
   // The page's way back.
   page: ReactNode;
 }) {
@@ -65,6 +78,7 @@ export function AgentsPage(props: {
   const addButton = useRef<HTMLButtonElement>(null);
   const update = () => void refresh();
   const switchable = canUse?.areas.filter((area) => !area.always) ?? [];
+  const assistants = assistantAppsOf(props.apps);
 
   return (
     <>
@@ -91,9 +105,9 @@ export function AgentsPage(props: {
             questions. You choose what it can use.
           </p>
         )}
-        {agents && agents.length > 0 && (
+        {((agents && agents.length > 0) || assistants.length > 0) && (
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {agents.map((agent) => (
+            {agents?.map((agent) => (
               <AgentRow
                 key={agent.id}
                 agent={agent}
@@ -101,6 +115,13 @@ export function AgentsPage(props: {
                 onEdit={(action, trigger) =>
                   setEditing({ action, agent, trigger })
                 }
+              />
+            ))}
+            {assistants.map((app) => (
+              <AssistantAppRow
+                key={app.id}
+                app={app}
+                onOpen={() => props.onOpenApp(app.id)}
               />
             ))}
           </ul>
@@ -200,6 +221,46 @@ function AgentRow(props: {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+    </li>
+  );
+}
+
+// An app acting as the household's AI assistant, by its own icon and name,
+// opening its page. It has no menu: it keeps its name, and is removed in
+// Apps. While it isn't working it stays in its place, saying so, its icon
+// greyed out.
+function AssistantAppRow(props: { app: AppInfo; onOpen: () => void }) {
+  const state = assistantAppState(props.app);
+  return (
+    <li>
+      <Button
+        variant="row"
+        size="row"
+        type="button"
+        onClick={props.onOpen}
+        className="-mx-2.5 w-[calc(100%+20px)]"
+      >
+        <AppIcon
+          icon={props.app.icon ?? plainIcon}
+          className={cn(
+            "size-8 [&_svg]:size-4",
+            state && "opacity-45 grayscale",
+          )}
+        />
+        <span className="flex min-w-0 flex-col gap-px leading-tight">
+          <span className="truncate text-sm font-medium">
+            {props.app.name}
+            {state && <span className="text-muted-foreground"> ({state})</span>}
+          </span>
+          <span className="truncate text-[13px] font-medium text-muted-foreground">
+            {assistantAppDetail}
+          </span>
+        </span>
+        <ChevronRight
+          aria-hidden="true"
+          className="ms-auto size-4 shrink-0 text-muted-foreground"
+        />
+      </Button>
     </li>
   );
 }

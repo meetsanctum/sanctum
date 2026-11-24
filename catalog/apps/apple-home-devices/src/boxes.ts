@@ -1,16 +1,25 @@
 import { EventEmitter } from "node:events";
 
+import { maxBlobBytes } from "@meetsanctum/app-sdk";
 import {
   AppleTV,
   CompanionPairSetup,
+  Credentials,
+  MediaSubType,
+  MediaType,
   PairSetup,
+  PlaybackState,
   PowerState,
+  type CompanionEvent,
+  type FeatureAvailability,
   type HAPCredentials,
+  type Message,
+  type NowPlayingInfo,
 } from "node-appletv-remote";
 
 // The one module that speaks to Apple TVs: pairing with a code on the
-// screen, over AirPlay and over Companion, and a Companion connection for
-// power and volume. It goes through node-appletv-remote, whose errors are
+// screen, over AirPlay and over Companion, a Companion connection for power
+// and volume, and a player connection, MRP over AirPlay, for what plays. It goes through node-appletv-remote, whose errors are
 // plain messages, and turns those it knows into errors of its own, so the
 // rest of the app and its tests never see the library.
 
@@ -52,7 +61,13 @@ export type BoxVolume = "available" | "unavailable" | "unknown";
 export interface Link {
   readonly power: BoxPower;
   readonly volume: BoxVolume;
-  /** Something it says changed: its power or its volume. */
+  /**
+   * Its media controls, as flags, or null before it says: they change as
+   * something starts, pauses or stops playing, and stay for a paused item
+   * while the box sleeps.
+   */
+  readonly controls: number | null;
+  /** Something it says changed: its power, its volume or its controls. */
   on(event: "change", listener: () => void): this;
   /** Either side closed the connection. */
   on(event: "close", listener: () => void): this;
@@ -63,6 +78,62 @@ export interface Link {
   close(): void;
 }
 
+/** What the box says of its player's state, as it reports it. */
+export type PlayerState =
+  "playing" | "paused" | "stopped" | "seeking" | "unknown";
+
+/** What the box says is playing, its words empty where it says none. */
+export type Playing = {
+  state: PlayerState;
+  /** The app that plays: its bundle id and its name. */
+  app: { id: string; name: string } | null;
+  title: string;
+  artist: string;
+  album: string;
+  series: string;
+  season?: number;
+  episode?: number;
+  contentId?: string;
+  uniqueId?: string;
+  kind?: "music" | "audio" | "video";
+  duration?: number;
+  /** Where it was, in seconds, at `positionAt`, in ms since 1970. */
+  position?: number;
+  positionAt?: number;
+  /** Whether it says the item has a picture, and the picture's id. */
+  artwork?: boolean;
+  artworkId?: string;
+};
+
+export type PlayerRequest =
+  | [command: "play" | "pause" | "stop" | "next" | "previous"]
+  | [command: "seek", position: number];
+
+export type PlayerCommand = PlayerRequest[0];
+export type PlayerClose = "closed" | "sleep";
+
+export type Picture = {
+  type: "image/jpeg" | "image/png" | "image/webp";
+  data: Uint8Array;
+};
+
+/** A connection to one box's player: what plays, and playback. */
+export interface Player {
+  /** Whether it's on, as the box tells each session. */
+  readonly power: BoxPower;
+  readonly playing: Playing;
+  /** Something it says changed. */
+  on(event: "change", listener: () => void): this;
+  /** Either side closed it, or the box ended it on going to sleep. */
+  on(event: "close", listener: (reason: PlayerClose) => void): this;
+  /** Whether the app that plays takes the command now, where it says. */
+  can(command: PlayerCommand): "yes" | "no" | "unknown";
+  send(...request: PlayerRequest): Promise<void>;
+  /** The playing item's picture, about 600 px wide, or null. */
+  picture(): Promise<Picture | null>;
+  close(): void;
+}
+
 /** What pairs with and connects to boxes; tests stand a fake box in for it. */
 export interface Boxes {
   /** Asks the box to show AirPlay's code, and holds the pairing open. */
@@ -70,6 +141,8 @@ export interface Boxes {
   /** Asks the box to show Companion's code, naming Sanctum on it. */
   pairCompanion(box: Endpoint): Promise<Pairing>;
   connect(box: Endpoint, keys: Keys): Promise<Link>;
+  /** Opens the player with AirPlay's keys. */
+  play(box: Endpoint, keys: Keys): Promise<Player>;
 }
 
 /** The code didn't match what the box showed. */
@@ -97,12 +170,18 @@ export class PairingLost extends Error {
   override name = "PairingLost";
 }
 
+/** The box signalled sleep while the player was opening. */
+export class PlayerSleeping extends Error {
+  override name = "PlayerSleeping";
+}
+
 // What the box calls itself on the pairings it lists.
 const pairingName = "Sanctum";
 
 // HAP's TLV error 2, Authentication: a wrong code in pair-setup's M4, and
-// keys the box doesn't know in pair-verify's M4. A box whose identity was
-// reset also fails the signature check in M2.
+// keys the box doesn't know in pair-verify's M4, AirPlay's or Companion's,
+// both of which Repair pairs again. A box whose identity was reset also
+// fails the signature check in M2.
 const wrongCodeMessage = /M4 missing Proof \(error=2\)/;
 const lostMessage =
   /pair-verify M4 error: 2\b|^Companion server signature verification failed$/i;
@@ -186,6 +265,7 @@ const powerOf = (state: PowerState): BoxPower =>
 class CompanionLink extends EventEmitter implements Link {
   power: BoxPower = "unknown";
   volume: BoxVolume = "unknown";
+  controls: number | null = null;
   private closed = false;
 
   constructor(private readonly tv: AppleTV) {
@@ -200,6 +280,15 @@ class CompanionLink extends EventEmitter implements Link {
       const volume = volumeOf(tv);
       if (volume === this.volume || this.closed) return;
       this.volume = volume;
+      this.emit("change");
+    });
+    tv.on("companionEvent", (event: CompanionEvent) => {
+      if (event.identifier !== "_iMC" || this.closed) return;
+      const content = event.data.get("_c");
+      const flags = content instanceof Map ? content.get("_mcF") : undefined;
+      const controls = typeof flags === "number" ? flags : 0;
+      if (controls === this.controls) return;
+      this.controls = controls;
       this.emit("change");
     });
     tv.on("companionClose", () => this.end());
@@ -226,6 +315,192 @@ class CompanionLink extends EventEmitter implements Link {
   sleep = () => translated(() => this.tv.suspend());
   volumeUp = () => translated(() => this.tv.volumeUp());
   volumeDown = () => translated(() => this.tv.volumeDown());
+
+  close() {
+    this.end();
+  }
+}
+
+// MRP's timestamps count seconds from 2001, Apple's epoch.
+const appleEpochMs = Date.UTC(2001, 0, 1);
+
+const stateOf = (state: PlaybackState): PlayerState =>
+  state === PlaybackState.Playing
+    ? "playing"
+    : state === PlaybackState.Paused || state === PlaybackState.Interrupted
+      ? "paused"
+      : state === PlaybackState.Stopped
+        ? "stopped"
+        : state === PlaybackState.Seeking
+          ? "seeking"
+          : "unknown";
+
+function kindOf(info: NowPlayingInfo): Playing["kind"] {
+  if (info.mediaType === MediaType.Video) return "video";
+  if (info.mediaType !== MediaType.Audio) return undefined;
+  return info.mediaSubType === MediaSubType.Music ? "music" : "audio";
+}
+
+const finite = (value: number) => (Number.isFinite(value) ? value : undefined);
+
+function playingOf(info: NowPlayingInfo): Playing {
+  // The TV app reports Playing at rate 0 after a seek. Other apps can
+  // report the same combination when paused, so use the library's state.
+  const state = stateOf(
+    info.appBundleIdentifier === "com.apple.TVWatchList"
+      ? info.reportedPlaybackState
+      : info.playbackState,
+  );
+  const at =
+    info.hasElapsedTime && info.timestamp > 0
+      ? appleEpochMs + info.timestamp * 1000
+      : undefined;
+  return {
+    state,
+    app: info.appBundleIdentifier
+      ? {
+          id: info.appBundleIdentifier,
+          name: info.appDisplayName || info.appBundleIdentifier,
+        }
+      : null,
+    title: info.title,
+    artist: info.artist,
+    album: info.album,
+    series: info.seriesName,
+    season: info.seasonNumber,
+    episode: info.episodeNumber,
+    contentId: info.contentIdentifier,
+    uniqueId: info.uniqueIdentifier,
+    kind: kindOf(info),
+    duration: info.hasDuration ? finite(info.duration) : undefined,
+    position: info.hasElapsedTime ? finite(info.elapsedTime) : undefined,
+    positionAt: at !== undefined && Number.isFinite(at) ? at : undefined,
+    artwork: info.artworkAvailable,
+    artworkId: info.artworkIdentifier,
+  };
+}
+
+const nothingPlaying: Playing = {
+  state: "unknown",
+  app: null,
+  title: "",
+  artist: "",
+  album: "",
+  series: "",
+};
+
+// MRP's SetConnectionState: 3 is the box ending the session as it sleeps.
+const setConnectionState = 38;
+const disconnected = 3;
+
+/** A picture's type from its first bytes, or null where it's none we send. */
+export function pictureTypeOf(data: Uint8Array): Picture["type"] | null {
+  if (data[0] === 0xff && data[1] === 0xd8) return "image/jpeg";
+  if (
+    data[0] === 0x89 &&
+    data[1] === 0x50 &&
+    data[2] === 0x4e &&
+    data[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  const ascii = (at: number) =>
+    String.fromCharCode(...data.subarray(at, at + 4));
+  if (ascii(0) === "RIFF" && ascii(8) === "WEBP") return "image/webp";
+  return null;
+}
+
+const features = {
+  play: "play",
+  pause: "pause",
+  stop: "stop",
+  next: "next",
+  previous: "previous",
+  seek: "setPosition",
+} as const;
+
+class MrpPlayer extends EventEmitter implements Player {
+  power: BoxPower = "unknown";
+  playing: Playing = nothingPlaying;
+  private closed: PlayerClose | null = null;
+
+  constructor(private readonly tv: AppleTV) {
+    super();
+    const changed = () => {
+      if (!this.closed) this.emit("change");
+    };
+    tv.on("powerState", (state: PowerState) => {
+      this.power = powerOf(state);
+      changed();
+    });
+    tv.on("message", (message: Message) => {
+      if (message.type !== setConnectionState) return;
+      const payload = message.payload as {
+        ".setConnectionStateMessage"?: { state?: number };
+      };
+      if (payload[".setConnectionStateMessage"]?.state === disconnected) {
+        this.end("sleep");
+      }
+    });
+    tv.on("nowPlaying", (info: NowPlayingInfo) => {
+      this.playing = playingOf(info);
+      changed();
+    });
+    tv.on("featureAvailability", changed);
+    tv.on("close", () => this.end());
+  }
+
+  async start() {
+    this.playing = playingOf(await this.tv.getNowPlaying());
+    if (this.closed) throw new Unreachable("The player closed during setup");
+  }
+
+  get sleeping() {
+    return this.closed === "sleep";
+  }
+
+  can(command: PlayerCommand) {
+    const said: FeatureAvailability = this.tv.featureAvailability(
+      features[command],
+    );
+    return said === "supported" ? "yes" : said === "unknown" ? "unknown" : "no";
+  }
+
+  send(...[command, position]: PlayerRequest) {
+    return translated(() => {
+      switch (command) {
+        case "play":
+          return this.tv.play();
+        case "pause":
+          return this.tv.pause();
+        case "stop":
+          return this.tv.stop();
+        case "next":
+          return this.tv.next();
+        case "previous":
+          return this.tv.previous();
+        case "seek":
+          return this.tv.setPosition(position);
+      }
+    });
+  }
+
+  picture() {
+    return translated(async () => {
+      const bytes = await this.tv.requestArtwork(600, 600);
+      if (!bytes || bytes.byteLength > maxBlobBytes) return null;
+      const data = new Uint8Array(bytes);
+      const type = pictureTypeOf(data);
+      return type ? { type, data } : null;
+    });
+  }
+
+  private end(reason: PlayerClose = "closed") {
+    if (this.closed) return;
+    this.closed = reason;
+    this.emit("close", reason);
+    void this.tv.close();
+  }
 
   close() {
     this.end();
@@ -286,6 +561,24 @@ export function createBoxes(): Boxes {
           throw error;
         }
         return link;
+      }),
+    play: (box, keys) =>
+      translated(async () => {
+        const tv = tvOf(box);
+        const player = new MrpPlayer(tv);
+        const credentials = bytes(keys);
+        try {
+          // MRP over AirPlay only; Companion stays on its own connection.
+          await tv.connect(new Credentials(credentials, credentials));
+          await player.start();
+        } catch (error) {
+          void tv.close();
+          if (player.sleeping) {
+            throw new PlayerSleeping("The TV slept during player setup");
+          }
+          throw error;
+        }
+        return player;
       }),
   };
 }

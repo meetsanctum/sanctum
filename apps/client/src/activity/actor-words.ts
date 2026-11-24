@@ -83,9 +83,14 @@ export function byWords(entry: ActivityInfo) {
         const { kind, name } = attributedTo;
         const fallback =
           kind === "person" ? "someone who has left" : "a shared device";
-        parts.push(
-          `${who.askedBy ? "asked by" : "added by"} ${name ?? fallback}`,
-        );
+        // An assistant acts for a person, or for a shared device it was
+        // asked on.
+        const how = !who.askedBy
+          ? "added by"
+          : kind === "client"
+            ? "asked from"
+            : "asked by";
+        parts.push(`${how} ${name ?? fallback}`);
       }
     }
     // The automation in between, unless an app keeps it for a press.

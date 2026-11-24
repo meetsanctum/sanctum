@@ -13,7 +13,15 @@ let made = 0;
 describeDriver({
   app: createAppleHomeDevicesApp({
     boxes: fake.boxes,
-    timings: { offlineMs: 60, firstRetryMs: 20, lastRetryMs: 80 },
+    timings: {
+      offlineMs: 60,
+      firstRetryMs: 20,
+      lastRetryMs: 80,
+      wakeOpenMs: 5,
+      wakeRetryMs: 10,
+      gatherMs: 5,
+      settleMs: 100,
+    },
   }),
   kinds: ["media"],
   async add(_kind, core) {

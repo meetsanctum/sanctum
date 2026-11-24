@@ -15,11 +15,18 @@ import {
   type Keys,
   type Link,
   type Pairing,
+  type Picture,
+  type Player,
+  type PlayerClose,
+  type PlayerCommand,
+  type PlayerRequest,
+  type Playing,
 } from "../src/boxes.js";
 
 // Apple TVs for the tests, standing in for node-appletv-remote: each shows a
 // code for every pairing it opens, knows the keys it handed out, and keeps
-// the connections made to it, which a test can drop, sleep or wake.
+// the connections made to it, Companion's and its players, which a test can
+// drop, sleep or wake, and play something on.
 
 type Protocol = "airplay" | "companion";
 
@@ -58,6 +65,23 @@ export class FakeBox {
   on = true;
   volume: BoxVolume = "available";
   readonly endpoints: Endpoint[] = [];
+  /** Its players, open now, and how many were opened in all. */
+  readonly players: FakePlayer[] = [];
+  playersOpened = 0;
+  /** Whether its player can be reached, apart from Companion. */
+  playerReachable = true;
+  playerAttempts = 0;
+  playerHold: Promise<void> | null = null;
+  /** What plays, as its player says it. */
+  playing: Playing = { ...nothing };
+  /** What the app that plays takes, where not every command. */
+  readonly takes = new Map<PlayerCommand, "yes" | "no" | "unknown">();
+  /** What its players were told, in order: "play", "seek 30". */
+  readonly sent: string[] = [];
+  /** The picture of what plays, and a hold on handing it over. */
+  picture: Picture | null = null;
+  pictureHold: Promise<void> | null = null;
+  pictures = 0;
   private clients = 0;
 
   constructor(options: FakeBoxOptions) {
@@ -129,7 +153,27 @@ export class FakeBox {
   /** Turns it on or off from its own remote. */
   setPower(on: boolean) {
     this.on = on;
+    if (!on) this.playing = { ...nothing };
     for (const link of this.links) link.changed();
+    for (const player of [...this.players]) player.changed();
+  }
+
+  /** Its media controls, as Companion's flags: pause, play, or none. */
+  get controls() {
+    const state = this.playing.state;
+    return state === "playing" ? 2 : state === "paused" ? 1 : 0;
+  }
+
+  /** Plays something, as from its own remote. */
+  play(playing: Partial<Playing>) {
+    this.playing = { ...nothing, state: "playing", ...playing };
+    for (const link of this.links) link.changed();
+    for (const player of [...this.players]) player.changed();
+  }
+
+  /** Ends its player sessions with the given close reason. */
+  endSessions(reason?: PlayerClose) {
+    for (const player of [...this.players]) player.drop(reason);
   }
 
   setVolume(volume: BoxVolume) {
@@ -209,6 +253,10 @@ export class FakeLink extends EventEmitter implements Link {
     return this.box.volume;
   }
 
+  get controls() {
+    return this.box.controls;
+  }
+
   changed() {
     if (!this.closed) this.emit("change");
   }
@@ -243,6 +291,65 @@ export class FakeLink extends EventEmitter implements Link {
   }
 }
 
+const nothing: Playing = {
+  state: "unknown",
+  app: null,
+  title: "",
+  artist: "",
+  album: "",
+  series: "",
+};
+
+export class FakePlayer extends EventEmitter implements Player {
+  closed = false;
+
+  constructor(private readonly box: FakeBox) {
+    super();
+  }
+
+  get power(): BoxPower {
+    return this.box.on ? "on" : "off";
+  }
+
+  get playing() {
+    return this.box.playing;
+  }
+
+  changed() {
+    if (!this.closed) this.emit("change");
+  }
+
+  drop(reason: PlayerClose = "closed") {
+    if (this.closed) return;
+    this.closed = true;
+    this.box.players.splice(this.box.players.indexOf(this), 1);
+    this.emit("close", reason);
+  }
+
+  can(command: PlayerCommand) {
+    return this.box.takes.get(command) ?? "yes";
+  }
+
+  async send(...[command, position]: PlayerRequest) {
+    if (this.closed) throw new Error("closed");
+    this.box.sent.push(command === "seek" ? `seek ${position}` : command);
+    const state =
+      command === "play" ? "playing" : command === "pause" ? "paused" : null;
+    if (state) this.box.play({ ...this.box.playing, state });
+  }
+
+  async picture() {
+    this.box.pictures += 1;
+    const picture = this.box.picture;
+    await this.box.pictureHold;
+    return picture;
+  }
+
+  close() {
+    this.drop();
+  }
+}
+
 /** The fake boxes on the network, as the app's Boxes. */
 export function createFakeBoxes(...list: FakeBox[]) {
   const all = new Map(list.map((box) => [box.deviceId, box]));
@@ -269,6 +376,21 @@ export function createFakeBoxes(...list: FakeBox[]) {
       const link = new FakeLink(box);
       box.links.push(link);
       return link;
+    },
+    async play(endpoint, keys: Keys) {
+      const box = boxOf(endpoint);
+      box.playerAttempts += 1;
+      if (box.playerHold) await box.playerHold;
+      if (!box.reachable || !box.playerReachable) {
+        throw new Unreachable("connect ETIMEDOUT");
+      }
+      if (!box.known.get("airplay")!.has(keys.clientId)) {
+        throw new PairingLost("The player no longer knows these keys");
+      }
+      const player = new FakePlayer(box);
+      box.players.push(player);
+      box.playersOpened += 1;
+      return player;
     },
   };
   return { boxes, add: (box: FakeBox) => all.set(box.deviceId, box) };

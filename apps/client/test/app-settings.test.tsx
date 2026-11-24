@@ -227,7 +227,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function show(app: AppInfo) {
+async function show(app: AppInfo, openCanUse?: () => void) {
   await act(async () =>
     root.render(
       <TemperatureUnitProvider unit="celsius">
@@ -248,6 +248,7 @@ async function show(app: AppInfo) {
             background="var(--dashboard-mocha)"
             onChanged={(next) => changed.push(next)}
             openStatus={() => (openedStatus += 1)}
+            {...(openCanUse ? { openCanUse } : {})}
             onDone={() => undefined}
           />
         </HomeTimeZoneProvider>
@@ -349,6 +350,53 @@ describe("an app's settings page", () => {
     expect(
       switchFor("See your remotes' presses").getAttribute("aria-checked"),
     ).toBe("true");
+  });
+
+  it("links an AI assistant's permissions straight to what AI agents can use", async () => {
+    const opened = vi.fn();
+    await show(moods, opened);
+    expect(button("What AI Agents Can Use")).toBeUndefined();
+
+    const example: AppInfo = {
+      id: "sanctum.example",
+      name: "Example",
+      version: "1.0.0",
+      icon: null,
+      pages: [],
+      permissions: ["ai.assistant", "models.use"],
+      requests: [
+        {
+          id: "ai.assistant",
+          reason: "To do what you ask.",
+          needed: true,
+          asked: null,
+          startsOn: false,
+        },
+        {
+          id: "models.use",
+          reason: "To understand what you ask.",
+          needed: true,
+          asked: null,
+          startsOn: false,
+        },
+      ],
+      state: "running",
+      settings: null,
+      provides: {
+        entities: [],
+        widgets: [],
+        roomSections: [],
+        devicePages: [],
+      },
+    };
+    await show(example, opened);
+    expect(text()).toContain("Act as your AI assistant");
+    expect(text()).toContain("allow for AI agents. To do what you ask.");
+    expect(text()).toContain(
+      "Your home's limits apply. To understand what you ask.",
+    );
+    await act(async () => button("What AI Agents Can Use").click());
+    expect(opened).toHaveBeenCalledOnce();
   });
 
   it("says, while one is off, when the app asks for it", async () => {

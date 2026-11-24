@@ -269,10 +269,15 @@ export function AppPage(props: {
       )}
       <UpdateWaiting app={app} />
       {app.requests.length > 0 && (
-        <PermissionsSection app={app} onChanged={props.onChanged} />
+        <PermissionsSection
+          app={app}
+          onChanged={props.onChanged}
+          onOpenCanUse={props.openCanUse}
+        />
       )}
       <AppCanUseSection
         app={app}
+        apps={props.apps}
         live={props.live}
         onOpenCanUse={props.openCanUse}
       />

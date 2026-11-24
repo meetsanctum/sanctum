@@ -199,6 +199,7 @@ export function SettingsPage(props: {
           apps={props.apps}
           live={props.live}
           onOpenCanUse={openCanUse}
+          onOpenApp={openApp}
           page={back}
         />
       );

@@ -16,6 +16,7 @@ import { AppCanUseSection } from "../src/agents/app-section";
 import { CanUsePage } from "../src/agents/can-use-page";
 import { agentDetail, missingWords, turnOnWords } from "../src/agents/words";
 import { CoreError, coreJson } from "../src/core-fetch";
+import { assistant, canUseWith, example } from "./settings-agents-fixtures";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -49,54 +50,6 @@ const kitchen: AgentInfo = {
   addedBy: { kind: "client", id: "tablet", name: "Kitchen tablet" },
   lastSeenAt: "2026-11-22T11:35:00Z",
 };
-
-const moods = {
-  id: "sanctum.example",
-  name: "Example",
-  version: "1.0.0",
-} as AppInfo;
-
-function canUseWith(changes: Partial<Record<string, boolean>> = {}): AiCanUse {
-  const area = (id: string, on: boolean, always = false) => ({
-    id,
-    on: changes[id] ?? on,
-    always,
-  });
-  const offer = (
-    id: string,
-    title: string,
-    on: boolean,
-    kind: "action" | "entity",
-    tier: "read" | "write",
-    missing: string[] = [],
-  ) => ({
-    app: moods.id,
-    id,
-    kind,
-    tier,
-    title,
-    description: "Written for an AI agent.",
-    on: changes[id] ?? on,
-    needs: missing,
-    missing,
-  });
-  return {
-    areas: [
-      area("places.read", true, true),
-      area("devices.control:light", true),
-      area("devices.read:switch", true),
-      area("devices.read:motion", false),
-      area("people.read", false),
-    ],
-    offers: [
-      offer("example.run", "Run a scene", true, "action", "write"),
-      offer("example.create", "Create a scene", false, "action", "write", [
-        "devices.control:switch",
-      ]),
-      offer("example.scene", "Scenes in each room", true, "entity", "read"),
-    ],
-  };
-}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -290,15 +243,18 @@ describe("the words for AI agents", () => {
 
 describe("Settings → AI agents", () => {
   let openedCanUse: number;
+  let openedApps: string[];
 
-  async function show() {
+  async function show(apps: AppInfo[] = [example]) {
     openedCanUse = 0;
+    openedApps = [];
     await act(async () =>
       root.render(
         <AgentsPage
-          apps={[moods]}
+          apps={apps}
           live={live}
           onOpenCanUse={() => openedCanUse++}
+          onOpenApp={(id) => openedApps.push(id)}
           page={null}
         />,
       ),
@@ -340,6 +296,63 @@ describe("Settings → AI agents", () => {
     await act(async () => button("What AI Agents Can Use2 of 4 on").click());
     expect(openedCanUse).toBe(1);
   });
+
+  it("lists an app acting as the AI assistant, opening its page", async () => {
+    await show([example, assistant]);
+
+    const row = button("AssistantSanctum app")!;
+    expect(row).toBeTruthy();
+    expect(row.closest("li")).not.toBeNull();
+    expect(
+      row.closest("li")!.querySelector('[aria-haspopup="menu"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("ExampleSanctum app");
+    await act(async () => row.click());
+    expect(openedApps).toEqual([assistant.id]);
+  });
+
+  it("keeps a paused assistant app in its place, saying so", async () => {
+    agents = [];
+    await show([
+      { ...assistant, permissions: [], state: "paused" },
+      {
+        ...assistant,
+        id: "sanctum.example-other",
+        name: "Other",
+        state: "paused",
+        permissions: [],
+        requests: [
+          { ...assistant.requests[0]!, needed: false },
+          {
+            id: "places.read",
+            reason: "To find your rooms.",
+            needed: true,
+            asked: null,
+            startsOn: false,
+          },
+        ],
+      },
+    ]);
+
+    expect(button("Assistant (paused)Sanctum app")).toBeTruthy();
+    expect(container.textContent).not.toContain("Other");
+  });
+
+  it.each([
+    ["off", "off"],
+    ["failed", "not running"],
+    ["stopped", "not running"],
+  ] as const)(
+    "keeps a granted assistant in the list when %s",
+    async (state, label) => {
+      agents = [];
+      await show([{ ...assistant, state }]);
+
+      const row = button(`Assistant (${label})Sanctum app`);
+      expect(row).toBeTruthy();
+      expect(row.querySelector(".grayscale")).not.toBeNull();
+    },
+  );
 
   it("removes an agent and ignores a late poll from before the removal", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
@@ -553,7 +566,7 @@ describe("What AI agents can use", () => {
     await act(async () =>
       root.render(
         <CanUsePage
-          apps={[moods]}
+          apps={[example]}
           live={live}
           onOpenApp={(id) => openedApp.push(id)}
           onDone={() => undefined}
@@ -636,7 +649,7 @@ describe("What AI agents can use", () => {
   it("leads to each app that offers something, with how much is on", async () => {
     await show();
     await act(async () => button("Example2 of 3 on").click());
-    expect(openedApp).toEqual([moods.id]);
+    expect(openedApp).toEqual([example.id]);
   });
 });
 
@@ -648,7 +661,8 @@ describe("an app's part of what AI agents can use", () => {
     await act(async () =>
       root.render(
         <AppCanUseSection
-          app={moods}
+          app={example}
+          apps={[example]}
           live={live}
           onOpenCanUse={() => openedCanUse++}
         />,
@@ -691,7 +705,7 @@ describe("an app's part of what AI agents can use", () => {
     expect(posted).toEqual([
       [
         "/api/agents/can-use/offer",
-        { app: moods.id, id: "example.run", on: false },
+        { app: example.id, id: "example.run", on: false },
       ],
     ]);
     expect(switchFor("Run a scene").getAttribute("aria-checked")).toBe("false");

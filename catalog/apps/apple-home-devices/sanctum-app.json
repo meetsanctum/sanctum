@@ -1,10 +1,10 @@
 {
   "id": "sanctum.apple-home-devices",
   "name": "Apple Home Devices",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "core": "^2.0.0",
   "protocol": 22,
-  "summary": "Brings your Apple TVs and HomePods into your home.",
+  "summary": "Brings your Apple TVs into your home, with what they play.",
   "runtime": {
     "memory": 128,
     "data": 256
@@ -71,7 +71,7 @@
   "permissions": [
     {
       "id": "devices.register",
-      "reason": "To add your Apple TVs and HomePods and keep their state.",
+      "reason": "To add your Apple TVs and show what they play.",
       "needed": true,
       "asked": null,
       "startsOn": false
@@ -99,7 +99,7 @@
     },
     {
       "id": "lan:tcp:49152-65535",
-      "reason": "To control your Apple TVs on the ports each one hands out for a connection.",
+      "reason": "To control your Apple TVs and see what they play, on the ports each hands out.",
       "needed": true,
       "asked": null,
       "startsOn": false
