@@ -11,7 +11,7 @@ import {
   type DriverRepairResult,
   type DriverRemoval,
 } from "@meetsanctum/app-sdk";
-import { entityId } from "esphome-client";
+import { entityId, type Entity } from "esphome-client";
 
 import {
   connectOnce,
@@ -52,7 +52,11 @@ import {
 // and those it gave them (keys.ts), are its secrets. Where each one is comes
 // from what the home's network announces.
 
-export type DriverOptions = { timings?: Partial<Timings> };
+export type DriverOptions = {
+  timings?: Partial<Timings>;
+  /** How long an unmute waits to show before its side switch is taken to hold it. */
+  unmuteMs?: number;
+};
 
 // A Noise key as ESPHome writes it: 32 bytes in base64.
 const isKey = (text: string) => /^[A-Za-z0-9+/]{43}=$/.test(text);
@@ -309,6 +313,34 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     if (session) owned.connection.adopt(session);
     else owned.connection.start();
     return owned;
+  }
+
+  // A smart speaker's Mute switch: on mutes the microphones. Its side switch
+  // holds it on, which the speaker keeps to itself: an unmute then changes
+  // nothing and it says nothing. An unmute it takes shows within moments, so
+  // one that hasn't shown by then is refused at once, rather than waiting
+  // out the core's confirmation.
+  async function muteCommand(session: Session, mute: Entity, muted: boolean) {
+    const id = entityId("switch", mute.objectId);
+    if (muted) {
+      session.client.command(id, { state: true });
+      return;
+    }
+    try {
+      await session.client.commandAndAwait(
+        id,
+        { state: false },
+        {
+          predicate: (event) => event.state !== true,
+          timeoutMs: options.unmuteMs ?? 2_000,
+        },
+      );
+    } catch (error) {
+      if (session.client.latest(id)?.state === true) {
+        throw new ActionError("conflict", "Still muted by its side switch");
+      }
+      throw error;
+    }
   }
 
   // Says a device's problem, as it stands when it's said, until the core
@@ -717,10 +749,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         }
         session.client.command(entityId("media_player", entity.objectId), sent);
       } else if (command.kind === "audio" && entity.type === "switch") {
-        // Its Mute switch: on mutes the microphones.
-        session.client.command(entityId("switch", entity.objectId), {
-          state: command.command.muted,
-        });
+        await muteCommand(session, entity, command.command.muted);
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {
           state: command.command.on,

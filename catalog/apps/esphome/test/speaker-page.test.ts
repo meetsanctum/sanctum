@@ -88,31 +88,35 @@ describe("a smart speaker's page", () => {
     await home.core.until(() => audio()?.muted === false, "unmuted");
   });
 
-  it("stays muted while its side switch holds it", async () => {
+  it("refuses an unmute its side switch holds, without waiting for the core", async () => {
     const { device, audio, mute } = await addedSpeaker();
     device.held.set(203, { state: true });
     device.setState(203, { state: true });
     await home.core.until(() => audio()?.muted === true, "muted by its side");
 
     const commands = device.commands.length;
-    const reports = home.core.reports.length;
+    const started = Date.now();
+    await expect(mute(false)).rejects.toMatchObject({ code: "conflict" });
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(
+      device.commands
+        .slice(commands)
+        .some(
+          (command) => command.key === 203 && command.fields.state === false,
+        ),
+    ).toBe(true);
+    expect(audio()?.muted).toBe(true);
+  });
+
+  it("unmutes at once when nothing holds it", async () => {
+    const { audio, mute } = await addedSpeaker();
+    await mute(true);
+    await home.core.until(() => audio()?.muted === true, "muted");
+
+    const started = Date.now();
     await mute(false);
-    await home.core.until(
-      () =>
-        device.commands
-          .slice(commands)
-          .some(
-            (command) => command.key === 203 && command.fields.state === false,
-          ),
-      "unmute sent to the switch",
-    );
-    await home.core.until(
-      () =>
-        home.core.reports
-          .slice(reports)
-          .some((report) => report.states.audio?.muted === true),
-      "switch reports it is still muted",
-    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await home.core.until(() => audio()?.muted === false, "unmuted");
   });
 
   it("changes its ring's glow, colour and brightness, each alone", async () => {

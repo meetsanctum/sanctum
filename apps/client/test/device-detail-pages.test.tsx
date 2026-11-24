@@ -252,10 +252,14 @@ it.each([
   ]);
 });
 
-it("shows a smart speaker with a button by its playback, and mutes from Microphones", async () => {
-  const speaker = mediaPlayer("speaker", "Speaker", "office", {
-    activity: "idle",
-  });
+it("shows a smart speaker with a button by its playback, and mutes its microphones from Volume", async () => {
+  const speaker = mediaPlayer(
+    "speaker",
+    "Speaker",
+    "office",
+    { activity: "idle", volume: 40, muted: false },
+    { power: false, volume: "level", mute: true },
+  );
   devices = [
     {
       ...speaker,
@@ -268,13 +272,15 @@ it("shows a smart speaker with a button by its playback, and mutes from Micropho
     [["media", "player"]],
   );
   await open("speaker/player");
+  expect(tabs().map(([label]) => label)).not.toContain("Microphones");
   const tab = dialog().querySelector<HTMLButtonElement>(
-    '[role="tab"][aria-label="Microphones"]',
+    '[role="tab"][aria-label="Volume"]',
   )!;
   await act(async () => tab.click());
-  const microphones =
-    dialog().querySelector<HTMLButtonElement>('[role="switch"]')!;
-  expect(microphones.getAttribute("aria-checked")).toBe("true");
+  const microphones = dialog().querySelector<HTMLButtonElement>(
+    '[aria-label="Mute Speaker\'s microphones"]',
+  )!;
+  expect(microphones.getAttribute("aria-pressed")).toBe("false");
   await act(async () => microphones.click());
   expect(posted()).toEqual([
     { device: "speaker", capability: "audio", command: { muted: true } },

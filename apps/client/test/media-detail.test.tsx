@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
-import type { DeviceInfo, MediaCommand } from "@meetsanctum/app-sdk";
+import type {
+  CapabilityInfo,
+  DeviceInfo,
+  MediaCommand,
+} from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { coreJson } from "../src/core-fetch";
 import type { Media } from "../src/media";
 import { MediaPlaying, MediaRemote, MediaVolume } from "../src/media-detail";
 import { mediaPlayer } from "./place-pages-fixtures";
+
+vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // A media player's pages in its detail: Playing with what plays and its
 // buttons, dimmed and empty while off; a TV's Remote with its power and
@@ -399,5 +406,121 @@ describe("Volume", () => {
     ).toBeTruthy();
     await press("Mute Office Speaker");
     expect(sent).toEqual([{ muted: true }]);
+  });
+
+  const speaker = (
+    microphones: Partial<Extract<CapabilityInfo, { kind: "audio" }>> | null,
+    muted = false,
+  ): DeviceInfo => {
+    const device = mediaPlayer(
+      "speaker",
+      "Office Speaker",
+      "office",
+      { activity: "idle", volume: 40, muted },
+      { power: false, playback: ["play"], volume: "level", mute: true },
+      "smart-speaker",
+    );
+    return {
+      ...device,
+      capabilities: [
+        ...device.capabilities,
+        ...(microphones
+          ? [
+              {
+                id: "audio",
+                kind: "audio" as const,
+                features: { mutes: true, muteSwitch: true },
+                state: { muted: false },
+                observed: { muted: false },
+                desired: null,
+                sync: "synced" as const,
+                setBy: null,
+                changedAt: null,
+                ...microphones,
+              },
+            ]
+          : []),
+      ],
+    };
+  };
+  const icon = (label: string) =>
+    button(label)?.querySelector("svg")?.getAttribute("class");
+
+  it("shows the sound's mute by its own icon, crossed out while muted", async () => {
+    await render(MediaVolume, speaker(null));
+    expect(icon("Mute Office Speaker")).toContain("volume-2");
+
+    await render(MediaVolume, speaker(null, true));
+    expect(icon("Mute Office Speaker")).toContain("volume-x");
+    expect(button("Mute Office Speaker")?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("mutes a smart speaker's microphones beside its sound, through core Devices", async () => {
+    vi.mocked(coreJson).mockResolvedValue({});
+    await render(MediaVolume, speaker({}));
+    const microphones = button("Mute Office Speaker's microphones")!;
+    expect(microphones.getAttribute("aria-pressed")).toBe("false");
+    expect(icon("Mute Office Speaker's microphones")).toContain("lucide-mic");
+
+    await press("Mute Office Speaker's microphones");
+
+    expect(coreJson).toHaveBeenCalledWith("/api/devices/command", {
+      method: "POST",
+      json: {
+        device: "speaker",
+        capability: "audio",
+        command: { muted: true },
+      },
+    });
+  });
+
+  it("shows its microphones as the speaker last said, waiting while a change is on its way", async () => {
+    await render(
+      MediaVolume,
+      speaker({
+        state: { muted: false },
+        observed: { muted: true },
+        desired: { muted: false },
+        sync: "pending",
+      }),
+    );
+    const microphones = button("Mute Office Speaker's microphones")!;
+    expect(microphones.getAttribute("aria-pressed")).toBe("true");
+    expect(icon("Mute Office Speaker's microphones")).toContain("mic-off");
+    expect(microphones.disabled).toBe(true);
+  });
+
+  it("leaves its microphones as they were when a change is refused", async () => {
+    vi.mocked(coreJson).mockRejectedValue(new Error("conflict"));
+    await render(
+      MediaVolume,
+      speaker({ state: { muted: true }, observed: { muted: true } }),
+    );
+
+    await press("Mute Office Speaker's microphones");
+
+    const microphones = button("Mute Office Speaker's microphones")!;
+    expect(microphones.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("has no microphones button where Sanctum can't mute them, or none are known", async () => {
+    await render(
+      MediaVolume,
+      speaker({ features: { mutes: false, muteSwitch: false } }),
+    );
+    expect(button("Mute Office Speaker's microphones")).toBeNull();
+
+    await render(
+      MediaVolume,
+      speaker({ observed: { heardAt: "2026-11-24T09:00:00Z" } }),
+    );
+    expect(button("Mute Office Speaker's microphones")).toBeNull();
+
+    await render(MediaVolume, speaker(null));
+    expect(button("Mute Office Speaker's microphones")).toBeNull();
+    expect(button("Mute Office Speaker")).not.toBeNull();
   });
 });
