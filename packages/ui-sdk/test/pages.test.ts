@@ -15,6 +15,7 @@ import {
 import { digestOf, listFiles } from "../tools/files";
 import { buildKit, sdkVersion } from "../tools/kit";
 import { buildPages as buildPagesWith } from "../tools/pages";
+import { hexAlphaColours } from "./css-colours";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -127,19 +128,27 @@ describe("an app's pages", () => {
     expect(css).not.toMatch(/@layer base\{/);
   }, 60_000);
 
-  it("write colours with alpha as rgba(), never as hex", async () => {
+  it("write colours with alpha as rgba() or transparent", async () => {
     // The Shelly Wall Display's web view drops `#0000` and `#ffffff24`.
     const dir = await app(`
 import { defineAppUi } from "@meetsanctum/ui-sdk";
 function MainPage() {
-  return <p className="bg-black/37">Example</p>;
+  return (
+    <>
+      <p className="bg-black/37">Example</p>
+      <p className="bg-[#0000]">Transparent</p>
+    </>
+  );
 }
 export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { main: MainPage } });
 `);
     await buildPages(dir);
     const css = readFileSync(join(dir, "pages/pages.css"), "utf8");
-    expect(css).not.toMatch(/#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i);
+    expect(hexAlphaColours(css)).toEqual([]);
     expect(css).toContain("background-color:rgba(0,0,0,.37)");
+    expect(css).toContain(
+      String.raw`.bg-\[\#0000\]{background-color:transparent}`,
+    );
   }, 60_000);
 
   it("leave out the utilities the kit's stylesheet has, so each comes once", async () => {

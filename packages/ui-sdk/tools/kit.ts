@@ -3,7 +3,6 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
-import { Features } from "lightningcss";
 import { build, type BuildOptions, type Plugin, type UserConfig } from "vite";
 
 import { digestOf, filesOf } from "./files.js";
@@ -106,13 +105,16 @@ export const quietLogs: OnLog = (level, log, handler) => {
   handler(level, log);
 };
 
+// The HexAlphaColors flag accepted by Vite's CSS minifier.
+const hexAlphaColors = 1 << 14;
+
 /**
  * How the kit's and pages' stylesheets are written: a colour with alpha as
  * rgba() or transparent, never the minifier's hex (`#0000`, `#ffffff24`),
  * which the Shelly Wall Display's web view drops.
  */
 export const stylesheetOptions: UserConfig["css"] = {
-  lightningcss: { include: Features.HexAlphaColors },
+  lightningcss: { include: hexAlphaColors },
 };
 
 function kitModules(files: ReadonlySet<string>): Plugin {

@@ -8,6 +8,7 @@ import { frameBridge } from "../src/frame/protocol";
 import { digestOf, listFiles } from "../tools/files";
 import { lucideIcons } from "../tools/icons";
 import { buildKit, sdkVersion, type KitManifest } from "../tools/kit";
+import { hexAlphaColours } from "./css-colours";
 
 // The kit, React and ui-sdk as the modules every app page imports, in parts:
 // React, ui-sdk without its icons, and one module per icon.
@@ -117,8 +118,11 @@ describe("the kit", { timeout: 60_000 }, () => {
   it("writes colours with alpha as rgba() or transparent, never as hex", () => {
     // The Shelly Wall Display's web view drops `#0000` and `#ffffff24`.
     const css = read("kit.css");
-    expect(css).not.toMatch(/#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i);
+    expect(hexAlphaColours(css)).toEqual([]);
     expect(css).toContain(".border-transparent{border-color:transparent}");
+    expect(css).toMatch(
+      /[{;]--hairline-on-carbon:rgba\(255,255,255,\.14\)[;}]/,
+    );
   });
 
   it("spans widgets across the phone tile grid and keeps their own span in other grids", () => {
