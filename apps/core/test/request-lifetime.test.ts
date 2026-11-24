@@ -3,11 +3,13 @@ import {
   assistantAppId,
   turnLimits,
   type AppDefinition,
+  type AssistantRequestCall,
   type RequestContext,
 } from "@meetsanctum/app-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActionCallError } from "../src/app-host/errors.js";
+import type { ToolRecorder } from "../src/app-host/contexts.js";
 import type { InstalledApp } from "../src/app-host/installed.js";
 import { createRequests } from "../src/app-host/requests.js";
 import type { Turn } from "../src/models/turns.js";
@@ -35,13 +37,14 @@ function setUp(
   } satisfies Turn;
   type Options = Parameters<typeof createRequests>[0];
   const contexts = new WeakMap<RequestContext, ReturnType<Options["coreOf"]>>();
+  const recorders = new WeakMap<RequestContext, ToolRecorder>();
   const log = vi.fn();
   const arrives = vi.fn<Options["arrives"]>().mockResolvedValue(true);
   const requests = createRequests({
     installed: new Map([[assistantAppId, entry]]),
     accepts: () => true,
     arrives,
-    contextFor(_entry, actor, scope, { reply }) {
+    contextFor(_entry, actor, scope, { reply, recordTool }) {
       const context = { appId: assistantAppId, actor } as RequestContext;
       contexts.set(context, {
         async replyRequest(answer) {
@@ -49,6 +52,7 @@ function setUp(
           reply(answer);
         },
       });
+      recorders.set(context, recordTool);
       return context;
     },
     coreOf: (ctx) => contexts.get(ctx)!,
@@ -64,14 +68,30 @@ function setUp(
       asked: { text: "Hello", language: "en", clientName: "Tablet" },
       checkClient,
     });
-  return { ask, close: requests.close, arrives, entry, log, turn };
+  return {
+    ask,
+    requests,
+    close: requests.close,
+    arrives,
+    entry,
+    log,
+    turn,
+    record: (ctx: RequestContext) => recorders.get(ctx)!,
+  };
 }
 
 describe("Assistant request admission and lifetime", () => {
   it("settles a stalled request at the deadline and refuses a late reply", async () => {
     const release = deferredDelivery();
     const late = deferredResult<unknown>();
+    const aborted = vi.fn();
+    let earlier: AssistantRequestCall["earlier"] | undefined;
     const { ask, turn } = setUp(async (_ctx, request) => {
+      if (request.earlier.length) {
+        earlier = request.earlier;
+        return;
+      }
+      request.signal.addEventListener("abort", aborted, { once: true });
       await release.promise;
       try {
         await request.reply({ text: "Here." });
@@ -88,8 +108,11 @@ describe("Assistant request admission and lifetime", () => {
     await vi.advanceTimersByTimeAsync(1);
     await expect(answered).resolves.toBeNull();
     expect(turn.end).toHaveBeenCalledOnce();
+    expect(aborted).toHaveBeenCalledOnce();
     release.resolve();
     expect(await late.promise).toBeInstanceOf(Error);
+    await ask();
+    expect(earlier).toEqual([expect.objectContaining({ cutOff: false })]);
   });
 
   it("refuses a stalled request and closes its turn when the core stops", async () => {
@@ -109,6 +132,86 @@ describe("Assistant request admission and lifetime", () => {
     expect(turn.end).toHaveBeenCalledOnce();
     release.resolve();
   });
+
+  it("does not write an exchange queued before the Assistant restarted", async () => {
+    const arriving = deferredDelivery();
+    const entered = deferredDelivery();
+    const seen = vi.fn();
+    let running = false;
+    const { ask, requests, entry } = setUp(
+      async (_ctx, request) => {
+        seen(request.earlier);
+      },
+      {
+        accepts: () => running,
+        async arrives() {
+          entered.resolve();
+          await arriving.promise;
+          return true;
+        },
+      },
+    );
+    entry.runId = 1;
+    const first = ask();
+    await entered.promise;
+    const second = ask();
+    const third = ask();
+    const stopped = expect(third).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    requests.stopped(entry);
+    running = true;
+    entry.runId = 2;
+    arriving.resolve();
+
+    await expect(first).resolves.toBeNull();
+    await expect(second).resolves.toBeNull();
+    await stopped;
+    await ask();
+    expect(seen).toHaveBeenCalledExactlyOnceWith([]);
+  });
+
+  it.each([
+    { settledEarly: false, outcome: "unknown" },
+    { settledEarly: true, outcome: "answered" },
+  ])(
+    "shows an in-flight tool as $outcome after takeover",
+    async ({ settledEarly, outcome }) => {
+      const entered = deferredDelivery();
+      const release = deferredDelivery();
+      const seen = vi.fn();
+      const { ask, record } = setUp(async (ctx, request) => {
+        if (request.earlier.length > 0) {
+          seen(request.earlier[0]?.tools);
+          return;
+        }
+        const answered = record(ctx)("lights", { on: true });
+        entered.resolve();
+        await release.promise;
+        answered({ text: "Done.", isError: false });
+      });
+
+      const first = ask();
+      await entered.promise;
+      const second = ask();
+      await expect(first).resolves.toBeNull();
+      await vi.advanceTimersByTimeAsync(settledEarly ? 1_000 : 1_999);
+      expect(seen).not.toHaveBeenCalled();
+
+      if (settledEarly) release.resolve();
+      await vi.advanceTimersByTimeAsync(settledEarly ? 0 : 1);
+      expect(seen).toHaveBeenCalledExactlyOnceWith([
+        {
+          name: "lights",
+          input: { on: true },
+          outcome,
+          ...(settledEarly ? { text: "Done.", isError: false } : {}),
+        },
+      ]);
+      release.resolve();
+      await expect(second).resolves.toBeNull();
+    },
+  );
 
   it("reports a lost connection only when the request has no reply", async () => {
     const failure = new ActionCallError("unavailable");
@@ -169,22 +272,29 @@ describe("Assistant request admission and lifetime", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("keeps a client's slot until its handler finishes after an early reply", async () => {
+  it("lets a client's newer request take over from one still running, beside another client's", async () => {
     const release = deferredDelivery();
-    const { ask, turn } = setUp(async (ctx, request) => {
+    const seen: AssistantRequestCall[] = [];
+    const { ask, turn } = setUp(async (_ctx, request) => {
+      seen.push(request);
       await request.reply({ text: "Here." });
-      if (ctx.actor.id === "tablet") await release.promise;
+      if (seen.length === 1) await release.promise;
     });
 
     await expect(ask()).resolves.toEqual({ text: "Here." });
-    await expect(ask()).rejects.toMatchObject({ code: "limited" });
     await expect(ask("phone")).resolves.toEqual({ text: "Here." });
+    expect(seen[0]!.signal.aborted).toBe(false);
 
-    release.resolve();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(turn.end).toHaveBeenCalledTimes(2);
     await expect(ask()).resolves.toEqual({ text: "Here." });
+    expect(seen[0]!.signal.reason).toMatchObject({ code: "turn_ended" });
     await vi.advanceTimersByTimeAsync(0);
+    expect(turn.end).toHaveBeenCalledTimes(3);
+    expect(seen[2]!.earlier).toEqual([
+      expect.objectContaining({ asked: "Hello", reply: "Here.", cutOff: true }),
+    ]);
+    // The phone's exchange is its own.
+    expect(seen[1]!.earlier).toEqual([]);
+    release.resolve();
   });
 
   it("limits how many clients can have a request under way together", async () => {

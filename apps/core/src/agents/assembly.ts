@@ -44,6 +44,7 @@ export function createAgentAccess(
   const canUse = createAgentsCanUse(db, {
     record,
     apps: () => apps().offers(),
+    onRevoked: () => apps().clearRequestWindows(),
     now,
   });
   const ticks = now && (() => now().getTime());

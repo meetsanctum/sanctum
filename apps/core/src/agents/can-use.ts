@@ -46,6 +46,9 @@ export function createAgentsCanUse(
     record: (entry: NewActivityEntry) => string;
     // The installed apps' offers, read on every listing.
     apps: () => readonly AppOffers[];
+    // Something AI agents could use was switched off, or an update raised
+    // its tier, which switches it off.
+    onRevoked?: () => void;
     now?: () => Date;
   },
 ) {
@@ -142,6 +145,7 @@ export function createAgentsCanUse(
     adopt(app: AppOffers, { asUpdate }: { asUpdate: boolean }): void {
       const rows = itemRows(app.app);
       const updatedAt = now();
+      let revoked = false;
       db.transaction(() => {
         for (const offer of app.offers.values()) {
           const itemId = itemKey(offer);
@@ -162,6 +166,7 @@ export function createAgentsCanUse(
           }
           if (row.tier === tier) continue;
           const rose = tierRank[tier] > tierRank[row.tier];
+          if (rose && row.on) revoked = true;
           db.update(agentItems)
             .set(rose ? { tier, on: false, updatedAt } : { tier })
             .where(
@@ -170,6 +175,7 @@ export function createAgentsCanUse(
             .run();
         }
       });
+      if (revoked) options.onRevoked?.();
     },
 
     areaOn,
@@ -232,6 +238,7 @@ export function createAgentsCanUse(
           detail: { item: area, on },
         });
       });
+      if (!on) options.onRevoked?.();
       return true;
     },
 
@@ -267,6 +274,7 @@ export function createAgentsCanUse(
           detail: { app: appId, item: id, title: offer.title, on },
         });
       });
+      if (!on) options.onRevoked?.();
       return true;
     },
   };

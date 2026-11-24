@@ -9,7 +9,10 @@ import type {
   StaticManifest,
   StopInfo,
 } from "@meetsanctum/app-sdk";
-import type { CallBody, DriverHook } from "@meetsanctum/app-sdk/protocol";
+import type {
+  DriverHook,
+  OutboundCallBody,
+} from "@meetsanctum/app-sdk/protocol";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 import { z } from "zod";
 
@@ -30,6 +33,8 @@ export const uninstallLimitMs = 30_000;
 
 // The protocol whose runners take an uninstall call.
 const uninstallFrom = 9;
+// The protocol whose runners take a request's earlier exchanges.
+const earlierFrom = 22;
 
 /** The core's calls behind a context, so a call's id can be tied to them. */
 export type CoreOf = (ctx: RequestContext) => CoreCalls;
@@ -44,9 +49,10 @@ export function apartApp(
 ): AppDefinition {
   const call = (
     ctx: RequestContext,
-    body: CallBody,
+    body: OutboundCallBody,
     deadlineMs = timeoutOf(ctx),
-  ) => link.call(coreOf(ctx), ctx.actor, body, deadlineMs);
+    signal?: AbortSignal,
+  ) => link.call(coreOf(ctx), ctx.actor, body, deadlineMs, signal);
   const hook = (name: DriverHook) => (ctx: AppContext, params?: unknown) =>
     call(ctx, { kind: "driver", hook: name, params }) as Promise<never>;
   const hooks = (manifest.driver?.hooks ?? []) as readonly string[];
@@ -93,12 +99,24 @@ export function apartApp(
       ? {
           requests: async (
             ctx: RequestContext,
-            { text, language, clientName }: AssistantRequestCall,
+            {
+              text,
+              language,
+              clientName,
+              earlier,
+              signal,
+            }: AssistantRequestCall,
           ) => {
-            await call(ctx, {
-              kind: "request",
-              request: { text, language, clientName },
-            });
+            const asked = { text, language, clientName };
+            // An older runner's schema takes no more than those.
+            const request =
+              manifest.protocol < earlierFrom ? asked : { ...asked, earlier };
+            await call(
+              ctx,
+              { kind: "request", request },
+              timeoutOf(ctx),
+              signal,
+            );
           },
         }
       : {}),

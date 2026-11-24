@@ -46,6 +46,10 @@ const refusals: Record<ActionCallErrorCode, [string, string]> = {
     "not_allowed",
     "This asks your home's AI model, which only someone at a screen can do.",
   ],
+  turn_ended: [
+    "turn_ended",
+    "The request this was for has ended, so nothing more was done.",
+  ],
   unavailable: [
     "unavailable",
     "The app isn't running just now. Try again in a while.",
