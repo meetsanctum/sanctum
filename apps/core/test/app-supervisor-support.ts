@@ -15,6 +15,7 @@ export const manifest = {
   id: "test.supervised",
   version: "1.0.0",
   runtime: { memory: 128, data: 256 },
+  permissions: [],
 } as unknown as StaticManifest;
 
 export function setUp(
@@ -46,6 +47,7 @@ export function setUp(
         memoryLimits: true,
         discovery: false,
         lan: false,
+        portRanges: false,
         deletesData: false,
         reserves: false,
       }),

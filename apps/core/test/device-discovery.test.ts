@@ -61,6 +61,7 @@ async function finding(
       memoryLimits: true,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });

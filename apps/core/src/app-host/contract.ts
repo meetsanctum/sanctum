@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import {
   assertDriverProblems,
+  assertLanPermissions,
   appManifestSchema,
   assistantOfferOf,
   deviceActionActivitySchema,
@@ -539,6 +540,9 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
       manifest.driver.hooks.includes("repair"),
     );
   }
+  // What its network may reach rests on these, so the core checks them
+  // itself rather than trust the app's own build.
+  assertLanPermissions(manifest.permissions.map((each) => each.id));
   checkPieces(manifest);
   return manifest;
 }

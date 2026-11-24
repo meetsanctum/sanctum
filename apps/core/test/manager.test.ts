@@ -132,6 +132,7 @@ describe("what the manager can do", () => {
       memoryLimits: false,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });
@@ -143,14 +144,16 @@ describe("what the manager can do", () => {
 
     client.followCapabilities(5);
 
-    // One that doesn't say whether it looks for devices, or gives apps that
-    // reach them a network of their own, does neither.
+    // One that doesn't say whether it looks for devices, gives apps that
+    // reach them a network of their own, or takes ranges of ports in its
+    // rules, does none of it.
     await vi.waitFor(() =>
       expect(client.capabilities()).toEqual({
         appContainers: true,
         memoryLimits: true,
         discovery: false,
         lan: false,
+        portRanges: false,
         deletesData: false,
         reserves: false,
       }),

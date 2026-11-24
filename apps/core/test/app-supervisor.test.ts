@@ -288,6 +288,7 @@ describe("an app's supervisor", () => {
           memoryLimits: true,
           discovery: false,
           lan: false,
+          portRanges: false,
           deletesData: false,
           reserves: false,
         }),
@@ -499,6 +500,56 @@ describe("an app's supervisor", () => {
       supervisor.end(entry);
     });
 
+    it("keeps one that asks for a range of ports, switched on or not, waiting for a manager that takes ranges", async () => {
+      let ranges = false;
+      const { entry, supervisor, started, stopped, phase } = setUp(
+        {
+          capabilities: () => ({
+            appContainers: true,
+            memoryLimits: true,
+            discovery: true,
+            lan: true,
+            portRanges: ranges,
+            deletesData: false,
+            reserves: false,
+          }),
+        },
+        {
+          starting: () => ({
+            core: "core",
+            count: 1,
+            addresses: [],
+            ports: [6053],
+          }),
+          started: () => true,
+          canRun: () => true,
+        },
+      );
+      entry.manifest = {
+        ...manifest,
+        permissions: [{ id: "lan:tcp:6053" }, { id: "lan:tcp:49152-65535" }],
+      } as typeof manifest;
+      // Only the single port is on: switching the range on later mustn't
+      // find a manager that refuses it.
+      entry.granted = ["lan:tcp:6053"];
+
+      await supervisor.launch(entry);
+      await passes(60_000);
+
+      expect(phase()).toBe("waiting");
+      expect(entry.supervision!.waitingFor).toBe(
+        "Waiting for an update that lets it reach your devices",
+      );
+      expect(started).toEqual([]);
+      expect(stopped).toEqual([entry.app.id]);
+
+      // Asked again after its next pause.
+      ranges = true;
+      await passes(300_000);
+      expect(started).toContain(entry.app.id);
+      supervisor.end(entry);
+    });
+
     it("keeps retrying an unconfirmed network when its connection gets ready late", async () => {
       const start = vi.fn(async () => {
         throw new ManagerUnavailable("No answer");
@@ -510,6 +561,7 @@ describe("an app's supervisor", () => {
             memoryLimits: true,
             discovery: true,
             lan: true,
+            portRanges: true,
             deletesData: false,
             reserves: false,
           }),

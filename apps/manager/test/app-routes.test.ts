@@ -79,6 +79,7 @@ describe("what a manager can do", () => {
       memoryLimits: true,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });
@@ -91,6 +92,7 @@ describe("what a manager can do", () => {
       memoryLimits: true,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });
@@ -121,6 +123,7 @@ describe("what a manager can do", () => {
       memoryLimits: false,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });

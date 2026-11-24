@@ -27,3 +27,28 @@ describe("a driver's problem declarations at installation", () => {
     expect(() => checkManifest(manifest)).toThrow();
   });
 });
+
+describe("an app's ports at installation", () => {
+  it.each([
+    ["a malformed one", ["lan:tcp:any"], "must name a TCP port"],
+    ["a range outside the session ports", ["lan:tcp:1-65535"], "must name"],
+    [
+      "two that share ports",
+      ["lan:tcp:50000", "lan:tcp:49152-65535"],
+      "share ports",
+    ],
+    [
+      "more than 16",
+      Array.from({ length: 17 }, (_, index) => `lan:tcp:${7000 + index}`),
+      "at most 16",
+    ],
+  ])("refuses %s read from a package", (_, ports, refusal) => {
+    const manifest = toStaticManifest(lamps);
+    manifest.permissions = [
+      ...manifest.permissions,
+      { id: "discover:mdns:_example._tcp", reason: "For the test." },
+      ...ports.map((id) => ({ id, reason: "For the test." })),
+    ] as typeof manifest.permissions;
+    expect(() => checkManifest(manifest)).toThrow(refusal);
+  });
+});

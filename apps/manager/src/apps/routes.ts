@@ -26,7 +26,8 @@ import type { AppUsage } from "./usage.js";
 //
 //   GET    /api/capabilities         what this manager can do: run apps, limit
 //                                    their memory, look for devices, give an app
-//                                    that reaches them its own network, delete
+//                                    that reaches them its own network, take
+//                                    ranges of ports in its rules, delete
 //                                    a removed app's data, reserve what an
 //                                    add needs; one too
 //                                    old for this route answers 404, which means
@@ -38,7 +39,9 @@ import type { AppUsage } from "./usage.js";
 //                                    policy, answered with the one its rules hold
 //   PUT    /api/apps/:app/container/lan  replace what its network may reach:
 //                                    { core, count, addresses, ports, manager,
-//                                    holder }, refused (409) for another holder
+//                                    holder }, where each of the ports is a
+//                                    port or a range [from, to], refused (409)
+//                                    for another holder
 //                                    or one no newer
 //   POST   /api/apps/:app/container/stop  stop it, keeping why it stopped:
 //                                    { off? }, turned off, gives its room back
@@ -158,6 +161,7 @@ export function registerAppRoutes(
         memoryLimits: false,
         discovery,
         lan: false,
+        portRanges: false,
         deletesData: false,
         reserves: false,
       };
@@ -171,6 +175,8 @@ export function registerAppRoutes(
       memoryLimits,
       discovery,
       lan: appContainers && apps.reachesDevices(),
+      // Its network's rules take a range of ports as well as single ones.
+      portRanges: appContainers && apps.reachesDevices(),
       // It deletes a removed app's data, and a service's.
       deletesData: Boolean(images && maintenance && updates),
       reserves: Boolean(capacity && images),

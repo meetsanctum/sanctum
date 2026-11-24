@@ -1,7 +1,7 @@
 import { assertDriverProblems } from "./device-problems.js";
 import { registerPermission } from "./devices.js";
 import { discoveredServices, isMalformedDiscover } from "./discovery.js";
-import { isMalformedLan, lanPorts } from "./lan.js";
+import { assertLanPermissions } from "./lan.js";
 import type { AppDefinition } from "./index.js";
 
 /** Checks the driver's permission and the hooks its manifest declares. */
@@ -69,15 +69,5 @@ export function assertDriver(app: AppDefinition, asked: readonly string[]) {
     );
   }
   // It reaches only devices it finds, on the ports it names.
-  const malformedLan = asked.find(isMalformedLan);
-  if (malformedLan) {
-    throw new Error(
-      `${malformedLan} must name a TCP port, such as lan:tcp:6053`,
-    );
-  }
-  if (lanPorts(asked).length > 0 && !looks) {
-    throw new Error(
-      "A lan:tcp: permission reaches only devices the app finds, so it needs a discover:mdns: permission too",
-    );
-  }
+  assertLanPermissions(asked);
 }

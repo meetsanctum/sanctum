@@ -165,6 +165,7 @@ export function fakeManager() {
       memoryLimits: true,
       discovery: true,
       lan: lan.can,
+      portRanges: lan.can,
       deletesData: true,
       reserves: false,
     }),

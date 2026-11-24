@@ -12,7 +12,10 @@ import {
 import {
   createLanHolders,
   holderName,
+  lanChange,
   lanNetworkName,
+  lanPolicy,
+  maxLanPorts,
   readRules,
   rulesFor,
 } from "../src/apps/lan.js";
@@ -76,7 +79,7 @@ describe("an app's network rules", () => {
         "table inet sanctum {",
         '  comment "sanctum core-1 1"',
         "  set reach { type ipv4_addr; elements = { 192.168.1.40 }; }",
-        "  set reachports { type inet_service; elements = { 6053 }; }",
+        "  set reachports { type inet_service; flags interval; elements = { 6053 }; }",
         "  chain output {",
         "    type filter hook output priority 0; policy drop;",
         "    ip daddr @reach tcp dport @reachports accept",
@@ -99,10 +102,103 @@ describe("an app's network rules", () => {
     expect(readRules(listing(rulesFor(policy)))).toEqual({
       marker: "sanctum core-1 1",
       addresses: ["192.168.1.40"],
-      ports: [6053],
+      ports: [[6053, 6053]],
       drops: true,
     });
     expect(readRules("Error: No such file or directory")).toBeNull();
+  });
+
+  it("hold ranges of ports as intervals, joined where they overlap or touch", () => {
+    expect(
+      rulesFor({
+        ...policy,
+        ports: [[50_005, 60_000], 7001, [50_000, 50_010], 7000, 6053],
+      }),
+    ).toContain(
+      "  set reachports { type inet_service; flags interval; elements = { 6053, 7000-7001, 50000-60000 }; }",
+    );
+  });
+
+  it("read back ranges as nft lists them, and nothing they can't tell", () => {
+    // As nft 1.1.6 lists a table holding 7000 and 49152-65535.
+    const listed = (elem: unknown[]) =>
+      JSON.stringify({
+        nftables: [
+          { metainfo: { version: "1.1.6", json_schema_version: 1 } },
+          {
+            table: {
+              family: "inet",
+              name: "sanctum",
+              handle: 1,
+              comment: "sanctum core-1 1",
+            },
+          },
+          {
+            set: {
+              family: "inet",
+              name: "reachports",
+              table: "sanctum",
+              type: "inet_service",
+              handle: 4,
+              flags: ["interval"],
+              elem,
+            },
+          },
+          { chain: { name: "output", hook: "output", policy: "drop" } },
+          { chain: { name: "input", hook: "input", policy: "drop" } },
+        ],
+      });
+    expect(
+      readRules(listed([7000, 7001, { range: [49_152, 65_535] }]))?.ports,
+    ).toEqual([
+      [7000, 7001],
+      [49_152, 65_535],
+    ]);
+    for (const elem of [
+      ["ssh"],
+      [{ prefix: { addr: 49_152, len: 2 } }],
+      [{ range: [49_152] }],
+      [{ range: [49_152, 65_535], extra: true }],
+      [0],
+      [65_536],
+    ]) {
+      expect(readRules(listed(elem))?.ports, JSON.stringify(elem)).toBeNull();
+    }
+  });
+});
+
+describe("an app's network policy as the core sends it", () => {
+  const parsed = (ports: unknown[]) =>
+    lanPolicy.safeParse({ ...policy, ports }).success;
+
+  it("names ports, and ranges of them as [from, to]", () => {
+    expect(parsed([6053, [49_152, 65_535]])).toBe(true);
+    expect(
+      lanChange.safeParse({
+        ...policy,
+        ports: [[49_152, 65_535]],
+        manager: "manager-1",
+        holder: "holder-1",
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a range that runs down", [[65_535, 49_152]]],
+    ["a range of one port", [[50_000, 50_000]]],
+    ["a range below the session ports", [[1, 65_535]]],
+    ["a range with a third end", [[49_152, 60_000, 65_535]]],
+    ["a range written as text", ["49152-65535"]],
+    ["a port as text", ["6053"]],
+    ["a port past the last", [[49_152, 65_536]]],
+    ["no port", [0]],
+    ["a fraction", [6053.5]],
+    [
+      "more than 16 entries",
+      Array.from({ length: maxLanPorts + 1 }, (_, index) => 7000 + index),
+    ],
+  ])("refuses %s", (_, ports) => {
+    expect(parsed(ports)).toBe(false);
   });
 });
 
@@ -182,6 +278,52 @@ describe("an app that reaches devices", () => {
     ).toEqual({ ...lan, count: 2 });
     expect(nft.tables.get(lan!.holder)).toContain(
       "set reach { type ipv4_addr; }",
+    );
+  });
+
+  it("refuses rules nft lists with other ports than it was sent", async () => {
+    const { apps, docker } = await setup();
+    const { lan } = await apps.start(start, { lan: policy });
+    const change = {
+      ...policy,
+      count: 2,
+      manager: "manager-1",
+      holder: lan!.holder,
+    };
+    const loading = docker.onRun!;
+    docker.onRun = (options) => {
+      const answer = loading(options);
+      // A table that lets more through than it was sent.
+      return answer?.code === 0
+        ? {
+            code: 0,
+            output: listing(
+              rulesFor({ ...change, ports: [6053, [49_152, 65_535]] }),
+            ),
+          }
+        : answer;
+    };
+
+    await expect(apps.applyLan(app, change)).rejects.toThrow(
+      "didn't take its rules",
+    );
+  });
+
+  it("loads a range of ports, and takes it away again", async () => {
+    const { apps, nft } = await setup();
+    const { lan } = await apps.start(start, {
+      lan: { ...policy, ports: [7000, [49_152, 65_535]] },
+    });
+    expect(nft.tables.get(lan!.holder)).toContain(
+      "elements = { 7000, 49152-65535 };",
+    );
+    const change = { ...policy, manager: "manager-1", holder: lan!.holder };
+
+    expect(
+      await apps.applyLan(app, { ...change, count: 2, ports: [7000] }),
+    ).toEqual({ ...lan, count: 2 });
+    expect(nft.tables.get(lan!.holder)).toContain(
+      "set reachports { type inet_service; flags interval; elements = { 7000 }; }",
     );
   });
 

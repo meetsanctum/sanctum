@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -21,6 +22,11 @@ const docker = async (...args: string[]) =>
   (
     await execFile("docker", args, { maxBuffer: 16 * 1024 * 1024 })
   ).stdout.trim();
+
+// The base of the manager's own image.
+const runtimeBase = /^FROM (\S+) AS runtime$/m.exec(
+  readFileSync(new URL("../Dockerfile", import.meta.url), "utf8"),
+)![1]!;
 
 const tag = randomBytes(3).toString("hex");
 const app = `test.lan${tag}`;
@@ -76,7 +82,11 @@ describe("an app's network of its own on real Docker", () => {
         ["build", "--quiet", "-t", image, "-"],
         (error) => (error ? fail(error) : done()),
       );
-      child.stdin?.end("FROM alpine:latest\nRUN apk add --no-cache nftables\n");
+      // nft as the manager's own image has it, which holders and helpers
+      // run from.
+      child.stdin?.end(
+        `FROM ${runtimeBase}\nRUN apk add --no-cache nftables\n`,
+      );
     });
     await docker("pull", "--quiet", "alpine:latest");
     holders = createLanHolders({
@@ -103,7 +113,14 @@ describe("an app's network of its own on real Docker", () => {
       );
     const listen = (port: number) =>
       `while true; do echo hi | nc -l -p ${port}; done`;
-    await serving(device, `${listen(6053)} & ${listen(80)}`);
+    // Its ports, and a range's ends and the ports either side of them, each
+    // listening, so that what isn't reached is what the rules drop.
+    await serving(
+      device,
+      [6053, 80, 49_999, 50_000, 50_005, 50_010, 50_011]
+        .map(listen)
+        .join(" & "),
+    );
     await serving(other, listen(6053));
   }, 300_000);
 
@@ -262,6 +279,159 @@ describe("an app's network of its own on real Docker", () => {
 
     expect(await ticks()).toBe(cut);
     await docker("rm", "--force", sayer).catch(() => "");
+  });
+
+  it("lets the app reach its devices on a range of ports, both ends included, and not a port past either", async () => {
+    const address = await addressOf(device);
+    await holders.apply(app, {
+      ...policy([address]),
+      ports: [6053, [50_000, 50_010]],
+      manager: "test",
+      holder,
+    });
+
+    for (const port of [6053, 50_000, 50_005, 50_010]) {
+      expect(await reaches(address, port), `port ${port}`).toBe("yes");
+    }
+    for (const port of [80, 49_999, 50_011]) {
+      expect(await reaches(address, port), `port ${port}`).toBe("no");
+    }
+    // As nft lists them: the range as one, and the rules that use the sets.
+    const listed = await docker(
+      "run",
+      "--rm",
+      "--network",
+      `container:${holder}`,
+      "--cap-drop",
+      "ALL",
+      "--cap-add",
+      "NET_ADMIN",
+      image,
+      "nft",
+      "-j",
+      "list",
+      "table",
+      "inet",
+      "sanctum",
+    );
+    const { nftables } = JSON.parse(listed) as {
+      nftables: Record<
+        string,
+        { name?: string; elem?: unknown; expr?: unknown }
+      >[];
+    };
+    expect(
+      nftables.find((each) => each.set?.name === "reachports")?.set?.elem,
+    ).toEqual([6053, { range: [50_000, 50_010] }]);
+    const rules = nftables.flatMap((each) =>
+      each.rule ? [JSON.stringify(each.rule.expr)] : [],
+    );
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toContain('"field":"dport"}},"right":"@reachports"');
+    expect(rules[1]).toContain('"field":"sport"}},"right":"@reachports"');
+    expect(rules[1]).toContain('"right":"reply"');
+  });
+
+  it("drops connections initiated by an allowed device from a port in a range", async () => {
+    const address = await addressOf(device);
+    const holderAddress = await addressOf(holderName(app));
+    await holders.apply(app, {
+      ...policy([address]),
+      ports: [[50_000, 50_010]],
+      manager: "test",
+      holder,
+    });
+    await docker(
+      "run",
+      "--detach",
+      "--name",
+      listener,
+      "--network",
+      `container:${holder}`,
+      "--cap-drop",
+      "ALL",
+      "alpine:latest",
+      "sh",
+      "-c",
+      "nc -l -p 12345",
+    );
+    await expect
+      .poll(() =>
+        docker(
+          "exec",
+          listener,
+          "sh",
+          "-c",
+          "cat /proc/net/tcp /proc/net/tcp6 | grep -c ':3039 ' || true",
+        ),
+      )
+      .toBe("1");
+
+    expect(
+      await docker(
+        "exec",
+        device,
+        "sh",
+        "-c",
+        `nc -z -w 2 -p 50005 ${holderAddress} 12345 && echo yes || echo no`,
+      ),
+    ).toBe("no");
+    await docker("rm", "--force", listener);
+  });
+
+  it("cuts a connection open on a port of a range it takes away", async () => {
+    const address = await addressOf(device);
+    await docker("rm", "--force", sayer, ticking).catch(() => "");
+    await docker(
+      "run",
+      "--detach",
+      "--name",
+      sayer,
+      "--network",
+      lanNetworkName(app),
+      "alpine:latest",
+      "sh",
+      "-c",
+      "(while true; do echo tick; sleep 0.1; done) | nc -l -p 50005",
+    );
+    const sayerAddress = await addressOf(sayer);
+    await holders.apply(app, {
+      ...policy([address, sayerAddress]),
+      ports: [6053, [50_000, 50_010]],
+      manager: "test",
+      holder,
+    });
+    await docker(
+      "run",
+      "--detach",
+      "--name",
+      ticking,
+      "--network",
+      `container:${holder}`,
+      "--cap-drop",
+      "ALL",
+      "alpine:latest",
+      "nc",
+      sayerAddress,
+      "50005",
+    );
+    const ticks = async () =>
+      (await docker("logs", ticking)).split("\n").filter(Boolean).length;
+    await expect.poll(ticks, { timeout: 10_000 }).toBeGreaterThan(3);
+
+    // The address stays; only the range goes.
+    await holders.apply(app, {
+      ...policy([address, sayerAddress]),
+      ports: [6053],
+      manager: "test",
+      holder,
+    });
+    await new Promise((done) => setTimeout(done, 500));
+    const cut = await ticks();
+    await new Promise((done) => setTimeout(done, 1_500));
+
+    expect(await ticks()).toBe(cut);
+    await docker("rm", "--force", sayer, ticking).catch(() => "");
   });
 
   it("goes with its network", async () => {

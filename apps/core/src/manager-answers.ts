@@ -280,6 +280,9 @@ export const capabilities = z.object({
   // manager from before either doesn't say.
   discovery: z.boolean().default(false),
   lan: z.boolean().default(false),
+  // Whether that network's rules take a range of ports as well as single
+  // ones.
+  portRanges: z.boolean().default(false),
   // Whether it deletes a removed app's data, and a service's.
   deletesData: z.boolean().default(false),
   // Whether it keeps one count of the memory and disk it has promised, which
@@ -292,6 +295,7 @@ export const noCapabilities: ManagerCapabilities = {
   memoryLimits: false,
   discovery: false,
   lan: false,
+  portRanges: false,
   deletesData: false,
   reserves: false,
 };

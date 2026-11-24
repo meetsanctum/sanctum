@@ -23,7 +23,8 @@ import { AppRefusal } from "./refusal.js";
 // starts, a short helper joins the holder's network, never the host's, with
 // NET_ADMIN alone, loads Sanctum's rules there as one nftables table and reads
 // them back. The rules let the app open connections only to its found
-// devices' addresses, on its ports, every packet checked in either direction
+// devices' addresses, on its ports and ranges of ports, every packet checked
+// in either direction
 // rather than passed for a connection passed before, so taking an address away
 // cuts its connection. Nothing else goes: not DNS, Docker's resolver at
 // 127.0.0.11 included whatever port it maps, nor the host, the core and the
@@ -39,11 +40,50 @@ const rulesRole = "app-rules";
 const appLabel = "sanctum.app";
 const table = "inet sanctum";
 
-// The most addresses and ports one policy holds.
+// The most addresses one policy holds, and the most ports and ranges.
 export const maxLanAddresses = 256;
 export const maxLanPorts = 16;
 
 const ipv4 = z.ipv4();
+const port = z.number().int().min(1).max(65_535);
+
+// A range lies within the ports devices hand out for a session, as the core
+// checks an app's manifest: never the well-known and registered ports a
+// device's other services listen on.
+const rangePorts = { from: 49_152, to: 65_535 };
+
+/** A port, or a range of them from the first to the second, both included. */
+const lanPort = z.union([
+  port,
+  z
+    .tuple([port, port])
+    .refine(
+      ([from, to]) =>
+        rangePorts.from <= from && from < to && to <= rangePorts.to,
+      "A range runs upwards, within the ports handed out for a session",
+    ),
+]);
+export type LanPort = z.infer<typeof lanPort>;
+
+type Interval = [from: number, to: number];
+
+const intervalOf = (port: LanPort): Interval =>
+  typeof port === "number" ? [port, port] : port;
+
+/**
+ * The ports as the fewest intervals that cover them, in order: nft refuses
+ * intervals that overlap, and the same ports may be written more than one
+ * way, so rules are written, and compared, in this form.
+ */
+export function mergedPorts(ports: readonly LanPort[]): Interval[] {
+  const merged: Interval[] = [];
+  for (const [from, to] of ports.map(intervalOf).sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && from <= last[1] + 1) last[1] = Math.max(last[1], to);
+    else merged.push([from, to]);
+  }
+  return merged;
+}
 
 /** What an app's network may reach, as the core names it (core's app-host/lan.ts). */
 export const lanPolicy = z.object({
@@ -54,7 +94,7 @@ export const lanPolicy = z.object({
     .refine((core) => !/[^A-Za-z0-9_-]/.test(core)),
   count: z.number().int().min(1),
   addresses: z.array(ipv4).max(maxLanAddresses),
-  ports: z.array(z.number().int().min(1).max(65_535)).max(maxLanPorts),
+  ports: z.array(lanPort).max(maxLanPorts),
 });
 export type LanPolicy = z.infer<typeof lanPolicy>;
 
@@ -95,8 +135,11 @@ const marker = (policy: { core: string; count: number }) =>
  */
 export function rulesFor(policy: LanPolicy) {
   const addresses = [...new Set(policy.addresses)].sort();
-  const ports = [...new Set(policy.ports)].sort((a, b) => a - b);
-  const elements = (values: readonly (string | number)[]) =>
+  // Written only from checked numbers.
+  const ports = mergedPorts(policy.ports).map(([from, to]) =>
+    from === to ? `${from}` : `${from}-${to}`,
+  );
+  const elements = (values: readonly string[]) =>
     values.length > 0 ? ` elements = { ${values.join(", ")} };` : "";
   return [
     `table ${table}`,
@@ -104,7 +147,7 @@ export function rulesFor(policy: LanPolicy) {
     `table ${table} {`,
     `  comment "${marker(policy)}"`,
     `  set reach { type ipv4_addr;${elements(addresses)} }`,
-    `  set reachports { type inet_service;${elements(ports)} }`,
+    `  set reachports { type inet_service; flags interval;${elements(ports)} }`,
     "  chain output {",
     "    type filter hook output priority 0; policy drop;",
     "    ip daddr @reach tcp dport @reachports accept",
@@ -127,9 +170,19 @@ const listed = z.object({
 type Listed = {
   marker: string | null;
   addresses: string[];
-  ports: number[];
+  // The ports as intervals, or null where an element isn't one nft lists for
+  // a port or a range of them, which nothing then takes as confirmed.
+  ports: Interval[] | null;
   drops: boolean;
 };
+
+// A port set's element, as nft lists it: a port, or {"range": [from, to]}.
+const listedPort = z.union([
+  port,
+  z
+    .strictObject({ range: z.tuple([port, port]) })
+    .transform(({ range }) => range),
+]);
 
 // What a holder's table holds, from `nft -j list table`.
 export function readRules(output: string): Listed | null {
@@ -155,11 +208,14 @@ export function readRules(output: string): Listed | null {
   return {
     marker: typeof comment === "string" ? comment : null,
     addresses: setOf("reach").map(String).sort(),
-    ports: setOf("reachports")
-      .map(Number)
-      .sort((a, b) => a - b),
+    ports: portsOf(setOf("reachports")),
     drops,
   };
+}
+
+function portsOf(elements: unknown[]) {
+  const ports = z.array(listedPort).safeParse(elements);
+  return ports.success ? mergedPorts(ports.data) : null;
 }
 
 // The policy's core run and count, from what a holder's rules say.
@@ -265,13 +321,14 @@ export function createLanHolders(options: {
       rulesFor(policy),
     );
     const read = code === 0 ? readRules(output) : null;
-    const as = (values: readonly (string | number)[]) =>
+    const as = (values: readonly string[]) =>
       JSON.stringify([...new Set(values)].sort());
     if (
       !read?.drops ||
       read.marker !== marker(policy) ||
       as(read.addresses) !== as(policy.addresses) ||
-      as(read.ports) !== as(policy.ports)
+      !read.ports ||
+      JSON.stringify(read.ports) !== JSON.stringify(mergedPorts(policy.ports))
     ) {
       throw new AppRefusal(
         `${app}'s network didn't take its rules (${output.trim().slice(0, 200)})`,
