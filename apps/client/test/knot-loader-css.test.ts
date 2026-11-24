@@ -215,6 +215,24 @@ describe("the frame's backing under the glass in the built CSS", () => {
     expect(backing("data-covered")).toEqual([["opacity", "1"]]);
   });
 
+  it("keeps the screen's own pointer events and catches presses below the overlay", () => {
+    const screen = ".home-screen[data-holds-pointer]";
+    expect(declarationsOf(screen)).toContainEqual(["pointer-events", "auto"]);
+    const barrier = [
+      ...declarationsOf(`${screen}:after`),
+      ...declarationsOf(`${screen}::after`),
+    ];
+    expect(barrier).toEqual(
+      expect.arrayContaining([
+        ["content", '""'],
+        ["position", "absolute"],
+        ["inset", "0"],
+        ["z-index", "9"],
+        ["pointer-events", "auto"],
+      ]),
+    );
+  });
+
   it("keeps following the glass's fade where motion is reduced", () => {
     const reduced = rules.filter((rule) =>
       rule.media.includes("prefers-reduced-motion:reduce"),

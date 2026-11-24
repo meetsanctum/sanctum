@@ -143,10 +143,14 @@ describe("a container two overlays cover", () => {
 
     await both(true, true);
     expect(container.hasAttribute("data-covered")).toBe(true);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
     await both(false, true);
     expect(container.hasAttribute("data-covered")).toBe(true);
+    expect(container.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
     await both(false, false);
     expect(container.hasAttribute("data-covered")).toBe(false);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(false);
   });
 });
 

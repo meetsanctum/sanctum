@@ -410,11 +410,15 @@ function Strip(props: {
               className="fill-white/8"
             />
           )}
-          {marks.off && <path d={marks.off} className="fill-white/14" />}
-          {[...marks.on].map(([colour, each]) => (
-            <Fragment key={colour}>
-              <path d={each.fill} fill={colour} fillOpacity={0.4} />
-              <path d={each.top} fill={colour} />
+          {marks.map(({ off, on }, index) => (
+            <Fragment key={index}>
+              {off && <path d={off} className="fill-white/14" />}
+              {[...on].map(([colour, each]) => (
+                <Fragment key={colour}>
+                  <path d={each.fill} fill={colour} fillOpacity={0.4} />
+                  <path d={each.top} fill={colour} />
+                </Fragment>
+              ))}
             </Fragment>
           ))}
           {pointed !== null && (
@@ -472,35 +476,43 @@ function Strip(props: {
   );
 }
 
-// The strip's marks as a few paths, a light's level and its top edge in
-// each colour it had and a line where it was off, rather than an element or
-// two for every span: a light that follows daylight changes every few
-// minutes, and its hundreds of spans made its page slow to draw.
+type MarkLayer = {
+  off: string;
+  on: Map<string, { fill: string; top: string }>;
+};
+
+// Batch disjoint marks by colour. Each span is at least a pixel wide, so
+// spans starting at the same pixel need separate layers in time order to
+// keep their colours and top edges in the right order.
 function marksOf(
   spans: readonly Span[],
   x: (at: number) => number,
   height: number,
 ) {
-  let off = "";
-  const on = new Map<string, { fill: string; top: string }>();
+  const layers: MarkLayer[] = [];
+  let previousLeft = -1;
+  let index = 0;
   for (const span of spans) {
     if (!span.known) continue;
     const left = x(span.from);
     const width = Math.max(left + 1, x(span.to)) - left;
+    index = left === previousLeft ? index + 1 : 0;
+    previousLeft = left;
+    const layer = (layers[index] ??= { off: "", on: new Map() });
     if (!span.on) {
-      off += `M${left} ${height - 1}h${width}v1h${-width}z`;
+      layer.off += `M${left} ${height - 1}h${width}v1h${-width}z`;
       continue;
     }
     const level =
       span.brightness === null
         ? height
         : Math.max(2, Math.round((height * span.brightness) / 100));
-    const each = on.get(span.colour) ?? { fill: "", top: "" };
+    const each = layer.on.get(span.colour) ?? { fill: "", top: "" };
     each.fill += `M${left} ${height - level}h${width}v${level}h${-width}z`;
     each.top += `M${left} ${height - level}h${width}v2h${-width}z`;
-    on.set(span.colour, each);
+    layer.on.set(span.colour, each);
   }
-  return { off, on };
+  return layers;
 }
 
 // The columns' scale: the least of these hours that holds the longest day.

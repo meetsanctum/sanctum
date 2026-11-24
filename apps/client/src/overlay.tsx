@@ -36,9 +36,9 @@ function WhileCovering(props: { onCovering: (covering: boolean) => void }) {
 // While a modal dialog is open Radix turns pointer events off on <body>,
 // so nothing outside it takes a press. Every element inherits that, so the
 // whole screen behind would be styled again as an overlay opened and again
-// as it went. The veil covers the window already, so the container keeps
-// pointer events itself while any overlay's content is there (data-holds-
-// pointer, shell-frame.css), and what is behind it keeps its styles. Set
+// as it went. The container keeps pointer events itself while any overlay's
+// content is there (data-holds-pointer, shell-frame.css), with a barrier
+// under the veil to catch presses if a modal menu takes over. Set
 // from inside the content, which Radix's own layer contains: it is set
 // before Radix turns them off and cleared after it turns them back on.
 const holding = new WeakMap<HTMLElement, number>();
