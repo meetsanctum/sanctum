@@ -252,7 +252,7 @@ it.each([
   ]);
 });
 
-it("shows a smart speaker with a button by its playback, and mutes from Microphones", async () => {
+it("matches the driver's page width and mutes from Microphones on a smart speaker", async () => {
   const speaker = mediaPlayer("speaker", "Speaker", "office", {
     activity: "idle",
   });
@@ -260,6 +260,7 @@ it("shows a smart speaker with a button by its playback, and mutes from Micropho
     {
       ...speaker,
       type: "smart-speaker",
+      driver: driver.info.id,
       capabilities: [button, ...speaker.capabilities, audio],
     },
   ];
@@ -267,11 +268,26 @@ it("shows a smart speaker with a button by its playback, and mutes from Micropho
   expect(sections.map(({ id, tiles }) => [id, tiles[0]?.capabilityId])).toEqual(
     [["media", "player"]],
   );
-  await open("speaker/player");
-  const tab = dialog().querySelector<HTMLButtonElement>(
-    '[role="tab"][aria-label="Microphones"]',
-  )!;
-  await act(async () => tab.click());
+  await open("speaker/player", { apps: [driver] });
+
+  async function pageWidth(label: string) {
+    const tab = dialog().querySelector<HTMLButtonElement>(
+      `[role="tab"][aria-label="${label}"]`,
+    )!;
+    await act(async () => tab.click());
+    const panel = document.getElementById(tab.getAttribute("aria-controls")!)!;
+    const column = panel.querySelector(
+      '[data-slot="swipe-page-content"]',
+    )!.firstElementChild!;
+    return [...column.classList]
+      .filter((name) => /^(w|max-w)-/.test(name))
+      .sort();
+  }
+
+  const driverWidth = await pageWidth("Status, from Example");
+  expect(driverWidth).toEqual(["max-w-full", expect.stringMatching(/^w-/)]);
+  expect(await pageWidth("Microphones")).toEqual(driverWidth);
+
   const microphones =
     dialog().querySelector<HTMLButtonElement>('[role="switch"]')!;
   expect(microphones.getAttribute("aria-checked")).toBe("true");
