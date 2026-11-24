@@ -5,6 +5,7 @@ import {
   createLiveFeed,
   frameBridge,
   type CoreBridge,
+  type ToFrame,
 } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -91,6 +92,7 @@ afterEach(() => {
   container.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  delete document.documentElement.dataset.effects;
 });
 
 async function show(
@@ -144,6 +146,38 @@ function hello() {
 }
 
 describe("an app's page in its frame", () => {
+  it("sends the shell's effects setting when the page opens and when it changes", async () => {
+    document.documentElement.dataset.effects = "reduced";
+    await show();
+    const port = hello();
+    const said: ToFrame[] = [];
+    port.onmessage = (event: MessageEvent<ToFrame>) => said.push(event.data);
+    try {
+      await vi.waitFor(() =>
+        expect(said[0]).toMatchObject({
+          type: "setup",
+          context: { effects: "reduced" },
+        }),
+      );
+      await act(async () => {
+        delete document.documentElement.dataset.effects;
+      });
+      await vi.waitFor(() =>
+        expect(said).toContainEqual({
+          type: "context",
+          context: {
+            mode: "day",
+            effects: "regular",
+            temperatureUnit: null,
+            timeZone: null,
+          },
+        }),
+      );
+    } finally {
+      port.close();
+    }
+  });
+
   it("shows the app's name, and the loader only after 0.4 s", async () => {
     await show();
     expect(container.querySelector("h1")?.textContent).toBe("Weather");

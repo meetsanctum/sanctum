@@ -34,9 +34,10 @@ export function useEdgeFade(
       return;
     }
     followed.current?.stop();
-    followed.current = row
-      ? { row, reduced, stop: follow(row, focusWhenScrollable, !reduced) }
-      : null;
+    followed.current =
+      row && (!reduced || focusWhenScrollable)
+        ? { row, reduced, stop: follow(row, focusWhenScrollable, !reduced) }
+        : null;
   });
   useLayoutEffect(
     () => () => {
@@ -55,10 +56,7 @@ function follow(
   let frame = 0;
   const paint = () => {
     frame = 0;
-    const box = row.getBoundingClientRect();
     const maxScroll = row.scrollWidth - row.clientWidth;
-    const before = row.scrollLeft > 0;
-    const after = row.scrollLeft < maxScroll - 1;
     if (focusWhenScrollable) {
       // Rows without controls need a tab stop for keyboard scrolling in Safari.
       const hasOverflow = maxScroll > 1;
@@ -67,10 +65,14 @@ function follow(
         else row.removeAttribute("tabindex");
       }
     }
+    if (!fades) return;
+    const box = row.getBoundingClientRect();
+    const before = row.scrollLeft > 0;
+    const after = row.scrollLeft < maxScroll - 1;
     for (const tile of row.children) {
       if (!(tile instanceof HTMLElement)) continue;
       let mask = "";
-      if (fades && (before || after)) {
+      if (before || after) {
         const at = tile.getBoundingClientRect();
         const start = box.left - at.left;
         const end = box.right - at.left;
@@ -90,7 +92,7 @@ function follow(
     if (frame === 0) frame = window.requestAnimationFrame(paint);
   };
   paint();
-  row.addEventListener("scroll", schedule, { passive: true });
+  if (fades) row.addEventListener("scroll", schedule, { passive: true });
   const resized =
     typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
   const observeAll = () => {
@@ -109,9 +111,16 @@ function follow(
         });
   changed?.observe(row, { childList: true });
   return () => {
-    row.removeEventListener("scroll", schedule);
     resized?.disconnect();
     changed?.disconnect();
     window.cancelAnimationFrame(frame);
+    if (fades) {
+      row.removeEventListener("scroll", schedule);
+      for (const tile of row.children) {
+        if (!(tile instanceof HTMLElement)) continue;
+        tile.style.maskImage = "";
+        tile.style.webkitMaskImage = "";
+      }
+    }
   };
 }

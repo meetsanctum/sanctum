@@ -22,16 +22,37 @@ function filesIn(dir: string, kinds: RegExp): string[] {
 
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
+function shadowParts(value: string) {
+  return value.split(/,(?![^(]*\))/).map((part) => {
+    const tokens: string[] =
+      part.replaceAll("_", " ").match(/[\w-]+\([^)]*\)|\S+/g) ?? [];
+    const lengths = tokens.filter((token) =>
+      /^-?(?:\d*\.)?\d+(?:[a-z]+)?$/.test(token),
+    );
+    return { tokens, lengths };
+  });
+}
+
 // A shadow's parts that are soft: not inset, with a blur above 0.
 function hasSoftShadow(value: string) {
-  return value
-    .split(/,(?![^(]*\))/)
-    .map((part) => part.trim().replaceAll("_", " "))
-    .some((part) => {
-      if (part.startsWith("inset") || part === "none") return false;
-      const lengths = part.match(/-?[\d.]+(?:px|rem)?(?=\s|$)/g) ?? [];
-      return lengths.length >= 3 && Number.parseFloat(lengths[2]!) > 0;
-    });
+  return shadowParts(value).some(
+    ({ tokens, lengths }) =>
+      !tokens.includes("inset") && Number.parseFloat(lengths[2] ?? "0") > 0,
+  );
+}
+
+// A reduced shadow must set its offsets and leave its blur at zero.
+function isHardShadow(value: string) {
+  return (
+    value === "none" ||
+    shadowParts(value).every(
+      ({ tokens, lengths }) =>
+        lengths.length >= 2 &&
+        Number.parseFloat(lengths[2] ?? "0") === 0 &&
+        (lengths.length === 4 ||
+          !tokens.some((token) => /^(var|calc|min|max|clamp)\(/.test(token))),
+    )
+  );
 }
 
 type Effect = "shadow" | "drop-shadow" | "mask" | "blur";
@@ -70,11 +91,12 @@ function findBase(name: string) {
   return last;
 }
 
-const undoes: Record<Exclude<Effect, "blur">, RegExp> = {
-  shadow: /^shadow-/,
-  "drop-shadow": /^drop-shadow-none$/,
-  mask: /^\[mask-image:none\]$/,
-};
+function undoes(effect: Exclude<Effect, "blur">, name: string) {
+  if (effect === "drop-shadow") return name === "drop-shadow-none";
+  if (effect === "mask") return name === "[mask-image:none]";
+  const custom = /^shadow-\[(.*)\]$/.exec(name);
+  return name === "shadow-none" || (custom && isHardShadow(custom[1]!));
+}
 
 function classStringProblems(path: string, text: string) {
   const problems: string[] = [];
@@ -87,14 +109,12 @@ function classStringProblems(path: string, text: string) {
         problems.push(`${path}: ${name} (live blur goes through frosted)`);
         continue;
       }
+      const { effect, prefix } = found;
+      const reducedPrefix = `reduce-effects:${prefix}`;
       const partner = names.some((each) => {
-        if (!each.startsWith("reduce-effects:")) return false;
-        const rest = each.slice("reduce-effects:".length);
         return (
-          rest.startsWith(found.prefix) &&
-          undoes[found.effect as Exclude<Effect, "blur">].test(
-            rest.slice(found.prefix.length),
-          )
+          each.startsWith(reducedPrefix) &&
+          undoes(effect, each.slice(reducedPrefix.length))
         );
       });
       if (!partner) problems.push(`${path}: ${name}`);
@@ -126,42 +146,58 @@ function cssRules(text: string): CssRule[] {
   return rules;
 }
 
-function drawsEffect(body: string) {
+function declarations(body: string) {
+  const values = new Map<string, string>();
   for (const declaration of body.split(";")) {
     const colon = declaration.indexOf(":");
     if (colon < 0) continue;
     const property = declaration.slice(0, colon).trim();
     const value = declaration.slice(colon + 1).trim();
-    if (property === "box-shadow" && hasSoftShadow(value)) return property;
-    if (/^(-webkit-)?mask-image$/.test(property) && value !== "none") {
-      return property;
-    }
-    if (/^(-webkit-)?backdrop-filter$/.test(property) && value !== "none") {
-      return property;
-    }
-    if (property === "filter" && /blur|drop-shadow/.test(value)) {
-      return property;
-    }
+    values.set(property, value);
   }
-  return null;
+  return values;
+}
+
+function drawsEffect(property: string, value: string) {
+  if (property === "box-shadow") return hasSoftShadow(value);
+  if (/^(?:-webkit-)?(?:mask-image|backdrop-filter)$/.test(property)) {
+    return value !== "none";
+  }
+  return property === "filter" && /blur|drop-shadow/.test(value);
 }
 
 function cssProblems(path: string, text: string) {
   const rules = cssRules(text);
-  const reduced = rules.filter((rule) =>
-    /data-effects=["']?reduced/.test(rule.selector),
-  );
+  const reducedPrefix = /^\[data-effects=(?:"reduced"|'reduced'|reduced)\]\s+/;
+  const reduced = rules
+    .filter((rule) => reducedPrefix.test(rule.selector))
+    .map((rule) => ({
+      selector: rule.selector.replace(reducedPrefix, "").replace(/\s+/g, " "),
+      within: rule.within,
+      values: declarations(rule.body),
+    }));
   const problems: string[] = [];
   for (const rule of rules) {
     if (rule.within.some((at) => at.startsWith("@utility frosted"))) continue;
-    if (/data-effects=["']?reduced/.test(rule.selector)) continue;
-    const property = drawsEffect(rule.body);
-    if (!property) continue;
-    const element = rule.selector.match(/\.[\w-]+(?![\s\S]*\.[\w-])/)?.[0];
-    const partner =
-      element !== undefined &&
-      reduced.some((each) => each.selector.includes(element));
-    if (!partner) problems.push(`${path}: ${rule.selector} { ${property} }`);
+    if (reducedPrefix.test(rule.selector)) continue;
+    const selector = rule.selector.replace(/\s+/g, " ");
+    for (const [property, value] of declarations(rule.body)) {
+      if (!drawsEffect(property, value)) continue;
+      const partner = reduced.some((each) => {
+        if (each.selector !== selector) return false;
+        if (!each.within.every((at, index) => at === rule.within[index])) {
+          return false;
+        }
+        const override = each.values.get(property);
+        return (
+          override !== undefined &&
+          (property === "box-shadow"
+            ? isHardShadow(override)
+            : override === "none")
+        );
+      });
+      if (!partner) problems.push(`${path}: ${rule.selector} { ${property} }`);
+    }
   }
   return problems;
 }
@@ -190,6 +226,50 @@ describe("every effect's look under Reduce effects", () => {
     expect(
       drawing.filter((path) => !read(path).includes("useReducedEffects")),
     ).toEqual([]);
+  });
+
+  it("reads Reduce effects where SVG masks have styled shapes", () => {
+    const masked = scripts.filter((path) =>
+      /<mask\b[^>]*>(?:(?!<\/mask>)[\s\S])*?\bclassName=/.test(read(path)),
+    );
+    expect(masked.length).toBeGreaterThan(0);
+    expect(
+      masked.filter((path) => !read(path).includes("useReducedEffects")),
+    ).toEqual([]);
+  });
+
+  it.each([
+    "shadow-[0_16px_40px_rgb(0_0_0/24%)]",
+    "shadow-sm",
+    "shadow-red-500",
+  ])("rejects %s as a reduced shadow override", (override) => {
+    const shadow = "shadow-[0_16px_40px_rgb(0_0_0/24%)]";
+    expect(
+      classStringProblems("example", `"${shadow} reduce-effects:${override}"`),
+    ).toEqual([`example: ${shadow}`]);
+  });
+
+  it("accepts a reduced shadow with only hairlines", () => {
+    expect(
+      classStringProblems(
+        "example",
+        '"shadow-md reduce-effects:shadow-[inset_0_1px_0_white,0_0_0_1px_black]"',
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ".card { opacity: 1; }",
+    ".card { mask-image: linear-gradient(black, transparent); }",
+    ".card-title { mask-image: none; }",
+    ".card .title { mask-image: none; }",
+  ])("rejects a CSS override that leaves the mask active: %s", (override) => {
+    expect(
+      cssProblems(
+        "example",
+        `.card { mask-image: linear-gradient(black, transparent); } [data-effects="reduced"] ${override}`,
+      ),
+    ).toEqual(["example: .card { mask-image }"]);
   });
 
   it("finds what it looks for", () => {

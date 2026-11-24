@@ -1,5 +1,8 @@
+import { useReducedEffects } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useId } from "react";
+
+import { knotPath } from "./knot";
 
 // The knot as a loading indicator: one line goes round the upright loop,
 // turns right where it would close and goes round the lying loop, knotting
@@ -25,12 +28,17 @@ const lying = "M7 5H11A2 2 0 0 1 11 9H3A2 2 0 0 1 3 5H10.5";
 export function KnotLoader(props: { className?: string }) {
   // Each knot on a screen needs its own mask and clip ids.
   const id = useId();
+  const reduced = useReducedEffects();
+  const className = cn("knot-loader", props.className);
+  if (reduced) {
+    return (
+      <svg viewBox="0 0 14 14" aria-hidden="true" className={className}>
+        <path fill="currentColor" d={knotPath} />
+      </svg>
+    );
+  }
   return (
-    <svg
-      viewBox="0 0 14 14"
-      aria-hidden="true"
-      className={cn("knot-loader", props.className)}
-    >
+    <svg viewBox="0 0 14 14" aria-hidden="true" className={className}>
       <defs>
         {/* The upright loop passes under at top left and bottom right, the
             lying one at top right and bottom left. The top-left square runs

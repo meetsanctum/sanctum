@@ -6,6 +6,7 @@ import {
   startFrame,
   type AppUi,
   type CoreBridge,
+  type FrameContext,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
 import { afterEach, beforeEach, vi, expect, type Mock } from "vitest";
@@ -85,6 +86,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
+  delete document.documentElement.dataset.effects;
 });
 
 export const client = (app = info) =>
@@ -98,7 +100,12 @@ export const message = (data: unknown, more: object) =>
   Object.assign(new Event("message"), { data, ...more });
 
 // The shell's end, for the frame whose window is `frame`.
-export function shellEnd(frame: Window, code = "code-1", app = info) {
+export function shellEnd(
+  frame: Window,
+  code = "code-1",
+  app = info,
+  frameContext: FrameContext = context,
+) {
   const events: FrameEvent[] = [];
   let appClient = client(app);
   const bridge = openBridge({
@@ -110,7 +117,7 @@ export function shellEnd(frame: Window, code = "code-1", app = info) {
       app,
       page: "main",
       params: {},
-      context,
+      context: frameContext,
     }),
     on: (event) => events.push(event),
     host: shell as unknown as Window,
@@ -140,14 +147,18 @@ export function frameWindow(
 }
 
 // A page in its frame, started by the kit as the core's entry starts it.
-export function framed(ui: () => Promise<{ default: AppUi }>, app = info) {
+export function framed(
+  ui: () => Promise<{ default: AppUi }>,
+  app = info,
+  frameContext: FrameContext = context,
+) {
   const frame = frameWindow((data, ports) =>
     window.dispatchEvent(message(data, { source: window, ports })),
   );
   vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => {
     shell.dispatchEvent(message(data, { source: frame }));
   });
-  const end = shellEnd(frame, "code-1", app);
+  const end = shellEnd(frame, "code-1", app, frameContext);
   startFrame(ui);
   return { ...end, frame };
 }

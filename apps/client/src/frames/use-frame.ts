@@ -1,9 +1,10 @@
 import {
   frameBridge,
+  useReducedEffects,
   type FrameContext,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { looksRunning } from "../app-state";
 import type { HostedApp } from "../apps";
@@ -36,13 +37,18 @@ export function useFrame(options: {
     Extract<ToFrame, { type: "setup" }>,
     "page" | "params" | "device"
   >;
-  context: FrameContext;
+  context: Omit<FrameContext, "effects">;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
   /** What else the page says: its bar, where to go, its size, a key. */
   on?: (event: FrameEvent) => void;
 }) {
-  const { app, context } = options;
+  const { app, context: pageContext } = options;
+  const reduced = useReducedEffects();
+  const context = useMemo<FrameContext>(
+    () => ({ ...pageContext, effects: reduced ? "reduced" : "regular" }),
+    [pageContext, reduced],
+  );
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<FramePhase>("opening");
   const [mismatch, setMismatch] = useState<PageMismatch>();
@@ -56,9 +62,9 @@ export function useFrame(options: {
   const loads = useRef<{ code?: string }>({});
   const bridge = useRef<FrameBridge>(undefined);
   // What the frame's messages act on, as the shell has it now.
-  const latest = useRef(options);
+  const latest = useRef({ ...options, context });
   useEffect(() => {
-    latest.current = options;
+    latest.current = { ...options, context };
   });
 
   // A frame afresh, for each try and each build the app runs: an update,

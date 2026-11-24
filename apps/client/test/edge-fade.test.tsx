@@ -11,9 +11,13 @@ import { useEdgeFade } from "../src/edge-fade";
 let root: Root;
 let container: HTMLDivElement;
 
-function Row(props: { tiles?: number; shown?: boolean }) {
+function Row(props: {
+  tiles?: number;
+  shown?: boolean;
+  focusWhenScrollable?: boolean;
+}) {
   const row = useRef<HTMLDivElement>(null);
-  useEdgeFade(row);
+  useEdgeFade(row, { focusWhenScrollable: props.focusWhenScrollable });
   if (props.shown === false) return null;
   return (
     <div ref={row}>
@@ -97,13 +101,27 @@ describe("a row's edge fade", () => {
     row.dispatchEvent(new Event("scroll"));
     expect(first!.style.maskImage).not.toBe("");
 
+    const pending = new Map<number, FrameRequestCallback>();
+    let frame = 0;
+    const request = vi.fn((paint: FrameRequestCallback) => {
+      pending.set(++frame, paint);
+      return frame;
+    });
+    vi.stubGlobal("requestAnimationFrame", request);
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => pending.delete(id));
+    row.dispatchEvent(new Event("scroll"));
+    expect(pending.size).toBe(1);
+
     try {
       await act(async () => {
         document.documentElement.dataset.effects = "reduced";
       });
+      for (const paint of pending.values()) paint(0);
       expect(first!.style.maskImage).toBe("");
+      expect(first!.style.webkitMaskImage).toBe("");
+      request.mockClear();
       row.dispatchEvent(new Event("scroll"));
-      expect(first!.style.maskImage).toBe("");
+      expect(request).not.toHaveBeenCalled();
     } finally {
       await act(async () => {
         delete document.documentElement.dataset.effects;
@@ -160,6 +178,26 @@ describe("a row's edge fade", () => {
     expect(added.style.maskImage).toBe(
       "linear-gradient(to right, transparent -212px, black -188px, black 64px, transparent 88px)",
     );
+  });
+
+  it("keeps the tab stop for an overflowing row without fades", async () => {
+    document.documentElement.dataset.effects = "reduced";
+    try {
+      await act(async () => root.render(<Row focusWhenScrollable />));
+      const row = container.firstElementChild as HTMLElement;
+      layOut(row, 0, 412);
+      const measure = vi.spyOn(row, "getBoundingClientRect");
+      await act(async () => root.render(<Row focusWhenScrollable tiles={3} />));
+      expect(row.tabIndex).toBe(0);
+      expect((row.firstElementChild as HTMLElement).style.maskImage).toBe("");
+      expect(measure).not.toHaveBeenCalled();
+
+      layOut(row, 0, 300);
+      await act(async () => root.render(<Row focusWhenScrollable />));
+      expect(row.hasAttribute("tabindex")).toBe(false);
+    } finally {
+      delete document.documentElement.dataset.effects;
+    }
   });
 
   it("sets nothing up again when the row draws again", async () => {

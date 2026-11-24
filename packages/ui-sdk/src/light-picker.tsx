@@ -3,6 +3,7 @@ import type {
   LightFeatures,
   LightState,
 } from "@meetsanctum/app-sdk";
+import { cn } from "cn";
 import {
   ArrowLeft,
   Check,
@@ -302,6 +303,7 @@ export function LightPicker(props: {
         key="middle"
         colour={whiteOf(mireds)}
         label="White wheel"
+        whiteSwatch
         disabled={disabled}
         onClick={() => open("wheel")}
       />,
@@ -440,6 +442,7 @@ function Circle(props: {
 function Middle(props: {
   colour: string;
   label: string;
+  whiteSwatch?: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
@@ -455,7 +458,10 @@ function Middle(props: {
     >
       <Pencil
         aria-hidden="true"
-        className="size-7 drop-shadow-[0_1px_4px_rgb(0_0_0/0.65)] reduce-effects:drop-shadow-none"
+        className={cn(
+          "size-7 drop-shadow-[0_1px_4px_rgb(0_0_0/0.65)] reduce-effects:drop-shadow-none",
+          props.whiteSwatch && "reduce-effects:text-(--carbon)",
+        )}
       />
     </button>
   );

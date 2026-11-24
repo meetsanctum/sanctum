@@ -86,11 +86,11 @@ type Tone = "neutral" | "success" | "error";
 
 const tones: Record<Tone, string> = {
   neutral:
-    "from-white/12 to-white/6 shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)]",
+    "from-white/12 to-white/6 inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
   success:
-    "from-(--leaf)/20 to-(--leaf)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(52_199_89/0.42),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(52_199_89/0.42)]",
+    "from-(--leaf)/20 to-(--leaf)/8 inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(52_199_89/0.42)]",
   error:
-    "from-(--ruby)/20 to-(--ruby)/8 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(255_59_48/0.45),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_0_0_1px_rgb(255_59_48/0.45)]",
+    "from-(--ruby)/20 to-(--ruby)/8 inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(255_59_48/0.45)]",
 };
 
 const rounds: Record<Tone, string> = {
@@ -118,7 +118,7 @@ export function DeviceCard(props: {
         } as CSSProperties
       }
       className={cn(
-        "relative flex min-h-55 flex-col items-center rounded-lg bg-linear-to-b px-4 pt-4.5 pb-4 text-center",
+        "relative flex min-h-55 flex-col items-center rounded-lg bg-linear-to-b px-4 pt-4.5 pb-4 text-center shadow-[0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-none",
         "animate-in fill-mode-both fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:animation-duration-500 motion-safe:[animation-delay:calc(var(--card-stagger)+var(--card-wait))] motion-reduce:[animation-delay:var(--card-stagger)]",
         tones[props.tone ?? "neutral"],
       )}
