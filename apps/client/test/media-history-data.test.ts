@@ -281,6 +281,7 @@ describe("a media player's week", () => {
     const today = (minutes: number) =>
       daysWith([null, null, null, null, null, null, minutes]);
     expect(playedWeekHeadline(today(40), now)).toBe("Played 40 min today");
+    expect(playedWeekHeadline(today(0), now)).toBe("Nothing played today");
   });
 
   it("distinguishes a quiet week from a week with gaps", () => {
@@ -291,9 +292,9 @@ describe("a media player's week", () => {
         idle.map((day) => ({ ...day, known: 60 })),
         now,
       ),
-    ).toBe("No playback recorded");
+    ).toBe("Nothing played since Tue");
     expect(playedWeekHeadline(daysWith([null, null, 0, 0, 0, 0, 0]), now)).toBe(
-      "No playback recorded",
+      "Nothing played since Thu",
     );
     expect(playedWeekHeadline(daysWith(Array(7).fill(null)), now)).toBe(
       "Not known yet",

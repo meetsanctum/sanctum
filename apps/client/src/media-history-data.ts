@@ -118,20 +118,24 @@ export function aboutDuration(seconds: number) {
 
 /**
  * What the last 7 days come to: about how long it played a day, over the
- * days that have ended; until one has, how long today; or whether
- * anything played over the week.
+ * days that have ended; until one has, how long today; or since when
+ * nothing has played.
  */
 export function playedWeekHeadline(days: readonly Day[], now: number) {
   return durationWeekHeadline(days, now, {
     average: (seconds) => `Played about ${aboutDuration(seconds)} a day`,
     today: (duration) => `Played ${duration} today`,
-    none: () =>
+    // "All week" only of a week known throughout; otherwise since the
+    // first day anything is known of.
+    none: (known, today) =>
       days.every(
         (day) =>
           day.known >=
           (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
       )
         ? "Nothing played all week"
-        : "No playback recorded",
+        : known[0]!.start === today
+          ? "Nothing played today"
+          : `Nothing played since ${weekday.format(known[0]!.start)}`,
   });
 }
