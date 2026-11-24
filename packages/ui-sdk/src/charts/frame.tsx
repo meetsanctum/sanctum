@@ -44,7 +44,7 @@ export function Readout(props: {
       <span className="flex items-center gap-1.5 text-[15px] leading-5">
         {props.colour && (
           <span
-            className="h-0.5 w-3 shrink-0 rounded-full"
+            className="h-0.5 w-3 shrink-0 rounded-xs"
             style={{ background: props.colour }}
           />
         )}
