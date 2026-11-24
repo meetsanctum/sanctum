@@ -24,6 +24,7 @@ home in the same words as apps' [permissions](/apps/permissions/).
 | Control your lights                                           | On                       |
 | See your switches                                             | On                       |
 | Control your switches                                         | Off                      |
+| Speak on your smart speakers                                  | On                       |
 | See what your sensors read                                    | Off                      |
 | See your remotes' presses                                     | Off, and asks to turn on |
 | Know when there's motion                                      | Off, and asks to turn on |
@@ -37,6 +38,12 @@ home in the same words as apps' [permissions](/apps/permissions/).
 - **Control your lights** includes seeing them. **See your switches**
   includes plugs, and **Control your switches** also lets an agent see
   and turn switches and plugs on or off.
+- **Speak on your smart speakers** lets an agent have Sanctum say something
+  out loud on one smart speaker that can announce, such as "Dinner's ready":
+  up to 300 characters, in English or German, always in Sanctum's own voice.
+  A speaker says one thing at a time and at most four a minute, and an agent
+  six a minute. A muted or offline speaker says nothing, and the agent is
+  told why. The activity log keeps what was said and which agent asked.
 - **What Tells Who's Home:** motion, doors and windows, remotes' presses,
   the activity log, what your devices reported, and the names of the people
   who live here can show when someone is home. Each asks before it turns on,

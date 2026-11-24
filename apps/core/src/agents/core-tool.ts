@@ -55,7 +55,6 @@ export function areasOff(areas: readonly string[]) {
   );
 }
 
-
 export const inputSchemaOf = (schema: z.ZodType): Tool["inputSchema"] => {
   const json = z.toJSONSchema(schema, { io: "input" }) as Record<
     string,

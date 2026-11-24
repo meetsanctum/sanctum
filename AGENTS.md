@@ -57,7 +57,9 @@ setup, the commands and the layout; these notes are the rules.
   which keeps each app's catalog. Other apps read entities by standard type
   only, never from a named app.
 - Clients only ever talk to the core. Only the manager touches Docker, the
-  network stack and hardware, and only the core talks to the manager.
+  network stack and hardware, and only the core talks to the manager. Smart
+  speakers fetch announcements from the core on port 4180, plain HTTP on the
+  home's network, at one-off addresses only the core makes.
 - Clients never assume the core served the page: build every core URL with
   `coreUrl()` from `apps/client/src/core-url.ts`, never a bare `/api` path.
 - The core starts and stops through named phases and steps

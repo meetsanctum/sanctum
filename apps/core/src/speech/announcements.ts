@@ -60,7 +60,11 @@ type Announcement = {
 
 export class AnnouncementRefused extends Error {
   constructor(readonly reason: "busy" | "full") {
-    super(reason === "busy" ? "That speaker is busy" : "Too many announcements at once");
+    super(
+      reason === "busy"
+        ? "That speaker is busy"
+        : "Too many announcements at once",
+    );
   }
 }
 
@@ -75,7 +79,10 @@ export function createAnnouncements(options: {
   // A device's announcement, from its making until it has played: one at a
   // time, as a second one cuts the first short on the speaker.
   const byDevice = new Map<string, Announcement>();
-  const server = createServer({ headersTimeout: 5_000, requestTimeout: 10_000 }, serve);
+  const server = createServer(
+    { headersTimeout: 5_000, requestTimeout: 10_000 },
+    serve,
+  );
   server.maxConnections = 2 * maxAnnouncements;
   server.keepAliveTimeout = 1_000;
 
@@ -98,7 +105,10 @@ export function createAnnouncements(options: {
     if (announcement.release) return;
     const playedMs = (announcement.samples / announcement.rate) * 1_000;
     const left = announcement.fetchedAt + playedMs + 1_000 - now();
-    announcement.release = setTimeout(() => end(announcement), Math.max(0, left));
+    announcement.release = setTimeout(
+      () => end(announcement),
+      Math.max(0, left),
+    );
   }
 
   function notFound(response: ServerResponse) {
@@ -152,7 +162,8 @@ export function createAnnouncements(options: {
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
     ) {
       if (byDevice.has(device)) throw new AnnouncementRefused("busy");
-      if (byDevice.size >= maxAnnouncements) throw new AnnouncementRefused("full");
+      if (byDevice.size >= maxAnnouncements)
+        throw new AnnouncementRefused("full");
       const path = `/a/${randomBytes(20).toString("base64url")}.flac`;
       const announcement: Announcement = {
         device,

@@ -730,10 +730,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           throw new ActionError("not_found", `${command.key} doesn't announce`);
         }
         owned.telemetry.announced();
-        session.client.command(entityId("media_player", player.entity.objectId), {
-          mediaUrl: command.command.announce.url,
-          announcement: true,
-        });
+        session.client.command(
+          entityId("media_player", player.entity.objectId),
+          {
+            mediaUrl: command.command.announce.url,
+            announcement: true,
+          },
+        );
       } else if (
         command.kind === "audio" &&
         "muted" in command.command &&

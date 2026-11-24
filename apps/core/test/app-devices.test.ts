@@ -300,3 +300,51 @@ describeDriver({
   unplug: (key) => radio.unplug(key),
   press: (key, action) => radio.pressButton(key, action),
 });
+
+describe("a smart speaker's announcements", () => {
+  it("reach its driver from the core only, never as a command", async () => {
+    const { core, maya } = await lampsCore();
+    await radio.add("speaker-1", "audio");
+    await settled();
+    const speaker = core.devices
+      .list()
+      .find((device) => device.type === "smart-speaker")!;
+    const url = "http://192.168.1.20:4180/a/abc.flac";
+    const asked = { announce: { url } };
+
+    // Neither a person's client nor an app sends one as a command.
+    const sent = await post(
+      core,
+      "/api/devices/command",
+      { device: speaker.id, capability: "audio", command: asked },
+      maya,
+    );
+    expect(sent.statusCode).toBe(400);
+    await expect(
+      core.devices.command(
+        { kind: "app", id: "test.panel" },
+        { device: speaker.id, capability: "audio", command: asked },
+        {},
+        "test.panel",
+      ),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(radio.received).toEqual([]);
+
+    await core.devices.announce(speaker.id, url, {
+      kind: "user",
+      id: maya.person.id,
+    });
+    expect(radio.received).toEqual([
+      {
+        command: {
+          key: "speaker-1",
+          device: speaker.id,
+          capability: "audio",
+          kind: "audio",
+          command: asked,
+        },
+        actor: { kind: "user", id: maya.person.id },
+      },
+    ]);
+  });
+});

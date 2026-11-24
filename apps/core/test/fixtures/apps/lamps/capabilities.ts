@@ -48,7 +48,11 @@ export const capabilities = {
   contact: [{ id: "contact", kind: "contact" }],
   media: [{ id: capabilityIds.media, kind: "media", features: mediaFeatures }],
   audio: [
-    { id: capabilityIds.audio, kind: "audio", features: { mutes: true } },
+    {
+      id: capabilityIds.audio,
+      kind: "audio",
+      features: { mutes: true, announces: true },
+    },
   ],
   light: [
     {

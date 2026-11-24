@@ -195,3 +195,10 @@ Files from others keep their own licences, as the backdrops in
 `apps/client/src/backdrops` do: photos from Unsplash under the
 [Unsplash License](https://unsplash.com/license), credited in
 [their README](apps/client/src/backdrops/README.md).
+
+The services the manager runs on the host, such as Zigbee2MQTT, Mosquitto,
+Ollama and Piper, are their makers' images under their own licences, which
+Sanctum runs as they are; Piper is under the GPL 3.0. The voices Sanctum
+speaks in are Piper's: Norman for English, trained on public-domain
+recordings from LibriVox, and Thorsten for German, under CC0 1.0. Both are
+downloaded when first needed.

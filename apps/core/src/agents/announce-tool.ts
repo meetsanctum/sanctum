@@ -5,10 +5,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-import type {
-  ActivityAuthor,
-  NewActivityEntry,
-} from "../activity/activity.js";
+import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import { AnnouncementRefused } from "../speech/announcements.js";
 import {
   speechLanguages,
@@ -97,13 +94,17 @@ export function createAnnounceTool(options: {
       isOn(canUse, announcePermission) && speakers().length > 0,
     refusal: () => areasOff([announcePermission]),
     async run(agent, raw, canUse) {
-      if (!isOn(canUse, announcePermission)) throw areasOff([announcePermission]);
+      if (!isOn(canUse, announcePermission))
+        throw areasOff([announcePermission]);
       const parsed = input.safeParse(raw);
       if (!parsed.success) return invalidInput();
       const { speaker: id, text, language } = parsed.data;
       const device = options.devices.get(id);
       if (!device || !announcesOn(device)) {
-        return toolError("not_found", "There's no such smart speaker in the home.");
+        return toolError(
+          "not_found",
+          "There's no such smart speaker in the home.",
+        );
       }
       if (device.availability !== "online") {
         return toolError("unavailable", `“${device.name}” is offline.`);
@@ -135,7 +136,10 @@ export function createAnnounceTool(options: {
         if (error instanceof AnnouncementRefused) {
           return error.reason === "busy"
             ? toolError("busy", `“${device.name}” is still saying something.`)
-            : toolError("limited", "Too many announcements at once. Try again in a minute.");
+            : toolError(
+                "limited",
+                "Too many announcements at once. Try again in a minute.",
+              );
         }
         if (error instanceof SpeechUnavailable) {
           return toolError("unavailable", error.message);

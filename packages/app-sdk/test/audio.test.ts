@@ -47,7 +47,11 @@ describe("a smart speaker's microphones", () => {
         muted: true,
       }),
     ).toBe(false);
-    for (const url of ["https://example.com/a.flac", "file:///etc/passwd", "x"]) {
+    for (const url of [
+      "https://example.com/a.flac",
+      "file:///etc/passwd",
+      "x",
+    ]) {
       expect(() => audio.command.parse({ announce: { url } })).toThrow();
     }
   });

@@ -607,10 +607,9 @@ export function createDevices(
       const capability = device?.capabilities.find(
         (each) =>
           each.kind === "audio" &&
-          capabilityOf("audio").supports(
-            each.features as AudioFeatures,
-            { announce: { url } },
-          ),
+          capabilityOf("audio").supports(each.features as AudioFeatures, {
+            announce: { url },
+          }),
       );
       const address = device && reads.address(device.id);
       if (!device || !capability || !address) {

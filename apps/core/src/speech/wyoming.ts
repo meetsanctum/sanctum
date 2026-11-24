@@ -66,13 +66,14 @@ function createReader() {
       const data = {
         ...(typeof head.data === "object" && head.data ? head.data : {}),
         ...(dataLength
-          ? (parsed(buffered.subarray(newline + 1, newline + 1 + dataLength)) as Record<
-              string,
-              unknown
-            >)
+          ? (parsed(
+              buffered.subarray(newline + 1, newline + 1 + dataLength),
+            ) as Record<string, unknown>)
           : {}),
       } as Record<string, unknown>;
-      const payload = Buffer.from(buffered.subarray(newline + 1 + dataLength, end));
+      const payload = Buffer.from(
+        buffered.subarray(newline + 1 + dataLength, end),
+      );
       buffered = buffered.subarray(end);
       return { type: head.type, data, payload };
     },
@@ -135,39 +136,55 @@ export async function* synthesize(options: {
           const woke = await Promise.race([quiet, timedOut]);
           clearTimeout(timer);
           wake = null;
-          if (woke === "timeout") throw new SpeechError("The speech service went quiet");
+          if (woke === "timeout")
+            throw new SpeechError("The speech service went quiet");
         }
         const item = queue.shift()!;
-        if (item === null) throw new SpeechError("The speech service closed the connection");
+        if (item === null)
+          throw new SpeechError("The speech service closed the connection");
         if (item instanceof Error) {
-          throw item instanceof SpeechError ? item : new SpeechError(item.message);
+          throw item instanceof SpeechError
+            ? item
+            : new SpeechError(item.message);
         }
         reader.push(item);
       }
       if (event.type === "error") {
         throw new SpeechError(
-          typeof event.data.text === "string" ? event.data.text : "The speech service failed",
+          typeof event.data.text === "string"
+            ? event.data.text
+            : "The speech service failed",
         );
       }
       if (event.type === "audio-start" || event.type === "audio-chunk") {
         rate = Number(event.data.rate ?? rate);
         width = Number(event.data.width ?? width);
         channels = Number(event.data.channels ?? channels);
-        if (width !== 2 || channels !== 1 || !(rate >= 8_000 && rate <= 48_000)) {
-          throw new SpeechError("The speech service sent audio in a format Sanctum can't play");
+        if (
+          width !== 2 ||
+          channels !== 1 ||
+          !(rate >= 8_000 && rate <= 48_000)
+        ) {
+          throw new SpeechError(
+            "The speech service sent audio in a format Sanctum can't play",
+          );
         }
       }
       if (event.type === "audio-chunk" && event.payload.length > 0) {
         total += event.payload.length;
-        if (total > maxAudioBytes) throw new SpeechError("The speech is too long");
-        let bytes: Buffer = carry ? Buffer.concat([carry, event.payload]) : event.payload;
+        if (total > maxAudioBytes)
+          throw new SpeechError("The speech is too long");
+        let bytes: Buffer = carry
+          ? Buffer.concat([carry, event.payload])
+          : event.payload;
         carry = null;
         if (bytes.length % 2 === 1) {
           carry = bytes.subarray(bytes.length - 1);
           bytes = bytes.subarray(0, bytes.length - 1);
         }
         const samples = new Int16Array(bytes.length / 2);
-        for (let i = 0; i < samples.length; i++) samples[i] = bytes.readInt16LE(i * 2);
+        for (let i = 0; i < samples.length; i++)
+          samples[i] = bytes.readInt16LE(i * 2);
         yield { rate, samples };
       }
       if (event.type === "audio-stop") return;

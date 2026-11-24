@@ -58,7 +58,9 @@ function framesOf(samples: Int16Array, rate: number) {
   const encoder = createFlacEncoder(rate);
   const frames: Uint8Array[] = [];
   for (let at = 0; at < samples.length; at += 4_096) {
-    const bytes = encoder.push(samples.subarray(at, Math.min(at + 4_096, samples.length)));
+    const bytes = encoder.push(
+      samples.subarray(at, Math.min(at + 4_096, samples.length)),
+    );
     if (bytes.length > 0) frames.push(bytes);
   }
   frames.push(encoder.end());
@@ -85,13 +87,17 @@ describe("createFlacEncoder", () => {
     expect(decoded.channelData).toHaveLength(1);
     expect(toInt16(decoded.channelData[0]!)).toEqual(samples);
     // However it arrives, the stream is the same.
-    expect(encode(samples, 22_050, [1_000, 5_000, 333])).toEqual(joined([header, ...frames]));
+    expect(encode(samples, 22_050, [1_000, 5_000, 333])).toEqual(
+      joined([header, ...frames]),
+    );
     // Smaller than the same sound as 16-bit PCM.
     expect(joined(frames).length).toBeLessThan(samples.length * 2 * 0.8);
   });
 
   it("codes silence, full-scale steps and a last block of every short size", async () => {
-    for (const length of [1, 2, 5, 255, 256, 257, 4_095, 4_096, 4_097, 10_000]) {
+    for (const length of [
+      1, 2, 5, 255, 256, 257, 4_095, 4_096, 4_097, 10_000,
+    ]) {
       const samples = new Int16Array(length);
       for (let i = 0; i < length && length !== 10_000; i++) {
         samples[i] = i % 3 === 0 ? 0 : i % 3 === 1 ? 32_767 : -32_768;

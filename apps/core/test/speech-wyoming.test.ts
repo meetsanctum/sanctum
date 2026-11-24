@@ -23,13 +23,19 @@ afterEach(() => {
   for (const server of servers.splice(0)) server.close();
 });
 
-async function service(answer: (socket: Socket, asked: Record<string, unknown>) => void) {
+async function service(
+  answer: (socket: Socket, asked: Record<string, unknown>) => void,
+) {
   const server = createServer((socket) => {
     let line = "";
     socket.on("data", (bytes) => {
       line += bytes.toString();
       const newline = line.indexOf("\n");
-      if (newline >= 0) answer(socket, JSON.parse(line.slice(0, newline)) as Record<string, unknown>);
+      if (newline >= 0)
+        answer(
+          socket,
+          JSON.parse(line.slice(0, newline)) as Record<string, unknown>,
+        );
     });
   });
   servers.push(server);
@@ -70,7 +76,11 @@ describe("synthesize", () => {
       const stream = Buffer.concat([
         event("audio-start", format),
         event("audio-chunk", format, pcm(1, -2, 3).subarray(0, 5)),
-        event("audio-chunk", format, Buffer.concat([pcm(3).subarray(1), pcm(-4)])),
+        event(
+          "audio-chunk",
+          format,
+          Buffer.concat([pcm(3).subarray(1), pcm(-4)]),
+        ),
         event("audio-stop", {}),
       ]);
       socket.write(stream.subarray(0, 10));
@@ -82,7 +92,10 @@ describe("synthesize", () => {
     ]);
     expect(asked).toEqual({
       type: "synthesize",
-      data: { text: "Dinner is ready.", voice: { name: "en_US-norman-medium" } },
+      data: {
+        text: "Dinner is ready.",
+        voice: { name: "en_US-norman-medium" },
+      },
     });
   });
 
@@ -95,23 +108,31 @@ describe("synthesize", () => {
 
   it("refuses audio that isn't 16-bit mono", async () => {
     const port = await service((socket) => {
-      socket.write(event("audio-start", { rate: 22_050, width: 2, channels: 2 }));
+      socket.write(
+        event("audio-start", { rate: 22_050, width: 2, channels: 2 }),
+      );
     });
     await expect(all(port)).rejects.toThrow(SpeechError);
   });
 
   it("gives up on a service that goes quiet, or closes early", async () => {
     const quiet = await service(() => {});
-    await expect(all(quiet, 100)).rejects.toThrow("The speech service went quiet");
+    await expect(all(quiet, 100)).rejects.toThrow(
+      "The speech service went quiet",
+    );
     const closing = await service((socket) => socket.end());
-    await expect(all(closing)).rejects.toThrow("The speech service closed the connection");
+    await expect(all(closing)).rejects.toThrow(
+      "The speech service closed the connection",
+    );
   });
 
   it("stops when it's cancelled", async () => {
     const port = await service(() => {});
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 50);
-    await expect(all(port, 5_000, controller.signal)).rejects.toThrow("Speech was cancelled");
+    await expect(all(port, 5_000, controller.signal)).rejects.toThrow(
+      "Speech was cancelled",
+    );
   });
 
   it("fails on a service that doesn't answer in Wyoming", async () => {

@@ -21,7 +21,7 @@ change colour has no colours to choose.
 | Motion      | `motion`  | Motion or none                                         | Change its settings                |
 | Contact     | `contact` | Open or closed                                         | Nothing                            |
 | Media       | `media`   | What it plays, and how loud                            | Play, pause, skip, set its volume  |
-| Microphones | `audio`   | Whether they're muted, and when it heard its wake word | Mute or unmute them                |
+| Microphones | `audio`   | Whether they're muted, and when it heard its wake word | Mute or unmute them; announce      |
 | Button      | `button`  | That it was pressed, and how                           | Nothing                            |
 
 ## Light
@@ -119,6 +119,12 @@ word. It never carries what the microphones hear.
   Home Assistant Voice PE has on its side. That switch mutes them too, and
   while it's on, only it turns them back on: an unmute is refused within
   2 seconds, and the button shakes red and stays muted.
+- **Announces:** whether the device plays an announcement: something
+  Sanctum says out loud, in its own voice, over whatever the device is
+  playing, which goes quieter meanwhile. Only Sanctum sends one, when an AI
+  agent asks it to speak (see [What AI agents can
+  use](/ai-agents/what-they-can-use/)); no app or person sends one as a
+  command.
 
 Muting and unmuting wait for the device to say it did them. History keeps
 nothing of its microphones. Where Sanctum can mute its microphones, a smart

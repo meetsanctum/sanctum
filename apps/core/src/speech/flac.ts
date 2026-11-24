@@ -62,7 +62,9 @@ class BitWriter {
 
   private room(more: number) {
     if (this.length + more <= this.bytes.length) return;
-    const grown = new Uint8Array(Math.max(this.bytes.length * 2, this.length + more));
+    const grown = new Uint8Array(
+      Math.max(this.bytes.length * 2, this.length + more),
+    );
     grown.set(this.bytes.subarray(0, this.length));
     this.bytes = grown;
   }
@@ -213,7 +215,13 @@ function bestResidual(x: Int32Array, n: number): Residual {
 }
 
 /** Codes one block as a frame, its header and CRCs included. */
-function encodeFrame(out: BitWriter, x: Int32Array, n: number, frame: number, sampleRate: number) {
+function encodeFrame(
+  out: BitWriter,
+  x: Int32Array,
+  n: number,
+  frame: number,
+  sampleRate: number,
+) {
   const start = out.length;
   out.write(0b11111111111110, 14);
   out.write(0, 1);

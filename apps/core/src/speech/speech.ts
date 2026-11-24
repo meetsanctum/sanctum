@@ -83,7 +83,9 @@ export function createSpeech(options: {
   }
 
   async function endpoint() {
-    const url = await options.manager.serviceUrl(speechService).catch(() => null);
+    const url = await options.manager
+      .serviceUrl(speechService)
+      .catch(() => null);
     return url ? endpointOf(url) : null;
   }
 
@@ -140,12 +142,14 @@ export function createSpeech(options: {
           );
         });
     } else {
-      void options.manager.releaseServiceForCore(speechService).catch((error: unknown) => {
-        wanted = null;
-        options.log(
-          `Speech couldn't stop: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+      void options.manager
+        .releaseServiceForCore(speechService)
+        .catch((error: unknown) => {
+          wanted = null;
+          options.log(
+            `Speech couldn't stop: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
     }
   }
 
@@ -185,7 +189,9 @@ export function createSpeech(options: {
     }) {
       const [at, host] = await Promise.all([endpoint(), hostAddress()]);
       if (!at || !host) {
-        throw new SpeechUnavailable("Speech isn't running on Sanctum right now");
+        throw new SpeechUnavailable(
+          "Speech isn't running on Sanctum right now",
+        );
       }
       const announcement = options.announcements.create(
         input.device,
@@ -201,7 +207,11 @@ export function createSpeech(options: {
           }),
       );
       try {
-        await options.devices.announce(input.device, announcement.url, input.actor);
+        await options.devices.announce(
+          input.device,
+          announcement.url,
+          input.actor,
+        );
       } catch (error) {
         announcement.withdraw();
         throw error;

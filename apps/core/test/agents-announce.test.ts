@@ -1,0 +1,217 @@
+import type { AiCanUse, DeviceInfo } from "@meetsanctum/app-sdk";
+import { describe, expect, it } from "vitest";
+
+import type { NewActivityEntry } from "../src/activity/activity.js";
+import type { AgentCaller } from "../src/app-host/gate.js";
+import { createAnnounceTool } from "../src/agents/announce-tool.js";
+import { AnnouncementRefused } from "../src/speech/announcements.js";
+import { SpeechUnavailable } from "../src/speech/speech.js";
+
+// The announce tool: an AI agent has Sanctum say something on a smart
+// speaker while "Speak on your smart speakers" is on, never on a muted or
+// offline one, a few a minute, and Activity keeps what was said.
+
+const agent: AgentCaller = {
+  id: "agent-1",
+  name: "Codex",
+  actor: { kind: "assistant-run", id: "agent-1", onBehalfOf: "person-1" },
+};
+
+const canUse = (on: boolean): AiCanUse => ({
+  areas: [{ id: "devices.announce", on, always: false }],
+  offers: [],
+});
+
+function speakerDevice(
+  overrides: {
+    availability?: string;
+    muted?: boolean;
+    announces?: boolean;
+  } = {},
+) {
+  return {
+    id: "speaker",
+    name: "Office Speaker",
+    availability: overrides.availability ?? "online",
+    capabilities: [
+      {
+        id: "media-media_player",
+        kind: "media",
+        features: {},
+        observed: {
+          activity: "idle",
+          volume: 40,
+          muted: overrides.muted ?? false,
+        },
+      },
+      {
+        id: "audio",
+        kind: "audio",
+        features: {
+          mutes: true,
+          muteSwitch: true,
+          announces: overrides.announces ?? true,
+        },
+      },
+    ],
+  } as unknown as DeviceInfo;
+}
+
+function setup(device = speakerDevice(), speak?: () => Promise<unknown>) {
+  const said: unknown[] = [];
+  const recorded: NewActivityEntry[] = [];
+  let clock = 0;
+  const tool = createAnnounceTool({
+    devices: {
+      list: () => [device],
+      get: (id) => (id === device.id ? device : null),
+    },
+    speech: {
+      speak: async (input) => {
+        said.push(input);
+        await speak?.();
+        return { spoken: Promise.resolve(true), fetched: () => true };
+      },
+    },
+    record: (entry) => {
+      recorded.push(entry);
+      return "entry";
+    },
+    agentWho: () => ({ actor: "assistant-run:agent-1" }),
+    now: () => clock,
+  });
+  return {
+    tool,
+    said,
+    recorded,
+    tick: (ms: number) => {
+      clock += ms;
+    },
+    run: (input: Record<string, unknown>, on = true) =>
+      tool.run(agent, input, canUse(on)),
+  };
+}
+
+const errorOf = (result: { structuredContent?: unknown }) =>
+  (result.structuredContent as { error?: string }).error;
+
+describe("the announce tool", () => {
+  it("is listed with the home's speakers while the area is on", () => {
+    const { tool } = setup();
+    expect(tool.usable(canUse(true))).toBe(true);
+    expect(tool.usable(canUse(false))).toBe(false);
+    const listed = tool.tool(canUse(true), { assistant: false });
+    expect(listed.name).toBe("announce");
+    expect(listed.description).toContain('speaker ("Office Speaker")');
+    expect(
+      setup(speakerDevice({ announces: false })).tool.usable(canUse(true)),
+    ).toBe(false);
+  });
+
+  it("says the text on the speaker in English unless asked, and logs what was said", async () => {
+    const { run, said, recorded } = setup();
+    const result = await run({
+      speaker: "speaker",
+      text: "  Dinner's ready.  ",
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toEqual({
+      sentTo: "Office Speaker",
+      speaker: "speaker",
+    });
+    expect(said).toEqual([
+      {
+        device: "speaker",
+        text: "Dinner's ready.",
+        language: "en",
+        actor: agent.actor,
+      },
+    ]);
+    expect(recorded).toEqual([
+      {
+        action: "device.announce",
+        outcome: "ok",
+        actor: "assistant-run:agent-1",
+        subjectId: "speaker",
+        detail: { text: "Dinner's ready.", language: "en" },
+      },
+    ]);
+  });
+
+  it("refuses a muted, offline or unknown speaker, and text that's too long", async () => {
+    expect(
+      errorOf(
+        await setup(speakerDevice({ muted: true })).run({
+          speaker: "speaker",
+          text: "Hi",
+        }),
+      ),
+    ).toBe("muted");
+    expect(
+      errorOf(
+        await setup(speakerDevice({ availability: "offline" })).run({
+          speaker: "speaker",
+          text: "Hi",
+        }),
+      ),
+    ).toBe("unavailable");
+    const { run, said } = setup();
+    expect(errorOf(await run({ speaker: "kitchen", text: "Hi" }))).toBe(
+      "not_found",
+    );
+    expect(
+      errorOf(await run({ speaker: "speaker", text: "x".repeat(301) })),
+    ).toBe("invalid_input");
+    expect(
+      errorOf(await run({ speaker: "speaker", text: "Hi", language: "fr" })),
+    ).toBe("invalid_input");
+    expect(said).toEqual([]);
+  });
+
+  it("refuses while the area is off", async () => {
+    const { tool } = setup();
+    await expect(
+      tool.run(agent, { speaker: "speaker", text: "Hi" }, canUse(false)),
+    ).rejects.toMatchObject({ items: ["devices.announce"] });
+  });
+
+  it("lets a speaker say four things a minute", async () => {
+    const { run, tick } = setup();
+    for (let i = 0; i < 4; i++) {
+      expect(
+        (await run({ speaker: "speaker", text: `${i}` })).isError,
+      ).toBeUndefined();
+    }
+    expect(errorOf(await run({ speaker: "speaker", text: "5" }))).toBe(
+      "limited",
+    );
+    tick(60_001);
+    expect(
+      (await run({ speaker: "speaker", text: "6" })).isError,
+    ).toBeUndefined();
+  });
+
+  it("answers busy, full and unavailable speech by name", async () => {
+    const busy = setup(speakerDevice(), async () => {
+      throw new AnnouncementRefused("busy");
+    });
+    expect(errorOf(await busy.run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "busy",
+    );
+    expect(busy.recorded).toEqual([]);
+    const full = setup(speakerDevice(), async () => {
+      throw new AnnouncementRefused("full");
+    });
+    expect(errorOf(await full.run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "limited",
+    );
+    const off = setup(speakerDevice(), async () => {
+      throw new SpeechUnavailable("Speech isn't running on Sanctum right now");
+    });
+    const result = await off.run({ speaker: "speaker", text: "Hi" });
+    expect(errorOf(result)).toBe("unavailable");
+    expect(result.content).toEqual([
+      { type: "text", text: "Speech isn't running on Sanctum right now" },
+    ]);
+  });
+});

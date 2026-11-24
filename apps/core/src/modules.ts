@@ -742,10 +742,13 @@ export async function createModules(
   // firmware's deadlines are the last that change a device, so the bus closes
   // after them, and history then records that nothing is known from then on.
   const stoppingSteps = [
-    ["stop announcements", async () => {
-      speech?.stop();
-      await announcements?.stop();
-    }],
+    [
+      "stop announcements",
+      async () => {
+        speech?.stop();
+        await announcements?.stop();
+      },
+    ],
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
