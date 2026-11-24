@@ -57,6 +57,7 @@ export * from "./blobs.js";
 export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";
+export * from "./device-asking.js";
 export * from "./device-problems.js";
 export * from "./discovery.js";
 export * from "./found-devices.js";
@@ -492,6 +493,8 @@ const driverHooks = [
   "repair",
   "discovered",
   "add",
+  "cancelAdd",
+  "cancelRepair",
 ] as const;
 
 /**

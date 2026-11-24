@@ -19,10 +19,12 @@ import type {
 } from "../app-host/contract.js";
 import type { AppHost } from "../app-host/host.js";
 import type { Devices } from "../devices/devices.js";
+import type { View } from "../devices/views.js";
 import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import {
   corePieces,
+  deviceCommandOf,
   type CorePiece,
   type DeviceStepConfig,
   type EntityTriggerConfig,
@@ -195,10 +197,10 @@ export function createPieces(options: {
 
   // Whether the room, floor, zone, device or entity a config names is still
   // there.
-  function exists(named: Named) {
+  function exists(named: Named, view: View | undefined) {
     switch (named.kind) {
       case "device":
-        return options.devices.get(named.id) !== null;
+        return options.devices.get(named.id, view) !== null;
       case "room":
         return options.places.hasRoom(named.id);
       case "floor":
@@ -228,13 +230,14 @@ export function createPieces(options: {
     node: WorkflowNode,
     piece: Piece,
     saving: boolean,
+    view: View | undefined,
   ): WorkflowProblem[] {
     const gone = new Map<string, Named>();
     for (const each of namedBy(piece, node.config)) {
       // An app may keep a workflow in its start before it has published what it
       // names, so only one that's gone counts for an entity.
       if (each.kind === "entity" && saving) continue;
-      if (!exists(each)) {
+      if (!exists(each, view)) {
         gone.set(`${each.field}\u0000${each.kind}\u0000${each.id}`, each);
       }
     }
@@ -248,42 +251,62 @@ export function createPieces(options: {
   }
 
   // A device step's command, for the capability of the device it names,
-  // when the workflow is saved.
+  // and whether that capability can do it by the features its device
+  // registered. The device and its capability are checked when the
+  // workflow is saved; whether it can do it, before each run too, as a
+  // player that registers again without a feature can't do the step.
   function deviceStepProblems(
     node: WorkflowNode,
     config: DeviceStepConfig,
+    saving: boolean,
+    view: View | undefined,
   ): WorkflowProblem[] {
-    const device = options.devices.get(config.device);
+    const device = options.devices.get(config.device, view);
     const capability = device?.capabilities.find(
       (each) => each.id === config.capability,
     );
     if (!capability) {
-      return [
-        {
-          node: node.id,
-          field: "capability",
-          message: `There is no device ${config.device} with ${config.capability}`,
-        },
-      ];
+      return saving
+        ? [
+            {
+              node: node.id,
+              field: "capability",
+              message: `There is no device ${config.device} with ${config.capability}`,
+            },
+          ]
+        : [];
     }
-    const command = capabilityOf(capability.kind).command.safeParse(
-      config.command,
-    );
-    return command.success
+    const definition = capabilityOf(capability.kind);
+    const command = definition.command.safeParse(config.command);
+    if (!command.success) {
+      return command.error.issues.map((issue) => ({
+        node: node.id,
+        field: pathOf(
+          node.piece === "device" ? ["command", ...issue.path] : issue.path,
+        ),
+        message: `The command does not fit a ${capability.kind}: ${issue.message.charAt(0).toLowerCase()}${issue.message.slice(1)}`,
+      }));
+    }
+    return (
+      definition.supports as (features: unknown, command: unknown) => boolean
+    )(capability.features, command.data)
       ? []
-      : command.error.issues.map((issue) => ({
-          node: node.id,
-          field: pathOf(["command", ...issue.path]),
-          message: `The command does not fit a ${capability.kind}: ${issue.message.charAt(0).toLowerCase()}${issue.message.slice(1)}`,
-        }));
+      : [
+          {
+            node: node.id,
+            field: "device",
+            message: `${device!.name} can't do this`,
+          },
+        ];
   }
 
   // A press trigger's remote and action, when the workflow is saved.
   function pressTriggerProblem(
     node: WorkflowNode,
     config: PressTriggerConfig,
+    view: View | undefined,
   ): WorkflowProblem | undefined {
-    const device = options.devices.get(config.device);
+    const device = options.devices.get(config.device, view);
     const buttons = device?.capabilities.filter(
       (each) =>
         each.kind === "button" &&
@@ -417,10 +440,13 @@ export function createPieces(options: {
     /**
      * What keeps a graph from being saved or from running, and what it may not
      * do on its own: a room, floor, zone, device or entity it names that is
-     * gone among them. Saving also checks the commands its device steps send.
+     * gone among them. Saving also checks the commands its device steps send,
+     * and each check whether their devices can do them.
      */
-    check(graph: WorkflowGraph, options_: { saving?: boolean } = {}): Check {
-      const saving = options_.saving ?? false;
+    check(
+      graph: WorkflowGraph,
+      { saving = false, view }: { saving?: boolean; view?: View } = {},
+    ): Check {
       const problems: WorkflowProblem[] = [];
       const warnings: string[] = [];
       const ids = new Set<string>();
@@ -471,20 +497,17 @@ export function createPieces(options: {
           );
           continue;
         }
-        const named = namedProblems(node, piece, saving);
+        const named = namedProblems(node, piece, saving, view);
         if (named.length > 0) {
           problems.push(...named);
           continue;
         }
-        if (
-          piece.app === null &&
-          node.kind === "step" &&
-          piece.id === "device" &&
-          saving
-        ) {
-          problems.push(
-            ...deviceStepProblems(node, config.data as DeviceStepConfig),
-          );
+        const sent =
+          piece.app === null && node.kind === "step"
+            ? deviceCommandOf(piece.id, config.data)
+            : undefined;
+        if (sent) {
+          problems.push(...deviceStepProblems(node, sent, saving, view));
         }
         if (
           piece.app === null &&
@@ -495,6 +518,7 @@ export function createPieces(options: {
           const problem = pressTriggerProblem(
             node,
             config.data as PressTriggerConfig,
+            view,
           );
           if (problem) {
             problems.push(problem);

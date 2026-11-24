@@ -7,7 +7,13 @@ import { build, type Plugin } from "vite";
 
 import { digestOf, filesOf, type BuiltFile } from "./files.js";
 import { iconImports, iconModules } from "./icons.js";
-import { kitImports, quietLogs, sdkRoot, sdkVersion } from "./kit.js";
+import {
+  kitImports,
+  quietLogs,
+  sdkRoot,
+  sdkVersion,
+  stylesheetOptions,
+} from "./kit.js";
 import { withoutKitRules } from "./styles.js";
 
 // `sanctum-pages build`, run in an app's package as part of its build: its
@@ -148,6 +154,7 @@ export async function buildPages(
       base: "./",
       logLevel: "warn",
       plugins: [tailwindcss(), iconImports(), kitRulesLeftOut(kitCss)],
+      css: stylesheetOptions,
       build: {
         outDir: next,
         emptyOutDir: true,

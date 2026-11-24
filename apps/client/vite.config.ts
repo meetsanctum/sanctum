@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { Features } from "lightningcss";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 
@@ -42,6 +43,14 @@ export default defineConfig({
     brand(),
     displayPort ? displayBridge({ touchLog, frameLog, builtDir }) : undefined,
   ],
+  css: {
+    // The build's minifier writes a colour with alpha as hex, `#0000` or
+    // `#ffffff24`, which the Shelly Wall Display's web view drops: buttons'
+    // transparent borders came out in the text colour and their reset
+    // background as the browser's grey. Written as rgba() or transparent,
+    // every browser reads them.
+    lightningcss: { include: Features.HexAlphaColors },
+  },
   resolve: {
     // The alias the shadcn components import from (components.json).
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

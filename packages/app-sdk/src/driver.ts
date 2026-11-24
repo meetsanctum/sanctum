@@ -22,7 +22,14 @@ export function assertDriver(app: AppDefinition, asked: readonly string[]) {
   ) {
     throw new Error("A driver's pairing has open and close functions");
   }
-  for (const hook of ["move", "remove", "add", "identify"] as const) {
+  for (const hook of [
+    "move",
+    "remove",
+    "add",
+    "identify",
+    "cancelAdd",
+    "cancelRepair",
+  ] as const) {
     if (
       app.driver?.[hook] !== undefined &&
       typeof app.driver[hook] !== "function"

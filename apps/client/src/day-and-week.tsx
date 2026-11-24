@@ -147,8 +147,9 @@ type Cursor = { index: number; x: number | null };
 // The day as a band 40 px tall: motion, or being open, as White spans, the
 // rest as a hairline along its foot, and nothing where nothing was known.
 // The pointer shows the span under it, a White span within a few pixels
-// before the rest; the arrow keys step from span to span.
-function Band(props: {
+// before the rest; the arrow keys step from span to span. A media player's
+// History draws its playing as one too (media-history.tsx).
+export function Band(props: {
   spans: readonly Span[];
   from: number;
   to: number;

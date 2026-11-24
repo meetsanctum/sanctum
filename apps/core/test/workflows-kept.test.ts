@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { workflows } from "../src/workflows/schema.js";
 import { lampsCore } from "./devices-support.js";
-import { get, post, type TestCore } from "./support.js";
+import { get, post, testCore, type TestCore } from "./support.js";
 import {
   heard,
   keeper,
@@ -236,6 +236,66 @@ async function suspensionOf(core: TestCore, maya: SignedIn, id: string) {
 }
 
 describe("a workflow an app keeps, with the app's grants", () => {
+  it("requires media control to save or run a volume step and hides details without media read", async () => {
+    const read = "devices.read:media";
+    const control = "devices.control:media";
+    const app = "sanctum.example";
+    const driver = "sanctum.example-driver";
+    const core = await testCore();
+    const granted = new Set(["workflows.manage", read]);
+    vi.spyOn(core.apps, "holds").mockImplementation((id) =>
+      id === app ? { app, granted: [...granted] } : null,
+    );
+    vi.spyOn(core.apps, "isRunning").mockImplementation((id) => id === app);
+    const register = (volume: "level" | "steps") =>
+      core.devices.register(driver, {
+        key: "player",
+        name: "Player",
+        type: "media-player",
+        capabilities: [{ id: "media", kind: "media", features: { volume } }],
+      });
+    const { id: device } = register("level");
+    const input = {
+      key: "volume",
+      name: "Quiet",
+      graph: steps(trigger("hand", "manual"), {
+        id: "volume",
+        kind: "step",
+        piece: "volume",
+        config: { device, capability: "media", volume: 20 },
+      }),
+    };
+    const put = () => core.workflows.kept.put(app, input);
+
+    expect(() => put()).toThrow(`${app} does not hold ${control}`);
+    granted.add(control);
+    const kept = put();
+    granted.delete(control);
+    const run = core.workflows.runByHand(
+      { clientId: "example" },
+      { id: kept.id },
+    );
+    expect(run).toMatchObject({
+      status: "skipped",
+      reason: "suspended",
+      steps: [],
+    });
+
+    granted.delete(read);
+    register("steps");
+    expect(() => put()).toThrow(`${app} does not hold ${control}`);
+    expect(core.workflows.get(kept.id).problems[0]?.message).toContain(
+      "can't do this",
+    );
+    expect(core.workflows.kept.list(app)[0]?.problems).toEqual([
+      {
+        node: "volume",
+        field: "device",
+        message: "The device it names was removed",
+      },
+    ]);
+  });
+
   it("is refused when the app may not do what its pieces do", async () => {
     const { core, maya } = await home();
 

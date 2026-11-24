@@ -23,6 +23,13 @@ export type RemoveFromDriver = (
   hold?: Hold,
 ) => Promise<void>;
 
+/** Ends what is asked to repair the device as it is removed (asking.ts). */
+export type EndAsking = (
+  device: { driver: string; key: string },
+  actor: Actor,
+  hold: Hold,
+) => Promise<void>;
+
 // Removing a device cannot be undone from Sanctum, since the device has to
 // join again.
 export const removalRule: Rule = { tier: "destructive" };
@@ -41,6 +48,7 @@ export function createRemoval(
     // other way round.
     turns: Turns;
     removeFromDriver?: RemoveFromDriver;
+    endAsking?: EndAsking;
     // Its name now, for its entry once it is gone.
     nameOf: (id: string) => string | null;
     // Runs a change, then tells live clients what it did to the device.
@@ -105,6 +113,9 @@ export function createRemoval(
       });
     removing.add(id);
     try {
+      // A repair waiting on an answer ends first, so its driver closes what
+      // it opened for it.
+      await options.endAsking?.(device, actor, hold);
       if (!options.removeFromDriver) {
         throw new ActionCallError("unavailable");
       }

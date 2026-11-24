@@ -5,7 +5,9 @@ import { midnight, timeText, type Span } from "./device-history-data";
 // The motion band: a day of motion 40 px tall, motion as White spans, quiet
 // as a hairline along its foot and nothing where nothing was known, with the
 // time every 6 hours under or over it. A motion sensor's detail draws one
-// for the sensor, Presence's overview one for each room.
+// for the sensor, Presence's overview one for each room, and a media
+// player's History one for its playing, with the time a player with power
+// was on without playing as a faint fill.
 
 export const bandHeight = 40;
 
@@ -34,6 +36,23 @@ export function BandMarks(props: {
         if (!span.known) return null;
         const left = Math.round(x(span.from));
         const right = Math.round(x(span.to));
+        if (!span.on && span.powered) {
+          // A media player on without playing, faint across the band, and
+          // within it however short.
+          const fillWidth = Math.max(1, right - left);
+          return (
+            <rect
+              key={span.from}
+              x={Math.min(left, plot - fillWidth)}
+              y={0}
+              width={fillWidth}
+              height={bandHeight}
+              className={
+                span === props.pointed ? "fill-white/24" : "fill-white/16"
+              }
+            />
+          );
+        }
         if (!span.on) {
           return (
             <rect

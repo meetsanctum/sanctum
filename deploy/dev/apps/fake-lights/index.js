@@ -6,6 +6,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { crc32, deflateSync } from "node:zlib";
 
+import { createPairing } from "./pairing.js";
 import {
   climateOf,
   climateSensors,
@@ -24,8 +25,11 @@ import {
 // change by themselves (home.js). Add
 // devices can try it out: while it lets devices join, a new light joins a few
 // seconds in and another a little later, and it has found a climate sensor
-// and a plug on the network, the plug asking for its key ("sanctum"). Only
-// a development stack stages it (deploy/dev/stack.Dockerfile).
+// and a plug on the network, the plug asking for its key ("sanctum"), and a
+// TV box that asks two codes once adding starts (pairing.js). Once added,
+// the TV box starts each later run with its pairing lost, as a box reset
+// while its driver was away, and Repair sets it right with the same two
+// codes. Only a development stack stages it (deploy/dev/stack.Dockerfile).
 
 const lights = new Map(
   lightNames.map(([key, name]) => [
@@ -301,6 +305,27 @@ const foundDevices = [
     states: { power: { on: false } },
   },
 ];
+// The TV box pairs once adding starts, asking each code as the box shows it.
+const tvBox = {
+  key: "den-tv",
+  name: "Den TV",
+  description: "Fake TV box",
+  type: "media-player",
+  asks: [],
+  model: "Fake TV box",
+  capabilities: [
+    {
+      id: "player",
+      kind: "media",
+      features: { power: true, playback: ["play", "pause"], volume: "steps" },
+    },
+  ],
+  states: { player: { on: false, activity: "idle" } },
+};
+foundDevices.push(tvBox);
+const pairing = createPairing();
+// Whether the TV box is paired this run: once added, not until repaired.
+let tvPaired = false;
 const added = new Set();
 // What it lists of each found device (ctx.devices.found).
 const listed = () =>
@@ -327,6 +352,14 @@ async function registerFound(
     capabilities,
   });
   added.add(key);
+  // The TV box plays as the other players do once it's added.
+  if (key === tvBox.key) {
+    players.set(key, {
+      type,
+      features: capabilities[0].features,
+      state: { ...states.player },
+    });
+  }
   await ctx.devices.report({ key, availability: "online", states });
 }
 
@@ -540,15 +573,21 @@ export default defineApp({
     }
     await ctx.devices.present({
       keys: [
-        ...lights.keys(),
-        ...plugs.keys(),
-        ...contacts.keys(),
-        ...motionSensors.map((each) => each.key),
-        ...climateSensors.map((each) => each.key),
-        ...players.keys(),
-        ...added,
+        ...new Set([
+          ...lights.keys(),
+          ...plugs.keys(),
+          ...contacts.keys(),
+          ...motionSensors.map((each) => each.key),
+          ...climateSensors.map((each) => each.key),
+          ...players.keys(),
+          ...added,
+        ]),
       ],
     });
+    tvPaired = !added.has(tvBox.key);
+    if (!tvPaired) {
+      await ctx.devices.problem({ key: tvBox.key, problem: "pairingLost" });
+    }
     await ctx.devices.found(listed());
     // Each report updates the device's last-seen time, so only send changes.
     ticking = setInterval(() => {
@@ -569,6 +608,7 @@ export default defineApp({
     steps.forEach(clearTimeout);
     steps = [];
     for (const key of blinking.keys()) stopBlink(key);
+    pairing.clear();
     running = undefined;
   },
   driver: {
@@ -643,15 +683,59 @@ export default defineApp({
           wrongKey: "That key doesn't match. Check it and try again.",
         },
       },
+      firstCode: {
+        label: "Code on the TV (1 of 2)",
+        kind: "code",
+        length: 4,
+        help: "The TV shows a four-digit code. Any but 0000 works here.",
+        refusals: { wrongCode: "That code didn't match." },
+      },
+      secondCode: {
+        label: "Code on the TV (2 of 2)",
+        kind: "code",
+        length: 4,
+        help: "A new code is on the TV.",
+        lasts: { seconds: 35, again: "Show a new code" },
+        refusals: { wrongCode: "That code didn't match." },
+      },
     },
-    async add(ctx, { key, answers }) {
+    addLater: ["firstCode", "secondCode"],
+    problems: {
+      pairingLost: {
+        words: "Its pairing was removed",
+        repair: {
+          help: "Pair it again. The TV shows two codes, one after the other.",
+          asks: [],
+          later: ["firstCode", "secondCode"],
+        },
+      },
+    },
+    async add(ctx, { key, answers, attempt, again }) {
       const device = foundDevices.find((each) => each.key === key);
       if (!device) return;
       if (device.asks.includes("key") && answers.key !== "sanctum") {
         return { refused: { question: "key", refusal: "wrongKey" } };
       }
+      if (device === tvBox) {
+        const step = pairing.step(key, { answers, attempt, again });
+        if (step !== "paired") return step;
+        tvPaired = true;
+      }
       await registerFound(ctx, device);
       await ctx.devices.found(listed());
+    },
+    async cancelAdd(_ctx, { key, attempt }) {
+      pairing.cancel(key, attempt);
+    },
+    async repair(ctx, { key, answers, attempt, again }) {
+      if (key !== tvBox.key || tvPaired) return;
+      const step = pairing.step(key, { answers, attempt, again });
+      if (step !== "paired") return step;
+      tvPaired = true;
+      await ctx.devices.problem({ key, problem: null });
+    },
+    async cancelRepair(_ctx, { key, attempt }) {
+      pairing.cancel(key, attempt);
     },
   },
 });

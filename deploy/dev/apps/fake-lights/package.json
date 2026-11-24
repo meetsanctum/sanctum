@@ -10,6 +10,7 @@
   "files": [
     "index.js",
     "home.js",
+    "pairing.js",
     "sanctum-app.json"
   ],
   "scripts": {

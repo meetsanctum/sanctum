@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
-import { build, type BuildOptions, type Plugin } from "vite";
+import { build, type BuildOptions, type Plugin, type UserConfig } from "vite";
 
 import { digestOf, filesOf } from "./files.js";
 import { iconModules, lucideDir, lucideIcons, sdkModule } from "./icons.js";
@@ -105,6 +105,21 @@ export const quietLogs: OnLog = (level, log, handler) => {
   handler(level, log);
 };
 
+// lightningcss's Features.HexAlphaColors, which Vite's CSS minifier takes,
+// written out: ui-sdk is Apache-2.0 and lightningcss MPL-2.0, so ui-sdk
+// doesn't depend on it directly. The kit's test fails if the flag stops
+// lowering those colours.
+const hexAlphaColors = 1 << 14;
+
+/**
+ * How the kit's and pages' stylesheets are written: a colour with alpha as
+ * rgba() or transparent, never the minifier's hex (`#0000`, `#ffffff24`),
+ * which the Shelly Wall Display's web view drops.
+ */
+export const stylesheetOptions: UserConfig["css"] = {
+  lightningcss: { include: hexAlphaColors },
+};
+
 function kitModules(files: ReadonlySet<string>): Plugin {
   const lucide = lucideDir();
   return {
@@ -176,6 +191,7 @@ export async function buildKit(
     base: "./",
     logLevel: "warn",
     plugins: [kitModules(files), tailwindcss()],
+    css: stylesheetOptions,
     resolve: { dedupe: ["react", "react-dom"] },
     build: {
       outDir,

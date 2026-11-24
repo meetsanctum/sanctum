@@ -1,5 +1,6 @@
 import type {
   AddResult,
+  AttemptEnded,
   CapabilityInfo,
   DeviceInfo,
   LightsResult,
@@ -50,8 +51,12 @@ import type { Presses } from "./presses.js";
 //   POST /api/devices/firmware/stop  { id } → DeviceInfo
 //   POST /api/devices/probe          { id } → ProbeResult
 //   POST /api/devices/identify       { id } → {}
-//   POST /api/devices/repair         { id, answers } → RepairResult
-//   POST /api/devices/add            { driver, key, answers } → AddResult
+//   POST /api/devices/repair         { id, answers, attempt? } → RepairResult
+//                                    { id, attempt, step, answers | again } → RepairResult
+//   POST /api/devices/repair/cancel  { id, attempt } → AttemptEnded
+//   POST /api/devices/add            { driver, key, answers, attempt? } → AddResult
+//                                    { driver, key, attempt, step, answers | again } → AddResult
+//   POST /api/devices/add/cancel     { driver, key, attempt } → AddResult
 
 export function registerDeviceRoutes(
   app: FastifyInstance,
@@ -215,6 +220,24 @@ export function registerDeviceRoutes(
     const { actor, who } = admitted(request.principal!, addRule, "device.add");
     return options.found.add(actor, who, request.body);
   });
+
+  // Ends the client's attempt, as its card's Cancel or closing does.
+  app.post("/api/devices/add/cancel", async (request): Promise<AddResult> => {
+    const { actor, who } = admitted(request.principal!, addRule, "device.add");
+    return options.found.cancel(actor, who, request.body);
+  });
+
+  app.post(
+    "/api/devices/repair/cancel",
+    async (request): Promise<AttemptEnded> => {
+      const { actor, who } = admitted(
+        request.principal!,
+        repairRule,
+        "device.repair",
+      );
+      return options.problems.cancel(actor, who, request.body);
+    },
+  );
 
   app.get("/api/devices/pairing", async (request): Promise<PairingInfo> => {
     gate.admit(request.principal!, pairingRules.read);

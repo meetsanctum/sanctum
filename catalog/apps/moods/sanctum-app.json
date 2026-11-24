@@ -3,7 +3,7 @@
   "name": "Moods",
   "version": "0.13.0",
   "core": "^2.0.0",
-  "protocol": 17,
+  "protocol": 18,
   "summary": "Moods for each room, and what remotes and motion do with its lights.",
   "runtime": {
     "memory": 128,

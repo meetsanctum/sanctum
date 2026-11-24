@@ -165,12 +165,15 @@ export function lightCommandOf(entity: Entity, command: LightCommand) {
 /**
  * A media player's state as Sanctum has it, from ESPHome's: what it's doing,
  * its volume and whether it's muted, both said every time, and whether it's
- * on where it can be turned on and off. An announcement it plays counts as
- * playing.
+ * on where it can be turned on and off. While it announces, such as an
+ * assistant's answer or a timer's chime, it is doing what it did before, or
+ * idle: an answer is not something playing, and must not start what a
+ * player starting to play starts.
  */
 function mediaStateOf(
   hasPower: boolean,
   event: TelemetryEvent & { type: "media_player" },
+  before: MediaState["activity"] | undefined,
 ): MediaState {
   // Zero values can be absent on the wire: no state yet, silent, unmuted.
   const now = event.state ?? MediaPlayerState.NONE;
@@ -180,11 +183,13 @@ function mediaStateOf(
       : 0;
   const state: MediaState = {
     activity:
-      now === MediaPlayerState.PLAYING || now === MediaPlayerState.ANNOUNCING
-        ? "playing"
-        : now === MediaPlayerState.PAUSED
-          ? "paused"
-          : "idle",
+      now === MediaPlayerState.ANNOUNCING
+        ? (before ?? "idle")
+        : now === MediaPlayerState.PLAYING
+          ? "playing"
+          : now === MediaPlayerState.PAUSED
+            ? "paused"
+            : "idle",
     volume,
     muted: event.muted === true,
   };
@@ -246,10 +251,12 @@ function celsiusOf(value: number, unit: string) {
 /**
  * What one state event says of its capability, in that kind's shape, or
  * null where it says nothing Sanctum keeps, as a sensor without a reading.
+ * A media player's announcement keeps the activity it reported `before`.
  */
 export function stateOf(
   mapped: Mapped,
   event: TelemetryEvent,
+  before?: MediaState["activity"],
 ):
   | LightState
   | SwitchState
@@ -261,7 +268,7 @@ export function stateOf(
   const { capability, entity } = mapped;
   if (event.type === "light") return lightStateOf(mapped, event);
   if (event.type === "media_player" && capability.kind === "media") {
-    return mediaStateOf(capability.features?.power === true, event);
+    return mediaStateOf(capability.features?.power === true, event, before);
   }
   if (event.type === "switch") return { on: event.state === true };
   if (event.type === "sensor") {

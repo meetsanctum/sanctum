@@ -31,7 +31,7 @@ describe("a driver's problem declarations at installation", () => {
 describe("an app's ports at installation", () => {
   it("accepts more than 16 single-port declarations from an earlier protocol", () => {
     const manifest = toStaticManifest(lamps);
-    manifest.protocol = 16;
+    manifest.protocol = 17;
     const permission = (id: string) => ({
       id,
       reason: "For the test.",

@@ -1,4 +1,4 @@
-import type { AppContext } from "@meetsanctum/app-sdk";
+import type { AppContext, MediaActivity } from "@meetsanctum/app-sdk";
 import type { TelemetryEvent } from "esphome-client";
 
 import type { Session } from "./connection.js";
@@ -20,6 +20,7 @@ export function report(
   mapping: Mapping,
   event: TelemetryEvent,
   session: Session,
+  activities: Map<string, MediaActivity>,
 ) {
   // A state event names its entity by its key, which a type keeps apart.
   if (
@@ -55,7 +56,10 @@ export function report(
           })
         : null
       : (() => {
-          const now = stateOf(mapped, event);
+          const now = stateOf(mapped, event, activities.get(capability));
+          if (now && "activity" in now) {
+            activities.set(capability, now.activity);
+          }
           return now
             ? ctx.devices.report({
                 key: mac,

@@ -101,6 +101,8 @@ export const driverHooks = [
   "repair",
   "discovered",
   "add",
+  "cancelAdd",
+  "cancelRepair",
 ] as const;
 export type DriverHook = (typeof driverHooks)[number];
 

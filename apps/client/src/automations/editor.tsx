@@ -41,7 +41,13 @@ import {
   PopoverTrigger,
 } from "../components/ui/popover";
 import { CoreError } from "../core-fetch";
-import { Chooser, deviceKindsFor, withDevice, type NewNode } from "./chooser";
+import {
+  Chooser,
+  deviceCommandFor,
+  deviceKindsFor,
+  withDevice,
+  type NewNode,
+} from "./chooser";
 import { pieceOf, problemOf, type Automations } from "./data";
 import { FieldControl, type Home } from "./fields";
 import { autoName, graphOf, isSimple, needsValue } from "./graph";
@@ -487,8 +493,9 @@ export function EditorPage(props: {
           </DialogHeader>
           {option && optionPiece && (
             <div className="flex max-h-[60dvh] flex-col gap-4 overflow-y-auto">
-              {Object.entries(fieldsOf(optionPiece.config)).map(
-                ([name, field]) => (
+              {Object.entries(fieldsOf(optionPiece.config))
+                .filter(([, field]) => field.hidden !== true)
+                .map(([name, field]) => (
                   <div key={name} className="flex flex-col gap-1.5">
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                       {String(field.title ?? capitalize(name))}
@@ -501,6 +508,10 @@ export function EditorPage(props: {
                         home: props.home,
                         config: option.config,
                         deviceKinds: deviceKindsFor(optionPiece, option.config),
+                        deviceCommand: deviceCommandFor(
+                          optionPiece,
+                          option.config,
+                        ),
                       }}
                       onChange={(value) =>
                         updateNode(
@@ -516,8 +527,7 @@ export function EditorPage(props: {
                       }
                     />
                   </div>
-                ),
-              )}
+                ))}
             </div>
           )}
           <DialogFooter>
@@ -736,6 +746,7 @@ function Token(props: {
             home: props.home,
             config: node.config,
             deviceKinds: deviceKindsFor(piece, node.config),
+            deviceCommand: deviceCommandFor(piece, node.config),
           }}
           onChange={set}
         />

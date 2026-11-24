@@ -535,18 +535,15 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
     );
   }
   if (manifest.driver) {
-    assertDriverProblems(
-      manifest.driver,
-      manifest.driver.hooks.includes("repair"),
-    );
+    assertDriverProblems(manifest.driver, manifest.driver.hooks);
   }
   // What its network may reach rests on these, so the core checks them
   // itself rather than trust the app's own build.
-  // Protocol 17 caps declarations. Older packages only have to fit the
+  // Protocol 18 caps declarations. Older packages only have to fit the
   // manager's limit on the permissions granted at any one time.
   assertLanPermissions(
     manifest.permissions.map((each) => each.id),
-    { limitCount: manifest.protocol >= 17 },
+    { limitCount: manifest.protocol >= 18 },
   );
   checkPieces(manifest);
   return manifest;

@@ -81,10 +81,40 @@ function kindsWith(field: string): string[] {
   });
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The command a core step sends the device it names: the command its config
+ * holds, as Turn on's, or the one its device field says it sends, as the
+ * volume's, with the level its config sets.
+ */
+export function deviceCommandFor(
+  piece: PieceInfo,
+  config: Record<string, unknown> = {},
+): Record<string, unknown> | undefined {
+  if (piece.app || piece.kind !== "step") return undefined;
+  if (isRecord(config.command)) return config.command;
+  const { device } = deviceFields(piece);
+  const sends = device && fieldsOf(piece.config)[device]?.sends;
+  if (!isRecord(sends)) return undefined;
+  return Object.fromEntries(
+    Object.entries(sends).map(([key, value]) => [key, config[key] ?? value]),
+  );
+}
+
+// The kinds that take a command, such as media for Pause.
+function kindsTaking(command: Record<string, unknown>): string[] {
+  return capabilityKinds.filter(
+    (kind) => capabilities[kind].command.safeParse(command).success,
+  );
+}
+
 /**
  * The kinds of device a piece's device field fits: the kind its config
  * names, else those whose state has the field a core piece compares, such
- * as motion for "{device} sees motion", else lights and switches.
+ * as motion for "{device} sees motion", or that take the command a core
+ * step sends, such as media for Pause, else lights and switches.
  */
 export function deviceKindsFor(
   piece: PieceInfo,
@@ -94,6 +124,11 @@ export function deviceKindsFor(
   if (piece.group === "Buttons") return ["button"];
   if (!piece.app && typeof config.field === "string") {
     const kinds = kindsWith(config.field);
+    if (kinds.length > 0) return kinds;
+  }
+  const command = deviceCommandFor(piece, config);
+  if (command) {
+    const kinds = kindsTaking(command);
     if (kinds.length > 0) return kinds;
   }
   return piece.app ? ["light"] : ["light", "switch"];
@@ -130,8 +165,9 @@ export function withDevice(
   const { device: field, part } = deviceFields(piece);
   if (!field) return config;
   const kinds = deviceKindsFor(piece, config);
+  const command = deviceCommandFor(piece, config);
   const capability = device.capabilities.find((each) =>
-    matchesCapability(each, kinds, config.field),
+    matchesCapability(each, kinds, config.field, command),
   );
   return {
     ...config,
@@ -185,11 +221,12 @@ function sectionsFor(
         const base = { ...(preset?.config ?? {}) };
         if (deviceField) {
           const kinds = deviceKindsFor(piece, base);
+          const command = deviceCommandFor(piece, base);
           for (const device of home.devices.filter(
             (each) =>
               each.roomId === room.id &&
               each.capabilities.some((capability) =>
-                matchesCapability(capability, kinds, base.field),
+                matchesCapability(capability, kinds, base.field, command),
               ),
           )) {
             const config = withDevice(piece, base, device);
