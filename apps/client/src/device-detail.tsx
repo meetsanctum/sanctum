@@ -99,7 +99,6 @@ const pageOf: Partial<Record<CapabilityKind, string>> = {
   contact: "contact",
   sensor: "readings",
   media: "playing",
-  audio: "microphones",
 };
 
 // What a switch has: on and off, which its controls show as one button.
@@ -206,7 +205,7 @@ export function DeviceDetail(props: {
   // The media player whose tile opened it, or the device's first.
   const openedPlayer = capability?.kind === "media" ? capability : undefined;
   const player = openedPlayer ?? device?.capabilities.find(isMedia);
-  const microphones = device?.capabilities.filter(isAudio) ?? [];
+  const microphones = device?.capabilities.find(isAudio);
   const playerTile =
     device &&
     player &&
@@ -360,7 +359,7 @@ export function DeviceDetail(props: {
                   : []),
             ]
           : []),
-        ...(microphones.length > 0
+        ...(microphones
           ? [
               {
                 id: "microphones",
@@ -368,8 +367,9 @@ export function DeviceDetail(props: {
                 icon: Mic,
                 content: (
                   <MicrophonesPage
+                    key={`${device.id}/${microphones.id}`}
                     device={device}
-                    capabilities={microphones}
+                    capability={microphones}
                     now={now}
                   />
                 ),
@@ -439,15 +439,13 @@ export function DeviceDetail(props: {
       ]
     : [];
   const initial =
-    capability?.kind === "audio"
-      ? pageOf.audio
-      : props.openFirstPage || !capability
-        ? undefined
-        : capability.kind === "button"
-          ? buttonPage
-            ? "apps"
-            : "activity"
-          : pageOf[capability.kind];
+    props.openFirstPage || !capability
+      ? undefined
+      : capability.kind === "button"
+        ? buttonPage
+          ? "apps"
+          : "activity"
+        : pageOf[capability.kind];
   const detailKey = `${props.openFirstPage ? "room" : "part"}/${tile?.key}`;
   const [selection, setSelection] = useState<{
     detailKey: string;

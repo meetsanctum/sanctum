@@ -1,6 +1,5 @@
 import {
   capabilityOf,
-  controlPermission,
   isCapabilityKind,
   shownAsOf,
   type Actor,
@@ -87,7 +86,6 @@ type CommandHooks = {
   check?: (target: { device: DeviceInfo; capability: CapabilityInfo }) => void;
   shouldLeaveMoving?: boolean;
   accepted?: (change: CommandChange, isConfirmed: boolean) => void;
-  pageApp?: string;
 };
 
 export function createDevices(
@@ -99,7 +97,6 @@ export function createDevices(
     deliver: Deliver;
     // Which run of a driver app this is, which each start changes.
     driverRun?: (driver: string) => number | undefined;
-    appGrants?: (app: string) => readonly string[] | undefined;
     // The drivers the household removed: their devices are hidden, kept for
     // when the driver is added back.
     hiddenDrivers?: () => ReadonlySet<string>;
@@ -424,21 +421,12 @@ export function createDevices(
     // ran when it first went: a driver that has restarted never gets it again,
     // since a light switched twice is worse than one someone switches again.
     const wentThrough = options.driverRun?.(driver);
-    const originApp = app ?? hooks?.pageApp;
     const send = async (
       command: Record<string, unknown>,
       onResend?: () => void,
     ) => {
       if (onResend && actor.kind === "assistant-run") {
         gate.permit(actor, deviceCommandRule(capability.kind));
-      }
-      if (
-        onResend &&
-        capability.kind === "audio" &&
-        originApp &&
-        !options.appGrants?.(originApp)?.includes(controlPermission("audio"))
-      ) {
-        throw new ActionCallError("forbidden");
       }
       onResend?.();
       if (isStopping || options.driverRun?.(driver) !== wentThrough) {

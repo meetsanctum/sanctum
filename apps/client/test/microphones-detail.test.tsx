@@ -14,7 +14,8 @@ import {
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // A smart speaker's Microphones page: its microphones' switch, which mutes
-// them through core Devices and when it last heard its wake word.
+// them through core Devices, when it last heard its wake word, and how to
+// free microphones its own switch holds muted.
 
 const device = {
   id: "device:speaker",
@@ -59,7 +60,7 @@ afterEach(async () => {
 async function show(capability: Audio, shown: DeviceInfo = device) {
   await act(async () => {
     root.render(
-      <MicrophonesPage device={shown} capabilities={[capability]} now={now} />,
+      <MicrophonesPage device={shown} capability={capability} now={now} />,
     );
   });
 }
@@ -95,12 +96,12 @@ describe("a smart speaker's Microphones page", () => {
     });
   });
 
-  it("waits while a change is on its way", async () => {
+  it("waits while a change is on its way, showing what it said until then", async () => {
     await show(
       audio({
-        sync: "pending",
         state: { muted: true },
         desired: { muted: true },
+        sync: "pending",
       }),
     );
 
@@ -111,7 +112,37 @@ describe("a smart speaker's Microphones page", () => {
     );
   });
 
-  it("shows a timeout and gives conditional help for a physical switch", async () => {
+  it("says a change didn't work on a speaker without a switch of its own", async () => {
+    await show(
+      audio({
+        features: { mutes: true, muteSwitch: false },
+        state: { muted: false },
+        observed: { muted: false },
+        sync: "conflict",
+      }),
+    );
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Couldn't change them. Check it's switched on, then try again.",
+    );
+  });
+
+  it("shows whether they're muted where only its own switch mutes them", async () => {
+    await show(
+      audio({
+        features: { mutes: false, muteSwitch: true },
+        state: { muted: true },
+        observed: { muted: true },
+      }),
+    );
+
+    expect(microphones()).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Muted",
+    );
+  });
+
+  it("says how to free microphones its own switch holds muted", async () => {
     await show(
       audio({
         state: { muted: true },
@@ -121,36 +152,8 @@ describe("a smart speaker's Microphones page", () => {
     );
 
     expect(microphones()?.getAttribute("aria-checked")).toBe("false");
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "If the switch on its side is on",
-    );
-  });
-
-  it("shows a timeout on a speaker without a physical switch", async () => {
-    await show(
-      audio({
-        features: { mutes: true, muteSwitch: false },
-        sync: "conflict",
-      }),
-    );
-
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Couldn't change the microphones. Try again.",
-    );
-  });
-
-  it("shows mute status for a speaker with a physical-only switch", async () => {
-    await show(
-      audio({
-        features: { mutes: false, muteSwitch: true },
-        observed: { muted: true },
-        state: { muted: true },
-      }),
-    );
-
-    expect(microphones()).toBeNull();
-    expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      "Muted",
+      "They're still muted. Turn off the switch on its side to turn them on.",
     );
   });
 
@@ -161,7 +164,7 @@ describe("a smart speaker's Microphones page", () => {
     await act(async () => microphones()!.click());
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Couldn't change the microphones.",
+      "Couldn't change them.",
     );
   });
 
@@ -169,6 +172,7 @@ describe("a smart speaker's Microphones page", () => {
     await show(
       audio({
         features: { mutes: false, muteSwitch: false },
+        state: { heardAt: new Date(2026, 10, 24, 9, 5).toISOString() },
         observed: { heardAt: new Date(2026, 10, 24, 9, 5).toISOString() },
       }),
     );

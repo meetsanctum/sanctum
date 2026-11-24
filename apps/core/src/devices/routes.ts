@@ -127,9 +127,7 @@ export function registerDeviceRoutes(
         throw error;
       }
     }
-    return devices.commandFor(request.principal!, request.body, {
-      pageApp: request.pageApp?.app,
-    });
+    return devices.commandFor(request.principal!, request.body);
   });
 
   app.post("/api/devices/lights", async (request): Promise<LightsResult> => {

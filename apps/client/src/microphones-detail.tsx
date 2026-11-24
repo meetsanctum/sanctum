@@ -12,8 +12,10 @@ import { productName } from "./brand";
 
 // A smart speaker's Microphones page: whether they're on, which mutes or
 // unmutes them through core Devices as any command goes, and when it last
-// heard its wake word. A speaker with a mute switch of its own, on its
-// side, is muted by that too.
+// heard its wake word, as the speaker last said them. A speaker with a mute
+// switch of its own, on its side, is muted by that too, and while that one
+// is on, nothing else turns them back on: an unmute the speaker doesn't
+// confirm says so.
 
 export type Audio = Extract<CapabilityInfo, { kind: "audio" }>;
 
@@ -63,37 +65,12 @@ export function heardWords(
 
 export function MicrophonesPage(props: {
   device: DeviceInfo;
-  capabilities: readonly Audio[];
+  capability: Audio;
   /** The minute it is, which "Today" and "Yesterday" follow. */
   now: Date;
 }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {props.capabilities.map((capability) => (
-        <MicrophoneSection
-          key={`${props.device.id}/${capability.id}`}
-          device={props.device}
-          capability={capability}
-          title={
-            props.capabilities.length > 1
-              ? `Microphones · ${capability.id}`
-              : "Microphones"
-          }
-          now={props.now}
-        />
-      ))}
-    </div>
-  );
-}
-
-function MicrophoneSection(props: {
-  device: DeviceInfo;
-  capability: Audio;
-  title: string;
-  now: Date;
-}) {
-  const { device, capability, title, now } = props;
-  const id = `${device.id}-microphones-${capability.id}`;
+  const { device, capability, now } = props;
+  const id = `${device.id}-microphones`;
   const [failed, setFailed] = useState(false);
   const muted = capability.observed?.muted;
   const canMute = capability.features.mutes && muted !== undefined;
@@ -106,6 +83,11 @@ function MicrophoneSection(props: {
     : muted
       ? "Muted"
       : "On";
+  // An unmute it didn't take: its own switch still holds them.
+  const stillMuted =
+    capability.features.muteSwitch &&
+    capability.sync === "conflict" &&
+    muted === true;
 
   async function change(on: boolean) {
     setFailed(false);
@@ -122,7 +104,7 @@ function MicrophoneSection(props: {
 
   return (
     <div className="flex flex-col gap-2">
-      <PageSection id={id} title={title}>
+      <PageSection id={id} title="Microphones">
         {(muted !== undefined || busy) && (
           <div className="flex min-h-13 items-center justify-between gap-3 px-2.5 text-[15px] leading-5">
             <div className="flex min-w-0 flex-col">
@@ -139,7 +121,7 @@ function MicrophoneSection(props: {
             </div>
             {canMute && (
               <Switch
-                aria-label={title}
+                aria-label="Microphones"
                 checked={!muted}
                 disabled={!reachable || busy}
                 onCheckedChange={(on) => void change(on)}
@@ -152,19 +134,24 @@ function MicrophoneSection(props: {
           <span>{heardWords(capability.observed?.heardAt, now)}</span>
         </div>
       </PageSection>
-      {failed || capability.sync === "conflict" ? (
+      {stillMuted ? (
         <p
           role="alert"
           className="m-0 px-1 text-[13px] leading-[18px] text-destructive"
         >
-          Couldn't change the microphones. Try again.
-          {capability.features.muteSwitch &&
-            muted === true &&
-            " If the switch on its side is on, turn it off to turn the microphones on."}
+          They're still muted. Turn off the switch on its side to turn them on.
+        </p>
+      ) : failed || capability.sync === "conflict" ? (
+        <p
+          role="alert"
+          className="m-0 px-1 text-[13px] leading-[18px] text-destructive"
+        >
+          Couldn't change them. Check it's switched on, then try again.
         </p>
       ) : (
         <p className="m-0 px-1 text-[13px] leading-[18px] text-muted-foreground">
-          {productName} doesn't answer the speaker's wake word.
+          When it hears its wake word, it chimes and flashes red: {productName}{" "}
+          doesn't answer it.
           {capability.features.muteSwitch &&
             " The switch on its side mutes the microphones too, and while it's on, only that switch turns them back on."}
         </p>

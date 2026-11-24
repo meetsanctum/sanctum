@@ -76,7 +76,8 @@ const summaryTypes: readonly { type: DeviceType; title: string }[] = [
 ];
 
 /**
- * Media's summary: which types of devices the home has and how many are playing.
+ * Media's summary: for each type the home's players are shown as, how many
+ * are playing, or "Not playing" while none is.
  */
 export function mediaSummary(
   tiles: readonly Tile[],
@@ -84,27 +85,21 @@ export function mediaSummary(
 ): { type: DeviceType; title: string; status: string }[] {
   const typeOf = new Map(devices.map((device) => [device.id, device.type]));
   const mediaTypes = new Set(summaryTypes.map(({ type }) => type));
-  const counts = new Map<DeviceType, { players: number; playing: number }>();
+  const counts = new Map<DeviceType, { playing: number }>();
   for (const tile of tiles) {
-    if (tile.kind !== "media" && tile.kind !== "audio") continue;
+    if (tile.kind !== "media") continue;
     const deviceType = typeOf.get(tile.deviceId);
     const type =
       deviceType && mediaTypes.has(deviceType) ? deviceType : "media-player";
-    const count = counts.get(type) ?? { players: 0, playing: 0 };
-    if (tile.kind === "media") count.players += 1;
+    const count = counts.get(type) ?? { playing: 0 };
     if (tile.media?.playing) count.playing += 1;
     counts.set(type, count);
   }
   return summaryTypes.flatMap(({ type, title }) => {
     const count = counts.get(type);
     if (!count) return [];
-    const { players, playing } = count;
-    const status =
-      playing > 0
-        ? `${playing} playing`
-        : players > 0
-          ? "Not playing"
-          : "Microphones";
+    const { playing } = count;
+    const status = playing > 0 ? `${playing} playing` : "Not playing";
     return [{ type, title, status }];
   });
 }

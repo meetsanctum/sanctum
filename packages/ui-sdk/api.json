@@ -1,5 +1,5 @@
 {
-  "version": "0.1.23",
+  "version": "0.1.22",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2862,7 +2862,7 @@
       "    key: string;",
       "    deviceId: string;",
       "    capabilityId: string;",
-      "    kind: \"light\" | \"switch\" | \"button\" | \"sensor\" | \"motion\" | \"contact\" | \"media\" | \"audio\" | \"unknown\";",
+      "    kind: \"light\" | \"switch\" | \"button\" | \"sensor\" | \"motion\" | \"contact\" | \"media\" | \"unknown\";",
       "    roomId: string | null;",
       "    name: string;",
       "    status: string;",
