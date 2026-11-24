@@ -360,7 +360,7 @@ describe("the apps' packages on real images", () => {
     expect(refused.status).toBe(404);
   });
 
-  it("starts the pinned Ollama image and lists models on a fresh host", async () => {
+  it("starts the pinned Ollama image, which has no models yet", async () => {
     // The image is gigabytes, downloaded while the test waits: it took nearly
     // four minutes on a home connection.
     await vi.waitFor(
