@@ -8,8 +8,8 @@ import type { AgentCaller } from "../app-host/gate.js";
 // a call of `lights` or `device_command` sent a command, the fields it asked
 // for and how the capability was before. Kept in memory, for each agent its
 // last five changes for an hour (per device for Assistant requests), and
-// dropped once the agent is removed. A
-// change put back keeps its answer, so putting it back again says the same.
+// dropped once the agent is removed. A change put back keeps its answer, so
+// putting it back again says the same.
 
 /** How many of an agent's changes are kept, and for how long. */
 export const changesKept = { count: 5, ms: 60 * 60_000 };

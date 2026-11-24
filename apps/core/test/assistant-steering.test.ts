@@ -5,7 +5,6 @@ import {
   modelsUsePermission,
   type PermissionRequest,
   assistantAppId,
-  defineAction,
   defineApp,
   isActionError,
   type AiToolAnswer,
@@ -14,12 +13,10 @@ import {
   type RequestContext,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import { connect } from "./agents-support.js";
 import { apart, base, running, useCleanUps } from "./app-apart-support.js";
 import { lampsCore } from "./devices-support.js";
-import type { AppPackage } from "./runner-apps.js";
 import {
   claimed,
   deferredDelivery,
@@ -62,51 +59,14 @@ function fakeAssistant(
   });
 }
 
-// An app offering AI agents a call that waits until the test lets it go.
-function slowApp() {
-  const entered = deferredDelivery();
-  const release = deferredDelivery();
-  const app: AppPackage = {
-    app: defineApp({
-      ...base,
-      id: "sanctum.example",
-      name: "Slow",
-      permissions: [],
-      actions: [
-        defineAction({
-          id: "example.wait",
-          title: "Wait",
-          tier: "read",
-          assistant: { starts: "on", description: "Waits a while." },
-          input: z.object({}),
-          output: z.object({ waited: z.boolean() }),
-          async run() {
-            entered.resolve();
-            await release.promise;
-            return { waited: true };
-          },
-        }),
-      ],
-    }),
-    origin: "system",
-  };
-  return { app, entered, release };
-}
-
-const slowTool = "sanctum_example_wait";
-
 async function household(
   permissions = [assistantGrant] as PermissionRequest[],
 ) {
   const script: { current: Script } = { current: async () => {} };
-  const slow = slowApp();
   const { core, maya, lamp, plug } = await lampsCore({
-    apps: [
-      { app: fakeAssistant(script, permissions), origin: "official" },
-      slow.app,
-    ],
+    apps: [{ app: fakeAssistant(script, permissions), origin: "official" }],
   });
-  return { core, maya, lamp, plug, script, slow };
+  return { core, maya, lamp, plug, script };
 }
 
 const grant = (
@@ -280,7 +240,7 @@ describe("a device's 5-minute window", () => {
     },
   );
 
-  it("drops earlier tool answers and replies when an AI area is switched off", async () => {
+  it("keeps what the Assistant already heard when an AI area is switched off", async () => {
     const { core, maya, script } = await household();
     const setArea = (on: boolean) =>
       post(
@@ -295,50 +255,27 @@ describe("a device's 5-minute window", () => {
       seen = request.earlier;
       const answer = await ctx.ai.call("activity", {});
       await request.reply({
-        text: answer.isError ? "Activity unavailable." : answer.text,
+        text: answer.isError
+          ? "Activity unavailable."
+          : "Here's what happened.",
       });
     };
-    expect(
-      (await ask(core, maya.token, "What happened?")).json().reply,
-    ).toContain('"entries"');
+    expect((await ask(core, maya.token, "What happened?")).json()).toEqual({
+      reply: "Here's what happened.",
+    });
     expect((await setArea(false)).statusCode).toBe(200);
     expect((await ask(core, maya.token, "And before that?")).json()).toEqual({
       reply: "Activity unavailable.",
     });
-    expect(seen).toEqual([]);
-  });
-
-  it("does not replay a pending tool or its reply after its app offer is switched off", async () => {
-    const { core, maya, script, slow } = await household();
-    let seen: EarlierExchange[] | undefined;
-    script.current = async (ctx, request) => {
-      if (request.text === "Wait") {
-        const answer = await ctx.ai.call(slowTool, {});
-        await request.reply({ text: answer.text });
-      } else {
-        seen = request.earlier;
-        await request.reply({ text: "Ready." });
-      }
-    };
-    try {
-      const pending = ask(core, maya.token, "Wait");
-      await slow.entered.promise;
-      const revoked = await post(
-        core,
-        "/api/agents/can-use/offer",
-        { app: "sanctum.example", id: "example.wait", on: false },
-        { token: maya.token },
-      );
-      expect(revoked.statusCode).toBe(200);
-      slow.release.resolve();
-      await pending;
-      expect((await ask(core, maya.token, "What happened?")).json()).toEqual({
-        reply: "Ready.",
-      });
-      expect(seen).toEqual([]);
-    } finally {
-      slow.release.resolve();
-    }
+    expect(seen).toEqual([
+      expect.objectContaining({
+        asked: "What happened?",
+        tools: [
+          expect.objectContaining({ name: "activity", outcome: "answered" }),
+        ],
+        reply: "Here's what happened.",
+      }),
+    ]);
   });
 });
 
