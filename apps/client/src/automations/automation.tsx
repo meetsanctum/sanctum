@@ -493,7 +493,11 @@ function RunRow(props: {
                       : step.status === "skipped"
                         ? "Not met"
                         : (stepWords[step.status] ?? step.status)
-                    : (stepWords[step.status] ?? step.status)}
+                    : step.status === "skipped" && step.error
+                      ? // A step with nothing to act on, such as Pause
+                        // with nothing playing, ran and did nothing.
+                        "Skipped"
+                      : (stepWords[step.status] ?? step.status)}
                 </span>
               </li>
             );

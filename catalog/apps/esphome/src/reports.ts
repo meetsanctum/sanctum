@@ -1,4 +1,4 @@
-import type { AppContext } from "@meetsanctum/app-sdk";
+import type { AppContext, MediaActivity } from "@meetsanctum/app-sdk";
 import type { TelemetryEvent } from "esphome-client";
 
 import type { Session } from "./connection.js";
@@ -8,6 +8,10 @@ import { stateOf } from "./states.js";
 
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
+
+// What each session's media players last said they were doing, by
+// capability, which an announcement keeps (stateOf).
+const activities = new WeakMap<Session, Map<string, MediaActivity>>();
 
 /**
  * Reports one thing a session's device said, read by that session's own
@@ -55,7 +59,15 @@ export function report(
           })
         : null
       : (() => {
-          const now = stateOf(mapped, event);
+          let seen = activities.get(session);
+          if (!seen) {
+            seen = new Map();
+            activities.set(session, seen);
+          }
+          const now = stateOf(mapped, event, seen.get(capability));
+          if (now && "activity" in now) {
+            seen.set(capability, now.activity);
+          }
           return now
             ? ctx.devices.report({
                 key: mac,

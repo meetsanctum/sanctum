@@ -710,6 +710,7 @@ export function createWorkflows(
      */
     hold() {
       held = true;
+      firing.stop();
     },
 
     /**
@@ -722,6 +723,7 @@ export function createWorkflows(
       held = true;
       clearInterval(timer);
       timer = undefined;
+      firing.stop();
       engine.interrupt();
     },
 
@@ -757,6 +759,7 @@ export function createWorkflows(
     close() {
       clearInterval(timer);
       timer = undefined;
+      firing.stop();
     },
   };
   return module;

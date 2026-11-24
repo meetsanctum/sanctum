@@ -23,6 +23,7 @@ import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import {
   corePieces,
+  deviceCommandOf,
   type CorePiece,
   type DeviceStepConfig,
   type EntityTriggerConfig,
@@ -248,34 +249,52 @@ export function createPieces(options: {
   }
 
   // A device step's command, for the capability of the device it names,
-  // when the workflow is saved.
+  // and whether that capability can do it by the features its device
+  // registered. The device and its capability are checked when the
+  // workflow is saved; whether it can do it, before each run too, as a
+  // player that registers again without a feature can't do the step.
   function deviceStepProblems(
     node: WorkflowNode,
     config: DeviceStepConfig,
+    saving: boolean,
   ): WorkflowProblem[] {
     const device = options.devices.get(config.device);
     const capability = device?.capabilities.find(
       (each) => each.id === config.capability,
     );
     if (!capability) {
-      return [
-        {
-          node: node.id,
-          field: "capability",
-          message: `There is no device ${config.device} with ${config.capability}`,
-        },
-      ];
+      return saving
+        ? [
+            {
+              node: node.id,
+              field: "capability",
+              message: `There is no device ${config.device} with ${config.capability}`,
+            },
+          ]
+        : [];
     }
-    const command = capabilityOf(capability.kind).command.safeParse(
-      config.command,
-    );
-    return command.success
+    const definition = capabilityOf(capability.kind);
+    const command = definition.command.safeParse(config.command);
+    if (!command.success) {
+      return command.error.issues.map((issue) => ({
+        node: node.id,
+        field: pathOf(
+          node.piece === "device" ? ["command", ...issue.path] : issue.path,
+        ),
+        message: `The command does not fit a ${capability.kind}: ${issue.message.charAt(0).toLowerCase()}${issue.message.slice(1)}`,
+      }));
+    }
+    return (
+      definition.supports as (features: unknown, command: unknown) => boolean
+    )(capability.features, command.data)
       ? []
-      : command.error.issues.map((issue) => ({
-          node: node.id,
-          field: pathOf(["command", ...issue.path]),
-          message: `The command does not fit a ${capability.kind}: ${issue.message.charAt(0).toLowerCase()}${issue.message.slice(1)}`,
-        }));
+      : [
+          {
+            node: node.id,
+            field: "device",
+            message: `${device!.name} can't do this`,
+          },
+        ];
   }
 
   // A press trigger's remote and action, when the workflow is saved.
@@ -417,7 +436,8 @@ export function createPieces(options: {
     /**
      * What keeps a graph from being saved or from running, and what it may not
      * do on its own: a room, floor, zone, device or entity it names that is
-     * gone among them. Saving also checks the commands its device steps send.
+     * gone among them. Saving also checks the commands its device steps send,
+     * and each check whether their devices can do them.
      */
     check(graph: WorkflowGraph, options_: { saving?: boolean } = {}): Check {
       const saving = options_.saving ?? false;
@@ -476,15 +496,12 @@ export function createPieces(options: {
           problems.push(...named);
           continue;
         }
-        if (
-          piece.app === null &&
-          node.kind === "step" &&
-          piece.id === "device" &&
-          saving
-        ) {
-          problems.push(
-            ...deviceStepProblems(node, config.data as DeviceStepConfig),
-          );
+        const sent =
+          piece.app === null && node.kind === "step"
+            ? deviceCommandOf(piece.id, config.data)
+            : undefined;
+        if (sent) {
+          problems.push(...deviceStepProblems(node, sent, saving));
         }
         if (
           piece.app === null &&

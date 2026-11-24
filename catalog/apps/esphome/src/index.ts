@@ -55,8 +55,9 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // 0.6.0: media players, and smart speakers, whose voice requests are
     // followed and declined. 0.7.0: a smart speaker's microphones, ring and
     // wake word on its page. 0.8.0: an action for each change there, about
-    // the speaker, so Activity names it.
-    version: "0.8.0",
+    // the speaker, so Activity names it. 0.8.1: a speaker announcing is
+    // doing what it did before, not playing.
+    version: "0.8.1",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",

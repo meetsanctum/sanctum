@@ -17,6 +17,7 @@ import {
   Sunset,
   Thermometer,
   ToggleRight,
+  TvMinimalPlay,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +51,7 @@ const kindGlyphs: Record<string, LucideIcon> = {
   motion: Footprints,
   contact: ContactClosed,
   sensor: Thermometer,
+  media: TvMinimalPlay,
 };
 
 /** A piece's icon: its app's, its own glyph, or its device's kind. */

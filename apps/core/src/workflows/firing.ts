@@ -6,7 +6,8 @@ import { placeKey, type MotionChange } from "../devices/motion.js";
 import type { Press } from "../devices/presses.js";
 import type { EntityChange } from "../entities/entities.js";
 import type { Engine, WorkflowRow } from "./engine.js";
-import { changeFires, sameValue } from "./graph.js";
+import { changeFires, sameValue, statePasses } from "./graph.js";
+import { comparedState } from "./media.js";
 import type {
   DeviceTriggerConfig,
   EntityTriggerConfig,
@@ -24,7 +25,10 @@ import type { Timers } from "./timers.js";
 // it: not while the app is absent or paused, or the workflow suspended
 // (kept-grants.ts). A place's motion, as Motion keeps it, starts motion
 // triggers as the place goes from no motion to motion, once, however many
-// sensors see it, and sets no-motion triggers' timers (timers.ts).
+// sensors see it, and sets no-motion triggers' timers (timers.ts). A device
+// trigger that asks for its change to hold (forSeconds) waits that long in
+// memory, and lets it go if the device changes back before: a wait of
+// seconds that a restart forgets, as the change it waited on is forgotten.
 
 export function createFiring(options: {
   rows: () => WorkflowRow[];
@@ -36,6 +40,59 @@ export function createFiring(options: {
 }) {
   const { pieces, engine } = options;
   const parsed = <T>(node: WorkflowNode) => pieces.parse<T>(node);
+
+  // Device triggers waiting for their change to hold, by workflow, node,
+  // device and capability.
+  type Hold = {
+    timer: ReturnType<typeof setTimeout>;
+    device: string;
+    capability: string;
+    config: DeviceTriggerConfig;
+  };
+  const holds = new Map<string, Hold>();
+
+  function letGo(key: string) {
+    clearTimeout(holds.get(key)?.timer);
+    holds.delete(key);
+  }
+
+  // A held trigger fires as its wait ends, if its workflow may still run
+  // and still has the trigger as it was.
+  function hold(
+    workflow: WorkflowRow,
+    node: WorkflowNode,
+    config: DeviceTriggerConfig & { forSeconds: number },
+    data: Record<string, unknown> & { device: string; capability: string },
+  ) {
+    const key = [workflow.id, node.id, data.device, data.capability].join(
+      "\u0000",
+    );
+    if (holds.has(key)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      holds.delete(key);
+      const now = options.rows().find((each) => each.id === workflow.id);
+      const same = now?.graph.nodes.find((each) => each.id === node.id);
+      if (
+        !now?.enabled ||
+        !options.mayRun(now) ||
+        !same ||
+        same.app ||
+        same.piece !== "device" ||
+        !sameValue(parsed(same), config)
+      ) {
+        return;
+      }
+      engine.fire(now, { nodes: [node.id], key: null, data });
+    }, config.forSeconds * 1000);
+    holds.set(key, {
+      timer,
+      device: data.device,
+      capability: data.capability,
+      config,
+    });
+  }
 
   // Each running workflow's trigger nodes that a firing matches.
   function matching(
@@ -131,6 +188,26 @@ export function createFiring(options: {
      */
     deviceChanged(change: DeviceChange) {
       const after = change.after;
+      const id = (after ?? change.before)?.id;
+      // A change undone lets the triggers waiting on it go: a device gone,
+      // or a state that no longer passes.
+      for (const [key, held] of holds) {
+        if (held.device !== id) {
+          continue;
+        }
+        const capability = after?.capabilities.find(
+          (each) => each.id === held.capability,
+        );
+        if (
+          !capability ||
+          !statePasses(
+            held.config,
+            comparedState(capability.kind, capability.observed),
+          )
+        ) {
+          letGo(key);
+        }
+      }
       if (!after) {
         return;
       }
@@ -158,8 +235,27 @@ export function createFiring(options: {
           ({ capability, before }) =>
             (!config.capability || config.capability === capability.id) &&
             (!config.kind || config.kind === capability.kind) &&
-            changeFires(config, before, capability.observed),
+            changeFires(
+              config,
+              comparedState(capability.kind, before),
+              comparedState(capability.kind, capability.observed),
+            ),
         );
+        if (hit && config.forSeconds !== undefined) {
+          hold(
+            workflow,
+            node,
+            config as typeof config & { forSeconds: number },
+            {
+              device: after.id,
+              capability: hit.capability.id,
+              kind: hit.capability.kind,
+              before: hit.before,
+              after: hit.capability.observed,
+            },
+          );
+          return false;
+        }
         if (hit && !seen.has(workflow.id)) {
           seen.set(workflow.id, hit);
         }
@@ -210,6 +306,13 @@ export function createFiring(options: {
     },
 
     motionChanged,
+
+    /** Lets every held trigger go, as workflows stop. */
+    stop() {
+      for (const key of [...holds.keys()]) {
+        letGo(key);
+      }
+    },
 
     /**
      * An app's entity changed: `entity` triggers compare its state before

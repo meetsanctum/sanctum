@@ -13,7 +13,7 @@ import {
   ToggleGroupItem,
 } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { Check, Sun } from "lucide-react";
+import { Check, Sun, Volume2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
@@ -22,6 +22,7 @@ import {
   formatDays,
   formatLux,
   formatMinutes,
+  formatPercent,
   matchesCapability,
   weekOrder,
   weekdaysOnly,
@@ -45,8 +46,10 @@ export type FieldContext = {
   home: Home;
   // The config the field belongs to, for a part of the device beside it.
   config: Record<string, unknown>;
-  // Which devices fit a device field, by their capabilities' kinds.
+  // Which devices fit a device field, by their capabilities' kinds, and
+  // the command a step sends it, which they must be able to do.
   deviceKinds?: readonly string[];
+  deviceCommand?: Record<string, unknown>;
 };
 
 /** A list of options; the one in force has a check. */
@@ -383,6 +386,24 @@ function NumberChoice(props: {
 
 const minuteChips = [2, 5, 10, 15, 30, 60];
 const luxChips = [5, 10, 30, 50, 100];
+const percentChips = [10, 20, 30, 50, 75];
+
+// The level a node's device is at now, such as a player's volume, with the
+// device's name; none while it says no level.
+function levelIn(
+  home: Home,
+  config: Record<string, unknown>,
+  field: string,
+): { name: string; level: number } | undefined {
+  const device = home.devices.find((each) => each.id === config.device);
+  const part = device?.capabilities.find(
+    (each) => each.id === config.capability,
+  );
+  const level = (part?.state as Record<string, unknown> | undefined)?.[field];
+  return device && typeof level === "number"
+    ? { name: device.name, level }
+    : undefined;
+}
 
 /** The control for a field, by what its schema says it is. */
 export function FieldControl(props: {
@@ -440,6 +461,32 @@ export function FieldControl(props: {
           onChange={props.onChange}
         />
       );
+    case "percent": {
+      // Where the node's device is now, beside the level to set it to.
+      const now = levelIn(home, props.context.config, props.name);
+      return (
+        <NumberChoice
+          label={String(props.field.title ?? "Level")}
+          unit="%"
+          value={typeof props.value === "number" ? props.value : undefined}
+          minimum={numberOr(props.field.minimum, 0)}
+          maximum={numberOr(props.field.maximum, 100)}
+          whole
+          chips={percentChips.map((value) => ({
+            value,
+            label: formatPercent(value),
+          }))}
+          onChange={props.onChange}
+        >
+          {now && (
+            <p className="m-0 flex items-center gap-1.5 text-[13px] leading-[18px] text-muted-foreground">
+              <Volume2 aria-hidden="true" className="size-3.5 shrink-0" />
+              {now.name} is at {formatPercent(now.level)} now
+            </p>
+          )}
+        </NumberChoice>
+      );
+    }
     case "lux": {
       // What the node's place reads now, beside the level to compare it with.
       const place = placeIn(props.context.config);
@@ -509,7 +556,12 @@ export function FieldControl(props: {
           (device) =>
             !kinds ||
             device.capabilities.some((capability) =>
-              matchesCapability(capability, kinds, props.context.config.field),
+              matchesCapability(
+                capability,
+                kinds,
+                props.context.config.field,
+                props.context.deviceCommand,
+              ),
             ),
         );
         const roomName = (id: string | null) =>

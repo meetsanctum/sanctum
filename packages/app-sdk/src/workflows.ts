@@ -64,6 +64,14 @@ export const minutesField = z
 /** A light level in lux, such as darker than 30 lx. */
 export const luxField = z.number().min(0).max(200_000).meta({ lux: true });
 
+/** A level in percent, such as a player's volume at 30%. */
+export const percentField = z
+  .number()
+  .int()
+  .min(0)
+  .max(100)
+  .meta({ percent: true });
+
 /**
  * Options with the words a sentence reads for each, such as
  * choice({ anyOn: "any light is on", allOff: "every light is off" }).
@@ -291,9 +299,21 @@ export type StateOperator = (typeof stateOperators)[number];
 export const namedKinds = ["room", "floor", "zone", "device"] as const;
 export type NamedKind = (typeof namedKinds)[number];
 
-/** A config field that names a room, a floor, a zone or a device by its id. */
-export function names(kind: NamedKind) {
-  return z.string().min(1).max(64).meta({ names: kind });
+/**
+ * A config field that names a room, a floor, a zone or a device by its id.
+ * A device's may say the command its piece sends, such as
+ * names("device", { sends: { volume: 0 } }) for a step that sets a player's
+ * volume, so the editor offers only the devices that take it.
+ */
+export function names(
+  kind: NamedKind,
+  options: { sends?: Record<string, unknown> } = {},
+) {
+  return z
+    .string()
+    .min(1)
+    .max(64)
+    .meta({ names: kind, ...(options.sends && { sends: options.sends }) });
 }
 
 const nodeId = z.string().min(1).max(64);
