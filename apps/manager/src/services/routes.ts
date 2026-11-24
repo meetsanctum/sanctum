@@ -11,13 +11,16 @@ import { OperationConflictError } from "../operations.js";
 import { zigbeeAdapters } from "./zigbee-coordinator-profiles.js";
 
 // The services API on the manager's socket, which only the core reaches. The
-// core asks on behalf of an app that holds a `services:<name>` permission:
+// core asks on behalf of an app that holds a `services:<name>` permission,
+// or for a service it uses itself:
 //
 //   GET    /api/services                         every service and its state
 //   GET    /api/services/:service                one service
 //   PUT    /api/services/:service/apps/:app      the app needs it; returns
 //                                                its connection details
 //   DELETE /api/services/:service/apps/:app      the app no longer needs it
+//   PUT    /api/services/:service/core           the core wants it for itself
+//   DELETE /api/services/:service/core           the core no longer does
 //   DELETE /api/services/:service/data           erase its own data once no
 //                                                app needs it and it has
 //                                                stopped; refused (409) before
@@ -88,6 +91,29 @@ export function registerServiceRoutes(
       return fail(reply, error);
     }
   });
+
+  app.put<{ Params: { service: string } }>(
+    "/api/services/:service/core",
+    async (request, reply) => {
+      try {
+        return await services.wantForCore(request.params.service);
+      } catch (error) {
+        return fail(reply, error);
+      }
+    },
+  );
+
+  app.delete<{ Params: { service: string } }>(
+    "/api/services/:service/core",
+    async (request, reply) => {
+      try {
+        await services.releaseForCore(request.params.service);
+        return reply.code(204).send();
+      } catch (error) {
+        return fail(reply, error);
+      }
+    },
+  );
 
   app.delete<{ Params: { service: string } }>(
     "/api/services/:service/data",

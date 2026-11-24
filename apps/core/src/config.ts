@@ -8,6 +8,16 @@ const booleanFlag = z
 const envSchema = z.object({
   CORE_HOST: z.string().default("127.0.0.1"),
   CORE_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
+  // Where smart speakers fetch announcements: plain HTTP, on the home's
+  // network, at one-off addresses (speech/announcements.ts). The published
+  // port is the one the host maps to it, which goes in the addresses.
+  CORE_SPEAKER_PORT: z.coerce.number().int().min(1).max(65535).default(4180),
+  CORE_SPEAKER_PUBLISHED_PORT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .optional(),
   // Comma-separated origins that may call the core from a browser, such as
   // http://localhost:5173.
   CORE_ALLOWED_ORIGINS: z.string().default(""),
@@ -44,6 +54,9 @@ const envSchema = z.object({
 export type CoreConfig = {
   host: string;
   port: number;
+  // Left out, as by tests that make their own, the core serves no speakers.
+  speakerPort?: number;
+  speakerPublishedPort?: number;
   allowedOrigins: string[];
   dataDir: string;
   plainHttp: boolean;
@@ -61,6 +74,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   return {
     host: parsed.CORE_HOST,
     port: parsed.CORE_PORT,
+    speakerPort: parsed.CORE_SPEAKER_PORT,
+    speakerPublishedPort:
+      parsed.CORE_SPEAKER_PUBLISHED_PORT ?? parsed.CORE_SPEAKER_PORT,
     allowedOrigins: parsed.CORE_ALLOWED_ORIGINS.split(",")
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),

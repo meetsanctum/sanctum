@@ -23,10 +23,33 @@ describe("a smart speaker's microphones", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: false, muteSwitch: false },
+      features: { mutes: false, muteSwitch: false, announces: false },
     });
-    expect(audio.supports(audio.features.parse({}))).toBe(false);
-    expect(audio.supports(audio.features.parse({ mutes: true }))).toBe(true);
+    const mute = { muted: true };
+    expect(audio.supports(audio.features.parse({}), mute)).toBe(false);
+    expect(audio.supports(audio.features.parse({ mutes: true }), mute)).toBe(
+      true,
+    );
+  });
+
+  it("play an announcement from a plain HTTP address only where the driver says so", () => {
+    const announce = {
+      announce: { url: "http://192.168.1.20:4180/a/abc.flac" },
+    };
+    expect(audio.command.parse(announce)).toEqual(announce);
+    expect(audio.desired(announce)).toEqual({});
+    expect(audio.supports(audio.features.parse({}), announce)).toBe(false);
+    expect(
+      audio.supports(audio.features.parse({ announces: true }), announce),
+    ).toBe(true);
+    expect(
+      audio.supports(audio.features.parse({ announces: true }), {
+        muted: true,
+      }),
+    ).toBe(false);
+    for (const url of ["https://example.com/a.flac", "file:///etc/passwd", "x"]) {
+      expect(() => audio.command.parse({ announce: { url } })).toThrow();
+    }
   });
 
   it("say whether they're muted and when it heard its wake word", () => {

@@ -41,12 +41,15 @@ import type { ZigbeeAdapter } from "./zigbee-coordinator-profiles.js";
 
 // Runs the services apps ask for and keeps them healthy. The core asks on an
 // app's behalf, over the manager's socket, and gets what the app needs to
-// use the service. The manager's CLI can ask too, by hand.
+// use the service, or for a service it uses itself. The manager's CLI can
+// ask too, by hand.
 
 export type ServiceStatus = {
   name: string;
   // The apps that asked for it; a service another one needs has none.
   apps: string[];
+  // The core asked for it for itself.
+  core?: true;
   state: "off" | "starting" | "running" | "waiting" | "failed";
   // Why it is waiting or failed.
   problem?: string;
@@ -59,7 +62,7 @@ export type ServiceStatus = {
   url?: string;
 };
 
-type Observed = Omit<ServiceStatus, "name" | "apps">;
+type Observed = Omit<ServiceStatus, "name" | "apps" | "core">;
 
 // A request the manager cannot act on, such as an unknown coordinator.
 export class ServiceRequestError extends Error {}
@@ -185,6 +188,14 @@ export function createServices(options: {
     return definition;
   }
 
+  function forCore(name: string) {
+    const definition = findService(name);
+    if (!definition?.forCore) {
+      throw new UnknownServiceError(`No service ${name} for the core`);
+    }
+    return definition;
+  }
+
   function checkApp(app: string) {
     if (app.length > 128 || !appId.test(app)) {
       throw new ServiceRequestError(`${app} is not an app id`);
@@ -205,6 +216,7 @@ export function createServices(options: {
     return {
       name,
       apps: state.apps[name] ?? [],
+      ...((state.core ?? []).includes(name) ? { core: true as const } : {}),
       ...current,
       ...(url && current.state === "running" ? { url } : {}),
     };
@@ -430,6 +442,34 @@ export function createServices(options: {
       if (!brokerState || (brokerState.apps[name] ?? []).includes(app)) {
         throw new Error("The broker has not confirmed the service revocation");
       }
+    },
+
+    // The core wants a service for itself: it runs from now on, with what it
+    // needs. Asking again changes nothing. The core reaches it at its url,
+    // which GET /api/services/:service gives once it runs.
+    async wantForCore(name: string) {
+      forCore(name);
+      await store.update((draft) => {
+        draft.core = [...new Set([...(draft.core ?? []), name])].sort();
+      });
+      void options.onChange?.();
+      return { service: status(name) };
+    },
+
+    // The core no longer wants the service. Once nothing does, it stops;
+    // its data volume stays. The answer waits for the reconcile that stops
+    // it, as an app's release does.
+    async releaseForCore(name: string) {
+      forCore(name);
+      await store.update((draft) => {
+        const core = (draft.core ?? []).filter((each) => each !== name);
+        if (core.length > 0) {
+          draft.core = core;
+        } else {
+          delete draft.core;
+        }
+      });
+      await options.onChange?.();
     },
 
     // Deletes a service's own data, once no app needs it and it has stopped,

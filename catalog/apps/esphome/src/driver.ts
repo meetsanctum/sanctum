@@ -719,7 +719,26 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           );
         }
         session.client.command(entityId("media_player", entity.objectId), sent);
-      } else if (command.kind === "audio" && entity.type === "switch") {
+      } else if (command.kind === "audio" && "announce" in command.command) {
+        // The speaker plays it on its media player, as an announcement.
+        const player = owned.mapping.mapped.find(
+          (each) =>
+            each.capability.kind === "media" &&
+            each.entity.type === "media_player",
+        );
+        if (!player) {
+          throw new ActionError("not_found", `${command.key} doesn't announce`);
+        }
+        owned.telemetry.announced();
+        session.client.command(entityId("media_player", player.entity.objectId), {
+          mediaUrl: command.command.announce.url,
+          announcement: true,
+        });
+      } else if (
+        command.kind === "audio" &&
+        "muted" in command.command &&
+        entity.type === "switch"
+      ) {
         await muteCommand(session, entity, command.command.muted);
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {

@@ -476,6 +476,46 @@ export function createManagerClient(options: {
       return answer.service.url ?? null;
     },
 
+    // The core wants a service for itself, as Piper for the speech it makes:
+    // the manager runs it from now on, and serviceUrl gives where it answers
+    // once it runs. Asking again changes nothing.
+    async wantServiceForCore(
+      service: string,
+      { signal }: { signal?: AbortSignal } = {},
+    ) {
+      await ask(async () => {
+        const response = await call(
+          socketPath,
+          "PUT",
+          `/api/services/${encodeURIComponent(service)}/core`,
+          undefined,
+          undefined,
+          signal,
+        );
+        expectGranted(response);
+      }, signal);
+    },
+
+    // The core no longer wants the service, which then stops once nothing
+    // else needs it; its data stays. The manager answers once its reconcile
+    // has run, which may wait for the service's container to stop.
+    async releaseServiceForCore(
+      service: string,
+      { signal }: { signal?: AbortSignal } = {},
+    ) {
+      await ask(async () => {
+        const response = await call(
+          socketPath,
+          "DELETE",
+          `/api/services/${encodeURIComponent(service)}/core`,
+          undefined,
+          30_000,
+          signal,
+        );
+        expectGranted(response);
+      }, signal);
+    },
+
     // Erases a service's own data, once no app needs it and it has stopped.
     async eraseServiceData(service: string) {
       await once(

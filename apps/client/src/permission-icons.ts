@@ -10,6 +10,7 @@ import {
   List,
   Mic,
   MapPin,
+  Megaphone,
   Network,
   Radar,
   RadioTower,
@@ -49,4 +50,5 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   sparkles: Sparkles,
   mic: Mic,
   bot: Bot,
+  megaphone: Megaphone,
 };

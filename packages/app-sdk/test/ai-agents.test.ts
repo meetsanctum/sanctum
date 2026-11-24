@@ -3,11 +3,13 @@ import { z } from "zod";
 
 import {
   aiAreas,
+  aiAreasOnAtFirst,
   assistantOfferOf,
   defineAction,
   defineApp,
   defineEntityType,
   forecastType,
+  permissionWords,
   sunType,
   toStaticManifest,
   type AssistantOffer,
@@ -123,6 +125,17 @@ describe("the core's areas", () => {
     expect(
       aiAreas.filter((area) => area.startsWith("devices.control:")),
     ).toEqual(["devices.control:light", "devices.control:switch"]);
+  });
+
+  it("let AI agents speak on smart speakers from the start, never mute them", () => {
+    expect(aiAreas).toContain("devices.announce");
+    expect(aiAreasOnAtFirst).toContain("devices.announce");
+    expect(aiAreas).not.toContain("devices.control:audio");
+    expect(permissionWords("devices.announce")).toEqual({
+      title: "Speak on your smart speakers",
+      detail: null,
+      icon: "megaphone",
+    });
   });
 });
 

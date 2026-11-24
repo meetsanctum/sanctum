@@ -3,6 +3,7 @@ import {
   isCapabilityKind,
   shownAsOf,
   type Actor,
+  type AudioFeatures,
   type CapabilityInfo,
   type DeviceCommand,
   type DeviceInfo,
@@ -348,7 +349,9 @@ export function createDevices(
     const parsed = definition.command.safeParse(command);
     if (
       !parsed.success ||
-      !definition.supports(capability.features, parsed.data)
+      !definition.supports(capability.features, parsed.data) ||
+      // Only the core announces, with an address of its own (announce).
+      "announce" in parsed.data
     ) {
       deviceLog.command(
         who,
@@ -592,6 +595,38 @@ export function createDevices(
         gate.permit(actor, deviceCommandRule(target.capability.kind)),
       );
       return run(actor, app, who, view, target, command, whileOn);
+    },
+
+    // The core's own announcement (speech/announcements.ts): its address
+    // goes to the smart speaker's driver, which plays it once. Apps and AI
+    // agents never send one as a command; they ask the core to speak, which
+    // has checked who is behind it and logs what was said.
+    async announce(deviceId: string, url: string, actor: Actor) {
+      if (isStopping) throw new ActionCallError("unavailable");
+      const device = load(deviceId);
+      const capability = device?.capabilities.find(
+        (each) =>
+          each.kind === "audio" &&
+          capabilityOf("audio").supports(
+            each.features as AudioFeatures,
+            { announce: { url } },
+          ),
+      );
+      const address = device && reads.address(device.id);
+      if (!device || !capability || !address) {
+        throw new ActionCallError("not_found");
+      }
+      await deliver(
+        address.driver,
+        {
+          key: address.key,
+          device: device.id,
+          capability: capability.id,
+          kind: "audio",
+          command: { announce: { url } },
+        },
+        actor,
+      );
     },
 
     // A driver brings one of its devices in, or updates it, and reports what

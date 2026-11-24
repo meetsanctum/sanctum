@@ -1,5 +1,6 @@
 import {
   capabilityOf,
+  announcePermission,
   controlPermission,
   householdTiers,
   type ActionDefinition,
@@ -67,6 +68,12 @@ export function agentOf(
 export function deviceCommandRule(kind: CapabilityKind): Rule {
   return { tier: capabilityOf(kind).tier, agentArea: controlPermission(kind) };
 }
+
+/**
+ * Speaking on a smart speaker: an AI agent needs "Speak on your smart
+ * speakers", not the area that mutes its microphones.
+ */
+export const announceRule: Rule = { tier: "write", agentArea: announcePermission };
 
 export function createGate(
   people: People,

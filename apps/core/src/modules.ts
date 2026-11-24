@@ -1,4 +1,5 @@
 import {
+  announcePermission,
   answersTo,
   modelsUsePermission,
   shownQuestions,
@@ -38,6 +39,8 @@ import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
+import { createAnnouncements } from "./speech/announcements.js";
+import { createSpeech } from "./speech/speech.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
@@ -124,7 +127,14 @@ export async function createModules(
         appCapacity?: ManagerClient["appCapacity"];
         reserveForApp?: ManagerClient["reserveForApp"];
         releaseAppReservation?: ManagerClient["releaseAppReservation"];
+        // Running the speech service for the core itself (speech/speech.ts);
+        // tests may leave them out.
+        wantServiceForCore?: ManagerClient["wantServiceForCore"];
+        releaseServiceForCore?: ManagerClient["releaseServiceForCore"];
       };
+    // Where smart speakers fetch announcements; none, and nothing is said
+    // out loud, in a core that doesn't listen.
+    speaker?: { host: string; port: number; publishedPort: number };
     // The apps this core's image ships, once the core has read them.
     shippedApps?: () => readonly string[];
     // Installs and starts an app the household just added, from the package
@@ -244,6 +254,7 @@ export async function createModules(
     apps: () => apps,
     tools: () => agentTools,
     commandLimits: options.agentCommandLimits,
+    onAreaChanged: () => speech?.areaChanged(),
     now,
   });
   const { canUse: agentsCanUse, checkAgentCommand } = agentAccess;
@@ -654,6 +665,30 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
+  const { wantServiceForCore, releaseServiceForCore } = options.manager;
+  const announcements =
+    options.speaker &&
+    createAnnouncements({
+      host: options.speaker.host,
+      port: options.speaker.port,
+      log,
+    });
+  const speech =
+    announcements && wantServiceForCore && releaseServiceForCore
+      ? createSpeech({
+          announcements,
+          manager: {
+            serviceUrl: options.manager.serviceUrl,
+            hostStatus: options.manager.hostStatus,
+            wantServiceForCore,
+            releaseServiceForCore,
+          },
+          devices,
+          areaOn: () => agentsCanUse.areaOn(announcePermission),
+          publishedPort: options.speaker!.publishedPort,
+          log,
+        })
+      : undefined;
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {
     apps,
     places,
@@ -663,6 +698,7 @@ export async function createModules(
     activity,
     activityViews,
     history,
+    speech,
     now,
   });
   // Live clients hear of a committed entry and the entries it adds to.
@@ -689,6 +725,7 @@ export async function createModules(
     live,
     motion,
     pairing,
+    speech,
     workflows,
   });
 
@@ -705,6 +742,10 @@ export async function createModules(
   // firmware's deadlines are the last that change a device, so the bus closes
   // after them, and history then records that nothing is known from then on.
   const stoppingSteps = [
+    ["stop announcements", async () => {
+      speech?.stop();
+      await announcements?.stop();
+    }],
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
@@ -773,6 +814,21 @@ export async function createModules(
     // What the manager finds on the home's network, which starts with the
     // core (core.ts); none under a manager that can't look.
     discovery: sightings,
+    // Serves smart speakers their announcements, and wants the speech
+    // service while one can announce; a port that's taken leaves the home
+    // without announcements, not without its core.
+    async startSpeech() {
+      if (!announcements || !speech) return;
+      try {
+        await announcements.start();
+      } catch (error) {
+        log(
+          `speech: smart speakers can't fetch announcements on port ${options.speaker!.port} (${error instanceof Error ? error.message : String(error)})`,
+        );
+        return;
+      }
+      speech.start();
+    },
     // At stopping's first moment, before anything is awaited (lifecycle.ts).
     stopNewWork,
     // The modules' steps of stopping, in order (lifecycle.ts).

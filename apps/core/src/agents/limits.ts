@@ -48,7 +48,7 @@ export type LimitRefusal = {
 
 // Counts in the last minute, each agent's and the home's: an agent's
 // next one waits until both have room, the later of the two.
-function minuteWindows(
+export function minuteWindows(
   limits: { agentPerMinute: number; homePerMinute: number },
   now: () => number,
 ) {

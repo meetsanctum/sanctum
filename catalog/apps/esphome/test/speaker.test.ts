@@ -45,8 +45,12 @@ describe("a smart speaker", () => {
           holds: [],
         },
       },
-      // Its Mute switch, which its side switch turns on too.
-      { kind: "audio", features: { mutes: true, muteSwitch: true } },
+      // Its Mute switch, which its side switch turns on too, and its player's
+      // format for announcements.
+      {
+        kind: "audio",
+        features: { mutes: true, muteSwitch: true, announces: true },
+      },
     ]);
 
     await home.core.until(() => device.voiceFollowed, "its requests followed");
@@ -175,6 +179,43 @@ describe("a smart speaker", () => {
       "its state after reconnecting",
     );
     expect(activities().slice(reports)).toEqual(["playing"]);
+  });
+
+  it("plays the core's announcement, whose playing isn't the player's own", async () => {
+    home = await startHome();
+    const device = await speaker();
+    const key = await add(home.core, device);
+    const capability = "media-media_player";
+    await home.core.until(
+      () => home.core.latest(key, capability)?.activity === "idle",
+      "idle",
+    );
+
+    const url = "http://192.168.1.20:4180/a/abc.flac";
+    await home.core.command(key, "audio", "audio", { announce: { url } });
+    await home.core.until(
+      () => device.states[201]?.state === MediaPlayerState.PLAYING,
+      "it plays the announcement",
+    );
+    expect(device.commands.at(-1)).toMatchObject({
+      type: "media_player",
+      key: 201,
+      fields: { mediaUrl: url, announcement: true },
+    });
+    device.setState(201, { state: MediaPlayerState.PLAYING, volume: 0.4 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 40,
+      "its report while announcing",
+    );
+    expect(home.core.latest(key, capability)?.activity).toBe("idle");
+
+    // Once it has stopped, playing is its own again.
+    device.setState(201, { state: MediaPlayerState.IDLE });
+    await home.core.command(key, capability, "media", { activity: "playing" });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.activity === "playing",
+      "playing",
+    );
   });
 
   it("keeps a speaker's activity separate from another speaker with the same capability", async () => {

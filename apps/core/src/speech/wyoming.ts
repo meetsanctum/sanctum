@@ -29,7 +29,7 @@ function parsed(bytes: Buffer): unknown {
 
 /** Reads Wyoming events from a socket's bytes as they come. */
 function createReader() {
-  let buffered = Buffer.alloc(0);
+  let buffered: Buffer = Buffer.alloc(0);
   return {
     push(bytes: Buffer) {
       buffered = buffered.length ? Buffer.concat([buffered, bytes]) : bytes;
@@ -100,7 +100,7 @@ export async function* synthesize(options: {
     queue.push(item);
     wake?.();
   };
-  socket.on("data", (bytes) => push(bytes));
+  socket.on("data", (bytes: Buffer) => push(bytes));
   socket.on("error", (error) => push(error));
   socket.on("close", () => push(null));
   const abort = () => push(new SpeechError("Speech was cancelled"));
@@ -160,7 +160,7 @@ export async function* synthesize(options: {
       if (event.type === "audio-chunk" && event.payload.length > 0) {
         total += event.payload.length;
         if (total > maxAudioBytes) throw new SpeechError("The speech is too long");
-        let bytes = carry ? Buffer.concat([carry, event.payload]) : event.payload;
+        let bytes: Buffer = carry ? Buffer.concat([carry, event.payload]) : event.payload;
         carry = null;
         if (bytes.length % 2 === 1) {
           carry = bytes.subarray(bytes.length - 1);

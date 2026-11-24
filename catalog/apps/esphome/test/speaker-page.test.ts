@@ -67,7 +67,7 @@ describe("a smart speaker's page", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: true, muteSwitch: true },
+      features: { mutes: true, muteSwitch: true, announces: true },
     });
   });
 
@@ -263,7 +263,7 @@ describe("a smart speaker's page", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: false, muteSwitch: false },
+      features: { mutes: false, muteSwitch: false, announces: true },
     });
     device.wake();
     await home.core.until(

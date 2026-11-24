@@ -4,7 +4,7 @@ import type {
   DeviceRegistration,
   MediaActivity,
 } from "@meetsanctum/app-sdk";
-import type { TelemetryEvent } from "esphome-client";
+import { MediaPlayerState, type TelemetryEvent } from "esphome-client";
 
 import type { Session, Timings } from "./connection.js";
 import { signalOf, type Mapping } from "./entities.js";
@@ -13,6 +13,9 @@ import { connectionFactsOf, describeSession } from "./session-details.js";
 import { audioStateOf, mutedOf } from "./speaker.js";
 import { stateOf } from "./states.js";
 import { declineRequests } from "./voice.js";
+
+/** The longest an announcement holds the player's own activity. */
+const announcementHeldMs = 5 * 60_000;
 
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
@@ -86,6 +89,10 @@ export function createReports(
 ) {
   const { timings, facts, current, capabilities } = options;
   const audio = audioReports(ctx, key, timings, facts, current);
+  // While an announcement plays, until the player stops playing or a few
+  // minutes have passed: ESPHome reports an announcement it was asked for
+  // as playing, not announcing, so it is read as one here.
+  let announcingUntil = 0;
   // Playback activity survives reconnects because announcements leave it unchanged.
   const activities = new Map(
     capabilities.flatMap((part) =>
@@ -105,8 +112,22 @@ export function createReports(
         }
       }
     },
+    /** An announcement was sent: its playing isn't the player's own. */
+    announced() {
+      announcingUntil = Date.now() + announcementHeldMs;
+    },
     state(event: TelemetryEvent, session: Session) {
       const { mapping } = describeSession(session);
+      if (event.type === "media_player" && announcingUntil > 0) {
+        if (
+          event.state === MediaPlayerState.PLAYING &&
+          Date.now() < announcingUntil
+        ) {
+          event = { ...event, state: MediaPlayerState.ANNOUNCING };
+        } else {
+          announcingUntil = 0;
+        }
+      }
       report(ctx, facts, key, mapping, event, session, activities, audio.send);
     },
   };

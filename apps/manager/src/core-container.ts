@@ -27,6 +27,11 @@ export const sanctumNetworkName = stacked("sanctum");
 // Created by Compose, which mounts it into the manager for backups.
 export const coreVolumeName = stacked("sanctum-core-data");
 export const corePort = 4100;
+// Smart speakers fetch the announcements they play from the core here, over
+// plain HTTP, since they check HTTPS only against public roots. It's
+// published on IPv4 only, so the home's network reaches it and a public IPv6
+// address doesn't.
+export const speakerPort = 4180;
 // The manager's socket lives in this volume, which Compose creates and mounts
 // into the manager; the core is the only other container that mounts it.
 export const socketVolumeName = stacked("sanctum-manager-socket");
@@ -43,7 +48,14 @@ export const socketGroupId = 4200;
 // responses: the desktop app's (apps/desktop).
 export const clientOrigins = ["app://sanctum"];
 
+// Where the host publishes the speakers' port: 4180 on a host, a stack's own
+// port where it has one, and nowhere on a stack that gives none.
+function publishedSpeakerPort() {
+  return stackCore ? (stackCore.speakerPort ?? null) : speakerPort;
+}
+
 export function coreContainerOptions(image: string): ContainerCreateOptions {
+  const published = publishedSpeakerPort();
   return {
     name: coreContainerName,
     Image: image,
@@ -58,9 +70,19 @@ export function coreContainerOptions(image: string): ContainerCreateOptions {
     },
     Env: [
       `CORE_ALLOWED_ORIGINS=${clientOrigins.join(",")}`,
+      ...(published === null
+        ? []
+        : [
+            `CORE_SPEAKER_PORT=${speakerPort}`,
+            // The port in the addresses it gives speakers.
+            `CORE_SPEAKER_PUBLISHED_PORT=${published}`,
+          ]),
       ...(stackCore?.env ?? []),
     ],
-    ExposedPorts: { [`${corePort}/tcp`]: {} },
+    ExposedPorts: {
+      [`${corePort}/tcp`]: {},
+      ...(published === null ? {} : { [`${speakerPort}/tcp`]: {} }),
+    },
     // Docker's own liveness check, inside the container: the core serves only
     // HTTPS, and the update path checks it against the host CA instead. A
     // stack's core may serve plain HTTP.
@@ -110,6 +132,13 @@ export function coreContainerOptions(image: string): ContainerCreateOptions {
             ? { HostIp: "127.0.0.1", HostPort: String(stackCore.port) }
             : { HostPort: String(corePort) },
         ],
+        ...(published === null
+          ? {}
+          : {
+              [`${speakerPort}/tcp`]: [
+                { HostIp: "0.0.0.0", HostPort: String(published) },
+              ],
+            }),
       },
       RestartPolicy: restartPolicy,
       LogConfig: {
@@ -144,6 +173,19 @@ export function hasAppFolders(core: ContainerInfo) {
 // one when it is created.
 export function hasInit(core: ContainerInfo) {
   return core.HostConfig.Init === true;
+}
+
+// Whether a core's container publishes the port speakers fetch announcements
+// from, where this manager publishes one. A core made before the port, or by
+// an older manager's update, has none, and a container only gets one when it
+// is created.
+export function hasSpeakerPort(core: ContainerInfo) {
+  if (publishedSpeakerPort() === null) return true;
+  const bindings = (core.HostConfig.PortBindings ?? {}) as Record<
+    string,
+    unknown[] | null
+  >;
+  return (bindings[`${speakerPort}/tcp`]?.length ?? 0) > 0;
 }
 
 // And only those folders: a Docker too old to know subpaths ignores them and
@@ -184,7 +226,9 @@ export async function reconcileCore(options: {
       ? "the folders apps need"
       : !hasInit(existing)
         ? "an init process"
-        : null;
+        : !hasSpeakerPort(existing)
+          ? "the port speakers fetch sound from"
+          : null;
     if (!lacks) {
       const started = await startExistingContainer({
         container: existing,

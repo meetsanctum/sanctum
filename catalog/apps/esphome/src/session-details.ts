@@ -1,4 +1,5 @@
 import { maxDeviceCapabilities } from "@meetsanctum/app-sdk";
+import { MediaPlayerFormatPurpose } from "esphome-client";
 
 import type { Session } from "./connection.js";
 import { mapEntities } from "./entities.js";
@@ -7,7 +8,9 @@ import { speakerPartsOf } from "./speaker.js";
 // Each connection has its own entity keys and capabilities. A device with a
 // voice assistant that plays has microphones, its `audio` part: its Mute
 // switch where it has one, a setting of its own that no other device's
-// switch would be, which Sanctum then mutes it with.
+// switch would be, which Sanctum then mutes it with. It announces where its
+// media player lists a format for announcements, which it then plays over
+// whatever it was playing.
 type SessionDescription = Parameters<typeof speakerPartsOf>[0];
 const sessions = new WeakMap<
   SessionDescription,
@@ -38,11 +41,20 @@ export function describeSession(session: SessionDescription) {
       }
     }
     const mutes = parts.mute !== null;
+    const announces =
+      player.entity.type === "media_player" &&
+      (player.entity.supportedFormats ?? []).some(
+        (format) =>
+          format.purpose === MediaPlayerFormatPurpose.ANNOUNCEMENT &&
+          // The library types the format's name loosely; the wire carries
+          // it as text, such as "flac".
+          String(format.format).toLowerCase() === "flac",
+      );
     mapping.mapped.push({
       capability: {
         id: "audio",
         kind: "audio",
-        features: { mutes, muteSwitch: mutes },
+        features: { mutes, muteSwitch: mutes, announces },
       },
       // Its media player's stands in where it has no Mute switch, whose
       // reports are the media part's.

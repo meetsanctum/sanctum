@@ -23,6 +23,8 @@ export type EmulatedEntity = {
   name: string;
   /** Its list entry's other fields, by the library's names: deviceClass, supportedColorModes. */
   fields?: Record<string, FieldValue | readonly FieldValue[]>;
+  /** Its list entry's repeated messages, such as a media player's supportedFormats. */
+  messages?: Record<string, readonly Record<string, FieldValue>[]>;
 };
 
 export type EmulatedOptions = {
@@ -627,6 +629,26 @@ export class EmulatedDevice {
           for (const each of Array.isArray(value) ? value : [value])
             parts.push(field(spec, each));
         }
+        for (const [name, list] of Object.entries(entity.messages ?? {})) {
+          const spec = schema.repeatedMessageFields?.[name];
+          if (!spec) throw new Error(`${entity.type} has no messages ${name}`);
+          for (const each of list) {
+            const inner = Buffer.concat(
+              Object.entries(each).map(([key, value]) => {
+                const inside = spec.fields[key];
+                if (!inside) throw new Error(`${name} has no field ${key}`);
+                return field(inside, value);
+              }),
+            );
+            parts.push(
+              Buffer.concat([
+                varint((spec.fieldNumber << 3) | 2),
+                varint(inner.length),
+                inner,
+              ]),
+            );
+          }
+        }
         send(schema.messageType, Buffer.concat(parts));
       }
       send(message.listEntitiesDone, Buffer.alloc(0));
@@ -671,6 +693,11 @@ export class EmulatedDevice {
       ...this.states[key],
     };
     if (typeof said.volume === "number") now.volume = said.volume;
+    // An announcement it was asked to play shows as playing, as the Voice
+    // PE's firmware of 2026.6 shows it; the test says when it ends.
+    if (said.announcement === true && typeof said.mediaUrl === "string") {
+      now.state = MediaPlayerState.PLAYING;
+    }
     switch (said.command) {
       case MediaPlayerCommand.PLAY:
         now.state = MediaPlayerState.PLAYING;
@@ -764,6 +791,10 @@ type ListSpec = {
   messageType: number;
   fields: Record<string, Spec>;
   repeatedFields?: Record<string, Spec>;
+  repeatedMessageFields?: Record<
+    string,
+    { fieldNumber: number; fields: Record<string, Spec> }
+  >;
 };
 type CommandSpec = {
   keyFieldNumber: number;

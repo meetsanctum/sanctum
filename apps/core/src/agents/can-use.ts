@@ -49,6 +49,8 @@ export function createAgentsCanUse(
     // Something AI agents could use was switched off, or an update raised
     // its tier, which switches it off.
     onRevoked?: () => void;
+    // One of the core's areas was switched, once the change has committed.
+    onAreaChanged?: () => void;
     now?: () => Date;
   },
 ) {
@@ -239,6 +241,7 @@ export function createAgentsCanUse(
         });
       });
       if (!on) options.onRevoked?.();
+      options.onAreaChanged?.();
       return true;
     },
 
