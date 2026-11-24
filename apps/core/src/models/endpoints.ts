@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
+  boundedFetch,
   ModelError,
   problemOfError,
   problemOfStatus,
@@ -82,11 +83,9 @@ async function getJson(
   const both = signal ? AbortSignal.any([signal, timeout]) : timeout;
   let response: Response;
   try {
-    response = await fetcher(url, {
-      headers,
-      redirect: "error",
-      signal: both,
-    });
+    // A list is read whole before it's checked, so it's held to the same
+    // byte limit as an answer.
+    response = await boundedFetch(fetcher)(url, { headers, signal: both });
   } catch (error) {
     // A request that fails before any answer reached nothing.
     throw both.aborted
@@ -101,7 +100,9 @@ async function getJson(
   try {
     return (await response.json()) as unknown;
   } catch (error) {
-    if (both.aborted) throw problemOfError(error, both);
+    if (both.aborted || error instanceof ModelError) {
+      throw problemOfError(error, both);
+    }
     throw new ModelError("answer", "the list isn't JSON");
   }
 }

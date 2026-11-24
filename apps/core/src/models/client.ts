@@ -148,7 +148,11 @@ export function boundedFetch(fetcher: typeof fetch): typeof fetch {
   };
 }
 
-function languageModel(endpoint: ModelEndpoint, model: string): LanguageModel {
+function languageModel(
+  endpoint: ModelEndpoint,
+  model: string,
+  rejectToolOverflow: () => never,
+): LanguageModel {
   // The base address and key are always given, so neither comes from the
   // environment, such as ANTHROPIC_BASE_URL or OPENAI_API_KEY.
   const settings = {
@@ -168,6 +172,26 @@ function languageModel(endpoint: ModelEndpoint, model: string): LanguageModel {
         apiKey: endpoint.key,
         name: "compatible",
         includeUsage: true,
+        metadataExtractor: {
+          extractMetadata: async () => undefined,
+          createStreamExtractor: () => ({
+            // The provider reads each piece of the stream here before its
+            // tool-call tracker, whose work grows with the calls in one
+            // piece: thousands in one piece would hold the core for a
+            // minute.
+            processChunk(chunk: unknown) {
+              const choices = (chunk as { choices?: unknown } | null)?.choices;
+              if (!Array.isArray(choices)) return;
+              const calls = (
+                choices[0] as { delta?: { tool_calls?: unknown } } | undefined
+              )?.delta?.tool_calls;
+              if (Array.isArray(calls) && calls.length > maxToolCalls) {
+                rejectToolOverflow();
+              }
+            },
+            buildMetadata: () => undefined,
+          }),
+        },
       }).chatModel(model);
   }
 }
@@ -196,6 +220,11 @@ export type AskOptions = {
   /** Answers of this turn that called a tool, to give back as they came. */
   kept?: KeptAnswers;
 };
+
+// Real answers call a handful of tools. Tracking each streamed call costs
+// more the more calls an answer has, so a malformed stream of thousands
+// could keep the core busy for up to a minute.
+export const maxToolCalls = 64;
 
 function stopOf(
   reason: string,
@@ -248,10 +277,10 @@ export async function* ask(
 ): AsyncGenerator<ModelPiece> {
   const tools = toolsOf(request.tools);
   const asked = conversationOf(request.messages, request.tools, options.kept);
-  const first = new AbortController();
-  const signal = AbortSignal.any([options.signal, first.signal]);
+  const controller = new AbortController();
+  const signal = AbortSignal.any([options.signal, controller.signal]);
   let firstTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(
-    () => first.abort(new ModelError("timeout")),
+    () => controller.abort(new ModelError("timeout")),
     options.firstPieceMs,
   );
   function firstPiece() {
@@ -260,10 +289,19 @@ export async function* ask(
     firstTimer = undefined;
     options.onFirstPiece?.();
   }
+  function rejectToolOverflow(): never {
+    const error = new ModelError("answer", "too many tool calls");
+    controller.abort(error);
+    throw error;
+  }
+  let toolCount = 0;
+  function countToolCall() {
+    if (++toolCount > maxToolCalls) rejectToolOverflow();
+  }
 
   try {
     const result = streamText({
-      model: languageModel(endpoint, request.model),
+      model: languageModel(endpoint, request.model, rejectToolOverflow),
       instructions: asked.instructions,
       messages: asked.messages,
       ...(tools ? { tools } : {}),
@@ -284,12 +322,17 @@ export async function* ask(
       telemetry: { isEnabled: false },
     });
     const calls: ModelToolCall[] = [];
+    const started = new Set<string>();
     let isBroken = false;
     let end: Extract<ModelPiece, { type: "end" }> | undefined;
     for await (const part of result.stream) {
       switch (part.type) {
-        case "reasoning-delta":
         case "tool-input-start":
+          countToolCall();
+          started.add(part.id);
+          firstPiece();
+          break;
+        case "reasoning-delta":
           // Thinking counts as the start of an answer: the model is
           // answering.
           firstPiece();
@@ -300,7 +343,9 @@ export async function* ask(
             yield { type: "text", text: part.text };
           }
           break;
-        case "tool-call":
+        case "tool-call": {
+          // Some providers send a call whole, without a start.
+          if (!started.has(part.toolCallId)) countToolCall();
           firstPiece();
           // Input that isn't whole JSON, a tool the app didn't offer, or one
           // the provider ran itself: no app's tool runs on it.
@@ -314,6 +359,7 @@ export async function* ask(
             input: part.input,
           });
           break;
+        }
         case "error":
           throw part.error;
         case "abort":

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
+import { maxResponseBytes } from "../src/models/client.js";
 import { modelSources, modelTokens } from "../src/models/schema.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
@@ -455,4 +456,39 @@ describe("Anthropic model discovery", () => {
       );
     },
   );
+});
+
+describe("model lists", () => {
+  it("stops reading a list as soon as it exceeds the byte limit", async () => {
+    const sources = fakeSources();
+    const { core, token } = await home(sources);
+    const look = () =>
+      post(
+        core,
+        "/api/models/look",
+        { kind: "openai", key: sources.openAi.key },
+        { token },
+      );
+
+    expect((await look()).json<ModelSourceLook>()).toMatchObject({
+      found: true,
+    });
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(maxResponseBytes / 2).fill(32);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(chunk.subarray(0, 1));
+      },
+      cancel,
+    });
+    sources.fetchers.internet = async () => new Response(body);
+
+    expect((await look()).json<ModelSourceLook>()).toEqual({
+      found: false,
+      problem: "answer",
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

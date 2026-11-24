@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Watched } from "../app-host/net.js";
-import { ask, ModelError } from "./client.js";
+import { ask, maxToolCalls, ModelError } from "./client.js";
 import type { KeptAnswers } from "./conversation.js";
 import type { Models, SourceInUse } from "./models.js";
 
@@ -53,7 +53,7 @@ const question = z.object({
                 input: z.unknown(),
               }),
             )
-            .max(32)
+            .max(maxToolCalls)
             .optional(),
         }),
         z.object({

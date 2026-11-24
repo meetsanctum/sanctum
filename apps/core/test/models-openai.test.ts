@@ -1,9 +1,10 @@
 import type { ModelMessage, ModelSourceLook } from "@meetsanctum/app-sdk";
 import { describe, expect, it, vi } from "vitest";
 
-import { ask, type ModelPiece } from "../src/models/client.js";
+import { ask, maxToolCalls, type ModelPiece } from "../src/models/client.js";
 import type { KeptAnswers } from "../src/models/conversation.js";
 import { endpointOf } from "../src/models/endpoints.js";
+import { createTurns } from "../src/models/turns.js";
 import { fakeSources, type FakeSources } from "./models-support.js";
 import { claimed, post, testCore, type TestCore } from "./support.js";
 
@@ -26,13 +27,12 @@ async function checked(core: TestCore) {
   return core.models.info();
 }
 
-async function answer(
+function streamAnswer(
   sources: FakeSources,
   messages: ModelMessage[],
   kept?: KeptAnswers,
 ) {
-  const pieces: ModelPiece[] = [];
-  for await (const piece of ask(
+  return ask(
     endpointOf({ kind: "openai", key: sources.openAi.key }, sources.fetchers),
     {
       model: "gpt-5-mini",
@@ -51,10 +51,51 @@ async function answer(
       firstPieceMs: 5_000,
       ...(kept ? { kept } : {}),
     },
-  )) {
+  );
+}
+
+async function answer(...args: Parameters<typeof streamAnswer>) {
+  const pieces: ModelPiece[] = [];
+  for await (const piece of streamAnswer(...args)) {
     pieces.push(piece);
   }
   return pieces;
+}
+
+function toolAnswer(completed: number, unfinished = false) {
+  const call = (index: number) => ({
+    type: "function_call",
+    id: `fc_${index}`,
+    call_id: `call_${index}`,
+    name: "lights",
+  });
+  const events: unknown[] = Array.from({ length: completed }, (_, index) => ({
+    type: "response.output_item.done",
+    output_index: index,
+    item: { ...call(index), arguments: "{}", status: "completed" },
+  }));
+  if (unfinished) {
+    events.push({
+      type: "response.output_item.added",
+      output_index: completed,
+      item: { ...call(completed), arguments: "" },
+    });
+  }
+  events.push({
+    type: unfinished ? "response.incomplete" : "response.completed",
+    response: {
+      ...(unfinished && {
+        incomplete_details: { reason: "max_output_tokens" },
+      }),
+      usage: { input_tokens: 50, output_tokens: 7 },
+    },
+  });
+  return new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+    {
+      headers: { "content-type": "text/event-stream" },
+    },
+  );
 }
 
 describe("OpenAI as a source", () => {
@@ -141,5 +182,96 @@ describe("OpenAI as a source", () => {
         encrypted_content: "sealed-thought-1",
       }),
     );
+  });
+
+  it.each([
+    {
+      completed: maxToolCalls + 1,
+      unfinished: false,
+      last: "completed without a start",
+    },
+    {
+      completed: maxToolCalls,
+      unfinished: true,
+      last: "cut off by the token limit",
+    },
+  ])(
+    "rejects an answer whose call past the limit is $last",
+    async ({ completed, unfinished }) => {
+      const sources = fakeSources();
+      sources.fetchers.internet = async () => toolAnswer(completed, unfinished);
+      const stream = streamAnswer(sources, [
+        { role: "user", content: "Lights on" },
+      ]);
+      await expect(stream.next()).rejects.toMatchObject({
+        problem: "answer",
+        message: "too many tool calls",
+      });
+    },
+  );
+
+  it("lets an app follow up with every call in an answer at the limit", async () => {
+    const sources = fakeSources();
+    const reach = { kind: "openai", key: sources.openAi.key } as const;
+    const turns = createTurns({
+      models: {
+        inUse: () => ({
+          id: "openai",
+          model: "gpt-5-mini",
+          shown: { name: "OpenAI", model: "gpt-5-mini", inHome: false },
+          detail: { kind: "openai", model: "gpt-5-mini" },
+          endpoint: () => endpointOf(reach, sources.fetchers),
+        }),
+        count: vi.fn(),
+        onLeaving: vi.fn(),
+      },
+      record: () => "turn",
+      log: vi.fn(),
+    });
+    const turn = turns.open({
+      appId: "sanctum.example",
+      appName: "Example",
+      who: { actor: "user" },
+    });
+    const tools = [
+      { name: "lights", description: "Turns the lights on.", input: {} },
+    ];
+    const reply = async (messages: ModelMessage[]) => {
+      const handle = turn.open({ messages, tools }, () => ({
+        signal: new AbortController().signal,
+        done: vi.fn(),
+      }));
+      const pieces = await turn.read(handle, 0);
+      while (pieces.at(-1)?.type !== "end") {
+        pieces.push(...(await turn.read(handle, pieces.length)));
+      }
+      return pieces;
+    };
+
+    const fetcher = sources.fetchers.internet;
+    const messages: ModelMessage[] = [{ role: "user", content: "Lights on" }];
+    try {
+      sources.fetchers.internet = async () => toolAnswer(maxToolCalls);
+      const toolCalls = (await reply(messages))
+        .filter((piece) => piece.type === "tool")
+        .map(({ id, name, input }) => ({ id, name, input }));
+      expect(toolCalls).toHaveLength(maxToolCalls);
+
+      sources.fetchers.internet = fetcher;
+      sources.openAi.answer = { text: ["Done."] };
+      expect(
+        await reply([
+          ...messages,
+          { role: "assistant", content: "", toolCalls },
+          ...toolCalls.map((call) => ({
+            role: "tool" as const,
+            toolCallId: call.id,
+            content: "On",
+          })),
+        ]),
+      ).toContainEqual({ type: "text", text: "Done." });
+    } finally {
+      turn.end();
+    }
   });
 });
