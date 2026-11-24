@@ -2,7 +2,7 @@
 import type { AppInfo, EntityInfo, LiveMessage } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import { Home } from "../src/Home";
@@ -169,6 +169,12 @@ async function render() {
     ),
   );
 }
+
+// Settings and Automations load when first opened (Home.tsx): loaded here
+// first, they open as quickly as the tests look for them.
+beforeAll(() =>
+  Promise.all([import("../src/settings"), import("../src/automations/page")]),
+);
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

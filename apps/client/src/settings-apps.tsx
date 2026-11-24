@@ -19,9 +19,6 @@ import { Row, Section } from "./components";
 // since adding it back meanwhile brings back what it had, and offers to
 // delete it now (app-delete-data.tsx).
 
-/** Settings' page for one app, by its id. */
-export const appSettingsPage = "app";
-
 export function AppsSection(props: {
   apps: AppInfo[];
   onOpen: (appId: string) => void;

@@ -22,6 +22,7 @@ import { clockTime } from "./attention";
 import { Section } from "./components";
 import { coreJson } from "./core-fetch";
 import { formatBytes } from "./system-status";
+import { everyWhileShown } from "./while-shown";
 
 // How an app in its own container is running, near the end of its settings.
 // It's for when something is wrong: its head and notice already say its
@@ -56,10 +57,10 @@ function useRunning(app: AppInfo) {
       }
     };
     void load();
-    const timer = setInterval(() => void load(), refreshMs);
+    const stopPolling = everyWhileShown(refreshMs, () => void load());
     return () => {
       isCurrent = false;
-      clearInterval(timer);
+      stopPolling();
       controller.abort();
     };
   }, [path, app.state]);

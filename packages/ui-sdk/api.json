@@ -1,5 +1,5 @@
 {
-  "version": "0.1.21",
+  "version": "0.1.22",
   "react": "19.3.1",
   "exports": [
     "AppClient",
@@ -2433,12 +2433,12 @@
     ],
     "device-tile.d.ts": [
       "import type { Tile } from \"./tiles\";",
-      "export declare function DeviceTile(props: {",
+      "export declare const DeviceTile: import(\"react\").MemoExoticComponent<(props: {",
       "    tile: Tile;",
       "    onToggle: (tile: Tile) => void;",
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
-      "}): import(\"react\").JSX.Element;"
+      "}) => import(\"react\").JSX.Element>;"
     ],
     "frame/protocol.d.ts": [
       "import type { AppInfo, DeviceInfo, LiveMessage, LivePress, TemperatureUnit } from \"@meetsanctum/app-sdk\";",

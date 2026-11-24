@@ -9,6 +9,7 @@ import {
   type TrustFailure,
 } from "../shell";
 import { hostStatus, type CheckedHost } from "./device";
+import { everyWhileShown } from "../while-shown";
 
 // The host this client is paired with: its id and its home's, last known
 // address, token and CA pin, kept by the shell.
@@ -166,7 +167,7 @@ export function followHost(
     }
   };
   void check();
-  const retry = setInterval(() => void check(), 10_000);
+  const stopRetries = everyWhileShown(10_000, () => void check());
   const stop = getShell().discovery?.watch((hosts) => {
     candidates = hosts.filter(
       (candidate) =>
@@ -176,7 +177,7 @@ export function followHost(
   });
   return () => {
     isStopped = true;
-    clearInterval(retry);
+    stopRetries();
     stop?.();
   };
 }

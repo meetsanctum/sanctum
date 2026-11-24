@@ -12,8 +12,7 @@ import { useState } from "react";
 import { AppIcon } from "./app-icon";
 import { plainIcon } from "./app-settings";
 import { opens, type HostedApp, type Route } from "./apps";
-import { settingsApp } from "./settings";
-import { appSettingsPage } from "./settings-apps";
+import { appSettingsPage, settingsApp } from "./system-apps";
 
 /** Where Apps is on show, as a route's app. */
 export const appsPage = "sanctum.apps";

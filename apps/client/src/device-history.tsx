@@ -35,6 +35,7 @@ import {
   type Live,
   type Span,
 } from "./device-history-data";
+import { everyWhileShown } from "./while-shown";
 
 // A light's or a switch's History page in its detail, from core History: the
 // last 24 hours as a strip, filled in the light's own colour as high as its
@@ -139,11 +140,11 @@ export function useDayAndWeek(
       }
     };
     void load();
-    const reload = setInterval(() => void load(), refreshMs);
+    const stopReloads = everyWhileShown(refreshMs, () => void load());
     const tick = setInterval(() => setNow(Date.now()), minute);
     return () => {
       current = false;
-      clearInterval(reload);
+      stopReloads();
       clearInterval(tick);
     };
   }, [device.id, capability.id, weekOfChanges]);

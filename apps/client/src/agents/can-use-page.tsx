@@ -38,8 +38,6 @@ import {
 // each asks before it turns on; everything else switches at once, and
 // turning anything off never asks.
 
-export const canUseSettingsPage = "ai-can-use";
-
 export function CanUsePage(props: {
   apps: readonly AppInfo[];
   live: LiveFeed;

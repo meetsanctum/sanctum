@@ -11,11 +11,12 @@ import {
   Thermometer,
 } from "lucide-react";
 import {
+  type CSSProperties,
+  memo,
+  type PointerEvent,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type PointerEvent,
 } from "react";
 
 import { useShowFailed } from "./show-failed";
@@ -60,7 +61,9 @@ const levelAt = (at: Drag, clientX: number) =>
 // does a sensor's, which shows its readings, a motion sensor's, white while
 // it sees motion, and a contact sensor's, white while it is open; its icon
 // is dashed while nothing is known of it, since a closed one would say more.
-export function DeviceTile(props: {
+// It draws again only when its tile or handlers change: a home's change
+// otherwise drew every tile again.
+export const DeviceTile = memo(function DeviceTile(props: {
   tile: Tile;
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
@@ -357,4 +360,4 @@ export function DeviceTile(props: {
       )}
     </div>
   );
-}
+});

@@ -8,9 +8,13 @@ import {
 } from "react";
 
 import type { Route } from "./apps";
-import { settingsApp, settingsPageTitle, setupPage } from "./settings";
-import { appSettingsPage } from "./settings-apps";
 import type { SetupTarget } from "./setup-guide";
+import {
+  appSettingsPage,
+  settingsApp,
+  settingsPageTitle,
+  setupPage,
+} from "./system-apps";
 
 const overview: Route = { app: settingsApp.id, page: "main", params: {} };
 

@@ -3,33 +3,44 @@ import type { Me } from "@meetsanctum/auth-protocol";
 import { PageBar, type LiveFeed, type PageParams } from "@meetsanctum/ui-sdk";
 import { useEffect } from "react";
 
-import { ActivityPage, activitySettingsPage } from "./activity/page";
-import { AgentsPage, agentsSettingsPage } from "./agents/agents-page";
-import { CanUsePage, canUseSettingsPage } from "./agents/can-use-page";
-import { agentsTitle, canUseTitle } from "./agents/words";
-import { AppPage, appSettingsTitle } from "./app-settings";
-import { ModelsPage, modelsSettingsPage } from "./models/models-page";
-import { modelsTitle } from "./models/words";
+import { ActivityPage } from "./activity/page";
+import { AgentsPage } from "./agents/agents-page";
+import { CanUsePage } from "./agents/can-use-page";
+import { AppPage } from "./app-settings";
+import { ModelsPage } from "./models/models-page";
 import { BackButton, Section } from "./components";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
-import { AddAppsSection, appSettingsPage, AppsSection } from "./settings-apps";
+import { AddAppsSection, AppsSection } from "./settings-apps";
 import { ClientsSection } from "./settings-clients";
 import { DevicesSection } from "./settings-devices";
 import { NeedsAttentionSection } from "./settings-attention";
 import { HouseholdSection } from "./settings-household";
-import {
-  MaintenancePage,
-  maintenanceSettingsPage,
-} from "./settings-maintenance";
+import { MaintenancePage } from "./settings-maintenance";
 import { SettingsOverview } from "./settings-overview";
-import { RoomsSection, roomsTitle } from "./settings-rooms";
-import { StatusPage, statusSettingsPage } from "./settings-status";
+import { RoomsSection } from "./settings-rooms";
+import { StatusPage } from "./settings-status";
 import type { PowerAction } from "./settings-status-power";
 import type { SetupTarget } from "./setup-guide";
 import { SystemSettings } from "./system-settings";
 import type { SystemStatus } from "./system-status";
 import type { Devices } from "./use-devices";
+import {
+  activitySettingsPage,
+  agentsSettingsPage,
+  appSettingsPage,
+  appsSettingsPage,
+  canUseSettingsPage,
+  clientsSettingsPage,
+  devicesSettingsPage,
+  householdSettingsPage,
+  maintenanceSettingsPage,
+  modelsSettingsPage,
+  roomsSettingsPage,
+  roomsTitle,
+  statusSettingsPage,
+  systemSettingsPage,
+} from "./system-apps";
 
 // Settings: a system app, the core's own UI, which the shell brings rather
 // than a package. Its first page shows what needs attention, while anything
@@ -47,55 +58,6 @@ import type { Devices } from "./use-devices";
 // device, a shared one too. Opened from the dashboard's setup guide, it opens
 // the step's page over its first and starts it once: Add room, Add devices,
 // or the home's location.
-
-const householdSettingsPage = "household";
-const roomsSettingsPage = "rooms";
-const devicesSettingsPage = "devices";
-const appsSettingsPage = "apps";
-const clientsSettingsPage = "clients";
-const systemSettingsPage = "system";
-
-/** The page each step of the setup guide opens and starts. */
-export const setupPage: Record<SetupTarget, string> = {
-  "add-room": roomsSettingsPage,
-  "add-devices": devicesSettingsPage,
-  household: householdSettingsPage,
-};
-
-const pageTitles: Record<string, string> = {
-  main: "Settings",
-  [householdSettingsPage]: "Household",
-  [roomsSettingsPage]: roomsTitle,
-  [devicesSettingsPage]: "Devices",
-  [maintenanceSettingsPage]: "Maintenance",
-  [activitySettingsPage]: "Activity",
-  [appsSettingsPage]: "Apps",
-  [agentsSettingsPage]: agentsTitle,
-  [canUseSettingsPage]: canUseTitle,
-  [modelsSettingsPage]: modelsTitle,
-  [clientsSettingsPage]: "Clients",
-  [systemSettingsPage]: "System",
-  [statusSettingsPage]: "Status",
-};
-
-/** A page of Settings' title, which Back on the page over it names. */
-export function settingsPageTitle(
-  page: string,
-  params: PageParams,
-  apps: readonly AppInfo[],
-) {
-  if (page === appSettingsPage) {
-    const app = apps.find((each) => each.id === params.id);
-    return app ? appSettingsTitle(app.name) : "Settings";
-  }
-  return pageTitles[page] ?? "Settings";
-}
-
-export const settingsApp = {
-  id: "sanctum.settings",
-  name: "Settings",
-  icon: { glyph: "settings", color: "graphite" },
-} as const;
 
 export function SettingsPage(props: {
   // Settings' overview, an area's page, or a page it opens.

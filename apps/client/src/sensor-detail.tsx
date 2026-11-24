@@ -31,6 +31,7 @@ import {
   weekRanges,
   type DayRange,
 } from "./sensor-history-data";
+import { everyWhileShown } from "./while-shown";
 
 // A sensor's detail: for each of its readings, what it reads now, its lowest
 // and highest of the last 24 hours with the day as a line, and each day's
@@ -197,11 +198,11 @@ function SensorReading(props: {
       }
     };
     void load();
-    const reload = setInterval(() => void load(), refreshMs);
+    const stopReloads = everyWhileShown(refreshMs, () => void load());
     const tick = setInterval(() => setNow(Date.now()), minute);
     return () => {
       current = false;
-      clearInterval(reload);
+      stopReloads();
       clearInterval(tick);
     };
   }, [device.id, sensor.id]);

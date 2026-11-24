@@ -1,4 +1,5 @@
 import { coreUrl } from "./core-url";
+import { isShown, onShown } from "./while-shown";
 
 // Whether the core answers, from its public health check. A core that an
 // update just started answers it while it waits for the update to commit,
@@ -58,18 +59,25 @@ export function startCoreStatusPolling(onStatus: (status: CoreStatus) => void) {
     }
     if (!isStopped) {
       onStatus(status);
-      timer = setTimeout(
-        check,
-        status.state === "online" ? onlineEveryMs : awayEveryMs,
-      );
+      // A hidden window asks again once it is shown.
+      if (isShown()) {
+        timer = setTimeout(
+          check,
+          status.state === "online" ? onlineEveryMs : awayEveryMs,
+        );
+      }
     }
   };
 
   void check();
+  const stopShown = onShown(() => {
+    if (!isStopped && !isChecking) void check();
+  });
   return {
     stop() {
       isStopped = true;
       clearTimeout(timer);
+      stopShown();
       controller?.abort();
     },
     // Asks at once, when something else suggests the core went away or came

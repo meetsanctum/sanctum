@@ -70,8 +70,6 @@ import {
 // adds Ollama on Sanctum, or looks at a computer's address or a provider's
 // key before adding it. Every client sees and changes the same.
 
-export const modelsSettingsPage = "ai-models";
-
 type Editing = {
   action: "rename" | "model" | "key" | "remove";
   source: ModelSourceInfo;

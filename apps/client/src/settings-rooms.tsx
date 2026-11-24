@@ -58,8 +58,6 @@ import {
 // each on a floor from its menu. Removing one first says what goes with it,
 // which the core works out.
 
-export const roomsTitle = "Rooms and Floors";
-
 export function roomDetail(
   room: Room,
   floors: readonly Floor[],

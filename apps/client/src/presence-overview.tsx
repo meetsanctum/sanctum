@@ -14,6 +14,7 @@ import { placeMotionText } from "./motion";
 import { BandMarks, BandTicks } from "./motion-band";
 import { motionSentence, roomSpans } from "./motion-history-data";
 import type { Devices } from "./use-devices";
+import { everyWhileShown } from "./while-shown";
 
 // Presence's overview, at the top of its page above its sensors by room:
 // under "Last 24 hours", a row for each room with a motion sensor, in the
@@ -141,10 +142,10 @@ function useLastDay(sensors: readonly Sensor[]) {
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), minute);
-    const reload = setInterval(() => refresh.current(), refreshMs);
+    const stopReloads = everyWhileShown(refreshMs, () => refresh.current());
     return () => {
       clearInterval(tick);
-      clearInterval(reload);
+      stopReloads();
     };
   }, []);
 

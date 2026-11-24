@@ -66,24 +66,25 @@
    it. So over the macOS window's material the sidebar's labels and the page's
    edge stayed legible through the glass. An opaque copy of the frame comes in
    under it, on the glass's own timing, so the whole window diffuses as the page
-   does; nobody misses the material under the glass. Going by the overlay's
-   state, it goes as the overlay starts to fade rather than after. Elsewhere
-   the frame is opaque already. The glass still fades where motion is
-   reduced, so its backing does too. */
+   does; nobody misses the material under the glass. The screen is marked
+   covered while an overlay is open (overlay.tsx), so it goes as the overlay
+   starts to fade rather than after. Elsewhere the frame is opaque already.
+   The glass still fades where motion is reduced, so its backing does too.
+   What covers the screen is said by attributes the screen carries, not by
+   :has() over its children: a :has() there had the browser check the whole
+   screen's styles again for each element a page put in it. */
 .frame-under-glass {
   background: var(--card);
   transition: opacity 200ms ease;
 }
 
-[data-platform="macos"]
-  .home-screen:has(> .overlay[data-state="open"])
-  .frame-under-glass {
+[data-platform="macos"] .home-screen[data-covered] .frame-under-glass {
   opacity: 1;
 }
 
 /* A veil fades in after a moment (src/styles.css), so a blip changes nothing
    here either. */
-[data-platform="macos"] .home-screen:has(> .veil) .frame-under-glass {
+[data-platform="macos"] .home-screen[data-veiled] .frame-under-glass {
   opacity: 1;
   transition: opacity 300ms ease-out 700ms;
 }
@@ -92,7 +93,7 @@
    starting value then too, so it waits and fades with the veil rather than
    appearing solid at once, before the glass has come in. */
 @starting-style {
-  [data-platform="macos"] .home-screen:has(> .veil) .frame-under-glass {
+  [data-platform="macos"] .home-screen[data-veiled] .frame-under-glass {
     opacity: 0;
   }
 }
@@ -102,7 +103,7 @@
    the page's shapes and blue buttons showing through as smudges and the
    green and red cards on it washed out. Over a page in Day the glass is
    deeper, with the same blur, so it reads as the same dark glass. */
-.home-screen:has(> .frame-neutral[data-mode="day"][data-on]) > .veil-glass {
+.home-screen[data-day-page] > .veil-glass {
   background-color: color-mix(in srgb, var(--carbon) 92%, transparent);
 }
 

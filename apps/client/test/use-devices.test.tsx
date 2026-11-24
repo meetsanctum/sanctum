@@ -155,6 +155,33 @@ describe("device updates", () => {
     expect(devices.tiles[0]?.on).toBe(true);
   });
 
+  it("keeps the tile of a device that didn't change, so it isn't drawn again", async () => {
+    const other = { ...device(false), id: "other", name: "Other" };
+    client.devices.mockResolvedValue([device(false), other]);
+    client.places.mockResolvedValue(places);
+    await act(async () => {
+      live.refresh();
+    });
+    const [switched, unchanged] = devices.tiles;
+
+    await act(async () => {
+      live.publish({ type: "device", id: "device", device: device(true) });
+    });
+    expect(devices.tiles[0]).not.toBe(switched);
+    expect(devices.tiles[0]?.on).toBe(true);
+    expect(devices.tiles[1]).toBe(unchanged);
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "other",
+        device: { ...other, name: "Renamed" },
+      });
+    });
+    expect(devices.tiles[1]).not.toBe(unchanged);
+    expect(devices.tiles[1]?.name).toBe("Renamed");
+  });
+
   it("keeps live state and places newer than an in-flight snapshot", async () => {
     const { snapshot, loading } = pendingLoad();
     const renamed = {

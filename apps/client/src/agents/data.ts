@@ -4,6 +4,7 @@ import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
+import { everyWhileShown } from "../while-shown";
 
 // What Settings reads of AI agents: the agents themselves, and what they can
 // use, which every client may change. The agents page asks for the agents
@@ -38,11 +39,11 @@ export function useAgents(live?: LiveFeed) {
     const update = () => void refresh();
     update();
     const stop = live?.subscribe({ refresh: update });
-    const timer = live ? undefined : window.setInterval(update, agentsEvery);
+    const stopPolling = live ? undefined : everyWhileShown(agentsEvery, update);
     return () => {
       latestAnswer.current = ++request.current;
       stop?.();
-      window.clearInterval(timer);
+      stopPolling?.();
     };
   }, [live, refresh]);
   return { agents, refresh };

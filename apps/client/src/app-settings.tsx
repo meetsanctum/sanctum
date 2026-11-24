@@ -38,6 +38,7 @@ import {
 } from "./components/ui/dialog";
 import { coreJson } from "./core-fetch";
 import { PreferencesSection } from "./settings-preferences";
+import { appSettingsTitle } from "./system-apps";
 
 // Settings → Apps → the app: the same page for every app, drawn by the shell
 // from the app's manifest and what the home knows now, so no app can hide,
@@ -49,11 +50,6 @@ import { PreferencesSection } from "./settings-preferences";
 
 // An app without an icon of its own, such as a driver, gets a plain one.
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
-
-// An app's settings page's title, which Back on a page over it names too.
-export function appSettingsTitle(name: string) {
-  return `${name} Settings`;
-}
 
 function stateWords(app: AppInfo) {
   const update = app.run?.update;

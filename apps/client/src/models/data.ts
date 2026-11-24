@@ -3,6 +3,7 @@ import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
+import { everyWhileShown } from "../while-shown";
 
 // The installed desktop client can connect to a core that only sends totals.
 export type ModelsResponse = Omit<ModelsInfo, "usage"> & {
@@ -44,13 +45,13 @@ export function useModels(live?: LiveFeed) {
     const update = () => void refresh();
     update();
     const stop = live?.subscribe({ refresh: update });
-    const timer = window.setInterval(
-      update,
+    const stopPolling = everyWhileShown(
       checking ? checkingEvery : restingEvery,
+      update,
     );
     return () => {
       stop?.();
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [live, refresh, checking]);
   useEffect(

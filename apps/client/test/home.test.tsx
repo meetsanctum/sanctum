@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AppInfo, EntityInfo, WidgetContent } from "@meetsanctum/app-sdk";
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   homeDashboard,
@@ -93,6 +93,12 @@ async function openFromOverview(name: string) {
   });
   return apps.map((button) => button.textContent);
 }
+
+// Settings and Automations load when first opened (Home.tsx): loaded here
+// first, they open as quickly as the tests look for them.
+beforeAll(() =>
+  Promise.all([import("../src/settings"), import("../src/automations/page")]),
+);
 
 describe("navigation", () => {
   it("opens a room from the sidebar, named in the top bar, with no Back", async () => {

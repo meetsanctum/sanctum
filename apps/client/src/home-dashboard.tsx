@@ -13,7 +13,7 @@ import {
   roomRowOf,
   type SectionEntities,
 } from "./room-sections";
-import type { Devices } from "./use-devices";
+import { useTileHandlers, type Devices } from "./use-devices";
 
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
@@ -45,6 +45,7 @@ export function HomeRooms(props: {
   onEdit: () => void;
 }) {
   const { devices, entities } = props;
+  const { onToggle, onDim } = useTileHandlers(devices);
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
@@ -105,7 +106,12 @@ export function HomeRooms(props: {
       <section
         key={place.id}
         aria-labelledby={headingId}
-        className="flex shrink-0 flex-col gap-3"
+        // A room off screen isn't styled or laid out until it nears the
+        // screen, keeping the size it last had: with many rooms, a change
+        // over Home, such as a device's detail opening, otherwise styled
+        // them all again. Its 4 px of padding, given back by the margin,
+        // keeps its tiles' focus rings inside what it paints.
+        className="-m-1 flex shrink-0 flex-col gap-3 p-1 [contain-intrinsic-size:auto_320px] [content-visibility:auto]"
       >
         <Heading
           id={headingId}
@@ -147,12 +153,8 @@ export function HomeRooms(props: {
               <DeviceTile
                 key={tile.key}
                 tile={tile}
-                onToggle={(each) =>
-                  void devices.toggle(each).catch(() => undefined)
-                }
-                onDim={(each, brightness) =>
-                  void devices.dim(each, brightness).catch(() => undefined)
-                }
+                onToggle={onToggle}
+                onDim={onDim}
                 onOpen={props.openDevice}
               />
             ))}
