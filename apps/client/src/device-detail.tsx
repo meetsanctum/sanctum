@@ -332,32 +332,26 @@ export function DeviceDetail(props: {
                 ),
               },
               // A player with power has a Remote, with its power; one
-              // without has its Volume, mute and level.
-              ...(mediaProps.capability.features.power
-                ? [
-                    {
-                      id: "remote",
-                      label: "Remote",
-                      icon: RemoteIcon,
-                      content: <MediaRemote {...mediaProps} />,
-                    },
-                  ]
-                : mediaProps.capability.features.volume !== null ||
-                    mediaProps.capability.features.mute
-                  ? [
-                      {
-                        id: "volume",
-                        label: "Volume",
-                        icon: Volume2,
-                        content: (
-                          <MediaVolume
-                            key={`${device.id}/volume`}
-                            {...mediaProps}
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
+              // without has its Volume, mute and level. Either shows its
+              // volume dimmed where it has none to change.
+              mediaProps.capability.features.power
+                ? {
+                    id: "remote",
+                    label: "Remote",
+                    icon: RemoteIcon,
+                    content: <MediaRemote {...mediaProps} />,
+                  }
+                : {
+                    id: "volume",
+                    label: "Volume",
+                    icon: Volume2,
+                    content: (
+                      <MediaVolume
+                        key={`${device.id}/volume`}
+                        {...mediaProps}
+                      />
+                    ),
+                  },
             ]
           : []),
         ...(microphones

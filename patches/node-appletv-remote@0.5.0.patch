@@ -1,0 +1,14 @@
+diff --git a/dist/companion/pair-setup.js b/dist/companion/pair-setup.js
+index 2a4027ece806814233d067ae25356875030ed4bf..ffa811b8e67a2fa66cca66c953b455524d08f223 100644
+--- a/dist/companion/pair-setup.js
++++ b/dist/companion/pair-setup.js
+@@ -261,6 +261,9 @@ export class CompanionPairSetup {
+         const { frames, remainder } = parseFrames(this.buffer);
+         this.buffer = remainder;
+         for (const frame of frames) {
++            // tvOS 27 answers PS_Start with an empty 0x01 frame before M2; it carries no pairing data.
++            if (frame.payload.length === 0)
++                continue;
+             const resolver = this.pendingFrameResolvers.shift();
+             if (resolver) {
+                 resolver(frame);

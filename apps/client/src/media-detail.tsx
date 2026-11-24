@@ -583,7 +583,11 @@ function VolumeSteps(props: {
   );
 }
 
-/** Remote, a TV's second page: its power above its volume's + and −. */
+/**
+ * Remote, a TV's second page: its power above its volume's + and −, which
+ * stay in their place, dimmed, while the TV is off or where it has no volume
+ * to step, so every TV's Remote looks alike.
+ */
 export function MediaRemote(props: Props) {
   const { capability, onCommand } = props;
   const on = capability.state?.on === true;
@@ -600,18 +604,21 @@ export function MediaRemote(props: Props) {
           <Power aria-hidden="true" />
         </Toggle>
       )}
-      {volume !== null && (
-        <VolumeSteps
-          name={props.name}
-          disabled={props.disabled || capability.state?.on === false}
-          onStep={(volumeStep) => onCommand({ volumeStep })}
-        />
-      )}
+      <VolumeSteps
+        name={props.name}
+        disabled={
+          props.disabled || capability.state?.on === false || volume === null
+        }
+        onStep={(volumeStep) => onCommand({ volumeStep })}
+      />
     </div>
   );
 }
 
-/** Volume, a speaker's second page: mute above its level, as Remote is laid out. */
+/**
+ * Volume, a speaker's second page: mute above its level, as Remote is laid
+ * out. A speaker with no volume to set shows its level dimmed in its place.
+ */
 export function MediaVolume(props: Props) {
   const { capability, onCommand } = props;
   const muted = capability.state?.muted === true;
@@ -627,24 +634,22 @@ export function MediaVolume(props: Props) {
           <VolumeX aria-hidden="true" />
         </Toggle>
       )}
-      {capability.features.volume === "level" ? (
+      {capability.features.volume !== "steps" ? (
         <LevelSlider
           label={`${props.name} volume`}
           level={capability.state?.volume ?? 0}
           fill="#ffffff"
           valueText={(level) => `${level}%`}
-          disabled={props.disabled}
+          disabled={props.disabled || capability.features.volume === null}
           failures={props.failures}
           onLevel={(volume) => onCommand({ volume })}
         />
       ) : (
-        capability.features.volume === "steps" && (
-          <VolumeSteps
-            name={props.name}
-            disabled={props.disabled}
-            onStep={(volumeStep) => onCommand({ volumeStep })}
-          />
-        )
+        <VolumeSteps
+          name={props.name}
+          disabled={props.disabled}
+          onStep={(volumeStep) => onCommand({ volumeStep })}
+        />
       )}
     </div>
   );

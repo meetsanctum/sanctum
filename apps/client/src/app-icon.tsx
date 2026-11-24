@@ -16,6 +16,7 @@ import {
   Sparkles,
   Sun,
   SwatchBook,
+  Tv,
   Utensils,
   Workflow,
   type LucideIcon,
@@ -41,6 +42,7 @@ const glyphs: Record<string, LucideIcon> = {
   sparkles: Sparkles,
   sun: Sun,
   "swatch-book": SwatchBook,
+  tv: Tv,
   utensils: Utensils,
   workflow: Workflow,
 };
