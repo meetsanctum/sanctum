@@ -1,6 +1,6 @@
 import type { AppInfo, ModelsInfo } from "@meetsanctum/app-sdk";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
-import { LineChart } from "@meetsanctum/ui-sdk/charts";
+import { LineChart, type DaysLineChartProps } from "@meetsanctum/ui-sdk/charts";
 import { useId, useState } from "react";
 
 import { AppIcon } from "../app-icon";
@@ -20,31 +20,35 @@ const shownOptions: { value: Shown; label: string }[] = [
   { value: "apps", label: "Apps" },
 ];
 
-type Series = { key: string; name: string; tokens: number[] };
+type Series = { key: string; name: string; values: number[] };
 
 // Each keeps the colour of its place in the home's list, the theme's
 // --series-1 to --series-3, whichever is shown or in use. More than three
 // fold into one.
-const most = 3;
-
-function withOthers(series: Series[], others: string): Series[] {
-  if (series.length <= most) return series;
-  const kept = series.slice(0, most - 1);
-  const rest = series.slice(most - 1);
+function withOthers(
+  series: Series[],
+  others: string,
+): DaysLineChartProps["series"] {
+  const [first, second, third, ...rest] = series;
+  if (!first) return [];
+  if (!second) return [first];
+  if (!third) return [first, second];
+  if (rest.length === 0) return [first, second, third];
   return [
-    ...kept,
+    first,
+    second,
     {
       key: "others",
       name: others,
-      tokens: rest[0]!.tokens.map((_, day) =>
-        rest.reduce((sum, each) => sum + each.tokens[day]!, 0),
+      values: third.values.map((value, day) =>
+        rest.reduce((sum, each) => sum + each.values[day]!, value),
       ),
     },
   ];
 }
 
-const sum = (tokens: readonly number[]) =>
-  tokens.reduce((total, each) => total + each, 0);
+const sum = (tokens: readonly (number | null)[]) =>
+  tokens.reduce<number>((total, each) => total + (each ?? 0), 0);
 const count = (value: number) => value.toLocaleString();
 
 // The top of the scale: 1, 2 or 5 times a power of ten, at least the most.
@@ -72,17 +76,22 @@ const dateText = (start: number) =>
     timeZone: "UTC",
   });
 
-function Chart(props: { series: Series[]; days: string[]; label: string }) {
+function Chart(props: {
+  series: DaysLineChartProps["series"];
+  days: string[];
+  label: string;
+}) {
   const { series } = props;
-  const top = niceTop(Math.max(...series.flatMap((each) => each.tokens)));
+  const top = niceTop(
+    Math.max(
+      ...series.flatMap((each) => each.values.map((value) => value ?? 0)),
+    ),
+  );
   return (
     <LineChart
+      mode="days"
       days={props.days.map(startOf)}
-      series={series.map((each) => ({
-        key: each.key,
-        name: each.name,
-        values: each.tokens,
-      }))}
+      series={series}
       format={format}
       scale={{ min: 0, max: top, lines: [0, top / 2, top] }}
       name="Tokens used"
@@ -119,7 +128,7 @@ export function TokensUsed(props: {
     (usage?.sources ?? []).map((each) => ({
       key: each.id,
       name: names.get(each.id) ?? "A source",
-      tokens: each.tokens,
+      values: each.tokens,
     })),
     "Other sources",
   );
@@ -128,21 +137,21 @@ export function TokensUsed(props: {
       ...(usage?.apps ?? []).map((each) => ({
         key: each.id,
         name: appNames.get(each.id) ?? each.id,
-        tokens: each.tokens,
+        values: each.tokens,
       })),
       ...(usage && sum(usage.checks) > 0
         ? [
             {
               key: "checks",
               name: "Checks in Settings",
-              tokens: usage.checks,
+              values: usage.checks,
             },
           ]
         : []),
     ],
     "Other apps",
   );
-  const total = sum(bySource.flatMap((each) => each.tokens));
+  const total = sum(bySource.flatMap((each) => each.values));
   const series = shown === "models" ? bySource : byApp;
 
   return (
@@ -208,7 +217,7 @@ export function TokensUsed(props: {
                   {each.name}
                 </span>
                 <span className="font-medium tabular-nums">
-                  {count(sum(each.tokens))}
+                  {count(sum(each.values))}
                 </span>
               </li>
             ))}

@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LineChart, type LinePoint } from "../src/charts";
+import { LineChart, type LineChartProps } from "../src/charts";
 
 // A day as a line (charts/line.tsx): at its end the cursor shows what it reads
 // now, where the line ends, and not the last 5 minutes before it.
@@ -39,7 +39,11 @@ const slotMs = 5 * minute;
 // The middle of each of the day's 5 minutes, as the chart lays them out.
 const slotMiddle = (slot: number) => now - dayMs + (slot + 0.5) * slotMs;
 
-function chart(line: { runs: LinePoint[][]; min: number; max: number }) {
+function chart(line: {
+  runs: LineChartProps["runs"];
+  min: number;
+  max: number;
+}) {
   return (
     <LineChart
       runs={line.runs}
@@ -179,24 +183,22 @@ describe("a day's line", () => {
       min: 54,
       max: 58,
     };
-    await act(async () =>
-      root.render(
-        <LineChart
-          runs={line.runs}
-          now={now}
-          name="Temperature"
-          height={72}
-          tone="page"
-          format={{
-            gutter: 0,
-            shown: (value) => value,
-            text: (value) => `${value}°C`,
-            grid: (value) => `${value}°C`,
-          }}
-          scale={{ min: 20, max: 90, lines: [20, 50, 80] }}
-        />,
-      ),
-    );
+    const props: LineChartProps = {
+      runs: line.runs,
+      now,
+      name: "Temperature",
+      height: 72,
+      tone: "page",
+      format: {
+        gutter: 0,
+        shown: (value) => value,
+        text: (value) => `${value}°C`,
+        grid: (value) => `${value}°C`,
+      },
+      scale: { min: 20, max: 90, lines: [20, 50, 80] },
+    };
+    const withOptionalDays = { ...props, days: undefined };
+    await act(async () => root.render(<LineChart {...withOptionalDays} />));
     const chart = container.querySelector<HTMLElement>('[role="group"]')!;
     // Focus puts the cursor at the end, as End does.
     await act(async () => chart.focus());

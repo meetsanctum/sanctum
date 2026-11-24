@@ -1,9 +1,10 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 
 import { SpokenPin, useCursor } from "./cursor";
 import { plotClass, Readout, RowsReadout, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
-import { gridYOn, scaleOf, yOn, type ChartScale } from "./scale";
+import { LineGridLabels, LineGridMarks } from "./line-grid";
+import { scaleOf, yOn, type ChartScale } from "./scale";
 import { dateText } from "./time";
 
 // Days as lines, a point a day, such as each model's tokens over the last
@@ -23,10 +24,15 @@ export type LineSeries = {
 
 /** What a line chart over days takes. */
 export type DaysLineChartProps = {
+  mode: "days";
   /** Each day's start, oldest first and today last. */
   days: readonly number[];
   /** Its lines, up to three, in the order of their colours. */
-  series: readonly LineSeries[];
+  series:
+    | readonly []
+    | readonly [LineSeries]
+    | readonly [LineSeries, LineSeries]
+    | readonly [LineSeries, LineSeries, LineSeries];
   format: ChartFormat;
   /** What it charts, as its label says it: Tokens used. */
   name: string;
@@ -48,8 +54,7 @@ export type DaysLineChartProps = {
 };
 
 /** A line's colour, by its place among the chart's lines. */
-export const seriesColour = (index: number) =>
-  `var(--series-${(index % 3) + 1})`;
+const seriesColour = (index: number) => `var(--series-${index + 1})`;
 
 // The lines and gridlines, apart from the cursor, which a pointer moves
 // without drawing them again.
@@ -66,16 +71,12 @@ const DaysMarks = memo(function DaysMarks(props: {
   const y = (value: number) => yOn(scale, height, shown(value));
   return (
     <>
-      {scale?.lines.map((value) => (
-        <rect
-          key={value}
-          x={0}
-          y={gridYOn(scale, height, value) - 0.5}
-          width={plot}
-          height={1}
-          className={props.page ? "fill-foreground/12" : "fill-white/12"}
-        />
-      ))}
+      <LineGridMarks
+        scale={scale}
+        height={height}
+        page={props.page}
+        plot={plot}
+      />
       {props.series.map((line, index) => {
         // Each run of known days, broken where one wasn't.
         const runs: { day: number; value: number }[][] = [[]];
@@ -119,7 +120,23 @@ const DaysMarks = memo(function DaysMarks(props: {
 
 /** Days as lines, a point a day, with their gridlines, three days named under them and a cursor. */
 export function DaysLineChart(props: DaysLineChartProps) {
-  const { days, series, format, height, date = dateText } = props;
+  const {
+    days,
+    series: supplied,
+    format,
+    height,
+    date = dateText,
+    today = "Today",
+    unknown = "Not known",
+  } = props;
+  const series = useMemo(
+    () =>
+      supplied.map((line) => ({
+        ...line,
+        values: days.map((_, index) => line.values[index] ?? null),
+      })),
+    [days, supplied],
+  );
   const page = props.tone === "page";
   const { box, width } = useWidth(props.width);
   const plot = Math.max(0, width - format.gutter);
@@ -137,8 +154,10 @@ export function DaysLineChart(props: DaysLineChartProps) {
       ),
     [days, last, plot],
   );
-  const dayText = (start: number) =>
-    start === days[last] ? (props.today ?? "Today") : date(start);
+  const dayText = useCallback(
+    (start: number) => (start === days[last] ? today : date(start)),
+    [date, days, last, today],
+  );
   const cursor = useCursor<number>({
     width: plot,
     steps: days.length,
@@ -147,10 +166,18 @@ export function DaysLineChart(props: DaysLineChartProps) {
       const step = days.indexOf(start);
       return step < 0 ? null : step;
     },
-    keyAtX: (pointerX, wide) =>
-      days[
-        last > 0 ? Math.round((pointerX / Math.max(1, wide - 1)) * last) : 0
-      ] ?? Number.NaN,
+    keyAtX: (pointerX) => {
+      // The boundary between two days is halfway between their drawn points.
+      let low = 0;
+      let high = last;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        const boundary = (xs[middle]! + xs[middle + 1]!) / 2;
+        if (pointerX < boundary) high = middle;
+        else low = middle + 1;
+      }
+      return days[low] ?? Number.NaN;
+    },
   });
   const given = props.scale;
   const scale = useMemo(() => {
@@ -165,10 +192,11 @@ export function DaysLineChart(props: DaysLineChartProps) {
       : null;
   }, [given, series, format]);
   const y = (value: number) => yOn(scale, height, format.shown(value));
-  const valueText = (value: number | null | undefined) =>
-    value === null || value === undefined
-      ? (props.unknown ?? "Not known")
-      : format.text(value);
+  const valueText = useCallback(
+    (value: number | null | undefined) =>
+      value === null || value === undefined ? unknown : format.text(value),
+    [format, unknown],
+  );
   const rowsOf = (step: number) =>
     series.map((line, index) => ({
       key: line.key,
@@ -176,14 +204,27 @@ export function DaysLineChart(props: DaysLineChartProps) {
       value: valueText(line.values[step]),
       colour: seriesColour(index),
     }));
-  const saidOf = (step: number) =>
-    `${dayText(days[step]!)}: ${series
-      .map((line) =>
-        series.length > 1
-          ? `${line.name} ${valueText(line.values[step])}`
-          : valueText(line.values[step]),
-      )
-      .join(", ")}`;
+  const saidOf = useCallback(
+    (step: number) =>
+      `${dayText(days[step]!)}: ${series
+        .map((line) =>
+          series.length > 1
+            ? `${line.name} ${valueText(line.values[step])}`
+            : valueText(line.values[step]),
+        )
+        .join(", ")}`,
+    [days, dayText, series, valueText],
+  );
+  const spokenDays = useMemo(
+    () => (
+      <ul className="sr-only">
+        {days.map((start, index) => (
+          <li key={start}>{saidOf(index)}</li>
+        ))}
+      </ul>
+    ),
+    [days, saidOf],
+  );
   const step = cursor.step;
   const label = page ? "text-muted-foreground" : "text-(--pewter)";
   const middle = Math.floor(last / 2);
@@ -225,8 +266,8 @@ export function DaysLineChart(props: DaysLineChartProps) {
                 className={page ? "fill-foreground/40" : "fill-white/40"}
               />
               {series.map((line, index) => {
-                const value = line.values[step];
-                return value === null || value === undefined ? null : (
+                const value = line.values[step] ?? null;
+                return value === null ? null : (
                   <circle
                     key={line.key}
                     cx={xs[step]}
@@ -253,19 +294,16 @@ export function DaysLineChart(props: DaysLineChartProps) {
               width={plot}
               value={valueText(series[0]?.values[step])}
               about={dayText(days[step]!)}
+              inside
             />
           ))}
       </div>
-      {scale?.lines.map((value) => (
-        <span
-          key={value}
-          aria-hidden="true"
-          style={{ top: gridYOn(scale, height, value) }}
-          className={`absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] tabular-nums ${label}`}
-        >
-          {format.grid(value)}
-        </span>
-      ))}
+      <LineGridLabels
+        scale={scale}
+        height={height}
+        page={page}
+        format={format}
+      />
       <div
         aria-hidden="true"
         className={`relative mt-2 h-[18px] text-[13px] leading-[18px] ${label}`}
@@ -290,11 +328,7 @@ export function DaysLineChart(props: DaysLineChartProps) {
         pin={cursor.pin}
         text={cursor.pinStep === null ? "" : saidOf(cursor.pinStep)}
       />
-      <ul className="sr-only">
-        {days.map((start, index) => (
-          <li key={start}>{saidOf(index)}</li>
-        ))}
-      </ul>
+      {spokenDays}
     </div>
   );
 }

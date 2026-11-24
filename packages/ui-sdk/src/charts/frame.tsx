@@ -31,14 +31,15 @@ export function Readout(props: {
   value: string;
   about: string;
   colour?: string;
+  inside?: boolean;
 }) {
   // Kept within the chart, whatever side of it the pointer is on.
   const left = Math.max(0, Math.min(props.x - 64, props.width - 128));
   return (
     <div
       aria-hidden="true"
-      style={{ left }}
-      className="pointer-events-none absolute -top-14 z-10 flex w-32 flex-col rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white)"
+      style={props.inside ? besideCursor(props.x, props.width) : { left }}
+      className={`pointer-events-none absolute z-10 flex w-32 flex-col rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white) ${props.inside ? "top-0 max-w-[calc(50%-1rem)]" : "-top-14"}`}
     >
       <span className="flex items-center gap-1.5 text-[15px] leading-5">
         {props.colour && (
@@ -56,6 +57,12 @@ export function Readout(props: {
   );
 }
 
+function besideCursor(x: number, width: number) {
+  return x < width / 2
+    ? { left: Math.round(x) + 8 }
+    : { right: width - Math.round(x) + 8 };
+}
+
 /**
  * A readout over a chart of several lines: what it is about first, then a
  * row for each line, its colour, its name and its value. It sits inside the
@@ -69,16 +76,11 @@ export function RowsReadout(props: {
   about: string;
   rows: readonly { key: string; name: string; value: string; colour: string }[];
 }) {
-  const onRight = props.x < props.width / 2;
   return (
     <div
       aria-hidden="true"
       data-mode="evening"
-      style={
-        onRight
-          ? { left: Math.round(props.x) + 8 }
-          : { right: props.width - Math.round(props.x) + 8 }
-      }
+      style={besideCursor(props.x, props.width)}
       className="pointer-events-none absolute top-0 z-10 flex max-w-[min(20rem,calc(50%-1rem))] flex-col gap-0.5 rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white)"
     >
       <span className="text-[13px] leading-[18px] text-(--silver)">
@@ -90,7 +92,7 @@ export function RowsReadout(props: {
           className="flex items-center gap-1.5 text-[13px] leading-[18px]"
         >
           <span
-            className="h-0.5 w-3 shrink-0 rounded-full"
+            className="h-0.5 w-3 shrink-0 rounded-xs"
             style={{ background: row.colour }}
           />
           <span className="min-w-0 flex-1 truncate text-(--silver)">

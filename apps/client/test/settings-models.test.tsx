@@ -205,6 +205,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -353,7 +355,12 @@ describe("Settings → AI models", () => {
     installed = [{ ...ollamaApp, id: "sanctum.former", name: "Former" }];
     usage = usageOf(
       { mac: 100, router: 50 },
-      { "sanctum.example": 100, "sanctum.former": 50 },
+      {
+        "sanctum.example": 100,
+        "sanctum.former": 50,
+        "sanctum.third": 20,
+        "sanctum.fourth": 10,
+      },
     );
     await show();
     const sums = () =>
@@ -378,7 +385,7 @@ describe("Settings → AI models", () => {
         (each) => each.textContent === "Apps",
       )!,
     );
-    expect(sums()).toEqual(["Example3,000", "Former1,500"]);
+    expect(sums()).toEqual(["Example3,000", "Former1,500", "Other apps900"]);
   });
 
   it("keeps the totals and source choices that an older core supports", async () => {
@@ -394,6 +401,8 @@ describe("Settings → AI models", () => {
   });
 
   it("reads one day's tokens with the arrow keys", async () => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+    usage!.sources[0]!.tokens[28] = 175;
     await show();
     const chart = container.querySelector<HTMLElement>(
       '[aria-label^="Tokens used"]',
@@ -411,10 +420,74 @@ describe("Settings → AI models", () => {
       "Today: Qwen3 8B on Office Mac 100, OpenAI: GPT-5 Mini with OpenRouter 50",
     );
     await key("ArrowLeft");
-    expect(status()).toMatch(/^(?!Today)[^:]+: Qwen3 8B on Office Mac 100, /);
-    expect(chart.textContent).toContain("Qwen3 8B on Office Mac100");
+    const previousDay = new Date("2026-11-22T12:00:00Z").toLocaleDateString(
+      undefined,
+      { day: "numeric", month: "short", timeZone: "America/Los_Angeles" },
+    );
+    expect(status()).toBe(
+      `${previousDay}: Qwen3 8B on Office Mac 175, OpenAI: GPT-5 Mini with OpenRouter 50`,
+    );
+    expect(chart.textContent).toContain(
+      `${previousDay}Qwen3 8B on Office Mac175`,
+    );
     await key("Escape");
     expect(status()).toBe("");
+  });
+
+  it("reads the nearest plotted day on hover and keeps a tapped day pinned", async () => {
+    vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(270);
+    usage!.sources[0]!.tokens[3] = 125;
+    usage!.sources[0]!.tokens[4] = 175;
+    await show();
+    const chart = container.querySelector<HTMLElement>(
+      '[aria-label^="Tokens used"]',
+    )!;
+    expect(chart.style.width).toBe("230px");
+    chart.getBoundingClientRect = () => new DOMRect(40, 0, 230, 128);
+    const readout = () =>
+      chart.querySelector(".pointer-events-none")?.textContent;
+    const move = (x: number) =>
+      chart.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerType: "mouse",
+          clientX: 40 + x,
+        }),
+      );
+    const leave = () =>
+      chart.dispatchEvent(
+        new PointerEvent("pointerout", {
+          bubbles: true,
+          pointerType: "mouse",
+          relatedTarget: document.body,
+        }),
+      );
+
+    // At x = 28 the point at 24.5 px is closer than the one at 32.5 px.
+    await act(async () => move(28));
+    expect(readout()).toContain("Qwen3 8B on Office Mac125");
+    expect(chart.hasAttribute("data-pinned")).toBe(false);
+    await act(async () => leave());
+    expect(readout()).toBeUndefined();
+
+    await act(async () => {
+      const press = {
+        bubbles: true,
+        clientX: 73,
+        pointerType: "touch",
+        pointerId: 1,
+        isPrimary: true,
+      };
+      chart.dispatchEvent(new PointerEvent("pointerdown", press));
+      chart.dispatchEvent(new PointerEvent("pointerup", press));
+      chart.dispatchEvent(new MouseEvent("click", { ...press, detail: 1 }));
+    });
+    expect(chart.hasAttribute("data-pinned")).toBe(true);
+    expect(readout()).toContain("Qwen3 8B on Office Mac175");
+    await act(async () => move(28));
+    expect(readout()).toContain("Qwen3 8B on Office Mac125");
+    await act(async () => leave());
+    expect(readout()).toContain("Qwen3 8B on Office Mac175");
   });
 
   it("lists the apps that may use it, each opening its page", async () => {

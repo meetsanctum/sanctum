@@ -2391,8 +2391,9 @@
       "    values: readonly (number | null)[];",
       "};",
       "export type DaysLineChartProps = {",
+      "    mode: \"days\";",
       "    days: readonly number[];",
-      "    series: readonly LineSeries[];",
+      "    series: readonly [] | readonly [LineSeries] | readonly [LineSeries, LineSeries] | readonly [LineSeries, LineSeries, LineSeries];",
       "    format: ChartFormat;",
       "    name: string;",
       "    height: number;",
@@ -2404,7 +2405,6 @@
       "    width?: number;",
       "    tone?: \"glass\" | \"page\";",
       "};",
-      "export declare const seriesColour: (index: number) => string;",
       "export declare function DaysLineChart(props: DaysLineChartProps): import(\"react\").JSX.Element;"
     ],
     "charts/index.d.ts": [
@@ -2434,7 +2434,7 @@
       "    at: number;",
       "    value: number;",
       "}[];",
-      "export type DayLineChartProps = {",
+      "export type LineChartProps = {",
       "    runs: readonly (readonly LinePoint[])[];",
       "    now: number;",
       "    format: ChartFormat;",
@@ -2450,8 +2450,12 @@
       "    time?: (at: number) => string;",
       "    width?: number;",
       "};",
-      "export type LineChartProps = DayLineChartProps | DaysLineChartProps;",
-      "export declare function LineChart(props: LineChartProps): import(\"react\").JSX.Element;"
+      "export type DayLineChartProps = LineChartProps;",
+      "type LineChartInput = (LineChartProps & {",
+      "    mode?: never;",
+      "}) | DaysLineChartProps;",
+      "export declare function LineChart(props: LineChartInput): import(\"react\").JSX.Element;",
+      "export {};"
     ],
     "charts/scale.d.ts": [
       "export type ChartScale = {",

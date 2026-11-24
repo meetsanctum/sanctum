@@ -3,7 +3,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LineChart, type LineSeries } from "../src/charts";
+import { LineChart, type DaysLineChartProps } from "../src/charts";
 
 // Days as lines (charts/days-line.tsx): a point a day for up to three
 // lines, a readout with a row for each, and each day listed for screen
@@ -47,13 +47,18 @@ const press = (key: string) =>
     group().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   });
 
-const series: LineSeries[] = [
+const series = [
   { key: "mac", name: "Office Mac", values: [10, 20, null, 40, 50] },
   { key: "router", name: "Router", values: [5, 5, 5, 5, 0] },
-];
+] as const satisfies DaysLineChartProps["series"];
 // 241 px wide less a 40 px gutter: 201 px, a day every 50 px.
-const chart = (shown = series, shownDays = days) => (
+const chart = (
+  shown: DaysLineChartProps["series"] = series,
+  shownDays = days,
+  overrides: Partial<Pick<DaysLineChartProps, "format" | "scale">> = {},
+) => (
   <LineChart
+    mode="days"
     days={shownDays}
     series={shown}
     format={{
@@ -68,6 +73,7 @@ const chart = (shown = series, shownDays = days) => (
     date={date}
     width={241}
     tone="page"
+    {...overrides}
   />
 );
 
@@ -116,11 +122,54 @@ describe("days as lines", () => {
     expect(container.querySelectorAll("svg > circle")).toHaveLength(1);
   });
 
-  it("reads one line the way a day's line does", async () => {
-    await render(chart([series[0]!]));
+  it("reads one line inside the plot, beside the cursor", async () => {
+    await render(chart([series[0]]));
     await act(async () => group().focus());
     expect(readout()).toBe("50 tokensToday");
     expect(spoken()).toBe("Today: 50 tokens");
+    const popover = group().querySelector<HTMLElement>(".pointer-events-none")!;
+    expect(popover.classList.contains("top-0")).toBe(true);
+    expect(popover.style.right).toBe("8px");
+  });
+
+  it("scales in displayed units using the supplied days", async () => {
+    await render(
+      chart(
+        [
+          { key: "mac", name: "Office Mac", values: [200, 500, null, 400] },
+          {
+            key: "router",
+            name: "Router",
+            values: [200, 200, 200, 200, 200, 9000],
+          },
+        ],
+        days,
+        {
+          scale: undefined,
+          format: {
+            gutter: 40,
+            shown: (value) => value / 10,
+            text: (value) => `${value / 10} units`,
+            grid: (value) => `${value} units`,
+          },
+        },
+      ),
+    );
+    expect(
+      [...container.querySelectorAll("span.absolute.right-0.tabular-nums")].map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(["20 units", "40 units"]);
+    const [mac, router] = container.querySelectorAll("svg g");
+    expect(mac!.querySelector("polyline")?.getAttribute("points")).toBe(
+      "0.5,80 50.5,20",
+    );
+    expect(mac!.querySelector("circle")?.getAttribute("cy")).toBe("40");
+    expect(router!.querySelector("polyline")?.getAttribute("points")).toBe(
+      "0.5,80 50.5,80 100.5,80 150.5,80 200.5,80",
+    );
+    await act(async () => group().focus());
+    expect(spoken()).toBe("Today: Office Mac Not known, Router 20 units");
   });
 
   it("lists each day for screen readers", async () => {
@@ -145,10 +194,11 @@ describe("days as lines", () => {
     await press("ArrowRight");
     expect(spoken()).toBe("11-21: Office Mac 20 tokens, Router 5 tokens");
     const next = [...days.slice(1), today + day];
-    const moved = series.map((line) => ({
+    const advance = (line: (typeof series)[number]) => ({
       ...line,
       values: [...line.values.slice(1), 0],
-    }));
+    });
+    const moved = [advance(series[0]), advance(series[1])] as const;
     await render(chart(moved, next));
     expect(readout()).toBe("11-21Office Mac20 tokensRouter5 tokens");
     await render(
