@@ -175,8 +175,10 @@ function languageModel(
         metadataExtractor: {
           extractMetadata: async () => undefined,
           createStreamExtractor: () => ({
-            // The adapter calls this before it passes the first choice's
-            // deltas to its tool-call tracker.
+            // The provider reads each piece of the stream here before its
+            // tool-call tracker, whose work grows with the calls in one
+            // piece: thousands in one piece would hold the core for a
+            // minute.
             processChunk(chunk: unknown) {
               const choices = (chunk as { choices?: unknown } | null)?.choices;
               if (!Array.isArray(choices)) return;
@@ -320,14 +322,14 @@ export async function* ask(
       telemetry: { isEnabled: false },
     });
     const calls: ModelToolCall[] = [];
-    const pending = new Map<string, number>();
+    const started = new Set<string>();
     let isBroken = false;
     let end: Extract<ModelPiece, { type: "end" }> | undefined;
     for await (const part of result.stream) {
       switch (part.type) {
         case "tool-input-start":
           countToolCall();
-          pending.set(part.id, (pending.get(part.id) ?? 0) + 1);
+          started.add(part.id);
           firstPiece();
           break;
         case "reasoning-delta":
@@ -342,11 +344,8 @@ export async function* ask(
           }
           break;
         case "tool-call": {
-          // Some providers emit a completed call without a start event.
-          const starts = pending.get(part.toolCallId);
-          if (starts === undefined) countToolCall();
-          else if (starts === 1) pending.delete(part.toolCallId);
-          else pending.set(part.toolCallId, starts - 1);
+          // Some providers send a call whole, without a start.
+          if (!started.has(part.toolCallId)) countToolCall();
           firstPiece();
           // Input that isn't whole JSON, a tool the app didn't offer, or one
           // the provider ran itself: no app's tool runs on it.
