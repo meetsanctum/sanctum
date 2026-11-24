@@ -699,15 +699,22 @@ export function MediaVolume(props: Props & { microphones?: ReactNode }) {
         </div>
       )}
       {capability.features.volume !== "steps" ? (
-        <LevelSlider
-          label={`${props.name} volume`}
-          level={capability.state?.volume ?? 0}
-          fill="#ffffff"
-          valueText={(level) => `${level}%`}
-          disabled={props.disabled || capability.features.volume === null}
-          failures={props.failures}
-          onLevel={(volume) => onCommand({ volume })}
-        />
+        // Dimmed as a disabled button is, where there's no level to set.
+        <div
+          className={
+            capability.features.volume === null ? "opacity-50" : undefined
+          }
+        >
+          <LevelSlider
+            label={`${props.name} volume`}
+            level={capability.state?.volume ?? 0}
+            fill="#ffffff"
+            valueText={(level) => `${level}%`}
+            disabled={props.disabled || capability.features.volume === null}
+            failures={props.failures}
+            onLevel={(volume) => onCommand({ volume })}
+          />
+        </div>
       ) : (
         <VolumeSteps
           name={props.name}

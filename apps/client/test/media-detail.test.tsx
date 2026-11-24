@@ -440,6 +440,7 @@ describe("Volume", () => {
       'input[aria-label="Kitchen Speaker volume"]',
     )!;
     expect(slider.disabled).toBe(true);
+    expect(slider.closest(".opacity-50")).not.toBeNull();
   });
 
   const speaker = (muted = false) =>
