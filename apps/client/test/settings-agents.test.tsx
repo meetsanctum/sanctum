@@ -54,6 +54,27 @@ const moods = {
   id: "sanctum.example",
   name: "Example",
   version: "1.0.0",
+  icon: null,
+  requests: [],
+  permissions: [],
+  state: "running",
+} as unknown as AppInfo;
+
+// An app acting as the household's AI assistant.
+const assistant = {
+  ...moods,
+  id: "sanctum.assistant",
+  name: "Assistant",
+  requests: [
+    {
+      id: "ai.assistant",
+      reason: "To do what you ask.",
+      needed: true,
+      asked: null,
+      startsOn: false,
+    },
+  ],
+  permissions: ["ai.assistant"],
 } as AppInfo;
 
 function canUseWith(changes: Partial<Record<string, boolean>> = {}): AiCanUse {
@@ -290,15 +311,18 @@ describe("the words for AI agents", () => {
 
 describe("Settings → AI agents", () => {
   let openedCanUse: number;
+  let openedApps: string[];
 
-  async function show() {
+  async function show(apps: AppInfo[] = [moods]) {
     openedCanUse = 0;
+    openedApps = [];
     await act(async () =>
       root.render(
         <AgentsPage
-          apps={[moods]}
+          apps={apps}
           live={live}
           onOpenCanUse={() => openedCanUse++}
+          onOpenApp={(id) => openedApps.push(id)}
           page={null}
         />,
       ),
@@ -339,6 +363,29 @@ describe("Settings → AI agents", () => {
 
     await act(async () => button("What AI Agents Can Use2 of 4 on").click());
     expect(openedCanUse).toBe(1);
+  });
+
+  it("lists an app acting as the AI assistant, opening its page", async () => {
+    await show([moods, assistant]);
+
+    const row = button("AssistantSanctum app")!;
+    expect(row).toBeTruthy();
+    expect(row.querySelector("[aria-label$='more']")).toBeNull();
+    expect(container.textContent).not.toContain("ExampleSanctum app");
+    await act(async () => row.click());
+    expect(openedApps).toEqual(["sanctum.assistant"]);
+  });
+
+  it("keeps a paused assistant app in its place, saying so", async () => {
+    agents = [];
+    await show([
+      { ...assistant, permissions: [], state: "paused" },
+      // One that asks for it but hasn't got it isn't one.
+      { ...assistant, id: "sanctum.other", name: "Other", permissions: [] },
+    ]);
+
+    expect(button("Assistant (paused)Sanctum app")).toBeTruthy();
+    expect(container.textContent).not.toContain("Other");
   });
 
   it("removes an agent and ignores a late poll from before the removal", async () => {

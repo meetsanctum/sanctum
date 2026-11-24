@@ -216,9 +216,14 @@ describe("an entry's words", () => {
   });
 
   it.each([
-    { kind: "person", name: "Sam", expected: "Sam" },
-    { kind: "person", name: null, expected: "someone who has left" },
-    { kind: "client", name: null, expected: "a shared device" },
+    { kind: "person", name: "Sam", expected: "asked by Sam" },
+    { kind: "person", name: null, expected: "asked by someone who has left" },
+    {
+      kind: "client",
+      name: "Kitchen Tablet",
+      expected: "asked from Kitchen Tablet",
+    },
+    { kind: "client", name: null, expected: "asked from a shared device" },
   ] as const)(
     "names who asked the assistant ($expected)",
     ({ kind, name, expected }) => {
@@ -234,7 +239,7 @@ describe("an entry's words", () => {
         }),
         "device",
       );
-      expect(words.detail).toBe(`Assistant, asked by ${expected}`);
+      expect(words.detail).toBe(`Assistant, ${expected}`);
     },
   );
 

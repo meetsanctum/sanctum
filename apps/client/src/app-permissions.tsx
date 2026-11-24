@@ -1,4 +1,5 @@
 import {
+  aiAssistantPermission,
   permissionWords,
   type AppInfo,
   type PermissionInfo,
@@ -16,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
+import { canUseTitle } from "./agents/words";
 import { CoreError, coreJson } from "./core-fetch";
 import { permissionIconOf } from "./permission-icons";
 
@@ -24,7 +26,8 @@ import { permissionIconOf } from "./permission-icons";
 // switch. Every client may switch any. Turning off one the app needs asks
 // first, since the app then pauses; the rest switch at once. The core
 // answers with the app as it is now, which the shell takes for everything
-// that shows it.
+// that shows it. An app that acts as the household's AI assistant links
+// straight to What AI agents can use, which limits what it can do.
 
 /** What went wrong switching a permission, in words, by the core's code. */
 export function problemOf(
@@ -48,6 +51,8 @@ export function problemOf(
 export function PermissionsSection(props: {
   app: AppInfo;
   onChanged: (app: AppInfo) => void;
+  // Opens What AI agents can use.
+  onOpenCanUse?: () => void;
 }) {
   const { app } = props;
   // The switch being changed, shown where it is going until the core answers.
@@ -127,6 +132,17 @@ export function PermissionsSection(props: {
           );
         })}
       </ul>
+      {props.onOpenCanUse &&
+        app.requests.some(({ id }) => id === aiAssistantPermission) && (
+          <Button
+            variant="link"
+            size="inline"
+            className="self-start"
+            onClick={props.onOpenCanUse}
+          >
+            {canUseTitle}
+          </Button>
+        )}
       {problem && (
         <p role="alert" className="m-0 text-sm text-destructive">
           {problem}
