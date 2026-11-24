@@ -39,6 +39,7 @@ import { useArtwork } from "./artwork";
 import { contactPageName } from "./contact";
 import { DeviceFrame } from "./frames/device-frame";
 import { isMedia, mediaText } from "./media";
+import { mediaHistoryPage } from "./media-history";
 import {
   MediaPlaying,
   MediaRemote,
@@ -71,7 +72,8 @@ import type { Devices } from "./use-devices";
 // (motion-detail.tsx), its Contact (contact-detail.tsx), its Readings and
 // their history (sensor-detail.tsx), the pages apps add for its kinds, each
 // drawn by its app in the app's scope, such as Moods' Presses, its light's
-// History (device-history.tsx), and last its Activity: who did what to it
+// or switch's History (device-history.tsx) or a media player's
+// (media-history.tsx), and last its Activity: who did what to it
 // (activity/device-page.tsx). It opens on the page of the tile it was
 // opened from, so a room's tile for the whole device opens it on the first,
 // and its readings' tile under Environment on Readings. A device's further
@@ -219,7 +221,12 @@ export function DeviceDetail(props: {
       ? (pages.find((page) => page.kinds.includes("button")) ??
         pages.find((page) => page.devices === "own"))
       : undefined;
-  const history = device && control ? historyPage(device, control) : null;
+  const history =
+    device && control
+      ? historyPage(device, control)
+      : device && player
+        ? mediaHistoryPage(device, player)
+        : null;
   const activity =
     device && hasDetail
       ? activityPage(device, {

@@ -215,6 +215,28 @@ it("keeps the opening tint on Remote and updates it on Playing", async () => {
   expect(tint()).toBe(next);
 });
 
+it.each([
+  ["a TV", true, "Remote"],
+  ["a speaker", false, "Volume"],
+])("gives %s its History before its Activity", async (_, power, second) => {
+  devices = [
+    mediaPlayer(
+      "tv",
+      "TV",
+      "office",
+      { activity: "paused" },
+      { power, volume: "level" },
+    ),
+  ];
+  await open("tv/player");
+  expect(tabs().map(([label]) => label)).toEqual([
+    "Playing",
+    second,
+    "History",
+    "Activity",
+  ]);
+});
+
 it("asks for the same artwork again when the detail is reopened", async () => {
   const hash = "a".repeat(64);
   devices = [

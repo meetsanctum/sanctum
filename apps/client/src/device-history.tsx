@@ -224,6 +224,8 @@ export function Notice(props: { children: ReactNode }) {
 export function Part(props: {
   title: string;
   headline: string;
+  /** A line under the headline, as a media player's History says. */
+  sentence?: string | null;
   children: ReactNode;
 }) {
   const id = useId();
@@ -236,6 +238,11 @@ export function Part(props: {
         {props.title}
       </h3>
       <p className="m-0 text-2xl leading-8 font-light">{props.headline}</p>
+      {props.sentence && (
+        <p className="m-0 text-[15px] leading-[22px] text-(--silver)">
+          {props.sentence}
+        </p>
+      )}
       <div className="mt-4">{props.children}</div>
     </section>
   );
