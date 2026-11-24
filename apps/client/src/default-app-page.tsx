@@ -36,7 +36,7 @@ function defaultPageIcon(app: AppInfo) {
 
 /**
  * The page's background: the app's own colours where it names them, darkest
- * at the bottom left under its name, else its icon's colour deepened there.
+ * at the bottom left under its name, else its icon's colour deepened.
  */
 export function appBackdrop(app: AppInfo) {
   const backdrop = app.backdrop;
@@ -48,7 +48,9 @@ export function appBackdrop(app: AppInfo) {
     return `${shade}, linear-gradient(to top right, ${backdrop.from}, ${backdrop.to})`;
   }
   const color = `var(--${defaultPageIcon(app).color})`;
-  return `${shade}, linear-gradient(to top right, color-mix(in srgb, ${color} 30%, var(--carbon)), ${color} 55%, color-mix(in srgb, ${color} 85%, var(--white)))`;
+  // Deepened toward Carbon at both ends, never lightened, so even a light
+  // icon colour such as sun keeps the top bar's white buttons at 3:1.
+  return `${shade}, linear-gradient(to top right, color-mix(in srgb, ${color} 30%, var(--carbon)), color-mix(in srgb, ${color} 70%, var(--carbon)))`;
 }
 
 export function DefaultAppPage(props: {
