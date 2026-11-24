@@ -57,7 +57,7 @@ beforeAll(async () => {
     (file) => file.type === "asset" && file.fileName.endsWith(".css"),
   );
   css = stylesheet?.type === "asset" ? String(stylesheet.source) : "";
-  rules = styleRules(css);
+  rules = stylesheetRules(css);
 }, 30_000);
 
 describe("the knot loader's built CSS", () => {
@@ -343,9 +343,8 @@ function normalise(value: string) {
     .replace(/\b0\./g, ".");
 }
 
-// The style rules of a flat, minified stylesheet, each with the media
-// query it sits in. Keyframes are left out.
-function styleRules(stylesheet: string): Rule[] {
+// The declaration blocks of a flat, minified stylesheet, including keyframe steps.
+function stylesheetRules(stylesheet: string): Rule[] {
   const found: Rule[] = [];
   const open: string[] = [];
   let start = 0;
@@ -358,12 +357,7 @@ function styleRules(stylesheet: string): Rule[] {
       const prelude = open.pop()!;
       const body = stylesheet.slice(start, i);
       start = i + 1;
-      if (
-        prelude.startsWith("@") ||
-        open.some((at) => at.startsWith("@keyframes"))
-      ) {
-        continue;
-      }
+      if (prelude.startsWith("@")) continue;
       const within = (kind: string) =>
         open
           .filter((at) => at.startsWith(kind))
