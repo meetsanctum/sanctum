@@ -1,6 +1,5 @@
 import {
   Button,
-  icons,
   PageSection,
   Slider,
   Switch,
@@ -16,19 +15,13 @@ import {
   type ReactNode,
 } from "react";
 
-import type {
-  ChangeRingAction,
-  MicrophonesAction,
-  SpeakerAction,
-} from "../page";
+import type { ChangeRingAction, SpeakerAction } from "../page";
 import { ringColourDistance } from "../ring-colour";
 import type { Ring, SpeakerChange, SpeakerState } from "../speaker";
 
-// A smart speaker's own parts on ESPHome's page: Listening, its microphones
-// and when it last heard its wake word, and Ring, how its ring looks. Its
-// side switch mutes the microphones without Sanctum, and the speaker is
-// heard while the page is open, so the page reads them again every few
-// seconds while it shows.
+// A smart speaker's own part on ESPHome's page: Ring, how its ring looks.
+// Its microphones are the shell's. The ring also shows what the speaker is
+// doing, so the page reads it again every few seconds while it shows.
 
 /** The ring's colours, the first the speaker's own. */
 const ringColours = [
@@ -55,43 +48,6 @@ export function ringColourOf(hex: string) {
   }
   // Within a few steps per channel, as the speaker rounds what it's given.
   return bestDistance <= 12 ? best : null;
-}
-
-/** When it last heard its wake word: Today at 21:14, Yesterday at 07:02, 17 Nov at 09:30. */
-export function heardWords(at: number | null, now: Date, timeZone?: string) {
-  if (at === null) return "Not yet";
-  const calendar = new Intl.DateTimeFormat("en-GB", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    timeZone,
-  });
-  const day = (date: Date) => {
-    const { year, month, day } = Object.fromEntries(
-      calendar
-        .formatToParts(date)
-        .map(({ type, value }) => [type, Number(value)]),
-    );
-    return Date.UTC(year!, month! - 1, day!);
-  };
-  const heard = new Date(at);
-  const time = heard.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  });
-  const daysAgo = (day(now) - day(heard)) / 86_400_000;
-  const words =
-    daysAgo === 0
-      ? "Today"
-      : daysAgo === 1
-        ? "Yesterday"
-        : heard.toLocaleDateString("en-GB", {
-            day: "numeric",
-            month: "short",
-            timeZone,
-          });
-  return `${words} at ${time}`;
 }
 
 function SwitchRow(props: {
@@ -245,7 +201,6 @@ export function SpeakerCards(props: DevicePageProps) {
   const { device } = props;
   const client = useAppClient();
   const [speaker, setSpeaker] = useState<SpeakerState | null>(null);
-  const [stillMuted, setStillMuted] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const reads = useRef(0);
@@ -257,10 +212,7 @@ export function SpeakerCards(props: DevicePageProps) {
       const now = await client.call<SpeakerAction>("esphome.speaker", {
         device: device.id,
       });
-      if (read === reads.current) {
-        setSpeaker(now);
-        if (now.microphones) setStillMuted(false);
-      }
+      if (read === reads.current) setSpeaker(now);
     } catch {
       // What it showed stays until a read goes through.
     }
@@ -289,34 +241,18 @@ export function SpeakerCards(props: DevicePageProps) {
     if (pending.current) return;
     pending.current = true;
     setSpeaker(shown);
-    setStillMuted(false);
     setFailed(false);
     setBusy(true);
     // A read already on its way says what was before the change.
     reads.current += 1;
     try {
-      if (next.microphones !== undefined) {
-        await client.call<MicrophonesAction>(
-          next.microphones
-            ? "esphome.unmuteMicrophones"
-            : "esphome.muteMicrophones",
-          { device: device.id },
-        );
-      }
-      if (next.ring) {
-        await client.call<ChangeRingAction>("esphome.changeRing", {
-          device: device.id,
-          ...next.ring,
-        });
-      }
-    } catch (error) {
+      await client.call<ChangeRingAction>("esphome.changeRing", {
+        device: device.id,
+        ...next.ring,
+      });
+    } catch {
       setSpeaker(speaker);
-      if (
-        next.microphones &&
-        (error as { code?: string }).code === "conflict"
-      ) {
-        setStillMuted(true);
-      } else setFailed(true);
+      setFailed(true);
     } finally {
       await read();
       pending.current = false;
@@ -326,57 +262,12 @@ export function SpeakerCards(props: DevicePageProps) {
 
   if (!speaker) return null;
   const reachable = device.availability !== "offline";
-  const { microphones, ring } = speaker;
+  const { ring } = speaker;
   const changeRing = (next: Partial<Ring>) =>
     ring && change({ ring: next }, { ...speaker, ring: { ...ring, ...next } });
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <PageSection id="speaker-listening" title="Listening">
-          {microphones !== null && (
-            <SwitchRow
-              id="speaker-microphones"
-              label="Microphones"
-              detail={
-                microphones ? (
-                  "On"
-                ) : (
-                  <>
-                    <icons.MicOff aria-hidden="true" className="size-3.5" />
-                    Muted
-                  </>
-                )
-              }
-              checked={microphones}
-              disabled={!reachable || busy}
-              onChange={(on) =>
-                change({ microphones: on }, { ...speaker, microphones: on })
-              }
-            />
-          )}
-          <div className="flex min-h-11 items-center justify-between gap-3 px-2.5 text-[15px] leading-5">
-            <span className="text-muted-foreground">Heard its wake word</span>
-            <span>{heardWords(speaker.heardWakeWordAt, new Date())}</span>
-          </div>
-        </PageSection>
-        {microphones !== null &&
-          (stillMuted ? (
-            <p
-              role="alert"
-              className="m-0 px-1 text-[13px] leading-[18px] text-destructive"
-            >
-              They're still muted. Turn off the switch on its side to turn them
-              on.
-            </p>
-          ) : (
-            <p className="m-0 px-1 text-[13px] leading-[18px] text-muted-foreground">
-              When it hears its wake word, it chimes and flashes red: Sanctum
-              doesn't answer it. The switch on its side mutes the microphones
-              too, and while it's on, only that switch turns them back on.
-            </p>
-          ))}
-      </div>
       {ring && (
         <div className="flex flex-col gap-2">
           <PageSection id="speaker-ring" title="Ring">

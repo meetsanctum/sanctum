@@ -6,12 +6,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { createDriver, type Driver, type DriverOptions } from "./driver.js";
 import type { SpeakerChange } from "./speaker.js";
-import {
-  changeRingAction,
-  deviceAction,
-  microphonesActions,
-  speakerAction,
-} from "./page.js";
+import { changeRingAction, deviceAction, speakerAction } from "./page.js";
 import { esphomeService } from "./sightings.js";
 
 // The ESPHome driver app: brings the lights, switches, sensors, motion and
@@ -41,7 +36,6 @@ export function createEsphomeApp(options: DriverOptions = {}) {
   const speaker = speakerAction((deviceId) => running().speaker(deviceId));
   const changeSpeaker = (deviceId: string, change: SpeakerChange) =>
     running().changeSpeaker(deviceId, change);
-  const microphones = microphonesActions(changeSpeaker);
   const changeRing = changeRingAction(changeSpeaker);
 
   return defineApp({
@@ -56,8 +50,10 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // followed and declined. 0.7.0: a smart speaker's microphones, ring and
     // wake word on its page. 0.8.0: an action for each change there, about
     // the speaker, so Activity names it. 0.8.1: a speaker announcing is
-    // doing what it did before, not playing.
-    version: "0.8.1",
+    // doing what it did before, not playing. 0.9.0: a smart speaker's
+    // microphones are its `audio` part, which the shell shows, and leave
+    // its page.
+    version: "0.9.0",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -89,7 +85,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       ],
     },
     migrations: "migrations",
-    actions: [device, speaker, ...microphones, changeRing],
+    actions: [device, speaker, changeRing],
     events: [],
     async start(ctx) {
       const started = createDriver(ctx, options);

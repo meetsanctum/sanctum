@@ -7,12 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeviceFacts } from "../../src/facts";
 import type { SpeakerState } from "../../src/speaker";
-import { heardWords, ringColourOf } from "../../src/ui/speaker-cards";
+import { ringColourOf } from "../../src/ui/speaker-cards";
 import ui from "../../src/ui/index";
 
-// A smart speaker's page: Listening, with its microphones and when it last
-// heard its wake word, and Ring, above how it's connected. Turning on
-// microphones its side switch holds muted says how to free them.
+// A smart speaker's page: Ring, above how it's connected. Its microphones
+// are the shell's.
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -56,11 +55,7 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  speaker = {
-    microphones: true,
-    ring: { glow: false, colour: "#18bbf2", brightness: 66 },
-    heardWakeWordAt: null,
-  };
+  speaker = { ring: { glow: false, colour: "#18bbf2", brightness: 66 } };
   changes = [];
   refuse = null;
   isReadFailing = false;
@@ -87,13 +82,9 @@ async function show(shown: DeviceInfo = device) {
         return speaker;
       }
       const change =
-        id === "esphome.muteMicrophones"
-          ? { microphones: false }
-          : id === "esphome.unmuteMicrophones"
-            ? { microphones: true }
-            : id === "esphome.changeRing"
-              ? (({ device: _device, ...ring }) => ({ ring }))(input)
-              : null;
+        id === "esphome.changeRing"
+          ? (({ device: _device, ...ring }) => ({ ring }))(input)
+          : null;
       if (change) {
         changes.push(change);
         await writeGate;
@@ -125,12 +116,11 @@ const click = (element: Element) =>
   });
 
 describe("a smart speaker's page", () => {
-  it("shows Listening and Ring above how it's connected", async () => {
+  it("shows Ring above how it's connected", async () => {
     await show();
 
-    expect(headings()).toEqual(["Listening", "Ring"]);
-    expect(switchFor("Microphones").getAttribute("aria-checked")).toBe("true");
-    expect(host.textContent).toContain("Heard its wake wordNot yet");
+    expect(headings()).toEqual(["Ring"]);
+    expect(host.textContent).not.toContain("Microphones");
     expect(switchFor("Glow while waiting").getAttribute("aria-checked")).toBe(
       "false",
     );
@@ -145,36 +135,19 @@ describe("a smart speaker's page", () => {
     expect(host.textContent).toContain("It also has Wake sound");
   });
 
-  it("shows neither on a device that isn't a smart speaker", async () => {
+  it("shows no ring on a device that isn't a smart speaker", async () => {
     await show({ ...device, type: "switch" } as DeviceInfo);
 
     expect(headings()).toEqual([]);
     expect(host.textContent).toContain("Encrypted");
   });
 
-  it("mutes its microphones and picks the ring's colour", async () => {
+  it("picks the ring's colour", async () => {
     await show();
 
-    await click(switchFor("Microphones"));
     await click(host.querySelector('[aria-label="Orange"]')!);
 
-    expect(changes).toEqual([
-      { microphones: false },
-      { ring: { colour: "#ff9f0a" } },
-    ]);
-  });
-
-  it("says how to free microphones its side switch holds muted", async () => {
-    speaker.microphones = false;
-    refuse = "conflict";
-    await show();
-
-    await click(switchFor("Microphones"));
-
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-      "They're still muted. Turn off the switch on its side to turn them on.",
-    );
-    expect(switchFor("Microphones").getAttribute("aria-checked")).toBe("false");
+    expect(changes).toEqual([{ ring: { colour: "#ff9f0a" } }]);
   });
 
   it("keeps the requested ring setting visible until the write completes", async () => {
@@ -263,49 +236,16 @@ describe("a smart speaker's page", () => {
     ]);
   });
 
-  it("shows the wake-word time when no controls are available", async () => {
-    speaker = { microphones: null, ring: null, heardWakeWordAt: Date.now() };
+  it("shows nothing of its own while its ring is unknown", async () => {
+    speaker = { ring: null };
     await show({ ...device, availability: "offline" });
 
-    expect(headings()).toEqual(["Listening"]);
-    expect(host.textContent).toContain("Heard its wake wordToday at");
+    expect(headings()).toEqual([]);
     expect(host.querySelector('[role="switch"]')).toBeNull();
   });
 });
 
 describe("its words", () => {
-  it("say when it last heard its wake word", () => {
-    const now = new Date(2026, 10, 23, 12, 0);
-    expect(heardWords(null, now)).toBe("Not yet");
-    expect(heardWords(new Date(2026, 10, 23, 9, 5).getTime(), now)).toBe(
-      "Today at 09:05",
-    );
-    expect(heardWords(new Date(2026, 10, 22, 21, 14).getTime(), now)).toBe(
-      "Yesterday at 21:14",
-    );
-    expect(heardWords(new Date(2026, 10, 17, 7, 30).getTime(), now)).toBe(
-      "17 Nov at 07:30",
-    );
-  });
-
-  it("uses calendar days over both daylight-saving changes", () => {
-    const zone = "Europe/Zurich";
-    expect(
-      heardWords(
-        Date.parse("2026-03-28T20:00Z"),
-        new Date("2026-03-29T22:30Z"),
-        zone,
-      ),
-    ).toBe("28 Mar at 21:00");
-    expect(
-      heardWords(
-        Date.parse("2026-10-24T20:00Z"),
-        new Date("2026-10-25T22:30Z"),
-        zone,
-      ),
-    ).toBe("Yesterday at 22:00");
-  });
-
   it("take a colour the speaker rounded as the ring's own", () => {
     expect(ringColourOf("#18bbf2")).toBe("#18bbf2");
     expect(ringColourOf("#17bbf1")).toBe("#18bbf2");

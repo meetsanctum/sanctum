@@ -632,6 +632,10 @@ describe("a player's step it can't do", () => {
       type: "smart-speaker",
       capabilities: [
         {
+          id: "audio",
+          kind: "audio",
+        },
+        {
           id: "media",
           kind: "media",
           features: {

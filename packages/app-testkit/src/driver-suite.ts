@@ -1,4 +1,5 @@
 import {
+  audioFeatures,
   capabilityOf,
   mediaFeatures,
   permissionIds,
@@ -80,6 +81,12 @@ export function sampleCommands(
       ...(player.mute ? [{ muted: true }, { muted: false }] : []),
       ...(supportsPlayback("stop") ? [{ playback: "stop" }] : []),
     ];
+  }
+  if (kind === "audio") {
+    // Muted and back, where it can be muted.
+    return audioFeatures.parse(features).mutes
+      ? [{ muted: true }, { muted: false }]
+      : [];
   }
   if (kind === "motion") {
     // Each setting it has, changed and back again.

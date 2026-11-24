@@ -10,8 +10,6 @@ import {
   type AppContext,
   type BlobType,
   type DeviceJoining,
-  type DeviceRegistration,
-  type MediaFeatures,
   type DriverAdd,
   type DriverAddResult,
   type DriverCommand,
@@ -23,10 +21,12 @@ import {
   type FoundReport,
 } from "@meetsanctum/app-sdk";
 
+import { capabilities, capabilityIds } from "./capabilities.js";
+
 // A driver app for the tests, loaded from its package like a catalog app. It
 // brings lamps, plugs, remotes, climate sensors, motion sensors (motion,
 // light level and temperature, with their settings), contact sensors and
-// media players from a pretend radio, the
+// media players and microphones from a pretend radio, the
 // way the Zigbee app brings them from Zigbee2MQTT: it registers them when it
 // starts and says those are all it has, carries out the commands the core hands
 // it, and reports what the devices say back, remotes' presses and releases, and
@@ -49,6 +49,7 @@ type Gadget = {
     | "motion"
     | "contact"
     | "media"
+    | "audio"
     | "purifier";
   name: string;
   // What the driver says it is, if it says.
@@ -58,15 +59,6 @@ type Gadget = {
   answers: boolean;
 };
 
-const capabilityIds = {
-  light: "light",
-  switch: "power",
-  button: "button",
-  media: "media",
-} as const;
-// What a remote's button can do, and which of that is a hold.
-export const remoteActions = ["single", "double", "hold"];
-export const remoteHolds = ["hold"];
 // What the driver says a gadget is: a switch whose name or model says it is
 // a plug is one, a purifier is nothing Sanctum uses, and the rest are what
 // their kind is.
@@ -89,6 +81,7 @@ const models = {
   motion: "Motion sensor",
   contact: "Contact sensor",
   media: "Media box",
+  audio: "Microphone",
   purifier: "Air purifier",
 };
 // A climate sensor's two readings and its battery, as it first says them.
@@ -194,7 +187,9 @@ class Radio {
                 ? { open: false, battery: 95 }
                 : kind === "media"
                   ? { on: true, activity: "idle", volume: 30, muted: false }
-                  : { on: false },
+                  : kind === "audio"
+                    ? { muted: false }
+                    : { on: false },
       answers: true,
     });
     if (this.ctx) {
@@ -540,45 +535,7 @@ class Radio {
       // What a test says it is goes over the wire as it is, one a core
       // refuses too.
       type: (gadget.type as DeclaredType | undefined) ?? typeOf(gadget),
-      capabilities:
-        gadget.kind === "purifier"
-          ? []
-          : gadget.kind === "sensor"
-            ? sensorCapabilities
-            : gadget.kind === "motion"
-              ? motionCapabilities
-              : gadget.kind === "contact"
-                ? [{ id: "contact", kind: "contact" }]
-                : gadget.kind === "media"
-                  ? [
-                      {
-                        id: capabilityIds.media,
-                        kind: "media",
-                        features: mediaFeatures,
-                      },
-                    ]
-                  : [
-                      gadget.kind === "light"
-                        ? {
-                            id: capabilityIds.light,
-                            kind: "light",
-                            features: {
-                              brightness: true,
-                              colorTemperature: { min: 153, max: 500 },
-                              color: true,
-                            },
-                          }
-                        : gadget.kind === "button"
-                          ? {
-                              id: capabilityIds.button,
-                              kind: "button",
-                              features: {
-                                actions: remoteActions,
-                                holds: remoteHolds,
-                              },
-                            }
-                          : { id: capabilityIds.switch, kind: "switch" },
-                    ],
+      capabilities: capabilities[gadget.kind],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)
@@ -609,30 +566,6 @@ const sleeps = (gadget: Gadget) =>
   gadget.kind === "motion" ||
   gadget.kind === "contact";
 
-// A motion sensor's motion, with its settings, and its two readings.
-const motionCapabilities: DeviceRegistration["capabilities"] = [
-  {
-    id: "occupancy",
-    kind: "motion",
-    features: {
-      sensitivity: ["low", "medium", "high"],
-      clearAfter: { min: 10, max: 3600 },
-      indicator: true,
-    },
-  },
-  { id: "illuminance", kind: "sensor", features: { measures: "illuminance" } },
-  { id: "temperature", kind: "sensor", features: { measures: "temperature" } },
-];
-
-// A media player that does all a media player can: power, every step of
-// playback, a volume it can be set to, and mute.
-const mediaFeatures: MediaFeatures = {
-  power: true,
-  playback: ["play", "pause", "stop", "next", "previous", "seek"],
-  volume: "level",
-  mute: true,
-};
-
 // What a media player does with a command: a step of the volume moves it by
 // 5, stop leaves it idle, a place in what's playing is where it is now, and
 // next and previous change nothing it says; the rest is the state asked for.
@@ -655,12 +588,6 @@ function playMedia(
     Object.assign(state, command);
   }
 }
-
-// A sensor's readings, each a capability.
-const sensorCapabilities: DeviceRegistration["capabilities"] = [
-  { id: "temperature", kind: "sensor", features: { measures: "temperature" } },
-  { id: "humidity", kind: "sensor", features: { measures: "humidity" } },
-];
 
 // What a gadget says of itself: a remote has no state, only presses; a
 // sensor says its readings and its battery.

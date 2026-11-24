@@ -80,3 +80,37 @@ describe("an app's action about a device", () => {
     expect(lastChangeWords(log)).toBe("Alex changed its ring at 21:52");
   });
 });
+
+describe("a smart speaker's microphones", () => {
+  const microphones = (
+    muted: boolean,
+    fields: Parameters<typeof entry>[0] = {},
+  ) =>
+    entry({
+      detail: {
+        capability: "audio",
+        capabilityKind: "audio",
+        asked: { muted },
+      },
+      subject: speaker,
+      ...fields,
+    });
+
+  it("say they were muted or turned on", () => {
+    expect(activityWords(microphones(true)).title).toBe(
+      "Office Speaker muted its microphones",
+    );
+    expect(activityWords(microphones(false), "device").title).toBe(
+      "Turned on its microphones",
+    );
+  });
+
+  it("say what didn't happen when its own switch held them", () => {
+    expect(
+      activityWords(
+        microphones(false, { outcome: "failed", reason: "no_answer" }),
+        "device",
+      ).title,
+    ).toBe("Didn't turn on its microphones: it didn't answer");
+  });
+});

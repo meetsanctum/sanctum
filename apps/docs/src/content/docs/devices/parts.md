@@ -13,15 +13,16 @@ Every part says what it can do when its device joins, such as whether a
 light dims. Sanctum offers only what the part can do, so a light that can't
 change colour has no colours to choose.
 
-| Part    | Id        | It says                       | It can be asked to                 |
-| ------- | --------- | ----------------------------- | ---------------------------------- |
-| Light   | `light`   | On or off, brightness, colour | Turn on or off, dim, change colour |
-| Switch  | `switch`  | On or off                     | Turn on or off                     |
-| Sensor  | `sensor`  | One reading                   | Nothing                            |
-| Motion  | `motion`  | Motion or none                | Change its settings                |
-| Contact | `contact` | Open or closed                | Nothing                            |
-| Media   | `media`   | What it plays, and how loud   | Play, pause, skip, set its volume  |
-| Button  | `button`  | That it was pressed, and how  | Nothing                            |
+| Part        | Id        | It says                                                | It can be asked to                 |
+| ----------- | --------- | ------------------------------------------------------ | ---------------------------------- |
+| Light       | `light`   | On or off, brightness, colour                          | Turn on or off, dim, change colour |
+| Switch      | `switch`  | On or off                                              | Turn on or off                     |
+| Sensor      | `sensor`  | One reading                                            | Nothing                            |
+| Motion      | `motion`  | Motion or none                                         | Change its settings                |
+| Contact     | `contact` | Open or closed                                         | Nothing                            |
+| Media       | `media`   | What it plays, and how loud                            | Play, pause, skip, set its volume  |
+| Microphones | `audio`   | Whether they're muted, and when it heard its wake word | Mute or unmute them                |
+| Button      | `button`  | That it was pressed, and how                           | Nothing                            |
 
 ## Light
 
@@ -105,6 +106,24 @@ player can confirm, so each is done once its driver takes it.
 
 History keeps when a media player played and when it was on, never what it
 played or how loud.
+
+## Microphones
+
+A microphones part belongs to a device that listens for its wake word, such
+as a smart speaker: it makes the device a smart speaker. It says whether its
+microphones are muted, where they can be, and when it last heard its wake
+word. It never carries what the microphones hear.
+
+- **Mutes:** whether Sanctum can mute and unmute them.
+- **Mute switch:** whether the device has a mute switch of its own, as the
+  Home Assistant Voice PE has on its side. That switch mutes them too, and
+  while it's on, only it turns them back on. When an unmute times out,
+  the Microphones page shows the failure and reminds you to check the
+  switch if the microphones are still muted.
+
+Muting and unmuting wait for the device to say it did them. History keeps
+nothing of its microphones. A smart speaker's detail shows them on its
+Microphones page.
 
 ## Button
 

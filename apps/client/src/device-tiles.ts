@@ -547,8 +547,12 @@ export function sectionsByRoom(
 
 // The kind of the capability that says what a device of a type is: a
 // light's light, a plug's switch, a motion sensor's motion.
+// A smart speaker's microphones have no tile: its room's tile is its media
+// player's.
 export const primaryKindOf = (type: DeviceType) =>
-  deviceTypes.find((each) => each.id === type)?.needs[0];
+  type === "smart-speaker"
+    ? "media"
+    : deviceTypes.find((each) => each.id === type)?.needs[0];
 
 const isControlTile = (tile: Tile) =>
   tile.kind === "light" || tile.kind === "switch";

@@ -5,8 +5,8 @@ import type { DeviceFacts } from "../facts";
 import type { DeviceAction } from "../page";
 import { SpeakerCards } from "./speaker-cards";
 
-// ESPHome's page in its devices' detail: on a smart speaker its microphones
-// and ring first, then how the device is reached, what it runs, its Wi-Fi
+// ESPHome's page in its devices' detail: on a smart speaker its ring
+// first, then how the device is reached, what it runs, its Wi-Fi
 // signal, and what it has that the app doesn't bring in.
 
 /** A Wi-Fi signal in words, then in dBm with a true minus sign. */

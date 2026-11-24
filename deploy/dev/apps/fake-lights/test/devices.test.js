@@ -223,3 +223,26 @@ test("starts with previously added devices even when their stored type is outdat
   await core.command("desk-plug", "power", "switch", { on: true });
   assert.deepEqual(core.latest("desk-plug", "power"), { on: true });
 });
+
+test("a smart speaker has microphones, which it mutes when asked", async () => {
+  const speaker = core.registered.get("office-speaker");
+  assert.deepEqual(
+    speaker.capabilities.find((each) => each.kind === "audio"),
+    {
+      id: "microphones",
+      kind: "audio",
+      features: { mutes: true, muteSwitch: false },
+    },
+  );
+  const reports = [];
+  await app.driver.command(
+    {
+      actor: { kind: "user", id: "resident" },
+      devices: { report: async (report) => reports.push(report) },
+    },
+    { key: "office-speaker", kind: "audio", command: { muted: true } },
+  );
+  assert.deepEqual(reports, [
+    { key: "office-speaker", states: { microphones: { muted: true } } },
+  ]);
+});

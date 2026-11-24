@@ -1,4 +1,4 @@
-import { ActionError } from "@meetsanctum/app-sdk";
+import { ActionError, type AudioState } from "@meetsanctum/app-sdk";
 import {
   EntityCategory,
   entityId,
@@ -10,26 +10,21 @@ import type { Session } from "./connection.js";
 import { ringColourDistance, ringRgb } from "./ring-colour.js";
 import { hasVoiceAssistant } from "./registration.js";
 
-// A smart speaker's own parts, which only ESPHome's page shows: its
-// microphones, the Mute switch its firmware has, and its ring, the LED Ring
-// light. The ring is never a light in the home: its colour and brightness
-// are those of every animation the speaker shows as it listens and
-// answers, the speaker's look rather than a lamp. The Home Assistant Voice
-// PE's firmware names both so, as settings of its own.
+// A smart speaker's own parts: the Mute switch its firmware has, which is
+// its microphones in the core (its `audio` part), and its ring, the LED
+// Ring light, which only ESPHome's page shows. The ring is never a light in
+// the home: its colour and brightness are those of every animation the
+// speaker shows as it listens and answers, the speaker's look rather than
+// a lamp. The Home Assistant Voice PE's firmware names both so, as
+// settings of its own, and its side switch mutes it too.
 
 /** A smart speaker's own parts, by their entities, where it has them. */
 export type SpeakerParts = { mute: Entity | null; ring: Entity | null };
 
-export type SpeakerSettings = {
-  /** Whether its microphones are on, unknown until it says. */
-  microphones: boolean | null;
+/** What a smart speaker's page shows of it. */
+export type SpeakerState = {
   /** Its ring, unknown until it says. */
   ring: Ring | null;
-};
-
-/** What a smart speaker's page shows of it. */
-export type SpeakerState = SpeakerSettings & {
-  heardWakeWordAt: number | null;
 };
 
 export type Ring = {
@@ -41,16 +36,14 @@ export type Ring = {
   brightness: number;
 };
 
-/** A change to a smart speaker's parts, each left as it is where unsaid. */
-export type SpeakerChange = {
-  microphones?: boolean;
-  ring?: Partial<Ring>;
-};
+/** A change to a smart speaker's ring, each part left as it is where unsaid. */
+export type SpeakerChange = { ring: Partial<Ring> };
 
 /** A smart speaker's own parts, or null for a device that isn't one. */
-export function speakerPartsOf(
-  session: Pick<Session, "info" | "entities">,
-): SpeakerParts | null {
+export function speakerPartsOf(session: {
+  info: Pick<Session["info"], "voiceAssistantFeatureFlags">;
+  entities: readonly Entity[];
+}): SpeakerParts | null {
   if (!hasVoiceAssistant(session.info)) return null;
   const own = (type: string, objectId: string) =>
     session.entities.find(
@@ -80,43 +73,32 @@ function ringOf(event: TelemetryEvent & { type: "light" }): Ring {
   };
 }
 
-export function speakerSettingsOf(
+export function speakerStateOf(
   { client }: Session,
-  { mute, ring }: SpeakerParts,
-): SpeakerSettings {
-  const switches = mute && client.latest(entityId("switch", mute.objectId));
+  { ring }: SpeakerParts,
+): SpeakerState {
   const lights = ring && client.latest(entityId("light", ring.objectId));
-  return {
-    microphones: switches ? switches.state !== true : null,
-    ring: lights ? ringOf(lights) : null,
-  };
+  return { ring: lights ? ringOf(lights) : null };
 }
 
-async function changeMicrophones(
-  { client }: Session,
-  mute: Entity,
-  microphones: boolean,
-) {
-  const id = entityId("switch", mute.objectId);
-  const muted = !microphones;
-  const matches = (event: TelemetryEvent & { type: "switch" }) =>
-    (event.state === true) === muted;
-  const current = client.latest(id);
-  if (current && matches(current)) return;
-  try {
-    await client.commandAndAwait(id, { state: muted }, { predicate: matches });
-  } catch (error) {
-    // The hardware switch can prevent unmuting while the connection stays open.
-    if (
-      microphones &&
-      error instanceof DOMException &&
-      error.name === "TimeoutError" &&
-      client.latest(id)?.state === true
-    ) {
-      throw new ActionError("conflict", "Still muted by its side switch");
-    }
-    throw error;
-  }
+/** Whether its Mute switch is on, which its side switch turns on too. */
+export function mutedOf({ client }: Session, { mute }: SpeakerParts) {
+  const switches = mute && client.latest(entityId("switch", mute.objectId));
+  return switches ? switches.state === true : null;
+}
+
+/**
+ * Its microphones as the core has them: whether they're muted, where it
+ * has said, and when it last heard its wake word.
+ */
+export function audioStateOf(
+  muted: boolean | null,
+  heardAt: number | null,
+): AudioState {
+  return {
+    ...(muted !== null && { muted }),
+    ...(heardAt !== null && { heardAt: new Date(heardAt).toISOString() }),
+  };
 }
 
 async function changeRing(
@@ -158,15 +140,6 @@ export async function changeSpeaker(
   parts: SpeakerParts,
   change: SpeakerChange,
 ) {
-  if (change.microphones !== undefined && !parts.mute) {
-    throw new ActionError("not_found", "It has no microphones' switch");
-  }
-  if (change.ring && !parts.ring) {
-    throw new ActionError("not_found", "It has no ring");
-  }
-  if (change.microphones !== undefined && parts.mute) {
-    await changeMicrophones(session, parts.mute, change.microphones);
-  }
-  if (change.ring && parts.ring)
-    await changeRing(session, parts.ring, change.ring);
+  if (!parts.ring) throw new ActionError("not_found", "It has no ring");
+  await changeRing(session, parts.ring, change.ring);
 }

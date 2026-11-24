@@ -4,10 +4,11 @@ import type { SpeakerState } from "../src/speaker.js";
 import { add, announce, startHome } from "./support.js";
 import { player, voicePe } from "./voice-pe.js";
 
-// A smart speaker's own parts on ESPHome's page: its microphones, which its
-// side switch can hold muted, its ring's glow, colour and brightness, and
-// when it last heard its wake word, kept across restarts. Neither part is
-// a capability, so neither reaches the rest of the home.
+// A smart speaker's own parts: its microphones, its `audio` part in the
+// core, which its side switch can hold muted and which carries when it last
+// heard its wake word, kept across restarts; and on ESPHome's page its
+// ring's glow, colour and brightness, which never reaches the rest of the
+// home.
 
 let home: Awaited<ReturnType<typeof startHome>>;
 
@@ -33,35 +34,39 @@ async function addedSpeaker() {
   const read = async () =>
     (await home.core.call("esphome.speaker", { device: id })) as SpeakerState;
   // The page's change, by the action it calls for it.
-  const change = async (input: { microphones?: boolean; ring?: object }) => {
-    if (input.microphones !== undefined) {
-      await home.core.call(
-        input.microphones
-          ? "esphome.unmuteMicrophones"
-          : "esphome.muteMicrophones",
-        { device: id },
-      );
-    }
-    if (input.ring) {
-      await home.core.call("esphome.changeRing", { device: id, ...input.ring });
-    }
+  const change = async (input: { ring: object }) => {
+    await home.core.call("esphome.changeRing", { device: id, ...input.ring });
   };
-  await eventually(async () => {
-    const now = await read();
-    return now.ring !== null && now.microphones !== null;
-  }, "its parts");
+  const audio = () => home.core.latest(key, "audio");
+  const mute = (muted: boolean) =>
+    home.core.command(key, "audio", "audio", { muted });
+  await eventually(async () => (await read()).ring !== null, "its ring");
+  await home.core.until(() => audio() !== undefined, "its microphones");
   await home.core.until(() => device.voiceFollowed, "its requests followed");
-  return { device, key, id, read, change };
+  return { device, key, id, read, change, audio, mute };
 }
 
 describe("a smart speaker's page", () => {
-  it("shows its microphones on and its ring as it ships, and nothing heard yet", async () => {
-    const { read } = await addedSpeaker();
+  it("has its microphones on and its ring as it ships, and nothing heard yet", async () => {
+    const { read, audio } = await addedSpeaker();
 
+    expect(audio()).toEqual({ muted: false });
     expect(await read()).toEqual({
-      microphones: true,
       ring: { glow: false, colour: "#18bbf2", brightness: 66 },
-      heardWakeWordAt: null,
+    });
+  });
+
+  it("registers its microphones as its audio part, which can be muted", async () => {
+    const { key } = await addedSpeaker();
+
+    expect(
+      home.core.registered
+        .get(key)
+        ?.capabilities.find((each) => each.kind === "audio"),
+    ).toEqual({
+      id: "audio",
+      kind: "audio",
+      features: { mutes: true, muteSwitch: true },
     });
   });
 
@@ -74,28 +79,40 @@ describe("a smart speaker's page", () => {
   });
 
   it("mutes and unmutes its microphones", async () => {
-    const { device, read, change } = await addedSpeaker();
+    const { device, audio, mute } = await addedSpeaker();
 
-    await change({ microphones: false });
+    await mute(true);
+    await home.core.until(() => audio()?.muted === true, "muted");
     expect(device.states[203]).toMatchObject({ state: true });
-    expect((await read()).microphones).toBe(false);
-    await change({ microphones: true });
-    expect((await read()).microphones).toBe(true);
+    await mute(false);
+    await home.core.until(() => audio()?.muted === false, "unmuted");
   });
 
-  it("refuses to turn on microphones its side switch holds muted", async () => {
-    const { device, read, change } = await addedSpeaker();
+  it("stays muted while its side switch holds it", async () => {
+    const { device, audio, mute } = await addedSpeaker();
     device.held.set(203, { state: true });
     device.setState(203, { state: true });
-    await eventually(
-      async () => (await read()).microphones === false,
-      "muted by its side",
-    );
+    await home.core.until(() => audio()?.muted === true, "muted by its side");
 
-    await expect(change({ microphones: true })).rejects.toMatchObject({
-      code: "conflict",
-    });
-    expect((await read()).microphones).toBe(false);
+    const commands = device.commands.length;
+    const reports = home.core.reports.length;
+    await mute(false);
+    await home.core.until(
+      () =>
+        device.commands
+          .slice(commands)
+          .some(
+            (command) => command.key === 203 && command.fields.state === false,
+          ),
+      "unmute sent to the switch",
+    );
+    await home.core.until(
+      () =>
+        home.core.reports
+          .slice(reports)
+          .some((report) => report.states.audio?.muted === true),
+      "switch reports it is still muted",
+    );
   });
 
   it("changes its ring's glow, colour and brightness, each alone", async () => {
@@ -155,48 +172,50 @@ describe("a smart speaker's page", () => {
     expect((await read()).ring?.brightness).toBe(40);
   });
 
-  it("drops microphone state from the old session after reconnecting", async () => {
+  it("drops ring state from the old session after reconnecting", async () => {
     const { device, read } = await addedSpeaker();
-    expect((await read()).microphones).toBe(true);
+    expect((await read()).ring).not.toBeNull();
 
-    delete device.states[203];
+    delete device.states[204];
     device.reboot();
     await announce(home.core, device);
     await home.core.until(() => device.voiceFollowed, "followed again");
 
-    expect((await read()).microphones).toBeNull();
+    expect((await read()).ring).toBeNull();
   });
 
-  it("records only wake words and keeps the timestamp after an app restart", async () => {
-    const { device, read } = await addedSpeaker();
+  it("says when it heard its wake word, never a button's press, and keeps it after a restart", async () => {
+    const { device, audio } = await addedSpeaker();
     device.wake(null);
     await home.core.until(
       () => device.voiceMessages.length === 2,
       "button run ended",
     );
-    expect((await read()).heardWakeWordAt).toBeNull();
+    expect(audio()?.heardAt).toBeUndefined();
     const before = Date.now();
 
     device.wake();
-    await eventually(
-      async () => (await read()).heardWakeWordAt !== null,
-      "heard",
-    );
-    const heard = (await read()).heardWakeWordAt!;
+    await home.core.until(() => audio()?.heardAt !== undefined, "heard");
+    const heardAt = audio()!.heardAt as string;
+    const heard = Date.parse(heardAt);
     expect(heard).toBeGreaterThanOrEqual(before);
     expect(heard).toBeLessThanOrEqual(Date.now());
+    expect(audio()?.muted).toBe(false);
 
-    await device.unplug();
     await home.core.stop();
+    home.core.reports.length = 0;
     await home.core.start();
-    expect(await read()).toEqual({
-      microphones: null,
-      ring: null,
-      heardWakeWordAt: heard,
-    });
+    await announce(home.core, device);
+    await home.core.until(
+      () =>
+        home.core.reports.some(
+          (each) => each.states.audio?.heardAt === heardAt,
+        ),
+      "said again",
+    );
   });
 
-  it("tracks the wake word of a speaker without microphone or ring controls", async () => {
+  it("has microphones that can't be muted without a Mute switch, and says when it heard", async () => {
     home = await startHome();
     const device = await home.plugIn({
       voiceAssistant: true,
@@ -204,17 +223,47 @@ describe("a smart speaker's page", () => {
     });
     const key = await add(home.core, device);
     await home.core.until(() => device.voiceFollowed, "its requests followed");
-    const read = () =>
-      home.core.call("esphome.speaker", {
-        device: `device:${key}`,
-      }) as Promise<SpeakerState>;
+    const registered = home.core.registered.get(key);
 
+    expect(registered?.type).toBe("smart-speaker");
+    expect(
+      registered?.capabilities.find((each) => each.kind === "audio"),
+    ).toEqual({
+      id: "audio",
+      kind: "audio",
+      features: { mutes: false, muteSwitch: false },
+    });
     device.wake();
-    await eventually(
-      async () => (await read()).heardWakeWordAt !== null,
+    await home.core.until(
+      () => home.core.latest(key, "audio")?.heardAt !== undefined,
       "heard",
     );
-    expect(await read()).toMatchObject({ microphones: null, ring: null });
+    expect(home.core.latest(key, "audio")?.muted).toBeUndefined();
+  });
+
+  it("says when it heard a single wake word even if its first report fails", async () => {
+    let attempts = 0;
+    home = await startHome(undefined, {
+      beforeReport({ states }) {
+        if (states.audio?.heardAt && ++attempts === 1) {
+          throw new Error("The core did not answer");
+        }
+      },
+    });
+    const device = await home.plugIn({
+      voiceAssistant: true,
+      entities: [player],
+    });
+    const key = await add(home.core, device);
+    await home.core.until(() => device.voiceFollowed, "its requests followed");
+
+    device.wake();
+
+    await home.core.until(
+      () => home.core.latest(key, "audio")?.heardAt !== undefined,
+      "heard after a retry",
+    );
+    expect(attempts).toBe(2);
   });
 
   it("isn't a smart speaker's page on another device", async () => {

@@ -12,17 +12,18 @@ a room's page.
 
 ## Parts
 
-Each part of a device does one thing. Sanctum knows seven:
+Each part of a device does one thing. Sanctum knows eight:
 
-| Part    | What it does                                             |
-| ------- | -------------------------------------------------------- |
-| Light   | Turns on and off, and may dim or change colour           |
-| Switch  | Turns something on and off                               |
-| Sensor  | Measures one thing: temperature, humidity or light level |
-| Motion  | Says whether something is moving                         |
-| Contact | Says whether something is open or closed                 |
-| Media   | Plays, and says what it is playing and how loud          |
-| Button  | Is pressed                                               |
+| Part        | What it does                                             |
+| ----------- | -------------------------------------------------------- |
+| Light       | Turns on and off, and may dim or change colour           |
+| Switch      | Turns something on and off                               |
+| Sensor      | Measures one thing: temperature, humidity or light level |
+| Motion      | Says whether something is moving                         |
+| Contact     | Says whether something is open or closed                 |
+| Media       | Plays, and says what it is playing and how loud          |
+| Microphones | Listens for its wake word, and can be muted              |
+| Button      | Is pressed                                               |
 
 A device can have several parts, and several of the same part. A ceiling
 light is one light. A wall module with two relays is two switches. A sensor

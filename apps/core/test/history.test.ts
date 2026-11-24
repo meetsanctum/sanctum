@@ -7,7 +7,14 @@ import {
   radio,
   settled,
 } from "./devices-support.js";
-import { get, post, sharedClient, testCore, type TestCore } from "./support.js";
+import {
+  claimed,
+  get,
+  post,
+  sharedClient,
+  testCore,
+  type TestCore,
+} from "./support.js";
 
 // History: each change of what a device reported, or of whether it
 // answered, and its roll-ups every 5 minutes and every hour, for whoever
@@ -374,6 +381,39 @@ describe("history", () => {
       (await statistics(core, maya.token, lamp, { period: "day" })).statusCode,
     ).toBe(400);
     expect((await states(core, "not-a-token", lamp)).statusCode).toBe(401);
+  });
+
+  it("keeps no history of microphone mute states or wake words", async () => {
+    const core = await testCore();
+    const maya = await claimed(core);
+    const { id } = core.devices.register("test.lamps", {
+      key: "speaker-1",
+      name: "Speaker",
+      type: "smart-speaker",
+      capabilities: [{ id: "audio", kind: "audio", features: { mutes: true } }],
+    });
+    core.devices.report("test.lamps", {
+      key: "speaker-1",
+      availability: "online",
+      states: { audio: { muted: false, heardAt: core.now().toISOString() } },
+    });
+    await later(core, minute);
+    core.devices.report("test.lamps", {
+      key: "speaker-1",
+      states: { audio: { muted: true, heardAt: core.now().toISOString() } },
+    });
+    core.history.maintain();
+
+    expect(
+      core.db.$client
+        .prepare(
+          "select count(*) as count from history_series where device_id = ?",
+        )
+        .get(id),
+    ).toEqual({ count: 0 });
+    expect((await states(core, maya.token, id, {}, "audio")).statusCode).toBe(
+      404,
+    );
   });
 
   it("lets anyone stop keeping a device's history, which deletes it, and keep it again", async () => {

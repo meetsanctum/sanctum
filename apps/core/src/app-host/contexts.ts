@@ -163,6 +163,7 @@ export function createAppContexts(options: {
     const core = createCoreCalls({
       appId,
       actor,
+      protocol: entry.manifest.protocol,
       permissions: () => entry.granted,
       permissionsRevision: () => entry.grantsRevision,
       query: storage.query,

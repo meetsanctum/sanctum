@@ -31,6 +31,8 @@
 // driver.cancelRepair.
 // 18 lets an app ask for a range of ports (lan:tcp:<from>-<to>), which a core
 // before would read as no port at all.
-export const protocolVersion = 18;
+// 19 brings smart speakers' microphones: a driver may register the `audio`
+// kind.
+export const protocolVersion = 19;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

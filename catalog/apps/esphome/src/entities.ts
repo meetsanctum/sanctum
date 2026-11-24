@@ -1,4 +1,8 @@
-import type { DeviceRegistration, MediaPlayback } from "@meetsanctum/app-sdk";
+import {
+  maxDeviceCapabilities,
+  type DeviceRegistration,
+  type MediaPlayback,
+} from "@meetsanctum/app-sdk";
 import { ColorMode, EntityCategory, type Entity } from "esphome-client";
 
 // What a device's entities are in Sanctum: the capabilities they map onto,
@@ -187,7 +191,11 @@ export function mapEntities(entities: readonly Entity[]): Mapping {
       entity.entityCategory === EntityCategory.DIAGNOSTIC ||
       entity.entityCategory === EntityCategory.CONFIG;
     const capability = ownPart ? null : capabilityOf(entity);
-    if (capability && !ids.has(capability.id) && mapped.length < 32) {
+    if (
+      capability &&
+      !ids.has(capability.id) &&
+      mapped.length < maxDeviceCapabilities
+    ) {
       ids.add(capability.id);
       mapped.push({ capability, entity });
     } else if (

@@ -9,6 +9,7 @@ import type { HostedApp } from "../src/apps";
 import { useArtwork } from "../src/artwork";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail } from "../src/device-detail";
+import { sectionsOfRoom, tilesOf } from "../src/device-tiles";
 import { forgetPageTicket } from "../src/frames/page-ticket";
 import { missingArtworkTint } from "../src/media-detail";
 import { useDevices } from "../src/use-devices";
@@ -52,6 +53,18 @@ const button: CapabilityInfo = {
   features: { actions: ["single"], holds: [] },
   state: null,
   observed: null,
+  desired: null,
+  sync: "synced",
+  setBy: null,
+  changedAt: null,
+};
+
+const audio: CapabilityInfo = {
+  id: "audio",
+  kind: "audio",
+  features: { mutes: true, muteSwitch: false },
+  state: { muted: false },
+  observed: { muted: false },
   desired: null,
   sync: "synced",
   setBy: null,
@@ -234,6 +247,35 @@ it.each([
     second,
     "History",
     "Activity",
+  ]);
+});
+
+it("shows a smart speaker with a button by its playback, and mutes from Microphones", async () => {
+  const speaker = mediaPlayer("speaker", "Speaker", "office", {
+    activity: "idle",
+  });
+  devices = [
+    {
+      ...speaker,
+      type: "smart-speaker",
+      capabilities: [button, ...speaker.capabilities, audio],
+    },
+  ];
+  const sections = sectionsOfRoom(tilesOf(devices, places), devices);
+  expect(sections.map(({ id, tiles }) => [id, tiles[0]?.capabilityId])).toEqual(
+    [["media", "player"]],
+  );
+  await open("speaker/player");
+  const tab = dialog().querySelector<HTMLButtonElement>(
+    '[role="tab"][aria-label="Microphones"]',
+  )!;
+  await act(async () => tab.click());
+  const microphones =
+    dialog().querySelector<HTMLButtonElement>('[role="switch"]')!;
+  expect(microphones.getAttribute("aria-checked")).toBe("true");
+  await act(async () => microphones.click());
+  expect(posted()).toEqual([
+    { device: "speaker", capability: "audio", command: { muted: true } },
   ]);
 });
 

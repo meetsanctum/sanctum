@@ -3,6 +3,7 @@ import { describeDriver } from "@meetsanctum/app-testkit";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { deviceViewOf } from "../src/app-host/calls.js";
 import lampsDriver from "./fixtures/apps/lamps/index.js";
 import {
   lampsCore,
@@ -10,7 +11,7 @@ import {
   radio,
   settled,
 } from "./devices-support.js";
-import { post, sharedClient, type TestCore } from "./support.js";
+import { post, sharedClient, testCore, type TestCore } from "./support.js";
 
 // Apps using places and devices through their context: the app must hold the
 // permission, and the actor behind the call must be allowed what it does.
@@ -20,6 +21,43 @@ function call(core: TestCore, token: string, action: string, input: object) {
     token,
   });
 }
+
+describe("a smart speaker's microphones", () => {
+  it("hides wake word updates from an app that can only read playback", async () => {
+    const core = await testCore();
+    const { id } = core.devices.register("test.lamps", {
+      key: "speaker",
+      name: "Speaker",
+      type: "smart-speaker",
+      capabilities: [
+        { id: "playback", kind: "media" },
+        { id: "mics", kind: "audio" },
+      ],
+    });
+    const view = deviceViewOf("sanctum.example", ["devices.read:media"]);
+    core.devices.report("test.lamps", {
+      key: "speaker",
+      availability: "online",
+      states: { playback: { activity: "idle" } },
+    });
+    const before = core.devices.get(id, view);
+    expect(before?.lastSeenAt).toBe(core.now().toISOString());
+    expect(before?.capabilities.map((part) => part.kind)).toEqual(["media"]);
+
+    core.advance(1_000);
+    const heardAt = core.now().toISOString();
+    core.devices.report("test.lamps", {
+      key: "speaker",
+      states: { mics: { heardAt } },
+    });
+
+    expect(core.devices.get(id, view)).toEqual(before);
+    expect(
+      core.devices.get(id)?.capabilities.find((part) => part.kind === "audio")
+        ?.observed,
+    ).toEqual({ heardAt });
+  });
+});
 
 describe("an app with places.read and light permissions", () => {
   it("reads the home and the lights, and nothing else", async () => {
@@ -245,7 +283,16 @@ describe("lifecycle hooks", () => {
 // playing its pretend radio's side.
 describeDriver({
   app: lampsDriver,
-  kinds: ["light", "switch", "button", "sensor", "motion", "contact", "media"],
+  kinds: [
+    "light",
+    "switch",
+    "button",
+    "sensor",
+    "motion",
+    "contact",
+    "media",
+    "audio",
+  ],
   async setUp() {
     radio.reset();
   },

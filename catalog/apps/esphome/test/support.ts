@@ -54,10 +54,15 @@ const light: EmulatedEntity = {
   },
 };
 
-/** One entity of each kind, with a state, as a device of that kind has. */
+/**
+ * One entity of each kind, with a state, as a device of that kind has. A
+ * smart speaker's microphones are its Mute switch, on a device with a voice
+ * assistant and a media player.
+ */
 export function entitiesOf(kind: CapabilityKind): {
   entities: EmulatedEntity[];
   states: EmulatedOptions["states"];
+  voiceAssistant?: boolean;
 } {
   // Its own copy, which a test may change.
   return structuredClone(fixtureOf(kind));
@@ -66,6 +71,7 @@ export function entitiesOf(kind: CapabilityKind): {
 function fixtureOf(kind: CapabilityKind): {
   entities: EmulatedEntity[];
   states: EmulatedOptions["states"];
+  voiceAssistant?: boolean;
 } {
   switch (kind) {
     case "light":
@@ -152,6 +158,30 @@ function fixtureOf(kind: CapabilityKind): {
         ],
         states: { 107: { state: 1, volume: 0.5, muted: false } },
       };
+    case "audio":
+      return {
+        voiceAssistant: true,
+        entities: [
+          {
+            type: "media_player",
+            key: 107,
+            objectId: "media_player",
+            name: "Media Player",
+            fields: { supportsPause: true },
+          },
+          {
+            type: "switch",
+            key: 108,
+            objectId: "mute",
+            name: "Mute",
+            fields: { entityCategory: EntityCategory.CONFIG },
+          },
+        ],
+        states: {
+          107: { state: 1, volume: 0.5, muted: false },
+          108: { state: false },
+        },
+      };
   }
 }
 
@@ -169,9 +199,18 @@ export const signalEntity: EmulatedEntity = {
 };
 
 /** A home with ESPHome running, and the devices it hears of. */
-export async function startHome(timingOverrides?: Partial<typeof timings>) {
+export async function startHome(
+  timingOverrides?: Partial<typeof timings>,
+  options?: Pick<
+    NonNullable<Parameters<typeof createDriverCore>[1]>,
+    "beforeReport"
+  >,
+) {
   const devices: EmulatedDevice[] = [];
-  const core = createDriverCore(app(timingOverrides), { migrationsFolder });
+  const core = createDriverCore(app(timingOverrides), {
+    migrationsFolder,
+    ...options,
+  });
   await core.start();
   return {
     core,

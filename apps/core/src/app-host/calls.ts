@@ -145,6 +145,7 @@ function forApp(error: unknown) {
 export function createCoreCalls(options: {
   appId: string;
   actor: Actor;
+  protocol?: number;
   // What the app may do now, its grants (grants.ts), read on every call.
   permissions: () => readonly string[];
   // Grows each time those grants change.
@@ -368,7 +369,7 @@ export function createCoreCalls(options: {
     async register(registration) {
       need(registerPermission);
       notForAgents();
-      return devices.register(appId, registration);
+      return devices.register(appId, registration, options.protocol);
     },
 
     async report(report) {

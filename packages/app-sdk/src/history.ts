@@ -39,7 +39,8 @@ export type HistoryPeriod = (typeof historyPeriods)[number];
  * on, as 1 or 0, a light's brightness while it was on, a sensor's reading
  * in its measure's standard unit, whether a motion sensor saw motion,
  * whether a contact sensor was open, and whether a media player was playing
- * and, where it has power, on, each as 1 or 0.
+ * and, where it has power, on, each as 1 or 0. A smart speaker's
+ * microphones keep no history.
  */
 export const historyFields = {
   light: ["on", "brightness"],
@@ -49,6 +50,7 @@ export const historyFields = {
   motion: ["motion"],
   contact: ["open"],
   media: ["playing", "on"],
+  audio: [],
 } as const satisfies Record<CapabilityKind, readonly string[]>;
 export type HistoryField = (typeof historyFields)[CapabilityKind][number];
 

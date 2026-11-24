@@ -39,6 +39,7 @@ import {
   confirmMs as defaultConfirmMs,
   confirms,
   prepare,
+  requiresReportedFields,
   settle,
   shownState,
   type Settled,
@@ -484,7 +485,7 @@ export function createDevices(
         (after.sync === "synced" || after.sync === "held") &&
         after.state !== null &&
         confirms(after.state, prepared.desired, {
-          reported: row.kind === "media",
+          reported: requiresReportedFields(row.kind),
         });
       hooks.accepted(
         { asked: prepared.desired, before: shownState(row), at },
