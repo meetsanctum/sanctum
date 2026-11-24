@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import * as sdk from "../src/index.js";
 import {
   addLocalDays,
   dateText,
@@ -29,13 +28,6 @@ const newYork = "America/New_York";
 const santiago = "America/Santiago";
 
 describe("local dates", () => {
-  it("keeps the existing helpers available at the package root", () => {
-    expect(sdk.localDate).toBe(localDate);
-    expect(sdk.addLocalDays).toBe(addLocalDays);
-    expect(sdk.zonedDateToUtc).toBe(zonedDateToUtc);
-    expect(sdk.isTimeZone).toBe(isTimeZone);
-  });
-
   it("are read in the home's time zone", () => {
     const instant = at("2026-10-29T23:30:00Z");
     expect(localDate(zurich, instant)).toBe("2026-10-30");

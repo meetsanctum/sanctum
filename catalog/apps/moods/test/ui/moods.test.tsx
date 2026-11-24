@@ -22,7 +22,12 @@ import { fakeClient } from "./support";
 // shell's (apps/client).
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [{ id: "office", name: "Office", floorId: null }],

@@ -1,7 +1,5 @@
 import {
-  homeClock,
   homeLocationSchema,
-  hourCycles,
   temperatureUnits,
   type Floor,
   type HomeLocation,
@@ -9,6 +7,7 @@ import {
   type Room,
   type Zone,
 } from "@meetsanctum/app-sdk";
+import { homeClock, hourCycles } from "@meetsanctum/app-sdk/clock";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";

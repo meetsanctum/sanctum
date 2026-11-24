@@ -1,11 +1,10 @@
 import {
-  addDays,
-  homeClock,
   turnOnType,
   type AppContext,
   type DeviceInfo,
   type TurnOn,
 } from "@meetsanctum/app-sdk";
+import { addDays, homeClock } from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 

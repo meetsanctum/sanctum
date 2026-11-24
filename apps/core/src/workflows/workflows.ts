@@ -1,5 +1,4 @@
 import {
-  hostTimeZone,
   keptWorkflow,
   runModes,
   workflowGraph,
@@ -9,6 +8,7 @@ import {
   type WorkflowProblem,
   type WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
+import { hostTimeZone } from "@meetsanctum/app-sdk/clock";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";

@@ -1,4 +1,5 @@
-import type { HourCycle, TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   index,
   integer,

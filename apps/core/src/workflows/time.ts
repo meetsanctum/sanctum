@@ -1,12 +1,11 @@
+import { weekdays, type Weekday } from "@meetsanctum/app-sdk";
 import {
   addDays,
   localParts,
   weekdayIndex,
-  weekdays,
   zonedTime,
   type LocalDate,
-  type Weekday,
-} from "@meetsanctum/app-sdk";
+} from "@meetsanctum/app-sdk/clock";
 
 // The workflows' times of day in the home's time zone, for timers and the
 // time condition, on the home clock: a time the clocks skip comes as much
