@@ -616,6 +616,7 @@ describe("the catalog's apps, from their packages", () => {
 
   it("have manifests whose every schema compiles", () => {
     expect(packages.map(({ app }) => app.id).sort()).toEqual([
+      "sanctum.apple-home-devices",
       "sanctum.esphome",
       "sanctum.moods",
       "sanctum.natural-light",

@@ -600,7 +600,9 @@ function VolumeSteps(props: {
 
 /**
  * Remote, a TV's second page: its power, and a smart speaker's microphones'
- * mute beside it, above its volume's + and −.
+ * mute beside it, above its volume's + and −, which stay in their place,
+ * dimmed, while the TV is off or where it has no volume to step, so every
+ * TV's Remote looks alike.
  */
 export function MediaRemote(props: Props & { microphones?: ReactNode }) {
   const { capability, microphones, onCommand } = props;
@@ -623,13 +625,13 @@ export function MediaRemote(props: Props & { microphones?: ReactNode }) {
           {microphones}
         </div>
       )}
-      {volume !== null && (
-        <VolumeSteps
-          name={props.name}
-          disabled={props.disabled || capability.state?.on === false}
-          onStep={(volumeStep) => onCommand({ volumeStep })}
-        />
-      )}
+      <VolumeSteps
+        name={props.name}
+        disabled={
+          props.disabled || capability.state?.on === false || volume === null
+        }
+        onStep={(volumeStep) => onCommand({ volumeStep })}
+      />
     </div>
   );
 }
@@ -669,7 +671,8 @@ export function MicrophonesToggle(props: {
 /**
  * Volume, a speaker's second page: mute, and a smart speaker's microphones'
  * mute beside it where Sanctum can mute them, above its level, as Remote is
- * laid out.
+ * laid out. A speaker with no volume to set shows its level dimmed in its
+ * place.
  */
 export function MediaVolume(props: Props & { microphones?: ReactNode }) {
   const { capability, microphones, onCommand } = props;
@@ -695,24 +698,29 @@ export function MediaVolume(props: Props & { microphones?: ReactNode }) {
           {microphones}
         </div>
       )}
-      {capability.features.volume === "level" ? (
-        <LevelSlider
-          label={`${props.name} volume`}
-          level={capability.state?.volume ?? 0}
-          fill="#ffffff"
-          valueText={(level) => `${level}%`}
-          disabled={props.disabled}
-          failures={props.failures}
-          onLevel={(volume) => onCommand({ volume })}
-        />
-      ) : (
-        capability.features.volume === "steps" && (
-          <VolumeSteps
-            name={props.name}
-            disabled={props.disabled}
-            onStep={(volumeStep) => onCommand({ volumeStep })}
+      {capability.features.volume !== "steps" ? (
+        // Dimmed as a disabled button is, where there's no level to set.
+        <div
+          className={
+            capability.features.volume === null ? "opacity-50" : undefined
+          }
+        >
+          <LevelSlider
+            label={`${props.name} volume`}
+            level={capability.state?.volume ?? 0}
+            fill="#ffffff"
+            valueText={(level) => `${level}%`}
+            disabled={props.disabled || capability.features.volume === null}
+            failures={props.failures}
+            onLevel={(volume) => onCommand({ volume })}
           />
-        )
+        </div>
+      ) : (
+        <VolumeSteps
+          name={props.name}
+          disabled={props.disabled}
+          onStep={(volumeStep) => onCommand({ volumeStep })}
+        />
       )}
     </div>
   );

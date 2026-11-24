@@ -1,0 +1,34 @@
+{
+  "name": "@meetsanctum/apple-home-devices",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "sanctum-app.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run && sanctum-app manifest --check",
+    "manifest": "sanctum-app manifest",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@meetsanctum/app-sdk": "workspace:*",
+    "node-appletv-remote": "0.5.0"
+  },
+  "devDependencies": {
+    "@meetsanctum/app-testkit": "workspace:*",
+    "@meetsanctum/typescript-config": "workspace:*",
+    "vitest": "^4.1.5"
+  }
+}

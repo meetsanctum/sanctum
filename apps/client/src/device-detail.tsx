@@ -309,11 +309,6 @@ export function DeviceDetail(props: {
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
-  const hasVolume =
-    mediaProps &&
-    !mediaProps.capability.features.power &&
-    (mediaProps.capability.features.volume !== null ||
-      mediaProps.capability.features.mute);
   const audio = device?.capabilities.find(
     (each) =>
       each.kind === "audio" &&
@@ -362,7 +357,8 @@ export function DeviceDetail(props: {
                 ),
               },
               // A player with power has a Remote, with its power; one
-              // without has its Volume, mute and level.
+              // without has its Volume, mute and level. Either shows its
+              // volume dimmed where it has none to change.
               ...(mediaProps.capability.features.power
                 ? [
                     {
@@ -377,22 +373,20 @@ export function DeviceDetail(props: {
                       ),
                     },
                   ]
-                : hasVolume
-                  ? [
-                      {
-                        id: "volume",
-                        label: "Volume",
-                        icon: Volume2,
-                        content: (
-                          <MediaVolume
-                            key={`${device.id}/volume`}
-                            {...mediaProps}
-                            microphones={microphones}
-                          />
-                        ),
-                      },
-                    ]
-                  : []),
+                : [
+                    {
+                      id: "volume",
+                      label: "Volume",
+                      icon: Volume2,
+                      content: (
+                        <MediaVolume
+                          key={`${device.id}/volume`}
+                          {...mediaProps}
+                          microphones={microphones}
+                        />
+                      ),
+                    },
+                  ]),
             ]
           : []),
         ...(motion

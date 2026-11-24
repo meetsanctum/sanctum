@@ -31,9 +31,10 @@ setup, the commands and the layout; these notes are the rules.
   MCP on stdio, passing calls on to the core's `/api/mcp` over pinned HTTPS.
 - `packages/typescript-config` — shared TypeScript settings.
 - `catalog/apps/*` — Sanctum apps, driver apps included, one workspace
-  package each: `esphome`, `moods`, `natural-light`, `weather` and `zigbee`.
-  An app's UI is its package's `./ui` export, built into pages the core
-  serves, which the client shows in frames.
+  package each: `apple-home-devices`, `esphome`, `moods`, `natural-light`,
+  `ollama`, `weather` and `zigbee`. An app's UI, where it has one, is its
+  package's `./ui` export, built into pages the core serves, which the client
+  shows in frames.
 - `assets/brand` — `@meetsanctum/brand`, the brand's files under their own
   licence: the logo, the app icons, the desktop app's icon and the brand's
   photos.

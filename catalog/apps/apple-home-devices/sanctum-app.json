@@ -1,0 +1,125 @@
+{
+  "id": "sanctum.apple-home-devices",
+  "name": "Apple Home Devices",
+  "version": "0.1.0",
+  "core": "^2.0.0",
+  "protocol": 21,
+  "summary": "Brings your Apple TVs and HomePods into your home.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": null,
+  "driver": {
+    "hooks": [
+      "command",
+      "remove",
+      "repair",
+      "discovered",
+      "add",
+      "cancelAdd",
+      "cancelRepair"
+    ],
+    "problems": {
+      "pairingLost": {
+        "words": "It's no longer paired with Sanctum",
+        "repair": {
+          "help": "Pair it again. The TV shows two codes, one after the other.",
+          "asks": [],
+          "later": [
+            "airplayCode",
+            "companionCode"
+          ]
+        }
+      }
+    },
+    "questions": {
+      "airplayCode": {
+        "label": "Code on the TV (1 of 2)",
+        "kind": "code",
+        "length": 4,
+        "refusals": {
+          "wrongCode": "That code didn't match."
+        },
+        "help": "The TV shows a four-digit code."
+      },
+      "companionCode": {
+        "label": "Code on the TV (2 of 2)",
+        "kind": "code",
+        "length": 4,
+        "refusals": {
+          "wrongCode": "That code didn't match.",
+          "expired": "That code had expired. Enter the new one on the TV."
+        },
+        "help": "A new code is on the TV.",
+        "lasts": {
+          "seconds": 35,
+          "again": "Show a new code"
+        }
+      }
+    },
+    "refusals": {
+      "notAllowed": "The TV didn't let Sanctum pair. On the TV, open Settings, then AirPlay and HomeKit, and allow access to everyone on the same network.",
+      "unreachable": "Sanctum can't reach the TV. Check that it's plugged in and on the same network, then add it again.",
+      "homePod": "HomePods are not yet supported by Sanctum."
+    },
+    "addLater": [
+      "airplayCode",
+      "companionCode"
+    ]
+  },
+  "permissions": [
+    {
+      "id": "devices.register",
+      "reason": "To add your Apple TVs and HomePods and keep their state.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "discover:mdns:_airplay._tcp",
+      "reason": "To find your Apple TVs and HomePods.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "discover:mdns:_companion-link._tcp",
+      "reason": "To find your Apple TVs and HomePods.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "lan:tcp:7000",
+      "reason": "To pair with your Apple TVs.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "lan:tcp:49152-65535",
+      "reason": "To control your Apple TVs on the ports each one hands out for a connection.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "tv",
+    "color": "graphite"
+  },
+  "pages": [],
+  "settings": null,
+  "actions": [],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}
