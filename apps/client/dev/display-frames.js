@@ -16,16 +16,16 @@ const kind = `${location.pathname}/`.startsWith(`${builtPath}/`)
 const load = Math.random().toString(36).slice(2, 10);
 
 let control = { label: "", blur: true, masks: true, prompt: "", reload: 0 };
-let blurEnabled = hasBlur(control);
+let effects = effectsMode();
 let seenReload;
 let runStart = 0;
 let isRecording = !document.hidden;
 let batch = { frames: [], moves: [], events: [], loafs: [] };
 
-function hasBlur(settings) {
-  return (
-    settings.blur && document.documentElement.dataset.effects !== "reduced"
-  );
+function effectsMode() {
+  return document.documentElement.dataset.effects === "reduced"
+    ? "reduced"
+    : "regular";
 }
 
 function percentile(sorted, share) {
@@ -206,7 +206,8 @@ function send(keepalive = false) {
     load,
     page: kind,
     label: control.label,
-    blur: blurEnabled,
+    effects,
+    blur: control.blur && effects === "regular",
     masks: control.masks,
     frames,
     moves,
@@ -242,11 +243,20 @@ function flushTimings(keepalive) {
   lastMove = undefined;
 }
 
-function startRun(blur) {
-  flushTimings();
-  shown = "";
-  runStart = performance.now();
-  blurEnabled = blur;
+function updateRun(next) {
+  const nextEffects = effectsMode();
+  if (
+    next.label !== control.label ||
+    nextEffects !== effects ||
+    (effects === "regular" && next.blur !== control.blur) ||
+    next.masks !== control.masks
+  ) {
+    flushTimings();
+    shown = "";
+    runStart = performance.now();
+  }
+  control = next;
+  effects = nextEffects;
 }
 
 const styles = {
@@ -304,15 +314,7 @@ async function follow() {
       } else location.reload();
       return;
     }
-    const nextBlur = hasBlur(next);
-    if (
-      next.label !== control.label ||
-      nextBlur !== blurEnabled ||
-      next.masks !== control.masks
-    ) {
-      startRun(nextBlur);
-    }
-    control = next;
+    updateRun(next);
     turnOff("blur", !control.blur);
     turnOff("masks", !control.masks);
     showPrompt(control.prompt);
@@ -325,10 +327,12 @@ async function follow() {
 }
 
 // The system's reduced transparency can change between control polls.
-new MutationObserver(() => {
-  const blur = hasBlur(control);
-  if (blur !== blurEnabled) startRun(blur);
-}).observe(document.documentElement, { attributeFilter: ["data-effects"] });
+new MutationObserver(() => updateRun(control)).observe(
+  document.documentElement,
+  {
+    attributeFilter: ["data-effects"],
+  },
+);
 
 void follow();
 setInterval(() => {

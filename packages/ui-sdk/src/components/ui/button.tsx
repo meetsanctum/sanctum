@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
+import { cva, cx, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Slot } from "radix-ui";
 
@@ -20,7 +20,7 @@ const pressed =
 const checked =
   "aria-checked:bg-foreground aria-checked:text-background aria-checked:hover:bg-foreground/90 aria-checked:hover:text-background";
 
-const buttonVariants = cva(
+const standardButtonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
@@ -143,6 +143,39 @@ const buttonVariants = cva(
     },
   },
 );
+
+// These glass surfaces keep their own layout and press states.
+const frostedSurface =
+  "flex rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50";
+const frostedButtonVariants = {
+  "device-tile": `${frostedSurface} group relative min-w-0 items-center gap-3 overflow-hidden data-offline:opacity-50 data-[look=lit]:bg-(--tile-colour) data-[look=lit]:text-(--carbon) data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) [touch-action:pan-y]`,
+  "section-tile": `${frostedSurface} group relative min-w-0 items-center gap-3 overflow-hidden transition-[opacity,transform] duration-150 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]`,
+  "presence-row": `${frostedSurface} w-full flex-col gap-2 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3`,
+};
+
+type StandardOptions = NonNullable<
+  Parameters<typeof standardButtonVariants>[0]
+>;
+type ButtonOptions = Omit<StandardOptions, "variant"> & {
+  variant?: StandardOptions["variant"] | keyof typeof frostedButtonVariants;
+};
+
+function buttonVariants({
+  variant,
+  size,
+  class: classes,
+  className,
+}: ButtonOptions = {}) {
+  const extra = cx(classes, className);
+  switch (variant) {
+    case "device-tile":
+    case "section-tile":
+    case "presence-row":
+      return cx(frostedButtonVariants[variant], extra);
+    default:
+      return standardButtonVariants({ variant, size, className: extra });
+  }
+}
 
 function Button({
   className,

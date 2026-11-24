@@ -298,6 +298,24 @@ describe("Reduce effects in the built CSS", () => {
     ]);
   });
 
+  it("keeps live backdrop filters in the frosted utility", () => {
+    const liveFilters = rules
+      .filter(({ declarations }) =>
+        declarations.some(
+          (declaration) =>
+            /^(?:-webkit-)?backdrop-filter:(?!none$|var\(--tw-backdrop-)/.test(
+              declaration,
+            ) || /^--tw-backdrop-[\w-]+:(?!\s*initial$)\s*\S/.test(declaration),
+        ),
+      )
+      .flatMap(({ selectors }) => selectors);
+
+    // Tailwind emits its default blur utility from the frame's class selector.
+    expect(
+      liveFilters.filter((selector) => selector !== ".backdrop-blur"),
+    ).toEqual([".frosted"]);
+  });
+
   it("makes the veil solid Carbon, over a page in Day too", () => {
     expect(css).toContain(
       `.reduce-effects\\:bg-\\(--carbon\\)${reduced}{background-color:var(--carbon)}`,

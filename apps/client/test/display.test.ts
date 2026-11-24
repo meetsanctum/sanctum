@@ -134,14 +134,20 @@ async function recordDisplay(
   let nextFrame: (at: number) => void;
   let poll: () => void;
   let effectsChanged: () => void;
+  const styles = new Map<string, { id: string }>();
   const document = {
     hidden: false,
     documentElement: { dataset: { effects } },
     addEventListener: handlers.set.bind(handlers),
     querySelector: () => ({ innerText: "Home Lights" }),
-    getElementById: () => null,
-    createElement: () => ({}),
-    head: { append: () => {} },
+    getElementById: (id: string) => styles.get(id) ?? null,
+    createElement: () => ({
+      id: "",
+      remove() {
+        styles.delete(this.id);
+      },
+    }),
+    head: { append: (style: { id: string }) => styles.set(style.id, style) },
   };
   const assign = vi.fn();
   const location = Object.assign(new URL(address), { assign });
@@ -273,7 +279,7 @@ it.each([
 );
 
 it("keeps frame timings separate when Reduce effects changes the blur setting", async () => {
-  const { handlers, posts, frame, setEffects } = await recordDisplay(
+  const { handlers, posts, frame, document, setEffects } = await recordDisplay(
     "http://localhost:8123/",
     "reduced",
   );
@@ -281,6 +287,7 @@ it("keeps frame timings separate when Reduce effects changes the blur setting", 
   frame(10);
   frame(30);
   setEffects(undefined, 40);
+  expect(document.getElementById("display-frames-no-blur")).toBeNull();
   frame(50);
   frame(75);
   setEffects("reduced", 80);
@@ -290,16 +297,47 @@ it("keeps frame timings separate when Reduce effects changes the blur setting", 
 
   expect(posts).toEqual([
     expect.objectContaining({
+      effects: "reduced",
       blur: false,
       frames: [expect.objectContaining({ count: 1, durationMs: 20 })],
     }),
     expect.objectContaining({
+      effects: "regular",
       blur: true,
       frames: [expect.objectContaining({ count: 1, durationMs: 25 })],
     }),
     expect.objectContaining({
+      effects: "reduced",
       blur: false,
       frames: [expect.objectContaining({ count: 1, durationMs: 30 })],
+    }),
+  ]);
+});
+
+it("separates regular and reduced recordings when diagnostic blur is off", async () => {
+  const { handlers, posts, frame, document, setControl, setEffects } =
+    await recordDisplay();
+  await setControl({ blur: false });
+  expect(document.getElementById("display-frames-no-blur")).not.toBeNull();
+  posts.length = 0;
+
+  frame(10);
+  frame(30);
+  setEffects("reduced", 40);
+  frame(50);
+  frame(75);
+  handlers.get("pagehide")!();
+
+  expect(posts).toEqual([
+    expect.objectContaining({
+      effects: "regular",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 20 })],
+    }),
+    expect.objectContaining({
+      effects: "reduced",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 25 })],
     }),
   ]);
 });
@@ -498,13 +536,15 @@ it("summarises valid timings when the log contains invalid or incomplete lines",
   const root = await mkdtemp(join(tmpdir(), "sanctum-display-"));
   try {
     const log = join(root, "frames.jsonl");
-    const run = { page: "built", label: "scroll", blur: true, masks: true };
+    const run = { page: "built", label: "scroll", blur: false, masks: true };
     await writeFile(
       log,
       [
         JSON.stringify({ ...run, frames: "missing samples" }),
         JSON.stringify({ ...run, shows: "Home" }),
         '{"page":',
+        JSON.stringify({ ...run, effects: "regular", shows: "Lights" }),
+        JSON.stringify({ ...run, effects: "reduced", shows: "Presence" }),
       ].join("\n"),
     );
     const { stdout, stderr } = await promisify(execFile)(process.execPath, [
@@ -516,6 +556,16 @@ it("summarises valid timings when the log contains invalid or incomplete lines",
     ]);
     expect(JSON.parse(stdout)).toEqual([
       expect.objectContaining({ ...run, screens: ["Home"] }),
+      expect.objectContaining({
+        ...run,
+        effects: "regular",
+        screens: ["Lights"],
+      }),
+      expect.objectContaining({
+        ...run,
+        effects: "reduced",
+        screens: ["Presence"],
+      }),
     ]);
     expect(stderr).toContain("line 1");
     expect(stderr).toContain("line 3");
