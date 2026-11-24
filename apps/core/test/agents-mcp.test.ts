@@ -7,7 +7,7 @@ import { toolListTtlMs } from "../src/agents/mcp.js";
 import { connect, names } from "./agents-support.js";
 import { lampsCore } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
-import { get, post } from "./support.js";
+import { get, post, type TestCore } from "./support.js";
 
 // The MCP endpoint AI agents reach the home through, driven with the
 // official SDK's own client on the 2026-07-28 revision: the tools follow what
@@ -117,13 +117,21 @@ const examplePackage: AppPackage = {
   origin: "official",
 };
 
+function addAgent(core: TestCore, personId: string, name: string) {
+  return core.auth.clients.createAgent({
+    name,
+    platform: "macos",
+    addedBy: { kind: "person", id: personId },
+  });
+}
+
 async function household() {
   const home = await lampsCore({ apps: [examplePackage] });
-  const agent = home.core.auth.clients.createAgent({
-    name: "Codex on the office Mac",
-    platform: "macos",
-    addedBy: { kind: "person", id: home.maya.person.id },
-  });
+  const agent = addAgent(
+    home.core,
+    home.maya.person.id,
+    "Codex on the office Mac",
+  );
   return { ...home, agent };
 }
 
@@ -443,16 +451,24 @@ describe("the MCP endpoint", () => {
   });
 
   it("holds each agent to its calls at once", async () => {
-    const { core, agent } = await household();
+    const { core, maya, agent } = await household();
     const client = await connect(core, agent.token);
+    const other = addAgent(core, maya.person.id, "Hallway agent");
+    const otherClient = await connect(core, other.token);
     const calls = Array.from({ length: agentLimits.agentAtOnce }, () =>
       client.callTool({ name: "sanctum_example_wait" }),
     );
-    await vi.waitFor(() => expect(waiting).toHaveLength(calls.length));
 
-    await expect(names(client)).rejects.toThrow();
-    for (const release of waiting.splice(0)) release();
-    for (const call of await Promise.all(calls)) {
+    let finished;
+    try {
+      await vi.waitFor(() => expect(waiting).toHaveLength(calls.length));
+      await expect(names(client)).rejects.toThrow();
+      expect(await names(otherClient)).toContain("sanctum_example_wait");
+    } finally {
+      for (const release of waiting.splice(0)) release();
+      finished = await Promise.all(calls);
+    }
+    for (const call of finished) {
       expect(call.isError).toBeFalsy();
     }
     expect(await names(client)).toContain("sanctum_example_wait");
@@ -462,7 +478,7 @@ describe("the MCP endpoint", () => {
   });
 
   it("holds each agent to its requests a minute, and logs it once", async () => {
-    const { core, agent } = await household();
+    const { core, maya, agent } = await household();
     const client = await connect(core, agent.token);
     const plainText = () =>
       core.server.inject({
@@ -485,6 +501,10 @@ describe("the MCP endpoint", () => {
     expect(refused.statusCode).toBe(429);
     expect(Number(refused.headers["retry-after"])).toBeGreaterThanOrEqual(1);
     expect(Number(refused.headers["retry-after"])).toBeLessThanOrEqual(60);
+
+    const other = addAgent(core, maya.person.id, "Hallway agent");
+    const otherClient = await connect(core, other.token);
+    expect(await names(otherClient)).toContain("sanctum_example_wait");
 
     const entries = core.activity
       .recent()

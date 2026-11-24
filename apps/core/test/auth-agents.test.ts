@@ -5,6 +5,7 @@ import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, onTestFinished } from "vitest";
 
+import { agentOf } from "../src/app-host/gate.js";
 import type { AddedBy } from "../src/auth/clients.js";
 import { registerAuth } from "../src/auth/routes.js";
 import { authClients, authTokens } from "../src/auth/schema.js";
@@ -199,18 +200,24 @@ describe("an agent", () => {
     ).toThrow(expect.objectContaining({ code: "needs_approval" }));
   });
 
-  it("is refused what it sends on once it's removed", async () => {
+  it("is refused new calls and what it sends on once it's removed", async () => {
     const { core, maya } = await household();
     const { token, client } = addAgent(core, {
       kind: "person",
       id: maya.person.id,
     });
-    const actor = core.gate.admit(core.auth.clients.authenticate(token)!, {
-      tier: "write",
-    });
+    const principal = core.auth.clients.authenticate(token);
+    if (principal?.scope !== "agent") {
+      throw new Error("Expected an agent principal");
+    }
+    const caller = agentOf(principal);
+    const actor = core.gate.admit(caller, { tier: "write" });
 
     await post(core, "/api/auth/clients/revoke", { id: client.id }, maya);
 
+    expect(() => core.gate.admit(caller, { tier: "write" })).toThrow(
+      expect.objectContaining({ code: "forbidden" }),
+    );
     expect(() => core.gate.permit(actor, { tier: "write" })).toThrow(
       expect.objectContaining({ code: "forbidden" }),
     );
