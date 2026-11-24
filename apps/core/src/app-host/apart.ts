@@ -1,6 +1,7 @@
 import type {
   ActionDefinition,
   AppContext,
+  AssistantRequest,
   AppDefinition,
   CoreCalls,
   StartInfo,
@@ -80,6 +81,18 @@ export function apartApp(
       ? {
           uninstall: async (ctx: AppContext) => {
             await call(ctx, { kind: "uninstall" }, uninstallLimitMs);
+          },
+        }
+      : {}),
+    // Sanctum's Assistant answers requests within its turn's time.
+    ...(manifest.requests
+      ? {
+          requests: async (ctx: AppContext, request: AssistantRequest) => {
+            const { text, language, room, from, earlier } = request;
+            await call(ctx, {
+              kind: "request",
+              request: { text, language, room, from, earlier },
+            });
           },
         }
       : {}),

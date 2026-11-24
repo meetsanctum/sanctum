@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
 import type { AssistantCalls } from "../agents/assistants.js";
+import { createRequests } from "./requests.js";
 import type { Turns } from "../models/turns.js";
 import type { ManagerClient } from "../manager.js";
 import type { AgentsCanUse, AppOffers } from "../agents/can-use.js";
@@ -333,6 +334,25 @@ export function createAppHost(options: {
     timeoutMs,
   });
 
+  const requests = createRequests({
+    installed,
+    accepts,
+    arrives: (entry) =>
+      appStateOf(entry) === "paused"
+        ? Promise.resolve(false)
+        : supervisor.arrives(entry, timeoutMs),
+    contextFor,
+    coreOf: contexts.coreOf,
+    turnFor: (entry, who) =>
+      options.turns.open({
+        appId: entry.app.id,
+        appName: entry.manifest.name,
+        who,
+      }),
+    track,
+    log,
+  });
+
   const drivers = createDriverCalls({
     installed,
     accepts,
@@ -609,6 +629,11 @@ export function createAppHost(options: {
         ? null
         : "forbidden";
     },
+
+    /** Someone's request, for Sanctum's Assistant (requests.ts). */
+    ask: requests.ask,
+    /** Whether Sanctum's Assistant answers requests now. */
+    isAssistantOn: requests.isOn,
 
     /** One of an installed app's actions. */
     action(appId: string, actionId: string) {

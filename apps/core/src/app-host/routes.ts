@@ -1,12 +1,14 @@
-import type {
-  AppGoBack,
-  AppRunning,
-  AppInfo,
-  AppSettings,
-  AppRemoval,
-  AvailableApp,
-  HardwareOffer,
-  StaticManifest,
+import {
+  requestLanguages,
+  requestTextMaxLength,
+  type AppGoBack,
+  type AppRunning,
+  type AppInfo,
+  type AppSettings,
+  type AppRemoval,
+  type AvailableApp,
+  type HardwareOffer,
+  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -91,6 +93,11 @@ import type { AppHost } from "./host.js";
 // so the host always gets the caller's principal.
 
 const appParams = z.object({ appId: z.string().min(1).max(128) });
+
+const askBody = z.strictObject({
+  text: z.string().trim().min(1).max(requestTextMaxLength),
+  language: z.enum(requestLanguages).optional(),
+});
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedId = z.string().min(1).max(64);
@@ -224,6 +231,36 @@ export function registerAppRoutes(
     return reply
       .type("application/json; charset=utf-8")
       .send(JSON.stringify(output ?? null));
+  });
+
+  // Someone's typed request, for Sanctum's Assistant: a person's or a shared
+  // device's, never an AI agent's or a widget's. It answers with the reply,
+  // or null when the Assistant gave none, once the Assistant replies.
+  app.post("/api/assistant/ask", async (request) => {
+    const principal = request.principal!;
+    if (principal.scope !== "full") {
+      throw new ActionCallError("forbidden");
+    }
+    const parsed = askBody.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ActionCallError("invalid_request");
+    }
+    const actor = gate.admit(principal, { tier: "write" });
+    if (actor.kind !== "user" && actor.kind !== "client") {
+      throw new ActionCallError("forbidden");
+    }
+    const reply = await host.ask({
+      actor,
+      who: { personId: principal.person?.id, clientId: principal.client.id },
+      asked: {
+        text: parsed.data.text,
+        language: parsed.data.language ?? "en",
+        room: null,
+        from: { kind: "client", name: principal.client.name },
+        earlier: [],
+      },
+    });
+    return { reply: reply?.text ?? null };
   });
 
   // An app's settings are the household's preferences: every client reads

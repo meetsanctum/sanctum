@@ -1,0 +1,160 @@
+import {
+  aiAssistantPermission,
+  assistantAppId,
+  defineApp,
+  toStaticManifest,
+  type AppDefinition,
+  type AssistantRequestCall,
+} from "@meetsanctum/app-sdk";
+import { describe, expect, it, vi } from "vitest";
+
+import { contractOf } from "../src/app-host/contract.js";
+import { apart, base, running, useCleanUps } from "./app-apart-support.js";
+import { claimed, post, testCore, type TestCore } from "./support.js";
+
+// A request is what someone types to Sanctum: the core opens a turn for it
+// and runs Sanctum's Assistant's handler, which answers with request.reply.
+// Only that app may answer requests, and with none to answer the core says
+// so at once.
+
+useCleanUps();
+
+type Handler = (
+  ctx: Parameters<NonNullable<AppDefinition["requests"]>>[0],
+  request: AssistantRequestCall,
+) => Promise<void>;
+
+function assistant(handler: Handler, id = assistantAppId) {
+  return defineApp({
+    ...base,
+    id,
+    name: "Assistant",
+    permissions: [
+      {
+        id: aiAssistantPermission,
+        reason: "To do what you ask.",
+        needed: true,
+      },
+    ],
+    actions: [],
+    requests: handler,
+  });
+}
+
+// Says what it was asked, from where, and how many rooms the home has.
+const echo: Handler = async (ctx, request) => {
+  const tools = await ctx.ai.list();
+  const overview = await ctx.ai.call("home_overview");
+  const rooms = (JSON.parse(overview.text) as { rooms: unknown[] }).rooms;
+  await request.reply({
+    text: `"${request.text}" from ${request.from.name} (${request.language}), ${tools.length > 0 ? "with tools" : "without"}, ${rooms.length} rooms`,
+  });
+};
+
+async function ask(core: TestCore, token: string, body: unknown) {
+  return post(core, "/api/assistant/ask", body, { token });
+}
+
+async function inCore(handler: Handler) {
+  const core = await testCore({
+    apps: [{ app: assistant(handler), origin: "official" }],
+  });
+  const maya = await claimed(core);
+  return { core, maya };
+}
+
+describe("a typed request", () => {
+  it("reaches Sanctum's Assistant, which answers within a turn for whoever asked", async () => {
+    const { core, maya } = await inCore(echo);
+
+    const asked = await ask(core, maya.token, { text: "  Is it raining?  " });
+
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json()).toEqual({
+      reply: '"Is it raining?" from Maya\'s MacBook (en), with tools, 0 rooms',
+    });
+  });
+
+  it("answers as soon as the Assistant replies, while it goes on", async () => {
+    let finished = false;
+    const { core, maya } = await inCore(async (_ctx, request) => {
+      await request.reply({ text: "On it." });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      finished = true;
+    });
+
+    const asked = await ask(core, maya.token, { text: "Tidy up" });
+
+    expect(asked.json()).toEqual({ reply: "On it." });
+    expect(finished).toBe(false);
+  });
+
+  it("is answered once, and with nothing when the Assistant gives no reply", async () => {
+    const replies: string[] = [];
+    const { core, maya } = await inCore(async (_ctx, request) => {
+      if (request.text === "quiet") return;
+      await request.reply({ text: "First." });
+      try {
+        await request.reply({ text: "Second." });
+      } catch {
+        replies.push("refused");
+      }
+    });
+
+    expect((await ask(core, maya.token, { text: "twice" })).json()).toEqual({
+      reply: "First.",
+    });
+    await vi.waitFor(() => expect(replies).toEqual(["refused"]));
+    expect((await ask(core, maya.token, { text: "quiet" })).json()).toEqual({
+      reply: null,
+    });
+  });
+
+  it("says the Assistant is off when there's none to answer", async () => {
+    const core = await testCore();
+    const maya = await claimed(core);
+
+    const asked = await ask(core, maya.token, { text: "Hello?" });
+
+    expect(asked.statusCode).toBe(503);
+  });
+
+  it("comes only from a person or a shared device, in words", async () => {
+    const { core, maya } = await inCore(echo);
+    const agent = core.auth.clients.createAgent({
+      name: "Codex on the office Mac",
+      platform: "macos",
+      addedBy: { kind: "person", id: maya.person.id },
+    });
+
+    expect((await ask(core, agent.token, { text: "Hi" })).statusCode).toBe(403);
+    expect((await ask(core, maya.token, { text: "   " })).statusCode).toBe(400);
+    expect(
+      (await ask(core, maya.token, { text: "Hi", language: "fr" })).statusCode,
+    ).toBe(400);
+  });
+});
+
+describe("who answers requests", () => {
+  it("is Sanctum's Assistant alone: any other app's handler is refused", () => {
+    const other = assistant(echo, "sanctum.example");
+
+    expect(() => contractOf(toStaticManifest(other))).toThrow(
+      "Only Sanctum's Assistant answers requests",
+    );
+    expect(() => contractOf(toStaticManifest(assistant(echo)))).not.toThrow();
+  });
+
+  it("is reached over the socket when the Assistant runs in its own container", async () => {
+    const { core } = await apart(assistant(echo));
+    const maya = await claimed(core);
+    await running(core, assistantAppId);
+
+    const asked = await ask(core, maya.token, { text: "Lights?" });
+
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json()).toEqual({
+      reply: '"Lights?" from Maya\'s MacBook (en), with tools, 0 rooms',
+    });
+  });
+});

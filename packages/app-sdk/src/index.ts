@@ -77,6 +77,7 @@ export * from "./lights.js";
 export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
+export * from "./requests.js";
 export * from "./host.js";
 export * from "./net.js";
 export * from "./pairing.js";
@@ -458,7 +459,13 @@ export function defineApp(app: AppDefinition): AppDefinition {
   if (pages.length > 0 && !app.icon) {
     throw new Error("An app with pages has an icon");
   }
-  for (const hook of ["start", "resume", "stop", "uninstall"] as const) {
+  for (const hook of [
+    "start",
+    "resume",
+    "stop",
+    "uninstall",
+    "requests",
+  ] as const) {
     if (app[hook] !== undefined && typeof app[hook] !== "function") {
       throw new Error(`An app's ${hook} must be a function`);
     }
@@ -519,6 +526,7 @@ export function toStaticManifest(app: AppDefinition) {
       data: app.runtime?.data ?? defaultData,
     },
     migrations: app.migrations ?? null,
+    ...(app.requests ? { requests: true as const } : {}),
     driver: app.driver
       ? {
           hooks: driverHooks.filter((hook) => app.driver?.[hook]),

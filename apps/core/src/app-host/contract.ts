@@ -5,6 +5,7 @@ import {
   assertLanPermissions,
   lanRanges,
   appManifestSchema,
+  assistantAppId,
   assistantOfferOf,
   deviceActionActivitySchema,
   roomSectionKinds,
@@ -409,6 +410,10 @@ function inputCheck(schema: object): SchemaCheck {
 }
 
 export function contractOf(manifest: StaticManifest): AppContract {
+  // Requests go to Sanctum's Assistant alone: one household voice.
+  if (manifest.requests && manifest.id !== assistantAppId) {
+    throw new Error("Only Sanctum's Assistant answers requests");
+  }
   const actions = new Map<string, DeclaredAction>(
     manifest.actions.map((action) => [
       action.id,
@@ -488,6 +493,7 @@ const manifestShape = z.looseObject({
   oldestPage: appManifestSchema.shape.version.optional(),
   pages: z.array(z.string()),
   driver: z.looseObject({ hooks: z.array(z.string()) }).nullable(),
+  requests: z.literal(true).optional(),
   settings: z
     .looseObject({ properties: z.record(z.string(), schema) })
     .nullable(),

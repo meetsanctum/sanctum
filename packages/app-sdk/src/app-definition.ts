@@ -16,6 +16,7 @@ import type { DriverDiscovery } from "./discovery.js";
 import type { DriverAdd, DriverAddResult } from "./found-devices.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
+import type { AssistantRequestCall } from "./requests.js";
 import type { RoomSectionDefinition } from "./room-sections.js";
 import type { TriggerDefinition } from "./workflows.js";
 import type {
@@ -84,6 +85,12 @@ export interface AppDefinition extends AppManifestFields {
    * brings back what it had.
    */
   uninstall?(ctx: AppContext): Promise<void>;
+  /**
+   * Sanctum's Assistant only: answers a request someone said or typed, within
+   * the turn the core opened for it, with `request.reply()`. The core refuses
+   * it from any other app.
+   */
+  requests?(ctx: AppContext, request: AssistantRequestCall): Promise<void>;
   /**
    * A driver app's side of the Drivers contract: the core hands it every
    * command for its own devices, as the actor behind the command. It

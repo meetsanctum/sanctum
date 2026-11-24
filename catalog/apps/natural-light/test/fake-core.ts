@@ -164,6 +164,7 @@ export function fakeCore(app: AppDefinition, clock: () => Date) {
       hostResources: absent,
       aiTools: absent,
       callAiTool: absent,
+      replyRequest: absent,
       entities: absent,
       fetch: absent,
       emit: absent,

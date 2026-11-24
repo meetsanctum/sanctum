@@ -6,6 +6,7 @@ import {
   type Actor,
   type AppContext,
   type CoreCalls,
+  type RequestReply,
   type HostResources,
   type ModelSourceShown,
 } from "@meetsanctum/app-sdk";
@@ -154,12 +155,15 @@ export function createAppContexts(options: {
       snapshot,
       withinMs,
       turn,
+      reply,
     }: {
       held?: EmittedEvent[];
       following?: Following;
       snapshot?: ReadSnapshot;
       withinMs?: number;
       turn?: Turn;
+      // A request's: how its reply reaches whoever asked.
+      reply?: (reply: RequestReply) => void;
     } = {},
   ) {
     const appId = entry.app.id;
@@ -228,6 +232,7 @@ export function createAppContexts(options: {
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       assistant: options.assistant,
+      ...(reply ? { reply } : {}),
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });

@@ -38,6 +38,7 @@ import type {
   EventDefinition,
 } from "./index.js";
 import type { HostResources } from "./host.js";
+import type { RequestReply } from "./requests.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type { AiToolAnswer } from "./ai-agents.js";
 import type {
@@ -167,6 +168,8 @@ export interface CoreCalls {
     name: string;
     input: Record<string, unknown>;
   }): Promise<AiToolAnswer>;
+  /** Answers the request this call runs for, once; Sanctum's Assistant only. */
+  replyRequest(reply: RequestReply): Promise<void>;
   log(message: string): void;
 }
 

@@ -35,6 +35,8 @@
 // kind.
 // 20 lets an app act as the household's AI assistant: ctx.ai lists the
 // tools AI agents may use and calls them within a turn.
-export const protocolVersion = 20;
+// 21 brings requests: Sanctum's Assistant answers what someone said or
+// typed, with request.reply.
+export const protocolVersion = 21;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

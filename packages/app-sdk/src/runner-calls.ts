@@ -17,6 +17,7 @@ import type { DriverDiscovery } from "./discovery.js";
 import type { DriverAdd } from "./found-devices.js";
 import type { DriverCommand, DriverMove } from "./devices.js";
 import type { DriverDevice } from "./firmware.js";
+import type { AssistantRequest } from "./requests.js";
 import {
   isActionError,
   isNotReady,
@@ -391,6 +392,27 @@ export function createCallHost(options: {
     return { ok: true, value: output.result.data };
   }
 
+  // Someone's request, for Sanctum's Assistant: its handler answers with
+  // request.reply, a call to the core like any other of the call's.
+  async function request(
+    { id, actor }: CallMessage,
+    deadlineMs: number,
+    asked: AssistantRequest,
+  ): Promise<Outcome> {
+    const handler = app.requests;
+    if (!handler) {
+      return failureOf(`${appId} answers no requests`, "unavailable");
+    }
+    const outcome = await inCall(id, deadlineMs, (scope) => {
+      const ctx = contextOf(scope, actor);
+      const core = callsOf(() => scope);
+      return outcomeOf(() =>
+        handler(ctx, { ...asked, reply: (reply) => core.replyRequest(reply) }),
+      );
+    });
+    return outcome.ok ? { ok: true, value: null } : outcome;
+  }
+
   function driverCall(
     { id, actor }: CallMessage,
     deadlineMs: number,
@@ -485,6 +507,8 @@ export function createCallHost(options: {
         return action(message, left, body.action, body.input);
       case "driver":
         return driverCall(message, left, body.hook, body.params);
+      case "request":
+        return request(message, left, body.request);
       case "uninstall":
         return uninstall(message, left);
       case "event":
