@@ -619,6 +619,10 @@ describe("an app's calls on an AI agent's behalf", () => {
         list: () => [],
       },
       models: { source: () => null },
+      assistant: {
+        list: () => [],
+        call: async () => ({ text: "", isError: true }),
+      },
       host: async () => {
         throw new Error("not in this test");
       },

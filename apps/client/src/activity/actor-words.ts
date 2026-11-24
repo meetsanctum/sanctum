@@ -77,12 +77,16 @@ export function byWords(entry: ActivityInfo) {
     );
   } else {
     parts.push(whoWords(who));
-    // An AI agent acts for whoever added it.
-    if (who.kind === "agent" && who.addedBy) {
-      const { kind, name } = who.addedBy;
-      const gone =
-        kind === "person" ? "someone who has left" : "a shared device";
-      parts.push(`added by ${name ?? gone}`);
+    if (who.kind === "agent") {
+      const attributedTo = who.askedBy ?? who.addedBy;
+      if (attributedTo) {
+        const { kind, name } = attributedTo;
+        const fallback =
+          kind === "person" ? "someone who has left" : "a shared device";
+        parts.push(
+          `${who.askedBy ? "asked by" : "added by"} ${name ?? fallback}`,
+        );
+      }
     }
     // The automation in between, unless an app keeps it for a press.
     if (

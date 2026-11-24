@@ -41,6 +41,7 @@ import { connectionFactsOf, describeSession } from "./session-details.js";
 import { lightCommandOf, mediaCommandOf } from "./states.js";
 import {
   changeSpeaker,
+  muteCommand,
   speakerStateOf,
   type SpeakerChange,
   type SpeakerState,
@@ -52,7 +53,9 @@ import {
 // and those it gave them (keys.ts), are its secrets. Where each one is comes
 // from what the home's network announces.
 
-export type DriverOptions = { timings?: Partial<Timings> };
+export type DriverOptions = {
+  timings?: Partial<Timings>;
+};
 
 // A Noise key as ESPHome writes it: 32 bytes in base64.
 const isKey = (text: string) => /^[A-Za-z0-9+/]{43}=$/.test(text);
@@ -717,10 +720,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         }
         session.client.command(entityId("media_player", entity.objectId), sent);
       } else if (command.kind === "audio" && entity.type === "switch") {
-        // Its Mute switch: on mutes the microphones.
-        session.client.command(entityId("switch", entity.objectId), {
-          state: command.command.muted,
-        });
+        await muteCommand(session, entity, command.command.muted);
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {
           state: command.command.on,

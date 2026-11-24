@@ -441,4 +441,27 @@ describe("Volume", () => {
     )!;
     expect(slider.disabled).toBe(true);
   });
+
+  const speaker = (muted = false) =>
+    mediaPlayer(
+      "speaker",
+      "Office Speaker",
+      "office",
+      { activity: "idle", volume: 40, muted },
+      { power: false, playback: ["play"], volume: "level", mute: true },
+      "smart-speaker",
+    );
+  const icon = (label: string) =>
+    button(label)?.querySelector("svg")?.getAttribute("class");
+
+  it("shows the sound's mute by its own icon, crossed out while muted", async () => {
+    await render(MediaVolume, speaker());
+    expect(icon("Mute Office Speaker")).toContain("volume-2");
+
+    await render(MediaVolume, speaker(true));
+    expect(icon("Mute Office Speaker")).toContain("volume-x");
+    expect(button("Mute Office Speaker")?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
 });

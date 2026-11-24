@@ -1,7 +1,9 @@
 import type { DeviceInfo, MediaCommand } from "@meetsanctum/app-sdk";
-import { Button, LevelSlider } from "@meetsanctum/ui-sdk";
+import { Button, LevelSlider, useShowFailed } from "@meetsanctum/ui-sdk";
 import {
   createLucideIcon,
+  Mic,
+  MicOff,
   Minus,
   Pause,
   Play,
@@ -9,6 +11,7 @@ import {
   Power,
   SkipBack,
   SkipForward,
+  Volume2,
   VolumeX,
 } from "lucide-react";
 import {
@@ -25,7 +28,8 @@ import { canPlayPause, isPlaying, type Media } from "./media";
 
 // A media player's pages in its detail, on the veil's glass with no card:
 // Playing, what it plays with its controls; a TV's Remote, its power above
-// its volume's buttons; a speaker's Volume, mute above its level. Off or
+// its volume's buttons; a speaker's Volume, mute and, on a smart speaker,
+// its microphones' mute above its level. Off or
 // with nothing to play, Playing keeps its layout, dimmed and empty, so it
 // shows what it will hold. Power is on Remote only.
 
@@ -487,18 +491,29 @@ function Toggle(props: {
   pressed: boolean;
   disabled: boolean;
   onClick: () => void;
+  /** Taps that didn't work, each shown once: a red wash and a shake. */
+  failures?: number;
+  onFailed?: () => void;
   children: ReactNode;
 }) {
+  const { surface, wash } = useShowFailed(props.failures, props.onFailed);
   return (
     <Button
+      ref={surface}
       variant="glass"
       size="round"
       aria-label={props.label}
       aria-pressed={props.pressed}
       disabled={props.disabled}
       onClick={props.onClick}
+      className="relative"
     >
-      {props.children}
+      <span
+        ref={wash}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-[inherit] bg-(--danger) opacity-0"
+      />
+      <span className="relative grid place-items-center">{props.children}</span>
     </Button>
   );
 }
@@ -584,25 +599,31 @@ function VolumeSteps(props: {
 }
 
 /**
- * Remote, a TV's second page: its power above its volume's + and −, which
- * stay in their place, dimmed, while the TV is off or where it has no volume
- * to step, so every TV's Remote looks alike.
+ * Remote, a TV's second page: its power, and a smart speaker's microphones'
+ * mute beside it, above its volume's + and −, which stay in their place,
+ * dimmed, while the TV is off or where it has no volume to step, so every
+ * TV's Remote looks alike.
  */
-export function MediaRemote(props: Props) {
-  const { capability, onCommand } = props;
+export function MediaRemote(props: Props & { microphones?: ReactNode }) {
+  const { capability, microphones, onCommand } = props;
   const on = capability.state?.on === true;
   const { volume } = capability.features;
   return (
     <div className="mt-4 flex flex-col items-center gap-5">
-      {capability.features.power && (
-        <Toggle
-          label={`${on ? "Turn off" : "Turn on"} ${props.name}`}
-          pressed={on}
-          disabled={props.disabled}
-          onClick={() => onCommand({ on: !on })}
-        >
-          <Power aria-hidden="true" />
-        </Toggle>
+      {(capability.features.power || microphones) && (
+        <div className="flex gap-5">
+          {capability.features.power && (
+            <Toggle
+              label={`${on ? "Turn off" : "Turn on"} ${props.name}`}
+              pressed={on}
+              disabled={props.disabled}
+              onClick={() => onCommand({ on: !on })}
+            >
+              <Power aria-hidden="true" />
+            </Toggle>
+          )}
+          {microphones}
+        </div>
       )}
       <VolumeSteps
         name={props.name}
@@ -615,24 +636,67 @@ export function MediaRemote(props: Props) {
   );
 }
 
+// Microphone mute shows what the speaker last reported while a change is
+// on its way. A failed change shakes the button and announces the failure.
+export function MicrophonesToggle(props: {
+  name: string;
+  muted: boolean;
+  disabled: boolean;
+  failures?: number;
+  onMute: (muted: boolean) => void;
+}) {
+  const { muted } = props;
+  const [announcement, setAnnouncement] = useState(0);
+  return (
+    <>
+      <Toggle
+        label={`Mute ${props.name}'s microphones`}
+        pressed={muted}
+        disabled={props.disabled}
+        failures={props.failures}
+        onFailed={() => setAnnouncement((count) => count + 1)}
+        onClick={() => props.onMute(!muted)}
+      >
+        {muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+      </Toggle>
+      <span role="alert" className="sr-only">
+        {announcement > 0 && (
+          <span key={announcement}>Couldn't change the microphone mute.</span>
+        )}
+      </span>
+    </>
+  );
+}
+
 /**
- * Volume, a speaker's second page: mute above its level, as Remote is laid
- * out. A speaker with no volume to set shows its level dimmed in its place.
+ * Volume, a speaker's second page: mute, and a smart speaker's microphones'
+ * mute beside it where Sanctum can mute them, above its level, as Remote is
+ * laid out. A speaker with no volume to set shows its level dimmed in its
+ * place.
  */
-export function MediaVolume(props: Props) {
-  const { capability, onCommand } = props;
+export function MediaVolume(props: Props & { microphones?: ReactNode }) {
+  const { capability, microphones, onCommand } = props;
   const muted = capability.state?.muted === true;
   return (
     <div className="mt-4 flex flex-col items-center gap-5">
-      {capability.features.mute && (
-        <Toggle
-          label={`Mute ${props.name}`}
-          pressed={muted}
-          disabled={props.disabled}
-          onClick={() => onCommand({ muted: !muted })}
-        >
-          <VolumeX aria-hidden="true" />
-        </Toggle>
+      {(capability.features.mute || microphones) && (
+        <div className="flex gap-5">
+          {capability.features.mute && (
+            <Toggle
+              label={`Mute ${props.name}`}
+              pressed={muted}
+              disabled={props.disabled}
+              onClick={() => onCommand({ muted: !muted })}
+            >
+              {muted ? (
+                <VolumeX aria-hidden="true" />
+              ) : (
+                <Volume2 aria-hidden="true" />
+              )}
+            </Toggle>
+          )}
+          {microphones}
+        </div>
       )}
       {capability.features.volume !== "steps" ? (
         <LevelSlider

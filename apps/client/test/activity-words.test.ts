@@ -215,6 +215,29 @@ describe("an entry's words", () => {
     expect(agent(null)).toBe("Codex on the office Mac");
   });
 
+  it.each([
+    { kind: "person", name: "Sam", expected: "Sam" },
+    { kind: "person", name: null, expected: "someone who has left" },
+    { kind: "client", name: null, expected: "a shared device" },
+  ] as const)(
+    "names who asked the assistant ($expected)",
+    ({ kind, name, expected }) => {
+      const words = activityWords(
+        entry({
+          who: {
+            kind: "agent",
+            id: "assistant",
+            name: "Assistant",
+            addedBy: null,
+            askedBy: { kind, id: "opener", name },
+          },
+        }),
+        "device",
+      );
+      expect(words.detail).toBe(`Assistant, asked by ${expected}`);
+    },
+  );
+
   it("describes an agent being removed", () => {
     const words = activityWords(
       entry({

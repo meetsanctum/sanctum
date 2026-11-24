@@ -1,5 +1,6 @@
 import {
   onBattery,
+  type AudioCommand,
   type CapabilityInfo,
   type DeviceInfo,
   type LightCommand,
@@ -49,6 +50,10 @@ export const pressShownMs = 5_000;
 
 // A command from here, followed until its device confirms it or it fails.
 type Sent = { at: number; pending: boolean; failed: boolean };
+
+type CommandTarget = Pick<Tile, "key" | "deviceId" | "capabilityId"> & {
+  kind: Tile["kind"] | "audio";
+};
 
 // The on or off and level a command from here asks of a tile, which the tile
 // shows as pending from the moment it goes out, rather than once the core
@@ -319,42 +324,42 @@ export function useDevices(live: LiveFeed) {
   // The core answers with the capability as it now stands, the asked-for
   // state pending until the device confirms it. When it cannot deliver the
   // command, it keeps the state from before and says so. A switch takes
-  // only on or off: a brightness above 0 turns it on. A media player's
-  // command goes as it is, and shows once the core has taken it.
+  // only on or off: a brightness above 0 turns it on. Media and audio
+  // commands go as they are, and show once the core has taken them.
   const command = useCallback(
-    async (tile: Tile, asked: LightCommand | MediaCommand) => {
+    async (
+      { key, deviceId, capabilityId, kind }: CommandTarget,
+      asked: LightCommand | MediaCommand | AudioCommand,
+    ) => {
       // A later command or a live device update takes precedence over this
       // response, which may arrive after the device has already answered.
       for (const pending of pendingCommands.current) {
         if (
-          pending.deviceId === tile.deviceId &&
-          pending.capabilityId === tile.capabilityId
+          pending.deviceId === deviceId &&
+          pending.capabilityId === capabilityId
         ) {
           pendingCommands.current.delete(pending);
         }
       }
-      const pending = {
-        deviceId: tile.deviceId,
-        capabilityId: tile.capabilityId,
-      };
+      const pending = { deviceId, capabilityId };
       pendingCommands.current.add(pending);
-      const commands = send([tile.key]);
+      const commands = send([key]);
       const light = asked as LightCommand;
+      const isDirect = kind === "media" || kind === "audio";
       const sending =
-        tile.kind === "light" || tile.kind === "media"
+        kind === "light" || isDirect
           ? asked
           : { on: light.on ?? (light.brightness ?? 0) > 0 };
-      const shown =
-        tile.kind === "media" ? undefined : askedOf(sending as LightCommand);
-      const answered = shown ? ask([tile.key], shown) : undefined;
+      const shown = isDirect ? undefined : askedOf(sending as LightCommand);
+      const answered = shown ? ask([key], shown) : undefined;
       try {
         const capability = await coreJson<CapabilityInfo>(
           "/api/devices/command",
           {
             method: "POST",
             json: {
-              device: tile.deviceId,
-              capability: tile.capabilityId,
+              device: deviceId,
+              capability: capabilityId,
               command: sending,
             },
           },
@@ -363,14 +368,14 @@ export function useDevices(live: LiveFeed) {
         // in it is this command's: still pending, or already confirmed or
         // held, which ends it even if pending never showed here.
         const [, command] = commands[0]!;
-        if (sent.current.get(tile.key) === command) {
+        if (sent.current.get(key) === command) {
           if (capability.sync === "pending") command.pending = true;
-          else sent.current.delete(tile.key);
+          else sent.current.delete(key);
         }
         if (!pendingCommands.current.has(pending)) return;
         updateDevices((current) =>
           current.map((device) =>
-            device.id === tile.deviceId
+            device.id === deviceId
               ? {
                   ...device,
                   capabilities: device.capabilities.map((each) =>
@@ -514,6 +519,7 @@ export function useDevices(live: LiveFeed) {
       devices,
       loaded,
       tiles,
+      failures,
       load,
       apply,
       command,
@@ -527,6 +533,7 @@ export function useDevices(live: LiveFeed) {
       devices,
       loaded,
       tiles,
+      failures,
       load,
       apply,
       command,

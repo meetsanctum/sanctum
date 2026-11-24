@@ -52,8 +52,8 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // the speaker, so Activity names it. 0.8.1: a speaker announcing is
     // doing what it did before, not playing. 0.9.0: a smart speaker's
     // microphones are its `audio` part, which the shell shows, and leave
-    // its page.
-    version: "0.9.0",
+    // its page. 0.9.1: an unmute its side switch holds is refused at once.
+    version: "0.9.1",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",

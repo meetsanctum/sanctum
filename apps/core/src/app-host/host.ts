@@ -8,6 +8,7 @@ import {
 import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
+import type { AssistantCalls } from "../agents/assistants.js";
 import type { Turns } from "../models/turns.js";
 import type { ManagerClient } from "../manager.js";
 import type { AgentsCanUse, AppOffers } from "../agents/can-use.js";
@@ -120,6 +121,8 @@ export function createAppHost(options: {
   pairing: () => Pick<Pairing, "joining">;
   // The turns in which apps ask the home's AI model.
   turns: Pick<Turns, "open" | "source">;
+  // The tools an assistant app calls within its turns.
+  assistant: AssistantCalls;
   log: Log;
   timeoutMs?: number;
   now?: () => Date;

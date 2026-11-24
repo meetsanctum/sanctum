@@ -87,6 +87,40 @@ export function mutedOf({ client }: Session, { mute }: SpeakerParts) {
   return switches ? switches.state === true : null;
 }
 
+export async function muteCommand(
+  { client }: Session,
+  mute: Entity,
+  muted: boolean,
+) {
+  const id = entityId("switch", mute.objectId);
+  if (muted) {
+    client.command(id, { state: true });
+    return;
+  }
+  try {
+    await client.commandAndAwait(
+      id,
+      { state: false },
+      // Off comes without a state at all, as a protocol buffer leaves out
+      // its defaults.
+      { predicate: (event) => event.state !== true, timeoutMs: 2_000 },
+    );
+  } catch (error) {
+    // An error from the connection or the send is what it is.
+    if (!(error instanceof DOMException && error.name === "TimeoutError")) {
+      throw error;
+    }
+    // Its side switch holds it on, which the speaker keeps to itself: an
+    // unmute then changes nothing and it says nothing, while one it takes
+    // shows within moments. Refused at once, rather than the core waiting
+    // out its confirmation and sending it again. Where it hasn't said, the
+    // core goes on waiting for its report.
+    if (client.latest(id)?.state === true) {
+      throw new ActionError("conflict", "Still muted by its side switch");
+    }
+  }
+}
+
 /**
  * Its microphones as the core has them: whether they're muted, where it
  * has said, and when it last heard its wake word.

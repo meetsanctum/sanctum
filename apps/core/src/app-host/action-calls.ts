@@ -96,7 +96,7 @@ export function createActionCalls(options: {
       await supervisor.arrives(entry, timeoutMs);
       if (actor.kind === "assistant-run") {
         check(entry, action, who, input, () => {
-          gate.requireActiveAgent(actor.id);
+          gate.requireActiveAgent(actor);
           admits(entry, action, actor);
         });
       }

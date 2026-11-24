@@ -14,6 +14,7 @@ import {
   encodeMessage,
   failureOf,
   maxCallsUnderWay,
+  MessageTooLarge,
   oldestProtocolVersion,
   protocolVersion,
   type AppMessage,
@@ -259,7 +260,19 @@ export function createAppLink(options: {
         send(connection, { type: "reply", id, outcome });
       } catch (error) {
         // Too long, or not something JSON can say.
-        send(connection, { type: "reply", id, outcome: failureOf(error) });
+        const fallback: Outcome =
+          method === "callAiTool" &&
+          outcome.ok &&
+          error instanceof MessageTooLarge
+            ? {
+                ok: true,
+                value: {
+                  isError: true,
+                  text: "The tool's answer is too large. Narrow the request and try again.",
+                },
+              }
+            : failureOf(error);
+        send(connection, { type: "reply", id, outcome: fallback });
       }
     };
     const open = connection.calls.get(call);

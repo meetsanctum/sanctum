@@ -116,6 +116,8 @@ export async function createAuth(
 
   return {
     isClaimed: () => isClaimed(db),
+    /** A person or a shared device, by their name now. */
+    named: namedAdder,
     agentAdder(id: string) {
       const addedBy = clients.addedBy(id);
       return addedBy ? namedAdder(addedBy) : null;

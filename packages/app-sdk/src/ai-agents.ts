@@ -15,6 +15,16 @@ import { placesReadPermission } from "./places.js";
 // in the words apps' permissions use. What an app leaves out, AI agents
 // never see.
 
+/**
+ * What lets an app act as the household's AI assistant: list the tools AI
+ * agents may use and call them through the core, within a turn, for whoever
+ * opened it.
+ */
+export const aiAssistantPermission = "ai.assistant";
+
+/** A tool's answer as the model reads it: the home's data, or why it failed. */
+export type AiToolAnswer = { text: string; isError: boolean };
+
 /** Reading the activity log: who did what, when and why. */
 export const activityReadPermission = "activity.read";
 /** Reading what devices reported over time. */

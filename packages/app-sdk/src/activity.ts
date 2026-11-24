@@ -23,6 +23,12 @@ export type DeviceActionActivity = z.infer<typeof deviceActionActivitySchema>;
 /** How it ended: done, refused, or failed, as a device that did not answer. */
 export type ActivityOutcome = "ok" | "refused" | "failed";
 
+type AgentAttribution = {
+  kind: "person" | "client";
+  id: string;
+  name: string | null;
+};
+
 /**
  * Who did it, as people see them: a person, a shared client by its name,
  * a workflow, an app, a remote's press, a change at the device outside
@@ -41,17 +47,22 @@ export type ActivityWho =
   | { kind: "workflow"; id: string; name: string | null }
   | { kind: "app"; id: string; name: string | null }
   | { kind: "press"; device: string; name: string | null; action: string }
-  | {
+  | ({
       kind: "agent";
       id: string;
       name: string | null;
-      /** The person or shared device who added the AI agent. */
-      addedBy: {
-        kind: "person" | "client";
-        id: string;
-        name: string | null;
-      } | null;
-    }
+    } & (
+      | {
+          /** The person or shared device who added the AI agent. */
+          addedBy: AgentAttribution | null;
+          askedBy?: never;
+        }
+      | {
+          addedBy: null;
+          /** The person or shared device the assistant acted for. */
+          askedBy: AgentAttribution;
+        }
+    ))
   | { kind: "device" }
   | { kind: "sanctum" }
   | { kind: "nobody" };
