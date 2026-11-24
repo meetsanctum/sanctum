@@ -32,6 +32,7 @@ import { motionPlace } from "../devices/motion.js";
 const field = z.string().min(1).max(100);
 const operator = z.enum(stateOperators);
 const entityId = z.string().min(1).max(128);
+const loadingIsPlaying = z.literal(true).optional().meta({ hidden: true });
 
 // Which entities an entity piece means: one, by its app and key, or every
 // one of a type. An app goes with a key, so a piece names the app behind a
@@ -105,27 +106,34 @@ export const corePieces = {
     },
     device: {
       title: "A device changes",
-      config: z.strictObject({
-        device: names("device").optional(),
-        capability: partOf("device").optional(),
-        kind: z.enum(capabilityKinds).optional(),
-        field: field.optional(),
-        operator: operator.optional(),
-        value: z.unknown().optional(),
-        // Fires only on a change from a value the core knew, not on a
-        // device's first state: a door found open has not just opened.
-        fromKnown: z.boolean().optional().meta({ title: "Only on a change" }),
-        // Fires once the change has held this long, and not at all if it
-        // is undone before: a player stopped for a moment between two
-        // episodes has not stopped playing.
-        forSeconds: z
-          .number()
-          .int()
-          .min(1)
-          .max(3600)
-          .optional()
-          .meta({ title: "Held for seconds" }),
-      }),
+      config: z
+        .strictObject({
+          device: names("device").optional(),
+          capability: partOf("device").optional(),
+          kind: z.enum(capabilityKinds).optional(),
+          field: field.optional(),
+          operator: operator.optional(),
+          value: z.unknown().optional(),
+          loadingIsPlaying,
+          // Fires only on a change from a value the core knew, not on a
+          // device's first state: a door found open has not just opened.
+          fromKnown: z.boolean().optional().meta({ title: "Only on a change" }),
+          // Fires once the change has held this long, and not at all if it
+          // is undone before: a player stopped for a moment between two
+          // episodes has not stopped playing.
+          forSeconds: z
+            .number()
+            .int()
+            .min(1)
+            .max(3600)
+            .optional()
+            .meta({ title: "Held for seconds" }),
+        })
+        .refine(
+          ({ forSeconds, field }) =>
+            forSeconds === undefined || field !== undefined,
+          { path: ["forSeconds"], message: "A hold needs a state field" },
+        ),
       words: {
         sentence: "{device} changes",
         card: { name: "{device}", specifics: "Changes" },
@@ -196,6 +204,7 @@ export const corePieces = {
               operator: "equals",
               value: "playing",
               fromKnown: true,
+              loadingIsPlaying: true,
             },
           },
           {
@@ -286,6 +295,7 @@ export const corePieces = {
         field,
         operator,
         value: z.unknown().optional(),
+        loadingIsPlaying,
       }),
       words: {
         presets: [
@@ -317,7 +327,12 @@ export const corePieces = {
           {
             title: "Is playing",
             sentence: "{device} is playing",
-            config: { field: "activity", operator: "equals", value: "playing" },
+            config: {
+              field: "activity",
+              operator: "equals",
+              value: "playing",
+              loadingIsPlaying: true,
+            },
           },
           {
             title: "Isn't playing",
@@ -326,6 +341,7 @@ export const corePieces = {
               field: "activity",
               operator: "not_equals",
               value: "playing",
+              loadingIsPlaying: true,
             },
           },
         ],
@@ -429,6 +445,7 @@ export const corePieces = {
         device: names("device"),
         capability: partOf("device"),
         command: z.record(z.string(), z.unknown()),
+        resumeOnly: z.literal(true).optional().meta({ hidden: true }),
       }),
       words: {
         presets: [
@@ -446,7 +463,7 @@ export const corePieces = {
           {
             title: "Resume",
             sentence: "Resume {device}",
-            config: { command: { activity: "playing" } },
+            config: { command: { activity: "playing" }, resumeOnly: true },
           },
           {
             title: "Pause",
@@ -474,7 +491,7 @@ export const corePieces = {
     volume: {
       title: "Set a player's volume",
       config: z.strictObject({
-        device: names("device", { sends: { volume: 0 } }),
+        device: names("device").meta({ sends: { volume: 0 } }),
         capability: partOf("device"),
         volume: percentField.meta({ percent: true, title: "Volume" }),
       }),

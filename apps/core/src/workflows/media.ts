@@ -5,8 +5,13 @@
 // isn't playing would go unanswered each time the doorbell rang.
 
 /** A capability's state as triggers and conditions compare it. */
-export function comparedState(kind: string, state: unknown): unknown {
+export function comparedState(
+  kind: string,
+  state: unknown,
+  loadingIsPlaying: boolean | undefined,
+): unknown {
   if (
+    !loadingIsPlaying ||
     kind !== "media" ||
     !state ||
     typeof state !== "object" ||
@@ -25,16 +30,25 @@ export function nothingToDo(
   kind: string,
   command: Record<string, unknown>,
   state: unknown,
+  observed: unknown,
+  resumeOnly: boolean | undefined,
 ): string | undefined {
-  if (kind !== "media" || !state || typeof state !== "object") {
+  if (kind !== "media") {
     return undefined;
   }
-  const { activity } = comparedState(kind, state) as { activity?: unknown };
-  if (command.activity === "paused" && activity !== "playing") {
-    return "Nothing was playing";
+  if (resumeOnly && command.activity === "playing") {
+    const activity = (
+      comparedState(kind, observed, true) as { activity?: unknown } | null
+    )?.activity;
+    if (activity !== "paused") {
+      return activity === "playing" ? "It was playing" : "Nothing was paused";
+    }
   }
-  if (command.activity === "playing" && activity !== "paused") {
-    return activity === "playing" ? "It was playing" : "Nothing was paused";
+  if (command.activity === "paused" && state && typeof state === "object") {
+    const { activity } = comparedState(kind, state, true) as {
+      activity?: unknown;
+    };
+    if (activity !== "playing") return "Nothing was playing";
   }
   return undefined;
 }

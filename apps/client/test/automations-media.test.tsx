@@ -1,17 +1,22 @@
+// @vitest-environment jsdom
 import {
   mediaFeatures,
   type CapabilityInfo,
   type DeviceInfo,
   type PieceInfo,
 } from "@meetsanctum/app-sdk";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   deviceCommandFor,
   deviceKindsFor,
   withDevice,
 } from "../src/automations/chooser";
+import { namesOf } from "../src/automations/data";
+import { EditorPage } from "../src/automations/editor";
 import { FieldControl } from "../src/automations/fields";
 import {
   fieldKind,
@@ -229,6 +234,78 @@ describe("a player's volume", () => {
         ),
       ),
     ).toBe("Set Office Speaker's volume to 20%");
+  });
+
+  it("offers only players with a volume level in Add a step and the device picker", async () => {
+    const devices = [
+      ...homeDevices,
+      {
+        ...homeDevices[0]!,
+        id: "spare-speaker",
+        name: "Spare Speaker",
+        roomId: null,
+      },
+    ];
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const buttons = (within: ParentNode) =>
+      [...within.querySelectorAll("button")].map((button) =>
+        button.textContent?.trim(),
+      );
+    const press = async (label: string, within: ParentNode = document) => {
+      const button = [...within.querySelectorAll("button")].find(
+        (each) => each.textContent?.trim() === label,
+      );
+      expect(button).toBeDefined();
+      await act(async () => button!.click());
+    };
+
+    try {
+      await act(async () =>
+        root.render(
+          <EditorPage
+            id={undefined}
+            automations={{
+              workflows: [],
+              pieces: [volumeStep],
+              entities: [],
+              people: [],
+              problem: undefined,
+              load: vi.fn(),
+              add: vi.fn(),
+              update: vi.fn(),
+              remove: vi.fn(),
+              run: vi.fn(),
+              runs: vi.fn(),
+            }}
+            apps={[]}
+            home={{ places, devices, entities: [] }}
+            names={namesOf(places, devices, [], [])}
+            back={vi.fn()}
+            ask={vi.fn()}
+          />,
+        ),
+      );
+      await press("Add a step");
+      const chooser = document.querySelector('[role="dialog"]')!;
+      expect(buttons(chooser)).toContain("Set Office Speaker's volume to 30%");
+      expect(buttons(chooser)).not.toContain(
+        "Set Living Room Box's volume to 30%",
+      );
+      const unassigned = chooser.querySelector('[aria-label="No room"]')!;
+      await press("Set Spare Speaker's volume to 30%", unassigned);
+      await press("Spare Speaker", container);
+      const picker = document.querySelector(
+        '[role="listbox"][aria-label="Device"]',
+      )!;
+      expect(buttons(picker)).toEqual(["Spare Speaker", "Office Speaker"]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("is chosen with a few levels, beside where the player is now", () => {

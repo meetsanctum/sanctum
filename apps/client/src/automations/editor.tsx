@@ -493,8 +493,9 @@ export function EditorPage(props: {
           </DialogHeader>
           {option && optionPiece && (
             <div className="flex max-h-[60dvh] flex-col gap-4 overflow-y-auto">
-              {Object.entries(fieldsOf(optionPiece.config)).map(
-                ([name, field]) => (
+              {Object.entries(fieldsOf(optionPiece.config))
+                .filter(([, field]) => field.hidden !== true)
+                .map(([name, field]) => (
                   <div key={name} className="flex flex-col gap-1.5">
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                       {String(field.title ?? capitalize(name))}
@@ -526,8 +527,7 @@ export function EditorPage(props: {
                       }
                     />
                   </div>
-                ),
-              )}
+                ))}
             </div>
           )}
           <DialogFooter>

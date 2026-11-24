@@ -9,10 +9,6 @@ import { stateOf } from "./states.js";
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
 
-// What each session's media players last said they were doing, by
-// capability, which an announcement keeps (stateOf).
-const activities = new WeakMap<Session, Map<string, MediaActivity>>();
-
 /**
  * Reports one thing a session's device said, read by that session's own
  * parts.
@@ -24,6 +20,7 @@ export function report(
   mapping: Mapping,
   event: TelemetryEvent,
   session: Session,
+  activities: Map<string, MediaActivity>,
 ) {
   // A state event names its entity by its key, which a type keeps apart.
   if (
@@ -59,14 +56,9 @@ export function report(
           })
         : null
       : (() => {
-          let seen = activities.get(session);
-          if (!seen) {
-            seen = new Map();
-            activities.set(session, seen);
-          }
-          const now = stateOf(mapped, event, seen.get(capability));
+          const now = stateOf(mapped, event, activities.get(capability));
           if (now && "activity" in now) {
-            seen.set(capability, now.activity);
+            activities.set(capability, now.activity);
           }
           return now
             ? ctx.devices.report({

@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import { noRoomName } from "../device-tiles";
 import type { Home } from "./fields";
 import { PieceIcon } from "./parts";
 import {
@@ -87,7 +88,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * The command a core step sends the device it names: the command its config
  * holds, as Turn on's, or the one its device field says it sends, as the
- * volume's (names("device", { sends })), with the level its config sets.
+ * volume's, with the level its config sets.
  */
 export function deviceCommandFor(
   piece: PieceInfo,
@@ -213,7 +214,8 @@ function sectionsFor(
   const rooms = [...(home.places?.rooms ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const roomSections: Section[] = rooms.map((room) => {
+  const locations = [...rooms, { id: null, name: noRoomName }];
+  const roomSections: Section[] = locations.map((room) => {
     const entries: Entry[] = [];
     for (const piece of ofKind) {
       const { device: deviceField, place } = deviceFields(piece);
@@ -253,7 +255,7 @@ function sectionsFor(
               });
             }
           }
-        } else if (place) {
+        } else if (place && room.id !== null) {
           const config = { ...base, [place]: { kind: "room", id: room.id } };
           entries.push({
             key: `${piece.app}:${piece.id}:${preset?.title}:${room.id}`,
@@ -264,7 +266,11 @@ function sectionsFor(
         }
       }
     }
-    return { id: `room-${room.id}`, title: room.name, entries };
+    return {
+      id: room.id === null ? "no-room" : `room-${room.id}`,
+      title: room.name,
+      entries,
+    };
   });
 
   // Each piece by its group or its app, filled in on its card. A core

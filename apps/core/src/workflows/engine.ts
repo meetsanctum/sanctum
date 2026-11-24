@@ -418,7 +418,10 @@ export function createEngine(options: {
       const state = part?.state;
       return (
         state !== undefined &&
-        statePasses(predicate, comparedState(part!.kind, state))
+        statePasses(
+          predicate,
+          comparedState(part!.kind, state, predicate.loadingIsPlaying),
+        )
       );
     }
     const output = await host.invoke({
@@ -480,7 +483,16 @@ export function createEngine(options: {
     const part = devices
       .get(sent.device, actingOn(workflow, node))
       ?.capabilities.find((each) => each.id === sent.capability);
-    return part && nothingToDo(part.kind, sent.command, part.state);
+    return (
+      part &&
+      nothingToDo(
+        part.kind,
+        sent.command,
+        part.state,
+        part.observed,
+        sent.resumeOnly,
+      )
+    );
   }
 
   // One run: each step the fired triggers reach runs when a path of

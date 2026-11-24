@@ -19,6 +19,7 @@ import type {
 } from "../app-host/contract.js";
 import type { AppHost } from "../app-host/host.js";
 import type { Devices } from "../devices/devices.js";
+import type { View } from "../devices/views.js";
 import type { Entities } from "../entities/entities.js";
 import type { PlacesModule } from "../places/places.js";
 import {
@@ -196,10 +197,10 @@ export function createPieces(options: {
 
   // Whether the room, floor, zone, device or entity a config names is still
   // there.
-  function exists(named: Named) {
+  function exists(named: Named, view: View | undefined) {
     switch (named.kind) {
       case "device":
-        return options.devices.get(named.id) !== null;
+        return options.devices.get(named.id, view) !== null;
       case "room":
         return options.places.hasRoom(named.id);
       case "floor":
@@ -229,13 +230,14 @@ export function createPieces(options: {
     node: WorkflowNode,
     piece: Piece,
     saving: boolean,
+    view: View | undefined,
   ): WorkflowProblem[] {
     const gone = new Map<string, Named>();
     for (const each of namedBy(piece, node.config)) {
       // An app may keep a workflow in its start before it has published what it
       // names, so only one that's gone counts for an entity.
       if (each.kind === "entity" && saving) continue;
-      if (!exists(each)) {
+      if (!exists(each, view)) {
         gone.set(`${each.field}\u0000${each.kind}\u0000${each.id}`, each);
       }
     }
@@ -257,8 +259,9 @@ export function createPieces(options: {
     node: WorkflowNode,
     config: DeviceStepConfig,
     saving: boolean,
+    view: View | undefined,
   ): WorkflowProblem[] {
-    const device = options.devices.get(config.device);
+    const device = options.devices.get(config.device, view);
     const capability = device?.capabilities.find(
       (each) => each.id === config.capability,
     );
@@ -301,8 +304,9 @@ export function createPieces(options: {
   function pressTriggerProblem(
     node: WorkflowNode,
     config: PressTriggerConfig,
+    view: View | undefined,
   ): WorkflowProblem | undefined {
-    const device = options.devices.get(config.device);
+    const device = options.devices.get(config.device, view);
     const buttons = device?.capabilities.filter(
       (each) =>
         each.kind === "button" &&
@@ -439,8 +443,10 @@ export function createPieces(options: {
      * gone among them. Saving also checks the commands its device steps send,
      * and each check whether their devices can do them.
      */
-    check(graph: WorkflowGraph, options_: { saving?: boolean } = {}): Check {
-      const saving = options_.saving ?? false;
+    check(
+      graph: WorkflowGraph,
+      { saving = false, view }: { saving?: boolean; view?: View } = {},
+    ): Check {
       const problems: WorkflowProblem[] = [];
       const warnings: string[] = [];
       const ids = new Set<string>();
@@ -491,7 +497,7 @@ export function createPieces(options: {
           );
           continue;
         }
-        const named = namedProblems(node, piece, saving);
+        const named = namedProblems(node, piece, saving, view);
         if (named.length > 0) {
           problems.push(...named);
           continue;
@@ -501,7 +507,7 @@ export function createPieces(options: {
             ? deviceCommandOf(piece.id, config.data)
             : undefined;
         if (sent) {
-          problems.push(...deviceStepProblems(node, sent, saving));
+          problems.push(...deviceStepProblems(node, sent, saving, view));
         }
         if (
           piece.app === null &&
@@ -512,6 +518,7 @@ export function createPieces(options: {
           const problem = pressTriggerProblem(
             node,
             config.data as PressTriggerConfig,
+            view,
           );
           if (problem) {
             problems.push(problem);

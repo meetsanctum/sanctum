@@ -41,57 +41,80 @@ export function createFiring(options: {
   const { pieces, engine } = options;
   const parsed = <T>(node: WorkflowNode) => pieces.parse<T>(node);
 
-  // Device triggers waiting for their change to hold, by workflow, node,
-  // device and capability.
-  type Hold = {
-    timer: ReturnType<typeof setTimeout>;
+  type DeviceData = Record<string, unknown> & {
     device: string;
     capability: string;
+  };
+  type Match = {
+    hold: Hold;
+    node: string;
+    data: DeviceData;
     config: DeviceTriggerConfig;
   };
-  const holds = new Map<string, Hold>();
+  type Hold = {
+    workflow: string;
+    timer: ReturnType<typeof setTimeout>;
+    matches: Map<string, Match>;
+  };
+  // Each pending trigger is tracked per capability. Matches from one report
+  // that are due together share a timer and start one run.
+  const pending = new Map<string, Match>();
+  let started = false;
 
-  function letGo(key: string) {
-    clearTimeout(holds.get(key)?.timer);
-    holds.delete(key);
+  function letGo(key: string, { hold }: Match) {
+    pending.delete(key);
+    hold.matches.delete(key);
+    if (hold.matches.size === 0) {
+      clearTimeout(hold.timer);
+    }
   }
 
-  // A held trigger fires as its wait ends, if its workflow may still run
-  // and still has the trigger as it was.
-  function hold(
+  function waitFor(
+    groups: Map<string, Hold>,
     workflow: WorkflowRow,
     node: WorkflowNode,
-    config: DeviceTriggerConfig & { forSeconds: number },
-    data: Record<string, unknown> & { device: string; capability: string },
+    config: DeviceTriggerConfig,
+    seconds: number,
+    data: DeviceData,
   ) {
-    const key = [workflow.id, node.id, data.device, data.capability].join(
-      "\u0000",
-    );
-    if (holds.has(key)) {
+    const key = JSON.stringify([
+      workflow.id,
+      node.id,
+      data.device,
+      data.capability,
+    ]);
+    if (!started || pending.has(key)) {
       return;
     }
-    const timer = setTimeout(() => {
-      holds.delete(key);
-      const now = options.rows().find((each) => each.id === workflow.id);
-      const same = now?.graph.nodes.find((each) => each.id === node.id);
-      if (
-        !now?.enabled ||
-        !options.mayRun(now) ||
-        !same ||
-        same.app ||
-        same.piece !== "device" ||
-        !sameValue(parsed(same), config)
-      ) {
-        return;
-      }
-      engine.fire(now, { nodes: [node.id], key: null, data });
-    }, config.forSeconds * 1000);
-    holds.set(key, {
-      timer,
-      device: data.device,
-      capability: data.capability,
-      config,
-    });
+    const group = JSON.stringify([workflow.id, seconds]);
+    let hold = groups.get(group);
+    if (!hold) {
+      const matches = new Map<string, Match>();
+      const timer = setTimeout(() => {
+        for (const key of matches.keys()) pending.delete(key);
+        const current = options.rows().find((each) => each.id === workflow.id);
+        if (
+          !current?.enabled ||
+          current.version !== workflow.version ||
+          !options.mayRun(current)
+        ) {
+          return;
+        }
+        const nodes = new Set<string>();
+        let first: DeviceData | undefined;
+        for (const match of matches.values()) {
+          first ??= match.data;
+          nodes.add(match.node);
+        }
+        if (first)
+          engine.fire(current, { nodes: [...nodes], key: null, data: first });
+      }, seconds * 1000);
+      hold = { workflow: workflow.id, timer, matches };
+      groups.set(group, hold);
+    }
+    const match = { hold, node: node.id, data, config };
+    hold.matches.set(key, match);
+    pending.set(key, match);
   }
 
   // Each running workflow's trigger nodes that a firing matches.
@@ -191,21 +214,25 @@ export function createFiring(options: {
       const id = (after ?? change.before)?.id;
       // A change undone lets the triggers waiting on it go: a device gone,
       // or a state that no longer passes.
-      for (const [key, held] of holds) {
-        if (held.device !== id) {
+      for (const [key, held] of pending) {
+        if (held.data.device !== id) {
           continue;
         }
         const capability = after?.capabilities.find(
-          (each) => each.id === held.capability,
+          (each) => each.id === held.data.capability,
         );
         if (
           !capability ||
           !statePasses(
             held.config,
-            comparedState(capability.kind, capability.observed),
+            comparedState(
+              capability.kind,
+              capability.observed,
+              held.config.loadingIsPlaying,
+            ),
           )
         ) {
-          letGo(key);
+          letGo(key, held);
         }
       }
       if (!after) {
@@ -223,6 +250,7 @@ export function createFiring(options: {
         return;
       }
       const seen = new Map<string, (typeof changed)[number]>();
+      const groups = new Map<string, Hold>();
       const fired = matching((workflow, node) => {
         if (node.app || node.piece !== "device") {
           return false;
@@ -231,31 +259,31 @@ export function createFiring(options: {
         if (!config || (config.device && config.device !== after.id)) {
           return false;
         }
-        const hit = changed.find(
-          ({ capability, before }) =>
-            (!config.capability || config.capability === capability.id) &&
-            (!config.kind || config.kind === capability.kind) &&
-            changeFires(
-              config,
-              comparedState(capability.kind, before),
-              comparedState(capability.kind, capability.observed),
+        const matches = ({ capability, before }: (typeof changed)[number]) =>
+          (!config.capability || config.capability === capability.id) &&
+          (!config.kind || config.kind === capability.kind) &&
+          changeFires(
+            config,
+            comparedState(capability.kind, before, config.loadingIsPlaying),
+            comparedState(
+              capability.kind,
+              capability.observed,
+              config.loadingIsPlaying,
             ),
-        );
-        if (hit && config.forSeconds !== undefined) {
-          hold(
-            workflow,
-            node,
-            config as typeof config & { forSeconds: number },
-            {
-              device: after.id,
-              capability: hit.capability.id,
-              kind: hit.capability.kind,
-              before: hit.before,
-              after: hit.capability.observed,
-            },
           );
+        if (config.forSeconds !== undefined) {
+          for (const { capability, before } of changed.filter(matches)) {
+            waitFor(groups, workflow, node, config, config.forSeconds, {
+              device: after.id,
+              capability: capability.id,
+              kind: capability.kind,
+              before,
+              after: capability.observed,
+            });
+          }
           return false;
         }
+        const hit = changed.find(matches);
         if (hit && !seen.has(workflow.id)) {
           seen.set(workflow.id, hit);
         }
@@ -307,10 +335,22 @@ export function createFiring(options: {
 
     motionChanged,
 
+    start() {
+      started = true;
+    },
+
+    /** Cancels a workflow's holds when its graph changes or it turns off. */
+    forget(workflow: string) {
+      for (const [key, match] of pending) {
+        if (match.hold.workflow === workflow) letGo(key, match);
+      }
+    },
+
     /** Lets every held trigger go, as workflows stop. */
     stop() {
-      for (const key of [...holds.keys()]) {
-        letGo(key);
+      started = false;
+      for (const [key, match] of pending) {
+        letGo(key, match);
       }
     },
 

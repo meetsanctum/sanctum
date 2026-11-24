@@ -299,21 +299,9 @@ export type StateOperator = (typeof stateOperators)[number];
 export const namedKinds = ["room", "floor", "zone", "device"] as const;
 export type NamedKind = (typeof namedKinds)[number];
 
-/**
- * A config field that names a room, a floor, a zone or a device by its id.
- * A device's may say the command its piece sends, such as
- * names("device", { sends: { volume: 0 } }) for a step that sets a player's
- * volume, so the editor offers only the devices that take it.
- */
-export function names(
-  kind: NamedKind,
-  options: { sends?: Record<string, unknown> } = {},
-) {
-  return z
-    .string()
-    .min(1)
-    .max(64)
-    .meta({ names: kind, ...(options.sends && { sends: options.sends }) });
+/** A config field that names a room, a floor, a zone or a device by its id. */
+export function names(kind: NamedKind) {
+  return z.string().min(1).max(64).meta({ names: kind });
 }
 
 const nodeId = z.string().min(1).max(64);
