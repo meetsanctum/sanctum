@@ -1,5 +1,6 @@
 import {
   durationText,
+  durationWeekHeadline,
   joinedSpans,
   midnight,
   onWithin,
@@ -73,10 +74,14 @@ export function mediaSentence(
   if (hasPower) {
     const on = poweredWithin(spans, from, now);
     if (on > 0) return `On for ${durationText(on)}`;
-    const first = joined.find((span) => span.known)!;
-    return first.from > from + 60_000
-      ? `Off since ${timeText(first.from)}`
-      : "Off the whole time";
+    if (latest?.powered !== false) return null;
+    let since = latest.from;
+    for (let i = joined.length - 2; i >= 0; i--) {
+      const previous = joined[i]!;
+      if (previous.powered !== false || previous.to !== since) break;
+      since = previous.from;
+    }
+    return since > from ? `Off since ${timeText(since)}` : "Off the whole time";
   }
   const played = [...joined].reverse().find((span) => span.on);
   if (played && played === latest && played.to >= now) {
@@ -113,21 +118,20 @@ export function aboutDuration(seconds: number) {
 
 /**
  * What the last 7 days come to: about how long it played a day, over the
- * days that have ended; until one has, how long today; or since when
- * nothing has played.
+ * days that have ended; until one has, how long today; or whether
+ * anything played over the week.
  */
 export function playedWeekHeadline(days: readonly Day[], now: number) {
-  const today = midnight(now);
-  const known = days.filter((day) => day.known > 0);
-  if (known.length === 0) return "Not known yet";
-  const ended = known.filter((day) => day.start !== today);
-  const average =
-    ended.reduce((sum, day) => sum + day.on, 0) / Math.max(1, ended.length);
-  if (average > 0) return `Played about ${aboutDuration(average)} a day`;
-  const onToday = known.find((day) => day.start === today)?.on ?? 0;
-  if (onToday > 0) return `Played ${durationText(onToday)} today`;
-  if (known.length === days.length) return "Nothing played all week";
-  return known[0]!.start === today
-    ? "Nothing played today"
-    : `Nothing played since ${weekday.format(known[0]!.start)}`;
+  return durationWeekHeadline(days, now, {
+    average: (seconds) => `Played about ${aboutDuration(seconds)} a day`,
+    today: (duration) => `Played ${duration} today`,
+    none: () =>
+      days.every(
+        (day) =>
+          day.known >=
+          (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
+      )
+        ? "Nothing played all week"
+        : "No playback recorded",
+  });
 }

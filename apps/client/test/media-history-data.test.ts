@@ -143,6 +143,23 @@ describe("a media player's day", () => {
     ).toBe("Off since 14:20");
   });
 
+  it("omits the power summary when power is unknown", () => {
+    const spans = day([
+      [from - hour, "online", { activity: "idle" }],
+      [at(17), "online", { activity: "playing" }],
+    ]);
+    expect(mediaSentence(spans, [], from, now, true)).toBeNull();
+  });
+
+  it("counts only the current stretch of reported off time", () => {
+    const spans = day([
+      [from - hour, "online", off],
+      [at(12), "online", { activity: "idle" }],
+      [at(14, 20), "online", off],
+    ]);
+    expect(mediaSentence(spans, [], from, now, true)).toBe("Off since 14:20");
+  });
+
   describe("without power", () => {
     const idle = { activity: "idle" };
     const plays = { activity: "playing" };
@@ -218,11 +235,16 @@ describe("a media player's day", () => {
 
 describe("a media player's week", () => {
   const daysWith = (minutes: (number | null)[]) =>
-    minutes.map((each, index) => ({
-      start: midnight(now, 6 - index),
-      on: (each ?? 0) * 60,
-      known: each === null ? 0 : 86_400,
-    }));
+    minutes.map((each, index) => {
+      const back = 6 - index;
+      const start = midnight(now, back);
+      const end = back === 0 ? now : midnight(now, back - 1);
+      return {
+        start,
+        on: (each ?? 0) * 60,
+        known: each === null ? 0 : (end - start) / 1000,
+      };
+    });
 
   it("is how long it played a day, from the roll-ups of playing", () => {
     const days = daysOf(
@@ -255,16 +277,23 @@ describe("a media player's week", () => {
     ).toBe("Played about 7 min a day");
   });
 
-  it("until a day has ended, how long today; else since when nothing played", () => {
+  it("shows today's play time when completed days have no playback", () => {
     const today = (minutes: number) =>
       daysWith([null, null, null, null, null, null, minutes]);
     expect(playedWeekHeadline(today(40), now)).toBe("Played 40 min today");
-    expect(playedWeekHeadline(today(0), now)).toBe("Nothing played today");
+  });
+
+  it("distinguishes a quiet week from a week with gaps", () => {
+    const idle = daysWith([0, 0, 0, 0, 0, 0, 0]);
+    expect(playedWeekHeadline(idle, now)).toBe("Nothing played all week");
+    expect(
+      playedWeekHeadline(
+        idle.map((day) => ({ ...day, known: 60 })),
+        now,
+      ),
+    ).toBe("No playback recorded");
     expect(playedWeekHeadline(daysWith([null, null, 0, 0, 0, 0, 0]), now)).toBe(
-      "Nothing played since Thu",
-    );
-    expect(playedWeekHeadline(daysWith([0, 0, 0, 0, 0, 0, 0]), now)).toBe(
-      "Nothing played all week",
+      "No playback recorded",
     );
     expect(playedWeekHeadline(daysWith(Array(7).fill(null)), now)).toBe(
       "Not known yet",

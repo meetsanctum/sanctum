@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, MediaState } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
+import { useDayAndWeek } from "../src/device-history";
 import { mediaHistoryPage } from "../src/media-history";
 import { mediaPlayer } from "./place-pages-fixtures";
 
@@ -81,6 +82,8 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -100,6 +103,7 @@ const spoken = () =>
   );
 
 it("shows a TV's day as playing, on and off, and its week as time played", async () => {
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(480);
   states = [
     {
       at: at(-2),
@@ -125,11 +129,15 @@ it("shows a TV's day as playing, on and off, and its week as time played", async
   expect(text).toContain("Last 24 hours");
   expect(text).toContain("Played 2 h 55 min");
   expect(text).toContain("On for 3 h 10 min");
-  expect(
-    container.querySelector(
-      '[role="group"][aria-label="Playing over the last 24 hours"]',
-    ),
-  ).not.toBeNull();
+  const band = container.querySelector(
+    '[role="group"][aria-label="Playing over the last 24 hours"] svg',
+  )!;
+  const [off, idle] = band.querySelectorAll("rect");
+  expect(off?.getAttribute("height")).toBe("1");
+  expect(Number(off?.getAttribute("width"))).toBeGreaterThan(0);
+  expect(idle?.getAttribute("height")).toBe(band.getAttribute("height"));
+  expect(idle?.getAttribute("class")).toBe("fill-white/16");
+  expect(Number(idle?.getAttribute("width"))).toBeGreaterThan(0);
   expect(spoken()).toEqual(
     expect.arrayContaining([
       expect.stringMatching(/ to 19:30: Off$/),
@@ -179,6 +187,64 @@ it("says when a speaker last played, without on or off", async () => {
   );
 });
 
+it("ends the playing span at a live pause between history refreshes", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(now);
+  states = [
+    { at: at(22, 30), availability: "online", state: { activity: "playing" } },
+  ];
+  const speaker = (activity: "playing" | "paused") =>
+    mediaPlayer("speaker", "Speaker", "office", { activity }, { power: false });
+
+  await show(speaker("playing"));
+  expect(container.textContent).toContain("Played 10 min");
+  await act(async () => vi.advanceTimersByTime(60_000));
+  await show(speaker("paused"));
+  await act(async () => vi.advanceTimersByTime(2 * 60_000));
+
+  expect(vi.mocked(coreJson)).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("Played 11 min");
+  expect(spoken()).toEqual(
+    expect.arrayContaining([
+      "22:30 to 22:41: Playing",
+      "22:41 to 22:43: Not playing",
+    ]),
+  );
+});
+
+it("buffers only playback and power even as title and volume change", async () => {
+  function LiveHistory({ device }: { device: DeviceInfo }) {
+    const { live } = useDayAndWeek(device, device.capabilities[0]!);
+    return <pre>{JSON.stringify(live.map((change) => change.state))}</pre>;
+  }
+  const showState = (state: MediaState | null) =>
+    act(async () => {
+      const device = mediaPlayer("tv", "TV", "living", state);
+      root.render(<LiveHistory device={device} />);
+    });
+
+  await showState(null);
+  vi.setSystemTime(now + 1000);
+  await showState({
+    on: true,
+    activity: "playing",
+    media: { title: "First track" },
+    volume: 20,
+  });
+  vi.setSystemTime(now + 2000);
+  await showState({
+    on: true,
+    activity: "playing",
+    media: { title: "Second track" },
+    volume: 30,
+  });
+
+  expect(JSON.parse(container.textContent!)).toEqual([
+    null,
+    { on: true, activity: "playing" },
+  ]);
+});
+
 it("says so where the household does not keep its history", async () => {
   kept = false;
   await show(
@@ -200,4 +266,18 @@ it("reads its history as the player's, from the day before", async () => {
   expect(query.get("device")).toBe("tv");
   expect(query.get("capability")).toBe("player");
   expect(query.get("from")).toBe(new Date(now - 24 * hour).toISOString());
+});
+
+it("requests the hour that overlaps the start of the first local day", async () => {
+  vi.stubEnv("TZ", "Asia/Kolkata");
+  vi.setSystemTime(new Date("2026-11-23T15:00:00Z"));
+  await show(mediaPlayer("tv", "TV", "living", { activity: "idle" }));
+
+  const asked = vi
+    .mocked(coreJson)
+    .mock.calls.map(([path]) => path)
+    .find((path) => path.startsWith("/api/history/statistics"))!;
+  const query = new URL(asked, "http://core").searchParams;
+  // The first local day starts at 18:30 UTC.
+  expect(query.get("from")).toBe("2026-11-16T18:00:00.000Z");
 });

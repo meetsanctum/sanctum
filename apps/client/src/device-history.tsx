@@ -24,6 +24,7 @@ import {
   dayMs,
   daysOf,
   durationText,
+  hourMs,
   midnight,
   sentence,
   spansOf,
@@ -104,6 +105,7 @@ export function useDayAndWeek(
     let current = true;
     const load = async () => {
       const to = Date.now();
+      const weekStart = midnight(to, 6);
       const query = (more: Record<string, string>) =>
         new URLSearchParams({
           device: device.id,
@@ -117,14 +119,17 @@ export function useDayAndWeek(
             `/api/history/states?${query({
               from: new Date(
                 // Keep the preceding state for an opening at midnight.
-                weekOfChanges ? midnight(to, 6) - 1 : to - dayMs,
+                weekOfChanges ? weekStart - 1 : to - dayMs,
               ).toISOString(),
             })}`,
           ),
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
               period: "hour",
-              from: new Date(midnight(to, 6)).toISOString(),
+              // Include the UTC hour that overlaps the first local midnight.
+              from: new Date(
+                Math.floor(weekStart / hourMs) * hourMs,
+              ).toISOString(),
             })}`,
           ),
         ]);
@@ -151,7 +156,12 @@ export function useDayAndWeek(
 
   // Keep every change seen since the last history read. The next read
   // replaces these with the core's recorded times.
-  const liveKey = JSON.stringify([device.availability, capability.observed]);
+  const { kind, observed } = capability;
+  const historyState =
+    kind === "media" && observed
+      ? { on: observed.on, activity: observed.activity }
+      : observed;
+  const liveKey = JSON.stringify([device.availability, historyState]);
   const [live, setLive] = useState<Live[]>([]);
   useEffect(() => {
     const [availability, state] = JSON.parse(liveKey) as [

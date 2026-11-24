@@ -200,10 +200,8 @@ export function DeviceDetail(props: {
           (each): each is Contact => each.kind === "contact",
         );
   // The media player whose tile opened it, or the device's first.
-  const player =
-    capability?.kind === "media"
-      ? capability
-      : device?.capabilities.find(isMedia);
+  const openedPlayer = capability?.kind === "media" ? capability : undefined;
+  const player = openedPlayer ?? device?.capabilities.find(isMedia);
   const playerTile =
     device &&
     player &&
@@ -222,7 +220,7 @@ export function DeviceDetail(props: {
         pages.find((page) => page.devices === "own"))
       : undefined;
   const history =
-    device && control
+    device && control && !openedPlayer
       ? historyPage(device, control)
       : device && player
         ? mediaHistoryPage(device, player)
@@ -244,7 +242,6 @@ export function DeviceDetail(props: {
     if (gone) onClose();
   }, [gone, onClose]);
 
-  const openedPlayer = capability?.kind === "media" ? capability : undefined;
   const name = openedPlayer
     ? ((props.openFirstPage ? device?.name : tile?.name) ?? "")
     : (controlTile?.name ?? device?.name ?? "");

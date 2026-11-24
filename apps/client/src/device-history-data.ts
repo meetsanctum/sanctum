@@ -14,7 +14,7 @@ import { lightColour } from "@meetsanctum/ui-sdk";
 // motion and being open counting as on, and a media player's, playing
 // counting as on.
 
-const hourMs = 60 * 60_000;
+export const hourMs = 60 * 60_000;
 export const dayMs = 24 * hourMs;
 
 /** What a capability was from `from` until `to`. */
@@ -332,28 +332,47 @@ export function sensedWeekHeadline(
   now: number,
   words: WeekWords,
 ) {
+  return durationWeekHeadline(days, now, {
+    average: (seconds) => {
+      const minutes = Math.round(seconds / 60);
+      return words.aDay(
+        minutes < 1
+          ? "under a minute"
+          : minutes < 60
+            ? `about ${minutes} min`
+            : `about ${Math.round(seconds / 3600)} h`,
+      );
+    },
+    today: words.today,
+    none: (known, today) => {
+      if (known.length === days.length) return `${words.none} all week`;
+      return known[0]!.start === today
+        ? `${words.none} today`
+        : `${words.none} since ${weekday.format(known[0]!.start)}`;
+    },
+  });
+}
+
+/** Summarise a week's recorded durations using the capability's wording. */
+export function durationWeekHeadline(
+  days: readonly Day[],
+  now: number,
+  words: {
+    average: (seconds: number) => string;
+    today: (duration: string) => string;
+    none: (known: readonly Day[], today: number) => string;
+  },
+) {
   const today = midnight(now);
   const known = days.filter((day) => day.known > 0);
   if (known.length === 0) return "Not known yet";
   const ended = known.filter((day) => day.start !== today);
   const average =
     ended.reduce((sum, day) => sum + day.on, 0) / Math.max(1, ended.length);
-  if (average > 0) {
-    const minutes = Math.round(average / 60);
-    return words.aDay(
-      minutes < 1
-        ? "under a minute"
-        : minutes < 60
-          ? `about ${minutes} min`
-          : `about ${Math.round(average / 3600)} h`,
-    );
-  }
+  if (average > 0) return words.average(average);
   const onToday = known.find((day) => day.start === today)?.on ?? 0;
   if (onToday > 0) return words.today(durationText(onToday));
-  if (known.length === days.length) return `${words.none} all week`;
-  return known[0]!.start === today
-    ? `${words.none} today`
-    : `${words.none} since ${weekday.format(known[0]!.start)}`;
+  return words.none(known, today);
 }
 
 /** The words a week of counts comes to, for what is counted. */
