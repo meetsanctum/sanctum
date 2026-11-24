@@ -47,13 +47,12 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
     name: "Apple Home Devices",
     version: "0.2.0",
     core: "^2.0.0",
-    summary:
-      "Brings your Apple TVs and HomePods into your home, with what they play.",
+    summary: "Brings your Apple TVs into your home, with what they play.",
     icon: { glyph: "tv", color: "graphite" },
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your Apple TVs and HomePods and show what they play.",
+        reason: "To add your Apple TVs and show what they play.",
         needed: true,
       },
       {

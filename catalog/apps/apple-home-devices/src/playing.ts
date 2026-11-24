@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { MediaActivity, MediaState } from "@meetsanctum/app-sdk";
 
 import type { Playing } from "./boxes.js";
@@ -33,13 +35,28 @@ const whole = (value: number | undefined, most: number) =>
 
 /** The item that plays, for telling one from the next. */
 export function itemOf(playing: Playing) {
-  return JSON.stringify([
-    playing.app?.id ?? "",
-    playing.title,
-    playing.artist,
-    playing.series,
-    Math.round(playing.duration ?? 0),
-  ]);
+  const app = playing.app?.id ?? "";
+  const identity = playing.contentId
+    ? [app, "content", playing.contentId]
+    : playing.uniqueId
+      ? [app, "unique", playing.uniqueId]
+      : [
+          app,
+          playing.title,
+          playing.artist,
+          playing.series,
+          playing.season,
+          playing.episode,
+          Math.round(playing.duration ?? 0),
+        ];
+  return createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+}
+
+/** A fixed-size key for the item's current artwork. */
+export function artworkOf(playing: Playing, item = itemOf(playing)) {
+  return playing.artworkId
+    ? createHash("sha256").update(item).update(playing.artworkId).digest("hex")
+    : item;
 }
 
 /**
@@ -47,16 +64,17 @@ export function itemOf(playing: Playing) {
  * was doing; stopped is idle, since a stopped film won't resume.
  */
 export function activityOf(
-  playing: Playing,
+  state: Playing["state"],
+  item: string,
   before: { item: string; activity: MediaActivity } | null,
 ): MediaActivity {
-  switch (playing.state) {
+  switch (state) {
     case "playing":
       return "playing";
     case "paused":
       return "paused";
     case "seeking":
-      return before?.item === itemOf(playing) && before.activity !== "idle"
+      return before?.item === item && before.activity !== "idle"
         ? before.activity
         : "playing";
     case "stopped":
@@ -94,14 +112,18 @@ export function mediaOf(playing: Playing, now: number): Media | null {
   const duration = seconds(playing.duration);
   if (duration !== undefined && duration > 0) media.duration = duration;
   const position = seconds(playing.position);
-  if (position !== undefined && playing.positionAt !== undefined) {
+  if (position !== undefined) {
     media.position =
       media.duration === undefined
         ? position
         : Math.min(position, media.duration);
-    const at =
-      playing.positionAt > now + clockSlackMs ? now : playing.positionAt;
-    media.positionAt = new Date(at).toISOString();
+    if (playing.positionAt !== undefined) {
+      const at =
+        playing.positionAt > now + clockSlackMs ? now : playing.positionAt;
+      const date = new Date(at);
+      if (Number.isFinite(date.getTime()))
+        media.positionAt = date.toISOString();
+    }
   }
   const said = Object.fromEntries(
     Object.entries(media).filter(([, value]) => value !== undefined),

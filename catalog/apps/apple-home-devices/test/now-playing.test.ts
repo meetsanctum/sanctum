@@ -137,14 +137,25 @@ describe("what plays", () => {
     });
   });
 
-  it("takes stopped as idle and keeps a seek's activity", async () => {
+  it("reports position without a timestamp", async () => {
     const box = livingRoom();
     const { core } = await playing(box);
-    box.play({ ...film, artwork: false });
-    await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
-    box.play({ ...film, artwork: false, state: "seeking" });
-    await wait(30);
-    expect(stateOf(core, box)?.activity).toBe("playing");
+    box.play({ ...film, artwork: false, positionAt: undefined, position: 150 });
+    await core.until(
+      () => stateOf(core, box)?.media?.position === 135,
+      "position",
+    );
+    expect(stateOf(core, box)?.media?.positionAt).toBeUndefined();
+  });
+
+  it("takes stopped as idle and keeps a paused item paused during a seek", async () => {
+    const box = livingRoom();
+    const { core } = await playing(box);
+    box.play({ ...film, artwork: false, state: "paused" });
+    await core.until(() => stateOf(core, box)?.activity === "paused", "paused");
+    box.play({ ...film, artwork: false, state: "seeking", position: 80 });
+    await core.until(() => stateOf(core, box)?.media?.position === 80, "seek");
+    expect(stateOf(core, box)?.activity).toBe("paused");
     box.play({ ...film, artwork: false, state: "stopped" });
     await core.until(() => stateOf(core, box)?.activity === "idle", "idle");
     expect(stateOf(core, box)).toMatchObject({ app: null, media: null });
@@ -160,7 +171,7 @@ describe("pictures", () => {
     const { core } = await playing(box);
     const from = core.reports.length;
     box.play(film);
-    await wait(timings.pictureWaitMs / 2);
+    await core.until(() => box.pictures === 1, "picture requested");
     // Nothing yet: it waits for the picture.
     expect(core.reports.slice(from).some((r) => r.states.media)).toBe(false);
     release();
@@ -177,6 +188,29 @@ describe("pictures", () => {
     box.play({ ...film, state: "paused" });
     await core.until(() => stateOf(core, box)?.activity === "paused", "paused");
     expect(box.pictures).toBe(1);
+  });
+
+  it("reports a new item when its picture takes longer than the wait", async () => {
+    const box = livingRoom();
+    box.picture = jpeg(3);
+    let release!: () => void;
+    box.pictureHold = new Promise((resolve) => (release = resolve));
+    const { core } = await playing(box);
+    box.play(film);
+    try {
+      await core.until(
+        () => stateOf(core, box)?.media?.title === film.title,
+        "title without picture",
+      );
+      expect(box.pictures).toBe(1);
+      expect(stateOf(core, box)?.media?.artwork).toBeUndefined();
+    } finally {
+      release();
+    }
+    await core.until(
+      () => stateOf(core, box)?.media?.artwork === hashOf(box.picture!),
+      "picture",
+    );
   });
 
   it("goes without a picture where the item has none", async () => {
@@ -196,16 +230,45 @@ describe("pictures", () => {
     box.pictureHold = new Promise((resolve) => (release = resolve));
     const { core } = await playing(box);
     box.play(film);
-    await wait(5);
+    await core.until(() => box.pictures === 1, "first picture requested");
     box.play({ ...film, title: "Family: Season 1", artwork: false });
     release();
     await core.until(
       () => stateOf(core, box)?.media?.title === "Family: Season 1",
       "the next item",
     );
-    await wait(30);
     expect(stateOf(core, box)?.media?.artwork).toBeUndefined();
     expect(core.blobs.size).toBe(0);
+    box.picture = jpeg(6);
+    box.pictureHold = null;
+    box.play(film);
+    await core.until(
+      () => stateOf(core, box)?.media?.artwork === hashOf(box.picture!),
+      "fresh picture when the first item returns",
+    );
+    expect(box.pictures).toBe(2);
+  });
+
+  it("fetches an evicted picture again and distinguishes items by ID", async () => {
+    const box = livingRoom();
+    const { core } = await playing(box);
+    for (let i = 0; i < 9; i++) {
+      box.picture = jpeg(i);
+      const hash = hashOf(box.picture);
+      box.play({ ...film, contentId: String(i) });
+      await core.until(
+        () => stateOf(core, box)?.media?.artwork === hash,
+        `picture ${i}`,
+      );
+    }
+    box.picture = jpeg(0);
+    const hash = hashOf(box.picture);
+    box.play({ ...film, contentId: "0" });
+    await core.until(
+      () => stateOf(core, box)?.media?.artwork === hash,
+      "evicted picture again",
+    );
+    expect(box.pictures).toBe(10);
   });
 
   it("puts a picture again for an item that comes back", async () => {
@@ -240,7 +303,15 @@ describe("playback", () => {
     await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
     const send = (command: Record<string, unknown>) =>
       core.command(box.key, "media", "media", command as never);
+    const from = core.reports.length;
     await send({ activity: "playing" });
+    await core.until(
+      () =>
+        core.reports
+          .slice(from)
+          .some((r) => r.states.media?.activity === "playing"),
+      "fresh confirmation of play",
+    );
     await send({ activity: "paused" });
     await send({ activity: "playing" });
     await send({ position: 30 });
@@ -274,6 +345,20 @@ describe("playback", () => {
 });
 
 describe("sleep and wake", () => {
+  it("reports power again when an off command leaves the TV off", async () => {
+    const box = livingRoom();
+    const { core } = await playing(box);
+    const off = () => core.command(box.key, "media", "media", { on: false });
+    await off();
+    await core.until(() => stateOf(core, box)?.on === false, "off");
+    const from = core.reports.length;
+    await off();
+    await core.until(
+      () => core.reports.slice(from).some((r) => r.states.media?.on === false),
+      "fresh confirmation of power",
+    );
+  });
+
   it("rests the player while the TV sleeps and opens a new one on a wake", async () => {
     const box = livingRoom();
     const { core } = await playing(box);
@@ -306,6 +391,35 @@ describe("sleep and wake", () => {
     box.play({ ...film, artwork: false });
     await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
     expect(stateOf(core, box)?.on).toBe(true);
+  });
+
+  it("checks for a remote wake signalled during the sleep window", async () => {
+    const box = gym();
+    box.tellsPower = false;
+    const { core } = await playing(box);
+    await core.command(box.key, "media", "media", { on: false });
+    box.on = true;
+    box.play({ ...film, artwork: false });
+    expect(box.players).toHaveLength(0);
+    await core.until(
+      () => stateOf(core, box)?.activity === "playing",
+      "remote wake",
+    );
+    expect(stateOf(core, box)?.on).toBe(true);
+  });
+
+  it("rests the player when its session signals sleep", async () => {
+    const box = gym();
+    box.tellsPower = false;
+    const { core } = await playing(box);
+    box.play({ ...film, artwork: false });
+    await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
+    const attempts = box.playerAttempts;
+    box.on = false;
+    box.endSessions("sleep");
+    await core.until(() => stateOf(core, box)?.on === false, "off");
+    expect(stateOf(core, box)?.activity).toBe("idle");
+    expect(box.playerAttempts).toBe(attempts);
   });
 
   it("keeps a sleeping TV off while Companion still offers its paused item", async () => {
@@ -366,10 +480,28 @@ describe("drops and restarts", () => {
     await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
     await core.stop();
     const from = core.reports.length;
+    const attempts = box.playerAttempts;
+    let release!: () => void;
+    box.playerHold = new Promise((resolve) => (release = resolve));
     await core.start();
     await core.discovered({ found: box.sightings(), lost: [] });
-    await core.until(() => box.players.length === 1, "player again");
-    await core.until(() => stateOf(core, box)?.activity === "playing", "plays");
+    try {
+      await core.until(
+        () => box.links.length === 1 && box.playerAttempts > attempts,
+        "Companion connected and player opening",
+      );
+      await wait(timings.settleMs / 3);
+      expect(core.reports.slice(from).some((r) => r.states.media)).toBe(false);
+    } finally {
+      release();
+    }
+    await core.until(
+      () =>
+        core.reports
+          .slice(from)
+          .some((r) => r.states.media?.activity === "playing"),
+      "fresh playing report",
+    );
     expect(
       core.reports.slice(from).some((r) => r.states.media?.activity === "idle"),
     ).toBe(false);

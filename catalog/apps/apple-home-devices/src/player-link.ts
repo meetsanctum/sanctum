@@ -1,5 +1,6 @@
 import {
   PairingLost,
+  PlayerSleeping,
   type Boxes,
   type Endpoint,
   type Keys,
@@ -35,6 +36,8 @@ export const defaultPlayerTimings: PlayerTimings = {
 export type PlayerNews = {
   /** It opened, closed, failed, or its player said something changed. */
   changed(): void;
+  /** The box ended its session as it went to sleep. */
+  slept(): void;
   /** The box no longer knows AirPlay's keys. */
   lost(): void;
   log(message: string): void;
@@ -59,6 +62,7 @@ export function createPlayerLink(options: PlayerLinkOptions) {
   const now = options.now ?? Date.now;
 
   let endpoint: Endpoint | null = null;
+  let verified: Endpoint | null = null;
   let keys: Keys | null = null;
   let player: Player | null = null;
   let opening = false;
@@ -97,58 +101,89 @@ export function createPlayerLink(options: PlayerLinkOptions) {
     }
     retry = setTimeout(() => {
       retry = null;
-      void open();
+      void open(verified ?? endpoint);
     }, wait);
   }
 
-  async function open() {
-    if (stopped || lost || !wanted || opening || player || !endpoint || !keys)
+  async function open(at: Endpoint | null) {
+    if (
+      stopped ||
+      lost ||
+      !wanted ||
+      opening ||
+      !at ||
+      !keys ||
+      (player && sameAddress(at, verified))
+    ) {
       return;
+    }
     opening = true;
     const attempt = generation;
-    const at = endpoint;
-    const current = () => !stopped && !lost && attempt === generation;
+    const withKeys = keys;
+    const current = () => !stopped && !lost && wanted && attempt === generation;
     let opened: Player | undefined;
-    try {
-      opened = await boxes.play(at, keys);
-    } catch (error) {
-      opening = false;
-      if (!current()) {
-        void open();
-        return;
+    let pairingRejected = false;
+    let slept = false;
+    // A candidate cannot displace or invalidate a verified link. If that
+    // link is down, try both addresses before reporting a lost pairing.
+    const other = sameAddress(at, verified) ? endpoint : verified;
+    for (const address of [at, sameAddress(at, other) ? null : other]) {
+      if (!current() || !address) break;
+      if (player && sameAddress(address, verified)) break;
+      try {
+        opened = await boxes.play(address, withKeys);
+      } catch (error) {
+        if (!current()) break;
+        if (!verified || sameAddress(address, verified)) {
+          pairingRejected ||= error instanceof PairingLost;
+          slept ||= error instanceof PlayerSleeping;
+        }
+        if (!(error instanceof PlayerSleeping)) {
+          news.log(
+            "Couldn't reach the player of " +
+              logText(address.name) +
+              ": " +
+              logText(error instanceof Error ? error.message : String(error)),
+          );
+        }
+        continue;
       }
-      news.log(
-        "Couldn't reach the player of " +
-          logText(at.name) +
-          ": " +
-          logText(error instanceof Error ? error.message : String(error)),
-      );
-      if (error instanceof PairingLost) {
+      if (current()) verified = address;
+      break;
+    }
+    opening = false;
+    if (!current()) {
+      opened?.close();
+      void open(endpoint);
+      return;
+    }
+    if (!opened) {
+      if (player) return;
+      if (pairingRejected) {
         lost = true;
         news.lost();
         return;
       }
+      if (slept) news.slept();
+      if (!wanted) return;
       failed = true;
       news.changed();
       later();
       return;
     }
-    opening = false;
-    if (!current() || !wanted) {
-      opened.close();
-      void open();
-      return;
-    }
+    const was = player;
     player = opened;
+    was?.close();
     failures = 0;
     failed = false;
     clear();
     opened.on("change", () => {
       if (player === opened) news.changed();
     });
-    opened.on("close", () => {
+    opened.on("close", (reason) => {
       if (player !== opened) return;
       player = null;
+      if (reason === "sleep") news.slept();
       news.changed();
       later(true);
     });
@@ -181,10 +216,11 @@ export function createPlayerLink(options: PlayerLinkOptions) {
       stopped = false;
       keys = withKeys;
       if (at) endpoint = at;
+      verified = at;
       generation += 1;
       lost = keys === null;
       wanted = true;
-      void open();
+      void open(verified ?? endpoint);
     },
 
     seen(at: Endpoint | null) {
@@ -194,21 +230,21 @@ export function createPlayerLink(options: PlayerLinkOptions) {
       if (!moved || stopped) return;
       generation += 1;
       failures = 0;
-      drop();
       clear();
-      void open();
+      void open(endpoint);
     },
 
     /** Takes new keys, as after a repair. */
     rekey(withKeys: Keys, at: Endpoint) {
       keys = withKeys;
       endpoint = at;
+      verified = at;
       generation += 1;
       lost = false;
       failures = 0;
       drop();
       clear();
-      if (!stopped) void open();
+      if (!stopped) void open(endpoint);
     },
 
     /**
@@ -226,7 +262,7 @@ export function createPlayerLink(options: PlayerLinkOptions) {
       clear();
       retry = setTimeout(() => {
         retry = null;
-        void open();
+        void open(verified ?? endpoint);
       }, afterMs);
     },
 

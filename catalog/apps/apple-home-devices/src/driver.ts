@@ -47,8 +47,6 @@ export type DriverOptions = {
 /** The secret that keeps one box's keys. */
 export const secretOf = (key: string) => `box:${key}`;
 
-export { mediaId };
-
 const isKeys = (value: unknown): value is BoxKeys => {
   const keys = (value ?? {}) as Partial<BoxKeys>;
   const fine = (part: unknown) =>

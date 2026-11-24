@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "core": "^2.0.0",
   "protocol": 22,
-  "summary": "Brings your Apple TVs and HomePods into your home, with what they play.",
+  "summary": "Brings your Apple TVs into your home, with what they play.",
   "runtime": {
     "memory": 128,
     "data": 256
@@ -71,7 +71,7 @@
   "permissions": [
     {
       "id": "devices.register",
-      "reason": "To add your Apple TVs and HomePods and show what they play.",
+      "reason": "To add your Apple TVs and show what they play.",
       "needed": true,
       "asked": null,
       "startsOn": false

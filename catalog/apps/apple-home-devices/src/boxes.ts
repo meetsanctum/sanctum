@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 
+import { maxBlobBytes } from "@meetsanctum/app-sdk";
 import {
   AppleTV,
   CompanionPairSetup,
@@ -92,6 +93,8 @@ export type Playing = {
   series: string;
   season?: number;
   episode?: number;
+  contentId?: string;
+  uniqueId?: string;
   kind?: "music" | "audio" | "video";
   duration?: number;
   /** Where it was, in seconds, at `positionAt`, in ms since 1970. */
@@ -102,8 +105,12 @@ export type Playing = {
   artworkId?: string;
 };
 
-export type PlayerCommand =
-  "play" | "pause" | "stop" | "next" | "previous" | "seek";
+export type PlayerRequest =
+  | [command: "play" | "pause" | "stop" | "next" | "previous"]
+  | [command: "seek", position: number];
+
+export type PlayerCommand = PlayerRequest[0];
+export type PlayerClose = "closed" | "sleep";
 
 export type Picture = {
   type: "image/jpeg" | "image/png" | "image/webp";
@@ -118,10 +125,10 @@ export interface Player {
   /** Something it says changed. */
   on(event: "change", listener: () => void): this;
   /** Either side closed it, or the box ended it on going to sleep. */
-  on(event: "close", listener: () => void): this;
+  on(event: "close", listener: (reason: PlayerClose) => void): this;
   /** Whether the app that plays takes the command now, where it says. */
   can(command: PlayerCommand): "yes" | "no" | "unknown";
-  send(command: PlayerCommand, position?: number): Promise<void>;
+  send(...request: PlayerRequest): Promise<void>;
   /** The playing item's picture, about 600 px wide, or null. */
   picture(): Promise<Picture | null>;
   close(): void;
@@ -163,15 +170,20 @@ export class PairingLost extends Error {
   override name = "PairingLost";
 }
 
+/** The box signalled sleep while the player was opening. */
+export class PlayerSleeping extends Error {
+  override name = "PlayerSleeping";
+}
+
 // What the box calls itself on the pairings it lists.
 const pairingName = "Sanctum";
 
 // HAP's TLV error 2, Authentication: a wrong code in pair-setup's M4, and
-// keys the box doesn't know in pair-verify's M4. A box whose identity was
-// reset also fails the signature check in M2.
+// keys the box doesn't know in Companion's pair-verify M4. AirPlay's M4
+// refusal arrives before session encryption and cannot establish pairing loss.
 const wrongCodeMessage = /M4 missing Proof \(error=2\)/;
 const lostMessage =
-  /pair-verify M4 error: 2\b|^Companion server signature verification failed$/i;
+  /^Companion (?:pair-verify M4 error: 2\b|server signature verification failed$)/i;
 const expiredMessage = /PIN expired/;
 // /pair-pin-start refused: the box's AirPlay access setting allows no
 // pairing from here.
@@ -330,12 +342,14 @@ function kindOf(info: NowPlayingInfo): Playing["kind"] {
 
 const finite = (value: number) => (Number.isFinite(value) ? value : undefined);
 
-type Art = { artwork?: boolean; artworkId?: string };
-
-function playingOf(info: NowPlayingInfo, art: Art): Playing {
-  // The box's own state: the library turns Playing at a rate of 0 into
-  // Paused, which the TV app reports for as long as it plays on after a seek.
-  const state = stateOf(info.reportedPlaybackState);
+function playingOf(info: NowPlayingInfo): Playing {
+  // The TV app reports Playing at rate 0 after a seek. Other apps can
+  // report the same combination when paused, so use the library's state.
+  const state = stateOf(
+    info.appBundleIdentifier === "com.apple.TVWatchList"
+      ? info.reportedPlaybackState
+      : info.playbackState,
+  );
   const at =
     info.hasElapsedTime && info.timestamp > 0
       ? appleEpochMs + info.timestamp * 1000
@@ -354,11 +368,14 @@ function playingOf(info: NowPlayingInfo, art: Art): Playing {
     series: info.seriesName,
     season: info.seasonNumber,
     episode: info.episodeNumber,
+    contentId: info.contentIdentifier,
+    uniqueId: info.uniqueIdentifier,
     kind: kindOf(info),
     duration: info.hasDuration ? finite(info.duration) : undefined,
     position: info.hasElapsedTime ? finite(info.elapsedTime) : undefined,
     positionAt: at !== undefined && Number.isFinite(at) ? at : undefined,
-    ...art,
+    artwork: info.artworkAvailable,
+    artworkId: info.artworkIdentifier,
   };
 }
 
@@ -374,23 +391,6 @@ const nothingPlaying: Playing = {
 // MRP's SetConnectionState: 3 is the box ending the session as it sleeps.
 const setConnectionState = 38;
 const disconnected = 3;
-
-type ItemMetadata = { artworkAvailable?: unknown; artworkIdentifier?: unknown };
-
-// The first item of a queue or an update, where its metadata says whether it
-// has a picture; the library's own snapshot leaves both out.
-function itemOf(message: Message): ItemMetadata | null | undefined {
-  const payload = message.payload as Record<string, unknown>;
-  const state = payload[".setStateMessage"] as
-    | { playbackQueue?: { contentItems?: { metadata?: ItemMetadata }[] } }
-    | undefined;
-  if (state?.playbackQueue) {
-    return state.playbackQueue.contentItems?.[0]?.metadata ?? null;
-  }
-  const update = payload[".updateContentItemMessage"] as
-    { contentItems?: { metadata?: ItemMetadata }[] } | undefined;
-  return update?.contentItems?.[0]?.metadata;
-}
 
 /** A picture's type from its first bytes, or null where it's none we send. */
 export function pictureTypeOf(data: Uint8Array): Picture["type"] | null {
@@ -421,8 +421,7 @@ const features = {
 class MrpPlayer extends EventEmitter implements Player {
   power: BoxPower = "unknown";
   playing: Playing = nothingPlaying;
-  private art: Art = {};
-  private closed = false;
+  private closed: PlayerClose | null = null;
 
   constructor(private readonly tv: AppleTV) {
     super();
@@ -434,29 +433,16 @@ class MrpPlayer extends EventEmitter implements Player {
       changed();
     });
     tv.on("message", (message: Message) => {
-      if (message.type === setConnectionState) {
-        const payload = message.payload as {
-          ".setConnectionStateMessage"?: { state?: number };
-        };
-        if (payload[".setConnectionStateMessage"]?.state === disconnected) {
-          this.end();
-        }
-        return;
+      if (message.type !== setConnectionState) return;
+      const payload = message.payload as {
+        ".setConnectionStateMessage"?: { state?: number };
+      };
+      if (payload[".setConnectionStateMessage"]?.state === disconnected) {
+        this.end("sleep");
       }
-      const item = itemOf(message);
-      if (item === undefined) return;
-      // A new queue says it afresh; an update to an item adds to it.
-      const art: Art = item === null || message.type === 4 ? {} : this.art;
-      if (typeof item?.artworkAvailable === "boolean") {
-        art.artwork = item.artworkAvailable;
-      }
-      if (typeof item?.artworkIdentifier === "string") {
-        art.artworkId = item.artworkIdentifier;
-      }
-      this.art = { ...art };
     });
     tv.on("nowPlaying", (info: NowPlayingInfo) => {
-      this.playing = playingOf(info, this.art);
+      this.playing = playingOf(info);
       changed();
     });
     tv.on("featureAvailability", changed);
@@ -464,12 +450,12 @@ class MrpPlayer extends EventEmitter implements Player {
   }
 
   async start() {
-    try {
-      this.playing = playingOf(await this.tv.getNowPlaying(), this.art);
-    } catch {
-      // Nothing playing answers with an error; the pushes that follow say.
-    }
+    this.playing = playingOf(await this.tv.getNowPlaying());
     if (this.closed) throw new Unreachable("The player closed during setup");
+  }
+
+  get sleeping() {
+    return this.closed === "sleep";
   }
 
   can(command: PlayerCommand) {
@@ -479,7 +465,7 @@ class MrpPlayer extends EventEmitter implements Player {
     return said === "supported" ? "yes" : said === "unknown" ? "unknown" : "no";
   }
 
-  send(command: PlayerCommand, position = 0) {
+  send(...[command, position]: PlayerRequest) {
     return translated(() => {
       switch (command) {
         case "play":
@@ -501,18 +487,18 @@ class MrpPlayer extends EventEmitter implements Player {
   picture() {
     return translated(async () => {
       const bytes = await this.tv.requestArtwork(600, 600);
-      if (!bytes) return null;
+      if (!bytes || bytes.byteLength > maxBlobBytes) return null;
       const data = new Uint8Array(bytes);
       const type = pictureTypeOf(data);
       return type ? { type, data } : null;
     });
   }
 
-  private end() {
+  private end(reason: PlayerClose = "closed") {
     if (this.closed) return;
-    this.closed = true;
+    this.closed = reason;
+    this.emit("close", reason);
     void this.tv.close();
-    this.emit("close");
   }
 
   close() {
@@ -586,6 +572,9 @@ export function createBoxes(): Boxes {
           await player.start();
         } catch (error) {
           void tv.close();
+          if (player.sleeping) {
+            throw new PlayerSleeping("The TV slept during player setup");
+          }
           throw error;
         }
         return player;

@@ -17,7 +17,9 @@ import {
   type Pairing,
   type Picture,
   type Player,
+  type PlayerClose,
   type PlayerCommand,
+  type PlayerRequest,
   type Playing,
 } from "../src/boxes.js";
 
@@ -68,6 +70,8 @@ export class FakeBox {
   playersOpened = 0;
   /** Whether its player can be reached, apart from Companion. */
   playerReachable = true;
+  playerAttempts = 0;
+  playerHold: Promise<void> | null = null;
   /** What plays, as its player says it. */
   playing: Playing = { ...nothing };
   /** What the app that plays takes, where not every command. */
@@ -167,9 +171,9 @@ export class FakeBox {
     for (const player of [...this.players]) player.changed();
   }
 
-  /** Ends its player sessions, as when it has slept for a while. */
-  endSessions() {
-    for (const player of [...this.players]) player.drop();
+  /** Ends its player sessions with the given close reason. */
+  endSessions(reason?: PlayerClose) {
+    for (const player of [...this.players]) player.drop(reason);
   }
 
   setVolume(volume: BoxVolume) {
@@ -315,18 +319,18 @@ export class FakePlayer extends EventEmitter implements Player {
     if (!this.closed) this.emit("change");
   }
 
-  drop() {
+  drop(reason: PlayerClose = "closed") {
     if (this.closed) return;
     this.closed = true;
     this.box.players.splice(this.box.players.indexOf(this), 1);
-    this.emit("close");
+    this.emit("close", reason);
   }
 
   can(command: PlayerCommand) {
     return this.box.takes.get(command) ?? "yes";
   }
 
-  async send(command: PlayerCommand, position?: number) {
+  async send(...[command, position]: PlayerRequest) {
     if (this.closed) throw new Error("closed");
     this.box.sent.push(command === "seek" ? `seek ${position}` : command);
     const state =
@@ -336,8 +340,9 @@ export class FakePlayer extends EventEmitter implements Player {
 
   async picture() {
     this.box.pictures += 1;
+    const picture = this.box.picture;
     await this.box.pictureHold;
-    return this.box.picture;
+    return picture;
   }
 
   close() {
@@ -374,11 +379,13 @@ export function createFakeBoxes(...list: FakeBox[]) {
     },
     async play(endpoint, keys: Keys) {
       const box = boxOf(endpoint);
+      box.playerAttempts += 1;
+      if (box.playerHold) await box.playerHold;
       if (!box.reachable || !box.playerReachable) {
         throw new Unreachable("connect ETIMEDOUT");
       }
       if (!box.known.get("airplay")!.has(keys.clientId)) {
-        throw new PairingLost("pair-verify M4 error: 2");
+        throw new PairingLost("The player no longer knows these keys");
       }
       const player = new FakePlayer(box);
       box.players.push(player);

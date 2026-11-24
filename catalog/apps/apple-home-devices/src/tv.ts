@@ -14,8 +14,10 @@ import type {
   Boxes,
   Endpoint,
   Picture,
+  Playing,
   Player,
   PlayerCommand,
+  PlayerRequest,
 } from "./boxes.js";
 import { createConnection, logText, type Timings } from "./connection.js";
 import type { BoxKeys } from "./pairing.js";
@@ -24,7 +26,7 @@ import {
   type PlayerLink,
   type PlayerTimings,
 } from "./player-link.js";
-import { activityOf, appOf, itemOf, mediaOf } from "./playing.js";
+import { activityOf, appOf, artworkOf, itemOf, mediaOf } from "./playing.js";
 
 // One added Apple TV: its Companion connection for power and volume steps,
 // its player connection for what plays and playback, and the one state the
@@ -165,6 +167,7 @@ export function createTv(options: TvOptions) {
   let droppedAt: number | null = null;
   // What the last report said, and what its item was doing.
   let reported: string | null = null;
+  let reportAgain = false;
   let before: { item: string; activity: MediaActivity } | null = null;
   let named: string | null = null;
   // Pictures by item and picture id, newest last.
@@ -174,6 +177,7 @@ export function createTv(options: TvOptions) {
   let waitingFor: { art: string; until: number } | null = null;
   let gather: NodeJS.Timeout | null = null;
   let grace: NodeJS.Timeout | null = null;
+  let controlsWake: NodeJS.Timeout | null = null;
   let timer: NodeJS.Timeout | null = null;
   let updates = Promise.resolve();
 
@@ -214,6 +218,7 @@ export function createTv(options: TvOptions) {
   // A word that it woke: the player is tried every few seconds for a while,
   // and once that while is over, what the player says then is taken.
   function woke(from: "companion" | "sanctum", afterMs = 0) {
+    clearControlsWake();
     wokeAt = now();
     sleptAt = -Infinity;
     heard(true, from);
@@ -233,6 +238,29 @@ export function createTv(options: TvOptions) {
   function powerChanged() {
     if (power === false) player.rest();
     else if (power === true && !player.wanted) player.want();
+  }
+
+  function clearControlsWake() {
+    if (controlsWake) clearTimeout(controlsWake);
+    controlsWake = null;
+  }
+
+  function controlsChanged(controls: number | null) {
+    clearControlsWake();
+    if (power === false && !controls) return;
+    if (!sleeping()) {
+      player.want();
+    } else if (controls) {
+      // Losing controls as the TV goes to sleep is expected. If controls
+      // return during that window, check the TV once the window ends.
+      controlsWake = setTimeout(
+        () => {
+          controlsWake = null;
+          player.want();
+        },
+        sleptAt + timings.sleepMs - now(),
+      );
+    }
   }
 
   const connection = createConnection({
@@ -258,12 +286,8 @@ export function createTv(options: TvOptions) {
         }
         // Its media controls changed, as when something starts playing
         // after its own remote woke it: the player says whether it's on.
-        if (
-          said.controls !== was.controls &&
-          was.controls !== null &&
-          !sleeping()
-        ) {
-          player.want();
+        if (said.controls !== was.controls && was.controls !== null) {
+          controlsChanged(said.controls);
         }
         if (power !== wasOn) powerChanged();
         schedule();
@@ -285,6 +309,10 @@ export function createTv(options: TvOptions) {
     random: options.random,
     now,
     news: {
+      slept() {
+        heard(false, "player");
+        powerChanged();
+      },
       changed() {
         const open = player.player;
         if (open || player.failed) settled = true;
@@ -324,10 +352,9 @@ export function createTv(options: TvOptions) {
   }
 
   // The picture to name for what plays, fetching it where it's new.
-  async function pictureFor(open: Player, item: string) {
-    const playing = open.playing;
+  async function pictureFor(open: Player, playing: Playing, item: string) {
     if (playing.artwork === false) return undefined;
-    const art = item + "|" + (playing.artworkId ?? "");
+    const art = artworkOf(playing, item);
     const kept = pictures.get(art);
     if (kept) {
       // Put again where the report doesn't name it now: the core lets a
@@ -337,7 +364,7 @@ export function createTv(options: TvOptions) {
           kept.hash = (await ctx.blobs.put(kept.picture)).hash;
         } catch (error) {
           pictures.delete(art);
-          tried.add(art);
+          triedPicture(art);
           ctx.log(
             `Couldn't hand over the picture for ${logText(tv.name)}: ` +
               logText(error instanceof Error ? error.message : String(error)),
@@ -358,6 +385,11 @@ export function createTv(options: TvOptions) {
     return undefined;
   }
 
+  function triedPicture(art: string) {
+    if (tried.size >= 64) tried.clear();
+    tried.add(art);
+  }
+
   async function fetch(open: Player, art: string) {
     fetching = art;
     let picture: Picture | null = null;
@@ -374,15 +406,16 @@ export function createTv(options: TvOptions) {
     // item still plays.
     const still =
       player.player === open &&
-      itemOf(open.playing) + "|" + (open.playing.artworkId ?? "") === art;
+      open.playing.artwork !== false &&
+      artworkOf(open.playing) === art;
     if (still) {
-      if (tried.size >= 64) tried.clear();
-      tried.add(art);
       if (picture) {
         pictures.set(art, { picture, hash: null });
         while (pictures.size > keptPictures) {
           pictures.delete(pictures.keys().next().value!);
         }
+      } else {
+        triedPicture(art);
       }
     }
     schedule();
@@ -415,7 +448,8 @@ export function createTv(options: TvOptions) {
     const state = await compose(open);
     if (state === null || stopped) return;
     const text = JSON.stringify(state);
-    if (text === reported) return;
+    if (text === reported && !reportAgain) return;
+    reportAgain = false;
     try {
       await ctx.devices.report({ key, states: { [mediaId]: state } });
       reported = text;
@@ -439,9 +473,10 @@ export function createTv(options: TvOptions) {
       if (held && droppedAt !== null && now() - droppedAt < timings.holdMs) {
         return { ...held, ...on };
       }
-      if (!settled) {
-        wakeAt(startedAt + timings.settleMs);
-        if (now() - startedAt < timings.settleMs) return null;
+      const settleAt = startedAt + timings.settleMs;
+      if (!settled && now() < settleAt) {
+        wakeAt(settleAt);
+        return null;
       }
       held = null;
       before = null;
@@ -449,11 +484,11 @@ export function createTv(options: TvOptions) {
     }
     const playing = open.playing;
     const item = itemOf(playing);
-    const activity = activityOf(playing, before);
+    const activity = activityOf(playing.state, item, before);
     const app = activity === "idle" ? null : appOf(playing);
     const media = activity === "idle" ? null : mediaOf(playing, now());
     if (media) {
-      const picture = await pictureFor(open, item);
+      const picture = await pictureFor(open, playing, item);
       if (picture === "wait") return null;
       if (picture) media.artwork = picture;
     }
@@ -484,10 +519,10 @@ export function createTv(options: TvOptions) {
     }
   }
 
-  async function playback(command: PlayerCommand, position?: number) {
+  async function playback(...request: PlayerRequest) {
     const open = await connected();
-    check(open, command);
-    await open.send(command, position);
+    check(open, request[0]);
+    await open.send(...request);
   }
 
   return {
@@ -531,12 +566,14 @@ export function createTv(options: TvOptions) {
         if (command.on) {
           woke("sanctum", timings.wakeOpenMs);
         } else {
+          clearControlsWake();
           wokeAt = -Infinity;
           sleptAt = now();
           if (grace) clearTimeout(grace);
           heard(false, "sanctum");
           player.rest();
         }
+        reportAgain = true;
         schedule();
         return;
       }
@@ -547,8 +584,13 @@ export function createTv(options: TvOptions) {
       if ("activity" in command) {
         const open = await connected();
         const playing = command.activity === "playing";
-        // Already so: nothing to send.
-        if (open.playing.state === (playing ? "playing" : "paused")) return;
+        // The core still needs a fresh report to confirm a command that's
+        // already satisfied.
+        if (open.playing.state === (playing ? "playing" : "paused")) {
+          reportAgain = true;
+          schedule();
+          return;
+        }
         check(open, playing ? "play" : "pause");
         await open.send(playing ? "play" : "pause");
         return;
@@ -563,6 +605,7 @@ export function createTv(options: TvOptions) {
       if (gather) clearTimeout(gather);
       if (timer) clearTimeout(timer);
       if (grace) clearTimeout(grace);
+      clearControlsWake();
       connection.stop();
       player.stop();
       await updates;

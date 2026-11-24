@@ -1,8 +1,11 @@
+import { maxBlobBytes } from "@meetsanctum/app-sdk";
 import {
+  AirPlayConnection,
   AppleTV,
   CompanionPairSetup,
   encodeFrame,
   FrameType,
+  PlaybackState,
   opackEncode,
 } from "node-appletv-remote";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +31,6 @@ describe("errorOf", () => {
   it.each([
     ["M4 missing Proof (error=2)", WrongCode],
     ["Companion PS M4 missing Proof (error=2)", WrongCode],
-    ["Pair-verify M4 error: 2", PairingLost],
     ["Companion pair-verify M4 error: 2", PairingLost],
     ["Companion server signature verification failed", PairingLost],
     [
@@ -53,24 +55,32 @@ describe("errorOf", () => {
     const error = new Error("M4 missing Proof (error=6)");
     expect(errorOf(error)).toBe(error);
   });
+
+  it("leaves an AirPlay verification refusal retryable", () => {
+    const error = new Error("Pair-verify M4 error: 2");
+    expect(errorOf(error)).toBe(error);
+  });
 });
+
+async function remote(protocol: "airplay" | "companion") {
+  const box = new FakeBox({ deviceId: "6E:D2:21:38:B4:95", name: "TV" });
+  const keys = await box.pair(protocol).finish(box.code(protocol));
+  const endpoint = {
+    deviceId: box.deviceId,
+    name: box.name,
+    model: box.model,
+    address: box.address,
+    airplayPort: 7000,
+    companionAddress: box.address,
+    companionPort: 49153,
+  };
+  return { endpoint, keys };
+}
 
 describe("Companion connection", () => {
   async function connect() {
-    const box = new FakeBox({ deviceId: "6E:D2:21:38:B4:95", name: "TV" });
-    const keys = await box.pair("companion").finish(box.code("companion"));
-    return createBoxes().connect(
-      {
-        deviceId: box.deviceId,
-        name: box.name,
-        model: box.model,
-        address: box.address,
-        airplayPort: 7000,
-        companionAddress: box.address,
-        companionPort: 49153,
-      },
-      keys,
-    );
+    const { endpoint, keys } = await remote("companion");
+    return createBoxes().connect(endpoint, keys);
   }
 
   it("keeps the link usable when optional requests fail", async () => {
@@ -113,6 +123,192 @@ describe("Companion connection", () => {
     );
 
     await expect(connect()).rejects.toBeInstanceOf(Unreachable);
+  });
+});
+
+describe("AirPlay player", () => {
+  const idle = () =>
+    Object.assign(new Error("No now-playing client"), { errorCode: 35 });
+
+  async function open() {
+    const { endpoint, keys } = await remote("airplay");
+    return createBoxes().play(endpoint, keys);
+  }
+
+  it("rejects a timeout on the initial snapshot", async () => {
+    vi.spyOn(AirPlayConnection.prototype, "connect").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AppleTV.prototype, "getState").mockRejectedValue(
+      new Error("MRP response timed out"),
+    );
+    await expect(open()).rejects.toBeInstanceOf(Unreachable);
+  });
+
+  it("opens an idle TV without an active player", async () => {
+    vi.spyOn(AirPlayConnection.prototype, "connect").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AppleTV.prototype, "getState").mockRejectedValue(idle());
+    const player = await open();
+    try {
+      expect(player.playing.state).toBe("unknown");
+    } finally {
+      player.close();
+    }
+  });
+
+  it.each([
+    ["com.apple.TVWatchList", "playing"],
+    ["com.plexapp.plex", "paused"],
+  ])(
+    "reads zero-rate Playing from %s as %s",
+    async (bundleIdentifier, state) => {
+      vi.spyOn(AirPlayConnection.prototype, "connect").mockImplementation(
+        async function (this: AirPlayConnection) {
+          this.emit("mrp-message", {
+            type: 47, // SetNowPlayingPlayer
+            ".setNowPlayingPlayerMessage": {
+              playerPath: {
+                client: { bundleIdentifier },
+                player: { identifier: "player" },
+              },
+            },
+          });
+          this.emit("mrp-message", {
+            type: 4, // SetState
+            ".setStateMessage": {
+              playerPath: {
+                client: { bundleIdentifier },
+                player: { identifier: "player" },
+              },
+              playbackState: PlaybackState.Playing,
+              nowPlayingInfo: { title: "Episode", playbackRate: 0 },
+            },
+          });
+        },
+      );
+      const player = await open();
+      try {
+        expect(player.playing).toMatchObject({ title: "Episode", state });
+      } finally {
+        player.close();
+      }
+    },
+  );
+
+  it("reports artwork from the selected player and queue item", async () => {
+    let transport!: AirPlayConnection;
+    vi.spyOn(AirPlayConnection.prototype, "connect").mockImplementation(
+      async function (this: AirPlayConnection) {
+        transport = this;
+      },
+    );
+    vi.spyOn(AppleTV.prototype, "getState").mockRejectedValue(idle());
+    const player = await open();
+    const client = { bundleIdentifier: "com.apple.TVWatchList" };
+    const path = { client, player: { identifier: "foreground" } };
+    try {
+      transport.emit("mrp-message", {
+        type: 47, // SetNowPlayingPlayer
+        ".setNowPlayingPlayerMessage": { playerPath: path },
+      });
+      transport.emit("mrp-message", {
+        type: 4, // SetState
+        ".setStateMessage": {
+          playerPath: path,
+          playbackState: PlaybackState.Playing,
+          playbackQueue: {
+            location: 1,
+            contentItems: [
+              {
+                identifier: "first",
+                metadata: { title: "First", artworkAvailable: false },
+              },
+              {
+                identifier: "second",
+                metadata: {
+                  title: "Second",
+                  artworkAvailable: true,
+                  artworkIdentifier: "original",
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(player.playing).toMatchObject({
+        title: "Second",
+        artwork: true,
+        artworkId: "original",
+      });
+      transport.emit("mrp-message", {
+        type: 4, // SetState
+        ".setStateMessage": {
+          playerPath: { client, player: { identifier: "background" } },
+          playbackQueue: {
+            contentItems: [{ metadata: { artworkAvailable: false } }],
+          },
+        },
+      });
+      transport.emit("mrp-message", {
+        type: 56, // UpdateContentItem
+        ".updateContentItemMessage": {
+          playerPath: path,
+          contentItems: [
+            { identifier: "first", metadata: { artworkAvailable: false } },
+            {
+              identifier: "second",
+              metadata: { artworkIdentifier: "updated" },
+            },
+          ],
+        },
+      });
+      expect(player.playing).toMatchObject({
+        title: "Second",
+        artwork: true,
+        artworkId: "updated",
+      });
+    } finally {
+      player.close();
+    }
+  });
+
+  it("signals a sleep close separately from other closes", async () => {
+    let transport!: AirPlayConnection;
+    vi.spyOn(AirPlayConnection.prototype, "connect").mockImplementation(
+      async function (this: AirPlayConnection) {
+        transport = this;
+      },
+    );
+    vi.spyOn(AppleTV.prototype, "getState").mockRejectedValue(idle());
+    const player = await open();
+    const closed = vi.fn();
+    player.on("close", closed);
+    transport.emit("mrp-message", {
+      type: 38, // SetConnectionState
+      ".setConnectionStateMessage": { state: 3 },
+    });
+    expect(closed).toHaveBeenCalledExactlyOnceWith("sleep");
+  });
+
+  it("accepts artwork at the blob limit and discards larger replies", async () => {
+    vi.spyOn(AirPlayConnection.prototype, "connect").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AppleTV.prototype, "getState").mockRejectedValue(idle());
+    const image = Buffer.alloc(maxBlobBytes + 1);
+    image.set([0xff, 0xd8]);
+    vi.spyOn(AppleTV.prototype, "requestArtwork")
+      .mockResolvedValueOnce(image.subarray(0, maxBlobBytes))
+      .mockResolvedValueOnce(image);
+    const player = await open();
+    try {
+      expect((await player.picture())?.data.byteLength).toBe(maxBlobBytes);
+      expect(await player.picture()).toBeNull();
+    } finally {
+      player.close();
+    }
   });
 });
 

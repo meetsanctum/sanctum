@@ -9,7 +9,7 @@ patchedDependencies:
     hash: 3a5a6c6b043fb644cad3157993914250963f33e16da54b45b42959133da21725
     path: patches/esphome-client@2.1.0.patch
   node-appletv-remote@0.5.0:
-    hash: a9ee49acf993178a5deb94d28d606193bb58127ad8d83d786b28df47bba7f38a
+    hash: cfa22543db7af66867af77e7fc59197299bd9ac26a46714c8774e895e3aa96af
     path: patches/node-appletv-remote@0.5.0.patch
 
 importers:
@@ -362,7 +362,7 @@ importers:
         version: link:../../../packages/app-sdk
       node-appletv-remote:
         specifier: 0.5.0
-        version: 0.5.0(patch_hash=a9ee49acf993178a5deb94d28d606193bb58127ad8d83d786b28df47bba7f38a)
+        version: 0.5.0(patch_hash=cfa22543db7af66867af77e7fc59197299bd9ac26a46714c8774e895e3aa96af)
     devDependencies:
       '@meetsanctum/app-testkit':
         specifier: workspace:*
@@ -13151,7 +13151,7 @@ snapshots:
     dependencies:
       semver: 7.8.6
 
-  node-appletv-remote@0.5.0(patch_hash=a9ee49acf993178a5deb94d28d606193bb58127ad8d83d786b28df47bba7f38a):
+  node-appletv-remote@0.5.0(patch_hash=cfa22543db7af66867af77e7fc59197299bd9ac26a46714c8774e895e3aa96af):
     dependencies:
       '@noble/ciphers': 1.3.0
       bonjour-service: 1.4.4
