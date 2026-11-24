@@ -239,18 +239,22 @@ describe("the client", () => {
     }
   });
 
+  const toolCalls = (count: number, name = "lights") =>
+    Array.from({ length: count }, (_, index) => ({
+      index,
+      id: `c${index}`,
+      function: { name, arguments: "{}" },
+    }));
+  const toolBatch = (calls: ReturnType<typeof toolCalls>) =>
+    `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: calls } }] })}\n\n`;
+  const finishTools =
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n';
+
   it(`takes up to ${maxToolCalls} tool calls in an answer, and fails one with more`, async () => {
     const calls = (count: number) =>
-      [
-        ...Array.from(
-          { length: count },
-          (_, index) =>
-            `data: {"choices":[{"delta":{"tool_calls":[{"index":${index},"id":"c${index}","function":{"name":"lights","arguments":"{}"}}]}}]}`,
-        ),
-        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
-        "data: [DONE]",
-        "",
-      ].join("\n\n");
+      toolCalls(count)
+        .map((call) => toolBatch([call]))
+        .join("") + finishTools;
     const pieces = await ask(calls(maxToolCalls));
     expect(pieces.filter((piece) => piece.type === "tool")).toHaveLength(
       maxToolCalls,
@@ -258,6 +262,74 @@ describe("the client", () => {
     await expect(ask(calls(maxToolCalls + 1))).rejects.toMatchObject({
       problem: "answer",
     });
+  });
+
+  it("rejects an oversized batch before processing any tool calls in it", async () => {
+    const pieces = await ask(toolBatch(toolCalls(maxToolCalls)) + finishTools);
+    expect(pieces.filter((piece) => piece.type === "tool")).toHaveLength(
+      maxToolCalls,
+    );
+
+    const onFirstPiece = vi.fn();
+    const stream = askSource(
+      endpoint(toolBatch(toolCalls(maxToolCalls + 1)) + finishTools),
+      request,
+      { ...options(), onFirstPiece },
+    );
+    await expect(stream.next()).rejects.toMatchObject({
+      problem: "answer",
+      message: "too many tool calls",
+    });
+    expect(onFirstPiece).not.toHaveBeenCalled();
+  });
+
+  it("aborts the source request when a check exceeds the tool call limit", async () => {
+    const source = endpoint("");
+    const aborted = vi.fn();
+    const check = new AbortController();
+    source.fetch = async (_input, init) => {
+      const signal = init!.signal!;
+      const batches = toolCalls(maxToolCalls + 1, "get_time")
+        .map((call) => toolBatch([call]))
+        .join("");
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(batches));
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted(signal.reason);
+              controller.error(signal.reason);
+            },
+            { once: true },
+          );
+        },
+      });
+      return new Response(body, {
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+    try {
+      const outcome = await checkSource({
+        endpoint: source,
+        model: request.model,
+        inHome: true,
+        now: () => new Date(),
+        signal: check.signal,
+      });
+      expect(outcome.check).toMatchObject({
+        outcome: "failed",
+        problem: "answer",
+      });
+      expect(aborted).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          problem: "answer",
+          message: "too many tool calls",
+        }),
+      );
+    } finally {
+      check.abort();
+    }
   });
 
   const toolAnswer = (stop: string, promptTokens: number | string = 40) =>

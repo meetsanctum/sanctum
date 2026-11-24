@@ -459,29 +459,36 @@ describe("Anthropic model discovery", () => {
 });
 
 describe("model lists", () => {
-  it("refuse a list larger than an answer may be", async () => {
+  it("stops reading a list as soon as it exceeds the byte limit", async () => {
     const sources = fakeSources();
-    const list = (pad: string) =>
-      Response.json({
-        object: "list",
-        data: [{ id: "gpt-5-mini", object: "model", owned_by: pad }],
-      });
     const { core, token } = await home(sources);
-    const look = (pad: string) => {
-      sources.fetchers.internet = async () => list(pad);
-      return post(
+    const look = () =>
+      post(
         core,
         "/api/models/look",
         { kind: "openai", key: sources.openAi.key },
         { token },
       );
-    };
 
-    expect((await look("openai")).json<ModelSourceLook>()).toMatchObject({
+    expect((await look()).json<ModelSourceLook>()).toMatchObject({
       found: true,
     });
-    expect(
-      (await look("x".repeat(maxResponseBytes))).json<ModelSourceLook>(),
-    ).toEqual({ found: false, problem: "answer" });
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(maxResponseBytes / 2).fill(32);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(chunk.subarray(0, 1));
+      },
+      cancel,
+    });
+    sources.fetchers.internet = async () => new Response(body);
+
+    expect((await look()).json<ModelSourceLook>()).toEqual({
+      found: false,
+      problem: "answer",
+    });
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
