@@ -30,6 +30,7 @@ function reacher(
   heard: DriverDiscovery[],
   lanNeeded: boolean,
   serviceNeeded = false,
+  lanPermission = "lan:tcp:6053",
 ) {
   return defineApp({
     id: app,
@@ -43,7 +44,7 @@ function reacher(
         reason: "For the test.",
         needed: true,
       },
-      { id: "lan:tcp:6053", reason: "For the test.", needed: lanNeeded },
+      { id: lanPermission, reason: "For the test.", needed: lanNeeded },
       ...(serviceNeeded
         ? [{ id: "services:mqtt", reason: "For the test.", needed: true }]
         : []),
@@ -65,6 +66,7 @@ async function reaching(
     lanNeeded?: boolean;
     allowed?: boolean;
     serviceNeeded?: boolean;
+    lanPermission?: string;
   } = {},
 ) {
   const heard: DriverDiscovery[] = [];
@@ -75,7 +77,12 @@ async function reaching(
     allowed: options.allowed ?? true,
     apps: [
       {
-        app: reacher(heard, options.lanNeeded ?? true, options.serviceNeeded),
+        app: reacher(
+          heard,
+          options.lanNeeded ?? true,
+          options.serviceNeeded,
+          options.lanPermission,
+        ),
         origin: "official",
       },
     ],
@@ -239,6 +246,29 @@ describe("reaching devices", () => {
         {
           app,
           policy: expect.objectContaining({ ports: [6053] }),
+          holder: "holder-1",
+        },
+      ]);
+  });
+
+  it("gets a network of its own for a range of ports alone", async () => {
+    const { lan, grant } = await reaching({
+      lanNeeded: false,
+      allowed: false,
+      lanPermission: "lan:tcp:49152-65535",
+    });
+    await grant("discover:mdns:_example._tcp", true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(lan.loaded).toEqual([]);
+
+    await grant("lan:tcp:49152-65535", true);
+
+    await expect
+      .poll(() => lan.loaded)
+      .toEqual([
+        {
+          app,
+          policy: expect.objectContaining({ ports: [[49_152, 65_535]] }),
           holder: "holder-1",
         },
       ]);

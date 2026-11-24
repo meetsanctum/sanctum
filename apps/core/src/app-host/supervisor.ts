@@ -3,7 +3,7 @@ import type { AppFailure, AppRunning } from "@meetsanctum/app-sdk";
 import type { ManagerClient } from "../manager.js";
 import { ManagerRefusal } from "../manager.js";
 import type { InstalledApp } from "./installed.js";
-import { reachesDevices, type LanPolicies } from "./lan.js";
+import { asksForPortRange, reachesDevices, type LanPolicies } from "./lan.js";
 
 // Keeps an app that runs apart running. Its container starts by the
 // manager's hand, and from there: Starting until its start returns; Waiting
@@ -321,8 +321,13 @@ export function createSupervisor(options: {
     // A manager that can't give it a network with Sanctum's rules keeps it
     // stopped, saying why, until an update brings one that can. One still
     // running, as after the core restarted under it, stops as it starts
-    // waiting.
-    if (reachesDevices(entry) && !manager.capabilities().lan) {
+    // waiting. So does one that asks for a range of ports under a manager
+    // whose rules take single ports only.
+    const capabilities = manager.capabilities();
+    if (
+      (reachesDevices(entry) && !capabilities.lan) ||
+      (asksForPortRange(entry) && !capabilities.portRanges)
+    ) {
       // Asked again with each try until the manager has stopped it.
       if (!stoppedToWait.has(entry)) {
         of(entry).endingConnection = entry.link.isConnected();

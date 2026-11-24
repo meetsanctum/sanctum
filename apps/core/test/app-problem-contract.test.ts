@@ -27,3 +27,59 @@ describe("a driver's problem declarations at installation", () => {
     expect(() => checkManifest(manifest)).toThrow();
   });
 });
+
+describe("an app's ports at installation", () => {
+  it("accepts more than 16 single-port declarations from an earlier protocol", () => {
+    const manifest = toStaticManifest(lamps);
+    manifest.protocol = 17;
+    const permission = (id: string) => ({
+      id,
+      reason: "For the test.",
+      needed: false,
+      asked: null,
+      startsOn: false,
+    });
+    manifest.permissions = [
+      ...manifest.permissions,
+      permission("discover:mdns:_example._tcp"),
+      ...Array.from({ length: 17 }, (_, index) =>
+        permission(`lan:tcp:${7000 + index}`),
+      ),
+    ];
+    expect(checkManifest(manifest)).toBe(manifest);
+  });
+
+  it("refuses a range from a package built before ranges", () => {
+    const manifest = toStaticManifest(lamps);
+    manifest.protocol = 17;
+    manifest.permissions = [
+      ...manifest.permissions,
+      { id: "discover:mdns:_example._tcp", reason: "For the test." },
+      { id: "lan:tcp:49152-65535", reason: "For the test." },
+    ] as typeof manifest.permissions;
+    expect(() => checkManifest(manifest)).toThrow("needs protocol 18");
+  });
+
+  it.each([
+    ["a malformed one", ["lan:tcp:any"], "must name a TCP port"],
+    ["a range outside the session ports", ["lan:tcp:1-65535"], "must name"],
+    [
+      "two that share ports",
+      ["lan:tcp:50000", "lan:tcp:49152-65535"],
+      "share ports",
+    ],
+    [
+      "more than 16",
+      Array.from({ length: 17 }, (_, index) => `lan:tcp:${7000 + index}`),
+      "at most 16",
+    ],
+  ])("refuses %s read from a package", (_, ports, refusal) => {
+    const manifest = toStaticManifest(lamps);
+    manifest.permissions = [
+      ...manifest.permissions,
+      { id: "discover:mdns:_example._tcp", reason: "For the test." },
+      ...ports.map((id) => ({ id, reason: "For the test." })),
+    ] as typeof manifest.permissions;
+    expect(() => checkManifest(manifest)).toThrow(refusal);
+  });
+});

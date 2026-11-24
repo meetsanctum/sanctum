@@ -82,6 +82,23 @@
   opacity: 1;
 }
 
+/* An overlay's Radix dialog turns pointer events off on <body>; the screen
+   keeps its own while one is there (overlay.tsx), so nothing behind the
+   veil is styled again for it. */
+.home-screen[data-holds-pointer] {
+  pointer-events: auto;
+}
+
+/* A modal menu can turn pointer events off on the overlay itself. Catch
+   presses below it, above the page, until the glass is gone. */
+.home-screen[data-holds-pointer]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: auto;
+}
+
 /* A veil fades in after a moment (src/styles.css), so a blip changes nothing
    here either. */
 [data-platform="macos"] .home-screen[data-veiled] .frame-under-glass {

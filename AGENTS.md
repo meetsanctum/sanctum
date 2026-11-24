@@ -108,6 +108,11 @@ What is under which licence, and what neither covers, is in
 - Clean up any dev servers, watchers or other services started during an agent
   loop before finishing the turn, unless the user asks to keep them running.
   `pnpm dev:stop` stops a worktree's stack, and `pnpm dev:down` removes it.
+- Before presenting a concept that involves UI or UX elements, run it and its
+  mockups through a review against Apple's
+  [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
+  (the `apple-design-guidelines` skill, where it's installed) and fix what the
+  review finds. The UI Guidelines below win where the two disagree.
 
 ## UI Guidelines
 

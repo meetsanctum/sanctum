@@ -132,6 +132,9 @@ function parseBody<T extends z.ZodType>(schema: T, body: string): z.output<T> {
   }
 }
 
+/** A port, or a range of them from the first to the second. */
+export type LanPort = number | [from: number, to: number];
+
 /**
  * What an app's network may reach: its found devices' addresses, on its
  * ports, as the core's run and its count for the app name it.
@@ -140,7 +143,7 @@ export type LanPolicy = {
   core: string;
   count: number;
   addresses: string[];
-  ports: number[];
+  ports: LanPort[];
 };
 
 const appContainerPath = (app: string) =>

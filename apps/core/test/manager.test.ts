@@ -132,6 +132,7 @@ describe("what the manager can do", () => {
       memoryLimits: false,
       discovery: false,
       lan: false,
+      portRanges: false,
       deletesData: false,
       reserves: false,
     });
@@ -143,19 +144,51 @@ describe("what the manager can do", () => {
 
     client.followCapabilities(5);
 
-    // One that doesn't say whether it looks for devices, or gives apps that
-    // reach them a network of their own, does neither.
+    // One that doesn't say whether it looks for devices, gives apps that
+    // reach them a network of their own, or takes ranges of ports in its
+    // rules, does none of it.
     await vi.waitFor(() =>
       expect(client.capabilities()).toEqual({
         appContainers: true,
         memoryLimits: true,
         discovery: false,
         lan: false,
+        portRanges: false,
         deletesData: false,
         reserves: false,
       }),
     );
     expect(logs).toContain("manager: can run apps");
+  });
+
+  it("learns port range support after an upgrade, and only with LAN support", async () => {
+    const { client, socketPath } = await setUp();
+    const manager = await answering(socketPath);
+    const base = { appContainers: true, memoryLimits: true };
+    manager.body = JSON.stringify({ ...base, lan: true });
+    client.followCapabilities(5);
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: true,
+        portRanges: false,
+      }),
+    );
+
+    manager.body = JSON.stringify({ ...base, lan: true, portRanges: true });
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: true,
+        portRanges: true,
+      }),
+    );
+
+    manager.body = JSON.stringify({ ...base, lan: false, portRanges: true });
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: false,
+        portRanges: false,
+      }),
+    );
   });
 
   it("takes an old manager's not found as nothing yet, and keeps asking", async () => {

@@ -1,6 +1,6 @@
 import { activityReadPermission, historyReadPermission } from "./ai-agents.js";
 import type { CapabilityKind } from "./devices.js";
-import { lanPort } from "./lan.js";
+import { lanRange } from "./lan.js";
 import { modelsUsePermission } from "./models.js";
 import { turnOnType } from "./lights.js";
 import { forecastType, sunType } from "./weather.js";
@@ -147,12 +147,14 @@ export function permissionWords(id: string): PermissionWords {
   if (kind === "discover" && rest.startsWith("mdns:")) {
     return words("Find devices on your network", "radar");
   }
-  const port = lanPort(id);
-  if (port !== null) {
+  const range = lanRange(id);
+  if (range !== null) {
     return words(
       "Talk to devices on your network",
       "network",
-      `Port ${port}, to the devices it found`,
+      range.from === range.to
+        ? `Port ${range.from}, to the devices it found`
+        : `Any port from ${range.from} to ${range.to}, on the devices it found`,
     );
   }
   if (kind === "services" && rest) {

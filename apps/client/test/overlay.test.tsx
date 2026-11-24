@@ -143,9 +143,67 @@ describe("a container two overlays cover", () => {
 
     await both(true, true);
     expect(container.hasAttribute("data-covered")).toBe(true);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
     await both(false, true);
     expect(container.hasAttribute("data-covered")).toBe(true);
+    expect(container.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
     await both(false, false);
     expect(container.hasAttribute("data-covered")).toBe(false);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(false);
+  });
+});
+
+// Radix turns pointer events off on <body> while the dialog is open, which
+// every element inherits; the container keeps its own from before that until
+// after it ends, so nothing behind the veil is styled again
+// (src/shell-frame.css).
+describe("pointer events behind the veil", () => {
+  it("holds its container's before Radix turns them off, and until after it turns them back on", async () => {
+    withFade();
+    const seen: string[] = [];
+    const note = (records: MutationRecord[]) => {
+      // What each change made of it, from what it was before.
+      for (const record of records) {
+        seen.push(
+          record.target === document.body
+            ? `body ${record.oldValue?.includes("pointer-events: none") ? "auto" : "none"}`
+            : `container ${record.oldValue === null ? "holds" : "lets go"}`,
+        );
+      }
+    };
+    const watch = new MutationObserver(note);
+    watch.observe(document.body, {
+      attributeFilter: ["style"],
+      attributeOldValue: true,
+    });
+    watch.observe(container, {
+      attributeFilter: ["data-holds-pointer"],
+      attributeOldValue: true,
+    });
+
+    await show(true);
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
+    expect(document.body.style.pointerEvents).toBe("none");
+
+    await show(false);
+    expect(document.body.style.pointerEvents).toBe("");
+    expect(container.hasAttribute("data-holds-pointer")).toBe(true);
+
+    await act(async () => {
+      dialog()!.dispatchEvent(
+        Object.assign(new Event("animationend"), { animationName: "exit" }),
+      );
+    });
+    expect(container.hasAttribute("data-holds-pointer")).toBe(false);
+
+    note(watch.takeRecords());
+    watch.disconnect();
+    expect(seen.filter((each, index) => each !== seen[index - 1])).toEqual([
+      "container holds",
+      "body none",
+      "body auto",
+      "container lets go",
+    ]);
   });
 });

@@ -228,4 +228,54 @@ describe("confirming an app's network policies", () => {
 
     policies.close();
   });
+
+  it("sends a range as [from, to], and takes it away when it's switched off", async () => {
+    vi.useFakeTimers();
+    const { entry, policies, apply } = setUp();
+    const range = "lan:tcp:49152-65535";
+    entry.manifest.permissions = [
+      { id: service, reason: "For the test.", needed: true },
+      { id: port, reason: "For the test.", needed: true },
+      { id: range, reason: "For the test." },
+    ].map(permissionInfo);
+    entry.granted.push(range);
+    policies.sync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apply.mock.calls.at(-1)![1]).toMatchObject({
+      ports: [6053, [49_152, 65_535]],
+    });
+
+    const pending = deferred<LanVersion>();
+    apply.mockImplementationOnce(() => pending.promise);
+    const taking = policies.taking(entry, range);
+    let isTaken = false;
+    void taking?.then(() => (isTaken = true));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apply.mock.calls.at(-1)![1]).toMatchObject({ ports: [6053] });
+    // Off only once the manager has confirmed the rules without it.
+    expect(isTaken).toBe(false);
+
+    pending.resolve(apply.mock.calls.at(-1)![1]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(isTaken).toBe(true);
+    policies.close();
+  });
+
+  it("sends the ports of an app that names single ones as it always has", async () => {
+    vi.useFakeTimers();
+    const { entry, policies, apply } = setUp();
+    entry.manifest.permissions = [
+      { id: service, reason: "For the test.", needed: true },
+      { id: port, reason: "For the test.", needed: true },
+      { id: "lan:tcp:6054", reason: "For the test." },
+    ].map(permissionInfo);
+    entry.granted.push("lan:tcp:6054");
+    policies.sync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Two ports side by side stay two ports, as a manager without ranges
+    // takes them.
+    expect(apply.mock.calls.at(-1)![1]).toMatchObject({ ports: [6053, 6054] });
+    policies.close();
+  });
 });

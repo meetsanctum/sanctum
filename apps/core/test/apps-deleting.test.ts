@@ -151,6 +151,7 @@ describe("the data of the services it used", () => {
           memoryLimits: true,
           discovery: false,
           lan: false,
+          portRanges: false,
           deletesData: true,
           reserves: false,
         }),

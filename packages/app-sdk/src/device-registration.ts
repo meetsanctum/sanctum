@@ -52,7 +52,7 @@ const registration = z.strictObject({
 function registrationSchema(legacy: boolean) {
   return registration.superRefine(({ type, capabilities }, context) => {
     const kinds = new Set(capabilities.map((capability) => capability.kind));
-    // Drivers through protocol 17 describe a smart speaker by its playback.
+    // Drivers through protocol 18 describe a smart speaker by its playback.
     if (legacy && type === "smart-speaker" && kinds.has("media")) return;
     if (!fitsType(type, kinds)) {
       context.addIssue({
@@ -70,7 +70,7 @@ const legacyRegistration = registrationSchema(true);
 
 /** The registration contract for the protocol declared by the driver. */
 export function deviceRegistrationForProtocol(protocol = protocolVersion) {
-  return protocol < 18 ? legacyRegistration : deviceRegistration;
+  return protocol < 19 ? legacyRegistration : deviceRegistration;
 }
 
 export type DeviceRegistration = z.input<typeof deviceRegistration>;

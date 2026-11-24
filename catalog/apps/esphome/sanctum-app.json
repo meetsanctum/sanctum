@@ -3,7 +3,7 @@
   "name": "ESPHome",
   "version": "0.9.0",
   "core": "^2.0.0",
-  "protocol": 18,
+  "protocol": 19,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
   "runtime": {
     "memory": 128,
