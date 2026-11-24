@@ -46,9 +46,7 @@ import { useTileHandlers, type Devices } from "./use-devices";
 type KeptLine = {
   own: readonly Tile[];
   unit: ReturnType<typeof unitOf>;
-  minute: number;
   line: {
-    motion: ReturnType<typeof placeMotionText>;
     contact: ReturnType<typeof placeContacts>;
     readings: ReturnType<typeof readingsOf>;
   };
@@ -73,27 +71,25 @@ export function HomeRooms(props: {
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
-  // Each room's line, worked out again only when its tiles, the unit or the
-  // minute changed: one device's change otherwise worked out every room's.
+  // Keep contact counts and readings for current rooms with unchanged tiles
+  // and units. Motion describes elapsed time, so it is worked out afresh.
   const lines = useRef(new Map<string, KeptLine>());
+  const nextLines = new Map<string, KeptLine>();
   const lineOf = (room: Room, own: readonly Tile[]) => {
-    const minute = Math.floor(now / 60_000);
     const was = lines.current.get(room.id);
-    if (
-      was &&
-      was.unit === unit &&
-      was.minute === minute &&
-      sameItems(was.own, own)
-    ) {
-      return was.line;
-    }
-    const line = {
-      motion: placeMotionText(own, now),
-      contact: placeContacts(own),
-      readings: readingsOf(sensorReadings(own), unit),
-    };
-    lines.current.set(room.id, { own, unit, minute, line });
-    return line;
+    const entry =
+      was && was.unit === unit && sameItems(was.own, own)
+        ? was
+        : {
+            own,
+            unit,
+            line: {
+              contact: placeContacts(own),
+              readings: readingsOf(sensorReadings(own), unit),
+            },
+          };
+    nextLines.set(room.id, entry);
+    return { ...entry.line, motion: placeMotionText(own, now) };
   };
   // Devices with no room have no line of their own and no sections.
   const shown = places.flatMap((place) => {
@@ -129,6 +125,7 @@ export function HomeRooms(props: {
         ]
       : [];
   });
+  lines.current = nextLines;
   const isEmpty =
     props.onHome !== undefined && places.every((place) => !place.onHome.length);
   const groups = byFloor(

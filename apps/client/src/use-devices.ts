@@ -26,7 +26,7 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
-import { tileKey, tilesOf } from "./device-tiles";
+import { tileKey, tilePlacesOf, tilesOfDevice } from "./device-tiles";
 import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
@@ -60,6 +60,7 @@ type CommandTarget = Pick<Tile, "key" | "deviceId" | "capabilityId"> & {
 // has taken it. Only what the core is sure to ask of the device shows: a
 // colour, or a level held for a light that is off, waits for its answer.
 type Asked = { on: boolean; brightness?: number };
+type Asks = ReadonlyMap<string, { asked: Asked; by: object }>;
 
 function askedOf(command: LightCommand): Asked | undefined {
   if (command.on === false || command.brightness === 0) return { on: false };
@@ -136,9 +137,7 @@ export function useDevices(live: LiveFeed) {
   }, []);
   // What the latest command from here asks of each tile, by its key, until
   // the core has answered it; null forgets what an earlier one asked.
-  const [asks, setAsks] = useState<
-    ReadonlyMap<string, { asked: Asked; by: object }>
-  >(() => new Map());
+  const [asks, setAsks] = useState<Asks>(() => new Map());
   const ask = useCallback((keys: string[], asked: Asked | null) => {
     const by = {};
     setAsks((current) => {
@@ -481,55 +480,51 @@ export function useDevices(live: LiveFeed) {
   // count on, and a device on a battery whose driver no longer knows
   // whether it answers turns quiet once a day has passed (maintenance.ts),
   // without a live message.
-  const ticks = devices.some(
-    (device) =>
-      device.capabilities.some(
-        (each) => each.kind === "motion" || each.kind === "contact",
-      ) ||
-      (onBattery(device) && device.availability === "unknown"),
-  );
+  const ticks = devices.some(tilesChangeWithTime);
   // The clock only moves the tiles on; they read the time afresh each time.
-  const minute = useMinuteClock(ticks);
+  const clock = useMinuteClock(ticks);
+  const tilePlaces = useMemo(() => tilePlacesOf(places), [places]);
   const kept = useRef(new Map<string, Tile>());
   const made = useRef(new WeakMap<DeviceInfo, MadeTiles>());
   const tiles = useMemo(() => {
-    // Only a device something was asked of shows it, as a new object.
-    const shown =
-      asks.size === 0
-        ? devices
-        : devices.map((device) =>
-            device.capabilities.some((capability) =>
-              asks.has(tileKey(device.id, capability.id)),
-            )
-              ? {
-                  ...device,
-                  capabilities: device.capabilities.map((capability) => {
-                    const each = asks.get(tileKey(device.id, capability.id));
-                    return each
-                      ? pendingAs(capability, each.asked)
-                      : capability;
-                  }),
-                }
-              : device,
-          );
-    // Each device's tiles are made again only when the device, the places,
-    // its presses or the minute changed: one light's change otherwise made
-    // all of the home's tiles again.
+    // Reuse tiles while their inputs match. Time-dependent tiles also need
+    // to see elapsed time between clock ticks when a live update comes in.
     const now = Date.now();
-    const next = shown
+    const next = devices
       .flatMap((device) => {
-        const presses = pressesOf(device, pressed);
         const was = made.current.get(device);
+        const timed = was?.timed ?? tilesChangeWithTime(device);
         if (
           was &&
-          was.places === places &&
-          was.minute === minute &&
-          was.presses === presses
+          (!timed || was.now === now) &&
+          was.places === tilePlaces &&
+          sameTileInputs(device, was, asks, pressed)
         ) {
+          was.asks = asks;
+          was.pressed = pressed;
           return was.tiles;
         }
-        const tiles = tilesOf([device], places, pressed, now);
-        made.current.set(device, { places, minute, presses, tiles });
+        const shown =
+          asks.size === 0
+            ? device
+            : {
+                ...device,
+                capabilities: device.capabilities.map((capability) => {
+                  const asked = asks.get(tileKey(device.id, capability.id));
+                  return asked
+                    ? pendingAs(capability, asked.asked)
+                    : capability;
+                }),
+              };
+        const tiles = tilesOfDevice(shown, tilePlaces, pressed, now);
+        made.current.set(device, {
+          places: tilePlaces,
+          timed,
+          now,
+          asks,
+          pressed,
+          tiles,
+        });
         return tiles;
       })
       .map((tile) => {
@@ -537,7 +532,7 @@ export function useDevices(live: LiveFeed) {
         return failed ? { ...tile, failures: failed } : tile;
       });
     return keepUnchanged(next, kept.current);
-  }, [devices, places, failures, pressed, asks, minute]);
+  }, [devices, tilePlaces, failures, pressed, asks, clock]);
   useLayoutEffect(() => {
     kept.current = new Map(tiles.map((tile) => [tile.key, tile]));
   }, [tiles]);
@@ -598,20 +593,42 @@ export function useTileHandlers(devices: Pick<Devices, "toggle" | "dim">) {
 
 // A device's tiles as last made, and what they were made from.
 type MadeTiles = {
-  places: Places | undefined;
-  minute: number;
-  presses: string;
+  places: ReturnType<typeof tilePlacesOf>;
+  timed: boolean;
+  now: number;
+  asks: Asks;
+  pressed: ReadonlyMap<string, string>;
   tiles: Tile[];
 };
 
-// A device's buttons' presses of the last few seconds, in one string.
-function pressesOf(device: DeviceInfo, pressed: ReadonlyMap<string, string>) {
-  if (pressed.size === 0) return "";
-  const prefix = `${device.id}/`;
-  return [...pressed]
-    .filter(([key]) => key.startsWith(prefix))
-    .map(([key, action]) => `${key}=${action}`)
-    .join(" ");
+function tilesChangeWithTime(device: DeviceInfo) {
+  return (
+    device.capabilities.some(
+      (each) => each.kind === "motion" || each.kind === "contact",
+    ) ||
+    (onBattery(device) && device.availability === "unknown")
+  );
+}
+
+// Commands and presses on other devices leave these tiles unchanged.
+function sameTileInputs(
+  device: DeviceInfo,
+  was: MadeTiles,
+  asks: Asks,
+  pressed: ReadonlyMap<string, string>,
+) {
+  const asksChanged = was.asks !== asks;
+  const pressesChanged = was.pressed !== pressed;
+  if (!asksChanged && !pressesChanged) return true;
+  return device.capabilities.every(({ id, kind }) => {
+    const comparePress = pressesChanged && kind === "button";
+    if (!asksChanged && !comparePress) return true;
+    const key = tileKey(device.id, id);
+    return (
+      (!asksChanged || was.asks.get(key)?.asked === asks.get(key)?.asked) &&
+      (!comparePress || was.pressed.get(key) === pressed.get(key))
+    );
+  });
 }
 
 // A tile that says the same as before keeps its object, so a tile drawn from

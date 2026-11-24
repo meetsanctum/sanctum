@@ -131,6 +131,7 @@ describe("a device's detail", () => {
           container={container}
           tileKey="display/"
           open
+          isCovering={false}
           devices={devices}
           apps={[app]}
           live={live}

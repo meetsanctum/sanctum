@@ -59,7 +59,7 @@ export function useOpenDevice() {
 
 type DetailProps = Omit<
   ComponentProps<typeof DeviceDetail>,
-  "tileKey" | "openFirstPage" | "open" | "onClose" | "devices"
+  "tileKey" | "openFirstPage" | "open" | "onClose" | "devices" | "isCovering"
 >;
 
 /**
@@ -86,6 +86,7 @@ export function OpenDeviceDetail(props: DetailProps & { opened: OpenDevice }) {
       tileKey={current.key}
       openFirstPage={current.openFirstPage}
       open={current.open}
+      isCovering={isCovering}
       onClose={opened.close}
     />
   );

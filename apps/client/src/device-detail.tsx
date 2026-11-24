@@ -23,14 +23,7 @@ import {
   Thermometer,
   Volume2,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
+import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
 
 import { activityPage } from "./activity/device-page";
 import { AppNotice, isShown, WhileNotRunning } from "./app-state";
@@ -142,6 +135,8 @@ export function DeviceDetail(props: {
   /** A room's tile opens on the device's first page. */
   openFirstPage?: boolean;
   open: boolean;
+  /** Whether the overlay is still over the window, including its exit fade. */
+  isCovering: boolean;
   devices: Devices;
   /** The apps whose pages a device's detail may show. */
   apps: readonly HostedApp[];
@@ -160,14 +155,6 @@ export function DeviceDetail(props: {
   onOpenStatus: () => void;
 }) {
   const { devices, onClose } = props;
-  const [isCovering, setIsCovering] = useState(false);
-  const onCovering = useCallback(
-    (covering: boolean) => {
-      setIsCovering(covering);
-      props.onCovering(covering);
-    },
-    [props.onCovering],
-  );
   const now = new Date(useMinuteClock());
   const tile = devices.tiles.find((each) => each.key === props.tileKey);
   const device = devices.devices.find((each) => each.id === tile?.deviceId);
@@ -286,7 +273,7 @@ export function DeviceDetail(props: {
   // The picture of what it plays, and its colour on the veil, while
   // something does.
   const isMediaActive = Boolean(
-    (props.open || isCovering) &&
+    (props.open || props.isCovering) &&
     player?.state &&
     player.state.on !== false &&
     player.state.activity !== "idle",
@@ -495,7 +482,7 @@ export function DeviceDetail(props: {
       container={props.container}
       open={props.open && hasDetail}
       onClose={onClose}
-      onCovering={onCovering}
+      onCovering={props.onCovering}
       title={name}
       tint={tint}
       subtitle={tile && `${room?.name ?? noRoomName} · ${status}`}

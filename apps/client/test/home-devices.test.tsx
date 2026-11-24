@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import { act } from "react";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 // Load the harness first so the screen uses its data fixtures.
 import {
@@ -41,6 +41,8 @@ vi.mock(import("../src/top-bar"), async (original) => {
   const actual = await original();
   return { ...actual, TopBar: vi.fn(actual.TopBar) };
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 it("draws a device's change without redrawing the frame or top bar", async () => {
   homeData.rooms = [{ id: "kitchen", name: "Kitchen", floorId: null }];
@@ -169,7 +171,7 @@ it("keeps Edit Home disabled while the first device snapshot is pending", async 
   expect(bars.mock.lastCall?.[0].onEditHome?.disabled).toBe(false);
 });
 
-it("leaves a closed device's detail alone when a device changes", async () => {
+it("draws device detail only from opening through its exit fade", async () => {
   homeData.rooms = [{ id: "kitchen", name: "Kitchen", floorId: null }];
   const lamp = light("lamp", "Lamp", { roomId: "kitchen" });
   homeData.devices = [lamp];
@@ -189,6 +191,27 @@ it("leaves a closed device's detail alone when a device changes", async () => {
   );
   expect(details).not.toHaveBeenCalled();
 
+  // The built CSS supplies these animations in the browser.
+  const computed = window.getComputedStyle.bind(window);
+  vi.stubGlobal("CSS", { escape: (name: string) => name });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(window, "getComputedStyle").mockImplementation((element) =>
+    element.getAttribute("role") === "dialog"
+      ? ({
+          get animationName() {
+            return element.getAttribute("data-state") === "closed"
+              ? "exit"
+              : "enter";
+          },
+        } as CSSStyleDeclaration)
+      : computed(element),
+  );
   await act(async () =>
     container
       .querySelector<HTMLButtonElement>(
@@ -197,7 +220,31 @@ it("leaves a closed device's detail alone when a device changes", async () => {
       .click(),
   );
   expect(details).toHaveBeenCalled();
+  const dialog = () => container.ownerDocument.querySelector('[role="dialog"]');
+  const opened = dialog();
+  expect(opened).not.toBeNull();
+
+  await act(async () =>
+    [...opened!.querySelectorAll("button")]
+      .find((button) => button.textContent === "Done")!
+      .click(),
+  );
+  expect(dialog()).toBe(opened);
+  expect(opened?.getAttribute("data-state")).toBe("closed");
+
+  await act(async () =>
+    opened!.dispatchEvent(
+      Object.assign(new Event("animationend"), { animationName: "exit" }),
+    ),
+  );
+  expect(dialog()).toBeNull();
+  details.mockClear();
+
+  await act(async () =>
+    pushLive({ type: "device", id: lamp.id, device: lamp }),
+  );
   expect(
-    container.ownerDocument.querySelector('[role="dialog"]'),
+    container.querySelector('main [aria-label="Lamp, Off"]'),
   ).not.toBeNull();
+  expect(details).not.toHaveBeenCalled();
 });

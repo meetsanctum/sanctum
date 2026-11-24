@@ -164,6 +164,7 @@ function Harness() {
         container={container}
         tileKey={detail.key}
         open={detail.open}
+        isCovering={false}
         devices={shown}
         apps={[]}
         live={live}
