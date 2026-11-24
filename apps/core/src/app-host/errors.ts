@@ -11,6 +11,9 @@ const statuses = {
   // The home's AI model answers only within a turn, which a person's or a
   // shared device's call opens.
   no_turn: 403,
+  // The turn this call belonged to is over: a newer request from the same
+  // device took over, or its time ran out.
+  turn_ended: 409,
   app_failed: 500,
   // The app, or a device's driver app, is not running: paused or stopped. Or
   // the core can't say yet, as which apps the home has before they install.

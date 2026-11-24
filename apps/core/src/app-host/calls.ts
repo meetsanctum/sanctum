@@ -19,6 +19,7 @@ import {
   workflowsManagePermission,
   type ActionErrorCode,
   type Actor,
+  type AiToolAnswer,
   type RequestReply,
   type AppSettings,
   type CoreCalls,
@@ -210,6 +211,12 @@ export function createCoreCalls(options: {
   assistant: AssistantCalls;
   // How a request's reply reaches whoever asked, for the call that runs it.
   reply?: (reply: RequestReply) => void;
+  // Keeps a request's tool call as it starts, and its answer, or null for a
+  // refusal, as it ends.
+  recordTool?: (
+    name: string,
+    input: Record<string, unknown>,
+  ) => (answer: AiToolAnswer | null) => void;
   // What the machine Sanctum runs on has now.
   host: () => Promise<HostResources>;
   log: (message: string) => void;
@@ -243,10 +250,16 @@ export function createCoreCalls(options: {
     });
   };
 
+  // A call that's over changes nothing more. One of a turn says so with
+  // `turn_ended`, which the Assistant tells apart from a failure.
+  function stillOpen() {
+    if (!options.ended()) return;
+    if (options.models.turn) throw new ActionError("turn_ended");
+    throw new Error(`This call to ${appId} has ended`);
+  }
+
   function need(permission: string) {
-    if (options.ended()) {
-      throw new Error(`This call to ${appId} has ended`);
-    }
+    stillOpen();
     if (!permissions().includes(permission)) {
       throw new Error(`${appId} does not hold ${permission}`);
     }
@@ -267,9 +280,7 @@ export function createCoreCalls(options: {
   }
 
   function open() {
-    if (options.ended()) {
-      throw new Error(`This call to ${appId} has ended`);
-    }
+    stillOpen();
   }
 
   function named(name: unknown) {
@@ -281,9 +292,7 @@ export function createCoreCalls(options: {
   }
 
   function readsDevices() {
-    if (options.ended()) {
-      throw new Error(`This call to ${appId} has ended`);
-    }
+    stillOpen();
     if (
       deviceKinds(permissions()).reads.size === 0 &&
       !permissions().includes(registerPermission)
@@ -660,13 +669,24 @@ export function createCoreCalls(options: {
       if (!parsed.success) {
         throw new Error("A tool's call is its name and an input object");
       }
-      const answer = await options.assistant.call(
-        appId,
-        actor,
+      const answered = options.recordTool?.(
         parsed.data.name,
         parsed.data.input,
-        options.ended,
       );
+      let answer: AiToolAnswer;
+      try {
+        answer = await options.assistant.call(
+          appId,
+          actor,
+          parsed.data.name,
+          parsed.data.input,
+          options.ended,
+        );
+      } catch (error) {
+        answered?.(null);
+        throw error;
+      }
+      answered?.(answer);
       need(aiAssistantPermission);
       return answer;
     },

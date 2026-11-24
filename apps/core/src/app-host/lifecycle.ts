@@ -53,6 +53,8 @@ export function createAppLifecycle(options: {
   commits: AppCommits;
   supervisor: () => Supervisor;
   canStart?: (entry: InstalledApp) => boolean;
+  // Ends what the app's requests left under way as it stops (requests.ts).
+  stopped?: (entry: InstalledApp) => void;
   timeoutMs: number;
   log: (message: string) => void;
 }) {
@@ -205,8 +207,9 @@ export function createAppLifecycle(options: {
     }
   }
 
-  // It takes no more calls, and what it set going ends: its pages'
-  // captures of presses and its requests to the internet. The core's events
+  // It takes no more calls, and what it set going ends: the Assistant's
+  // requests, its pages' captures of presses and its requests to the
+  // internet. The core's events
   // stop, the one the app is handling and, unless the core is shutting
   // down, its calls under way finish; then its stop hook runs and every
   // context it had ends. A stop hook that fails ends its container, so
@@ -222,6 +225,7 @@ export function createAppLifecycle(options: {
       return;
     }
     entry.running = undefined;
+    options.stopped?.(entry);
     options.presses().endCaptures(entry.app.id);
     entry.requests.end();
     await eventsForApps.stop(entry.app.id);

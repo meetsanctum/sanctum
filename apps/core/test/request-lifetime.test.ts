@@ -3,6 +3,7 @@ import {
   assistantAppId,
   turnLimits,
   type AppDefinition,
+  type AssistantRequestCall,
   type RequestContext,
 } from "@meetsanctum/app-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -169,22 +170,29 @@ describe("Assistant request admission and lifetime", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("keeps a client's slot until its handler finishes after an early reply", async () => {
+  it("lets a client's newer request take over from one still running, beside another client's", async () => {
     const release = deferredDelivery();
-    const { ask, turn } = setUp(async (ctx, request) => {
+    const seen: AssistantRequestCall[] = [];
+    const { ask, turn } = setUp(async (_ctx, request) => {
+      seen.push(request);
       await request.reply({ text: "Here." });
-      if (ctx.actor.id === "tablet") await release.promise;
+      if (seen.length === 1) await release.promise;
     });
 
     await expect(ask()).resolves.toEqual({ text: "Here." });
-    await expect(ask()).rejects.toMatchObject({ code: "limited" });
     await expect(ask("phone")).resolves.toEqual({ text: "Here." });
+    expect(seen[0]!.signal.aborted).toBe(false);
 
-    release.resolve();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(turn.end).toHaveBeenCalledTimes(2);
     await expect(ask()).resolves.toEqual({ text: "Here." });
+    expect(seen[0]!.signal.reason).toMatchObject({ code: "turn_ended" });
     await vi.advanceTimersByTimeAsync(0);
+    expect(turn.end).toHaveBeenCalledTimes(3);
+    expect(seen[2]!.earlier).toEqual([
+      expect.objectContaining({ asked: "Hello", reply: "Here.", cutOff: true }),
+    ]);
+    // The phone's exchange is its own.
+    expect(seen[1]!.earlier).toEqual([]);
+    release.resolve();
   });
 
   it("limits how many clients can have a request under way together", async () => {

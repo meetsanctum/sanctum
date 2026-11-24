@@ -45,6 +45,7 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
+import { assistantOf } from "./assistants.js";
 import type { AgentChanges } from "./changes.js";
 import { areasPage } from "./overview.js";
 import { createRestoreCapability } from "./restore.js";
@@ -74,9 +75,13 @@ type CoreToolsOptions = {
   now?: () => Date;
 };
 
+// Who lists the tools: an MCP client, or an assistant app acting within a
+// turn, for which some tools take less.
+type Listing = { assistant: boolean };
+
 type CoreTool = {
   /** As listed, from what's switched on now. */
-  tool: (canUse: AiCanUse) => Tool;
+  tool: (canUse: AiCanUse, listing: Listing) => Tool;
   /** Whether it's listed: what it needs is on. */
   usable: (canUse: AiCanUse) => boolean;
   /** Why it can't be used, when it's called anyway. */
@@ -317,7 +322,12 @@ export function createCoreTools(options: CoreToolsOptions) {
     },
   };
 
-  const restoreInput = z.strictObject({ change: z.string().min(1).max(64) });
+  const changeId = z.string().min(1).max(64);
+  const restoreInput = z.strictObject({ change: changeId });
+  // An assistant app may leave the change out, for the last one it made for
+  // whoever opened its turn: a person says "put it back" after the window of
+  // its earlier exchanges has gone.
+  const assistantRestoreInput = z.strictObject({ change: changeId.optional() });
 
   const putBack = createRestoreCapability({
     devices: options.devices,
@@ -326,28 +336,40 @@ export function createCoreTools(options: CoreToolsOptions) {
   });
 
   const restore: CoreTool = {
-    tool: () => ({
+    tool: (_canUse, { assistant }) => ({
       name: "restore",
       title: "Put back",
       description: [
-        "Put back one of your own changes: the `change` a lights or device_command call answered with.",
+        assistant
+          ? "Put back one of your own changes: the `change` a lights or device_command call answered with, or, left out, your last change."
+          : "Put back one of your own changes: the `change` a lights or device_command call answered with.",
         "Each light or switch that still shows what you set goes back to how it was. One changed since, by a person, a switch or an app, is left as it is and named, with the app where one changed it; one whose command is still on its way is uncertain.",
         "Only your last 5 changes are kept, for an hour. Putting back a change twice answers the same. A mood's run can't be put back this way.",
         notInstructions,
       ].join(" "),
-      inputSchema: inputSchemaOf(restoreInput),
+      inputSchema: inputSchemaOf(
+        assistant ? assistantRestoreInput : restoreInput,
+      ),
       annotations: {},
     }),
     usable: (canUse) => controlKinds(canUse).length > 0,
     refusal: () => areasOff(deviceCommandAreas),
     async run(agent, input, canUse) {
-      const parsed = restoreInput.safeParse(input);
+      const parsed = (
+        assistantOf(agent.id) ? assistantRestoreInput : restoreInput
+      ).safeParse(input);
       if (!parsed.success) return invalidInput();
-      const change = options.changes.find(agent.id, parsed.data.change);
+      const asked = parsed.data.change;
+      const change =
+        asked === undefined
+          ? options.changes.last(agent.id)
+          : options.changes.find(agent.id, asked);
       if (!change) {
         return toolError(
           "change_gone",
-          "That change can't be put back: only your last 5 changes are kept, for an hour.",
+          asked === undefined
+            ? "There's no change of yours to put back: only your last 5 changes are kept, for an hour."
+            : "That change can't be put back: only your last 5 changes are kept, for an hour.",
         );
       }
       const off = [
@@ -633,10 +655,10 @@ export function createCoreTools(options: CoreToolsOptions) {
 
   return {
     /** Those listed now, from what's switched on. */
-    list: (canUse: AiCanUse) =>
+    list: (canUse: AiCanUse, listing: Listing = { assistant: false }) =>
       Object.values(tools)
         .filter((tool) => tool.usable(canUse))
-        .map((tool) => tool.tool(canUse)),
+        .map((tool) => tool.tool(canUse, listing)),
 
     /** Runs one, answering its refusals and failures by their code. */
     async call(

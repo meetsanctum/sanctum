@@ -52,7 +52,13 @@ const maxConnections = 4;
 
 const methods = new Set<string>(coreCallMethods);
 // The refusals that came with a later protocol than the oldest.
-const codeSince: Partial<Record<string, number>> = { limited: 12, no_turn: 14 };
+const codeSince: Partial<Record<string, number>> = {
+  limited: 12,
+  no_turn: 14,
+  turn_ended: 22,
+};
+// The version whose runner aborts a request's signal on `end`.
+const endSince = 22;
 
 type Open = {
   // What it may do, decided when the core issued it.
@@ -414,8 +420,16 @@ export function createAppLink(options: {
      * Calls the app, with the core's calls this one may make. It settles with
      * the app's answer or when the connection goes; its caller stops waiting at
      * the deadline. An app still busy with it a while after that counts as hung.
+     * Once `signal` aborts, the app hears its call has ended, so a request's
+     * handler stops; the core's calls refuse what follows.
      */
-    call(core: CoreCalls, actor: Actor, body: CallBody, deadlineMs: number) {
+    call(
+      core: CoreCalls,
+      actor: Actor,
+      body: CallBody,
+      deadlineMs: number,
+      signal?: AbortSignal,
+    ) {
       const connection = current;
       if (
         connection?.phase !== "ready" ||
@@ -478,7 +492,31 @@ export function createAppLink(options: {
           open.timer.unref();
         }, deadlineMs);
         open.timer.unref();
+        // A runner before `end` lets the call run out its time.
+        const endCall = () => {
+          if (
+            connection.protocol >= endSince &&
+            connection.phase === "ready" &&
+            connection.calls.has(id)
+          ) {
+            send(connection, { type: "end", call: id });
+          }
+        };
+        if (signal && !signal.aborted) {
+          signal.addEventListener("abort", endCall, { once: true });
+          const settled = () => signal.removeEventListener("abort", endCall);
+          const { resolve: answered, reject: failed } = open;
+          open.resolve = (value) => {
+            settled();
+            answered(value);
+          };
+          open.reject = (error) => {
+            settled();
+            failed(error);
+          };
+        }
         connection.socket.write(line);
+        if (signal?.aborted) endCall();
         if (connection.socket.writableLength > maxUnreadBytes) {
           drop(connection, "it stopped reading");
         }

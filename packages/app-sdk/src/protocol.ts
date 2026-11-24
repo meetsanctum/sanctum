@@ -215,6 +215,9 @@ export const coreMessageSchema = z.discriminatedUnion("type", [
     outcome: outcomeSchema,
   }),
   z.object({ type: z.literal("ping"), beat: z.number().int() }),
+  // A request's call ends before its handler does, as a newer request from
+  // the same device takes over (protocol 22): its signal aborts.
+  z.object({ type: z.literal("end"), call: callId }),
 ]);
 export type CoreMessage = z.infer<typeof coreMessageSchema>;
 

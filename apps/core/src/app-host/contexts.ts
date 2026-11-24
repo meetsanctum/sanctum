@@ -48,6 +48,9 @@ import type { Turn } from "../models/turns.js";
 export type Following = ReturnType<EventsForApps["start"]>;
 
 type CallStorage = ReturnType<AppStorage["call"]>;
+export type ToolRecorder = NonNullable<
+  Parameters<typeof createCoreCalls>[0]["recordTool"]
+>;
 type RequestScope = { readonly ended: boolean; query?: never };
 type ContextOptions = {
   held?: EmittedEvent[];
@@ -55,8 +58,10 @@ type ContextOptions = {
   snapshot?: ReadSnapshot;
   withinMs?: number;
   turn?: Turn;
-  // A request's: how its reply reaches whoever asked.
+  // A request's: how its reply reaches whoever asked, and how its tool
+  // calls are kept for the device's next requests.
   reply?: (reply: RequestReply) => void;
+  recordTool?: ToolRecorder;
 };
 
 function message(error: unknown) {
@@ -175,7 +180,15 @@ export function createAppContexts(options: {
     entry: InstalledApp,
     actor: Actor,
     scope: CallStorage | RequestScope,
-    { held, following, snapshot, withinMs, turn, reply }: ContextOptions = {},
+    {
+      held,
+      following,
+      snapshot,
+      withinMs,
+      turn,
+      reply,
+      recordTool,
+    }: ContextOptions = {},
   ) {
     const appId = entry.app.id;
     const core = createCoreCalls({
@@ -248,6 +261,7 @@ export function createAppContexts(options: {
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       assistant: options.assistant,
       ...(reply ? { reply } : {}),
+      ...(recordTool ? { recordTool } : {}),
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),
     });

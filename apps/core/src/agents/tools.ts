@@ -169,7 +169,9 @@ export function createAgentTools(options: AgentToolsOptions) {
     list(within: { apart?: string } = {}): Tool[] {
       const canUse = canUseApart(within.apart);
       const tools = [overviewTool];
-      tools.push(...options.core.list(canUse));
+      tools.push(
+        ...options.core.list(canUse, { assistant: within.apart !== undefined }),
+      );
       for (const [name, offer] of namedActions(canUse.offers)) {
         if (!isUsable(offer)) continue;
         const inputSchema = inputSchemaOf(offer);

@@ -202,6 +202,9 @@ export const actionErrorCodes = [
   "limited",
   // The home's AI model answers only within a turn, which this call isn't.
   "no_turn",
+  // The turn this call belongs to is over: a newer request from the same
+  // device took over, or its time ran out.
+  "turn_ended",
 ] as const;
 export type ActionErrorCode = (typeof actionErrorCodes)[number];
 

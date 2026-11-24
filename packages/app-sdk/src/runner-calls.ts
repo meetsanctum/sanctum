@@ -167,6 +167,9 @@ export function createCallHost(options: {
   const open = new Set<Scope>();
   // A start hook under way, which a stop never overlaps.
   let starting: Promise<unknown> | undefined;
+  // The requests under way by their call, whose signal the core's `end`
+  // aborts.
+  const requestsUnderWay = new Map<string, AbortController>();
   let connection = 0;
   // It went on through a lost core, with a resume to catch up, and waits for
   // the next core's start; one that doesn't come stops it.
@@ -412,29 +415,36 @@ export function createCallHost(options: {
       return failureOf(`${appId} answers no requests`, "unavailable");
     }
     let ended = false;
-    const outcome = await inCall(
-      id,
-      deadlineMs,
-      (scope) => {
-        const core = callsOf(() => scope);
-        const ctx = createRequestContext({ appId, actor, app, core });
-        return outcomeOf(() =>
-          handler.call(app, ctx, {
-            ...asked,
-            reply: (reply) => core.replyRequest(reply),
-          }),
-        );
-      },
-      {
-        get ended() {
-          return ended;
+    const steering = new AbortController();
+    requestsUnderWay.set(id, steering);
+    try {
+      const outcome = await inCall(
+        id,
+        deadlineMs,
+        (scope) => {
+          const core = callsOf(() => scope);
+          const ctx = createRequestContext({ appId, actor, app, core });
+          return outcomeOf(() =>
+            handler.call(app, ctx, {
+              ...asked,
+              signal: steering.signal,
+              reply: (reply) => core.replyRequest(reply),
+            }),
+          );
         },
-        end() {
-          ended = true;
+        {
+          get ended() {
+            return ended;
+          },
+          end() {
+            ended = true;
+          },
         },
-      },
-    );
-    return outcome.ok ? { ok: true, value: null } : outcome;
+      );
+      return outcome.ok ? { ok: true, value: null } : outcome;
+    } finally {
+      requestsUnderWay.delete(id);
+    }
   }
 
   function driverCall(
@@ -541,6 +551,11 @@ export function createCallHost(options: {
   }
 
   return {
+    /** The core ended a request's call before its handler: its signal aborts. */
+    end(call: string) {
+      requestsUnderWay.get(call)?.abort();
+    },
+
     /**
      * Takes one call from the core, and answers it whenever it ends, on the
      * connection it came by.
@@ -571,6 +586,8 @@ export function createCallHost(options: {
       afterStart = new Promise<void>((open) => (opened = open));
       for (const scope of open) scope.call.end();
       open.clear();
+      // Its requests end with the connection that brought them.
+      for (const steering of requestsUnderWay.values()) steering.abort();
       // A start the core no longer waits for finishes first, so the stop that
       // follows finds what it set going.
       if (starting && !(await within(starting, capMs))) return false;

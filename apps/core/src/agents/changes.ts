@@ -57,6 +57,12 @@ export function createAgentChanges(options: {
       return change.id;
     },
 
+    /** The agent's last change that's still kept. */
+    last(agent: string): AgentChange | undefined {
+      prune();
+      return byAgent.get(agent)?.at(-1);
+    },
+
     /** One of the agent's own changes that's still kept. */
     find(agent: string, id: string): AgentChange | undefined {
       prune();

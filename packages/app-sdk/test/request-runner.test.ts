@@ -53,7 +53,12 @@ it("runs the Assistant's method and sends its reply without opening app storage"
   expect(
     await call("1.2", {
       kind: "request",
-      request: { text: "Hello", language: "en", clientName: "Tablet" },
+      request: {
+        text: "Hello",
+        language: "en",
+        clientName: "Tablet",
+        earlier: [],
+      },
     }),
   ).toEqual({ ok: true, value: null });
   expect(storage.call).toHaveBeenCalledOnce();
@@ -63,4 +68,64 @@ it("runs the Assistant's method and sends its reply without opening app storage"
     [{ text: "Assistant: Hello" }],
     expect.any(Function),
   );
+});
+
+it("aborts a request's signal when the core ends its call", async () => {
+  const aborted = vi.fn();
+  const app = defineApp({
+    id: assistantAppId,
+    name: "Assistant",
+    version: "1.0.0",
+    core: "^2.0.0",
+    permissions: [],
+    actions: [],
+    events: [],
+    async requests(_ctx, request) {
+      await new Promise((ended) =>
+        request.signal.addEventListener("abort", ended, { once: true }),
+      );
+      aborted(request.signal.aborted);
+    },
+  });
+  const runner = createCallHost({
+    app,
+    storage: {
+      call: vi.fn(() => ({ ended: false, end: vi.fn(), query: vi.fn() })),
+      close: vi.fn(),
+      sync: vi.fn(),
+    },
+    request: vi.fn(),
+    log: vi.fn(),
+    answer: vi.fn(),
+  });
+  const call = (id: string, body: CallBody) =>
+    new Promise<Outcome>((resolve) => {
+      runner.take(
+        {
+          type: "call",
+          id,
+          deadlineMs: 1_000,
+          actor: { kind: "client", id: "tablet" },
+          body,
+        },
+        resolve,
+      );
+    });
+  await call("1.1", { kind: "start", reason: "started" });
+
+  const answered = call("1.2", {
+    kind: "request",
+    request: {
+      text: "Hello",
+      language: "en",
+      clientName: "Tablet",
+      earlier: [],
+    },
+  });
+  await vi.waitFor(() => {
+    runner.end("1.2");
+    expect(aborted).toHaveBeenCalledWith(true);
+  });
+
+  expect(await answered).toEqual({ ok: true, value: null });
 });

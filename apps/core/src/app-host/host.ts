@@ -266,6 +266,7 @@ export function createAppHost(options: {
     updates: options.updates,
     supervisor: () => supervisor,
     canStart: (entry) => lan.canRun(entry),
+    stopped: (entry) => requests.stopped(entry),
     timeoutMs,
     log,
   });

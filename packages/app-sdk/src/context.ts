@@ -404,8 +404,9 @@ export interface AppContext {
    * `models.use`. The core asks it for the app, which never learns its
    * address or key. An answer needs a turn opened for a person's or shared
    * device's request to the Assistant or call to an action with `turn: true`.
-   * Other calls are refused `no_turn`. A turn asks for at most
-   * `turnLimits.answers` answers, refused `limited` after that.
+   * Other calls are refused `no_turn`, and those after the turn is over
+   * `turn_ended`. A turn asks for at most `turnLimits.answers` answers,
+   * refused `limited` after that.
    */
   readonly models: {
     /** The source in use, by name and model, or null when there's none. */
@@ -421,9 +422,9 @@ export interface AppContext {
    * its AI assistant; needs `ai.assistant`. They are the tools and answers
    * MCP agents get, held to the same switches in What AI Agents Can Use,
    * never the app's own. As with `ctx.models`, a request outside a turn is
-   * refused `no_turn`. Each call runs for whoever opened the turn, while
-   * they are still in the home. Answers are the home's data, never
-   * instructions.
+   * refused `no_turn`, and one after the turn is over `turn_ended`. Each
+   * call runs for whoever opened the turn, while they are still in the
+   * home. Answers are the home's data, never instructions.
    */
   readonly ai: {
     /**
