@@ -1,5 +1,11 @@
 import type { Tile } from "@meetsanctum/ui-sdk";
-import { useMemo, useSyncExternalStore, type ComponentProps } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+} from "react";
 
 import { DeviceDetail } from "./device-detail";
 import { useHomeDevices } from "./home-devices";
@@ -51,24 +57,44 @@ export function useOpenDevice() {
   return useMemo(createOpenDevice, []);
 }
 
-/** The open device's detail, the only part that draws as it opens or closes. */
-export function OpenDeviceDetail(
-  props: Omit<
-    ComponentProps<typeof DeviceDetail>,
-    "tileKey" | "openFirstPage" | "open" | "onClose" | "devices"
-  > & { opened: OpenDevice },
-) {
-  const { opened, ...detail } = props;
+type DetailProps = Omit<
+  ComponentProps<typeof DeviceDetail>,
+  "tileKey" | "openFirstPage" | "open" | "onClose" | "devices" | "isCovering"
+>;
+
+/**
+ * The open device's detail, the only part that draws as it opens or closes.
+ * It is there from when one opens until it has gone, its fade out ended, and
+ * only then reads the devices: a closed detail drew again with each change.
+ */
+export function OpenDeviceDetail(props: DetailProps & { opened: OpenDevice }) {
+  const { opened, onCovering, ...detail } = props;
   const current = useSyncExternalStore(opened.subscribe, opened.read);
-  const devices = useHomeDevices();
+  const [isCovering, setIsCovering] = useState(false);
+  const covering = useCallback(
+    (covers: boolean) => {
+      setIsCovering(covers);
+      onCovering(covers);
+    },
+    [onCovering],
+  );
+  if (!current.open && !isCovering) return null;
   return (
-    <DeviceDetail
+    <ShownDetail
       {...detail}
-      devices={devices}
+      onCovering={covering}
       tileKey={current.key}
       openFirstPage={current.openFirstPage}
       open={current.open}
+      isCovering={isCovering}
       onClose={opened.close}
     />
   );
+}
+
+function ShownDetail(
+  props: Omit<ComponentProps<typeof DeviceDetail>, "devices">,
+) {
+  const devices = useHomeDevices();
+  return <DeviceDetail {...props} devices={devices} />;
 }

@@ -25,6 +25,7 @@ function Detail(props: { capability: string }) {
       container={container}
       tileKey={`${device.id}/${props.capability}`}
       open
+      isCovering={false}
       devices={devices}
       apps={[]}
       live={live}

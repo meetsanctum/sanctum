@@ -368,6 +368,24 @@ describe("Remote", () => {
     await press("Turn on Living Room TV");
     expect(sent).toEqual([{ on: true }]);
   });
+
+  it("keeps + and − in place, dimmed, where the TV has no volume to step", async () => {
+    await render(
+      MediaRemote,
+      mediaPlayer(
+        "box",
+        "Gym TV",
+        "office",
+        { on: true, activity: "idle" },
+        { power: true, playback: [], volume: null, mute: false },
+      ),
+    );
+    expect(button("Turn the volume up")!.disabled).toBe(true);
+    expect(button("Turn the volume down")!.disabled).toBe(true);
+    await press("Turn the volume up");
+    await press("Turn off Gym TV");
+    expect(sent).toEqual([{ on: false }]);
+  });
 });
 
 describe("Volume", () => {
@@ -399,6 +417,30 @@ describe("Volume", () => {
     ).toBeTruthy();
     await press("Mute Office Speaker");
     expect(sent).toEqual([{ muted: true }]);
+  });
+
+  it("shows a speaker's level dimmed where it has no volume to set", async () => {
+    await render(
+      MediaVolume,
+      mediaPlayer(
+        "speaker",
+        "Kitchen Speaker",
+        "office",
+        { activity: "idle" },
+        {
+          power: false,
+          playback: ["play", "pause"],
+          volume: null,
+          mute: false,
+        },
+        "media-player",
+      ),
+    );
+    const slider = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Kitchen Speaker volume"]',
+    )!;
+    expect(slider.disabled).toBe(true);
+    expect(slider.closest(".opacity-50")).not.toBeNull();
   });
 
   const speaker = (muted = false) =>

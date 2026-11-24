@@ -130,6 +130,7 @@ function Harness() {
         container={container}
         tileKey={detail.key}
         open={detail.open}
+        isCovering={false}
         devices={shown}
         apps={apps}
         live={live}

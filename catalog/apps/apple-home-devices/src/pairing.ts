@@ -1,0 +1,234 @@
+import { setTimeout as delay } from "node:timers/promises";
+
+import {
+  CodeExpired,
+  NotAllowed,
+  Unreachable,
+  WrongCode,
+  type Boxes,
+  type Endpoint,
+  type Keys,
+  type Pairing,
+} from "./boxes.js";
+
+// Pairing a box, step by step, as adding or repairing one asks: AirPlay's
+// code, then Companion's, each read off the TV while its pairing connection
+// is held open. One pairing per box at a time, by the attempt the core names:
+// a new attempt closes whatever the last one left open. The first
+// protocol's keys stay in memory until the second passes, so an attempt
+// that stops halfway saves nothing.
+
+/** Both protocols' keys, as one box's secret keeps them. */
+export type BoxKeys = { airplay: Keys; companion: Keys };
+
+/** One step of an attempt, as driver.add and driver.repair hand it over. */
+export type PairingStep = {
+  attempt?: string;
+  answers: Record<string, string>;
+  again?: string;
+};
+
+/** What a step answers: what it asks next, a refusal that ends it, or done. */
+export type PairingAnswer =
+  | { asks: string[]; refused?: { question: string; refusal: string } }
+  | { refused: { question?: string; refusal: string } }
+  | undefined;
+
+export const airplayCode = "airplayCode";
+export const companionCode = "companionCode";
+
+type Open =
+  | { attempt: string; step: "airplay"; pairing: Pairing }
+  | {
+      attempt: string;
+      step: "companion";
+      pairing: Pairing;
+      airplay: Keys;
+      endpoint: Endpoint;
+    };
+
+type Paired = (keys: BoxKeys, endpoint: Endpoint) => Promise<void>;
+
+export type PairingOptions = {
+  /** How long to wait before trying a Companion pairing again, in ms. */
+  retryMs?: number;
+};
+
+export function createPairings(boxes: Boxes, options: PairingOptions = {}) {
+  const retryMs = options.retryMs ?? 1_000;
+  const open = new Map<string, Open>();
+  const shutdown = new AbortController();
+
+  function keep(key: string, next: Open) {
+    if (shutdown.signal.aborted) next.pairing.close();
+    shutdown.signal.throwIfAborted();
+    open.set(key, next);
+  }
+
+  function close(key: string) {
+    open.get(key)?.pairing.close();
+    open.delete(key);
+  }
+
+  // A refusal that ends the attempt, for what stopped the box pairing.
+  function refusalOf(error: unknown): PairingAnswer {
+    if (error instanceof NotAllowed)
+      return { refused: { refusal: "notAllowed" } };
+    if (error instanceof Unreachable) {
+      return { refused: { refusal: "unreachable" } };
+    }
+    throw error;
+  }
+
+  // A new Companion code. Right after one expires the box may still be
+  // closing it, so a failure is tried once more after a moment.
+  async function companionPairing(box: Endpoint) {
+    shutdown.signal.throwIfAborted();
+    try {
+      return await boxes.pairCompanion(box);
+    } catch (error) {
+      if (error instanceof NotAllowed) throw error;
+      await delay(retryMs, undefined, { signal: shutdown.signal });
+      shutdown.signal.throwIfAborted();
+      return boxes.pairCompanion(box);
+    }
+  }
+
+  async function begin(key: string, box: Endpoint, attempt: string) {
+    try {
+      const pairing = await boxes.pairAirPlay(box);
+      keep(key, { attempt, step: "airplay", pairing });
+      return { asks: [airplayCode] };
+    } catch (error) {
+      return refusalOf(error);
+    }
+  }
+
+  async function airplay(
+    key: string,
+    box: Endpoint,
+    now: Extract<Open, { step: "airplay" }>,
+    code: string,
+  ): Promise<PairingAnswer> {
+    let keys: Keys;
+    try {
+      keys = await now.pairing.finish(code);
+    } catch (error) {
+      open.delete(key);
+      if (!(error instanceof WrongCode)) throw error;
+      // tvOS keeps the code it no longer takes on screen while any pairing
+      // is open, and a new one pairs against a code it doesn't show; so the
+      // attempt ends, and Add, with every pairing closed, gets a new code.
+      return { refused: { question: airplayCode, refusal: "wrongCode" } };
+    }
+    try {
+      const pairing = await companionPairing(box);
+      keep(key, {
+        attempt: now.attempt,
+        step: "companion",
+        pairing,
+        airplay: keys,
+        endpoint: box,
+      });
+      return { asks: [companionCode] };
+    } catch (error) {
+      open.delete(key);
+      return refusalOf(error);
+    }
+  }
+
+  async function companion(
+    key: string,
+    box: Endpoint,
+    now: Extract<Open, { step: "companion" }>,
+    code: string,
+    done: Paired,
+  ): Promise<PairingAnswer> {
+    let keys: Keys;
+    try {
+      keys = await now.pairing.finish(code);
+    } catch (error) {
+      open.delete(key);
+      const refusal =
+        error instanceof WrongCode
+          ? "wrongCode"
+          : error instanceof CodeExpired
+            ? "expired"
+            : null;
+      if (!refusal) throw error;
+      // Each Companion pairing shows a code of its own, so a new one is
+      // asked for at once.
+      try {
+        const pairing = await companionPairing(box);
+        keep(key, { ...now, pairing, endpoint: box });
+        return {
+          asks: [companionCode],
+          refused: { question: companionCode, refusal },
+        };
+      } catch (again) {
+        return refusalOf(again);
+      }
+    }
+    open.delete(key);
+    shutdown.signal.throwIfAborted();
+    await done({ airplay: now.airplay, companion: keys }, now.endpoint);
+    return undefined;
+  }
+
+  return {
+    /** Takes one step of pairing a box, calling `done` once both codes pass. */
+    async step(
+      key: string,
+      box: Endpoint,
+      { attempt, answers, again }: PairingStep,
+      done: Paired,
+    ): Promise<PairingAnswer> {
+      shutdown.signal.throwIfAborted();
+      // The core names an attempt for every flow that asks once started.
+      if (attempt === undefined) throw new Error("Pairing needs an attempt");
+      const now = open.get(key);
+      if (now?.attempt !== attempt) {
+        close(key);
+        if (again !== undefined || Object.keys(answers).length > 0) {
+          throw new Error("No pairing is open for this attempt");
+        }
+        return begin(key, box, attempt);
+      }
+      if (again === companionCode && now.step === "companion") {
+        now.pairing.close();
+        try {
+          const pairing = await companionPairing(box);
+          keep(key, { ...now, pairing, endpoint: box });
+          return { asks: [companionCode] };
+        } catch (error) {
+          open.delete(key);
+          return refusalOf(error);
+        }
+      }
+      const code =
+        answers[now.step === "airplay" ? airplayCode : companionCode];
+      if (code === undefined || again !== undefined) {
+        throw new Error(`This pairing waits for ${now.step}'s code`);
+      }
+      return now.step === "airplay"
+        ? airplay(key, box, now, code)
+        : companion(key, box, now, code, done);
+    },
+
+    /** Closes the attempt's pairing, if it's still the open one. */
+    cancel(key: string, attempt: string) {
+      if (open.get(key)?.attempt === attempt) close(key);
+    },
+
+    /** Whether a pairing is open for the box. */
+    isOpen: (key: string) => open.has(key),
+
+    /** Closes every pairing still open, as the app stops. */
+    closeAll() {
+      shutdown.abort();
+      for (const key of [...open.keys()]) close(key);
+    },
+  };
+}
+
+export type Pairings = ReturnType<typeof createPairings>;

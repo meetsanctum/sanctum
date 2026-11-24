@@ -5,6 +5,7 @@ packages:
   # A development stack's own apps, which only it stages.
   - "deploy/dev/apps/*"
   - "assets/brand"
+allowUnusedPatches: true
 
 # Electron downloads its binary when installed. CI skips the download
 # (ELECTRON_SKIP_BINARY_DOWNLOAD), since nothing there runs it.
@@ -14,4 +15,4 @@ onlyBuiltDependencies:
 # installs one app's dependencies alone, as the manager's does, uses none.
 patchedDependencies:
   esphome-client@2.1.0: patches/esphome-client@2.1.0.patch
-allowUnusedPatches: true
+  node-appletv-remote@0.5.0: patches/node-appletv-remote@0.5.0.patch

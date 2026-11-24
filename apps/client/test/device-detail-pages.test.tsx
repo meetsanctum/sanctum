@@ -111,6 +111,7 @@ function Detail(props: {
       tileKey={props.tileKey}
       openFirstPage={props.openFirstPage}
       open={props.open ?? true}
+      isCovering={false}
       devices={shown}
       apps={props.apps ?? [presses]}
       live={live}
@@ -250,6 +251,29 @@ it.each([
     "History",
     "Activity",
   ]);
+});
+
+it("keeps the Volume tab for a speaker with no volume control", async () => {
+  devices = [
+    mediaPlayer(
+      "speaker",
+      "Kitchen Speaker",
+      "office",
+      { activity: "idle" },
+      { power: false, volume: null, mute: false },
+      "smart-speaker",
+    ),
+  ];
+  await open("speaker/player");
+  const volume = dialog().querySelector<HTMLButtonElement>(
+    '[role="tab"][aria-label="Volume"]',
+  );
+  expect(volume).not.toBeNull();
+  await act(async () => volume!.click());
+  const slider = dialog().querySelector<HTMLInputElement>(
+    'input[aria-label="Kitchen Speaker volume"]',
+  );
+  expect(slider?.disabled).toBe(true);
 });
 
 it("shows a smart speaker with a button by its playback, and mutes its microphones from Volume", async () => {
