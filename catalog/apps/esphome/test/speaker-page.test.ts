@@ -89,14 +89,16 @@ describe("a smart speaker's page", () => {
     await home.core.until(() => audio()?.muted === false, "unmuted");
   });
 
-  it("leaves confirmation to the core when the side switch holds the microphones and the speaker stays silent", async () => {
+  it("refuses within 2 s an unmute its side switch holds while the speaker stays silent", async () => {
     const { device, audio, mute } = await addedSpeaker();
     device.silent.add(203);
     device.setState(203, { state: true });
     await home.core.until(() => audio()?.muted === true, "muted by its side");
 
     const commands = device.commands.length;
-    await mute(false);
+    const started = Date.now();
+    await expect(mute(false)).rejects.toMatchObject({ code: "conflict" });
+    expect(Date.now() - started).toBeLessThan(4_000);
     expect(
       device.commands
         .slice(commands)

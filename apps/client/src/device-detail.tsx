@@ -18,7 +18,6 @@ import {
   Blocks,
   Footprints,
   House,
-  Mic,
   Play,
   Sun,
   Thermometer,
@@ -370,7 +369,12 @@ export function DeviceDetail(props: {
                       id: "remote",
                       label: "Remote",
                       icon: RemoteIcon,
-                      content: <MediaRemote {...mediaProps} />,
+                      content: (
+                        <MediaRemote
+                          {...mediaProps}
+                          microphones={microphones}
+                        />
+                      ),
                     },
                   ]
                 : hasVolume
@@ -389,20 +393,6 @@ export function DeviceDetail(props: {
                       },
                     ]
                   : []),
-            ]
-          : []),
-        ...(!hasVolume && microphones
-          ? [
-              {
-                id: "microphones",
-                label: "Microphones",
-                icon: Mic,
-                content: (
-                  <div className="mt-4 flex flex-col items-center gap-5">
-                    {microphones}
-                  </div>
-                ),
-              },
             ]
           : []),
         ...(motion

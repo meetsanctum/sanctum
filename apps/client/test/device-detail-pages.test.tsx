@@ -334,22 +334,13 @@ describe("microphone mute in device detail", () => {
     });
   const alert = () => dialog().querySelector('[role="alert"]')!;
 
-  it.each([
-    ["without a player", false, undefined],
-    ["with a Remote", true, { power: true }],
-    ["without playback volume or mute", true, { volume: null, mute: false }],
-  ] as const)("can mute microphones %s", async (_, hasPlayer, features) => {
-    const device = speaker(features);
-    devices = [
-      {
-        ...device,
-        capabilities: hasPlayer ? [...device.capabilities, audio] : [audio],
-      },
-    ];
-    await open(hasPlayer ? "speaker/player" : "speaker/");
+  it("mutes microphones beside power on a smart speaker with a Remote, with no page of their own", async () => {
+    const device = speaker({ power: true });
+    devices = [{ ...device, capabilities: [...device.capabilities, audio] }];
+    await open("speaker/player");
     expect(tabs().map(([label]) => label)).not.toContain("Volume");
-    expect(tabs()).toContainEqual(["Microphones", String(!hasPlayer)]);
-    await select("Microphones");
+    expect(tabs().map(([label]) => label)).not.toContain("Microphones");
+    await select("Remote");
     await act(async () => microphonesButton()!.click());
     expect(posted()).toEqual([
       { device: "speaker", capability: "audio", command: { muted: true } },

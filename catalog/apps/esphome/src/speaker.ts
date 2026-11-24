@@ -101,13 +101,22 @@ export async function muteCommand(
     await client.commandAndAwait(
       id,
       { state: false },
-      { predicate: (event) => event.state === false, timeoutMs: 2_000 },
+      // Off comes without a state at all, as a protocol buffer leaves out
+      // its defaults.
+      { predicate: (event) => event.state !== true, timeoutMs: 2_000 },
     );
   } catch (error) {
-    // A silent unmute may still take effect. Let the core keep waiting for
-    // the report, and pass through errors from the connection or the send.
+    // An error from the connection or the send is what it is.
     if (!(error instanceof DOMException && error.name === "TimeoutError")) {
       throw error;
+    }
+    // Its side switch holds it on, which the speaker keeps to itself: an
+    // unmute then changes nothing and it says nothing, while one it takes
+    // shows within moments. Refused at once, rather than the core waiting
+    // out its confirmation and sending it again. Where it hasn't said, the
+    // core goes on waiting for its report.
+    if (client.latest(id)?.state === true) {
+      throw new ActionError("conflict", "Still muted by its side switch");
     }
   }
 }

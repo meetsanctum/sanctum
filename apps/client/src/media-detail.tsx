@@ -598,22 +598,30 @@ function VolumeSteps(props: {
   );
 }
 
-/** Remote, a TV's second page: its power above its volume's + and −. */
-export function MediaRemote(props: Props) {
-  const { capability, onCommand } = props;
+/**
+ * Remote, a TV's second page: its power, and a smart speaker's microphones'
+ * mute beside it, above its volume's + and −.
+ */
+export function MediaRemote(props: Props & { microphones?: ReactNode }) {
+  const { capability, microphones, onCommand } = props;
   const on = capability.state?.on === true;
   const { volume } = capability.features;
   return (
     <div className="mt-4 flex flex-col items-center gap-5">
-      {capability.features.power && (
-        <Toggle
-          label={`${on ? "Turn off" : "Turn on"} ${props.name}`}
-          pressed={on}
-          disabled={props.disabled}
-          onClick={() => onCommand({ on: !on })}
-        >
-          <Power aria-hidden="true" />
-        </Toggle>
+      {(capability.features.power || microphones) && (
+        <div className="flex gap-5">
+          {capability.features.power && (
+            <Toggle
+              label={`${on ? "Turn off" : "Turn on"} ${props.name}`}
+              pressed={on}
+              disabled={props.disabled}
+              onClick={() => onCommand({ on: !on })}
+            >
+              <Power aria-hidden="true" />
+            </Toggle>
+          )}
+          {microphones}
+        </div>
       )}
       {volume !== null && (
         <VolumeSteps
