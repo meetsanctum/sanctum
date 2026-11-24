@@ -161,6 +161,36 @@ describe("what the manager can do", () => {
     expect(logs).toContain("manager: can run apps");
   });
 
+  it("learns port range support after an upgrade, and only with LAN support", async () => {
+    const { client, socketPath } = await setUp();
+    const manager = await answering(socketPath);
+    const base = { appContainers: true, memoryLimits: true };
+    manager.body = JSON.stringify({ ...base, lan: true });
+    client.followCapabilities(5);
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: true,
+        portRanges: false,
+      }),
+    );
+
+    manager.body = JSON.stringify({ ...base, lan: true, portRanges: true });
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: true,
+        portRanges: true,
+      }),
+    );
+
+    manager.body = JSON.stringify({ ...base, lan: false, portRanges: true });
+    await vi.waitFor(() =>
+      expect(client.capabilities()).toMatchObject({
+        lan: false,
+        portRanges: false,
+      }),
+    );
+  });
+
   it("takes an old manager's not found as nothing yet, and keeps asking", async () => {
     const { client, socketPath } = await setUp();
     const manager = await answering(socketPath);

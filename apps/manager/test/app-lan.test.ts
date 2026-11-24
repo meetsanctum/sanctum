@@ -159,6 +159,7 @@ describe("an app's network rules", () => {
       [{ prefix: { addr: 49_152, len: 2 } }],
       [{ range: [49_152] }],
       [{ range: [49_152, 65_535], extra: true }],
+      [{ range: [49_152, 65_535] }, { range: [55_000, 50_000] }],
       [0],
       [65_536],
     ]) {

@@ -24,12 +24,12 @@ export const maxLanPermissions = 16;
 /** The ports one lan:tcp: permission names, both ends included. */
 export type LanRange = { from: number; to: number };
 
-/**
- * The permission to reach the devices an app found, on one TCP port or, with
- * `to`, on every port from `port` to `to`.
- */
-export const lanPermission = (port: number, to?: number) =>
-  `${lanPrefix}${port}${to === undefined ? "" : `-${to}`}`;
+/** The permission to reach the devices an app found, on one TCP port. */
+export const lanPermission = (port: number) => `${lanPrefix}${port}`;
+
+/** The permission to reach the devices an app found, on a range of TCP ports. */
+export const lanRangePermission = (from: number, to: number) =>
+  `${lanPrefix}${from}-${to}`;
 
 const portOf = (text: string) => {
   if (!/^[1-9][0-9]{0,4}$/.test(text)) return null;
@@ -62,6 +62,18 @@ export function lanRange(permission: string): LanRange | null {
   }
   return { from, to };
 }
+
+/** The port a single-port permission names, or null for any other one. */
+export function lanPort(permission: string): number | null {
+  const range = lanRange(permission);
+  return range && range.from === range.to ? range.from : null;
+}
+
+/** The single ports a set of permissions names, in order. */
+export const lanPorts = (permissions: readonly string[]) =>
+  [...new Set(permissions.flatMap((each) => lanPort(each) ?? []))].sort(
+    (a, b) => a - b,
+  );
 
 /** Whether a permission id is a lan: one that names no port or range it can. */
 export const isMalformedLan = (permission: string) =>
@@ -104,7 +116,10 @@ export function lanRangesWithin(
  * than 16 of them, no two share a port, so switching one off always takes
  * its ports away, and the app finds the devices it reaches.
  */
-export function assertLanPermissions(asked: readonly string[]) {
+export function assertLanPermissions(
+  asked: readonly string[],
+  { limitCount = true }: { limitCount?: boolean } = {},
+) {
   const malformed = asked.find(isMalformedLan);
   if (malformed) {
     throw new Error(
@@ -113,7 +128,7 @@ export function assertLanPermissions(asked: readonly string[]) {
   }
   const ids = [...new Set(asked.filter((each) => lanRange(each) !== null))];
   if (ids.length === 0) return;
-  if (ids.length > maxLanPermissions) {
+  if (limitCount && ids.length > maxLanPermissions) {
     throw new Error(
       `An app asks for at most ${maxLanPermissions} lan:tcp: permissions`,
     );

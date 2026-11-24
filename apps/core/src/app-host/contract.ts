@@ -542,7 +542,12 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
   }
   // What its network may reach rests on these, so the core checks them
   // itself rather than trust the app's own build.
-  assertLanPermissions(manifest.permissions.map((each) => each.id));
+  // Protocol 17 caps declarations. Older packages only have to fit the
+  // manager's limit on the permissions granted at any one time.
+  assertLanPermissions(
+    manifest.permissions.map((each) => each.id),
+    { limitCount: manifest.protocol >= 17 },
+  );
   checkPieces(manifest);
   return manifest;
 }

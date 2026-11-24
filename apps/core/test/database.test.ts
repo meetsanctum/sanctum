@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 
+import { createAppGrants } from "../src/app-host/grants.js";
 import { createClients } from "../src/auth/clients.js";
 import { hashToken } from "../src/auth/tokens.js";
 import { migrationsFolder, openCoreDatabase } from "../src/database.js";
@@ -118,6 +119,49 @@ describe("the core's database", () => {
       tokens.map((token) => clients.authenticate(token)?.client.kind),
     ).toEqual(["personal", "shared"]);
     expect(after.db.$client.pragma("foreign_keys", { simple: true })).toBe(1);
+  });
+
+  it("keeps pre-upgrade port ranges off until the household approves them", async () => {
+    const dataDir = await tempDir();
+    const previousMigrations = join(await tempDir(), "migrations");
+    await cp(migrationsFolder, previousMigrations, { recursive: true });
+    const journalPath = join(previousMigrations, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      entries: { idx: number }[];
+    };
+    journal.entries = journal.entries.filter((entry) => entry.idx < 51);
+    await writeFile(journalPath, JSON.stringify(journal));
+
+    const port = "lan:tcp:6053";
+    const range = "lan:tcp:49152-65535";
+    const app = {
+      id: "sanctum.example",
+      permissions: [
+        { id: port, needed: true },
+        { id: range, needed: true },
+      ],
+    };
+    const before = openCoreDatabase(dataDir, {
+      migrationsFolder: previousMigrations,
+    });
+    const insert = before.db.$client.prepare(
+      "INSERT INTO app_grants (app_id, permission, granted, updated_at) VALUES (?, ?, 1, 0)",
+    );
+    insert.run(app.id, port);
+    insert.run(app.id, range);
+    before.close();
+
+    const after = openCoreDatabase(dataDir);
+    const grants = createAppGrants(after.db);
+    grants.adopt(app);
+    expect(grants.answers(app.id).get(range)).toBe(false);
+    expect(grants.of(app)).toEqual([port]);
+    expect(grants.set(app, range, true, () => {})).toBe(true);
+    after.close();
+
+    const restarted = openCoreDatabase(dataDir);
+    onTestFinished(restarted.close);
+    expect(createAppGrants(restarted.db).of(app)).toEqual([port, range]);
   });
 
   it("refuses a database a newer build has migrated", async () => {

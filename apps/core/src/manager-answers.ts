@@ -272,23 +272,28 @@ export const startedBody = z.object({
 
 // What the manager can do. An update replaces the core before the manager, so a
 // new core can find itself under an old manager, which knows no such question.
-export const capabilities = z.object({
-  appContainers: z.boolean(),
-  memoryLimits: z.boolean(),
-  // Whether it looks for devices on the home's network, and whether it gives
-  // an app that reaches them a network of its own with Sanctum's rules; a
-  // manager from before either doesn't say.
-  discovery: z.boolean().default(false),
-  lan: z.boolean().default(false),
-  // Whether that network's rules take a range of ports as well as single
-  // ones.
-  portRanges: z.boolean().default(false),
-  // Whether it deletes a removed app's data, and a service's.
-  deletesData: z.boolean().default(false),
-  // Whether it keeps one count of the memory and disk it has promised, which
-  // an add reserves from and the add sheet reads.
-  reserves: z.boolean().default(false),
-});
+export const capabilities = z
+  .object({
+    appContainers: z.boolean(),
+    memoryLimits: z.boolean(),
+    // Whether it looks for devices on the home's network, and whether it gives
+    // an app that reaches them a network of its own with Sanctum's rules; a
+    // manager from before either doesn't say.
+    discovery: z.boolean().default(false),
+    lan: z.boolean().default(false),
+    // Whether that network's rules take a range of ports as well as single
+    // ones.
+    portRanges: z.boolean().default(false),
+    // Whether it deletes a removed app's data, and a service's.
+    deletesData: z.boolean().default(false),
+    // Whether it keeps one count of the memory and disk it has promised, which
+    // an add reserves from and the add sheet reads.
+    reserves: z.boolean().default(false),
+  })
+  .transform((answer) => ({
+    ...answer,
+    portRanges: answer.lan && answer.portRanges,
+  }));
 export type ManagerCapabilities = z.infer<typeof capabilities>;
 export const noCapabilities: ManagerCapabilities = {
   appContainers: false,

@@ -181,7 +181,8 @@ const listedPort = z.union([
   port,
   z
     .strictObject({ range: z.tuple([port, port]) })
-    .transform(({ range }) => range),
+    .transform(({ range }) => range)
+    .refine(([from, to]) => from <= to),
 ]);
 
 // What a holder's table holds, from `nft -j list table`.

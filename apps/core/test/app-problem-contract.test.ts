@@ -29,6 +29,26 @@ describe("a driver's problem declarations at installation", () => {
 });
 
 describe("an app's ports at installation", () => {
+  it("accepts more than 16 single-port declarations from an earlier protocol", () => {
+    const manifest = toStaticManifest(lamps);
+    manifest.protocol = 16;
+    const permission = (id: string) => ({
+      id,
+      reason: "For the test.",
+      needed: false,
+      asked: null,
+      startsOn: false,
+    });
+    manifest.permissions = [
+      ...manifest.permissions,
+      permission("discover:mdns:_example._tcp"),
+      ...Array.from({ length: 17 }, (_, index) =>
+        permission(`lan:tcp:${7000 + index}`),
+      ),
+    ];
+    expect(checkManifest(manifest)).toBe(manifest);
+  });
+
   it.each([
     ["a malformed one", ["lan:tcp:any"], "must name a TCP port"],
     ["a range outside the session ports", ["lan:tcp:1-65535"], "must name"],

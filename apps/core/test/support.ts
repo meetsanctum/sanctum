@@ -337,6 +337,7 @@ function allowEveryPermission(
       appId: app.id,
       permission: request.id,
       granted: true,
+      rangeAware: true,
       updatedAt,
     })),
   );

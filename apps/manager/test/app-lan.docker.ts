@@ -369,13 +369,23 @@ describe("an app's network of its own on real Docker", () => {
 
     expect(
       await docker(
-        "exec",
-        device,
-        "sh",
-        "-c",
-        `nc -z -w 2 -p 50005 ${holderAddress} 12345 && echo yes || echo no`,
+        "run",
+        "--rm",
+        "--network",
+        `container:${device}`,
+        "--cap-drop",
+        "ALL",
+        runtimeBase,
+        "node",
+        "-e",
+        `const socket = require('node:net').connect({
+          host: process.argv[1], port: 12345, localPort: 50006,
+        });
+        socket.setTimeout(2000, () => { console.log('timed out'); socket.destroy(); });
+        socket.once('connect', () => { console.log('connected'); socket.destroy(); });`,
+        holderAddress,
       ),
-    ).toBe("no");
+    ).toBe("timed out");
     await docker("rm", "--force", listener);
   });
 

@@ -28,7 +28,7 @@ async function manager(options: { lan?: boolean } = {}) {
   const docker = new FakeDocker();
   docker.load(nodeImage, { title: "node", version: "24" });
   docker.load("sanctum-manager:test", { title: "manager", version: "test" });
-  playNft(docker);
+  const nft = playNft(docker);
   const dataDir = await mkdtemp(join(tmpdir(), "sanctum-apps-"));
   await mkdir(join(dataDir, "packages", app, folder), { recursive: true });
   await writeFile(join(dataDir, "packages", app, folder, "package.json"), "{}");
@@ -67,7 +67,7 @@ async function manager(options: { lan?: boolean } = {}) {
     },
   );
   servers.push(server);
-  return { docker, server };
+  return { docker, nft, server };
 }
 
 describe("what a manager can do", () => {
@@ -131,14 +131,14 @@ describe("what a manager can do", () => {
   });
 
   it("gives one that reaches devices a network of its own, and changes what it may reach", async () => {
-    const { docker, server } = await manager({ lan: true });
+    const { docker, nft, server } = await manager({ lan: true });
     docker.load("sanctum-core:1", { title: "sanctum-core", version: "1" });
     await docker.createContainer(coreContainerOptions("sanctum-core:1"));
     const policy = {
       core: "core-1",
       count: 1,
       addresses: ["192.168.1.40"],
-      ports: [6053],
+      ports: [6053, [50_000, 50_010]],
     };
 
     expect(
@@ -149,6 +149,7 @@ describe("what a manager can do", () => {
       url: path,
       payload: { folder, memoryMb: 128, lan: policy },
     });
+    expect(started.statusCode).toBe(200);
     const holder = (await docker.getContainer(holderName(app)).inspect()).Id;
     expect(started.json().lan).toEqual({
       core: "core-1",
@@ -156,18 +157,35 @@ describe("what a manager can do", () => {
       manager: "manager-1",
       holder,
     });
+    expect(nft.tables.get(holder)).toContain(
+      "elements = { 6053, 50000-50010 }",
+    );
 
     const change = (body: object) =>
       server.inject({ method: "PUT", url: `${path}/lan`, payload: body });
     const changed = await change({
       ...policy,
       count: 2,
+      ports: [6053, [50_001, 50_010]],
       manager: "manager-1",
       holder,
     });
+    expect(changed.statusCode).toBe(200);
     expect(changed.json()).toMatchObject({ count: 2, holder });
+    expect(nft.tables.get(holder)).toContain(
+      "elements = { 6053, 50001-50010 }",
+    );
+    const removed = await change({
+      ...policy,
+      count: 3,
+      ports: [6053],
+      manager: "manager-1",
+      holder,
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(nft.tables.get(holder)).toContain("elements = { 6053 }");
     expect(
-      (await change({ ...policy, count: 3, manager: "m", holder: "other" }))
+      (await change({ ...policy, count: 4, manager: "m", holder: "other" }))
         .statusCode,
     ).toBe(409);
     expect((await change({ ...policy, ports: [0] })).statusCode).toBe(400);
