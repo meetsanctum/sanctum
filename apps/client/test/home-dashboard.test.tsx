@@ -311,6 +311,30 @@ describe("Home", () => {
     expect(container.textContent).not.toContain("Kettle");
   });
 
+  it("lays each room out in full first, then skips it while off screen", async () => {
+    await show();
+    const rooms = () => [
+      ...container.querySelectorAll("section[aria-labelledby^=home-]"),
+    ];
+    expect(rooms().length).toBeGreaterThan(0);
+    expect(
+      rooms().filter((room) =>
+        room.className.includes("[content-visibility:auto]"),
+      ),
+    ).toEqual([]);
+
+    await act(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve)),
+        ),
+    );
+    for (const room of rooms()) {
+      expect(room.className).toContain("[content-visibility:auto]");
+      expect(room.className).toContain("[contain-intrinsic-size:auto_320px]");
+    }
+  });
+
   it("opens a room's page from its name", async () => {
     await show();
     await act(async () => button("Office").click());

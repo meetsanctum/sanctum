@@ -1,5 +1,7 @@
 import type { AppInfo, Floor } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -103,16 +105,7 @@ export function HomeRooms(props: {
     const { room } = place;
     const Heading = level === 3 ? "h3" : "h2";
     return (
-      <section
-        key={place.id}
-        aria-labelledby={headingId}
-        // A room off screen isn't styled or laid out until it nears the
-        // screen, keeping the size it last had: with many rooms, a change
-        // over Home, such as a device's detail opening, otherwise styled
-        // them all again. Its 4 px of padding, given back by the margin,
-        // keeps its tiles' focus rings inside what it paints.
-        className="-m-1 flex shrink-0 flex-col gap-3 p-1"
-      >
+      <RoomSection key={place.id} aria-labelledby={headingId}>
         <Heading
           id={headingId}
           className="m-0 text-[15px] leading-5 font-medium"
@@ -160,7 +153,7 @@ export function HomeRooms(props: {
             ))}
           </div>
         )}
-      </section>
+      </RoomSection>
     );
   };
 
@@ -254,6 +247,40 @@ function NothingOnHome(props: { name: string; onEdit: () => void }) {
           Edit {props.name}
         </Button>
       </div>
+    </section>
+  );
+}
+
+// A room off screen isn't styled or laid out until it nears the screen:
+// with many rooms, a change over Home, such as a device's detail opening,
+// otherwise styled them all again. It lays out in full once first, so the
+// browser keeps its size (contain-intrinsic-size: auto) and nothing shifts
+// as it comes into view. Its 4 px of padding, given back by the margin,
+// keeps its tiles' focus rings inside what it paints.
+function RoomSection(props: {
+  "aria-labelledby": string;
+  children: ReactNode;
+}) {
+  const [skipsOffScreen, setSkipsOffScreen] = useState(false);
+  useEffect(() => {
+    let later: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      later = setTimeout(() => setSkipsOffScreen(true));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(later);
+    };
+  }, []);
+  return (
+    <section
+      aria-labelledby={props["aria-labelledby"]}
+      className={cn(
+        "-m-1 flex shrink-0 flex-col gap-3 p-1 [contain-intrinsic-size:auto_320px]",
+        skipsOffScreen && "[content-visibility:auto]",
+      )}
+    >
+      {props.children}
     </section>
   );
 }
