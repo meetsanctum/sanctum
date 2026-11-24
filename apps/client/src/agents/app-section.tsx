@@ -37,7 +37,12 @@ export function AppCanUseSection(props: {
   const offers = offersOf(canUse, props.app.id);
   const hasAgent =
     (agents?.length ?? 0) > 0 ||
-    props.apps.some((app) => app.permissions.includes(aiAssistantPermission));
+    // An assistant app never uses its own offers.
+    props.apps.some(
+      (app) =>
+        app.id !== props.app.id &&
+        app.permissions.includes(aiAssistantPermission),
+    );
   if (!canUse || !hasAgent || offers.length === 0) return null;
 
   const change = async (offer: AiOfferInfo, on: boolean) => {
