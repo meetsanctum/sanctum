@@ -31,6 +31,7 @@ import {
   weekRanges,
   type DayRange,
 } from "./sensor-history-data";
+import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
 // A sensor's detail: for each of its readings, what it reads now, its lowest
@@ -156,6 +157,7 @@ function SensorReading(props: {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  useChartClock(setNow);
   const titleId = useId();
 
   useEffect(() => {
@@ -199,11 +201,9 @@ function SensorReading(props: {
     };
     void load();
     const stopReloads = everyWhileShown(refreshMs, () => void load());
-    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     return () => {
       current = false;
       stopReloads();
-      stopTicks();
     };
   }, [device.id, sensor.id]);
 

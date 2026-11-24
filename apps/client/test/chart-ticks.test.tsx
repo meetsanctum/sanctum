@@ -82,6 +82,15 @@ describe("a day's hours", () => {
       expect.arrayContaining(hours),
     );
   });
+
+  it("skips midnight when the clocks jump straight to 01:00", async () => {
+    vi.stubEnv("TZ", "America/Santiago");
+    expect(await ticksUntil("2026-09-06T20:00:00-03:00")).toEqual([
+      "06:00",
+      "12:00",
+      "18:00",
+    ]);
+  });
 });
 
 describe("a week of columns", () => {
@@ -99,11 +108,8 @@ describe("a week of columns", () => {
       each.textContent?.endsWith(" h"),
     );
     expect(scale?.textContent).toBe("25 h");
-    const top = Number(
-      /V(-?[\d.]+)/.exec(
-        container.querySelector("path")!.getAttribute("d")!,
-      )![1],
-    );
-    expect(top).toBeGreaterThanOrEqual(0);
+    const bar = container.querySelector("path")!.getAttribute("d")!;
+    const top = /Q-?[\d.]+,(-?[\d.]+)/.exec(bar)?.[1];
+    expect(Number(top)).toBe(0);
   });
 });

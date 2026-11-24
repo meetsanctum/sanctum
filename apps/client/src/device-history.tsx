@@ -38,6 +38,7 @@ import {
   type Span,
 } from "./device-history-data";
 import { BandTicks } from "./motion-band";
+import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
 // A light's or a switch's History page in its detail, from core History: the
@@ -102,6 +103,7 @@ export function useDayAndWeek(
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  useChartClock(setNow);
 
   useEffect(() => {
     let current = true;
@@ -148,11 +150,9 @@ export function useDayAndWeek(
     };
     void load();
     const stopReloads = everyWhileShown(refreshMs, () => void load());
-    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     return () => {
       current = false;
       stopReloads();
-      stopTicks();
     };
   }, [device.id, capability.id, weekOfChanges]);
 

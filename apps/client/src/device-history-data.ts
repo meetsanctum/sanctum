@@ -216,15 +216,28 @@ export function midnight(at: number, daysBack = 0) {
 
 /** The local hours every 6 within the day, whatever the clocks did. */
 export function sixHours(from: number, now: number) {
-  const start = midnight(from);
   const hours: number[] = [];
-  for (let hour = 0; ; hour += 6) {
-    const date = new Date(start);
-    date.setHours(hour);
-    const at = date.getTime();
-    if (at >= now) return hours;
-    if (at > from) hours.push(at);
+  for (
+    const day = new Date(from);
+    day.getTime() < now;
+    day.setHours(24, 0, 0, 0)
+  ) {
+    for (const hour of [0, 6, 12, 18]) {
+      const tick = new Date(day);
+      const at = tick.setHours(hour, 0, 0, 0);
+      // A clock change can move a skipped hour forward.
+      if (
+        at > from &&
+        at < now &&
+        tick.getHours() === hour &&
+        tick.getMinutes() === 0 &&
+        tick.getSeconds() === 0
+      ) {
+        hours.push(at);
+      }
+    }
   }
+  return hours;
 }
 
 /**
