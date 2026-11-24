@@ -144,6 +144,25 @@ const buttonVariants = cva(
   },
 );
 
+// Reusing classes for a variant, size and placement skips building the
+// variant class string and calling cn, which also caches merged strings.
+// The cache starts afresh if it fills with distinct combinations.
+const made = new Map<string, string>();
+function classesOf(
+  variant: VariantProps<typeof buttonVariants>["variant"],
+  size: VariantProps<typeof buttonVariants>["size"],
+  className: string | undefined,
+) {
+  const key = `${variant}\n${size}\n${className ?? ""}`;
+  let classes = made.get(key);
+  if (classes === undefined) {
+    if (made.size >= 1000) made.clear();
+    classes = cn(buttonVariants({ variant, size, className }));
+    made.set(key, classes);
+  }
+  return classes;
+}
+
 function Button({
   className,
   variant = "default",
@@ -161,7 +180,7 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={classesOf(variant, size, className)}
       {...props}
     />
   );

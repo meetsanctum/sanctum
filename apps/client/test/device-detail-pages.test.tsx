@@ -111,6 +111,7 @@ function Detail(props: {
       tileKey={props.tileKey}
       openFirstPage={props.openFirstPage}
       open={props.open ?? true}
+      isCovering={false}
       devices={shown}
       apps={props.apps ?? [presses]}
       live={live}
