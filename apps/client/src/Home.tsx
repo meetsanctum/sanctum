@@ -34,7 +34,7 @@ import {
   useDashboards,
 } from "./dashboards";
 import { connectLive } from "./live";
-import { HomePage } from "./home-page";
+import { HomePage, usePreloadSystemPages } from "./home-page";
 import { HomeSidebar } from "./home-sidebar";
 import { useWidgetCards } from "./home-widgets";
 import { OpenDeviceDetail, useOpenDevice } from "./open-device";
@@ -139,6 +139,7 @@ export function Home(props: {
   // Edit Home, until Done, or until the page or dashboard on show changes.
   const [editingHome, setEditingHome] = useState(false);
   const devices = useDevices(live);
+  usePreloadSystemPages(devices.loaded);
   // A restart or shutdown someone asked for, which the veil says.
   const going = useGoing(live, core.state);
   // How the machine Sanctum runs on is doing, for the dashboard's Attention

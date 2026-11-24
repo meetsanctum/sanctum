@@ -6,7 +6,7 @@ import {
   type PageParams,
   type Tile,
 } from "@meetsanctum/ui-sdk";
-import { Component, Suspense, type ReactNode } from "react";
+import { Component, Suspense, useEffect, type ReactNode } from "react";
 
 import { AppNotice, WhileNotRunning } from "./app-state";
 import type { HostedApp, Route } from "./apps";
@@ -38,13 +38,28 @@ import {
 import type { SystemStatus } from "./system-status";
 import type { Devices } from "./use-devices";
 
-// The system apps load when opened, so Home has less to load and run.
-const { Page: SettingsPage } = lazyPage(() =>
+// The system apps load the first time one opens, so Home has less to load
+// and run, and in idle time once Home has its devices, so opening one need
+// not wait for it. A load that fails ahead of time is left to the opening,
+// whose boundary says so (SystemPageBoundary).
+const { Page: SettingsPage, preload: preloadSettings } = lazyPage(() =>
   import("./settings").then((module) => module.SettingsPage),
 );
-const { Page: AutomationsPage } = lazyPage(() =>
+const { Page: AutomationsPage, preload: preloadAutomations } = lazyPage(() =>
   import("./automations/page").then((module) => module.AutomationsPage),
 );
+
+/** Loads Settings and Automations ahead of time, two seconds after `ready`. */
+export function usePreloadSystemPages(ready: boolean) {
+  useEffect(() => {
+    if (!ready) return;
+    const later = setTimeout(() => {
+      void preloadSettings().catch(() => undefined);
+      void preloadAutomations().catch(() => undefined);
+    }, 2_000);
+    return () => clearTimeout(later);
+  }, [ready]);
+}
 
 export function HomePage({
   route,

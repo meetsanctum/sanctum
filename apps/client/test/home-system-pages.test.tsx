@@ -12,14 +12,18 @@ const imports = vi.hoisted(() =>
 vi.mock("../src/settings", imports);
 vi.mock("../src/automations/page", imports);
 
-it("loads system pages only when opened", async () => {
+it("loads system pages ahead of time, keeping Home when that fails", async () => {
   imports.mockClear();
   vi.useFakeTimers();
   try {
     await remountHome();
+    expect(imports).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
     await vi.dynamicImportSettled();
-    expect(imports).not.toHaveBeenCalled();
+    expect(imports).toHaveBeenCalled();
+    // A failure ahead of time is left to the page's opening.
+    expect(container.querySelector("[role=alert]")).toBeNull();
+    expect(container.querySelector("main")).not.toBeNull();
   } finally {
     vi.useRealTimers();
   }
