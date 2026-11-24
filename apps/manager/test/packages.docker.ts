@@ -361,6 +361,8 @@ describe("the apps' packages on real images", () => {
   });
 
   it("starts the pinned Ollama image and lists models on a fresh host", async () => {
+    // The image is gigabytes, downloaded while the test waits: it took nearly
+    // four minutes on a home connection.
     await vi.waitFor(
       async () => {
         expect(await api("GET", "/api/services/ollama")).toMatchObject({
@@ -374,9 +376,9 @@ describe("the apps' packages on real images", () => {
           body: { isAnswering: true, models: [] },
         });
       },
-      { timeout: 240_000, interval: 1_000 },
+      { timeout: 480_000, interval: 1_000 },
     );
-  }, 300_000);
+  }, 540_000);
 
   it("runs each app through its socket in the container the manager makes", async () => {
     // The test plays the core's end of each app's socket now.
