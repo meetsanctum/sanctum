@@ -111,7 +111,11 @@ export function PermissionsSection(props: {
                 </span>
               )}
               <Switch
-                aria-label={words.title}
+                // Two permissions may share a title, as two ports do: the
+                // detail tells their switches apart.
+                aria-label={
+                  words.detail ? `${words.title}. ${words.detail}` : words.title
+                }
                 checked={granted}
                 disabled={pending !== undefined}
                 onCheckedChange={(next) => {
@@ -141,6 +145,8 @@ export function PermissionsSection(props: {
                 Turn off “{permissionWords(asking.id).title}” for {app.name}?
               </DialogTitle>
               <DialogDescription>
+                {permissionWords(asking.id).detail &&
+                  `${permissionWords(asking.id).detail}. `}
                 {app.name} needs it to work. It pauses until you turn this back
                 on.
               </DialogDescription>

@@ -10,12 +10,16 @@ export function listing(rules: string) {
   const comment = /comment "([^"]+)"/.exec(rules)?.[1];
   const elements = (set: string) => {
     const found = new RegExp(
-      `set ${set} \\{ type [a-z_0-9]+;(?: elements = \\{ ([^}]*) \\};)? \\}`,
+      `set ${set} \\{ type [a-z_0-9]+;(?: flags interval;)?(?: elements = \\{ ([^}]*) \\};)? \\}`,
     ).exec(rules)?.[1];
     return found ? found.split(", ") : undefined;
   };
   const reach = elements("reach");
-  const ports = elements("reachports")?.map(Number);
+  // A port as a number, a range of them as {"range": [from, to]}.
+  const ports = elements("reachports")?.map((each) => {
+    const [from, to] = each.split("-").map(Number);
+    return to === undefined ? from : { range: [from, to] };
+  });
   return JSON.stringify({
     nftables: [
       { metainfo: { version: "1.1.6" } },

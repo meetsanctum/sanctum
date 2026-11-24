@@ -218,6 +218,7 @@ describe("apps' containers on real Docker", () => {
       memoryLimits: true,
       discovery: false,
       lan: true,
+      portRanges: true,
       deletesData: true,
       reserves: true,
     });

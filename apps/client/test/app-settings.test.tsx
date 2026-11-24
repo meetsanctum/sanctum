@@ -394,6 +394,52 @@ describe("an app's settings page", () => {
     ]);
   });
 
+  it("distinguishes the single port and the needed range when switching off LAN access", async () => {
+    const port = "lan:tcp:6053";
+    const range = "lan:tcp:49152-65535";
+    await show({
+      ...moods,
+      permissions: [port, range],
+      requests: [
+        {
+          id: port,
+          reason: "To reach the device.",
+          needed: false,
+          asked: null,
+          startsOn: false,
+        },
+        {
+          id: range,
+          reason: "To open a session with the device.",
+          needed: true,
+          asked: null,
+          startsOn: false,
+        },
+      ],
+    });
+
+    const title = "Talk to devices on your network";
+    const rangeDetail = "Any port from 49152 to 65535, on the devices it found";
+    expect(
+      switchFor(`${title}. Port 6053, to the devices it found`).getAttribute(
+        "aria-checked",
+      ),
+    ).toBe("true");
+    const rangeSwitch = switchFor(`${title}. ${rangeDetail}`);
+    expect(rangeSwitch.getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => rangeSwitch.click());
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const description = dialog.getAttribute("aria-describedby")!;
+    expect(document.getElementById(description)?.textContent).toContain(
+      rangeDetail,
+    );
+    expect(granted).toEqual([]);
+
+    await act(async () => button("Turn off").click());
+    expect(granted).toEqual([{ permission: range, granted: false }]);
+  });
+
   it("says so when the core couldn't take a permission back in time", async () => {
     vi.mocked(coreJson).mockImplementationOnce(async () => {
       throw new CoreError(503, "unavailable");

@@ -1,7 +1,9 @@
 import {
   discoveredServices,
-  lanPorts,
+  lanRanges,
+  lanRangesWithin,
   pausedBy,
+  type LanRange,
   type Sighting,
 } from "@meetsanctum/app-sdk";
 
@@ -10,12 +12,14 @@ import {
   ManagerRefusal,
   ManagerUnavailable,
   type LanPolicy,
+  type LanPort,
 } from "../manager.js";
 import type { InstalledApp } from "./installed.js";
 
 // What an app that holds lan:tcp: may reach: the addresses of the devices it
 // found, on its ports, and nothing while it's paused, turned off or not
-// granted. The manager loads the first policy into the app's own network,
+// granted. Its ports go to the manager one entry for each permission, a port
+// or a range [from, to], and are compared by the ports they cover. The manager loads the first policy into the app's own network,
 // its holder's, before the app's container starts, and the core hands it
 // each change after, one at a time. Each policy's version names this run of
 // the core and a count, and the manager's confirmation names its own run and
@@ -28,18 +32,30 @@ import type { InstalledApp } from "./installed.js";
 
 const againMs = 5_000;
 
-type Reach = { addresses: string[]; ports: number[] };
+type Reach = { addresses: string[]; ports: LanPort[] };
 
 const nothing: Reach = { addresses: [], ports: [] };
+
+const rangeOf = (port: LanPort): LanRange =>
+  typeof port === "number"
+    ? { from: port, to: port }
+    : { from: port[0], to: port[1] };
+
+const portOf = ({ from, to }: LanRange): LanPort =>
+  from === to ? from : [from, to];
 
 // Whether everything `inner` lets through, `outer` lets through too.
 const within = (inner: Reach, outer: Reach) =>
   inner.addresses.every((each) => outer.addresses.includes(each)) &&
-  inner.ports.every((each) => outer.ports.includes(each));
+  lanRangesWithin(inner.ports.map(rangeOf), outer.ports.map(rangeOf));
 
 const both = (a: Reach, b: Reach): Reach => ({
   addresses: [...new Set([...a.addresses, ...b.addresses])],
-  ports: [...new Set([...a.ports, ...b.ports])],
+  ports: [
+    ...new Map(
+      [...a.ports, ...b.ports].map((port) => [String(port), port]),
+    ).values(),
+  ],
 });
 
 type Waiter = {
@@ -73,7 +89,17 @@ export type LanManager = {
 
 /** Whether an app reaches devices on the home's network. */
 export const reachesDevices = (entry: InstalledApp) =>
-  lanPorts(entry.granted).length > 0;
+  lanRanges(entry.granted).length > 0;
+
+/**
+ * Whether an app's manifest asks for a range of ports, switched on or not, so
+ * it runs only under a manager whose rules take one: switching it on later
+ * mustn't find a manager that can't.
+ */
+export const asksForPortRange = (entry: InstalledApp) =>
+  lanRanges(entry.manifest.permissions.map((each) => each.id)).some(
+    (range) => range.from < range.to,
+  );
 
 export function createLanPolicies(options: {
   // This run of the core, which names its policies.
@@ -124,7 +150,7 @@ export function createLanPolicies(options: {
     if (entry.off || pausedBy(entry.manifest.permissions, granted).length > 0) {
       return nothing;
     }
-    const ports = lanPorts(granted);
+    const ports = lanRanges(granted).map(portOf);
     if (ports.length === 0) return nothing;
     const services = new Set(discoveredServices(granted));
     const addresses = [

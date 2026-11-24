@@ -1,4 +1,4 @@
-import { lanPort } from "@meetsanctum/app-sdk";
+import { lanRange } from "@meetsanctum/app-sdk";
 
 import type { Presses } from "../devices/presses.js";
 import { appStateOf } from "./app-info.js";
@@ -152,7 +152,7 @@ export function createAppRunChoices(options: {
       // needs a container that has one.
       lan.sync();
       options.syncDiscovery();
-      if (granted && lanPort(permission) !== null && !lan.hasNetwork(entry)) {
+      if (granted && lanRange(permission) !== null && !lan.hasNetwork(entry)) {
         void supervisor.renew(entry);
       }
       const settled = reconcile(
