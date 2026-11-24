@@ -13,6 +13,7 @@ import {
   isOpen,
   lightNames,
   motionSensors,
+  playerNames,
   plugNames,
   seesMotion,
 } from "./home.js";
@@ -51,7 +52,6 @@ const players = new Map([
   [
     "tv-box",
     {
-      name: "Living room box",
       type: "media-player",
       features: {
         power: true,
@@ -78,7 +78,6 @@ const players = new Map([
   [
     "office-speaker",
     {
-      name: "Office speaker",
       type: "smart-speaker",
       features: {
         playback: ["play", "pause", "stop"],
@@ -221,25 +220,23 @@ const playedTo = (media, playing) =>
       )
     : media.position;
 
-const reportContact = (ctx, key) =>
-  ctx.devices.report({
-    key,
-    availability: "online",
-    states: { contact: { open: isOpen(contacts.get(key)) } },
-    battery: 87,
-  });
+const contactReading = (key) => ({
+  key,
+  availability: "online",
+  states: { contact: { open: isOpen(contacts.get(key)) } },
+  battery: 87,
+});
 
-const reportMotion = (ctx, sensor) =>
-  ctx.devices.report({
-    key: sensor.key,
-    availability: "online",
-    states: { occupancy: { motion: seesMotion(sensor) } },
-    battery: 74,
-  });
+const motionReading = (sensor) => ({
+  key: sensor.key,
+  availability: "online",
+  states: { occupancy: { motion: seesMotion(sensor) } },
+  battery: 74,
+});
 
-function reportClimate(ctx, sensor) {
+function climateReading(sensor) {
   const { temperature, humidity } = climateOf(sensor);
-  return ctx.devices.report({
+  return {
     key: sensor.key,
     availability: "online",
     states: {
@@ -247,7 +244,7 @@ function reportClimate(ctx, sensor) {
       humidity: { value: humidity },
     },
     battery: 91,
-  });
+  };
 }
 
 const reportPlug = (ctx, key) =>
@@ -441,6 +438,20 @@ export default defineApp({
   events: [],
   async start(ctx) {
     running = ctx;
+    const reported = new Map();
+    const reporting = new Set();
+    async function reportSensor(reading) {
+      const { key, states } = reading;
+      const value = JSON.stringify(states);
+      if (reported.get(key) === value || reporting.has(key)) return;
+      reporting.add(key);
+      try {
+        await ctx.devices.report(reading);
+        reported.set(key, value);
+      } finally {
+        reporting.delete(key);
+      }
+    }
     for (const key of lights.keys()) {
       await registerLight(ctx, key);
       await report(ctx, key);
@@ -454,7 +465,7 @@ export default defineApp({
         type: "contact",
         capabilities: [{ id: "contact", kind: "contact" }],
       });
-      await reportContact(ctx, key);
+      await reportSensor(contactReading(key));
     }
     for (const sensor of motionSensors) {
       await ctx.devices.register({
@@ -471,7 +482,7 @@ export default defineApp({
           },
         ],
       });
-      await reportMotion(ctx, sensor);
+      await reportSensor(motionReading(sensor));
     }
     for (const sensor of climateSensors) {
       await ctx.devices.register({
@@ -493,7 +504,7 @@ export default defineApp({
           },
         ],
       });
-      await reportClimate(ctx, sensor);
+      await reportSensor(climateReading(sensor));
     }
     for (const [key, { name }] of plugs) {
       await ctx.devices.register({
@@ -506,7 +517,8 @@ export default defineApp({
       });
       await reportPlug(ctx, key);
     }
-    for (const [key, { name, type, features }] of players) {
+    for (const [key, name] of playerNames) {
+      const { type, features } = players.get(key);
       await ctx.devices.register({
         key,
         name,
@@ -538,17 +550,16 @@ export default defineApp({
       ],
     });
     await ctx.devices.found(listed());
-    // The core takes a report that says the same again as no change, so
-    // only what changed reaches a client.
+    // Each report updates the device's last-seen time, so only send changes.
     ticking = setInterval(() => {
       for (const key of contacts.keys()) {
-        void reportContact(ctx, key).catch(() => undefined);
+        void reportSensor(contactReading(key)).catch(() => undefined);
       }
       for (const sensor of motionSensors) {
-        void reportMotion(ctx, sensor).catch(() => undefined);
+        void reportSensor(motionReading(sensor)).catch(() => undefined);
       }
       for (const sensor of climateSensors) {
-        void reportClimate(ctx, sensor).catch(() => undefined);
+        void reportSensor(climateReading(sensor)).catch(() => undefined);
       }
     }, 5_000);
   },

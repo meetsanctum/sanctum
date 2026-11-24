@@ -8,11 +8,12 @@
 export const isShown = () =>
   typeof document === "undefined" || document.visibilityState !== "hidden";
 
-/** Calls `shown` each time the window is shown again; returns a stop. */
-export function onShown(shown: () => void) {
+/** Calls `shown` when the window is shown again and `hidden` when it hides. */
+export function onShown(shown: () => void, hidden?: () => void) {
   if (typeof document === "undefined") return () => {};
   const changed = () => {
     if (isShown()) shown();
+    else hidden?.();
   };
   document.addEventListener("visibilitychange", changed);
   return () => document.removeEventListener("visibilitychange", changed);

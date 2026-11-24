@@ -2,9 +2,8 @@ import { permissionWords, type AppInfo } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AppIcon } from "./app-icon";
+import { AppIcon, plainIcon } from "./app-icon";
 import { problemOf } from "./app-permissions";
-import { plainIcon } from "./app-settings";
 import {
   Dialog,
   DialogContent,

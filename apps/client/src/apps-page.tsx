@@ -9,8 +9,7 @@ import {
 import { Minus, Pin, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
-import { AppIcon } from "./app-icon";
-import { plainIcon } from "./app-settings";
+import { AppIcon, plainIcon } from "./app-icon";
 import { opens, type HostedApp, type Route } from "./apps";
 import { appSettingsPage, settingsApp } from "./system-apps";
 

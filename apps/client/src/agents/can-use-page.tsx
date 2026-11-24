@@ -7,8 +7,7 @@ import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { AppIcon } from "../app-icon";
-import { plainIcon } from "../app-settings";
+import { AppIcon, plainIcon } from "../app-icon";
 import { Row, Section, SettingsPageBar } from "../components";
 import {
   Dialog,

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppCanUseSection } from "./agents/app-section";
 import { AppAdds } from "./app-adds";
 import { GoBack, useGoBackTo } from "./app-go-back";
-import { AppIcon } from "./app-icon";
+import { AppIcon, plainIcon } from "./app-icon";
 import { RemoveApp } from "./app-remove";
 import { PermissionsSection } from "./app-permissions";
 import { AppRunningSection } from "./app-running";
@@ -49,8 +49,6 @@ import { appSettingsTitle } from "./system-apps";
 // its title returns there, since everything on it is saved as it changes.
 
 // An app without an icon of its own, such as a driver, gets a plain one.
-export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
-
 function stateWords(app: AppInfo) {
   const update = app.run?.update;
   const canShowProgress =

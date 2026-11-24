@@ -6,8 +6,7 @@ import { useState, type ReactNode } from "react";
 import { AddAppSheet } from "./add-app-sheet";
 import { DeleteAppData } from "./app-delete-data";
 import { dayWords } from "./app-go-back";
-import { AppIcon } from "./app-icon";
-import { plainIcon } from "./app-settings";
+import { AppIcon, plainIcon } from "./app-icon";
 import { useAvailableApps } from "./available-apps";
 import { Row, Section } from "./components";
 

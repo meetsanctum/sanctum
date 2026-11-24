@@ -12,7 +12,14 @@ import {
   type Places,
 } from "@meetsanctum/app-sdk";
 import type { LiveFeed, Tile } from "@meetsanctum/ui-sdk";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
@@ -495,6 +502,9 @@ export function useDevices(live: LiveFeed) {
     });
     return keepUnchanged(next, kept.current);
   }, [devices, places, failures, pressed, asks, minute]);
+  useLayoutEffect(() => {
+    kept.current = new Map(tiles.map((tile) => [tile.key, tile]));
+  }, [tiles]);
   return {
     places,
     devices,
@@ -535,13 +545,10 @@ export function useTileHandlers(devices: Pick<Devices, "toggle" | "dim">) {
 // it draws again only when it changed: one sensor's change otherwise drew
 // every tile in the home again.
 function keepUnchanged(next: Tile[], kept: Map<string, Tile>) {
-  const tiles = next.map((tile) => {
+  return next.map((tile) => {
     const before = kept.get(tile.key);
     return before && sameData(before, tile) ? before : tile;
   });
-  kept.clear();
-  for (const tile of tiles) kept.set(tile.key, tile);
-  return tiles;
 }
 
 // Whether two pieces of plain data, as a tile is, say the same.

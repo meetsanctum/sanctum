@@ -11,6 +11,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { coreJson } from "../src/core-fetch";
 import type { CoreStatus } from "../src/core-status";
 import { Home } from "../src/Home";
+import type { LiveState } from "../src/live";
 import type { StoredHost } from "../src/shell";
 import { homeDashboard, host, moods } from "./home-shell-fixtures";
 
@@ -38,13 +39,15 @@ vi.mock("../src/core-status", () => ({
 // What the core pushes over the live socket.
 const socket = vi.hoisted(() => ({
   push: (_message: LiveMessage) => {},
+  state: (_state: LiveState) => {},
 }));
 vi.mock("../src/live", () => ({
   connectLive: (
-    _onState: unknown,
+    onState: (state: LiveState) => void,
     onMessage: (message: LiveMessage) => void,
   ) => {
     socket.push = onMessage;
+    socket.state = onState;
     return { stop() {}, retryNow() {} };
   },
 }));
@@ -55,6 +58,10 @@ export function publishCoreStatus(status: CoreStatus) {
 
 export function pushLive(message: LiveMessage) {
   socket.push(message);
+}
+
+export function pushLiveState(state: LiveState) {
+  socket.state(state);
 }
 
 export const mockCoreJson = vi.mocked(coreJson);

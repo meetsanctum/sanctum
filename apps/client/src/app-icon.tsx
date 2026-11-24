@@ -45,6 +45,8 @@ const glyphs: Record<string, LucideIcon> = {
   workflow: Workflow,
 };
 
+export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
+
 export function AppIcon(props: { icon: AppIconInfo; className?: string }) {
   const artwork = appArtwork.get(`${props.icon.glyph}:${props.icon.color}`);
   const Glyph = Object.hasOwn(glyphs, props.icon.glyph)

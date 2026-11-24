@@ -111,7 +111,7 @@ export function HomeRooms(props: {
         // over Home, such as a device's detail opening, otherwise styled
         // them all again. Its 4 px of padding, given back by the margin,
         // keeps its tiles' focus rings inside what it paints.
-        className="-m-1 flex shrink-0 flex-col gap-3 p-1 [contain-intrinsic-size:auto_320px] [content-visibility:auto]"
+        className="-m-1 flex shrink-0 flex-col gap-3 p-1"
       >
         <Heading
           id={headingId}

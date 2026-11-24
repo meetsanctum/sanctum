@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, test } from "node:test";
 
 import { createDriverCore } from "@meetsanctum/app-testkit";
 
+import { seedRooms } from "../home.js";
 import app from "../index.js";
 
 // What it brings, as a core takes it: each device as what it is, so the core
@@ -32,20 +32,41 @@ test("brings its lights, plugs and sensors as what they are", () => {
   assert.deepEqual(core.refused, []);
 });
 
-test("brings every device the seed puts in a room, and no other", async () => {
-  const seed = await readFile(
-    new URL("../../../seed.mjs", import.meta.url),
-    "utf8",
-  );
-  const rooms = Function(
-    `return ${seed.match(/const rooms = (\{[\s\S]*?\n\});/)[1]}`,
-  )();
-  const seeded = Object.values(rooms).flat().sort();
+test("brings every device the seed puts in a room, and no other", () => {
+  const seeded = Object.values(seedRooms).flat().sort();
   const brought = [...core.registered.values()]
     .map((device) => device.name)
     .sort();
   assert.equal(seeded.length, 60);
+  assert.equal(Object.keys(seedRooms).length, 9);
   assert.deepEqual(brought, seeded);
+});
+
+test("reports only changed contact, motion and climate readings after startup", async (t) => {
+  await core.stop();
+  t.mock.timers.enable({ apis: ["Date", "setInterval"], now: 0 });
+  await core.start();
+  const keys = ["balcony-door", "living-motion", "living-climate"];
+  const from = core.reports.length;
+
+  t.mock.timers.tick(5_000);
+  assert.deepEqual(
+    core.reports.slice(from).filter(({ key }) => keys.includes(key)),
+    [],
+  );
+
+  for (let elapsed = 5_000; elapsed < 90_000; elapsed += 5_000) {
+    t.mock.timers.tick(5_000);
+    await Promise.resolve();
+  }
+  assert.deepEqual(core.latest("balcony-door", "contact"), { open: false });
+  assert.deepEqual(core.latest("living-motion", "occupancy"), {
+    motion: false,
+  });
+  assert.deepEqual(core.latest("living-climate", "temperature"), {
+    value: 21.8,
+  });
+  assert.deepEqual(core.latest("living-climate", "humidity"), { value: 44 });
 });
 
 test("turns a plug on and off", async () => {

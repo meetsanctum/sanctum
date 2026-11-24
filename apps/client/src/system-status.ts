@@ -108,9 +108,12 @@ export function useSystemStatus(options: {
     let isStopped = false;
     let isLoading = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
+    const cancelPoll = () => {
       clearTimeout(timer);
       timer = undefined;
+    };
+    const load = async () => {
+      cancelPoll();
       isLoading = true;
       try {
         const answer = await systemStatus.get();
@@ -124,15 +127,19 @@ export function useSystemStatus(options: {
         isLoading = false;
       }
       // A hidden window asks again once it is shown.
-      if (isShown()) timer = setTimeout(load, everyMs);
+      if (isShown()) {
+        timer = setTimeout(() => {
+          if (isShown()) void load();
+        }, everyMs);
+      }
     };
     void load();
     const stopShown = onShown(() => {
-      if (!isStopped && !isLoading && timer === undefined) void load();
-    });
+      if (!isStopped && !isLoading) void load();
+    }, cancelPoll);
     return () => {
       isStopped = true;
-      clearTimeout(timer);
+      cancelPoll();
       stopShown();
     };
   }, [enabled, everyMs]);

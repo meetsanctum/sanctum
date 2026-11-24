@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { startCoreStatusPolling, type CoreStatus } from "../src/core-status";
@@ -127,6 +128,26 @@ describe("startCoreStatusPolling", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(fetch).toHaveBeenCalledTimes(3);
+    stop();
+  });
+
+  it("cancels a scheduled check when hidden and asks once when shown", async () => {
+    vi.useFakeTimers();
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json(healthy));
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    const { stop } = startCoreStatusPolling(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+
+    visibility.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    visibility.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(fetch).toHaveBeenCalledTimes(2);
     stop();
   });
 

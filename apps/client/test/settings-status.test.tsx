@@ -400,6 +400,35 @@ describe("the Status page", () => {
     expect(asked()).toBe(2);
   });
 
+  it.each([1_000, 5_000])(
+    "refreshes as soon as Status returns after %i ms hidden",
+    async (hiddenFor) => {
+      vi.useFakeTimers();
+      const visibility = vi.spyOn(document, "visibilityState", "get");
+      try {
+        await render();
+        const asked = () =>
+          vi
+            .mocked(coreJson)
+            .mock.calls.filter(([path]) => path === "/api/system/status")
+            .length;
+
+        visibility.mockReturnValue("hidden");
+        document.dispatchEvent(new Event("visibilitychange"));
+        await act(async () => vi.advanceTimersByTimeAsync(hiddenFor));
+        expect(asked()).toBe(1);
+
+        visibility.mockReturnValue("visible");
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        expect(asked()).toBe(2);
+      } finally {
+        visibility.mockRestore();
+      }
+    },
+  );
+
   it("reports an initial request failure and recovers on the next poll", async () => {
     vi.useFakeTimers();
     answer = async () => {
