@@ -23,12 +23,11 @@ import {
   resolveHomeAddress,
 } from "./addresses.js";
 import { checkSource } from "./check.js";
-import { ModelError } from "./client.js";
+import { ModelError, type ModelEndpoint } from "./client.js";
 import {
   endpointOf,
   listModels,
   warmOllama,
-  type ModelEndpoint,
   type ModelFetchers,
   type SourceReach,
 } from "./endpoints.js";

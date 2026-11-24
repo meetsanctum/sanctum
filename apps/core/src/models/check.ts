@@ -1,7 +1,6 @@
 import type { ModelCheck, ModelTokens } from "@meetsanctum/app-sdk";
 
-import { ModelError } from "./client.js";
-import { ask, type ModelEndpoint } from "./endpoints.js";
+import { ask, ModelError, type ModelEndpoint } from "./client.js";
 
 // Settings' check of a source: a short question with one tool, as an app's
 // turn would ask, timed to the first piece of the answer. A model that
@@ -48,18 +47,6 @@ export async function checkSource(options: {
 }): Promise<CheckResult> {
   const started = performance.now();
   const at = options.now().toISOString();
-  const firstWord = new AbortController();
-  const firstWordTimer = setTimeout(
-    () => firstWord.abort(new ModelError("timeout", "no first word in time")),
-    options.inHome
-      ? checkLimits.firstWordInHomeMs
-      : checkLimits.firstWordProviderMs,
-  );
-  const signal = AbortSignal.any([
-    firstWord.signal,
-    AbortSignal.timeout(checkLimits.wholeMs),
-    ...(options.signal ? [options.signal] : []),
-  ]);
   let firstWordMs: number | undefined;
   let answered = false;
   let usedTool = false;
@@ -68,10 +55,15 @@ export async function checkSource(options: {
     for await (const piece of ask(
       options.endpoint,
       { model: options.model, ...question, maxTokens: checkLimits.maxTokens },
-      signal,
-      () => {
-        firstWordMs = Math.round(performance.now() - started);
-        clearTimeout(firstWordTimer);
+      {
+        signal: options.signal ?? new AbortController().signal,
+        firstPieceMs: options.inHome
+          ? checkLimits.firstWordInHomeMs
+          : checkLimits.firstWordProviderMs,
+        wholeMs: checkLimits.wholeMs,
+        onFirstPiece: () => {
+          firstWordMs = Math.round(performance.now() - started);
+        },
       },
     )) {
       if (piece.type === "text") answered ||= piece.text.trim() !== "";
@@ -93,8 +85,6 @@ export async function checkSource(options: {
   } catch (error) {
     const problem = error instanceof ModelError ? error.problem : "answer";
     return { check: { at, outcome: "failed", problem }, tokens };
-  } finally {
-    clearTimeout(firstWordTimer);
   }
   return {
     check: {

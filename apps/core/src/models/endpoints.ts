@@ -3,18 +3,11 @@ import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
 import {
-  anthropicChat,
-  anthropicModels,
-  type AnthropicEndpoint,
-  type KeptAnswers,
-} from "./anthropic.js";
-import {
-  chat,
   ModelError,
   problemOfError,
   problemOfStatus,
-  type ChatEndpoint,
-  type ModelRequest,
+  type ModelApi,
+  type ModelEndpoint,
 } from "./client.js";
 
 // Where each kind of source answers. Ollama on Sanctum is reached at the
@@ -29,22 +22,12 @@ export type ModelFetchers = {
   internet: typeof fetch;
 };
 
-const chatProviders = {
-  openrouter: {
-    baseUrl: "https://openrouter.ai/api/v1",
-    maxTokensField: "max_tokens",
-  },
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    maxTokensField: "max_completion_tokens",
-  },
-} as const satisfies Record<
-  Exclude<ModelProvider, "anthropic">,
-  {
-    baseUrl: string;
-    maxTokensField: ChatEndpoint["maxTokensField"];
-  }
->;
+// Each provider's fixed address, and the SDK's provider that speaks to it.
+const providers = {
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", api: "compatible" },
+  anthropic: { baseUrl: "https://api.anthropic.com/v1", api: "anthropic" },
+  openai: { baseUrl: "https://api.openai.com/v1", api: "openai" },
+} as const satisfies Record<ModelProvider, { baseUrl: string; api: ModelApi }>;
 
 /**
  * What a source is reached by: the manager's address for Ollama on
@@ -55,25 +38,15 @@ export type SourceReach =
   | { kind: "computer"; address: HomeAddress }
   | { kind: ModelProvider; key: string };
 
-export type ModelEndpoint =
-  (ChatEndpoint & { api?: never }) | AnthropicEndpoint;
-
-function anthropicEndpoint(
-  key: string,
-  fetch: typeof globalThis.fetch,
-): AnthropicEndpoint {
-  return { api: "anthropic", baseUrl: "https://api.anthropic.com", key, fetch };
-}
-
 export function endpointOf(
   reach: SourceReach,
   fetchers: ModelFetchers,
 ): ModelEndpoint {
   if (reach.kind === "sanctum") {
     return {
+      api: "compatible",
       baseUrl: `${reach.url}/v1`,
       fetch: fetchers.home,
-      maxTokensField: "max_tokens",
     };
   }
   if (reach.kind === "computer") {
@@ -82,36 +55,16 @@ export function endpointOf(
       throw new ModelError("refused", "not an address in the home");
     }
     return {
+      api: "compatible",
       baseUrl: `http://${addressText(reach.address)}/v1`,
       fetch: fetchers.home,
-      maxTokensField: "max_tokens",
     };
   }
-  if (reach.kind === "anthropic") {
-    return anthropicEndpoint(reach.key, fetchers.internet);
-  }
-  const provider = chatProviders[reach.kind];
   return {
-    baseUrl: provider.baseUrl,
+    ...providers[reach.kind],
     key: reach.key,
     fetch: fetchers.internet,
-    maxTokensField: provider.maxTokensField,
   };
-}
-
-/**
- * Asks a source with the client its API needs, and yields the answer in
- * pieces. What the turn keeps of Claude's answers goes with the question.
- */
-export function ask(
-  endpoint: ModelEndpoint,
-  request: ModelRequest & { kept?: KeptAnswers },
-  signal: AbortSignal,
-  onFirstPiece?: () => void,
-) {
-  return endpoint.api === "anthropic"
-    ? anthropicChat(endpoint, request, signal, onFirstPiece)
-    : chat(endpoint, request, signal, onFirstPiece);
 }
 
 const listTimeoutMs = 10_000;
@@ -121,18 +74,24 @@ async function getJson(
   url: string,
   key: string | undefined,
   signal?: AbortSignal,
+  headers: Record<string, string> = key
+    ? { authorization: `Bearer ${key}` }
+    : {},
 ) {
   const timeout = AbortSignal.timeout(listTimeoutMs);
   const both = signal ? AbortSignal.any([signal, timeout]) : timeout;
   let response: Response;
   try {
     response = await fetcher(url, {
-      headers: key ? { authorization: `Bearer ${key}` } : {},
+      headers,
       redirect: "error",
       signal: both,
     });
   } catch (error) {
-    throw problemOfError(error, both);
+    // A request that fails before any answer reached nothing.
+    throw both.aborted
+      ? problemOfError(error, both)
+      : new ModelError("unreachable");
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
@@ -159,6 +118,11 @@ const ollamaTags = z.object({
 });
 const openAiModels = z.object({
   data: z.array(z.object({ id: z.string(), name: z.string().optional() })),
+});
+const anthropicModels = z.object({
+  data: z.array(
+    z.object({ id: z.string().min(1), display_name: z.string().optional() }),
+  ),
 });
 
 /**
@@ -250,14 +214,14 @@ export async function listModels(
       // The key is checked on its own, since the list of models is public.
       await getJson(
         fetchers.internet,
-        `${chatProviders.openrouter.baseUrl}/key`,
+        `${providers.openrouter.baseUrl}/key`,
         reach.key,
         signal,
       );
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${chatProviders.openrouter.baseUrl}/models?supported_parameters=tools`,
+          `${providers.openrouter.baseUrl}/models?supported_parameters=tools`,
           reach.key,
           signal,
         ),
@@ -267,16 +231,30 @@ export async function listModels(
         .map((model) => ({ id: model.id, name: model.name ?? model.id }))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
-    case "anthropic":
-      return anthropicModels(
-        anthropicEndpoint(reach.key, fetchers.internet),
-        signal,
+    case "anthropic": {
+      // Anthropic's own headers; a key's models fit in one page of 1,000.
+      const found = anthropicModels.safeParse(
+        await getJson(
+          fetchers.internet,
+          `${providers.anthropic.baseUrl}/models?limit=1000`,
+          reach.key,
+          signal,
+          { "x-api-key": reach.key, "anthropic-version": "2023-06-01" },
+        ),
       );
+      if (!found.success) throw new ModelError("answer", "not a model list");
+      return found.data.data
+        .map((model) => ({
+          id: model.id,
+          name: model.display_name || model.id,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
     case "openai": {
       const found = openAiModels.safeParse(
         await getJson(
           fetchers.internet,
-          `${chatProviders.openai.baseUrl}/models`,
+          `${providers.openai.baseUrl}/models`,
           reach.key,
           signal,
         ),

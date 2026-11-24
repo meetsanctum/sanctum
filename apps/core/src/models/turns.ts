@@ -11,9 +11,8 @@ import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { Watched } from "../app-host/net.js";
-import type { KeptAnswers } from "./anthropic.js";
-import { ModelError } from "./client.js";
-import { ask } from "./endpoints.js";
+import { ask, ModelError } from "./client.js";
+import type { KeptAnswers } from "./conversation.js";
 import type { Models, SourceInUse } from "./models.js";
 
 // A turn: one call from someone waiting, a person or a shared device, to an
@@ -152,26 +151,20 @@ export function createTurns(options: {
     watched: Watched,
     keptBySource: Map<string, KeptAnswers>,
   ) {
-    const first = new AbortController();
     const revoked = () => stop(answer, "cancelled");
     watched.signal.addEventListener("abort", revoked, { once: true });
-    const timer = setTimeout(
-      () => first.abort(new ModelError("timeout")),
-      source.shown.inHome
-        ? turnLimits.firstPieceInHomeMs
-        : turnLimits.firstPieceWithProviderMs,
-    );
     try {
       const endpoint = source.endpoint();
-      let kept: KeptAnswers | undefined;
-      if (endpoint.api === "anthropic") {
-        const keyHash = createHash("sha256").update(endpoint.key).digest("hex");
-        const connection = `${source.id} ${source.model} ${keyHash}`;
-        kept = keptBySource.get(connection);
-        if (!kept) {
-          kept = new Map();
-          keptBySource.set(connection, kept);
-        }
+      // Kept by source, model and key, so an answer goes back only to
+      // where it came from.
+      const keyHash = createHash("sha256")
+        .update(endpoint.key ?? "")
+        .digest("hex");
+      const connection = `${source.id} ${source.model} ${keyHash}`;
+      let kept = keptBySource.get(connection);
+      if (!kept) {
+        kept = new Map();
+        keptBySource.set(connection, kept);
       }
       const pieces = ask(
         endpoint,
@@ -184,10 +177,14 @@ export function createTurns(options: {
             a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
           ),
           maxTokens: asked.maxTokens ?? turnLimits.maxTokens,
-          ...(kept ? { kept } : {}),
         },
-        AbortSignal.any([answer.controller.signal, first.signal]),
-        () => clearTimeout(timer),
+        {
+          signal: answer.controller.signal,
+          firstPieceMs: source.shown.inHome
+            ? turnLimits.firstPieceInHomeMs
+            : turnLimits.firstPieceWithProviderMs,
+          kept,
+        },
       );
       let hasPiece = false;
       for await (const piece of pieces) {
@@ -227,7 +224,6 @@ export function createTurns(options: {
         );
       }
     } finally {
-      clearTimeout(timer);
       watched.signal.removeEventListener("abort", revoked);
       watched.done();
       stop(answer, "unavailable");

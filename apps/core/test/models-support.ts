@@ -1,8 +1,8 @@
 import type { ModelFetchers } from "../src/models/endpoints.js";
 
 // Fake AI model sources for tests: Ollama on a computer in the home, and
-// OpenRouter and Anthropic on the internet, answering as the real ones do,
-// with an answer streamed as server-sent events.
+// OpenRouter, Anthropic and OpenAI on the internet, answering as the real
+// ones do, with an answer streamed as server-sent events.
 
 /** What a fake source answers to a chat. */
 export type FakeAnswer = {
@@ -16,8 +16,9 @@ export type FakeAnswer = {
   delayMs?: number;
   // It sends its first piece of text, then nothing until it's stopped.
   hangs?: boolean;
-  // Anthropic's only: it thinks first, and why it stops instead of the
-  // usual end of a turn or a tool call. Null omits the stop reason.
+  // Anthropic's and OpenAI's: it thinks first. Anthropic's only: why it
+  // stops instead of the usual end of a turn or a tool call. Null omits the
+  // stop reason.
   thinks?: boolean;
   stopReason?: string | null;
   // Releases the rest of Claude's events after the first text delta.
@@ -34,8 +35,15 @@ export type FakeSources = {
   };
   openRouter: { key: string; answer: FakeAnswer };
   anthropic: { key: string; answer: FakeAnswer };
-  // Every request, as method and URL, with the authorization it carried.
-  requests: { method: string; url: string; authorization?: string }[];
+  openAi: { key: string; answer: FakeAnswer };
+  // Every request, with the key it carried and how it handles redirects.
+  requests: {
+    method: string;
+    url: string;
+    redirect?: RequestInit["redirect"];
+    authorization?: string;
+    apiKey?: string;
+  }[];
   // Each chat's body as sent.
   chats: Record<string, unknown>[];
   // How many answers that hung were stopped by the core.
@@ -73,7 +81,9 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
     chunks.push(JSON.stringify({ choices: [{ delta: { content: text } }] }));
   }
   if (answer.callsTool) {
-    // The call's name and input come in pieces, as they do.
+    // The call's name comes whole first, then its input in pieces, as it
+    // does.
+    const input = answer.toolArguments ?? "{}";
     chunks.push(
       JSON.stringify({
         choices: [
@@ -83,7 +93,7 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
                 {
                   index: 0,
                   id: "call-1",
-                  function: { name: "get_", arguments: "" },
+                  function: { name: "get_time", arguments: input.slice(0, 1) },
                 },
               ],
             },
@@ -95,13 +105,7 @@ function events(answer: FakeAnswer, signal?: AbortSignal | null) {
           {
             delta: {
               tool_calls: [
-                {
-                  index: 0,
-                  function: {
-                    name: "time",
-                    arguments: answer.toolArguments ?? "{}",
-                  },
-                },
+                { index: 0, function: { arguments: input.slice(1) } },
               ],
             },
           },
@@ -240,6 +244,104 @@ function anthropicEvents(answer: FakeAnswer, tool: string) {
   });
 }
 
+// OpenAI's Responses stream: the response, then each output item added,
+// filled and done, then the response completed with what it counted. A
+// reasoning model's reasoning comes sealed, since nothing is stored.
+function openAiEvents(answer: FakeAnswer, tool: string) {
+  const events: unknown[] = [
+    {
+      type: "response.created",
+      response: {
+        id: "resp_1",
+        created_at: 1_790_000_000,
+        model: "gpt-5-mini",
+      },
+    },
+  ];
+  let index = 0;
+  if (answer.thinks) {
+    const item = { type: "reasoning", id: "rs_1", summary: [] };
+    events.push(
+      {
+        type: "response.output_item.added",
+        output_index: index,
+        item: { ...item, encrypted_content: null },
+      },
+      {
+        type: "response.output_item.done",
+        output_index: index,
+        item: { ...item, encrypted_content: "sealed-thought-1" },
+      },
+    );
+    index += 1;
+  }
+  const message = { type: "message", id: "msg_1" };
+  events.push({
+    type: "response.output_item.added",
+    output_index: index,
+    item: message,
+  });
+  for (const text of answer.text ?? ["It's ", "noon."]) {
+    events.push({
+      type: "response.output_text.delta",
+      item_id: "msg_1",
+      output_index: index,
+      delta: text,
+    });
+  }
+  events.push({
+    type: "response.output_item.done",
+    output_index: index,
+    item: message,
+  });
+  index += 1;
+  if (answer.callsTool) {
+    const input = answer.toolArguments ?? "{}";
+    const call = {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: tool,
+    };
+    events.push(
+      {
+        type: "response.output_item.added",
+        output_index: index,
+        item: { ...call, arguments: "" },
+      },
+      {
+        type: "response.function_call_arguments.delta",
+        item_id: "fc_1",
+        output_index: index,
+        delta: input,
+      },
+      {
+        type: "response.output_item.done",
+        output_index: index,
+        item: { ...call, arguments: input, status: "completed" },
+      },
+    );
+  }
+  events.push({
+    type: "response.completed",
+    response: {
+      usage: {
+        input_tokens: answer.tokens?.read ?? 50,
+        input_tokens_details: { cached_tokens: 0 },
+        output_tokens: answer.tokens?.written ?? 7,
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    },
+  });
+  const text = events.map((event) => `data: ${JSON.stringify(event)}\n\n`);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(text.join("")));
+      controller.close();
+    },
+  });
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -263,6 +365,7 @@ export function fakeSources(): FakeSources {
       key: "sk-ant-api03-test-key-7c1d",
       answer: { callsTool: true },
     },
+    openAi: { key: "sk-proj-test-key-9e3b", answer: { callsTool: true } },
     requests: [],
     chats: [],
     stopped: 0,
@@ -297,6 +400,7 @@ export function fakeSources(): FakeSources {
         const url = new URL(String(input));
         note(url, init);
         if (url.host === "api.anthropic.com") return anthropic(url, init);
+        if (url.host === "api.openai.com") return openAi(url, init);
         if (url.host !== "openrouter.ai") return unreachable();
         const authorized =
           headerOf(init, "authorization") ===
@@ -327,10 +431,7 @@ export function fakeSources(): FakeSources {
     },
   };
   async function anthropic(url: URL, init?: RequestInit) {
-    // Anthropic takes a key in either header; its SDK sends it as a bearer.
-    const key =
-      headerOf(init, "x-api-key") ??
-      headerOf(init, "authorization")?.replace(/^Bearer /, "");
+    const key = headerOf(init, "x-api-key");
     if (key !== sources.anthropic.key) {
       return json(
         {
@@ -376,12 +477,42 @@ export function fakeSources(): FakeSources {
     }
     return json({ type: "error", error: { type: "not_found_error" } }, 404);
   }
+  async function openAi(url: URL, init?: RequestInit) {
+    if (headerOf(init, "authorization") !== `Bearer ${sources.openAi.key}`) {
+      return json({ error: { message: "Incorrect API key" } }, 401);
+    }
+    if (url.pathname === "/v1/models") {
+      return json({
+        data: [
+          { id: "gpt-5-mini", object: "model" },
+          { id: "gpt-image-1", object: "model" },
+        ],
+      });
+    }
+    if (url.pathname === "/v1/responses") {
+      const body = JSON.parse(String(init?.body)) as {
+        tools?: { name: string }[];
+      };
+      sources.chats.push(body);
+      return new Response(
+        openAiEvents(
+          sources.openAi.answer,
+          body.tools?.[0]?.name ?? "get_time",
+        ),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    }
+    return json({ error: { message: "not found" } }, 404);
+  }
   function note(url: URL, init?: RequestInit) {
     const authorization = headerOf(init, "authorization");
+    const apiKey = headerOf(init, "x-api-key");
     sources.requests.push({
       method: init?.method ?? "GET",
       url: url.toString(),
+      ...(init?.redirect ? { redirect: init.redirect } : {}),
       ...(authorization ? { authorization } : {}),
+      ...(apiKey ? { apiKey } : {}),
     });
   }
   return sources;

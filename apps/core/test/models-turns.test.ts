@@ -292,7 +292,7 @@ describe("an app's turn with the home's AI model", () => {
     expect(JSON.stringify(entry)).not.toContain("What time");
   });
 
-  it("passes messages on as they are, sorts the tools by name, and caps the tokens", async () => {
+  it("passes the conversation on, sorts the tools by name, and caps the tokens", async () => {
     const { core, maya, sources } = await home();
     await withOfficeMac(core, maya.token);
     sources.ollama.answer = { callsTool: true };
@@ -319,12 +319,14 @@ describe("an app's turn with the home's AI model", () => {
       { role: "user", content: "What time is it?" },
       {
         role: "assistant",
-        content: "",
+        content: null,
         tool_calls: [
           {
             id: "earlier",
             type: "function",
-            function: { name: "get_time", arguments: "null" },
+            // A call without input goes as an empty object, as every tool's
+            // input is.
+            function: { name: "get_time", arguments: "{}" },
           },
         ],
       },
