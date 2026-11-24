@@ -69,7 +69,10 @@ export const mockCoreJson = vi.mocked(coreJson);
 let root: Root;
 export let container: HTMLDivElement;
 
+const kitchen = { id: "kitchen", name: "Kitchen", floorId: null };
+
 export const homeData = {
+  rooms: [kitchen] as { id: string; name: string; floorId: string | null }[],
   installed: [] as AppInfo[],
   dashboards: [] as DashboardInfo[],
   entities: [] as EntityInfo[],
@@ -95,6 +98,7 @@ beforeEach(async () => {
   homeData.dashboards = [homeDashboard];
   homeData.entities = [];
   homeData.devices = [];
+  homeData.rooms = [kitchen];
   homeData.pins = [];
   mockCoreJson.mockReset();
   mockCoreJson.mockImplementation(async (path, init) => {
@@ -139,7 +143,7 @@ beforeEach(async () => {
             timeZone: "UTC",
             temperatureUnit: "celsius",
           },
-          rooms: [{ id: "kitchen", name: "Kitchen", floorId: null }],
+          rooms: homeData.rooms,
           floors: [],
           zones: [],
         };

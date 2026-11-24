@@ -3,6 +3,7 @@ import type { DashboardInfo } from "@meetsanctum/app-sdk";
 import type { Route } from "./apps";
 import { appOnShow, appsPage, type ListedApp } from "./apps-page";
 import { dashboardBackground } from "./dashboards";
+import { useKeyedHandlers } from "./keyed-handlers";
 import { placePages, SidebarPlaces } from "./place-pages";
 import { SidebarContent } from "./sidebar";
 import { SidebarPins } from "./sidebar-pins";
@@ -44,6 +45,10 @@ export function HomeSidebar(props: {
       route.app !== placePages &&
       !pinned?.some((app) => app.id === onShow));
   const openApps = () => go([{ app: appsPage, page: "main", params: {} }]);
+  const showDashboard = useKeyedHandlers((id: string) => {
+    props.showDashboard(id);
+    go([]);
+  });
   return (
     <SidebarContent
       isInert={props.isVeiled || (!props.isFloating && !layout.docked)}
@@ -79,10 +84,7 @@ export function HomeSidebar(props: {
           background: dashboardBackground[background],
           home: kind === "home",
           current: routes.length === 0 && id === props.shown?.id,
-          onSelect: () => {
-            props.showDashboard(id);
-            go([]);
-          },
+          onSelect: showDashboard(id),
         }),
       )}
       account={

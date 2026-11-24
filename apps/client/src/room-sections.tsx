@@ -12,7 +12,7 @@ import {
   tileIconOf,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
@@ -130,12 +130,16 @@ export function useSectionEntities(
     [entities],
   );
 
-  return {
-    tilesIn,
-    press,
-    failuresOf: (entity: SectionEntity) =>
-      failures.get(entityKey(entity.app, entity.key)),
-  };
+  const failuresOf = useCallback(
+    (entity: SectionEntity) => failures.get(entityKey(entity.app, entity.key)),
+    [failures],
+  );
+  // The same while nothing in it changes, so a room on Home that didn't
+  // change isn't drawn again.
+  return useMemo(
+    () => ({ tilesIn, press, failuresOf }),
+    [tilesIn, press, failuresOf],
+  );
 }
 
 export type SectionEntities = ReturnType<typeof useSectionEntities>;

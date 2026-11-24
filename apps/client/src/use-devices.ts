@@ -23,6 +23,7 @@ import {
 
 import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
+import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
 import { tileKey, tilesOf } from "./device-tiles";
 import { playPauseCommand } from "./media";
@@ -549,21 +550,4 @@ function keepUnchanged(next: Tile[], kept: Map<string, Tile>) {
     const before = kept.get(tile.key);
     return before && sameData(before, tile) ? before : tile;
   });
-}
-
-// Whether two pieces of plain data, as a tile is, say the same.
-function sameData(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  return keys.every(
-    (key) =>
-      Object.hasOwn(b, key) &&
-      sameData(
-        (a as Record<string, unknown>)[key],
-        (b as Record<string, unknown>)[key],
-      ),
-  );
 }

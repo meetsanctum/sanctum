@@ -15,7 +15,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -62,6 +62,7 @@ import { statusRow, statusTile, StatusTileWords } from "./status-tile";
 import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem, ServiceNotSetUp } from "./system-status";
 import { useTileHandlers, type Devices } from "./use-devices";
+import { useKeyedHandlers } from "./keyed-handlers";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, what its sensors
@@ -731,6 +732,14 @@ export function SidebarPlaces(props: {
   ) => void;
 }) {
   const { devices, current, open } = props;
+  // The same functions each time, so an item that didn't change isn't
+  // drawn again (SidebarItem).
+  const openCategory = useKeyedHandlers((id: string) =>
+    open("category", { id }),
+  );
+  const roomOpener = useKeyedHandlers((id: string) => open("room", { id }));
+  const openRoom = useCallback((id: string) => roomOpener(id)(), [roomOpener]);
+  const openNoRoom = useKeyedHandlers(() => open(noRoomPage, {}))(noRoomPage);
   const shown = sidebarCategories
     .map((category) => ({
       ...category,
@@ -751,7 +760,7 @@ export function SidebarPlaces(props: {
           current={
             current?.page === "category" && current.params.id === category.id
           }
-          onSelect={() => open("category", { id: category.id })}
+          onSelect={openCategory(category.id)}
         />
       ))}
       <SidebarRooms
@@ -761,8 +770,8 @@ export function SidebarPlaces(props: {
         }
         hasNoRoom={hasNoRoom}
         isNoRoomCurrent={current?.page === noRoomPage}
-        openRoom={(id) => open("room", { id })}
-        openNoRoom={() => open(noRoomPage, {})}
+        openRoom={openRoom}
+        openNoRoom={openNoRoom}
       />
     </>
   );

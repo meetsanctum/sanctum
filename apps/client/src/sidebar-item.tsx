@@ -1,13 +1,16 @@
 import { Button } from "@meetsanctum/ui-sdk";
 import type { LucideIcon } from "lucide-react";
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
+
+import { sameData } from "./same-data";
 
 // A place in the sidebar: its icon, Home's house, or for another dashboard a
 // small swatch of its background, its name and its glanceable status. The
 // current one is in the ink, White in Evening, like every active control;
 // the sidebar is in Evening beside a place and in the device's mode beside
-// an app's page.
-export function SidebarItem(
+// an app's page. It draws again only when what it shows changes, so its
+// `onSelect` must keep its identity (keyed-handlers.ts).
+export const SidebarItem = memo(function SidebarItem(
   props: (
     | { icon: LucideIcon; colour?: string }
     | {
@@ -64,7 +67,7 @@ export function SidebarItem(
       )}
     </Button>
   );
-}
+}, sameData);
 
 /** A heading over a group of places in the sidebar, such as Rooms. */
 export function SidebarHeading(props: { children: string }) {
