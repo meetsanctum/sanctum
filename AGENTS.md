@@ -114,6 +114,20 @@ What is under which licence, and what neither covers, is in
   (the `apple-design-guidelines` skill, where it's installed) and fix what the
   review finds. The UI Guidelines below win where the two disagree.
 
+## Performance
+
+- Sanctum's screens run on weak devices as much as on computers: wall
+  displays such as Shelly's, with a slow processor and a small web view, are
+  what most homes mount. Choose the solution that costs such a device least:
+  little JavaScript in each page, little work on the main thread, nothing
+  running while the screen is still.
+- Weigh every dependency, one you add or one you touch, by what it adds to
+  each page that loads it and what it does at runtime. Where a smaller
+  library or a few lines of our own do what is needed, use those instead.
+- Judge a change's cost on a home of real size, `pnpm dev:seed`'s sixty
+  devices, not on a handful. A proportionate fix is worth making even where a
+  small home hides its gain.
+
 ## UI Guidelines
 
 - Calm, glanceable, flat, with frosted glass only for what floats over a page
