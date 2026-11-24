@@ -76,7 +76,11 @@ describe("a day's line", () => {
     const point = async (x: number) =>
       act(async () =>
         plot.dispatchEvent(
-          new MouseEvent("pointermove", { clientX: x, bubbles: true }),
+          new PointerEvent("pointermove", {
+            clientX: x,
+            bubbles: true,
+            pointerType: "mouse",
+          }),
         ),
       );
     await point(width * 0.75);
@@ -105,7 +109,11 @@ describe("a day's line", () => {
     const point = async (x: number) =>
       act(async () =>
         plot.dispatchEvent(
-          new MouseEvent("pointermove", { clientX: x, bubbles: true }),
+          new PointerEvent("pointermove", {
+            clientX: x,
+            bubbles: true,
+            pointerType: "mouse",
+          }),
         ),
       );
     const xOf = (at: number) => ((at - (now - dayMs)) / dayMs) * width;
@@ -142,7 +150,11 @@ describe("a day's line", () => {
     const point = async (x: number) =>
       act(async () =>
         plot.dispatchEvent(
-          new MouseEvent("pointermove", { clientX: x, bubbles: true }),
+          new PointerEvent("pointermove", {
+            clientX: x,
+            bubbles: true,
+            pointerType: "mouse",
+          }),
         ),
       );
     const xOf = (at: number) => ((at - (now - dayMs)) / dayMs) * width;

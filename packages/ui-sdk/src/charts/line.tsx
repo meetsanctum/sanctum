@@ -2,19 +2,22 @@ import { cn } from "cn";
 import { memo, useId, useMemo } from "react";
 
 import { TimeTicks } from "./axis";
-import { plotClass, Readout, useCursor, useWidth } from "./frame";
+import { SpokenPin, useCursor } from "./cursor";
+import { plotClass, Readout, useWidth } from "./frame";
 import { scaleFraction, scaleOf, type ChartScale } from "./scale";
 import { dayMs, hourMs, timeText } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
 // It is broken where nothing was known, has two or three faint gridlines with
 // their values at the right and the hours every 6 below, and shows its value
-// under the pointer or, with the arrow keys, under a cursor; screen readers
+// under a mouse or where a tap or the arrow keys pin it; screen readers
 // get each hour's mean as a list. On glass it is drawn in White; on a page,
 // in the page's ink.
 
 const slots = 24 * 12;
 const slotMs = dayMs / slots;
+// What the cursor holds at Now, which moves on with the chart.
+const atNow = Number.POSITIVE_INFINITY;
 
 /** One reading on a line: a 5 minutes' mean at its middle, or what it reads now. */
 export type LinePoint = { at: number; value: number };
@@ -131,6 +134,28 @@ function yOn(scale: ChartScale | null, height: number, shownValue: number) {
 const gridYOn = (scale: ChartScale | null, height: number, value: number) =>
   Math.round(yOn(scale, height, value)) + 0.5;
 
+// The nearest reading within [at - half a slot, at + half a slot).
+function nearest(points: readonly LinePoint[], at: number) {
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (points[mid]!.at < at) low = mid + 1;
+    else high = mid;
+  }
+  const half = slotMs / 2;
+  const before = points[low - 1];
+  const after = points[low];
+  if (
+    before &&
+    at - before.at <= half &&
+    (!after || at - before.at <= after.at - at)
+  ) {
+    return before;
+  }
+  return after && after.at - at < half ? after : undefined;
+}
+
 /** What a day's line chart takes. */
 export type LineChartProps = {
   /** The line in its runs, each broken off where nothing was known, in time order. */
@@ -172,7 +197,10 @@ export function LineChart(props: LineChartProps) {
   const points = useMemo(() => runs.flat(), [runs]);
   // What it reads now, where the line ends: a step of its own after the
   // day's 5 minutes, so the last of them stays within the cursor's reach.
-  const live = points.find((each) => each.at === now);
+  const live = useMemo(
+    () => points.find((each) => each.at === now),
+    [points, now],
+  );
   const kept = useMemo(
     () => (live ? points.filter((each) => each !== live) : points),
     [points, live],
@@ -185,10 +213,31 @@ export function LineChart(props: LineChartProps) {
   // always the last pixel, however near the two are.
   const lastKept = kept.at(-1)?.at ?? now;
   const nowFrom = Math.max((lastKept + now) / 2, now - slotMs / 2);
-  const cursor = useCursor(slots + (live ? 1 : 0), (pointerX, wide) => {
-    const nearer = ((nowFrom - from) / dayMs) * wide;
-    if (live && pointerX >= Math.min(nearer, wide - 1)) return slots;
-    return Math.min(slots - 1, Math.floor((pointerX / wide) * slots));
+  const steps = slots + (live ? 1 : 0);
+  // A step points at its reading, or its 5 minutes' middle without one, and
+  // the last, after the day's, at Now, whatever time it is.
+  const keyAt = (step: number) => {
+    if (live && step === slots) return atNow;
+    const middle = from + (step + 0.5) * slotMs;
+    return nearest(kept, middle)?.at ?? middle;
+  };
+  const cursor = useCursor<number>({
+    width: plot,
+    steps,
+    keyAt,
+    stepOf: (key) =>
+      key === atNow
+        ? live
+          ? slots
+          : null
+        : key < from || key > now
+          ? null
+          : Math.min(slots - 1, Math.floor((key - from) / slotMs)),
+    keyAtX: (pointerX, wide) => {
+      const nearer = ((nowFrom - from) / dayMs) * wide;
+      if (live && pointerX >= Math.min(nearer, wide - 1)) return atNow;
+      return keyAt(Math.min(slots - 1, Math.floor((pointerX / wide) * slots)));
+    },
   });
   const given = props.scale;
   const scale = useMemo(() => {
@@ -201,25 +250,20 @@ export function LineChart(props: LineChartProps) {
   const means = useMemo(() => hourlyMeans(runs), [runs]);
   const x = (at: number) => ((at - from) / dayMs) * plot;
   const y = (value: number) => yOn(scale, height, format.shown(value));
-  const atNow = live !== undefined && cursor.at === slots;
   const pointedAt =
-    cursor.at === null
-      ? null
-      : atNow
-        ? now
-        : from + ((cursor.at + 0.5) / slots) * dayMs;
-  // The reading nearest the cursor, within its 5 minutes, or at its last
-  // step what it reads now.
-  const pointed =
-    pointedAt === null
-      ? undefined
-      : atNow
-        ? live
-        : kept
-            .filter((each) => Math.abs(each.at - pointedAt) <= slotMs / 2)
-            .sort(
-              (a, b) => Math.abs(a.at - pointedAt) - Math.abs(b.at - pointedAt),
-            )[0];
+    cursor.shown === null ? null : cursor.shown === atNow ? now : cursor.shown;
+  // The reading the cursor is on, or at Now what it reads now.
+  const readingAt = (key: number | null) =>
+    key === null ? undefined : key === atNow ? live : nearest(kept, key);
+  const pointed = readingAt(cursor.shown);
+  // What a reading or a time is, in the readout and to a screen reader.
+  const valueOf = (reading: LinePoint | undefined) =>
+    reading ? format.text(reading.value) : (props.unknown ?? "Not known");
+  const aboutOf = (reading: LinePoint | undefined, at: number) =>
+    reading?.at === now ? (props.nowText ?? "Now") : time(reading?.at ?? at);
+  const pinnedAt =
+    cursor.pin === null ? null : cursor.pin === atNow ? now : cursor.pin;
+  const pinned = cursor.pin === cursor.shown ? pointed : readingAt(cursor.pin);
   const label = page ? "text-muted-foreground" : "text-(--pewter)";
 
   return (
@@ -230,7 +274,7 @@ export function LineChart(props: LineChartProps) {
         aria-label={props.label ?? `${props.name} over the last 24 hours`}
         className={plotClass}
         style={{ width: plot, height }}
-        {...cursor.handlers(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"
@@ -272,16 +316,8 @@ export function LineChart(props: LineChartProps) {
           <Readout
             x={x(pointed?.at ?? pointedAt)}
             width={plot}
-            value={
-              pointed
-                ? format.text(pointed.value)
-                : (props.unknown ?? "Not known")
-            }
-            about={
-              pointed?.at === now
-                ? (props.nowText ?? "Now")
-                : time(pointed?.at ?? pointedAt)
-            }
+            value={valueOf(pointed)}
+            about={aboutOf(pointed, pointedAt)}
           />
         )}
       </div>
@@ -308,6 +344,14 @@ export function LineChart(props: LineChartProps) {
           className={`mt-2 ${label}`}
         />
       )}
+      <SpokenPin
+        pin={cursor.pin}
+        text={
+          pinnedAt === null
+            ? ""
+            : `${aboutOf(pinned, pinnedAt)}: ${valueOf(pinned)}`
+        }
+      />
       <ul className="sr-only">
         {means.map((hour) => (
           <li key={hour.at}>

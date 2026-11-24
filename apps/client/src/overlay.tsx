@@ -15,7 +15,8 @@ import { VeilGlass } from "./veil";
 // leads with aside. A click or tap on the glass around a page's content, its
 // tabs and its scrollbar closes it, as Done and Escape do; one that starts
 // or ends on them does not, so a slider let go outside it leaves it open.
-// Focus goes back to what opened it. It fades in and out, and under Reduce
+// Escape leaves a chart's pin first (data-pinned, which the chart clears),
+// then closes it. Focus goes back to what opened it. It fades in and out, and under Reduce
 // effects appears and goes at once: on a slow device the fade drew the
 // whole window over again for each of its frames.
 
@@ -120,7 +121,16 @@ export function Overlay(props: {
         <DialogPrimitive.Content
           asChild
           aria-describedby={undefined}
-          onEscapeKeyDown={props.onEscapeKeyDown}
+          onEscapeKeyDown={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("[data-pinned]")
+            ) {
+              event.preventDefault();
+              return;
+            }
+            props.onEscapeKeyDown?.(event);
+          }}
           onOpenAutoFocus={() => {
             opener.current =
               document.activeElement instanceof HTMLElement

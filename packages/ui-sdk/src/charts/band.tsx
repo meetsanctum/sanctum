@@ -1,13 +1,14 @@
-import { memo, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { memo } from "react";
 
 import { TimeTicks } from "./axis";
+import { SpokenPin, useCursor } from "./cursor";
 import { plotClass, Readout, useWidth } from "./frame";
 import { timeText } from "./time";
 
 // A day as a band 40 px tall: what is on as solid spans, what is faint as a
 // faint fill across the band, the rest as a hairline along its foot, and
 // nothing where nothing was known. As a whole chart it has the time every 6
-// hours under it, a readout under the pointer or the arrow keys, and the
+// hours under it, a readout a mouse shows or a tap pins (cursor.tsx), and the
 // spans listed for screen readers; its marks alone go inside something that
 // is itself the control, such as a row's button, with one axis over them all.
 
@@ -151,9 +152,9 @@ export type DayBandChartProps<Span extends BandSpan> = {
   tone?: "glass" | "page";
 };
 
-// Where the band's readout is: a span, and the pointer's place over it, or
-// none for the arrow keys, which show it at its middle.
-type Cursor = { index: number; x: number | null };
+// What a band's cursor points at: a time, and whether it came from a
+// pointer, which snaps to an on span a few pixels away.
+type BandKey = { at: number; snaps: boolean };
 
 /**
  * A day as a band with its hours under it. The pointer shows an on span
@@ -170,16 +171,15 @@ export function DayBandChart<Span extends BandSpan>(
     ((span: Span) =>
       `${time(span.from)}–${span.to >= to ? "now" : time(span.to)}`);
   const { box, width: plot } = useWidth(props.width);
-  const [cursor, setCursor] = useState<Cursor | null>(null);
   const x = (at: number) => ((at - from) / (to - from)) * plot;
-  const index =
-    cursor && spans.length > 0 ? Math.min(cursor.index, spans.length - 1) : -1;
-  const pointed = index >= 0 ? spans[index] : undefined;
-
-  const spanAt = (left: number) => {
-    const at = from + (left / Math.max(1, plot)) * (to - from);
+  // The span at a time: under a pointer, an on span under it or within a
+  // few pixels of it, then any other span under it; from the arrow keys,
+  // the span it is in.
+  const spanAt = ({ at, snaps }: BandKey) => {
+    if (at < from) return -1;
+    const left = x(at);
     const inside = spans.findIndex((span) => span.from <= at && at < span.to);
-    if (spans[inside]?.level === "on") return inside;
+    if (!snaps || spans[inside]?.level === "on") return inside;
     const near = spans.findIndex(
       (span) =>
         span.level === "on" &&
@@ -188,35 +188,40 @@ export function DayBandChart<Span extends BandSpan>(
     );
     return near >= 0 ? near : inside;
   };
-  const fromPointer = (event: PointerEvent<HTMLDivElement>) => {
-    const left =
-      event.clientX - event.currentTarget.getBoundingClientRect().left;
-    const found = spanAt(Math.max(0, Math.min(plot, left)));
-    setCursor(found >= 0 ? { index: found, x: left } : null);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (spans.length === 0) return;
-    const current = index >= 0 ? index : spans.length - 1;
-    const next =
-      event.key === "ArrowLeft"
-        ? current - 1
-        : event.key === "ArrowRight"
-          ? current + 1
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? spans.length - 1
-              : null;
-    if (next === null) return;
-    event.preventDefault();
-    setCursor({
-      index: Math.max(0, Math.min(spans.length - 1, next)),
-      x: null,
-    });
-  };
-  const markAt = pointed
-    ? (cursor?.x ?? (x(pointed.from) + x(pointed.to)) / 2)
-    : null;
+  // A pin holds a time inside its span, even if the pointer snapped to it.
+  const cursor = useCursor<BandKey>({
+    width: plot,
+    steps: spans.length,
+    keyAt: (step) => {
+      const span = spans[step];
+      return {
+        at: span ? (span.from + span.to) / 2 : Number.NaN,
+        snaps: false,
+      };
+    },
+    stepOf: (key) => {
+      const found = spanAt(key);
+      return found < 0 ? null : found;
+    },
+    keyAtX: (pointerX, wide) => ({
+      at: from + (pointerX / wide) * (to - from),
+      snaps: true,
+    }),
+    keyToPin: ({ at }, step) => {
+      const span = spans[step]!;
+      // Keep the selected span even when its distance in pixels changes.
+      const inside = span.from <= at && at < span.to;
+      return {
+        at: inside
+          ? at
+          : (Math.max(span.from, from) + Math.min(span.to, to)) / 2,
+        snaps: false,
+      };
+    },
+  });
+  const pointed = cursor.step === null ? undefined : spans[cursor.step];
+  const markAt = cursor.shown === null ? null : x(cursor.shown.at);
+  const pinned = cursor.pinStep === null ? undefined : spans[cursor.pinStep];
 
   return (
     <div ref={box} className="relative">
@@ -226,18 +231,7 @@ export function DayBandChart<Span extends BandSpan>(
         aria-label={props.label}
         className={plotClass}
         style={{ width: plot, height: bandHeight }}
-        onPointerMove={fromPointer}
-        onPointerDown={fromPointer}
-        onPointerLeave={() => setCursor(null)}
-        onFocus={() =>
-          setCursor(
-            (current) =>
-              current ??
-              (spans.length > 0 ? { index: spans.length - 1, x: null } : null),
-          )
-        }
-        onBlur={() => setCursor(null)}
-        onKeyDown={onKeyDown}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"
@@ -280,6 +274,10 @@ export function DayBandChart<Span extends BandSpan>(
         plot={plot}
         time={time}
         className={page ? "mt-2 text-muted-foreground" : "mt-2 text-(--pewter)"}
+      />
+      <SpokenPin
+        pin={cursor.pin}
+        text={pinned ? `${about(pinned)}: ${text(pinned)}` : ""}
       />
       <ul className="sr-only">
         {spans.map((span) => (

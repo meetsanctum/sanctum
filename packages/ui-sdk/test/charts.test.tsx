@@ -158,7 +158,11 @@ describe("a day's band", () => {
     );
     await act(async () =>
       group().dispatchEvent(
-        new MouseEvent("pointermove", { clientX: 242, bubbles: true }),
+        new PointerEvent("pointermove", {
+          clientX: 242,
+          bubbles: true,
+          pointerType: "mouse",
+        }),
       ),
     );
     expect(readout()).toMatch(/^Second/);
@@ -414,30 +418,6 @@ describe("a week's columns", () => {
       "2026-11-12: Never",
     ]);
   });
-
-  it("keeps the keyboard cursor in range when the week gets shorter", async () => {
-    const weekDays = days().slice(2);
-    const chart = (shown: typeof weekDays) => (
-      <WeekColumnsChart
-        days={shown}
-        now={now}
-        scale="counts"
-        label="Activity"
-        text={(day) => `${day.value} times`}
-        spoken={(day) => `${day.value} times`}
-        tone="page"
-      />
-    );
-    await render(chart(weekDays));
-    await act(async () => group().focus());
-    expect(readout()).toMatch(/^6 times/);
-    await render(chart(weekDays.slice(0, 3)));
-    expect(readout()).toMatch(/^4 times/);
-    expect(container.querySelector("path.fill-foreground")).toBeTruthy();
-    expect(container.querySelector("span.text-muted-foreground")).toBeTruthy();
-    await press("ArrowLeft");
-    expect(readout()).toMatch(/^3 times/);
-  });
 });
 
 describe("a week's ranges", () => {
@@ -470,6 +450,39 @@ describe("a week's ranges", () => {
     expect(listed()[2]).toBe("Sat 14 Nov: Not known");
     await press("Home");
     expect(readout()).toBe("18–21°Thu 12 Nov");
+  });
+
+  it("announces the date and range of a tapped day", async () => {
+    await render(
+      <WeekRangeChart
+        days={days()}
+        now={now}
+        format={format}
+        name="Temperature"
+        width={456}
+      />,
+    );
+    const plot = group();
+    // The fourth of seven 60 px days; a tap goes straight to click.
+    await act(async () => {
+      for (const type of ["pointerdown", "pointerup"]) {
+        plot.dispatchEvent(
+          new PointerEvent(type, {
+            clientX: 210,
+            bubbles: true,
+            pointerType: "touch",
+            isPrimary: true,
+            pointerId: 1,
+          }),
+        );
+      }
+      plot.dispatchEvent(
+        new MouseEvent("click", { clientX: 210, bubbles: true, detail: 1 }),
+      );
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Sun 15 Nov: 19.5–22.5°",
+    );
   });
 
   it("says its words as the caller's props say them", async () => {

@@ -1,15 +1,15 @@
 import { Fragment, memo, useMemo } from "react";
 
 import { TimeTicks } from "./axis";
-import { plotClass, Readout, useCursor, useWidth } from "./frame";
+import { SpokenPin, useCursor } from "./cursor";
+import { plotClass, Readout, useWidth } from "./frame";
 import { timeText } from "./time";
 
 // A day as a strip: each span on filled in its own colour, as high as its
 // level where the strip shows levels, off as a hairline along its foot and
 // nothing where nothing was known, with the time every 6 hours under it.
-// It shows its value under the pointer or, with the arrow keys, under a
-// cursor that moves in quarter hours, and lists its spans for screen
-// readers.
+// It shows its value under a mouse or where a tap or the arrow keys pin it,
+// in quarter hours, and lists its spans for screen readers.
 
 /**
  * How a strip draws a span: nothing known, off, or on in a colour, filled
@@ -130,8 +130,22 @@ export function DayStripChart<Span extends StripSpan>(
     time = timeText,
   } = props;
   const { box, width } = useWidth(props.width);
-  const cursor = useCursor(quarters);
   const plot = Math.max(0, width - (levels ? gutter : 0));
+  const quarterMs = (to - from) / quarters;
+  // A step points at its quarter hour's middle, a time that stays as the
+  // day moves on.
+  const keyAt = (step: number) => from + (step + 0.5) * quarterMs;
+  const cursor = useCursor<number>({
+    width: plot,
+    steps: quarters,
+    keyAt,
+    stepOf: (at) =>
+      at < from || at >= to
+        ? null
+        : Math.min(quarters - 1, Math.floor((at - from) / quarterMs)),
+    keyAtX: (pointerX, wide) =>
+      keyAt(Math.min(quarters - 1, Math.floor((pointerX / wide) * quarters))),
+  });
   const height = levels ? levelsHeight : flatHeight;
   const x = (at: number) => Math.round(((at - from) / (to - from)) * plot);
   const layers = useMemo(
@@ -146,10 +160,7 @@ export function DayStripChart<Span extends StripSpan>(
   );
   const spanAt = (at: number) =>
     spans.find((span) => span.from <= at && at < span.to);
-  const pointed =
-    cursor.at === null
-      ? null
-      : from + ((cursor.at + 0.5) / quarters) * (to - from);
+  const pointed = cursor.shown;
   const pointedSpan = pointed === null ? undefined : spanAt(pointed);
   const pointedMark = pointedSpan?.mark;
 
@@ -164,7 +175,7 @@ export function DayStripChart<Span extends StripSpan>(
         }
         className={plotClass}
         style={{ width: plot, height }}
-        {...cursor.handlers(plot)}
+        {...cursor.plot}
       >
         <svg
           aria-hidden="true"
@@ -218,6 +229,14 @@ export function DayStripChart<Span extends StripSpan>(
         plot={plot}
         time={time}
         className="mt-2 text-(--pewter)"
+      />
+      <SpokenPin
+        pin={cursor.pin}
+        text={
+          cursor.pin === null
+            ? ""
+            : `${time(cursor.pin)}: ${text(spanAt(cursor.pin))}`
+        }
       />
       <ul className="sr-only">
         {spans.map((span) => (

@@ -1,13 +1,6 @@
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-} from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
-// What every chart is drawn in: its width, the cursor a pointer or the arrow
-// keys move along it, and the readout over it.
+// What every chart is drawn in: its width and the readout over it.
 
 /**
  * The width a chart has, in whole pixels, so its marks sit on them at 1×:
@@ -61,60 +54,6 @@ export function Readout(props: {
       </span>
     </div>
   );
-}
-
-// Where a pointer or the arrow keys point along a chart, in its own steps.
-export function useCursor(
-  steps: number,
-  // Which step a pointer at x falls on, where the steps aren't all as wide.
-  stepAt?: (x: number, width: number) => number,
-) {
-  const [selected, setAt] = useState<number | null>(null);
-  // Keep the cursor at the new end when a chart loses steps.
-  let at = selected;
-  if (at !== null && at >= steps) {
-    at = steps - 1;
-    setAt(at);
-  }
-  const fromPointer =
-    (width: number) => (event: PointerEvent<HTMLDivElement>) => {
-      const box = event.currentTarget.getBoundingClientRect();
-      const x = Math.max(0, Math.min(width - 1, event.clientX - box.left));
-      setAt(
-        Math.min(
-          steps - 1,
-          stepAt ? stepAt(x, width) : Math.floor((x / width) * steps),
-        ),
-      );
-    };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const by = event.shiftKey ? 4 : 1;
-    const current = at ?? steps - 1;
-    const next =
-      event.key === "ArrowLeft"
-        ? current - by
-        : event.key === "ArrowRight"
-          ? current + by
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? steps - 1
-              : null;
-    if (next === null) return;
-    event.preventDefault();
-    setAt(Math.max(0, Math.min(steps - 1, next)));
-  };
-  return {
-    at,
-    handlers: (width: number) => ({
-      onPointerMove: fromPointer(width),
-      onPointerDown: fromPointer(width),
-      onPointerLeave: () => setAt(null),
-      onFocus: () => setAt((current) => current ?? steps - 1),
-      onBlur: () => setAt(null),
-      onKeyDown,
-    }),
-  };
 }
 
 /** The classes of a chart's plot, which takes focus for its cursor. */
