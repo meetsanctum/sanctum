@@ -442,7 +442,10 @@ function HomeScreen(
 
   return (
     // How the household reads things, for the shell's pages and apps' alike.
-    <Household home={devicesSummary.household}>
+    <Household
+      temperatureUnit={devicesSummary.temperatureUnit}
+      timeZone={devicesSummary.timeZone}
+    >
       <OverlayHostProvider value={overlayHost}>
         <ShellFrame
           screenRef={setScreen}
@@ -611,13 +614,13 @@ function HomeScreen(
 // The unit the household shows temperatures in, and the home's time zone,
 // in which widgets' cards write times.
 function Household(props: {
-  home:
-    { temperatureUnit: TemperatureUnit; timeZone: string | null } | undefined;
+  temperatureUnit: TemperatureUnit | undefined;
+  timeZone: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <TemperatureUnitProvider unit={props.home?.temperatureUnit}>
-      <HomeTimeZoneProvider timeZone={props.home?.timeZone}>
+    <TemperatureUnitProvider unit={props.temperatureUnit}>
+      <HomeTimeZoneProvider timeZone={props.timeZone}>
         {props.children}
       </HomeTimeZoneProvider>
     </TemperatureUnitProvider>

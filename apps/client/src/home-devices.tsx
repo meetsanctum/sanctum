@@ -1,3 +1,4 @@
+import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
@@ -19,7 +20,8 @@ export type DevicesSummary = {
   /** Whether the home has no devices at all. */
   none: boolean;
   /** How the household reads things: units and time zone. */
-  household: NonNullable<Devices["places"]>["home"] | undefined;
+  temperatureUnit: TemperatureUnit | undefined;
+  timeZone: string | undefined;
   fail: Devices["fail"];
 };
 
@@ -30,10 +32,11 @@ export function HomeDevicesProvider(props: {
   const devices = useDevices(props.live);
   const { loaded, fail } = devices;
   const none = devices.devices.length === 0;
-  const household = devices.places?.home;
+  const temperatureUnit = devices.places?.home.temperatureUnit;
+  const timeZone = devices.places?.home.timeZone;
   const summary = useMemo(
-    () => ({ loaded, none, household, fail }),
-    [loaded, none, household, fail],
+    () => ({ loaded, none, temperatureUnit, timeZone, fail }),
+    [loaded, none, temperatureUnit, timeZone, fail],
   );
   return (
     <SummaryContext.Provider value={summary}>

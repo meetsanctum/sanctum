@@ -3,6 +3,7 @@ import type {
   AppInfo,
   AvailableApp,
   HardwareOffer,
+  LiveMessage,
 } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,6 +13,7 @@ import { coreJson } from "../src/core-fetch";
 import type { CoreStatus } from "../src/core-status";
 import * as dashboard from "../src/home-dashboard";
 import { Home } from "../src/Home";
+import type { LiveState } from "../src/live";
 import * as shell from "../src/shell";
 import type { StoredHost } from "../src/shell";
 import { lamp, places } from "./device-detail-fixtures";
@@ -33,8 +35,15 @@ vi.mock("../src/auth/session", () => ({
     return () => {};
   },
 }));
+const socket = vi.hoisted(() => ({ push: (_message: LiveMessage) => {} }));
 vi.mock("../src/live", () => ({
-  connectLive: () => ({ stop() {}, retryNow() {} }),
+  connectLive: (
+    _onState: (state: LiveState) => void,
+    onMessage: (message: LiveMessage) => void,
+  ) => {
+    socket.push = onMessage;
+    return { stop() {}, retryNow() {} };
+  },
 }));
 const status = vi.hoisted(() => ({ publish: (_status: CoreStatus) => {} }));
 vi.mock("../src/core-status", () => ({
@@ -172,6 +181,21 @@ it("opens a room's contact tile on the device's first page", async () => {
     '[role="tab"][aria-selected="true"]',
   );
   expect(selected?.getAttribute("aria-label")).toBe("Motion");
+});
+
+it("updates the name in an open device detail", async () => {
+  await press("Lamp, 40%");
+  expect(dialog()?.querySelector("h2")?.textContent).toBe("Lamp");
+
+  await act(async () =>
+    socket.push({
+      type: "device",
+      id: lamp.id,
+      device: { ...lamp, name: "Office Lamp" },
+    }),
+  );
+
+  expect(dialog()?.querySelector("h2")?.textContent).toBe("Office Lamp");
 });
 
 it("opens the app's settings after adding it from a hardware offer", async () => {
