@@ -9,6 +9,7 @@ import {
 import { checkSource } from "../src/models/check.js";
 import {
   ask as askSource,
+  maxToolCalls,
   ModelError,
   type ModelEndpoint,
   type ModelPiece,
@@ -236,6 +237,27 @@ describe("the client", () => {
         ),
       ).rejects.toMatchObject({ problem: "answer" });
     }
+  });
+
+  it(`takes up to ${maxToolCalls} tool calls in an answer, and fails one with more`, async () => {
+    const calls = (count: number) =>
+      [
+        ...Array.from(
+          { length: count },
+          (_, index) =>
+            `data: {"choices":[{"delta":{"tool_calls":[{"index":${index},"id":"c${index}","function":{"name":"lights","arguments":"{}"}}]}}]}`,
+        ),
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+        "data: [DONE]",
+        "",
+      ].join("\n\n");
+    const pieces = await ask(calls(maxToolCalls));
+    expect(pieces.filter((piece) => piece.type === "tool")).toHaveLength(
+      maxToolCalls,
+    );
+    await expect(ask(calls(maxToolCalls + 1))).rejects.toMatchObject({
+      problem: "answer",
+    });
   });
 
   const toolAnswer = (stop: string, promptTokens: number | string = 40) =>

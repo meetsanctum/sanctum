@@ -197,6 +197,11 @@ export type AskOptions = {
   kept?: KeptAnswers;
 };
 
+// Real answers call a handful of tools. Tracking each streamed call costs
+// more the more calls an answer has, so a malformed stream of thousands
+// could keep the core busy for seconds.
+export const maxToolCalls = 64;
+
 function stopOf(
   reason: string,
   calledTool: boolean,
@@ -284,12 +289,18 @@ export async function* ask(
       telemetry: { isEnabled: false },
     });
     const calls: ModelToolCall[] = [];
+    let started = 0;
     let isBroken = false;
     let end: Extract<ModelPiece, { type: "end" }> | undefined;
     for await (const part of result.stream) {
       switch (part.type) {
-        case "reasoning-delta":
         case "tool-input-start":
+          if (++started > maxToolCalls) {
+            throw new ModelError("answer", "too many tool calls");
+          }
+          firstPiece();
+          break;
+        case "reasoning-delta":
           // Thinking counts as the start of an answer: the model is
           // answering.
           firstPiece();

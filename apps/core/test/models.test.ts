@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
+import { maxResponseBytes } from "../src/models/client.js";
 import { modelSources, modelTokens } from "../src/models/schema.js";
 import { fakeSources, officeMac, type FakeSources } from "./models-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
@@ -455,4 +456,32 @@ describe("Anthropic model discovery", () => {
       );
     },
   );
+});
+
+describe("model lists", () => {
+  it("refuse a list larger than an answer may be", async () => {
+    const sources = fakeSources();
+    const list = (pad: string) =>
+      Response.json({
+        object: "list",
+        data: [{ id: "gpt-5-mini", object: "model", owned_by: pad }],
+      });
+    const { core, token } = await home(sources);
+    const look = (pad: string) => {
+      sources.fetchers.internet = async () => list(pad);
+      return post(
+        core,
+        "/api/models/look",
+        { kind: "openai", key: sources.openAi.key },
+        { token },
+      );
+    };
+
+    expect((await look("openai")).json<ModelSourceLook>()).toMatchObject({
+      found: true,
+    });
+    expect(
+      (await look("x".repeat(maxResponseBytes))).json<ModelSourceLook>(),
+    ).toEqual({ found: false, problem: "answer" });
+  });
 });
