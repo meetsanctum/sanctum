@@ -1,82 +1,24 @@
-import { ActionError, type AppContext } from "@meetsanctum/app-sdk";
-import { createDriverCore, type DriverCore } from "@meetsanctum/app-testkit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { ActionError } from "@meetsanctum/app-sdk";
+import { createDriverCore } from "@meetsanctum/app-testkit";
+import { describe, expect, it, vi } from "vitest";
 
 import { createAppleHomeDevicesApp } from "../src/index.js";
 import { createSightings } from "../src/sightings.js";
 import { createFakeBoxes, FakeBox } from "./fake-boxes.js";
+import {
+  added,
+  gym,
+  home,
+  homes,
+  homeWith,
+  livingRoom,
+  stateOf,
+  timings,
+} from "./homes.js";
 
 // Apple TVs found, added with both of their codes, kept connected, turned
 // on and off and stepped up and down, and paired again once they forget
 // Sanctum, against fake boxes standing in for the network.
-
-const timings = { offlineMs: 60, firstRetryMs: 20, lastRetryMs: 80 };
-
-type Home = {
-  core: DriverCore;
-  boxes: FakeBox[];
-};
-
-let homes: Home[] = [];
-
-afterEach(async () => {
-  for (const home of homes) await home.core.stop();
-  homes = [];
-});
-
-function livingRoom() {
-  return new FakeBox({ deviceId: "6E:D2:21:38:B4:95", name: "Living Room" });
-}
-
-function gym() {
-  return new FakeBox({
-    deviceId: "EE:18:90:EF:56:78",
-    name: "Gym",
-    model: "AppleTV6,2",
-    address: "192.168.1.41",
-  });
-}
-
-async function home(...boxes: FakeBox[]): Promise<Home> {
-  return homeWith(boxes);
-}
-
-async function homeWith(
-  boxes: FakeBox[],
-  onStart?: (ctx: AppContext) => void,
-): Promise<Home> {
-  const fake = createFakeBoxes(...boxes);
-  const app = createAppleHomeDevicesApp({
-    boxes: fake.boxes,
-    timings,
-    random: () => 0.5,
-    pairing: { retryMs: 5 },
-  });
-  const core = createDriverCore({
-    ...app,
-    async start(ctx, info) {
-      onStart?.(ctx);
-      await app.start!(ctx, info);
-    },
-  });
-  await core.start();
-  await core.discovered({
-    found: boxes.flatMap((box) => box.sightings()),
-    lost: [],
-  });
-  const made = { core, boxes };
-  homes.push(made);
-  return made;
-}
-
-/** Adds a box with both of its codes, as someone reading them off the TV. */
-async function added(core: DriverCore, box: FakeBox) {
-  const attempt = await core.startAdd(box.key);
-  await attempt.answer({ airplayCode: box.code("airplay") });
-  const state = await attempt.answer({ companionCode: box.code("companion") });
-  expect(state.kind).toBe("done");
-  await core.until(() => box.links.length === 1, "connected");
-}
 
 describe("finding", () => {
   it("keeps valid TVs listed when another service has a blank name", async () => {
@@ -231,7 +173,12 @@ describe("adding", () => {
         {
           id: "media",
           kind: "media",
-          features: { power: true, playback: [], volume: "steps", mute: false },
+          features: {
+            power: true,
+            playback: ["play", "pause", "stop", "next", "previous", "seek"],
+            volume: "steps",
+            mute: false,
+          },
         },
       ],
     });
@@ -249,6 +196,8 @@ describe("adding", () => {
     expect(core.latest(box.key, "media")).toEqual({
       on: true,
       activity: "idle",
+      app: null,
+      media: null,
     });
     expect(core.found).toEqual([]);
   });
@@ -443,32 +392,43 @@ describe("connected", () => {
       core.reports
         .slice(before)
         .flatMap(({ states }) => (states.media ? [states.media.on] : []));
-    await core.until(() => updates().length === 2, "both power changes");
-    expect(updates()).toEqual([true, false]);
+    // Changes that come while a registration is pending are passed on
+    // together: the last word, and never an older one after it.
+    await core.until(() => updates().at(-1) === false, "off again");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(updates().at(-1)).toBe(false);
   });
 
   it("takes a TV that doesn't tell its power to be what it was last turned to", async () => {
     const box = gym();
     box.tellsPower = false;
+    // Without its player, nothing but Companion says anything.
+    box.playerReachable = false;
     const { core } = await home(box);
     await added(core, box);
     await core.until(
       () => core.latest(box.key, "media") !== undefined,
       "its state said",
     );
-    expect(core.latest(box.key, "media")).toEqual({ activity: "idle" });
+    const nothing = { activity: "idle", app: null, media: null };
+    expect(core.latest(box.key, "media")).toEqual(nothing);
     await core.command(box.key, "media", "media", { on: true });
     await core.until(() => core.latest(box.key, "media")?.on === true, "on");
-    expect(core.latest(box.key, "media")).toEqual({
-      on: true,
-      activity: "idle",
-    });
+    expect(core.latest(box.key, "media")).toEqual({ on: true, ...nothing });
     await core.command(box.key, "media", "media", { on: false });
     await core.until(() => core.latest(box.key, "media")?.on === false, "off");
-    expect(core.latest(box.key, "media")).toEqual({
-      on: false,
-      activity: "idle",
-    });
+    expect(core.latest(box.key, "media")).toEqual({ on: false, ...nothing });
+  });
+
+  it("takes the player's word on power where Companion says nothing of it", async () => {
+    const box = gym();
+    box.tellsPower = false;
+    const { core } = await home(box);
+    await added(core, box);
+    await core.until(() => core.latest(box.key, "media")?.on === true, "on");
+    box.setPower(false);
+    await core.until(() => core.latest(box.key, "media")?.on === false, "off");
+    expect(box.players).toHaveLength(0);
   });
 
   it("keeps the TV's volume while it's off, when it offers none", async () => {
@@ -516,10 +476,11 @@ describe("connected", () => {
         }
       ).volume;
     await core.until(() => volume() === "steps", "registered with steps");
-    const reports = core.reports.length;
     box.setVolume("unknown");
+    // Something else it says, to see the unknown volume passed over.
+    box.play({ title: "Weather" });
     await core.until(
-      () => core.reports.length > reports,
+      () => stateOf(core, box)?.media?.title === "Weather",
       "said with unknown volume",
     );
     expect(volume()).toBe("steps");

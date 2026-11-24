@@ -1,5 +1,18 @@
+diff --git a/dist/appletv.js b/dist/appletv.js
+index 15d6a35..523e78a 100644
+--- a/dist/appletv.js
++++ b/dist/appletv.js
+@@ -793,7 +793,7 @@ export class AppleTV extends EventEmitter {
+                 return artworkData;
+             }
+             if (artworkData instanceof Uint8Array) {
+-                return Buffer.from(artworkData);
++                return Buffer.from(artworkData.buffer, artworkData.byteOffset, artworkData.byteLength);
+             }
+         }
+         return null;
 diff --git a/dist/companion/pair-setup.js b/dist/companion/pair-setup.js
-index 2a4027ece806814233d067ae25356875030ed4bf..ffa811b8e67a2fa66cca66c953b455524d08f223 100644
+index 2a4027e..ffa811b 100644
 --- a/dist/companion/pair-setup.js
 +++ b/dist/companion/pair-setup.js
 @@ -261,6 +261,9 @@ export class CompanionPairSetup {
@@ -12,3 +25,141 @@ index 2a4027ece806814233d067ae25356875030ed4bf..ffa811b8e67a2fa66cca66c953b45552
              const resolver = this.pendingFrameResolvers.shift();
              if (resolver) {
                  resolver(frame);
+diff --git a/dist/connection.js b/dist/connection.js
+index 10cbcd2..8ade121 100644
+--- a/dist/connection.js
++++ b/dist/connection.js
+@@ -15,6 +15,12 @@ import { TlvTag, tlvEncode, tlvDecode } from './util/tlv.js';
+ import { buildDataStreamFrame, buildDataStreamReply, parseDataStreamFrame } from './util/data-stream.js';
+ /** `clientTypeUUID` that asks the receiver for an MRP data stream (stream type 130). */
+ const DATA_CHANNEL_TYPE_UUID = '1910A70F-DBC0-4242-AF95-115DB30604E1';
++/** Accept only the TCP ports the driver may reach on the TV. */
++function sessionPort(port) {
++    if (!Number.isInteger(port) || (port !== 7000 && (port < 49152 || port > 65535)))
++        throw new Error('Invalid AirPlay session port');
++    return port;
++}
+ /**
+  * Bracket an IPv6 literal for a URL authority or Host header; IPv4 and names pass through.
+  * In URIs the zone separator is percent-encoded (`fe80::1%25en0`); Host headers keep it raw.
+@@ -86,7 +92,7 @@ export function connectSocket(host, port, timeoutMs = CONNECT_TIMEOUT_MS, signal
+         }
+         sock.setNoDelay(true);
+         sock.setTimeout(timeoutMs, () => sock.destroy(new Error(`Connect to ${host}:${port} timed out`)));
+-        sock.connect(port, host, () => {
++        sock.connect({ host, port }, () => {
+             cleanup();
+             if (signal?.aborted) {
+                 abort();
+@@ -198,7 +204,7 @@ export class AirPlayConnection extends MRPConnection {
+     }
+     /** Write a progress line to stderr. */
+     log(msg) {
+-        console.error(`[AirPlay] ${msg}`);
++        // Progress lines on every connect and message: not for a long-running host's log.
+     }
+     // --- Pair-verify directly on the RTSP socket ---
+     /**
+@@ -439,7 +445,8 @@ export class AirPlayConnection extends MRPConnection {
+                 // ignore parse errors
+             }
+         }
+-        if (eventPort) {
++        if (eventPort !== undefined) {
++            eventPort = sessionPort(eventPort);
+             // Create HAP session for event channel with Events-Salt keys.
+             // Keys are reversed because the event channel originates from the receiver.
+             const eventOutputKey = await hkdfSha512(this.sharedSecret, 'Events-Salt', 'Events-Read-Encryption-Key', 32);
+@@ -489,7 +496,7 @@ export class AirPlayConnection extends MRPConnection {
+                 const parsed = parseBuffer(response.body);
+                 const respObj = parsed[0];
+                 const streams = respObj?.streams;
+-                if (streams?.[0]?.dataPort) {
++                if (streams?.[0]?.dataPort !== undefined) {
+                     dataPort = streams[0].dataPort;
+                 }
+             }
+@@ -497,6 +504,7 @@ export class AirPlayConnection extends MRPConnection {
+                 // ignore parse errors
+             }
+         }
++        dataPort = sessionPort(dataPort);
+         // Derive data channel encryption keys via HKDF
+         // Salt = "DataStream-Salt" + seed as decimal string
+         const saltStr = `DataStream-Salt${seed}`;
+diff --git a/dist/mrp/player-state.js b/dist/mrp/player-state.js
+index a543c3c..a7a495d 100644
+--- a/dist/mrp/player-state.js
++++ b/dist/mrp/player-state.js
+@@ -21,7 +21,7 @@ function retain(fields, names) {
+     return retained;
+ }
+ const DIRECT_FIELDS = ['title', 'artist', 'album', 'duration', 'elapsedTime', 'playbackRate', 'repeatMode', 'shuffleMode', 'timestamp', 'uniqueIdentifier'];
+-const METADATA_FIELDS = ['title', 'duration', 'elapsedTime', 'playbackRate', 'trackArtistName', 'albumArtistName', 'albumName', 'elapsedTimeTimestamp', 'genre', 'contentIdentifier', 'iTunesStoreIdentifier', 'iTunesStoreSubscriptionIdentifier', 'iTunesStoreArtistIdentifier', 'iTunesStoreAlbumIdentifier', 'seriesName', 'mediaType', 'mediaSubType', 'seasonNumber', 'episodeNumber'];
++const METADATA_FIELDS = ['title', 'duration', 'elapsedTime', 'playbackRate', 'trackArtistName', 'albumArtistName', 'albumName', 'elapsedTimeTimestamp', 'genre', 'contentIdentifier', 'iTunesStoreIdentifier', 'iTunesStoreSubscriptionIdentifier', 'iTunesStoreArtistIdentifier', 'iTunesStoreAlbumIdentifier', 'seriesName', 'mediaType', 'mediaSubType', 'seasonNumber', 'episodeNumber', 'artworkAvailable', 'artworkIdentifier'];
+ /** A protobuf integer has a stable track identity only if its decoded form is lossless. */
+ function stableIdentifier(value) {
+     if (typeof value === 'string' || typeof value === 'bigint')
+@@ -76,7 +76,7 @@ export class PlayerState {
+         if (metadata) {
+             for (const field of ['title', 'duration', 'elapsedTime', 'playbackRate', 'genre', 'contentIdentifier',
+                 'iTunesStoreIdentifier', 'iTunesStoreSubscriptionIdentifier', 'iTunesStoreArtistIdentifier',
+-                'iTunesStoreAlbumIdentifier', 'seriesName', 'mediaType', 'mediaSubType', 'seasonNumber', 'episodeNumber']) {
++                'iTunesStoreAlbumIdentifier', 'seriesName', 'mediaType', 'mediaSubType', 'seasonNumber', 'episodeNumber', 'artworkAvailable', 'artworkIdentifier']) {
+                 if (Object.prototype.hasOwnProperty.call(metadata, field))
+                     normalized[field] = metadata[field];
+             }
+diff --git a/dist/now-playing-info.d.ts b/dist/now-playing-info.d.ts
+index b882478..bbf528b 100644
+--- a/dist/now-playing-info.d.ts
++++ b/dist/now-playing-info.d.ts
+@@ -50,6 +50,9 @@ export declare class NowPlayingInfo {
+     readonly episodeNumber?: number;
+     /** MRP queue content identifier; empty when unknown. */
+     readonly contentIdentifier: string;
++    /** Availability and identity from the selected queue item's metadata. */
++    readonly artworkAvailable?: boolean;
++    readonly artworkIdentifier?: string;
+     /** Direct MRP item identifier; undefined when unknown. */
+     readonly uniqueIdentifier?: string;
+     /** MRP queue store identifiers; undefined when absent or unsafe to represent. */
+@@ -67,6 +70,8 @@ export declare class NowPlayingInfo {
+     readonly hasElapsedTime: boolean;
+     readonly hasPlaybackRate: boolean;
+     readonly playbackState: PlaybackState;
++    /** The state as the box reported it, before a rate of 0 turns Playing into Paused. */
++    readonly reportedPlaybackState: PlaybackState;
+     readonly timestamp: number;
+     readonly appDisplayName: string;
+     readonly appBundleIdentifier: string;
+diff --git a/dist/now-playing-info.js b/dist/now-playing-info.js
+index 2285461..e55b0f7 100644
+--- a/dist/now-playing-info.js
++++ b/dist/now-playing-info.js
+@@ -86,6 +86,8 @@ export class NowPlayingInfo {
+     timestamp;
+     appDisplayName;
+     appBundleIdentifier;
++    artworkAvailable;
++    artworkIdentifier;
+     /**
+      * Missing fields default to empty strings, 0, PlaybackState.Unknown, or undefined (shuffle/repeat).
+      * @param setStatePayload State context; supplies playback state, presence, player and app identity.
+@@ -114,6 +116,8 @@ export class NowPlayingInfo {
+         this.episodeNumber = typeof nowPlayingPayload.episodeNumber === 'number' && Number.isFinite(nowPlayingPayload.episodeNumber)
+             ? nowPlayingPayload.episodeNumber : undefined;
+         this.contentIdentifier = nowPlayingPayload.contentIdentifier ?? '';
++        this.artworkAvailable = typeof nowPlayingPayload.artworkAvailable === 'boolean' ? nowPlayingPayload.artworkAvailable : undefined;
++        this.artworkIdentifier = typeof nowPlayingPayload.artworkIdentifier === 'string' ? nowPlayingPayload.artworkIdentifier : undefined;
+         this.uniqueIdentifier = identifier(nowPlayingPayload.uniqueIdentifier);
+         this.iTunesStoreIdentifier = identifier(nowPlayingPayload.iTunesStoreIdentifier);
+         this.iTunesStoreSubscriptionIdentifier = identifier(nowPlayingPayload.iTunesStoreSubscriptionIdentifier);
+@@ -128,6 +132,8 @@ export class NowPlayingInfo {
+         this.timestamp = nowPlayingPayload.timestamp ?? 0;
+         // Some apps (Plex on tvOS 26.6) keep reporting Playing after a pause; only the rate drops to 0.
+         const reported = setStatePayload.playbackState ?? PlaybackState.Unknown;
++        // The state as the box reported it, before a rate of 0 turns Playing into Paused.
++        this.reportedPlaybackState = reported;
+         this.playbackState = reported === PlaybackState.Playing && this.hasPlaybackRate && this.playbackRate === 0
+             ? PlaybackState.Paused : reported;
+         this.appDisplayName = setStatePayload.displayName ?? '';

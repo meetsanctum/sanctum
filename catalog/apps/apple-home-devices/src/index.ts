@@ -11,12 +11,14 @@ import { airplayCode, companionCode } from "./pairing.js";
 import { airplayService, companionService } from "./sightings.js";
 
 // The Apple Home Devices driver app: brings Apple TVs into the core's
-// Devices as media players, to turn on and off and step the volume of. It
-// finds them by what they announce, AirPlay and Companion, and adds one
-// with the two codes the TV shows, one after the other: AirPlay's, then
-// Companion's, which the TV keeps for about 35 seconds. It keeps one
-// Companion connection to each, on the port the TV announces. HomePods are
-// listed, but can't be added, since they have no screen to show a code on.
+// Devices as media players, showing what they play and taking playback,
+// power and volume. It finds them by what they announce, AirPlay and
+// Companion, and adds one with the two codes the TV shows, one after the
+// other: AirPlay's, then Companion's, which the TV keeps for about 35
+// seconds. It keeps a Companion connection to each for power and volume
+// steps, and while the TV is awake a player connection, MRP over AirPlay,
+// for what plays. HomePods are listed, but can't be added, since they have
+// no screen to show a code on.
 
 export type { DriverOptions } from "./driver.js";
 
@@ -43,14 +45,14 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
   return defineApp({
     id: "sanctum.apple-home-devices",
     name: "Apple Home Devices",
-    version: "0.1.0",
+    version: "0.2.0",
     core: "^2.0.0",
-    summary: "Brings your Apple TVs and HomePods into your home.",
+    summary: "Brings your Apple TVs into your home, with what they play.",
     icon: { glyph: "tv", color: "graphite" },
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your Apple TVs and HomePods and keep their state.",
+        reason: "To add your Apple TVs and show what they play.",
         needed: true,
       },
       {
@@ -71,7 +73,7 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
       {
         id: lanRangePermission(lanRangePorts.from, lanRangePorts.to),
         reason:
-          "To control your Apple TVs on the ports each one hands out for a connection.",
+          "To control your Apple TVs and see what they play, on the ports each hands out.",
         needed: true,
       },
     ],
