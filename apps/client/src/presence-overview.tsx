@@ -3,7 +3,7 @@ import type {
   DeviceHistory,
   DeviceInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, icons, SectionHeading, type Tile } from "@meetsanctum/ui-sdk";
+import { icons, SectionHeading, type Tile } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { coreJson } from "./core-fetch";
@@ -273,11 +273,11 @@ function RoomRow(props: {
   const band = useWidth<HTMLSpanElement>();
   const x = (at: number) => ((at - from) / (to - from)) * band.width;
   return (
-    <Button
+    <button
       type="button"
-      variant="presence-row"
       aria-label={`${props.name}, ${props.status}. ${motionSentence(spans, from, to)}`}
       onClick={props.onOpen}
+      className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
     >
       <span className="flex min-w-0 items-center gap-3 @lg/day:w-54 @lg/day:shrink-0">
         <span
@@ -300,6 +300,6 @@ function RoomRow(props: {
       >
         <BandMarks spans={spans} x={x} plot={band.width} />
       </span>
-    </Button>
+    </button>
   );
 }

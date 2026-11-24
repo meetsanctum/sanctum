@@ -19,9 +19,8 @@ import {
   useState,
 } from "react";
 
-import { Button } from "./components/ui/button";
-import { contactIcon } from "./contact-icons";
 import { useShowFailed } from "./show-failed";
+import { contactIcon } from "./contact-icons";
 import type { Tile } from "./tiles";
 import { useThrottledSend } from "./use-throttled-send";
 
@@ -262,11 +261,9 @@ export const DeviceTile = memo(function DeviceTile(props: {
 
   return (
     <div className="relative col-span-3 flex min-w-0 rounded-lg has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50">
-      <Button
+      <button
         ref={surface}
         type="button"
-        variant="device-tile"
-        className="flex-1"
         aria-pressed={onOpen || !switches ? undefined : on}
         aria-haspopup={onOpen ? "dialog" : undefined}
         aria-label={onOpen ? `${tile.name}, ${status}` : playbackLabel}
@@ -285,6 +282,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
             ? ({ "--tile-colour": tile.colour } as CSSProperties)
             : undefined
         }
+        className="group relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 data-offline:opacity-50 data-[look=lit]:bg-(--tile-colour) data-[look=lit]:text-(--carbon) data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) [touch-action:pan-y]"
       >
         {canDim && look === "lit" && level !== undefined && (
           <span
@@ -316,7 +314,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
             {status}
           </span>
         </span>
-      </Button>
+      </button>
       {iconSwitches && (
         <button
           type="button"
