@@ -3,9 +3,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DayLineChart } from "../src/day-line";
+import { LineChart, type LinePoint } from "../src/charts";
 
-// A day as a line (day-line.tsx): at its end the cursor shows what it reads
+// A day as a line (charts/line.tsx): at its end the cursor shows what it reads
 // now, where the line ends, and not the last 5 minutes before it.
 
 let root: Root;
@@ -39,10 +39,10 @@ const slotMs = 5 * minute;
 // The middle of each of the day's 5 minutes, as the chart lays them out.
 const slotMiddle = (slot: number) => now - dayMs + (slot + 0.5) * slotMs;
 
-function chart(line: Parameters<typeof DayLineChart>[0]["line"]) {
+function chart(line: { runs: LinePoint[][]; min: number; max: number }) {
   return (
-    <DayLineChart
-      line={line}
+    <LineChart
+      runs={line.runs}
       now={now}
       name="Temperature"
       height={72}
@@ -169,8 +169,8 @@ describe("a day's line", () => {
     };
     await act(async () =>
       root.render(
-        <DayLineChart
-          line={line}
+        <LineChart
+          runs={line.runs}
           now={now}
           name="Temperature"
           height={72}

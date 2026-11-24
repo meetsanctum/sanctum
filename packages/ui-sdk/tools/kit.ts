@@ -11,8 +11,9 @@ import { iconModules, lucideDir, lucideIcons, sdkModule } from "./icons.js";
 // The kit: React, React DOM, React's JSX runtime and ui-sdk, as the modules
 // every app page imports, served by the core from its own image so every app
 // shares one look and one set of fixes. It comes in parts, so a page loads
-// what it uses: React, ui-sdk without its icons, and one module per icon.
-// kit.json says what it is and which module answers which import.
+// what it uses: React, ui-sdk without its icons or charts, its charts, and
+// one module per icon. kit.json says what it is and which module answers
+// which import.
 
 /** The kit's bridge with the shell, which a client must speak to show its pages. */
 export const bridgeVersion = 4;
@@ -41,6 +42,9 @@ export const sdkRoot = packageRoot(import.meta.url);
 
 const require = createRequire(import.meta.url);
 
+/** ui-sdk's charts, a module of their own so a page that charts nothing loads none of them. */
+export const chartsModule = `${sdkModule}/charts`;
+
 /** Which module of the kit answers each import a page makes. */
 export const kitImports: Readonly<Record<string, string>> = {
   react: "react.js",
@@ -48,6 +52,7 @@ export const kitImports: Readonly<Record<string, string>> = {
   "react-dom": "react-dom.js",
   "react-dom/client": "react-dom-client.js",
   [sdkModule]: "ui-sdk.js",
+  [chartsModule]: "charts.js",
   [iconModules]: "icons/",
 };
 
@@ -156,6 +161,9 @@ function kitModules(files: ReadonlySet<string>): Plugin {
           `import "${join(sdkRoot, "src/kit.css")}";`,
         ].join("\n");
       }
+      if (what === "charts") {
+        return `export * from "${join(sdkRoot, "src/charts/index.ts")}";`;
+      }
       if (what.startsWith("icon:")) {
         const file = what.slice("icon:".length);
         if (!files.has(file)) throw new Error(`No icon ${file}`);
@@ -177,6 +185,7 @@ export async function buildKit(
     "react-dom": `${virtual}react-dom`,
     "react-dom-client": `${virtual}react-dom/client`,
     "ui-sdk": `${virtual}ui-sdk`,
+    charts: `${virtual}charts`,
   };
   for (const file of files) input[`icons/${file}`] = `${virtual}icon:${file}`;
 

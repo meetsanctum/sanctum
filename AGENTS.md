@@ -21,7 +21,8 @@ setup, the commands and the layout; these notes are the rules.
   run on Railway beside the website.
 - `packages/app-sdk` — `defineApp`, `defineAction`, `defineEvent`, schemas.
 - `packages/ui-sdk` — what apps' pages import: `defineAppUi`, the typed app
-  client, the design components they share with the shell.
+  client, the design components they share with the shell, and Sanctum's
+  charts (`./charts`), which the shell draws too.
 - `packages/auth-protocol` — what the core's Auth and the clients share: its
   routes' shapes, the sign-in binding, username and password rules, AI
   agents' setup codes, and the host CA's pin check (`./host-chain`, Node).

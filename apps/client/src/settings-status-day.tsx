@@ -1,10 +1,10 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import { LineChart } from "@meetsanctum/ui-sdk/charts";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Row, Section } from "./components";
-import { DayLineChart } from "./day-line";
 import { hotCelsius, type HostInfo, type HostProblem } from "./system-status";
 import {
   memoryChart,
@@ -169,8 +169,8 @@ export function LastDaySection(props: {
     <Section id="status-day" title={lastDayTitle}>
       <div className="flex flex-col gap-6">
         <Reading {...heading.processor} summary={processorSummary(usage)}>
-          <DayLineChart
-            line={usage.line}
+          <LineChart
+            runs={usage.line.runs}
             now={now}
             name="Processor in use"
             height={chartHeight}
@@ -185,8 +185,8 @@ export function LastDaySection(props: {
             summary={temperatureSummary(celsius, unit)}
             problem={celsius.over !== null}
           >
-            <DayLineChart
-              line={celsius.line}
+            <LineChart
+              runs={celsius.line.runs}
               now={now}
               name="Temperature"
               height={chartHeight}
@@ -198,8 +198,8 @@ export function LastDaySection(props: {
         )}
         {memoryScale && (
           <Reading {...heading.memory} summary={memorySummary(memory)}>
-            <DayLineChart
-              line={memory.line}
+            <LineChart
+              runs={memory.line.runs}
               now={now}
               name="Memory in use"
               height={chartHeight}
