@@ -92,11 +92,16 @@ export function createRequests(options: {
   // The request of each device, running or about to.
   const runs = new Map<string, Run>();
 
-  // The Assistant or the core stops: its requests end, and every window
-  // goes, including what a request still waiting would have added.
-  function stopRequests() {
+  // Every window goes, including what a request still waiting would have
+  // added.
+  function clearWindows() {
     historyGeneration += 1;
     windows.clear();
+  }
+
+  // The Assistant or the core stops: its requests end, and every window goes.
+  function stopRequests() {
+    clearWindows();
     for (const run of runs.values()) {
       endRun(run, new ActionCallError("unavailable"));
     }
@@ -256,6 +261,12 @@ export function createRequests(options: {
       if (entry.app.id !== assistantAppId) return;
       stopRequests();
     },
+
+    /**
+     * Something AI agents could use was switched off: every window goes, so
+     * no later request carries what the Assistant heard through it.
+     */
+    clearWindows,
 
     /**
      * Runs a request for whoever asked, and resolves with the Assistant's

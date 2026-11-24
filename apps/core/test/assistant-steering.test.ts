@@ -240,7 +240,7 @@ describe("a device's 5-minute window", () => {
     },
   );
 
-  it("keeps what the Assistant already heard when an AI area is switched off", async () => {
+  it("forgets what the Assistant heard once an AI area is switched off", async () => {
     const { core, maya, script } = await household();
     const setArea = (on: boolean) =>
       post(
@@ -267,15 +267,8 @@ describe("a device's 5-minute window", () => {
     expect((await ask(core, maya.token, "And before that?")).json()).toEqual({
       reply: "Activity unavailable.",
     });
-    expect(seen).toEqual([
-      expect.objectContaining({
-        asked: "What happened?",
-        tools: [
-          expect.objectContaining({ name: "activity", outcome: "answered" }),
-        ],
-        reply: "Here's what happened.",
-      }),
-    ]);
+    // What it read while the area was on goes with the switch.
+    expect(seen).toEqual([]);
   });
 });
 
