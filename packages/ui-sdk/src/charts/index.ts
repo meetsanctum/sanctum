@@ -22,9 +22,11 @@ export {
 export {
   LineChart,
   type ChartFormat,
+  type DayLineChartProps,
   type LineChartProps,
   type LinePoint,
 } from "./line";
+export type { DaysLineChartProps, LineSeries } from "./days-line";
 export type { ChartScale } from "./scale";
 export {
   WeekColumnsChart,

@@ -1,6 +1,7 @@
 import type { AppInfo, ModelsInfo } from "@meetsanctum/app-sdk";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
-import { useId, useState, type KeyboardEvent } from "react";
+import { LineChart } from "@meetsanctum/ui-sdk/charts";
+import { useId, useState } from "react";
 
 import { AppIcon } from "../app-icon";
 import { Row, Section } from "../components";
@@ -21,20 +22,15 @@ const shownOptions: { value: Shown; label: string }[] = [
 
 type Series = { key: string; name: string; tokens: number[] };
 
-// Fixed by each one's place in the home's list, so a series keeps its
-// colour whichever is shown or in use. Blue is for what can be pressed, and
-// orange and red say what doesn't fit, so neither is a series colour. More
-// than three fold into one.
-const colours = [
-  "text-[#1baf7a] dark:text-[#199e70]",
-  "text-[#6250d6] dark:text-[#9085e9]",
-  "text-[#e87ba4] dark:text-[#d55181]",
-];
+// Each keeps the colour of its place in the home's list, the theme's
+// --series-1 to --series-3, whichever is shown or in use. More than three
+// fold into one.
+const most = 3;
 
 function withOthers(series: Series[], others: string): Series[] {
-  if (series.length <= colours.length) return series;
-  const kept = series.slice(0, colours.length - 1);
-  const rest = series.slice(colours.length - 1);
+  if (series.length <= most) return series;
+  const kept = series.slice(0, most - 1);
+  const rest = series.slice(most - 1);
   return [
     ...kept,
     {
@@ -65,171 +61,45 @@ function scaleText(value: number) {
   return String(value);
 }
 
-function dayText(day: string, isToday: boolean) {
-  if (isToday) return "Today";
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
+// A day of the home's, 2026-11-03, as the chart takes it: its midnight in
+// UTC, which says it whatever the device's own time zone.
+const startOf = (day: string) => Date.parse(`${day}T00:00:00Z`);
+
+const dateText = (start: number) =>
+  new Date(start).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     timeZone: "UTC",
   });
-}
 
 function Chart(props: { series: Series[]; days: string[]; label: string }) {
-  const { series, days } = props;
-  const [day, setDay] = useState<number>();
-  const [pinned, setPinned] = useState<number>();
-  const last = days.length - 1;
+  const { series } = props;
   const top = niceTop(Math.max(...series.flatMap((each) => each.tokens)));
-  const x = (at: number) => (at / last) * 100;
-  const y = (value: number) => 100 - (value / top) * 100;
-  const shown = day ?? pinned;
-
-  const dayAt = (clientX: number, box: DOMRect) =>
-    box.width > 0
-      ? Math.round(
-          Math.min(1, Math.max(0, (clientX - box.left) / box.width)) * last,
-        )
-      : last;
-  const keys = (event: KeyboardEvent) => {
-    const from = shown ?? last + 1;
-    const next =
-      event.key === "ArrowLeft"
-        ? Math.max(0, from - 1)
-        : event.key === "ArrowRight"
-          ? Math.min(last, from + 1)
-          : undefined;
-    if (event.key === "Escape") {
-      setPinned(undefined);
-      setDay(undefined);
-    }
-    if (next === undefined) return;
-    event.preventDefault();
-    setDay(undefined);
-    setPinned(next);
-  };
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-2">
-        <div className="relative flex w-8 shrink-0 flex-col justify-between text-end text-[11px] leading-none text-muted-foreground tabular-nums">
-          <span>{scaleText(top)}</span>
-          <span>{scaleText(top / 2)}</span>
-          <span>0</span>
-        </div>
-        <div
-          role="group"
-          aria-label={props.label}
-          tabIndex={0}
-          className="relative h-32 min-w-0 flex-1 cursor-crosshair rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          onPointerMove={(event) =>
-            event.pointerType === "mouse" &&
-            setDay(
-              dayAt(event.clientX, event.currentTarget.getBoundingClientRect()),
-            )
-          }
-          onPointerLeave={() => setDay(undefined)}
-          onClick={(event) =>
-            setPinned(
-              dayAt(event.clientX, event.currentTarget.getBoundingClientRect()),
-            )
-          }
-          onKeyDown={keys}
-          onBlur={() => setPinned(undefined)}
-        >
-          <svg
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            className="absolute inset-0 size-full overflow-visible"
-          >
-            {[0, 50, 100].map((at) => (
-              <line
-                key={at}
-                x1="0"
-                x2="100"
-                y1={at}
-                y2={at}
-                className="stroke-foreground/10"
-                strokeWidth="1"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            {shown !== undefined && (
-              <line
-                x1={x(shown)}
-                x2={x(shown)}
-                y1="0"
-                y2="100"
-                className="stroke-muted-foreground"
-                strokeWidth="1"
-                strokeDasharray="2 3"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-            {series.map((each, at) => (
-              <path
-                key={each.key}
-                d={each.tokens
-                  .map(
-                    (value, index) =>
-                      `${index === 0 ? "M" : "L"}${x(index)},${y(value)}`,
-                  )
-                  .join(" ")}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                className={colours[at]}
-              />
-            ))}
-          </svg>
-          <div
-            role="status"
-            className={
-              shown === undefined
-                ? "sr-only"
-                : "pointer-events-none absolute top-0 z-10 min-w-44 -translate-x-1/2 rounded-md bg-popover px-2.5 py-2 text-[12px] leading-4 text-popover-foreground shadow-md"
-            }
-            style={
-              shown === undefined
-                ? undefined
-                : { left: `clamp(5.5rem, ${x(shown)}%, calc(100% - 5.5rem))` }
-            }
-          >
-            {shown !== undefined && (
-              <>
-                <div className="mb-1 font-semibold">
-                  {dayText(days[shown]!, shown === last)}
-                </div>
-                {series.map((each, at) => (
-                  <div key={each.key} className="flex items-center gap-1.5">
-                    <span
-                      aria-hidden="true"
-                      className={`h-[3px] w-3 shrink-0 rounded-xs bg-current ${colours[at]}`}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                      {each.name}
-                    </span>
-                    <span className="font-medium tabular-nums">
-                      {count(each.tokens[shown]!)}
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-between ps-10 text-[11px] leading-none text-muted-foreground">
-        <span>{dayText(days[0]!, false)}</span>
-        <span>{dayText(days[Math.floor(last / 2)]!, false)}</span>
-        <span>Today</span>
-      </div>
-    </div>
+    <LineChart
+      days={props.days.map(startOf)}
+      series={series.map((each) => ({
+        key: each.key,
+        name: each.name,
+        values: each.tokens,
+      }))}
+      format={format}
+      scale={{ min: 0, max: top, lines: [0, top / 2, top] }}
+      name="Tokens used"
+      label={props.label}
+      height={128}
+      date={dateText}
+      tone="page"
+    />
   );
 }
+
+const format = {
+  gutter: 40,
+  shown: (value: number) => value,
+  text: count,
+  grid: scaleText,
+};
 
 export function TokensUsed(props: {
   info: ModelsResponse;
@@ -331,7 +201,8 @@ export function TokensUsed(props: {
               <li key={each.key} className="flex items-center gap-2.5 text-sm">
                 <span
                   aria-hidden="true"
-                  className={`h-[3px] w-3.5 shrink-0 rounded-xs bg-current ${colours[at]}`}
+                  className="h-[3px] w-3.5 shrink-0 rounded-xs"
+                  style={{ background: `var(--series-${at + 1})` }}
                 />
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {each.name}

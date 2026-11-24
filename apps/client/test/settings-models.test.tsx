@@ -117,6 +117,14 @@ const live = createLiveFeed();
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // Tokens used measures its width, which jsdom never lays out.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   sources = [mac, router];
   apps = [];
   usage = usageOf({ mac: 100, router: 50 });
@@ -351,7 +359,7 @@ describe("Settings → AI models", () => {
     const sums = () =>
       [
         ...container.querySelectorAll(
-          '[aria-labelledby="settings-models-tokens"] li',
+          '[aria-labelledby="settings-models-tokens"] ul:not(.sr-only) > li',
         ),
       ].map((each) => each.textContent);
 
@@ -390,36 +398,23 @@ describe("Settings → AI models", () => {
     const chart = container.querySelector<HTMLElement>(
       '[aria-label^="Tokens used"]',
     )!;
-    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue(
-      new DOMRect(0, 0, 300, 128),
+    const status = () =>
+      chart.parentElement!.querySelector('[role="status"]')?.textContent;
+    const key = (name: string) =>
+      act(async () => {
+        chart.dispatchEvent(
+          new KeyboardEvent("keydown", { key: name, bubbles: true }),
+        );
+      });
+    await act(async () => chart.focus());
+    expect(status()).toBe(
+      "Today: Qwen3 8B on Office Mac 100, OpenAI: GPT-5 Mini with OpenRouter 50",
     );
-    await act(async () => {
-      chart.dispatchEvent(
-        new PointerEvent("pointermove", {
-          pointerType: "mouse",
-          clientX: 0,
-          bubbles: true,
-        }),
-      );
-    });
-    expect(chart.querySelector('[role="status"]')?.textContent).toContain(
-      "Oct",
-    );
-    await act(async () => {
-      chart.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
-      );
-    });
-    expect(chart.querySelector('[role="status"]')?.textContent).toContain(
-      "Oct",
-    );
-    expect(chart.querySelector('[role="status"]')?.textContent).toContain("26");
-    await act(async () => {
-      chart.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-      );
-    });
-    expect(chart.querySelector('[role="status"]')?.textContent).toBe("");
+    await key("ArrowLeft");
+    expect(status()).toMatch(/^(?!Today)[^:]+: Qwen3 8B on Office Mac 100, /);
+    expect(chart.textContent).toContain("Qwen3 8B on Office Mac100");
+    await key("Escape");
+    expect(status()).toBe("");
   });
 
   it("lists the apps that may use it, each opening its page", async () => {

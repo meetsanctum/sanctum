@@ -56,6 +56,53 @@ export function Readout(props: {
   );
 }
 
+/**
+ * A readout over a chart of several lines: what it is about first, then a
+ * row for each line, its colour, its name and its value. It sits inside the
+ * chart's top, beside the cursor on the side with more room, so a pin that
+ * stays covers neither the cursor's points nor what is above the chart.
+ * Its Carbon takes Evening's series colours, which are drawn for it.
+ */
+export function RowsReadout(props: {
+  x: number;
+  width: number;
+  about: string;
+  rows: readonly { key: string; name: string; value: string; colour: string }[];
+}) {
+  const onRight = props.x < props.width / 2;
+  return (
+    <div
+      aria-hidden="true"
+      data-mode="evening"
+      style={
+        onRight
+          ? { left: Math.round(props.x) + 8 }
+          : { right: props.width - Math.round(props.x) + 8 }
+      }
+      className="pointer-events-none absolute top-0 z-10 flex max-w-[min(20rem,calc(50%-1rem))] flex-col gap-0.5 rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white)"
+    >
+      <span className="text-[13px] leading-[18px] text-(--silver)">
+        {props.about}
+      </span>
+      {props.rows.map((row) => (
+        <span
+          key={row.key}
+          className="flex items-center gap-1.5 text-[13px] leading-[18px]"
+        >
+          <span
+            className="h-0.5 w-3 shrink-0 rounded-full"
+            style={{ background: row.colour }}
+          />
+          <span className="min-w-0 flex-1 truncate text-(--silver)">
+            {row.name}
+          </span>
+          <span className="ms-2 tabular-nums">{row.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** The classes of a chart's plot, which takes focus for its cursor. */
 export const plotClass =
   "relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";

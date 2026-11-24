@@ -3,8 +3,9 @@ import { memo, useId, useMemo } from "react";
 
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
+import { DaysLineChart, type DaysLineChartProps } from "./days-line";
 import { plotClass, Readout, useWidth } from "./frame";
-import { scaleFraction, scaleOf, type ChartScale } from "./scale";
+import { gridYOn, scaleOf, yOn, type ChartScale } from "./scale";
 import { dayMs, hourMs, timeText } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
@@ -118,22 +119,6 @@ const LineMarks = memo(function LineMarks(props: {
   );
 });
 
-// Where a value in the unit shown sits, from the top, kept within the scale.
-function yOn(scale: ChartScale | null, height: number, shownValue: number) {
-  return scale
-    ? height -
-        scaleFraction(
-          scale,
-          Math.min(scale.max, Math.max(scale.min, shownValue)),
-        ) *
-          height
-    : height / 2;
-}
-
-// A gridline's middle, on a pixel's so it is sharp at 1×.
-const gridYOn = (scale: ChartScale | null, height: number, value: number) =>
-  Math.round(yOn(scale, height, value)) + 0.5;
-
 // The nearest reading within [at - half a slot, at + half a slot).
 function nearest(points: readonly LinePoint[], at: number) {
   let low = 0;
@@ -157,7 +142,7 @@ function nearest(points: readonly LinePoint[], at: number) {
 }
 
 /** What a day's line chart takes. */
-export type LineChartProps = {
+export type DayLineChartProps = {
   /** The line in its runs, each broken off where nothing was known, in time order. */
   runs: readonly (readonly LinePoint[])[];
   /** When the day ends; a point at `now` is what it reads now, a step of its own. */
@@ -189,8 +174,23 @@ export type LineChartProps = {
   width?: number;
 };
 
-/** A day as a line, with its gridlines, hours and a cursor. */
+/**
+ * What a line chart takes: a day of one line in 5 minutes, or days of up
+ * to three lines, a point a day.
+ */
+export type LineChartProps = DayLineChartProps | DaysLineChartProps;
+
+/** A day as a line, or days as lines, with their gridlines, times and a cursor. */
 export function LineChart(props: LineChartProps) {
+  return "days" in props ? (
+    <DaysLineChart {...props} />
+  ) : (
+    <DayLineChart {...props} />
+  );
+}
+
+// A day as a line, with its gridlines, hours and a cursor.
+function DayLineChart(props: DayLineChartProps) {
   const { runs, now, format, height, time = timeText } = props;
   const page = props.tone === "page";
   const { box, width } = useWidth(props.width);
