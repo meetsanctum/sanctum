@@ -17,7 +17,7 @@ import { sameData } from "./same-data";
  * grows with its words and has room for at least two cells or half a phone's line.
  */
 export const statusTileFrame =
-  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)] flex h-(--cell) w-max shrink-0 rounded-lg backdrop-blur-[24px]";
+  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)] flex h-(--cell) w-max shrink-0 rounded-lg frosted";
 
 /** A whole status tile's box, on what holds its icon and words. */
 export const statusTile = `${statusTileFrame} items-center gap-2.5 bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink)`;

@@ -5,6 +5,23 @@
 /* shadcn's dark variant is the Evening mode. */
 @custom-variant dark (&:where([data-mode="evening"], [data-mode="evening"] *));
 
+/* Reduce effects, a device's way of drawing the same screen more plainly:
+   where the page says data-effects="reduced", what blurs is drawn without
+   it. The shell sets it on <html> (apps/client/src/effects.ts). */
+@custom-variant reduce-effects (&:where([data-effects="reduced"], [data-effects="reduced"] *));
+
+/* Frosted glass's blur, the one place a live blur is declared, and gone
+   under Reduce effects, where the glass keeps only its fill. */
+@utility frosted {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+
+  @variant reduce-effects {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* Shell tile grids and shared device sections use six equal columns on a
    phone, so two three-cell tiles fit side by side. Widgets span that grid. */
 @utility tile-grid {

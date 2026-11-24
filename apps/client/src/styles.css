@@ -83,7 +83,7 @@ body {
 
 /* Solid there, they blur nothing: live backdrop-filter is only for the
    dashboard's frosted glass. */
-.app-page [class*="backdrop-blur"] {
+.app-page .frosted {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

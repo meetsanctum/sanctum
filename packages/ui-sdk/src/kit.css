@@ -40,7 +40,9 @@ body {
   padding: 0 24px 24px;
 }
 
-/* App pages use filled cards, as they do in the shell. */
+/* App pages use filled cards, as they do in the shell: the kit's frosted
+   glass, and a blur an app's page declares itself. */
+.frame-page .frosted,
 .frame-page [class*="backdrop-blur"] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

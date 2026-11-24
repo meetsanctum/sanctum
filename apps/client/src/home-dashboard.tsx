@@ -310,7 +310,7 @@ function NothingOnHome(props: { name: string; onEdit: () => void }) {
   return (
     <section
       aria-labelledby="nothing-on-home"
-      className="flex w-[520px] max-w-full shrink-0 items-start gap-3.5 rounded-lg bg-(--glass) p-4 ps-3.5 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]"
+      className="flex w-[520px] max-w-full shrink-0 items-start gap-3.5 rounded-lg bg-(--glass) p-4 ps-3.5 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] frosted"
     >
       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip)">
         <icons.House aria-hidden="true" className="size-[18px]" />

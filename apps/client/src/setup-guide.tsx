@@ -193,7 +193,7 @@ function Steps(props: { steps: Step[]; open: (target: SetupTarget) => void }) {
 }
 
 const glass =
-  "rounded-lg bg-(--glass) p-1.5 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]";
+  "rounded-lg bg-(--glass) p-1.5 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] frosted";
 
 // How many steps the guide shows, in words: two while it is not known whether
 // the home has a location.
