@@ -228,6 +228,7 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     hostResources: unused,
     aiTools: unused,
     callAiTool: unused,
+    replyRequest: unused,
     log() {},
   };
   const context = (actor: Actor) => {

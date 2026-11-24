@@ -142,6 +142,15 @@ async function render(
 }
 
 describe("a card", () => {
+  it("uses the shared frosted blur", async () => {
+    const { classList } = await render(list);
+
+    expect(classList.contains("frosted")).toBe(true);
+    expect([...classList].some((name) => name.includes("backdrop-blur"))).toBe(
+      false,
+    );
+  });
+
   it("is titled in its app's colour and takes its size on the grid", async () => {
     const card = await render(list);
 

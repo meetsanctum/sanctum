@@ -62,7 +62,7 @@ let status: SystemStatus;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  // The charts measure their width.
+  // The charts measure their width, and draw nothing until it is known.
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -70,6 +70,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
   const now = Date.now();
   status = piStatus({ checkedAt: new Date(now).toISOString() });
   answers = {
@@ -124,6 +125,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

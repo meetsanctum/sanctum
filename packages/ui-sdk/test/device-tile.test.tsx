@@ -95,6 +95,15 @@ afterEach(async () => {
 });
 
 describe("a light's tile", () => {
+  it("uses the shared frosted blur", async () => {
+    const { classList } = await render(lamp);
+
+    expect(classList.contains("frosted")).toBe(true);
+    expect([...classList].some((name) => name.includes("backdrop-blur"))).toBe(
+      false,
+    );
+  });
+
   it("switches on a tap", async () => {
     const button = await render(lamp);
     await act(async () => {

@@ -5,18 +5,13 @@ import type {
   DeviceStatistics,
 } from "@meetsanctum/app-sdk";
 import type { SwipePage } from "@meetsanctum/ui-sdk";
-import { History } from "lucide-react";
 import {
-  Fragment,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-  type ReactNode,
-} from "react";
+  DayStripChart,
+  WeekColumnsChart,
+  type WeekColumnsChartProps,
+} from "@meetsanctum/ui-sdk/charts";
+import { History } from "lucide-react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
@@ -30,14 +25,11 @@ import {
   sentence,
   spansOf,
   spanText,
-  timeText,
-  weekday,
+  stripSpan,
   weekHeadline,
   type Day,
   type Live,
-  type Span,
 } from "./device-history-data";
-import { BandTicks } from "./motion-band";
 import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
@@ -51,11 +43,6 @@ import { everyWhileShown } from "./while-shown";
 
 const minute = 60_000;
 const refreshMs = 5 * minute;
-// The strip's and the columns' heights, and the gutter for their scale.
-const stripHeight = 88;
-const bandHeight = 40;
-const columnsHeight = 96;
-const gutter = 40;
 // As wide as it may be, and no wider than an overlay's content on a phone
 // (overlay.tsx): a swipe page is only as wide as what it holds, so it
 // cannot make the page narrower itself. The Activity page is as wide.
@@ -214,10 +201,16 @@ function DeviceHistoryPage(props: {
       className={`${width} flex flex-col gap-10 transition-opacity [--history-width:520px] data-loading:opacity-0`}
     >
       <Part title="Last 24 hours" headline={dayHeadline(spans, from, now)}>
-        <Strip spans={spans} from={from} to={now} dims={dims} />
+        <DayStripChart
+          spans={spans.map(stripSpan)}
+          from={from}
+          to={now}
+          levels={dims}
+          text={spanText}
+        />
       </Part>
       <Part title="Last 7 days" headline={weekHeadline(days, now)}>
-        <Columns days={days} now={now} />
+        <WeekColumnsChart now={now} {...columnsOf(days)} />
       </Part>
     </div>
   );
@@ -260,256 +253,6 @@ export function Part(props: {
   );
 }
 
-// The width a chart has, in whole pixels, so its marks sit on them at 1×.
-export function useWidth<Box extends HTMLElement = HTMLDivElement>() {
-  const box = useRef<Box>(null);
-  const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    const element = box.current;
-    if (!element) return;
-    const measure = () => setWidth(Math.floor(element.clientWidth));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  return { box, width };
-}
-
-/** A readout over a chart, its value first and what it is about after. */
-export function Readout(props: {
-  x: number;
-  width: number;
-  value: string;
-  about: string;
-  colour?: string;
-}) {
-  // Kept within the chart, whatever side of it the pointer is on.
-  const left = Math.max(0, Math.min(props.x - 64, props.width - 128));
-  return (
-    <div
-      aria-hidden="true"
-      style={{ left }}
-      className="pointer-events-none absolute -top-14 z-10 flex w-32 flex-col rounded-md whitespace-nowrap border border-white/14 bg-(--carbon) px-2.5 py-1.5 text-(--white)"
-    >
-      <span className="flex items-center gap-1.5 text-[15px] leading-5">
-        {props.colour && (
-          <span
-            className="h-0.5 w-3 shrink-0 rounded-full"
-            style={{ background: props.colour }}
-          />
-        )}
-        {props.value}
-      </span>
-      <span className="text-[13px] leading-[18px] text-(--silver)">
-        {props.about}
-      </span>
-    </div>
-  );
-}
-
-// Where a pointer or the arrow keys point along a chart, in its own steps.
-export function useCursor(
-  steps: number,
-  // Which step a pointer at x falls on, where the steps aren't all as wide.
-  stepAt?: (x: number, width: number) => number,
-) {
-  const [at, setAt] = useState<number | null>(null);
-  const fromPointer =
-    (width: number) => (event: PointerEvent<HTMLDivElement>) => {
-      const box = event.currentTarget.getBoundingClientRect();
-      const x = Math.max(0, Math.min(width - 1, event.clientX - box.left));
-      setAt(
-        Math.min(
-          steps - 1,
-          stepAt ? stepAt(x, width) : Math.floor((x / width) * steps),
-        ),
-      );
-    };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const by = event.shiftKey ? 4 : 1;
-    const current = at ?? steps - 1;
-    const next =
-      event.key === "ArrowLeft"
-        ? current - by
-        : event.key === "ArrowRight"
-          ? current + by
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? steps - 1
-              : null;
-    if (next === null) return;
-    event.preventDefault();
-    setAt(Math.max(0, Math.min(steps - 1, next)));
-  };
-  return {
-    at,
-    handlers: (width: number) => ({
-      onPointerMove: fromPointer(width),
-      onPointerDown: fromPointer(width),
-      onPointerLeave: () => setAt(null),
-      onFocus: () => setAt((current) => current ?? steps - 1),
-      onBlur: () => setAt(null),
-      onKeyDown,
-    }),
-  };
-}
-
-// The strip's cursor moves in quarter hours.
-const quarters = 24 * 4;
-
-function Strip(props: {
-  spans: readonly Span[];
-  from: number;
-  to: number;
-  dims: boolean;
-}) {
-  const { spans, from, to, dims } = props;
-  const { box, width } = useWidth();
-  const cursor = useCursor(quarters);
-  const plot = Math.max(0, width - (dims ? gutter : 0));
-  const height = dims ? stripHeight : bandHeight;
-  const x = (at: number) => Math.round(((at - from) / (to - from)) * plot);
-  const spanAt = (at: number) =>
-    spans.find((span) => span.from <= at && at < span.to);
-  const pointed =
-    cursor.at === null
-      ? null
-      : from + ((cursor.at + 0.5) / quarters) * (to - from);
-  const pointedSpan = pointed === null ? undefined : spanAt(pointed);
-  const marks = marksOf(spans, x, height);
-
-  return (
-    <div ref={box} className="relative">
-      <div
-        tabIndex={0}
-        role="group"
-        aria-label={`${dims ? "Brightness" : "On and off"} over the last 24 hours`}
-        className="relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        style={{ width: plot, height }}
-        {...cursor.handlers(plot)}
-      >
-        <svg
-          aria-hidden="true"
-          width={plot}
-          height={height}
-          className="block overflow-visible"
-        >
-          {dims && (
-            <rect
-              x={0}
-              y={0}
-              width={plot}
-              height={1}
-              className="fill-white/8"
-            />
-          )}
-          {marks.map(({ off, on }, index) => (
-            <Fragment key={index}>
-              {off && <path d={off} className="fill-white/14" />}
-              {[...on].map(([colour, each]) => (
-                <Fragment key={colour}>
-                  <path d={each.fill} fill={colour} fillOpacity={0.4} />
-                  <path d={each.top} fill={colour} />
-                </Fragment>
-              ))}
-            </Fragment>
-          ))}
-          {pointed !== null && (
-            <rect
-              x={Math.min(plot - 1, x(pointed))}
-              y={0}
-              width={1}
-              height={height}
-              className="fill-white/40"
-            />
-          )}
-        </svg>
-        {pointed !== null && (
-          <Readout
-            x={x(pointed)}
-            width={plot}
-            value={spanText(pointedSpan)}
-            about={timeText(pointed)}
-            colour={pointedSpan?.on ? pointedSpan.colour : undefined}
-          />
-        )}
-      </div>
-      {dims && (
-        <span
-          aria-hidden="true"
-          className="absolute top-0 right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
-        >
-          100%
-        </span>
-      )}
-      <BandTicks
-        from={from}
-        to={to}
-        plot={plot}
-        className="mt-2 text-(--pewter)"
-      />
-      <ul className="sr-only">
-        {spans.map((span) => (
-          // One text each, not one for every part of it.
-          <li key={span.from}>
-            {`${timeText(span.from)} to ${timeText(span.to)}: ${spanText(span)}`}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-type MarkLayer = {
-  off: string;
-  on: Map<string, { fill: string; top: string }>;
-};
-
-// Batch disjoint marks by colour. Each span is at least a pixel wide, so
-// spans starting at the same pixel need separate layers in time order to
-// keep their colours and top edges in the right order.
-function marksOf(
-  spans: readonly Span[],
-  x: (at: number) => number,
-  height: number,
-) {
-  const layers: MarkLayer[] = [];
-  let previousLeft = -1;
-  let index = 0;
-  for (const span of spans) {
-    if (!span.known) continue;
-    const left = x(span.from);
-    const width = Math.max(left + 1, x(span.to)) - left;
-    index = left === previousLeft ? index + 1 : 0;
-    previousLeft = left;
-    const layer = (layers[index] ??= { off: "", on: new Map() });
-    if (!span.on) {
-      layer.off += `M${left} ${height - 1}h${width}v1h${-width}z`;
-      continue;
-    }
-    const level =
-      span.brightness === null
-        ? height
-        : Math.max(2, Math.round((height * span.brightness) / 100));
-    const each = layer.on.get(span.colour) ?? { fill: "", top: "" };
-    each.fill += `M${left} ${height - level}h${width}v${level}h${-width}z`;
-    each.top += `M${left} ${height - level}h${width}v2h${-width}z`;
-    layer.on.set(span.colour, each);
-  }
-  return layers;
-}
-
-// The columns' scale: the least of these hours that holds the longest day.
-const scales = [1, 2, 4, 6, 8, 12, 16, 24];
-
-const dayAndDate = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
-
 /** What the columns call a day: a light's or a switch's, unless said. */
 export type ColumnWords = {
   /** What the chart shows, for a screen reader. */
@@ -534,129 +277,32 @@ const onWords: ColumnWords = {
   spoken: (duration) => `on for ${duration}`,
 };
 
-// The top of a week of counts: the first of these a day's count fits.
-const countScales = [5, 10, 20, 50, 100, 200, 500, 1000];
-
 /**
- * The week as a column a day, as tall as the time it was on that day, or
- * as how often it came on where the page counts that.
+ * The week's days as a week's columns take them: each day's time on in
+ * hours, or how often it came on where the words count that, and what the
+ * words say of a day.
  */
-export function Columns(props: {
-  days: readonly Day[];
-  now: number;
-  words?: ColumnWords;
-}) {
-  const { days, now, words = onWords } = props;
-  const { box, width } = useWidth();
-  const cursor = useCursor(days.length || 1);
-  const plot = Math.max(0, width - gutter);
-  const slot = plot / Math.max(1, days.length);
-  const columnWidth = Math.max(4, Math.min(24, Math.floor(slot - 8)));
-  const counts = words.counts;
-  // What a column is as tall as: a day's count, or its hours on.
-  const amountOf = (day: Day) => (counts ? (day.count ?? 0) : day.on / 3600);
-  const most = Math.max(0, ...days.map(amountOf));
-  const scale = counts
-    ? (countScales.find((count) => count >= most) ?? most)
-    : // The day the clocks go back has 25 hours, which one on all day fills.
-      (scales.find((hours) => hours >= most) ?? Math.ceil(most));
-  const today = midnight(now);
-  const nameOf = (day: Day) =>
-    day.start === today ? "Today" : weekday.format(day.start);
-  const valueOf = (day: Day) =>
-    day.known === 0 && amountOf(day) === 0
-      ? "Not known"
-      : amountOf(day) === 0
-        ? words.none
-        : counts
-          ? counts.value(day.count ?? 0)
-          : sentence(durationText(day.on));
-  const pointed = cursor.at === null ? undefined : days[cursor.at];
-
-  return (
-    <div ref={box} className="relative">
-      <div
-        tabIndex={0}
-        role="group"
-        aria-label={words.label}
-        className="relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        style={{ width: plot, height: columnsHeight }}
-        {...cursor.handlers(plot)}
-      >
-        <svg
-          aria-hidden="true"
-          width={plot}
-          height={columnsHeight}
-          className="block"
-        >
-          <rect x={0} y={0} width={plot} height={1} className="fill-white/8" />
-          <rect
-            x={0}
-            y={columnsHeight - 1}
-            width={plot}
-            height={1}
-            className="fill-white/14"
-          />
-          {days.map((day, index) => {
-            if (amountOf(day) === 0) return null;
-            const height = Math.max(
-              2,
-              Math.round((columnsHeight * amountOf(day)) / scale),
-            );
-            const left = Math.round(slot * index + (slot - columnWidth) / 2);
-            const top = columnsHeight - height;
-            const radius = Math.min(4, height);
-            return (
-              <path
-                key={day.start}
-                d={`M${left},${columnsHeight}V${top + radius}Q${left},${top} ${left + radius},${top}H${left + columnWidth - radius}Q${left + columnWidth},${top} ${left + columnWidth},${top + radius}V${columnsHeight}Z`}
-                className={pointed === day ? "fill-white" : "fill-white/70"}
-              />
-            );
-          })}
-        </svg>
-        {pointed && (
-          <Readout
-            x={Math.round(slot * (cursor.at! + 0.5))}
-            width={plot}
-            value={valueOf(pointed)}
-            about={dayAndDate.format(pointed.start)}
-          />
-        )}
-      </div>
-      <span
-        aria-hidden="true"
-        className="absolute top-0 right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
-      >
-        {counts ? scale : `${scale} h`}
-      </span>
-      <div
-        aria-hidden="true"
-        className="relative mt-2 h-[18px]"
-        style={{ width: plot }}
-      >
-        {days.map((day, index) => (
-          <span
-            key={day.start}
-            style={{ left: Math.round(slot * (index + 0.5)) }}
-            className="absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] text-(--pewter)"
-          >
-            {nameOf(day)}
-          </span>
-        ))}
-      </div>
-      <ul className="sr-only">
-        {days.map((day) => (
-          <li key={day.start}>
-            {dayAndDate.format(day.start)}:{" "}
-            {amountOf(day) === 0
-              ? valueOf(day)
-              : counts
-                ? counts.spoken(day.count ?? 0)
-                : words.spoken(durationText(day.on))}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+export function columnsOf(
+  days: readonly Day[],
+  words: ColumnWords = onWords,
+): Omit<WeekColumnsChartProps<Day & { value: number | null }>, "now"> {
+  const { counts } = words;
+  return {
+    days: days.map((day) => {
+      const amount = counts ? (day.count ?? 0) : day.on / 3600;
+      return {
+        ...day,
+        value: day.known === 0 && amount === 0 ? null : amount,
+      };
+    }),
+    scale: counts ? "counts" : "hours",
+    label: words.label,
+    none: words.none,
+    text: (day) =>
+      counts ? counts.value(day.count ?? 0) : sentence(durationText(day.on)),
+    spoken: (day) =>
+      counts
+        ? counts.spoken(day.count ?? 0)
+        : words.spoken(durationText(day.on)),
+  };
 }

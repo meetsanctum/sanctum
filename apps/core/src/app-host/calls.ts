@@ -1,5 +1,6 @@
 import {
   aiAssistantPermission,
+  requestReplySchema,
   blobOf,
   ActionError,
   actionErrorCodes,
@@ -18,6 +19,7 @@ import {
   workflowsManagePermission,
   type ActionErrorCode,
   type Actor,
+  type RequestReply,
   type AppSettings,
   type CoreCalls,
   type CoreEventName,
@@ -206,6 +208,8 @@ export function createCoreCalls(options: {
   models: { source: () => ModelSourceShown | null; turn?: Turn };
   // The tools an assistant app calls, within the turn this call opened.
   assistant: AssistantCalls;
+  // How a request's reply reaches whoever asked, for the call that runs it.
+  reply?: (reply: RequestReply) => void;
   // What the machine Sanctum runs on has now.
   host: () => Promise<HostResources>;
   log: (message: string) => void;
@@ -622,6 +626,19 @@ export function createCoreCalls(options: {
       const { turn } = options.models;
       if (!turn) throw new ActionError("no_turn");
       turn.cancel(handle);
+    },
+
+    // Sanctum's Assistant answers the request its call runs for, once.
+    async replyRequest(reply) {
+      open();
+      if (!options.reply) {
+        throw new Error(`This call to ${appId} answers no request`);
+      }
+      const parsed = requestReplySchema.safeParse(reply);
+      if (!parsed.success) {
+        throw new Error("A reply is its words, up to 4,000 characters");
+      }
+      options.reply(parsed.data);
     },
 
     // An assistant app's tools, as for an AI agent acting for whoever opened

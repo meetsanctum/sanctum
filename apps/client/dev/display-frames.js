@@ -16,10 +16,17 @@ const kind = `${location.pathname}/`.startsWith(`${builtPath}/`)
 const load = Math.random().toString(36).slice(2, 10);
 
 let control = { label: "", blur: true, masks: true, prompt: "", reload: 0 };
+let effects = effectsMode();
 let seenReload;
 let runStart = 0;
 let isRecording = !document.hidden;
 let batch = { frames: [], moves: [], events: [], loafs: [] };
+
+function effectsMode() {
+  return document.documentElement.dataset.effects === "reduced"
+    ? "reduced"
+    : "regular";
+}
 
 function percentile(sorted, share) {
   if (sorted.length === 0) return 0;
@@ -199,7 +206,8 @@ function send(keepalive = false) {
     load,
     page: kind,
     label: control.label,
-    blur: control.blur,
+    effects,
+    blur: control.blur && effects === "regular",
     masks: control.masks,
     frames,
     moves,
@@ -233,6 +241,22 @@ function flushTimings(keepalive) {
   send(keepalive);
   lastFrame = undefined;
   lastMove = undefined;
+}
+
+function updateRun(next) {
+  const nextEffects = effectsMode();
+  if (
+    next.label !== control.label ||
+    nextEffects !== effects ||
+    (effects === "regular" && next.blur !== control.blur) ||
+    next.masks !== control.masks
+  ) {
+    flushTimings();
+    shown = "";
+    runStart = performance.now();
+  }
+  control = next;
+  effects = nextEffects;
 }
 
 const styles = {
@@ -282,20 +306,15 @@ async function follow() {
     const isReloading = seenReload !== undefined && next.reload > seenReload;
     if (isChangingPage || isReloading) {
       flushTimings(true);
-      if (isChangingPage) location.assign(next.path);
-      else location.reload();
+      if (isChangingPage) {
+        const target = new URL(next.path, location.href);
+        const effects = new URLSearchParams(location.search).get("effects");
+        if (effects !== null) target.searchParams.set("effects", effects);
+        location.assign(target.href);
+      } else location.reload();
       return;
     }
-    if (
-      next.label !== control.label ||
-      next.blur !== control.blur ||
-      next.masks !== control.masks
-    ) {
-      flushTimings();
-      shown = "";
-      runStart = performance.now();
-    }
-    control = next;
+    updateRun(next);
     turnOff("blur", !control.blur);
     turnOff("masks", !control.masks);
     showPrompt(control.prompt);
@@ -306,6 +325,14 @@ async function follow() {
     isFollowing = false;
   }
 }
+
+// The system's reduced transparency can change between control polls.
+new MutationObserver(() => updateRun(control)).observe(
+  document.documentElement,
+  {
+    attributeFilter: ["data-effects"],
+  },
+);
 
 void follow();
 setInterval(() => {

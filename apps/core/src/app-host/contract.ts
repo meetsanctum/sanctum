@@ -1,10 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
 
 import {
+  aiAssistantPermission,
   assertDriverProblems,
   assertLanPermissions,
   lanRanges,
   appManifestSchema,
+  assistantAppId,
   assistantOfferOf,
   deviceActionActivitySchema,
   roomSectionKinds,
@@ -409,6 +411,17 @@ function inputCheck(schema: object): SchemaCheck {
 }
 
 export function contractOf(manifest: StaticManifest): AppContract {
+  // Requests go to Sanctum's Assistant alone: one household voice.
+  if (manifest.requests) {
+    if (manifest.id !== assistantAppId) {
+      throw new Error("Only Sanctum's Assistant answers requests");
+    }
+    if (!manifest.permissions.some(({ id }) => id === aiAssistantPermission)) {
+      throw new Error(
+        `The Assistant's request handler needs ${aiAssistantPermission}`,
+      );
+    }
+  }
   const actions = new Map<string, DeclaredAction>(
     manifest.actions.map((action) => [
       action.id,
@@ -488,6 +501,7 @@ const manifestShape = z.looseObject({
   oldestPage: appManifestSchema.shape.version.optional(),
   pages: z.array(z.string()),
   driver: z.looseObject({ hooks: z.array(z.string()) }).nullable(),
+  requests: z.literal(true).optional(),
   settings: z
     .looseObject({ properties: z.record(z.string(), schema) })
     .nullable(),

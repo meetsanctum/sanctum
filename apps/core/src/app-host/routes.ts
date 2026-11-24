@@ -1,16 +1,20 @@
-import type {
-  AppGoBack,
-  AppRunning,
-  AppInfo,
-  AppSettings,
-  AppRemoval,
-  AvailableApp,
-  HardwareOffer,
-  StaticManifest,
+import {
+  assistantRequestSchema,
+  type AppGoBack,
+  type AppRunning,
+  type AppInfo,
+  type AppSettings,
+  type AppRemoval,
+  type AvailableApp,
+  type HardwareOffer,
+  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import type { Auth } from "../auth/auth.js";
+import { AuthError } from "../auth/errors.js";
+import { bearerToken } from "../auth/tokens.js";
 import type { AppAdding } from "./adding.js";
 import type { AppDeleting } from "./deleting.js";
 import type { HardwareOffers } from "./hardware-offers.js";
@@ -91,6 +95,10 @@ import type { AppHost } from "./host.js";
 // so the host always gets the caller's principal.
 
 const appParams = z.object({ appId: z.string().min(1).max(128) });
+
+const askBody = assistantRequestSchema
+  .pick({ text: true, language: true })
+  .partial({ language: true });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedId = z.string().min(1).max(64);
@@ -124,6 +132,7 @@ export function registerAppRoutes(
     deleting: AppDeleting;
     offers: HardwareOffers;
     gate: Gate;
+    authenticate: Auth["authenticate"];
   },
 ) {
   const { host, available, adding, removing, deleting, offers, gate } = options;
@@ -224,6 +233,43 @@ export function registerAppRoutes(
     return reply
       .type("application/json; charset=utf-8")
       .send(JSON.stringify(output ?? null));
+  });
+
+  // Someone's typed request, for Sanctum's Assistant: a person's or a shared
+  // device's, never an AI agent's or a widget's. It answers with the reply,
+  // or null when the Assistant gave none, once the Assistant replies.
+  app.post("/api/assistant/ask", async (request) => {
+    const principal = request.principal!;
+    if (principal.scope !== "full") {
+      throw new ActionCallError("forbidden");
+    }
+    const parsed = askBody.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ActionCallError("invalid_request");
+    }
+    const actor = gate.admit(principal, { tier: "write" });
+    if (actor.kind !== "user" && actor.kind !== "client") {
+      throw new ActionCallError("forbidden");
+    }
+    const token = bearerToken(request.headers.authorization);
+    const reply = await host.ask({
+      actor,
+      who: { personId: principal.person?.id, clientId: principal.client.id },
+      asked: {
+        text: parsed.data.text,
+        language: parsed.data.language ?? "en",
+        clientName: principal.client.name,
+      },
+      checkClient() {
+        if (
+          !token ||
+          options.authenticate(token)?.client.id !== principal.client.id
+        ) {
+          throw new AuthError("invalid_client_token");
+        }
+      },
+    });
+    return { reply: reply?.text ?? null };
   });
 
   // An app's settings are the household's preferences: every client reads

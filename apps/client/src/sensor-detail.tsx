@@ -15,22 +15,16 @@ import {
   formatTemperatureRange,
   icons,
 } from "@meetsanctum/ui-sdk";
+import { LineChart, WeekRangeChart } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useId, useState } from "react";
 
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
-import { DayLineChart } from "./day-line";
-import { Notice, Part, Readout, useCursor, useWidth } from "./device-history";
-import { dayMs, midnight, weekday } from "./device-history-data";
+import { Notice, Part } from "./device-history";
+import { dayMs, midnight } from "./device-history-data";
 import { measureNames } from "./device-tiles";
 import { lowBatteryText } from "./maintenance";
-import {
-  dayLine,
-  scaleOf,
-  weekRange,
-  weekRanges,
-  type DayRange,
-} from "./sensor-history-data";
+import { dayLine, weekRange, weekRanges } from "./sensor-history-data";
 import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
@@ -48,7 +42,6 @@ const refreshMs = 5 * minute;
 // The length of History's shorter roll-ups.
 const fiveMinutes = 5 * minute;
 const lineHeight = 108;
-const barsHeight = 96;
 const width =
   "w-[min(var(--history-width),calc(100vw-80px-env(safe-area-inset-left)-env(safe-area-inset-right)))]";
 
@@ -243,8 +236,8 @@ function SensorReading(props: {
               ? "Nothing read in the last 24 hours"
               : `${format.range(line.min, line.max)} in the last 24 hours`}
           </p>
-          <DayLineChart
-            line={line}
+          <LineChart
+            runs={line.runs}
             now={now}
             format={format}
             name={name}
@@ -257,143 +250,16 @@ function SensorReading(props: {
                 week ? format.range(week.min, week.max) : "Not known yet"
               }
             >
-              <Bars days={days} now={now} format={format} name={name} />
+              <WeekRangeChart
+                days={days}
+                now={now}
+                format={format}
+                name={name}
+              />
             </Part>
           </div>
         </>
       )}
     </section>
-  );
-}
-
-const dayAndDate = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
-
-// Each day of the week as a bar from its lowest to its highest.
-function Bars(props: {
-  days: readonly DayRange[];
-  now: number;
-  format: Format;
-  name: string;
-}) {
-  const { days, now, format } = props;
-  const { box, width } = useWidth();
-  const cursor = useCursor(days.length || 1);
-  const plot = Math.max(0, width - format.gutter);
-  const slot = plot / Math.max(1, days.length);
-  const barWidth = Math.max(4, Math.min(24, Math.floor(slot - 8)));
-  const known = days.filter((day) => day.min !== null && day.max !== null);
-  const shown = known.flatMap((day) => [
-    format.shown(day.min!),
-    format.shown(day.max!),
-  ]);
-  const scale =
-    shown.length > 0 ? scaleOf(Math.min(...shown), Math.max(...shown)) : null;
-  const y = (shownValue: number) =>
-    scale
-      ? barsHeight -
-        ((shownValue - scale.min) / (scale.max - scale.min)) * barsHeight
-      : 0;
-  const today = midnight(now);
-  const nameOf = (day: DayRange) =>
-    day.start === today ? "Today" : weekday.format(day.start);
-  const valueOf = (day: DayRange) =>
-    day.min === null || day.max === null
-      ? "Not known"
-      : format.range(day.min, day.max);
-  const pointed = cursor.at === null ? undefined : days[cursor.at];
-
-  return (
-    <div ref={box} className="relative">
-      <div
-        tabIndex={0}
-        role="group"
-        aria-label={`Each day's lowest and highest ${props.name.toLowerCase()}`}
-        className="relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        style={{ width: plot, height: barsHeight }}
-        {...cursor.handlers(plot)}
-      >
-        <svg
-          aria-hidden="true"
-          width={plot}
-          height={barsHeight}
-          className="block"
-        >
-          {scale?.lines.map((value) => (
-            <rect
-              key={value}
-              x={0}
-              y={Math.round(y(value))}
-              width={plot}
-              height={1}
-              className="fill-white/12"
-            />
-          ))}
-          {days.map((day, index) => {
-            if (day.min === null || day.max === null) return null;
-            const top = Math.round(y(format.shown(day.max)));
-            const height = Math.max(
-              4,
-              Math.round(y(format.shown(day.min))) - top,
-            );
-            const left = Math.round(slot * index + (slot - barWidth) / 2);
-            return (
-              <rect
-                key={day.start}
-                x={left}
-                y={top}
-                width={barWidth}
-                height={height}
-                rx={4}
-                className={pointed === day ? "fill-white" : "fill-white/70"}
-              />
-            );
-          })}
-        </svg>
-        {pointed && (
-          <Readout
-            x={Math.round(slot * (cursor.at! + 0.5))}
-            width={plot}
-            value={valueOf(pointed)}
-            about={dayAndDate.format(pointed.start)}
-          />
-        )}
-      </div>
-      {scale?.lines.map((value) => (
-        <span
-          key={value}
-          aria-hidden="true"
-          style={{ top: Math.round(y(value)) }}
-          className="absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
-        >
-          {format.grid(value)}
-        </span>
-      ))}
-      <div
-        aria-hidden="true"
-        className="relative mt-2 h-[18px]"
-        style={{ width: plot }}
-      >
-        {days.map((day, index) => (
-          <span
-            key={day.start}
-            style={{ left: Math.round(slot * (index + 0.5)) }}
-            className="absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] text-(--pewter)"
-          >
-            {nameOf(day)}
-          </span>
-        ))}
-      </div>
-      <ul className="sr-only">
-        {days.map((day) => (
-          <li key={day.start}>
-            {dayAndDate.format(day.start)}: {valueOf(day)}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

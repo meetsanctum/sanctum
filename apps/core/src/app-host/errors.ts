@@ -6,8 +6,7 @@ const statuses = {
   needs_approval: 403,
   not_found: 404,
   conflict: 409,
-  // An AI agent sent more device commands in the last minute than it may,
-  // or a turn asked the AI model for as many answers as it may.
+  // An AI agent, Assistant request or model turn reached a limit.
   limited: 429,
   // The home's AI model answers only within a turn, which a person's or a
   // shared device's call opens.

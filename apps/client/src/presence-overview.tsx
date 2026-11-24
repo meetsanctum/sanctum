@@ -4,14 +4,19 @@ import type {
   DeviceInfo,
 } from "@meetsanctum/app-sdk";
 import { icons, SectionHeading, type Tile } from "@meetsanctum/ui-sdk";
+import { DayBandMarks, DayTimeAxis } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { coreJson } from "./core-fetch";
-import { useWidth } from "./device-history";
-import { dayMs, spansOf, type Live, type Span } from "./device-history-data";
+import {
+  bandSpan,
+  dayMs,
+  spansOf,
+  type Live,
+  type Span,
+} from "./device-history-data";
 import { tileKey } from "./device-tiles";
 import { placeMotionText } from "./motion";
-import { BandMarks, BandTicks } from "./motion-band";
 import { motionSentence, roomSpans } from "./motion-history-data";
 import type { Devices } from "./use-devices";
 import { everyWhileShown } from "./while-shown";
@@ -221,7 +226,12 @@ export function PresenceOverview(props: {
           <SectionHeading id={headingId}>Last 24 hours</SectionHeading>
         </div>
         <div className="px-3.5 @lg/day:flex-1 @lg/day:ps-0">
-          <OverviewTicks from={from} to={now} />
+          <DayTimeAxis
+            from={from}
+            to={now}
+            withNow
+            className="text-(--tile-secondary)"
+          />
         </div>
       </div>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -243,22 +253,6 @@ export function PresenceOverview(props: {
   );
 }
 
-// Mounted with the rows, so its element exists when useWidth measures it.
-function OverviewTicks(props: { from: number; to: number }) {
-  const { box, width } = useWidth();
-  return (
-    <div ref={box}>
-      <BandTicks
-        from={props.from}
-        to={props.to}
-        plot={width}
-        withNow
-        className="text-(--tile-secondary)"
-      />
-    </div>
-  );
-}
-
 // A room's row: frosted glass, its footprints in a circle that turns White
 // while there is motion, its name and what it says now, then its band; on
 // a narrow page the band goes under its name.
@@ -272,14 +266,12 @@ function RoomRow(props: {
   onOpen: () => void;
 }) {
   const { spans, from, to } = props;
-  const band = useWidth<HTMLSpanElement>();
-  const x = (at: number) => ((at - from) / (to - from)) * band.width;
   return (
     <button
       type="button"
       aria-label={`${props.name}, ${props.status}. ${motionSentence(spans, from, to)}`}
       onClick={props.onOpen}
-      className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
+      className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
     >
       <span className="flex min-w-0 items-center gap-3 @lg/day:w-54 @lg/day:shrink-0">
         <span
@@ -295,13 +287,12 @@ function RoomRow(props: {
           </span>
         </span>
       </span>
-      <span
-        ref={band.box}
-        aria-hidden="true"
+      <DayBandMarks
+        spans={spans.map(bandSpan)}
+        from={from}
+        to={to}
         className="block h-10 w-full min-w-0 @lg/day:flex-1"
-      >
-        <BandMarks spans={spans} x={x} plot={band.width} />
-      </span>
+      />
     </button>
   );
 }

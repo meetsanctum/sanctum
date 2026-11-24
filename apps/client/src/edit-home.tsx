@@ -330,7 +330,7 @@ function EditTile(props: {
           ? ({ "--tile-colour": tile.colour } as CSSProperties)
           : undefined
       }
-      className="group relative col-span-3 flex min-w-0 items-center overflow-hidden rounded-lg bg-(--tile) py-3 ps-3.5 pe-2 text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 select-none data-dragging:scale-[1.03] data-dragging:opacity-80 data-off-home:bg-(--tile)/50 data-[look=lit]:bg-(--tile-colour) data-[look=lit]:text-(--carbon) data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:none] data-off-home:[touch-action:auto]"
+      className="group relative col-span-3 flex min-w-0 items-center overflow-hidden rounded-lg bg-(--tile) py-3 ps-3.5 pe-2 text-(--tile-ink) frosted transition-[opacity,transform] duration-150 select-none data-dragging:scale-[1.03] data-dragging:opacity-80 data-off-home:bg-(--tile)/50 data-[look=lit]:bg-(--tile-colour) data-[look=lit]:text-(--carbon) data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:none] data-off-home:[touch-action:auto]"
     >
       {level !== undefined && (
         <span

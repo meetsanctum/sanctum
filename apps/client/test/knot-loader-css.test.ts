@@ -278,6 +278,89 @@ describe("the frame's backing under the glass in the built CSS", () => {
   });
 });
 
+// Reduce effects (src/effects.ts): the frosted glass's one blur, gone where
+// <html> says data-effects="reduced", where floating glass is denser.
+describe("Reduce effects in the built CSS", () => {
+  const reduced = ":where([data-effects=reduced],[data-effects=reduced] *)";
+
+  it("blurs frosted glass, and doesn't under Reduce effects or on an app's page", () => {
+    const blur = "blur(24px)var(--frosted-extra-filter,)";
+    expect(declarationsOf(".frosted")).toEqual([
+      ["-webkit-backdrop-filter", blur],
+      ["backdrop-filter", blur],
+    ]);
+    expect(css).toContain(
+      `.frosted${reduced}{-webkit-backdrop-filter:none;backdrop-filter:none}`,
+    );
+    expect(declarationsOf(".app-page .frosted")).toEqual([
+      ["-webkit-backdrop-filter", "none"],
+      ["backdrop-filter", "none"],
+    ]);
+  });
+
+  it("keeps live backdrop filters in the frosted utility", () => {
+    const liveFilters = rules
+      .filter(({ declarations }) =>
+        declarations.some(
+          (declaration) =>
+            /^(?:-webkit-)?backdrop-filter:(?!none$|var\(--tw-backdrop-)/.test(
+              declaration,
+            ) || /^--tw-backdrop-[\w-]+:(?!\s*initial$)\s*\S/.test(declaration),
+        ),
+      )
+      .flatMap(({ selectors }) => selectors);
+
+    // Tailwind emits its default blur utility from the frame's class selector.
+    expect(
+      liveFilters.filter((selector) => selector !== ".backdrop-blur"),
+    ).toEqual([".frosted"]);
+  });
+
+  it("makes the veil solid Carbon, over a page in Day too", () => {
+    expect(css).toContain(
+      `.reduce-effects\\:bg-\\(--carbon\\)${reduced}{background-color:var(--carbon)}`,
+    );
+    expect(css).toContain(
+      ":root:not([data-effects=reduced]) .home-screen[data-day-page]>.veil-glass{",
+    );
+    expect(css).not.toMatch(
+      /(^|[},])\.home-screen\[data-day-page\]>\.veil-glass\{/,
+    );
+  });
+
+  it("brings an overlay and the frame's backing in and out at once", () => {
+    // After the fade's own rules, which it outweighs only by coming later.
+    for (const phase of ["open", "closed"]) {
+      const still = css.indexOf(
+        `.reduce-effects\\:data-${phase}\\:animate-none${reduced}:where([data-state=${phase}])`,
+      );
+      const fade = css.indexOf(
+        `.data-${phase}\\:animate-${phase === "open" ? "in" : "out"}:where(`,
+      );
+      expect(fade).toBeGreaterThan(-1);
+      expect(still).toBeGreaterThan(fade);
+    }
+    expect(css).toMatch(
+      /\.reduce-effects\\:data-closed\\:animate-none[^{]*\{animation:none\}/,
+    );
+    expect(declarationsOf("[data-effects=reduced] .frame-under-glass")).toEqual(
+      [["transition", "none"]],
+    );
+  });
+
+  it("makes the floating sidebar solid, in a place's deepened background", () => {
+    expect(declarationsOf("[data-effects=reduced] .sidebar-float")).toEqual([
+      ["background", "var(--float-solid,var(--card))"],
+    ]);
+    // A place's glass over it, else the mode's card as glass.
+    const sidebar = new Map(declarationsOf(".sidebar-float"));
+    expect(sidebar.get("background")).toMatch(/^var\(--float-glass,/);
+    expect(sidebar.get("--frosted-extra-filter")).toBe("saturate(1.4)");
+    expect(sidebar.has("backdrop-filter")).toBe(false);
+    expect(sidebar.has("-webkit-backdrop-filter")).toBe(false);
+  });
+});
+
 // The declarations for `selector` outside any media query, in the order the
 // build wrote them, from the rules under `supports`, by default none, and
 // outside starting styles unless requested.
@@ -300,7 +383,7 @@ function declarationsOf(
         return [
           declaration.slice(0, colon).trim(),
           normalise(declaration.slice(colon + 1)),
-        ];
+        ] as const;
       }),
     );
 }

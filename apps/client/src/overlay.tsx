@@ -15,7 +15,9 @@ import { VeilGlass } from "./veil";
 // leads with aside. A click or tap on the glass around a page's content, its
 // tabs and its scrollbar closes it, as Done and Escape do; one that starts
 // or ends on them does not, so a slider let go outside it leaves it open.
-// Focus goes back to what opened it.
+// Focus goes back to what opened it. It fades in and out, and under Reduce
+// effects appears and goes at once: on a slow device the fade drew the
+// whole window over again for each of its frames.
 
 // A press on these keeps the overlay open; the pages around them span the
 // glass.
@@ -135,7 +137,7 @@ export function Overlay(props: {
               the window under the overlay; its header moves it instead. */}
           <VeilGlass
             tint={props.tint}
-            className="overlay z-10 flex flex-col outline-none [-webkit-app-region:no-drag] animation-duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
+            className="overlay z-10 flex flex-col outline-none [-webkit-app-region:no-drag] animation-duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 reduce-effects:data-open:animate-none reduce-effects:data-closed:animate-none"
           >
             <WhileCovering onCovering={props.onCovering} />
             <HoldsPointer container={props.container} />

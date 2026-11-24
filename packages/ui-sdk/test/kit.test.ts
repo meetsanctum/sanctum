@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { frameBridge } from "../src/frame/protocol";
@@ -11,7 +12,8 @@ import { buildKit, sdkVersion, type KitManifest } from "../tools/kit";
 import { hexAlphaColours } from "./css-colours";
 
 // The kit, React and ui-sdk as the modules every app page imports, in parts:
-// React, ui-sdk without its icons, and one module per icon.
+// React, ui-sdk without its icons or charts, its charts, and one module per
+// icon.
 
 let dir: string;
 let kit: KitManifest;
@@ -46,6 +48,7 @@ describe("the kit", { timeout: 60_000 }, () => {
         "react-dom": "react-dom.js",
         "react-dom/client": "react-dom-client.js",
         "@meetsanctum/ui-sdk": "ui-sdk.js",
+        "@meetsanctum/ui-sdk/charts": "charts.js",
         "@meetsanctum/ui-sdk/icons/": "icons/",
       },
     });
@@ -69,6 +72,27 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(read("ui-sdk.js")).not.toContain("bitcoin");
   });
 
+  it("has the charts in a module of their own, small, which ui-sdk's leaves out", () => {
+    // The charts are about 16 KB.
+    expect(statSync(join(dir, "charts.js")).size).toBeLessThan(40_000);
+    expect(read("charts.js")).toContain("over the last 24 hours");
+    expect(read("ui-sdk.js")).not.toContain("over the last 24 hours");
+    expect(importsOf("ui-sdk.js")).not.toContain("charts.js");
+  });
+
+  it("exports each public chart from the built module an app imports", async () => {
+    const charts = await import(pathToFileURL(join(dir, "charts.js")).href);
+    expect(Object.keys(charts).sort()).toEqual([
+      "DayBandChart",
+      "DayBandMarks",
+      "DayStripChart",
+      "DayTimeAxis",
+      "LineChart",
+      "WeekColumnsChart",
+      "WeekRangeChart",
+    ]);
+  });
+
   it("gives a frame one React, which all its modules share", () => {
     const [react] = importsOf("react.js").filter((path) =>
       path.includes("chunks/react-"),
@@ -90,6 +114,7 @@ describe("the kit", { timeout: 60_000 }, () => {
     };
     expect(reached("react-dom-client.js")).toContain(react);
     expect(importsOf("ui-sdk.js")).toContain(react);
+    expect(importsOf("charts.js")).toContain(react);
     // An icon, through Lucide's shared code.
     expect(reached("icons/check.js")).toContain(react);
     // And one React DOM: the root ui-sdk starts a frame's page with is the
@@ -113,6 +138,12 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(css).not.toMatch(/url\(\//);
     const fonts = readdirSync(join(dir, "assets"));
     expect(fonts.every((name) => name.endsWith(".woff2"))).toBe(true);
+  });
+
+  it("turns off frosted blur on app pages in the frame", () => {
+    expect(read("kit.css")).toMatch(
+      /\.frame-page \.frosted[^{}]*\{-webkit-backdrop-filter:none;backdrop-filter:none\}/,
+    );
   });
 
   it("writes colours with alpha as rgba() or transparent, never as hex", () => {

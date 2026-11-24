@@ -6,6 +6,7 @@ import type {
   LightState,
 } from "@meetsanctum/app-sdk";
 import { lightColour } from "@meetsanctum/ui-sdk";
+import type { BandSpan, StripSpan } from "@meetsanctum/ui-sdk/charts";
 
 // What a device's History page shows, from core History: its last day as
 // spans, each what it was from one change to the next, and its last week day
@@ -154,6 +155,36 @@ export function joinedSpans(spans: readonly Span[]): Span[] {
   return joined;
 }
 
+/**
+ * A span as a day's band draws it: on in White, a media player with power
+ * on without playing faint, off as a hairline, and nothing where nothing
+ * was known.
+ */
+export const bandSpan = (span: Span): Span & BandSpan => ({
+  ...span,
+  level: !span.known
+    ? "unknown"
+    : span.on
+      ? "on"
+      : span.powered
+        ? "faint"
+        : "off",
+});
+
+/**
+ * A span as a light's or a switch's strip draws it: on in its colour, as
+ * high as its brightness, off as a hairline, and nothing where nothing was
+ * known.
+ */
+export const stripSpan = (span: Span): Span & StripSpan => ({
+  ...span,
+  mark: !span.known
+    ? "unknown"
+    : span.on
+      ? { level: span.brightness, colour: span.colour }
+      : "off",
+});
+
 /** When a span was, such as "09:05–10:40", or to now. */
 export function spanTimes(span: Span, now: number) {
   return `${timeText(span.from)}–${span.to >= now ? "now" : timeText(span.to)}`;
@@ -212,32 +243,6 @@ export function midnight(at: number, daysBack = 0) {
   date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() - daysBack);
   return date.getTime();
-}
-
-/** The local hours every 6 within the day, whatever the clocks did. */
-export function sixHours(from: number, now: number) {
-  const hours: number[] = [];
-  for (
-    const day = new Date(from);
-    day.getTime() < now;
-    day.setHours(24, 0, 0, 0)
-  ) {
-    for (const hour of [0, 6, 12, 18]) {
-      const tick = new Date(day);
-      const at = tick.setHours(hour, 0, 0, 0);
-      // A clock change can move a skipped hour forward.
-      if (
-        at > from &&
-        at < now &&
-        tick.getHours() === hour &&
-        tick.getMinutes() === 0 &&
-        tick.getSeconds() === 0
-      ) {
-        hours.push(at);
-      }
-    }
-  }
-  return hours;
 }
 
 /**

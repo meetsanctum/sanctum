@@ -90,6 +90,7 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
     callAiTool: async () => {
       throw new ActionError("no_turn");
     },
+    replyRequest: notFound,
     hostResources: async () => ({
       processor: { name: null, cores: 4, matrixInstructions: null },
       memory: null,

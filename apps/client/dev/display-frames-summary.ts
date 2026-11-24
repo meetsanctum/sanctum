@@ -1,11 +1,12 @@
 // Sums up what `SANCTUM_DISPLAY_FRAMES=true pnpm dev:display` recorded, one
-// block per run: the page (dev, built or blank), its label, and whether blur
-// and masks were on, with the screens the run saw by their first words.
+// block per run: the page (dev, built or blank), its label, effects mode, and
+// whether blur and masks were on, with the screens the run saw by their first words.
 //
 //   node apps/client/dev/display-frames-summary.ts [file] [--json]
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { Effects } from "../src/effects.ts";
 
 type Frames = {
   count: number;
@@ -25,6 +26,7 @@ type LongFrame = {
 type FrameLine = {
   page: string;
   label: string;
+  effects?: Effects;
   blur: boolean;
   masks: boolean;
   frames?: Frames[];
@@ -62,6 +64,9 @@ function isFrameLine(line: unknown): line is FrameLine {
     isObject(line) &&
     typeof line.page === "string" &&
     typeof line.label === "string" &&
+    (line.effects === undefined ||
+      line.effects === "regular" ||
+      line.effects === "reduced") &&
     typeof line.blur === "boolean" &&
     typeof line.masks === "boolean" &&
     (line.shows === undefined || typeof line.shows === "string") &&
@@ -128,12 +133,19 @@ const median = (values: number[]) => percentile(values, 0.5);
 export function summariseRuns(lines: FrameLine[]) {
   const runs = new Map<string, Run>();
   for (const line of lines) {
-    const key = [line.page, line.label, line.blur, line.masks].join("|");
+    const key = JSON.stringify([
+      line.page,
+      line.label,
+      line.effects,
+      line.blur,
+      line.masks,
+    ]);
     let run = runs.get(key);
     if (!run) {
       run = {
         page: line.page,
         label: line.label,
+        effects: line.effects,
         blur: line.blur,
         masks: line.masks,
         frames: [],
@@ -172,6 +184,7 @@ export function summariseRuns(lines: FrameLine[]) {
     return {
       page: run.page,
       label: run.label,
+      effects: run.effects,
       blur: run.blur,
       masks: run.masks,
       screens: run.screens,
@@ -213,7 +226,12 @@ export function summariseRuns(lines: FrameLine[]) {
 
 function print(runs: ReturnType<typeof summariseRuns>) {
   for (const run of runs) {
-    const effects = [run.blur ? "" : "no blur", run.masks ? "" : "no masks"]
+    const mode = { regular: "regular effects", reduced: "Reduce effects" };
+    const effects = [
+      run.effects ? mode[run.effects] : "",
+      run.blur ? "" : "no blur",
+      run.masks ? "" : "no masks",
+    ]
       .filter(Boolean)
       .join(", ");
     console.log(

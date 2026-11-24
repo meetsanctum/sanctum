@@ -698,6 +698,7 @@ export async function createModules(
     ["look for sticks", () => hardwareOffers.interrupt()],
     ["check Add devices' offers", () => deviceOffers.interrupt()],
     ["try updates that wait for room", () => roomWaits.interrupt()],
+    ["stop Assistant requests", () => apps.stopRequests()],
     ["take no more turns with the AI model", () => turns.close()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
