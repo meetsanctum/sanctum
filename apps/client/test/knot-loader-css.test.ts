@@ -348,15 +348,20 @@ describe("Reduce effects in the built CSS", () => {
     );
   });
 
-  it("draws nothing of the screen behind an open overlay, and styles none of it afresh", () => {
-    const rule =
-      /\[data-effects=reduced\] \.home-screen\[data-covered\]>:is\(([^)]*)\)\{([^}]*)\}/.exec(
-        css,
-      );
-    expect(rule?.[1]).toBe(".frame,.frame-top,.sidebar-column,.panel");
-    // Not visibility, which every element inherits: hiding and showing the
-    // screen with it styled all of it each time.
-    expect(rule?.[2]).toBe("content-visibility:hidden");
+  const coveredScreen =
+    "[data-effects=reduced] .home-screen[data-covered]>:is(.frame,.frame-top,.sidebar-column,.panel)";
+
+  it("skips the covered screen's contents and backgrounds behind an open overlay", () => {
+    expect(declarationsOf(coveredScreen).sort()).toEqual([
+      ["background", "0 0!important"],
+      ["content-visibility", "hidden"],
+    ]);
+  });
+
+  it("hides the covered screen on browsers without content visibility", () => {
+    expect(
+      declarationsOf(coveredScreen, "@supportsnot(content-visibility:hidden)"),
+    ).toEqual([["visibility", "hidden"]]);
   });
 
   it("cuts the top fade hard, down to the page's top edge", () => {
