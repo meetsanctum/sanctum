@@ -491,21 +491,51 @@ export function useDevices(live: LiveFeed) {
   // The clock only moves the tiles on; they read the time afresh each time.
   const minute = useMinuteClock(ticks);
   const kept = useRef(new Map<string, Tile>());
+  const made = useRef(new WeakMap<DeviceInfo, MadeTiles>());
   const tiles = useMemo(() => {
+    // Only a device something was asked of shows it, as a new object.
     const shown =
       asks.size === 0
         ? devices
-        : devices.map((device) => ({
-            ...device,
-            capabilities: device.capabilities.map((capability) => {
-              const each = asks.get(tileKey(device.id, capability.id));
-              return each ? pendingAs(capability, each.asked) : capability;
-            }),
-          }));
-    const next = tilesOf(shown, places, pressed, Date.now()).map((tile) => {
-      const failed = failures.get(tile.key);
-      return failed ? { ...tile, failures: failed } : tile;
-    });
+        : devices.map((device) =>
+            device.capabilities.some((capability) =>
+              asks.has(tileKey(device.id, capability.id)),
+            )
+              ? {
+                  ...device,
+                  capabilities: device.capabilities.map((capability) => {
+                    const each = asks.get(tileKey(device.id, capability.id));
+                    return each
+                      ? pendingAs(capability, each.asked)
+                      : capability;
+                  }),
+                }
+              : device,
+          );
+    // Each device's tiles are made again only when the device, the places,
+    // its presses or the minute changed: one light's change otherwise made
+    // all of the home's tiles again.
+    const now = Date.now();
+    const next = shown
+      .flatMap((device) => {
+        const presses = pressesOf(device, pressed);
+        const was = made.current.get(device);
+        if (
+          was &&
+          was.places === places &&
+          was.minute === minute &&
+          was.presses === presses
+        ) {
+          return was.tiles;
+        }
+        const tiles = tilesOf([device], places, pressed, now);
+        made.current.set(device, { places, minute, presses, tiles });
+        return tiles;
+      })
+      .map((tile) => {
+        const failed = failures.get(tile.key);
+        return failed ? { ...tile, failures: failed } : tile;
+      });
     return keepUnchanged(next, kept.current);
   }, [devices, places, failures, pressed, asks, minute]);
   useLayoutEffect(() => {
@@ -564,6 +594,24 @@ export function useTileHandlers(devices: Pick<Devices, "toggle" | "dim">) {
     [dim],
   );
   return { onToggle, onDim };
+}
+
+// A device's tiles as last made, and what they were made from.
+type MadeTiles = {
+  places: Places | undefined;
+  minute: number;
+  presses: string;
+  tiles: Tile[];
+};
+
+// A device's buttons' presses of the last few seconds, in one string.
+function pressesOf(device: DeviceInfo, pressed: ReadonlyMap<string, string>) {
+  if (pressed.size === 0) return "";
+  const prefix = `${device.id}/`;
+  return [...pressed]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([key, action]) => `${key}=${action}`)
+    .join(" ");
 }
 
 // A tile that says the same as before keeps its object, so a tile drawn from

@@ -42,6 +42,18 @@ import { useTileHandlers, type Devices } from "./use-devices";
 // closer to its own than to the next.
 
 /** The rooms on Home, and while nothing is on it, how to put something there. */
+// A room's line on Home as last worked out, and what it came from.
+type KeptLine = {
+  own: readonly Tile[];
+  unit: ReturnType<typeof unitOf>;
+  minute: number;
+  line: {
+    motion: ReturnType<typeof placeMotionText>;
+    contact: ReturnType<typeof placeContacts>;
+    readings: ReturnType<typeof readingsOf>;
+  };
+};
+
 export function HomeRooms(props: {
   devices: Devices;
   /** Home's devices, in the household's order. */
@@ -61,6 +73,28 @@ export function HomeRooms(props: {
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
+  // Each room's line, worked out again only when its tiles, the unit or the
+  // minute changed: one device's change otherwise worked out every room's.
+  const lines = useRef(new Map<string, KeptLine>());
+  const lineOf = (room: Room, own: readonly Tile[]) => {
+    const minute = Math.floor(now / 60_000);
+    const was = lines.current.get(room.id);
+    if (
+      was &&
+      was.unit === unit &&
+      was.minute === minute &&
+      sameItems(was.own, own)
+    ) {
+      return was.line;
+    }
+    const line = {
+      motion: placeMotionText(own, now),
+      contact: placeContacts(own),
+      readings: readingsOf(sensorReadings(own), unit),
+    };
+    lines.current.set(room.id, { own, unit, minute, line });
+    return line;
+  };
   // Devices with no room have no line of their own and no sections.
   const shown = places.flatMap((place) => {
     const { room, own, onHome } = place;
@@ -73,9 +107,9 @@ export function HomeRooms(props: {
           roomLightsButton(lights, room, devices),
         )
       : null;
-    const motion = room ? placeMotionText(own, now) : null;
-    const contact = room ? placeContacts(own) : null;
-    const readings = room ? readingsOf(sensorReadings(own), unit) : [];
+    const { motion, contact, readings } = room
+      ? lineOf(room, own)
+      : { motion: null, contact: null, readings: [] };
     const hasLine = !!motion || !!contact || readings.length > 0;
     const hasRow = row !== null && !isRowEmpty(row);
     return hasLine || hasRow || onHome.length > 0

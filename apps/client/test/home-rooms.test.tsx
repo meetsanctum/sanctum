@@ -4,11 +4,16 @@ import { expect, it, vi } from "vitest";
 
 // Load the harness first so room sections use its data fixtures.
 import { container, homeData, pushLive, refresh } from "./home-shell-harness";
+import * as deviceTiles from "../src/device-tiles";
 import * as roomSections from "../src/room-sections";
 import { homeDashboard } from "./home-shell-fixtures";
 import { moods, relax, sensor } from "./place-pages-fixtures";
 import { light } from "./settings-devices-fixtures";
 
+vi.mock(import("../src/device-tiles"), async (original) => {
+  const actual = await original();
+  return { ...actual, sensorReadings: vi.fn(actual.sensorReadings) };
+});
 vi.mock(import("../src/room-sections"), async (original) => {
   const actual = await original();
   return { ...actual, RoomRow: vi.fn(actual.RoomRow) };
@@ -111,4 +116,43 @@ it("redraws only the room whose mood changes", async () => {
   });
   expect(mood?.getAttribute("aria-pressed")).toBe("false");
   expect(rows.mock.calls.map(([props]) => props.roomName)).toEqual(["Office"]);
+});
+
+it("works out only the changed room's line again", async () => {
+  homeData.rooms = [
+    { id: "kitchen", name: "Kitchen", floorId: null },
+    { id: "office", name: "Office", floorId: null },
+  ];
+  const lamp = light("lamp", "Lamp", { roomId: "kitchen" });
+  homeData.devices = [
+    lamp,
+    sensor("kitchen-sensor", "kitchen", 21.5, 48),
+    sensor("office-sensor", "office", 20, 40),
+  ];
+  homeData.dashboards = [
+    { ...homeDashboard, kind: "home", devices: [lamp.id] },
+  ];
+  await refresh();
+  const readings = vi.mocked(deviceTiles.sensorReadings);
+  readings.mockClear();
+
+  await act(async () => {
+    pushLive({
+      type: "device",
+      id: "office-sensor",
+      device: sensor("office-sensor", "office", 22, 40),
+    });
+  });
+
+  // The office's line on Home, and none of the kitchen's.
+  const worked = readings.mock.calls.map(([own]) =>
+    [...new Set(own.map((tile) => tile.roomId))].join(),
+  );
+  expect(worked).toContain("office");
+  expect(worked).not.toContain("kitchen");
+  expect(
+    container.querySelector(
+      '[aria-labelledby="home-office"] [data-slot="readings"]',
+    )?.textContent,
+  ).toContain("22°");
 });

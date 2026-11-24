@@ -14,12 +14,17 @@ import {
   remountHome,
 } from "./home-shell-harness";
 import * as appsPage from "../src/apps-page";
+import * as deviceDetail from "../src/device-detail";
 import * as placePages from "../src/place-pages";
 import * as shellFrame from "../src/shell-frame";
 import * as topBar from "../src/top-bar";
 import { homeDashboard } from "./home-shell-fixtures";
 import { light } from "./settings-devices-fixtures";
 
+vi.mock(import("../src/device-detail"), async (original) => {
+  const actual = await original();
+  return { ...actual, DeviceDetail: vi.fn(actual.DeviceDetail) };
+});
 vi.mock(import("../src/apps-page"), async (original) => {
   const actual = await original();
   return { ...actual, AppsPage: vi.fn(actual.AppsPage) };
@@ -162,4 +167,37 @@ it("keeps Edit Home disabled while the first device snapshot is pending", async 
 
   await act(async () => resolve([]));
   expect(bars.mock.lastCall?.[0].onEditHome?.disabled).toBe(false);
+});
+
+it("leaves a closed device's detail alone when a device changes", async () => {
+  homeData.rooms = [{ id: "kitchen", name: "Kitchen", floorId: null }];
+  const lamp = light("lamp", "Lamp", { roomId: "kitchen" });
+  homeData.devices = [lamp];
+  homeData.dashboards = [
+    { ...homeDashboard, kind: "home", devices: [lamp.id] },
+  ];
+  await refresh();
+  const details = vi.mocked(deviceDetail.DeviceDetail);
+  details.mockClear();
+
+  await act(async () =>
+    pushLive({
+      type: "device",
+      id: lamp.id,
+      device: { ...lamp, name: "Kitchen Lamp" },
+    }),
+  );
+  expect(details).not.toHaveBeenCalled();
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>(
+        'main [aria-label="Kitchen Lamp, Off"]',
+      )!
+      .click(),
+  );
+  expect(details).toHaveBeenCalled();
+  expect(
+    container.ownerDocument.querySelector('[role="dialog"]'),
+  ).not.toBeNull();
 });
