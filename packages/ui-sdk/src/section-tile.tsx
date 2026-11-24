@@ -57,7 +57,7 @@ export function SectionTile(props: {
       onPointerUp={props.onPointerUp}
       onPointerCancel={props.onPointerCancel}
       onKeyDown={props.onKeyDown}
-      className="group relative col-span-3 flex min-w-0 items-center gap-3 overflow-hidden rounded-lg px-3.5 py-3 bg-(--tile) text-left text-(--tile-ink) backdrop-blur-[24px] transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]"
+      className="group relative col-span-3 flex min-w-0 items-center gap-3 overflow-hidden rounded-lg px-3.5 py-3 bg-(--tile) text-left text-(--tile-ink) frosted transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]"
     >
       <span
         ref={wash}

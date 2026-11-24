@@ -106,7 +106,7 @@ export function WidgetCard(props: {
     <article
       aria-labelledby={titleId}
       data-slot="widget-card"
-      className="col-span-(--widget-columns) flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] backdrop-blur-[24px]"
+      className="col-span-(--widget-columns) flex min-w-0 flex-col gap-3 rounded-lg bg-(--glass) p-4 text-(--glass-ink) shadow-[inset_0_0_0_1px_var(--glass-line)] frosted"
       style={
         {
           "--widget-columns": props.size.columns,

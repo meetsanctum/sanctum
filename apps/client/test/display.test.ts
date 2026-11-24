@@ -111,7 +111,10 @@ it("records two rapid taps as separate gestures and ignores mouse events", async
   }
 });
 
-it("keeps short drags and partial frame windows with the settings that measured them", async () => {
+async function recordDisplay(
+  address = "http://localhost:8123/",
+  effects?: string,
+) {
   const script = await readFile(
     new URL("../dev/display-frames.js", import.meta.url),
     "utf8",
@@ -130,17 +133,40 @@ it("keeps short drags and partial frame windows with the settings that measured 
   let now = 0;
   let nextFrame: (at: number) => void;
   let poll: () => void;
+  let effectsChanged: () => void;
+  const styles = new Map<string, { id: string }>();
   const document = {
     hidden: false,
+    documentElement: { dataset: { effects } },
     addEventListener: handlers.set.bind(handlers),
     querySelector: () => ({ innerText: "Home Lights" }),
-    getElementById: () => null,
-    createElement: () => ({}),
-    head: { append: () => {} },
+    getElementById: (id: string) => styles.get(id) ?? null,
+    createElement: () => ({
+      id: "",
+      remove() {
+        styles.delete(this.id);
+      },
+    }),
+    head: { append: (style: { id: string }) => styles.set(style.id, style) },
   };
+  const assign = vi.fn();
+  const location = Object.assign(new URL(address), { assign });
+  if (location.pathname.startsWith(builtPath)) {
+    control = { ...control, page: "built", path: builtPath };
+  }
   runInNewContext(script, {
     AbortSignal,
-    location: { pathname: "/" },
+    URL,
+    URLSearchParams,
+    location,
+    MutationObserver: class {
+      constructor(private callback: () => void) {}
+      observe(target: unknown, options: MutationObserverInit) {
+        expect(target).toBe(document.documentElement);
+        expect(options.attributeFilter).toEqual(["data-effects"]);
+        effectsChanged = this.callback;
+      }
+    },
     performance: { now: () => now },
     requestAnimationFrame: (callback: typeof nextFrame) => {
       nextFrame = callback;
@@ -164,6 +190,26 @@ it("keeps short drags and partial frame windows with the settings that measured 
   });
   const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
   const frame = (at: number) => nextFrame((now = at));
+  const setControl = async (changes: Partial<typeof control>, at = now) => {
+    now = at;
+    control = { ...control, ...changes };
+    poll();
+    await settle();
+  };
+  const setEffects = (effects: string | undefined, at: number) => {
+    now = at;
+    document.documentElement.dataset.effects = effects;
+    effectsChanged();
+  };
+
+  await settle();
+  posts.length = 0;
+  return { handlers, posts, frame, document, setControl, setEffects, assign };
+}
+
+it("keeps short drags and partial frame windows with the settings that measured them", async () => {
+  const { handlers, posts, frame, document, setControl } =
+    await recordDisplay();
   const touch = (type: string, timeStamp: number, isPrimary = true) =>
     handlers.get(`pointer${type}`)!({
       pointerType: "touch",
@@ -171,8 +217,6 @@ it("keeps short drags and partial frame windows with the settings that measured 
       timeStamp,
     });
 
-  await settle();
-  posts.length = 0;
   frame(10);
   frame(30);
   touch("move", 40);
@@ -183,10 +227,7 @@ it("keeps short drags and partial frame windows with the settings that measured 
   touch("move", 100);
   touch("move", 130);
 
-  now = 150;
-  control = { ...control, blur: false };
-  poll!();
-  await settle();
+  await setControl({ blur: false }, 150);
   frame(160);
   frame(185);
   document.hidden = true;
@@ -216,6 +257,87 @@ it("keeps short drags and partial frame windows with the settings that measured 
     expect.objectContaining({
       blur: false,
       frames: [expect.objectContaining({ count: 1, durationMs: 30 })],
+    }),
+  ]);
+});
+
+it.each([
+  ["/?effects=regular&other=1", "built", builtPath, "regular"],
+  [`${builtPath}?effects=reduced`, "dev", "/", "reduced"],
+])(
+  "keeps the effects override when switching from %s",
+  async (from, page, path, effects) => {
+    const origin = "http://localhost:8123";
+    const { assign, setControl } = await recordDisplay(origin + from);
+
+    await setControl({ page, path });
+
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      `${origin}${path}?effects=${effects}`,
+    );
+  },
+);
+
+it("keeps frame timings separate when Reduce effects changes the blur setting", async () => {
+  const { handlers, posts, frame, document, setEffects } = await recordDisplay(
+    "http://localhost:8123/",
+    "reduced",
+  );
+
+  frame(10);
+  frame(30);
+  setEffects(undefined, 40);
+  expect(document.getElementById("display-frames-no-blur")).toBeNull();
+  frame(50);
+  frame(75);
+  setEffects("reduced", 80);
+  frame(90);
+  frame(120);
+  handlers.get("pagehide")!();
+
+  expect(posts).toEqual([
+    expect.objectContaining({
+      effects: "reduced",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 20 })],
+    }),
+    expect.objectContaining({
+      effects: "regular",
+      blur: true,
+      frames: [expect.objectContaining({ count: 1, durationMs: 25 })],
+    }),
+    expect.objectContaining({
+      effects: "reduced",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 30 })],
+    }),
+  ]);
+});
+
+it("separates regular and reduced recordings when diagnostic blur is off", async () => {
+  const { handlers, posts, frame, document, setControl, setEffects } =
+    await recordDisplay();
+  await setControl({ blur: false });
+  expect(document.getElementById("display-frames-no-blur")).not.toBeNull();
+  posts.length = 0;
+
+  frame(10);
+  frame(30);
+  setEffects("reduced", 40);
+  frame(50);
+  frame(75);
+  handlers.get("pagehide")!();
+
+  expect(posts).toEqual([
+    expect.objectContaining({
+      effects: "regular",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 20 })],
+    }),
+    expect.objectContaining({
+      effects: "reduced",
+      blur: false,
+      frames: [expect.objectContaining({ count: 1, durationMs: 25 })],
     }),
   ]);
 });
@@ -414,13 +536,15 @@ it("summarises valid timings when the log contains invalid or incomplete lines",
   const root = await mkdtemp(join(tmpdir(), "sanctum-display-"));
   try {
     const log = join(root, "frames.jsonl");
-    const run = { page: "built", label: "scroll", blur: true, masks: true };
+    const run = { page: "built", label: "scroll", blur: false, masks: true };
     await writeFile(
       log,
       [
         JSON.stringify({ ...run, frames: "missing samples" }),
         JSON.stringify({ ...run, shows: "Home" }),
         '{"page":',
+        JSON.stringify({ ...run, effects: "regular", shows: "Lights" }),
+        JSON.stringify({ ...run, effects: "reduced", shows: "Presence" }),
       ].join("\n"),
     );
     const { stdout, stderr } = await promisify(execFile)(process.execPath, [
@@ -432,6 +556,16 @@ it("summarises valid timings when the log contains invalid or incomplete lines",
     ]);
     expect(JSON.parse(stdout)).toEqual([
       expect.objectContaining({ ...run, screens: ["Home"] }),
+      expect.objectContaining({
+        ...run,
+        effects: "regular",
+        screens: ["Lights"],
+      }),
+      expect.objectContaining({
+        ...run,
+        effects: "reduced",
+        screens: ["Presence"],
+      }),
     ]);
     expect(stderr).toContain("line 1");
     expect(stderr).toContain("line 3");

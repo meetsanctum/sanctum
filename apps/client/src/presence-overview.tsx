@@ -279,7 +279,7 @@ function RoomRow(props: {
       type="button"
       aria-label={`${props.name}, ${props.status}. ${motionSentence(spans, from, to)}`}
       onClick={props.onOpen}
-      className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) backdrop-blur-[24px] outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
+      className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
     >
       <span className="flex min-w-0 items-center gap-3 @lg/day:w-54 @lg/day:shrink-0">
         <span

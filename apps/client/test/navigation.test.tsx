@@ -470,8 +470,15 @@ describe("the sidebar", () => {
       trigger.focus();
       trigger.click();
     });
-    const dialog = document.querySelector('[role="dialog"]')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.classList.contains("sidebar-float")).toBe(true);
+    expect(dialog.classList.contains("frosted")).toBe(true);
+    expect(dialog.style.getPropertyValue("--float-solid")).toBe(
+      "var(--dashboard-mocha-deep)",
+    );
+    expect(dialog.style.getPropertyValue("--float-glass")).toBe(
+      "var(--dashboard-mocha-glass)",
+    );
     expect(document.activeElement?.textContent).toBe("Home");
     expect(
       dialog.querySelector('button[aria-label="Hide the sidebar"]'),

@@ -78,6 +78,12 @@
   transition: opacity 200ms ease;
 }
 
+/* An overlay comes and goes at once under Reduce effects (overlay.tsx), and
+   the backing with it; a veil keeps its own late fade, below. */
+[data-effects="reduced"] .frame-under-glass {
+  transition: none;
+}
+
 [data-platform="macos"] .home-screen[data-covered] .frame-under-glass {
   opacity: 1;
 }
@@ -119,8 +125,9 @@
    but over a White page, such as Settings in Day, it comes out mid grey,
    the page's shapes and blue buttons showing through as smudges and the
    green and red cards on it washed out. Over a page in Day the glass is
-   deeper, with the same blur, so it reads as the same dark glass. */
-.home-screen[data-day-page] > .veil-glass {
+   deeper, with the same blur, so it reads as the same dark glass. Under
+   Reduce effects it is solid Carbon over every page (src/veil.tsx). */
+:root:not([data-effects="reduced"]) .home-screen[data-day-page] > .veil-glass {
   background-color: color-mix(in srgb, var(--carbon) 92%, transparent);
 }
 
@@ -247,10 +254,18 @@
   padding: 0 8px 8px;
   border-radius: calc(var(--radius) * 0.8);
   color: var(--ink);
-  background: color-mix(in srgb, var(--card) 72%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  backdrop-filter: blur(24px) saturate(1.4);
+  background: var(
+    --float-glass,
+    color-mix(in srgb, var(--card) 72%, transparent)
+  );
+  --frosted-extra-filter: saturate(1.4);
   box-shadow:
     inset 0 0 0 1px var(--hairline),
     0 16px 48px rgb(0 0 0 / 30%);
+}
+
+/* Under Reduce effects it is solid: the mode's card, or over a
+   place its deepened background, as the frame beside it is. */
+[data-effects="reduced"] .sidebar-float {
+  background: var(--float-solid, var(--card));
 }

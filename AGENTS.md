@@ -176,11 +176,15 @@ What is under which licence, and what neither covers, is in
 - People are identified by avatar and identity colour, consistently.
 - A shared tablet and a signed-in person, adult or child, see and do the
   same: every screen and widget has one state, gated by nothing, and there is
-  no per-person data.
+  no per-person data. A device may draw that one state more plainly: its mode
+  and Reduce effects change how a screen is drawn, never what it shows or
+  does.
 - Keep layout stable and lightweight: live `backdrop-filter` only for the
-  dashboard's frosted glass, animate only `transform` and `opacity`. The
-  knot loader drawing its line and the page's edge going with the sidebar
-  are the exceptions.
+  dashboard's frosted glass, through the `frosted` utility, which draws no
+  blur under Reduce effects (`data-effects="reduced"` on `<html>`, set by
+  `apps/client/src/effects.ts`; `reduce-effects:` styles a part there).
+  Animate only `transform` and `opacity`. The knot loader drawing its line
+  and the page's edge going with the sidebar are the exceptions.
 - Destructive operations must be explicit, gated and unsurprising.
 - Never hard-code the product name in UI text; import `productName` from
   `apps/client/src/brand.ts`.
