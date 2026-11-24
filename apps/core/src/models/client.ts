@@ -223,7 +223,7 @@ export type AskOptions = {
 
 // Real answers call a handful of tools. Tracking each streamed call costs
 // more the more calls an answer has, so a malformed stream of thousands
-// could keep the core busy for seconds.
+// could keep the core busy for up to a minute.
 export const maxToolCalls = 64;
 
 function stopOf(

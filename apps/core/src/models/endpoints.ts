@@ -100,7 +100,9 @@ async function getJson(
   try {
     return (await response.json()) as unknown;
   } catch (error) {
-    if (both.aborted) throw problemOfError(error, both);
+    if (both.aborted || error instanceof ModelError) {
+      throw problemOfError(error, both);
+    }
     throw new ModelError("answer", "the list isn't JSON");
   }
 }
