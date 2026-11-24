@@ -215,6 +215,59 @@ it("keeps the opening tint on Remote and updates it on Playing", async () => {
   expect(tint()).toBe(next);
 });
 
+it.each([
+  ["a TV", true, "Remote"],
+  ["a speaker", false, "Volume"],
+])("gives %s its History before its Activity", async (_, power, second) => {
+  devices = [
+    mediaPlayer(
+      "tv",
+      "TV",
+      "office",
+      { activity: "paused" },
+      { power, volume: "level" },
+    ),
+  ];
+  await open("tv/player");
+  expect(tabs().map(([label]) => label)).toEqual([
+    "Playing",
+    second,
+    "History",
+    "Activity",
+  ]);
+});
+
+it.each(["player", "relay"])(
+  "reads History for the %s tile on a device with media and a switch",
+  async (capability) => {
+    const tv = mediaPlayer("tv", "TV", "office", { activity: "idle" });
+    devices = [
+      {
+        ...tv,
+        capabilities: [
+          ...tv.capabilities,
+          { ...plug.capabilities[0]!, id: "relay" },
+        ],
+      },
+    ];
+    await open(`tv/${capability}`);
+    const historyTab = dialog().querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-label="History"]',
+    )!;
+    await act(async () => historyTab.click());
+
+    expect(
+      vi
+        .mocked(coreJson)
+        .mock.calls.map(([path]) => path)
+        .filter((path) => path.startsWith("/api/history/states?"))
+        .map((path) =>
+          new URL(path, "http://core").searchParams.get("capability"),
+        ),
+    ).toEqual([capability]);
+  },
+);
+
 it("asks for the same artwork again when the detail is reopened", async () => {
   const hash = "a".repeat(64);
   devices = [

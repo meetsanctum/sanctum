@@ -11,9 +11,10 @@ import { lightColour } from "@meetsanctum/ui-sdk";
 // spans, each what it was from one change to the next, and its last week day
 // by day, from the hourly roll-ups and the spans for the hour not yet rolled
 // up. A motion sensor's and a contact sensor's pages read them as well,
-// motion and being open counting as on.
+// motion and being open counting as on, and a media player's, playing
+// counting as on.
 
-const hourMs = 60 * 60_000;
+export const hourMs = 60 * 60_000;
 export const dayMs = 24 * hourMs;
 
 /** What a capability was from `from` until `to`. */
@@ -23,8 +24,16 @@ export type Span = {
   /** Nothing is known of it while it is offline, or before it reports. */
   known: boolean;
   offline: boolean;
-  /** On; for a motion sensor, seeing motion; for a contact sensor, open. */
+  /**
+   * On; for a motion sensor, seeing motion; for a contact sensor, open; for
+   * a media player, playing.
+   */
   on: boolean;
+  /**
+   * A media player with power: whether it was on, playing or not. Unset for
+   * every other capability, and for a player without power.
+   */
+  powered?: boolean;
   /** A dimmable light's brightness while on. */
   brightness: number | null;
   /** A lit light's colour; white for a switch. */
@@ -59,7 +68,11 @@ function spanOf(
 ): Span {
   const { state } = recorded;
   const known = recorded.availability !== "offline" && state !== null;
-  const on = known && state[onFields[kind] ?? "on"] === true;
+  const on =
+    known &&
+    (kind === "media"
+      ? state.activity === "playing"
+      : state[onFields[kind] ?? "on"] === true);
   return {
     from,
     to,
@@ -72,6 +85,9 @@ function spanOf(
       kind === "light" && on
         ? lightColour(state as unknown as LightState)
         : "#ffffff",
+    ...(kind === "media" && known && typeof state.on === "boolean"
+      ? { powered: state.on }
+      : {}),
   };
 }
 
@@ -127,7 +143,8 @@ export function joinedSpans(spans: readonly Span[]): Span[] {
       last.to === span.from &&
       last.known === span.known &&
       last.offline === span.offline &&
-      last.on === span.on
+      last.on === span.on &&
+      last.powered === span.powered
     ) {
       joined[joined.length - 1] = { ...last, to: span.to };
     } else {
@@ -199,14 +216,14 @@ export function midnight(at: number, daysBack = 0) {
 
 /**
  * The last 7 local days, today last: the hourly roll-ups of whether it was
- * on, saw motion or was open, by `field`, and the spans for the time since
- * the last of them.
+ * on, saw motion, was open or played, by `field`, and the spans for the
+ * time since the last of them.
  */
 export function daysOf(
   statistics: Pick<DeviceStatistics, "fields"> | null,
   spans: readonly Span[],
   now: number,
-  field: "on" | "motion" | "open" = "on",
+  field: "on" | "motion" | "open" | "playing" = "on",
 ): Day[] {
   const hours = statistics?.fields[field] ?? [];
   const rolledUpTo = hours.reduce(
@@ -315,28 +332,47 @@ export function sensedWeekHeadline(
   now: number,
   words: WeekWords,
 ) {
+  return durationWeekHeadline(days, now, {
+    average: (seconds) => {
+      const minutes = Math.round(seconds / 60);
+      return words.aDay(
+        minutes < 1
+          ? "under a minute"
+          : minutes < 60
+            ? `about ${minutes} min`
+            : `about ${Math.round(seconds / 3600)} h`,
+      );
+    },
+    today: words.today,
+    none: (known, today) => {
+      if (known.length === days.length) return `${words.none} all week`;
+      return known[0]!.start === today
+        ? `${words.none} today`
+        : `${words.none} since ${weekday.format(known[0]!.start)}`;
+    },
+  });
+}
+
+/** Summarise a week's recorded durations using the capability's wording. */
+export function durationWeekHeadline(
+  days: readonly Day[],
+  now: number,
+  words: {
+    average: (seconds: number) => string;
+    today: (duration: string) => string;
+    none: (known: readonly Day[], today: number) => string;
+  },
+) {
   const today = midnight(now);
   const known = days.filter((day) => day.known > 0);
   if (known.length === 0) return "Not known yet";
   const ended = known.filter((day) => day.start !== today);
   const average =
     ended.reduce((sum, day) => sum + day.on, 0) / Math.max(1, ended.length);
-  if (average > 0) {
-    const minutes = Math.round(average / 60);
-    return words.aDay(
-      minutes < 1
-        ? "under a minute"
-        : minutes < 60
-          ? `about ${minutes} min`
-          : `about ${Math.round(average / 3600)} h`,
-    );
-  }
+  if (average > 0) return words.average(average);
   const onToday = known.find((day) => day.start === today)?.on ?? 0;
   if (onToday > 0) return words.today(durationText(onToday));
-  if (known.length === days.length) return `${words.none} all week`;
-  return known[0]!.start === today
-    ? `${words.none} today`
-    : `${words.none} since ${weekday.format(known[0]!.start)}`;
+  return words.none(known, today);
 }
 
 /** The words a week of counts comes to, for what is counted. */
