@@ -79,7 +79,7 @@ export type RepairDrivers = {
     actor: Actor,
     hold: Hold,
     withinMs: number | undefined,
-    run: number,
+    run: number | undefined,
   ): Promise<DriverRepairResult>;
   cancelRepair(
     driver: string,
@@ -88,7 +88,7 @@ export type RepairDrivers = {
     hold: Hold,
     run: number,
   ): Promise<void>;
-  /** What repairing a problem may ask once started, of the version taking calls now. */
+  /** What repairing a problem may ask once started, of the installed version. */
   laterOf(driver: string, problem: string): DeviceQuestion[];
 };
 
@@ -233,8 +233,9 @@ export function createProblems(options: {
           log(id, "refused", who, "invalid_request");
           throw new ActionCallError("invalid_request");
         }
-        const run = drivers.run(row.driver);
-        if (run === undefined) {
+        const later = drivers.laterOf(row.driver, problem.id);
+        const run = later.length > 0 ? drivers.run(row.driver) : undefined;
+        if (later.length > 0 && run === undefined) {
           log(id, "refused", who, "unavailable");
           throw new ActionCallError("unavailable");
         }
@@ -244,7 +245,7 @@ export function createProblems(options: {
             row.driver,
             row.key,
             { ...problem, repair: problem.repair },
-            run,
+            { later, run },
             who,
           ),
           {
@@ -293,7 +294,7 @@ export function createProblems(options: {
     driver: string,
     key: string,
     problem: DeviceProblem & { repair: NonNullable<DeviceProblem["repair"]> },
-    run: number,
+    { later, run }: { later: DeviceQuestion[]; run: number | undefined },
     who: ActivityAuthor,
   ): AskingFlow<{ operation: "repair"; done: RepairDone }> {
     return {
@@ -301,7 +302,7 @@ export function createProblems(options: {
       driver,
       key,
       run,
-      later: drivers.laterOf(driver, problem.id),
+      later,
       runNow: () => drivers.run(driver),
       call: (step, actor, hold, withinMs) =>
         drivers.repair(
@@ -351,7 +352,7 @@ export function createProblems(options: {
         if (!row) return "removed";
         return row.problem?.id === problem.id ? null : "settled";
       },
-      cancel: (attempt, actor, hold) =>
+      cancel: (attempt, actor, hold, run) =>
         drivers.cancelRepair(
           driver,
           { key, device: id, attempt },

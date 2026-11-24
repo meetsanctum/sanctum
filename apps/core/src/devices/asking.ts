@@ -70,8 +70,8 @@ type Completion =
 /** What adding or repairing does for the attempts it opens. */
 export type AskingFlow<Done extends Completion> = Device & {
   target: Extract<Target, { operation: Done["operation"] }>;
-  /** The run of the driver it began with. */
-  run: number;
+  /** The run of the driver it began with, where the call is tied to a run. */
+  run: number | undefined;
   /** The questions it may ask once started. */
   later: readonly DeviceQuestion[];
   /** The driver's run now, or nothing while none takes calls. */
@@ -95,7 +95,7 @@ export type AskingFlow<Done extends Completion> = Device & {
   /** How what it acts on ended outside it, or null while it stands. */
   standing(): AttemptEnd | null;
   /** Has the driver close what it opened for the attempt. */
-  cancel(attempt: string, actor: Actor, hold: Hold): Promise<void>;
+  cancel(attempt: string, actor: Actor, hold: Hold, run: number): Promise<void>;
   /** Records an attempt that ended after a refused answer, by that refusal. */
   refused(refusal: string): void;
 };
@@ -206,8 +206,8 @@ export function createAsking(options: {
 
   async function cancelDriver(attempt: Attempt, actor: Actor, hold: Hold) {
     const { flow } = attempt;
-    if (flow.runNow() === flow.run) {
-      await flow.cancel(attempt.id, actor, hold).catch(() => {});
+    if (flow.run !== undefined && flow.runNow() === flow.run) {
+      await flow.cancel(attempt.id, actor, hold, flow.run).catch(() => {});
     }
   }
 
@@ -427,7 +427,7 @@ export function createAsking(options: {
           await Promise.allSettled(cancelling);
         }
         const fell =
-          flow.runNow() !== flow.run
+          flow.run !== undefined && flow.runNow() !== flow.run
             ? "stopped"
             : pending?.settled
               ? "settled"

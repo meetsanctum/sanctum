@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import type { DeviceAsking, FoundDevice } from "@meetsanctum/app-sdk";
+import type {
+  AddResult,
+  DeviceAsking,
+  FoundDevice,
+} from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -59,6 +63,14 @@ const button = (text: string) =>
     (each) => each.textContent === text,
   )!;
 const field = () => page().querySelector<HTMLInputElement>("input")!;
+
+function pendingAdd() {
+  let resolve!: (result: AddResult) => void;
+  const promise = new Promise<AddResult>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 async function addTv() {
   core.adding = { ...core.adding, found: [tv] };
@@ -250,6 +262,51 @@ describe("Add devices, adding a device that asks once started", () => {
       path: "/api/devices/add/cancel",
       json: { driver: "sanctum.example", key: "tv", attempt: "ignored" },
     });
+    expect(named("Add Living Room")).not.toBeNull();
+  });
+
+  it("cancels while checking an answer and shows Added if the device was added", async () => {
+    const answer = pendingAdd();
+    const cancel = pendingAdd();
+    const steps = [asking(1, [first]), answer.promise];
+    core.answers.tv = () => steps.shift();
+    await addTv();
+    await type(field(), "1234");
+    await act(async () => button("Continue").click());
+    expect(button("Checking…").disabled).toBe(true);
+
+    vi.mocked(coreFetch.coreJson).mockImplementationOnce(() => cancel.promise);
+    await act(async () => button("Cancel").click());
+    expect(coreFetch.coreJson).toHaveBeenLastCalledWith(
+      "/api/devices/add/cancel",
+      {
+        method: "POST",
+        json: { driver: tv.driver, key: tv.key, attempt: "ignored" },
+      },
+    );
+    expect(button("Stopping…").disabled).toBe(true);
+
+    const added = light("tv", "Living Room");
+    await act(async () => answer.resolve({ added }));
+    expect(button("Stopping…").disabled).toBe(true);
+    await act(async () => cancel.resolve({ added }));
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
+  });
+
+  it("ignores a new code that arrives after Cancel has ended the attempt", async () => {
+    const answer = pendingAdd();
+    const steps = [asking(1, [second]), answer.promise];
+    core.answers.tv = () => steps.shift();
+    await addTv();
+    await act(async () => vi.advanceTimersByTime(35_000));
+    await act(async () => button("Show a new code").click());
+    expect(button("Asking…").disabled).toBe(true);
+
+    vi.mocked(coreFetch.coreJson).mockResolvedValueOnce({ ended: "cancelled" });
+    await act(async () => button("Cancel").click());
+    await act(async () => answer.resolve(asking(2, [second])));
+
+    expect(field()).toBeNull();
     expect(named("Add Living Room")).not.toBeNull();
   });
 

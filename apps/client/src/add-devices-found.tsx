@@ -146,6 +146,7 @@ function FoundCard(props: {
   const [doing, setDoing] = useState<
     "adding" | "checking" | "asking" | "stopping" | null
   >(null);
+  const request = useRef<{ what: NonNullable<typeof doing> } | null>(null);
   const [asking, setAsking] = useState<Asking | null>(null);
   // The attempt open from the first press until it ends.
   const attempt = useRef<string | null>(null);
@@ -182,13 +183,13 @@ function FoundCard(props: {
   const now = useNow(asking !== null);
   // The attempt's time ran out: the core ended it.
   useEffect(() => {
-    if (asking && now >= asking.until) {
+    if (asking && doing !== "stopping" && now >= asking.until) {
       attempt.current = null;
       setAsking(null);
       setAnswers({});
       setFailure(endedWords("adding", "time", props.appName) ?? undefined);
     }
-  }, [asking, now, props.appName]);
+  }, [asking, doing, now, props.appName]);
 
   const answerTo = (id: string) =>
     Object.hasOwn(answers, id) ? answers[id]! : "";
@@ -226,12 +227,20 @@ function FoundCard(props: {
   };
 
   const send = async (
-    what: "adding" | "checking" | "asking" | "stopping",
+    what: NonNullable<typeof doing>,
     path: "/api/devices/add" | "/api/devices/add/cancel",
     json: Record<string, unknown>,
     answered: readonly DeviceQuestion[],
   ) => {
-    if (doing) return;
+    if (
+      request.current &&
+      (what !== "stopping" || request.current.what === "stopping")
+    )
+      return;
+    // Cancel can overtake a step's reply. Only the latest request changes the card.
+    const current = { what };
+    request.current = current;
+    const stillCurrent = () => isShown.current && request.current === current;
     setDoing(what);
     setRefused(undefined);
     setFailure(undefined);
@@ -240,10 +249,10 @@ function FoundCard(props: {
         method: "POST",
         json: { ...device, ...json },
       });
-      if (!isShown.current) return;
+      if (!stillCurrent()) return;
       took(result, answered);
     } catch (error) {
-      if (!isShown.current) return;
+      if (!stillCurrent()) return;
       if (attempt.current) {
         cancelQuietly("/api/devices/add/cancel", {
           ...device,
@@ -254,11 +263,15 @@ function FoundCard(props: {
       setAsking(null);
       setFailure(addProblem(error, props.appName));
     } finally {
-      if (isShown.current) setDoing(null);
+      if (stillCurrent()) {
+        request.current = null;
+        setDoing(null);
+      }
     }
   };
 
   const add = () => {
+    if (request.current) return;
     const id = newAttemptId();
     attempt.current = id;
     void send(
@@ -354,7 +367,7 @@ function FoundCard(props: {
               type="button"
               variant="outline"
               className="flex-1"
-              disabled={doing !== null}
+              disabled={doing === "stopping"}
               onClick={cancel}
             >
               {doing === "stopping" ? "Stopping…" : "Cancel"}

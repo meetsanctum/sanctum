@@ -328,9 +328,12 @@ export async function createModules(
   // Adding and repairing that ask once started: the attempts open while the
   // person reads a code off the device.
   const asking = createAsking({ turns: devices.turns, answersTo, now });
-  // What a driver taking calls now may ask once adding or a repair started.
+  // Repair can be requested while the installed driver is coming back.
   const laterOf = (driver: string, problem?: string) => {
-    const declared = apps.drivingNow(driver)?.driver;
+    const declared =
+      problem === undefined
+        ? apps.drivingNow(driver)?.driver
+        : apps.manifest(driver)?.driver;
     const later =
       problem === undefined
         ? declared?.addLater

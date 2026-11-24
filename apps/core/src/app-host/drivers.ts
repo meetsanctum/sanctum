@@ -12,6 +12,7 @@ import {
   type DriverDiscovery,
   type DriverRemoval,
   type DriverRepair,
+  type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
@@ -34,7 +35,12 @@ const cancelWithinMs = 10_000;
 // What a device's turn holds on to (devices/turns.ts).
 type Hold = (running: Promise<unknown>) => void;
 
-type Driving = { app: AppDefinition; storage: AppStorage; runId: number };
+type Driving = {
+  app: AppDefinition;
+  manifest: StaticManifest;
+  storage: AppStorage;
+  runId: number;
+};
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -79,6 +85,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
     call: (
       driver: NonNullable<AppDefinition["driver"]>,
       ctx: AppContext,
+      manifest: StaticManifest,
     ) => Promise<T>,
     {
       quiet = false,
@@ -122,7 +129,7 @@ export function createDriverCalls<Entry extends Driving>(options: {
         ) {
           throw new ActionCallError("unavailable");
         }
-        return call(driver, ctx);
+        return call(driver, ctx, entry.manifest);
       });
       hold?.(running);
       return await options.track(entry, withTimeout(running, withinMs));
@@ -324,14 +331,23 @@ export function createDriverCalls<Entry extends Driving>(options: {
       actor: Actor,
       hold: Hold,
       withinMs: number | undefined,
-      run: number,
+      run: number | undefined,
     ) {
       return toDriver(
         driverId,
         actor,
         "repair a device",
-        (driver, ctx) => {
+        (driver, ctx, manifest) => {
           if (!driver.repair) {
+            throw new ActionCallError("unavailable");
+          }
+          // The installed version can change while a one-shot repair waits.
+          const problems = manifest.driver?.problems ?? {};
+          if (
+            run === undefined &&
+            Object.hasOwn(problems, repair.problem) &&
+            problems[repair.problem]!.repair?.later?.length
+          ) {
             throw new ActionCallError("unavailable");
           }
           return driver.repair(ctx, repair);
