@@ -1,1 +1,0 @@
-ALTER TABLE `app_grants` ADD `range_aware` integer DEFAULT false NOT NULL;

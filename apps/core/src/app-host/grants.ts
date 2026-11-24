@@ -1,6 +1,5 @@
 import {
   grantedAtFirst,
-  lanRange,
   permissionIds,
   type PermissionRequest,
 } from "@meetsanctum/app-sdk";
@@ -48,14 +47,7 @@ export function createAppGrants(
         .from(appGrants)
         .where(eq(appGrants.appId, appId))
         .all()
-        .map((row) => {
-          // Keep the answer off if giving it would open ports the core could
-          // not apply when it saved the grant. The household can turn it on.
-          const range = row.rangeAware ? null : lanRange(row.permission);
-          const granted =
-            row.granted && (range === null || range.from === range.to);
-          return [row.permission, granted];
-        }),
+        .map((row) => [row.permission, row.granted]),
     );
   }
 
@@ -81,7 +73,6 @@ export function createAppGrants(
             granted: asUpdate
               ? request.needed === true
               : grantedAtFirst(request),
-            rangeAware: true,
             updatedAt,
           })),
         )
@@ -99,7 +90,7 @@ export function createAppGrants(
      * the caller's transaction.
      */
     grantAll(appId: string, permissions: readonly string[]) {
-      const set = { granted: true, rangeAware: true, updatedAt: now() };
+      const set = { granted: true, updatedAt: now() };
       for (const permission of permissions) {
         db.insert(appGrants)
           .values({ appId, permission, ...set })
@@ -132,7 +123,7 @@ export function createAppGrants(
       if (!permissionIds(app.permissions).includes(permission)) return false;
       if (rows(app.id).get(permission) === granted) return false;
       db.transaction(() => {
-        const set = { granted, rangeAware: true, updatedAt: now() };
+        const set = { granted, updatedAt: now() };
         db.insert(appGrants)
           .values({ appId: app.id, permission, ...set })
           .onConflictDoUpdate({

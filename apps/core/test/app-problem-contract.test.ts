@@ -49,6 +49,17 @@ describe("an app's ports at installation", () => {
     expect(checkManifest(manifest)).toBe(manifest);
   });
 
+  it("refuses a range from a package built before ranges", () => {
+    const manifest = toStaticManifest(lamps);
+    manifest.protocol = 17;
+    manifest.permissions = [
+      ...manifest.permissions,
+      { id: "discover:mdns:_example._tcp", reason: "For the test." },
+      { id: "lan:tcp:49152-65535", reason: "For the test." },
+    ] as typeof manifest.permissions;
+    expect(() => checkManifest(manifest)).toThrow("needs protocol 18");
+  });
+
   it.each([
     ["a malformed one", ["lan:tcp:any"], "must name a TCP port"],
     ["a range outside the session ports", ["lan:tcp:1-65535"], "must name"],

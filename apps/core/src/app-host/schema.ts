@@ -26,10 +26,6 @@ export const appGrants = sqliteTable(
     appId: text("app_id").notNull(),
     permission: text("permission").notNull(),
     granted: integer("granted", { mode: "boolean" }).notNull(),
-    // Whether the core could apply port ranges when it answered this request.
-    rangeAware: integer("range_aware", { mode: "boolean" })
-      .notNull()
-      .default(false),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [primaryKey({ columns: [table.appId, table.permission] })],

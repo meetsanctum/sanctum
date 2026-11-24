@@ -5,8 +5,6 @@ import {
   defineApp,
   isMalformedLan,
   lanPermission,
-  lanPort,
-  lanPorts,
   lanRange,
   lanRangePermission,
   lanRanges,
@@ -70,13 +68,10 @@ describe("reaching devices on the network", () => {
     });
   });
 
-  it("keeps the single-port helpers working as callbacks and with mixed permissions", () => {
-    const ids = [8080, 6053, 8080].map(lanPermission);
-    expect(ids).toEqual(["lan:tcp:8080", "lan:tcp:6053", "lan:tcp:8080"]);
-    expect(ids.map(lanPort)).toEqual([8080, 6053, 8080]);
-    expect(lanPort("lan:tcp:49152-65535")).toBeNull();
-    expect(lanPorts([...ids, "lan:tcp:49152-65535", "places.read"])).toEqual([
-      6053, 8080,
+  it("writes single ports as a callback can", () => {
+    expect([8080, 6053].map(lanPermission)).toEqual([
+      "lan:tcp:8080",
+      "lan:tcp:6053",
     ]);
   });
 

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   assertDriverProblems,
   assertLanPermissions,
+  lanRanges,
   appManifestSchema,
   assistantOfferOf,
   deviceActionActivitySchema,
@@ -21,6 +22,9 @@ import {
 } from "@meetsanctum/app-sdk";
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import { z } from "zod";
+
+// The protocol that brought ranges of ports (lan:tcp:<from>-<to>).
+const lanRangesProtocol = 18;
 
 // What the core knows of an app, from its static manifest: the core checks
 // every call across the line between it and the app with the JSON Schemas
@@ -538,13 +542,19 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
     assertDriverProblems(manifest.driver, manifest.driver.hooks);
   }
   // What its network may reach rests on these, so the core checks them
-  // itself rather than trust the app's own build.
-  // Protocol 18 caps declarations. Older packages only have to fit the
-  // manager's limit on the permissions granted at any one time.
-  assertLanPermissions(
-    manifest.permissions.map((each) => each.id),
-    { limitCount: manifest.protocol >= 18 },
-  );
+  // itself rather than trust the app's own build. Ranges, and the cap on how
+  // many it asks for, came with protocol 18: an older package only has to
+  // fit the manager's limit on what's granted at a time, and one that names
+  // a range was built for a core that read it as no port, so a grant saved
+  // for it then never meant those ports.
+  const lan = manifest.permissions.map((each) => each.id);
+  const knowsRanges = manifest.protocol >= lanRangesProtocol;
+  if (!knowsRanges && lanRanges(lan).some(({ from, to }) => from < to)) {
+    throw new Error(
+      `its manifest asks for a range of ports, which needs protocol ${lanRangesProtocol}`,
+    );
+  }
+  assertLanPermissions(lan, { limitCount: knowsRanges });
   checkPieces(manifest);
   return manifest;
 }

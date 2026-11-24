@@ -63,18 +63,6 @@ export function lanRange(permission: string): LanRange | null {
   return { from, to };
 }
 
-/** The port a single-port permission names, or null for any other one. */
-export function lanPort(permission: string): number | null {
-  const range = lanRange(permission);
-  return range && range.from === range.to ? range.from : null;
-}
-
-/** The single ports a set of permissions names, in order. */
-export const lanPorts = (permissions: readonly string[]) =>
-  [...new Set(permissions.flatMap((each) => lanPort(each) ?? []))].sort(
-    (a, b) => a - b,
-  );
-
 /** Whether a permission id is a lan: one that names no port or range it can. */
 export const isMalformedLan = (permission: string) =>
   permission.startsWith("lan:") && lanRange(permission) === null;
