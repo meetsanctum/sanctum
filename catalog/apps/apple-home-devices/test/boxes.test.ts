@@ -56,9 +56,10 @@ describe("errorOf", () => {
     expect(errorOf(error)).toBe(error);
   });
 
-  it("leaves an AirPlay verification refusal retryable", () => {
-    const error = new Error("Pair-verify M4 error: 2");
-    expect(errorOf(error)).toBe(error);
+  it("takes an AirPlay verification refusal as a lost pairing", () => {
+    expect(errorOf(new Error("Pair-verify M4 error: 2"))).toBeInstanceOf(
+      PairingLost,
+    );
   });
 });
 

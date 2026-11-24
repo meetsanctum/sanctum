@@ -179,11 +179,12 @@ export class PlayerSleeping extends Error {
 const pairingName = "Sanctum";
 
 // HAP's TLV error 2, Authentication: a wrong code in pair-setup's M4, and
-// keys the box doesn't know in Companion's pair-verify M4. AirPlay's M4
-// refusal arrives before session encryption and cannot establish pairing loss.
+// keys the box doesn't know in pair-verify's M4, AirPlay's or Companion's,
+// both of which Repair pairs again. A box whose identity was reset also
+// fails the signature check in M2.
 const wrongCodeMessage = /M4 missing Proof \(error=2\)/;
 const lostMessage =
-  /^Companion (?:pair-verify M4 error: 2\b|server signature verification failed$)/i;
+  /pair-verify M4 error: 2\b|^Companion server signature verification failed$/i;
 const expiredMessage = /PIN expired/;
 // /pair-pin-start refused: the box's AirPlay access setting allows no
 // pairing from here.
