@@ -5,6 +5,7 @@ import {
   capabilityRegistration,
   controlPermission,
   deviceCategoryOf,
+  deviceRegistrationForProtocol,
   deviceTypeOf,
   historyFields,
   permissionWords,
@@ -50,8 +51,31 @@ describe("a smart speaker's microphones", () => {
     expect(permissionWords(readPermission("audio"))?.title).toBe(
       "See your smart speakers' microphones",
     );
-    expect(permissionWords(controlPermission("audio"))?.title).toBe(
-      "Mute your smart speakers' microphones",
+    expect(permissionWords(controlPermission("audio"))).toMatchObject({
+      title: "Mute and turn on your smart speakers' microphones",
+      detail:
+        "See whether the microphones are muted and when they last heard their wake word",
+    });
+  });
+
+  it("requires microphones on smart speakers from drivers that speak protocol 18", () => {
+    const speaker = {
+      key: "speaker",
+      name: "Speaker",
+      type: "smart-speaker",
+      capabilities: [{ id: "playback", kind: "media" }],
+    };
+    expect(deviceRegistrationForProtocol(17).safeParse(speaker).success).toBe(
+      true,
     );
+    expect(deviceRegistrationForProtocol(18).safeParse(speaker).success).toBe(
+      false,
+    );
+    expect(
+      deviceRegistrationForProtocol(18).safeParse({
+        ...speaker,
+        capabilities: [{ id: "mics", kind: "audio" }],
+      }).success,
+    ).toBe(true);
   });
 });

@@ -164,10 +164,6 @@ export function fitsType(
   kinds: ReadonlySet<CapabilityKind>,
 ): boolean {
   if (type === "unknown") return kinds.size === 0;
-  // A driver built before microphones were a part of their own, protocol
-  // 17 and older, says a smart speaker has only its media part, so it keeps
-  // its type and name until the driver says its microphones too.
-  if (type === "smart-speaker" && kinds.has("media")) return true;
   const { needs } = deviceTypes.find((each) => each.id === type)!;
   return needs.every((kind) => kinds.has(kind));
 }

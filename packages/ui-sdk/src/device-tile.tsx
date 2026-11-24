@@ -3,6 +3,7 @@ import {
   Footprints,
   Lightbulb,
   LightbulbOff,
+  Mic,
   Pause,
   Play,
   Plug,
@@ -250,11 +251,13 @@ export const DeviceTile = memo(function DeviceTile(props: {
                 ? tile.media?.playing
                   ? Pause
                   : Play
-                : tile.kind === "switch"
-                  ? Plug
-                  : on
-                    ? Lightbulb
-                    : LightbulbOff;
+                : tile.kind === "audio"
+                  ? Mic
+                  : tile.kind === "switch"
+                    ? Plug
+                    : on
+                      ? Lightbulb
+                      : LightbulbOff;
   const dashed = tile.kind === "contact" && !tile.contact ? "3 3" : undefined;
   const iconLook =
     "grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) data-[look=lit]:bg-white/55 data-[look=on]:bg-(--tile-on-ink)/8";

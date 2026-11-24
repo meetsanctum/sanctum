@@ -94,9 +94,25 @@ describe("a smart speaker's page", () => {
     device.setState(203, { state: true });
     await home.core.until(() => audio()?.muted === true, "muted by its side");
 
+    const commands = device.commands.length;
+    const reports = home.core.reports.length;
     await mute(false);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(audio()?.muted).toBe(true);
+    await home.core.until(
+      () =>
+        device.commands
+          .slice(commands)
+          .some(
+            (command) => command.key === 203 && command.fields.state === false,
+          ),
+      "unmute sent to the switch",
+    );
+    await home.core.until(
+      () =>
+        home.core.reports
+          .slice(reports)
+          .some((report) => report.states.audio?.muted === true),
+      "switch reports it is still muted",
+    );
   });
 
   it("changes its ring's glow, colour and brightness, each alone", async () => {
@@ -223,6 +239,31 @@ describe("a smart speaker's page", () => {
       "heard",
     );
     expect(home.core.latest(key, "audio")?.muted).toBeUndefined();
+  });
+
+  it("says when it heard a single wake word even if its first report fails", async () => {
+    let attempts = 0;
+    home = await startHome(undefined, {
+      beforeReport({ states }) {
+        if (states.audio?.heardAt && ++attempts === 1) {
+          throw new Error("The core did not answer");
+        }
+      },
+    });
+    const device = await home.plugIn({
+      voiceAssistant: true,
+      entities: [player],
+    });
+    const key = await add(home.core, device);
+    await home.core.until(() => device.voiceFollowed, "its requests followed");
+
+    device.wake();
+
+    await home.core.until(
+      () => home.core.latest(key, "audio")?.heardAt !== undefined,
+      "heard after a retry",
+    );
+    expect(attempts).toBe(2);
   });
 
   it("isn't a smart speaker's page on another device", async () => {

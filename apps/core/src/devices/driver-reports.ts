@@ -1,7 +1,7 @@
 import {
   ActionError,
   capabilityOf,
-  deviceRegistration,
+  deviceRegistrationForProtocol,
   deviceReport,
   type CapabilityKind,
 } from "@meetsanctum/app-sdk";
@@ -82,8 +82,12 @@ export function createDriverReports(
 
   return {
     // A driver brings one of its devices in, or updates it, by its own key.
-    register(driver: string, input: unknown): { id: string } {
-      const parsed = deviceRegistration.safeParse(input);
+    register(
+      driver: string,
+      input: unknown,
+      protocol?: number,
+    ): { id: string } {
+      const parsed = deviceRegistrationForProtocol(protocol).safeParse(input);
       if (!parsed.success) {
         throw invalid(
           `${driver} registered a device the core cannot take`,
@@ -189,11 +193,12 @@ export function createDriverReports(
           };
         },
       );
-      const answered =
-        observations.length > 0 ||
+      // The shared timestamp is visible without access to microphone state.
+      const sharedAnswer =
+        availability === "online" ||
         battery !== undefined ||
         batteryLow !== undefined ||
-        availability === "online";
+        observations.some(({ capability }) => capability.kind !== "audio");
       changing(device.id, () =>
         db.transaction(() => {
           const at = now();
@@ -235,7 +240,7 @@ export function createDriverReports(
               availability: left
                 ? "offline"
                 : (availability ?? device.availability),
-              lastSeenAt: answered ? at : device.lastSeenAt,
+              lastSeenAt: sharedAnswer ? at : device.lastSeenAt,
               battery: battery ?? device.battery,
               batteryLow: batteryLow ?? device.batteryLow,
             })
@@ -246,7 +251,9 @@ export function createDriverReports(
           }
         }),
       );
-      if (answered) options.onReport?.(device.id);
+      if (sharedAnswer || observations.length > 0) {
+        options.onReport?.(device.id);
+      }
     },
   };
 }

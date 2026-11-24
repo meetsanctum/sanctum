@@ -146,6 +146,10 @@ export function confirms(
   );
 }
 
+/** Whether confirmation needs an explicit reading for every requested field. */
+export const requiresReportedFields = (kind: CapabilityKind) =>
+  kind === "media" || kind === "audio";
+
 /** Prepares a command, already checked against its kind's schema, for a capability. */
 export function prepare(capability: CapabilitySync, command: State): Prepared {
   const prepared: Prepared =
@@ -297,12 +301,14 @@ export function reconcile(
       observed,
     );
   }
-  // A media report can leave out power, volume and mute while it says
-  // what is playing. Those fields must be present to confirm a command.
+  // Playback and wake-word updates can omit fields a command asked for.
+  // Confirm the command only when the device reports those fields.
   if (
     desired &&
     sync === "pending" &&
-    !confirms(observed, desired, { reported: capability.kind === "media" })
+    !confirms(observed, desired, {
+      reported: requiresReportedFields(capability.kind),
+    })
   ) {
     return { desired, sync, awaiting };
   }

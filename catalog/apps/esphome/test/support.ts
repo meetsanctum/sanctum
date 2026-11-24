@@ -199,9 +199,18 @@ export const signalEntity: EmulatedEntity = {
 };
 
 /** A home with ESPHome running, and the devices it hears of. */
-export async function startHome(timingOverrides?: Partial<typeof timings>) {
+export async function startHome(
+  timingOverrides?: Partial<typeof timings>,
+  options?: Pick<
+    NonNullable<Parameters<typeof createDriverCore>[1]>,
+    "beforeReport"
+  >,
+) {
   const devices: EmulatedDevice[] = [];
-  const core = createDriverCore(app(timingOverrides), { migrationsFolder });
+  const core = createDriverCore(app(timingOverrides), {
+    migrationsFolder,
+    ...options,
+  });
   await core.start();
   return {
     core,

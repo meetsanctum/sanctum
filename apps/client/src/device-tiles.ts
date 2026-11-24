@@ -30,6 +30,7 @@ import {
   type Media,
 } from "./media";
 import { motionText } from "./motion";
+import { isAudio } from "./microphones-detail";
 
 // The home's lights, switches, remotes and sensors as tiles: one tile for
 // each light, switch, button, motion sensor, contact sensor or media player
@@ -479,6 +480,10 @@ export function tilesOf(
     const motion = device.capabilities.filter(isMotion);
     const contacts = device.capabilities.filter(isContact);
     const players = device.capabilities.filter(isMedia);
+    const microphones =
+      device.type === "smart-speaker" && players.length === 0
+        ? device.capabilities.find(isAudio)
+        : undefined;
     const tiles = [
       ...controls.map((capability) =>
         tileOf(device, capability, controls.length > 1, roomId),
@@ -510,6 +515,26 @@ export function tilesOf(
       ...players.map((capability) =>
         mediaTile(device, capability, players.length > 1, roomId),
       ),
+      ...(microphones
+        ? [
+            {
+              key: tileKey(device.id, microphones.id),
+              deviceId: device.id,
+              capabilityId: microphones.id,
+              kind: "audio" as const,
+              roomId,
+              name: device.name,
+              status:
+                device.availability === "offline"
+                  ? offline(device)
+                  : "Microphones",
+              look: "off" as const,
+              on: false,
+              dims: false,
+              disabled: device.availability === "offline",
+            },
+          ]
+        : []),
       ...(sensors.length > 0
         ? [sensorTile(device, sensors, roomId, unit, isQuiet)]
         : []),
@@ -584,10 +609,13 @@ function roomTilesOf(
   return [...byDevice].flatMap(([id, own]) => {
     const device = devicesById.get(id);
     const kind = device && primaryKindOf(device.type);
-    const ofKind = own.filter((tile) => tile.kind === kind);
+    const ofKind =
+      device?.type === "smart-speaker"
+        ? own.filter((tile) => tile.kind === "media" || tile.kind === "audio")
+        : own.filter((tile) => tile.kind === kind);
     const first = ofKind[0] ?? own[0]!;
     const controls = own.filter(isControlTile);
-    if (first.kind === "media") {
+    if (first.kind === "media" || first.kind === "audio") {
       return [
         {
           tile: { ...first, name: device?.name ?? first.name },

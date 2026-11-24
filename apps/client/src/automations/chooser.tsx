@@ -28,6 +28,7 @@ import {
   fieldsOf,
   matchesCapability,
   plain,
+  presetOf,
   sentenceParts,
   type Names,
 } from "./words";
@@ -121,6 +122,8 @@ export function deviceKindsFor(
   config: Record<string, unknown> = {},
 ) {
   if (typeof config.kind === "string") return [config.kind];
+  const deviceKind = presetOf(piece, config)?.deviceKind;
+  if (deviceKind) return [deviceKind];
   if (piece.group === "Buttons") return ["button"];
   if (!piece.app && typeof config.field === "string") {
     const kinds = kindsWith(config.field);

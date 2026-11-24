@@ -58,7 +58,14 @@ const deviceStep: PieceInfo = {
     {
       title: "Mute",
       sentence: "Mute {device}",
+      deviceKind: "media",
       config: { command: { muted: true } },
+    },
+    {
+      title: "Unmute",
+      sentence: "Unmute {device}",
+      deviceKind: "media",
+      config: { command: { muted: false } },
     },
   ],
   config: {
@@ -216,6 +223,31 @@ describe("a player's steps", () => {
       ),
     ).toMatchObject({ device: "office-speaker", capability: "speaker" });
   });
+
+  it.each([
+    ["Mute", true],
+    ["Unmute", false],
+  ])(
+    "offers %s for playback only, even if its microphones come first",
+    (title, muted) => {
+      const audio = {
+        ...speaker,
+        id: "microphones",
+        kind: "audio" as const,
+        features: { mutes: true, muteSwitch: false },
+      } as CapabilityInfo;
+      const device = {
+        ...homeDevices[0]!,
+        capabilities: [audio, box, speaker],
+      };
+      expect(offers(deviceStep, title, audio)).toBe(false);
+      expect(
+        withDevice(deviceStep, { command: { muted } }, device),
+      ).toMatchObject({
+        capability: "speaker",
+      });
+    },
+  );
 });
 
 describe("a player's volume", () => {

@@ -14,8 +14,7 @@ import {
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // A smart speaker's Microphones page: its microphones' switch, which mutes
-// them through core Devices, when it last heard its wake word, and how to
-// free microphones its own switch holds muted.
+// them through core Devices and when it last heard its wake word.
 
 const device = {
   id: "device:speaker",
@@ -60,7 +59,7 @@ afterEach(async () => {
 async function show(capability: Audio, shown: DeviceInfo = device) {
   await act(async () => {
     root.render(
-      <MicrophonesPage device={shown} capability={capability} now={now} />,
+      <MicrophonesPage device={shown} capabilities={[capability]} now={now} />,
     );
   });
 }
@@ -97,12 +96,22 @@ describe("a smart speaker's Microphones page", () => {
   });
 
   it("waits while a change is on its way", async () => {
-    await show(audio({ sync: "pending", desired: { muted: true } }));
+    await show(
+      audio({
+        sync: "pending",
+        state: { muted: true },
+        desired: { muted: true },
+      }),
+    );
 
     expect(microphones()?.disabled).toBe(true);
+    expect(microphones()?.getAttribute("aria-checked")).toBe("true");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Muting…",
+    );
   });
 
-  it("says how to free microphones its own switch holds muted", async () => {
+  it("shows a timeout and gives conditional help for a physical switch", async () => {
     await show(
       audio({
         state: { muted: true },
@@ -112,8 +121,36 @@ describe("a smart speaker's Microphones page", () => {
     );
 
     expect(microphones()?.getAttribute("aria-checked")).toBe("false");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "If the switch on its side is on",
+    );
+  });
+
+  it("shows a timeout on a speaker without a physical switch", async () => {
+    await show(
+      audio({
+        features: { mutes: true, muteSwitch: false },
+        sync: "conflict",
+      }),
+    );
+
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "They're still muted. Turn off the switch on its side to turn them on.",
+      "Couldn't change the microphones. Try again.",
+    );
+  });
+
+  it("shows mute status for a speaker with a physical-only switch", async () => {
+    await show(
+      audio({
+        features: { mutes: false, muteSwitch: true },
+        observed: { muted: true },
+        state: { muted: true },
+      }),
+    );
+
+    expect(microphones()).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Muted",
     );
   });
 
@@ -124,7 +161,7 @@ describe("a smart speaker's Microphones page", () => {
     await act(async () => microphones()!.click());
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Couldn't change them.",
+      "Couldn't change the microphones.",
     );
   });
 
@@ -132,7 +169,7 @@ describe("a smart speaker's Microphones page", () => {
     await show(
       audio({
         features: { mutes: false, muteSwitch: false },
-        state: { heardAt: new Date(2026, 10, 24, 9, 5).toISOString() },
+        observed: { heardAt: new Date(2026, 10, 24, 9, 5).toISOString() },
       }),
     );
 

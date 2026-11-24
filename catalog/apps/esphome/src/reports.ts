@@ -1,32 +1,131 @@
-import type { AppContext, MediaActivity } from "@meetsanctum/app-sdk";
+import type {
+  AppContext,
+  DeviceInfo,
+  DeviceRegistration,
+  MediaActivity,
+} from "@meetsanctum/app-sdk";
 import type { TelemetryEvent } from "esphome-client";
 
-import type { Session } from "./connection.js";
+import type { Session, Timings } from "./connection.js";
 import { signalOf, type Mapping } from "./entities.js";
 import type { Facts } from "./facts.js";
-import { audioStateOf } from "./speaker.js";
+import { connectionFactsOf, describeSession } from "./session-details.js";
+import { audioStateOf, mutedOf } from "./speaker.js";
 import { stateOf } from "./states.js";
+import { declineRequests } from "./voice.js";
 
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
 
+/** Reports the current microphone state until the core takes it or the session ends. */
+function audioReports(
+  ctx: AppContext,
+  key: string,
+  timings: Pick<Timings, "firstPauseMs" | "longestPauseMs">,
+  facts: Facts,
+  current: () => Session | null,
+) {
+  let heardAt: number | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let latest = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    latest += 1;
+  };
+  function send(session: Session, attempt = 0) {
+    const { parts } = describeSession(session);
+    if (!parts || current() !== session) return;
+    cancel();
+    const sent = latest;
+    const audio = audioStateOf(mutedOf(session, parts), heardAt);
+    ctx.devices.report({ key, states: { audio } }).catch((error: unknown) => {
+      if (sent !== latest || current() !== session) return;
+      ctx.log(`could not report microphones for ${key} (${String(error)})`);
+      timer = setTimeout(
+        () => send(session, attempt + 1),
+        Math.min(timings.firstPauseMs * 2 ** attempt, timings.longestPauseMs),
+      );
+      timer.unref();
+    });
+  }
+  return {
+    send,
+    cancel,
+    async restore() {
+      const at = await facts.lastHeard(key);
+      if (at === null || heardAt !== null) return;
+      heardAt = at;
+      const session = current();
+      if (session) send(session);
+    },
+    follow(session: Session, order: (write: () => Promise<void>) => void) {
+      const { parts } = describeSession(session);
+      declineRequests(session, () => {
+        if (!parts) return;
+        // Capture the time promptly. The caller orders the write with setup.
+        const at = Date.now();
+        heardAt = at;
+        order(async () => {
+          await facts.heard(key, at, connectionFactsOf(session));
+          send(session);
+        });
+      });
+    },
+  };
+}
+
+export function createReports(
+  ctx: AppContext,
+  key: string,
+  options: {
+    timings: Pick<Timings, "firstPauseMs" | "longestPauseMs">;
+    facts: Facts;
+    current: () => Session | null;
+    capabilities: DeviceInfo["capabilities"];
+  },
+) {
+  const { timings, facts, current, capabilities } = options;
+  const audio = audioReports(ctx, key, timings, facts, current);
+  // Playback activity survives reconnects because announcements leave it unchanged.
+  const activities = new Map(
+    capabilities.flatMap((part) =>
+      part.kind === "media" && part.observed
+        ? [[part.id, part.observed.activity] as const]
+        : [],
+    ),
+  );
+  return {
+    audio,
+    registered(capabilities: DeviceRegistration["capabilities"]) {
+      for (const id of activities.keys()) {
+        if (
+          !capabilities.some((part) => part.id === id && part.kind === "media")
+        ) {
+          activities.delete(id);
+        }
+      }
+    },
+    state(event: TelemetryEvent, session: Session) {
+      const { mapping } = describeSession(session);
+      report(ctx, facts, key, mapping, event, session, activities, audio.send);
+    },
+  };
+}
+
 /**
  * Reports one thing a session's device said, read by that session's own
  * parts, with what it said before: what each media part was doing, which
- * an announcement leaves as it was, and when a smart speaker last heard its
- * wake word, which its microphones carry along with whether they're muted.
+ * an announcement leaves as it was.
  */
-export function report(
+function report(
   ctx: AppContext,
   facts: Facts,
   mac: string,
   mapping: Mapping,
   event: TelemetryEvent,
   session: Session,
-  said: {
-    activities: Map<string, MediaActivity>;
-    heardAt: number | null;
-  },
+  activities: Map<string, MediaActivity>,
+  tellAudio: (session: Session) => void,
 ) {
   // A state event names its entity by its key, which a type keeps apart.
   if (
@@ -49,6 +148,10 @@ export function report(
   );
   if (!mapped) return;
   const capability = mapped.capability.id;
+  if (mapped.capability.kind === "audio") {
+    tellAudio(session);
+    return;
+  }
   const sent =
     event.type === "event"
       ? typeof event.eventType === "string" &&
@@ -62,12 +165,9 @@ export function report(
           })
         : null
       : (() => {
-          const now =
-            mapped.capability.kind === "audio" && event.type === "switch"
-              ? audioStateOf(event.state === true, said.heardAt)
-              : stateOf(mapped, event, said.activities.get(capability));
+          const now = stateOf(mapped, event, activities.get(capability));
           if (now && "activity" in now) {
-            said.activities.set(capability, now.activity);
+            activities.set(capability, now.activity);
           }
           return now
             ? ctx.devices.report({

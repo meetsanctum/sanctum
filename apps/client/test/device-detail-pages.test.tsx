@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
+import {
+  deviceCategories,
+  type CapabilityInfo,
+  type DeviceInfo,
+} from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,7 +13,9 @@ import type { HostedApp } from "../src/apps";
 import { useArtwork } from "../src/artwork";
 import { coreJson } from "../src/core-fetch";
 import { DeviceDetail } from "../src/device-detail";
+import { sectionsOfRoom, tilesIn, tilesOf } from "../src/device-tiles";
 import { forgetPageTicket } from "../src/frames/page-ticket";
+import { mediaSummary } from "../src/media";
 import { missingArtworkTint } from "../src/media-detail";
 import { useDevices } from "../src/use-devices";
 import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
@@ -52,6 +58,18 @@ const button: CapabilityInfo = {
   features: { actions: ["single"], holds: [] },
   state: null,
   observed: null,
+  desired: null,
+  sync: "synced",
+  setBy: null,
+  changedAt: null,
+};
+
+const audio: CapabilityInfo = {
+  id: "audio",
+  kind: "audio",
+  features: { mutes: true, muteSwitch: false },
+  state: { muted: false },
+  observed: { muted: false },
   desired: null,
   sync: "synced",
   setBy: null,
@@ -235,6 +253,71 @@ it.each([
     "History",
     "Activity",
   ]);
+});
+
+it("opens Microphones from playback and sends commands to the selected set", async () => {
+  const speaker = mediaPlayer("speaker", "Speaker", "office", {
+    activity: "idle",
+  });
+  devices = [
+    {
+      ...speaker,
+      type: "smart-speaker",
+      capabilities: [
+        button,
+        ...speaker.capabilities,
+        audio,
+        {
+          ...audio,
+          id: "remote-mics",
+          observed: { muted: true },
+          state: { muted: true },
+        },
+      ],
+    },
+  ];
+  const sections = sectionsOfRoom(tilesOf(devices, places), devices);
+  expect(sections.map(({ id, tiles }) => [id, tiles[0]?.capabilityId])).toEqual(
+    [["media", "player"]],
+  );
+  await open("speaker/player");
+  const tab = dialog().querySelector<HTMLButtonElement>(
+    '[role="tab"][aria-label="Microphones"]',
+  )!;
+  await act(async () => tab.click());
+  const switches =
+    dialog().querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  expect(
+    [...switches].map((part) => part.getAttribute("aria-checked")),
+  ).toEqual(["true", "false"]);
+  await act(async () => switches[1]!.click());
+  expect(posted()).toEqual([
+    { device: "speaker", capability: "remote-mics", command: { muted: false } },
+  ]);
+});
+
+it("opens a smart speaker without playback from Media on Microphones", async () => {
+  devices = [
+    {
+      ...panel,
+      id: "speaker",
+      name: "Speaker",
+      type: "smart-speaker",
+      capabilities: [button, audio],
+    },
+  ];
+  const tiles = tilesOf(devices, places);
+  const media = deviceCategories.find((each) => each.id === "media")!;
+  expect(tilesIn(media, tiles).map((tile) => tile.capabilityId)).toEqual([
+    "audio",
+  ]);
+  expect(mediaSummary(tiles, devices)).toEqual([
+    { type: "smart-speaker", title: "Smart Speakers", status: "Microphones" },
+  ]);
+  expect(sectionsOfRoom(tiles, devices).map(({ id }) => id)).toEqual(["media"]);
+
+  await open("speaker/audio", { openFirstPage: true });
+  expect(tabs()).toContainEqual(["Microphones", "true"]);
 });
 
 it.each(["player", "relay"])(

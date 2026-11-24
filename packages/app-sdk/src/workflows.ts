@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { CapabilityKind } from "./devices.js";
 import type { EventDefinition } from "./index.js";
 
 // Workflows: the pieces an app adds to the household's rules, the jobs it
@@ -175,6 +176,8 @@ export type PiecePreset = {
   readonly card?: { readonly name: string; readonly specifics?: string };
   /** Its own glyph, when the piece has one (PieceWords.icon). */
   readonly icon?: string;
+  /** The kind of part this preset can choose when several take its command. */
+  readonly deviceKind?: CapabilityKind;
   readonly config: Readonly<Record<string, unknown>>;
 };
 

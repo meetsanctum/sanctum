@@ -478,11 +478,13 @@ export const corePieces = {
           {
             title: "Mute",
             sentence: "Mute {device}",
+            deviceKind: "media",
             config: { command: { muted: true } },
           },
           {
             title: "Unmute",
             sentence: "Unmute {device}",
+            deviceKind: "media",
             config: { command: { muted: false } },
           },
         ],

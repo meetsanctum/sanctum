@@ -3,6 +3,7 @@ import { describeDriver } from "@meetsanctum/app-testkit";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { deviceViewOf } from "../src/app-host/calls.js";
 import lampsDriver from "./fixtures/apps/lamps/index.js";
 import {
   lampsCore,
@@ -10,7 +11,7 @@ import {
   radio,
   settled,
 } from "./devices-support.js";
-import { post, sharedClient, type TestCore } from "./support.js";
+import { post, sharedClient, testCore, type TestCore } from "./support.js";
 
 // Apps using places and devices through their context: the app must hold the
 // permission, and the actor behind the call must be allowed what it does.
@@ -20,6 +21,123 @@ function call(core: TestCore, token: string, action: string, input: object) {
     token,
   });
 }
+
+describe("microphone grants", () => {
+  it.each(["the app", "its page"])(
+    "ends a pending microphone command from %s when control is revoked",
+    async (source) => {
+      const app = defineApp({
+        id: "sanctum.example",
+        name: "Example",
+        version: "1.0.0",
+        core: "^2.0.0",
+        permissions: [
+          {
+            id: "devices.control:audio",
+            reason: "Change microphone mute.",
+            startsOn: true,
+          },
+        ],
+        actions: [
+          defineAction({
+            id: "example.unmute",
+            title: "Turn on microphones",
+            tier: "write",
+            input: z.object({ device: z.string() }),
+            output: z.unknown(),
+            run: (ctx, { device }) =>
+              ctx.devices.command({
+                device,
+                capability: "audio",
+                command: { muted: false },
+              }),
+          }),
+        ],
+        events: [],
+      });
+      const { core, maya } = await lampsCore({
+        apps: [{ app, origin: "system" }],
+        confirmMs: 300,
+      });
+      await radio.add("speaker", "audio");
+      await radio.press("speaker", { muted: true });
+      const [speaker] = core.devices
+        .list()
+        .filter((each) => each.type === "smart-speaker");
+      radio.confirms = false;
+      const device = speaker!.id;
+      const sent =
+        source === "the app"
+          ? await post(
+              core,
+              "/api/apps/sanctum.example/actions/example.unmute",
+              { device },
+              maya,
+            )
+          : await post(
+              core,
+              "/api/devices/command",
+              {
+                device,
+                capability: "audio",
+                command: { muted: false },
+              },
+              { token: maya.token, headers: { "x-sanctum-app": app.id } },
+            );
+      expect(sent.statusCode).toBe(200);
+      expect(sent.json().sync).toBe("pending");
+
+      const changed = await post(
+        core,
+        "/api/apps/sanctum.example/permissions/update",
+        { permission: "devices.control:audio", granted: false },
+        maya,
+      );
+      expect(changed.statusCode).toBe(200);
+      await vi.waitFor(() => {
+        expect(core.devices.get(device)?.capabilities[0]?.sync).toBe(
+          "conflict",
+        );
+      });
+      expect(radio.received).toHaveLength(1);
+    },
+  );
+
+  it("hides wake word updates from an app that can only read playback", async () => {
+    const core = await testCore();
+    const { id } = core.devices.register("test.lamps", {
+      key: "speaker",
+      name: "Speaker",
+      type: "smart-speaker",
+      capabilities: [
+        { id: "playback", kind: "media" },
+        { id: "mics", kind: "audio" },
+      ],
+    });
+    const view = deviceViewOf("sanctum.example", ["devices.read:media"]);
+    core.devices.report("test.lamps", {
+      key: "speaker",
+      availability: "online",
+      states: { playback: { activity: "idle" } },
+    });
+    const before = core.devices.get(id, view);
+    expect(before?.lastSeenAt).toBe(core.now().toISOString());
+    expect(before?.capabilities.map((part) => part.kind)).toEqual(["media"]);
+
+    core.advance(1_000);
+    const heardAt = core.now().toISOString();
+    core.devices.report("test.lamps", {
+      key: "speaker",
+      states: { mics: { heardAt } },
+    });
+
+    expect(core.devices.get(id, view)).toEqual(before);
+    expect(
+      core.devices.get(id)?.capabilities.find((part) => part.kind === "audio")
+        ?.observed,
+    ).toEqual({ heardAt });
+  });
+});
 
 describe("an app with places.read and light permissions", () => {
   it("reads the home and the lights, and nothing else", async () => {

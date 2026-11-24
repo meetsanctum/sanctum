@@ -10,7 +10,6 @@ import {
   type DriverRepair,
   type DriverRepairResult,
   type DriverRemoval,
-  type MediaActivity,
 } from "@meetsanctum/app-sdk";
 import { entityId } from "esphome-client";
 
@@ -37,18 +36,15 @@ import {
   takeKeyOff,
 } from "./keys.js";
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
-import { report } from "./reports.js";
+import { createReports } from "./reports.js";
 import { connectionFactsOf, describeSession } from "./session-details.js";
 import { lightCommandOf, mediaCommandOf } from "./states.js";
 import {
   changeSpeaker,
-  audioStateOf,
-  mutedOf,
   speakerStateOf,
   type SpeakerChange,
   type SpeakerState,
 } from "./speaker.js";
-import { declineRequests } from "./voice.js";
 
 // ESPHome's side of the Drivers contract. It keeps no list of its devices:
 // they are the core's record of what it added, read whole with the MAC
@@ -75,12 +71,8 @@ type Owned = {
   sleeps: boolean;
   setup: Promise<void>;
   lastSpeaker: SpeakerState | null;
-  // Playback activity survives reconnects because an announcement
-  // leaves it unchanged.
-  activities: Map<string, MediaActivity>;
   speakerChange: Promise<void>;
-  // When a smart speaker last heard its wake word, kept with its facts.
-  heardAt: number | null;
+  telemetry: ReturnType<typeof createReports>;
   // What the core last took of its problem, unknown once an answer is
   // lost, and the report that's latest.
   told: string | null | undefined;
@@ -146,6 +138,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   function connected(owned: Owned, session: Session, hear: () => void) {
     // A new socket must not take commands using the previous firmware's map.
     owned.mapping = null;
+    owned.telemetry.audio.cancel();
     owned.maker = makerOf(session.info).manufacturer ?? owned.maker;
     owned.haltReport = undefined;
     const { parts, mapping } = describeSession(session);
@@ -161,15 +154,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       const sleeps = session.info.hasDeepSleep === true;
       const registration = registrationOf(owned.mac, session, mapping);
       await ctx.devices.register(registration);
-      for (const id of owned.activities.keys()) {
-        if (
-          !registration.capabilities.some(
-            (part) => part.id === id && part.kind === "media",
-          )
-        ) {
-          owned.activities.delete(id);
-        }
-      }
+      owned.telemetry.registered(registration.capabilities);
       if (!current()) return;
       if (!(await finishSetup(owned.mac, session))) {
         await facts.save(owned.mac, {
@@ -189,7 +174,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       }
       owned.mapping = mapping;
       owned.sleeps = sleeps;
-      tellAudio(owned, session);
+      owned.telemetry.audio.send(session);
     };
     const setup = owned.setup.then(async () => {
       await work();
@@ -199,15 +184,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     });
     owned.setup = setup.catch(() => undefined);
     // Subscribe promptly and keep wake-word writes ordered with setup and removal.
-    declineRequests(session, () => {
-      if (!parts) return;
-      const at = Date.now();
-      owned.heardAt = at;
+    owned.telemetry.audio.follow(session, (keepHeard) => {
       owned.setup = owned.setup
         .then(async () => {
           if (devices.get(owned.mac) !== owned) return;
-          await facts.heard(owned.mac, at, connectionFactsOf(session));
-          if (owned.connection.session === session) tellAudio(owned, session);
+          await keepHeard();
         })
         .catch((error: unknown) => {
           ctx.log(`could not keep when ${owned.mac} heard (${String(error)})`);
@@ -248,32 +229,26 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
       sleeps: device.firmware?.sleeps === true,
       setup: Promise.resolve(),
       lastSpeaker: device.type === "smart-speaker" ? { ring: null } : null,
-      activities: new Map(
-        device.capabilities.flatMap((part) =>
-          part.kind === "media" && part.observed
-            ? [[part.id, part.observed.activity] as const]
-            : [],
-        ),
-      ),
       speakerChange: Promise.resolve(),
-      heardAt: null,
+      telemetry: createReports(ctx, mac, {
+        timings,
+        facts,
+        capabilities: device.capabilities,
+        current: () =>
+          devices.get(mac) === owned &&
+          owned.mapping &&
+          !owned.removing &&
+          !owned.rekeying
+            ? owned.connection.session
+            : null,
+      }),
       removing: false,
       rekeying: false,
       maker: device.manufacturer ?? null,
       connection: undefined as unknown as Connection,
     };
-    // When a smart speaker last heard its wake word, as its facts keep it,
-    // unless it has heard it since.
     if (device.type === "smart-speaker") {
-      facts
-        .lastHeard(mac)
-        .then((at) => {
-          if (at === null || owned.heardAt !== null) return;
-          owned.heardAt = at;
-          const session = owned.connection.session;
-          if (session) tellAudio(owned, session);
-        })
-        .catch(() => undefined);
+      owned.telemetry.audio.restore().catch(() => undefined);
     }
     owned.connection = createConnection({
       mac,
@@ -287,19 +262,16 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
             throw error;
           }),
         state: (event, session) => {
-          const { parts, mapping } = describeSession(session);
+          const { parts } = describeSession(session);
           if (
             parts &&
             owned.connection.session === session &&
-            ((event.type === "switch" && event.key === parts.mute?.key) ||
-              (event.type === "light" && event.key === parts.ring?.key))
+            event.type === "light" &&
+            event.key === parts.ring?.key
           ) {
             owned.lastSpeaker = speakerStateOf(session, parts);
           }
-          report(ctx, facts, mac, mapping, event, session, {
-            activities: owned.activities,
-            heardAt: owned.heardAt,
-          });
+          owned.telemetry.state(event, session);
         },
         reachable: (reachable) => {
           const availability = reachable
@@ -339,25 +311,12 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     return owned;
   }
 
-  // A smart speaker's microphones, with when it last heard its wake word,
-  // once the core has the device.
-  function tellAudio(owned: Owned, session: Session) {
-    const { parts, mapping } = describeSession(session);
-    const hasAudio = mapping.mapped.some(
-      ({ capability }) => capability.kind === "audio",
-    );
-    if (!parts || !hasAudio || !owned.mapping) return;
-    const state = audioStateOf(mutedOf(session, parts), owned.heardAt);
-    ctx.devices
-      .report({ key: owned.mac, states: { audio: state } })
-      .catch(() => undefined);
-  }
-
   // Says a device's problem, as it stands when it's said, until the core
   // takes it: so it never waits for Repair with nothing saying so, and a
   // retry never says a problem it no longer has.
   function tell(owned: Owned, attempt = 0) {
     clearTimeout(owned.telling);
+    owned.telemetry.audio.cancel();
     const problem = owned.problem;
     const report = ++owned.reports;
     ctx.devices.problem({ key: owned.mac, problem }).then(

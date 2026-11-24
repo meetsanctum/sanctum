@@ -17,7 +17,8 @@ export type Tile = {
    * sensor's, one for each device, which shows its readings, or a motion
    * sensor's, which says whether it sees motion, or a contact
    * sensor's, which says whether what it sits on is open. A media
-   * player's plays or pauses with its round button. An unknown
+   * player's plays or pauses with its round button. A microphone tile
+   * opens the speaker's Microphones page. An unknown
    * device's, one for a device with nothing Sanctum can use, says what its
    * driver calls it; its `capabilityId` is empty.
    */
@@ -29,6 +30,7 @@ export type Tile = {
     | "motion"
     | "contact"
     | "media"
+    | "audio"
     | "unknown";
   /** The room it is in, or null when it is in none the home has. */
   roomId: string | null;

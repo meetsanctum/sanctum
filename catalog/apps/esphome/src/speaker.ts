@@ -40,9 +40,10 @@ export type Ring = {
 export type SpeakerChange = { ring: Partial<Ring> };
 
 /** A smart speaker's own parts, or null for a device that isn't one. */
-export function speakerPartsOf(
-  session: Pick<Session, "info" | "entities">,
-): SpeakerParts | null {
+export function speakerPartsOf(session: {
+  info: Pick<Session["info"], "voiceAssistantFeatureFlags">;
+  entities: readonly Entity[];
+}): SpeakerParts | null {
   if (!hasVoiceAssistant(session.info)) return null;
   const own = (type: string, objectId: string) =>
     session.entities.find(

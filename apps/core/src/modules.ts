@@ -305,6 +305,7 @@ export async function createModules(
     hiddenDrivers: () => removedApps.ids(),
     deliver: (driver, command, actor) => apps.deliver(driver, command, actor),
     driverRun: (driver) => apps.driverRun(driver),
+    appGrants: (app) => apps.holds(app)?.granted,
     removeFromDriver: (driver, removal, actor, hold) =>
       apps.removeDevice(driver, removal, actor, hold),
     endAsking: (device, actor, hold) =>

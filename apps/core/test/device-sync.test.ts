@@ -289,6 +289,22 @@ describe("a report", () => {
     });
   });
 
+  it("waits for a mute reading when the microphones report only a wake word", () => {
+    const microphones: CapabilitySync = {
+      kind: "audio",
+      features: { mutes: true },
+      observed: { muted: false },
+      desired: { muted: true },
+      sync: "pending",
+    };
+
+    expect(
+      reconcile(microphones, { heardAt: "2026-11-24T09:05:00.000Z" }),
+    ).toMatchObject({ sync: "pending", desired: { muted: true } });
+    expect(reconcile(microphones, { muted: false }).sync).toBe("pending");
+    expect(reconcile(microphones, { muted: true }).sync).toBe("synced");
+  });
+
   it("keeps a command pending while the device is on its way", () => {
     expect(reconcile(pending, { on: true, brightness: 70 })).toEqual({
       desired: pending.desired,

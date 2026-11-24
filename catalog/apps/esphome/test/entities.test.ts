@@ -1,7 +1,9 @@
+import { maxDeviceCapabilities } from "@meetsanctum/app-sdk";
 import { ColorMode, EntityCategory, type Entity } from "esphome-client";
 import { describe, expect, it } from "vitest";
 
 import { capabilityIdOf, mapEntities } from "../src/entities.js";
+import { describeSession } from "../src/session-details.js";
 import { lightCommandOf, stateOf } from "../src/states.js";
 
 // What ESPHome's entities are in Sanctum, and how their states and
@@ -11,6 +13,24 @@ const entity = (fields: Record<string, unknown>) =>
   ({ key: 1, name: "Part", objectId: "part", ...fields }) as unknown as Entity;
 
 describe("a device's entities", () => {
+  it("keeps playback and microphones when a speaker fills the capability list", () => {
+    const switches = Array.from(
+      { length: maxDeviceCapabilities - 1 },
+      (_, index) =>
+        entity({ type: "switch", key: index + 1, objectId: `switch_${index}` }),
+    );
+    const player = entity({ type: "media_player", key: maxDeviceCapabilities });
+    const { mapping } = describeSession({
+      info: { voiceAssistantFeatureFlags: 1 },
+      entities: [...switches, player],
+    });
+
+    expect(mapping.mapped).toHaveLength(maxDeviceCapabilities);
+    expect(mapping.mapped.map(({ capability }) => capability.kind)).toEqual(
+      expect.arrayContaining(["audio", "media"]),
+    );
+    expect(mapping.unused).toEqual([switches.at(-1)]);
+  });
   it("map onto Sanctum's kinds where they are one, and the rest are listed by name", () => {
     const { mapped, unused } = mapEntities([
       entity({

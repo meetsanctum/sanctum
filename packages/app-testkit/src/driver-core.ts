@@ -91,6 +91,7 @@ export function createDriverCore(
     services?: Record<string, ServiceConnection>;
     // Calls the core doesn't answer, failing as when it can't be reached.
     unanswered?: (keyof CoreCalls)[];
+    beforeReport?: (report: Reported) => void;
     // The app's migrations, for its own database.
     migrationsFolder?: string;
   } = {},
@@ -295,13 +296,15 @@ export function createDriverCore(
         }
         checked[id] = observed.data as Record<string, unknown>;
       }
-      reports.push({
+      const report = {
         key,
         ...(said ? { availability: said } : {}),
         states: checked,
         ...(battery === undefined ? {} : { battery }),
         ...(batteryLow === undefined ? {} : { batteryLow }),
-      });
+      };
+      options.beforeReport?.(report);
+      reports.push(report);
       if (said) availability.set(key, said);
     },
     async press(input) {

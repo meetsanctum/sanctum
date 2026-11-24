@@ -59,7 +59,7 @@ const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
   audio: ["See your smart speakers' microphones", "mic"],
 };
 
-const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
+const controls: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
   light: ["Control your lights", "lightbulb"],
   switch: ["Control your switches", "toggle-right"],
   button: ["Use your remotes", "circle-dot"],
@@ -67,7 +67,11 @@ const controls: Record<CapabilityKind, [string, PermissionIcon]> = {
   motion: ["Change your motion sensors", "activity"],
   contact: ["Change your contact sensors", "door-closed"],
   media: ["Control your media players", "tv"],
-  audio: ["Mute your smart speakers' microphones", "mic"],
+  audio: [
+    "Mute and turn on your smart speakers' microphones",
+    "mic",
+    "See whether the microphones are muted and when they last heard their wake word",
+  ],
 };
 
 // The services the manager runs, by the names their makers give them.
