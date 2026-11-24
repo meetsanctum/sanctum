@@ -348,12 +348,25 @@ describe("Reduce effects in the built CSS", () => {
     );
   });
 
-  it("draws nothing of the screen behind an open overlay", () => {
-    expect(
-      css.match(
-        /\[data-effects=reduced\] \.home-screen\[data-covered\]>:is\(([^)]*)\)\{visibility:hidden\}/,
-      )?.[1],
-    ).toBe(".frame,.frame-top,.sidebar-column,.panel");
+  it("keeps the screen behind an overlay drawn, so closing shows it at once", () => {
+    const coveredScreen =
+      /\.home-screen(?:\[[^\]]*\])*\[data-covered(?:="")?\]/;
+    const shellPart =
+      /\.(?:home-screen|frame(?:-top|-neutral|-place|-under-glass)?|sidebar-column|panel)(?![\w-])/;
+    const hiddenShell = rules
+      .filter(({ declarations }) =>
+        declarations.some((declaration) =>
+          /^visibility:\s*hidden(?:\s*!important)?$/i.test(declaration),
+        ),
+      )
+      .flatMap(({ selectors }) => selectors)
+      .filter((selector) => {
+        // Only the last compound targets the element itself. Keep :is() together.
+        const target = selector.split(/[\s>+~]+(?![^()]*\))/).at(-1) ?? "";
+        return coveredScreen.test(selector) && shellPart.test(target);
+      });
+
+    expect(hiddenShell).toEqual([]);
   });
 
   it("cuts the top fade hard, down to the page's top edge", () => {

@@ -22,9 +22,10 @@ import { KnotLoader } from "./knot-loader";
 // screen: a veil, and an overlay such as a device's detail or Add devices
 // (src/overlay.tsx), which renders it too. Over a White page it is deeper
 // (src/shell-frame.css). Under Reduce effects, which takes its blur away, it
-// is solid Carbon, and the page behind is hidden. It may take a colour (`tint`), such as what a media
-// player plays, laid over its Carbon so the glass turns towards it without
-// ceasing to be the veil.
+// is solid Carbon. The page behind stays drawn so its sidebar and buttons
+// appear as soon as an overlay closes. The glass may take a colour (`tint`),
+// such as what a media player plays, laid over its Carbon so the glass turns
+// towards it without ceasing to be the veil.
 export function VeilGlass({
   className,
   tint,
