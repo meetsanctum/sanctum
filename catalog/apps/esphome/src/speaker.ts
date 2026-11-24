@@ -87,6 +87,31 @@ export function mutedOf({ client }: Session, { mute }: SpeakerParts) {
   return switches ? switches.state === true : null;
 }
 
+export async function muteCommand(
+  { client }: Session,
+  mute: Entity,
+  muted: boolean,
+) {
+  const id = entityId("switch", mute.objectId);
+  if (muted) {
+    client.command(id, { state: true });
+    return;
+  }
+  try {
+    await client.commandAndAwait(
+      id,
+      { state: false },
+      { predicate: (event) => event.state === false, timeoutMs: 2_000 },
+    );
+  } catch (error) {
+    // A silent unmute may still take effect. Let the core keep waiting for
+    // the report, and pass through errors from the connection or the send.
+    if (!(error instanceof DOMException && error.name === "TimeoutError")) {
+      throw error;
+    }
+  }
+}
+
 /**
  * Its microphones as the core has them: whether they're muted, where it
  * has said, and when it last heard its wake word.

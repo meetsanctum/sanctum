@@ -117,12 +117,13 @@ word. It never carries what the microphones hear.
 - **Mutes:** whether Sanctum can mute and unmute them.
 - **Mute switch:** whether the device has a mute switch of its own, as the
   Home Assistant Voice PE has on its side. That switch mutes them too, and
-  while it's on, only it turns them back on: an unmute is refused, and
-  the button shakes red and stays muted.
+  while it's on, only it turns them back on. If the speaker doesn't confirm
+  an unmute, the button shakes red and stays muted.
 
 Muting and unmuting wait for the device to say it did them. History keeps
-nothing of its microphones. A smart speaker's Volume page has a button for
-them beside its mute, where Sanctum can mute them.
+nothing of its microphones. Where Sanctum can mute its microphones, a smart
+speaker has a button for them on Volume or on a Microphones page if it has
+no Volume page.
 
 ## Button
 

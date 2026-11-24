@@ -1,3 +1,4 @@
+import { ConnectionLostError } from "esphome-client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { SpeakerState } from "../src/speaker.js";
@@ -88,16 +89,14 @@ describe("a smart speaker's page", () => {
     await home.core.until(() => audio()?.muted === false, "unmuted");
   });
 
-  it("refuses an unmute its side switch holds, without waiting for the core", async () => {
+  it("leaves confirmation to the core when the side switch holds the microphones and the speaker stays silent", async () => {
     const { device, audio, mute } = await addedSpeaker();
-    device.held.set(203, { state: true });
+    device.silent.add(203);
     device.setState(203, { state: true });
     await home.core.until(() => audio()?.muted === true, "muted by its side");
 
     const commands = device.commands.length;
-    const started = Date.now();
-    await expect(mute(false)).rejects.toMatchObject({ code: "conflict" });
-    expect(Date.now() - started).toBeLessThan(4_000);
+    await mute(false);
     expect(
       device.commands
         .slice(commands)
@@ -105,18 +104,45 @@ describe("a smart speaker's page", () => {
           (command) => command.key === 203 && command.fields.state === false,
         ),
     ).toBe(true);
+    expect(device.states[203]).toMatchObject({ state: true });
     expect(audio()?.muted).toBe(true);
   });
 
-  it("unmutes at once when nothing holds it", async () => {
-    const { audio, mute } = await addedSpeaker();
+  it("waits for the speaker to confirm unmute", async () => {
+    const { device, audio, mute } = await addedSpeaker();
     await mute(true);
     await home.core.until(() => audio()?.muted === true, "muted");
 
-    const started = Date.now();
-    await mute(false);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    device.silent.add(203);
+    let settled = false;
+    const write = mute(false).finally(() => {
+      settled = true;
+    });
+    await home.core.until(
+      () => device.commands.at(-1)?.fields.state === false,
+      "unmute sent",
+    );
+    expect(settled).toBe(false);
+    device.setState(203, { state: false });
+    await write;
     await home.core.until(() => audio()?.muted === false, "unmuted");
+  });
+
+  it("reports a lost connection during unmute as a delivery error", async () => {
+    const { device, audio, mute } = await addedSpeaker();
+    await mute(true);
+    await home.core.until(() => audio()?.muted === true, "muted");
+
+    device.silent.add(203);
+    const result = expect(mute(false)).rejects.toBeInstanceOf(
+      ConnectionLostError,
+    );
+    await home.core.until(
+      () => device.commands.at(-1)?.fields.state === false,
+      "unmute sent",
+    );
+    device.reboot();
+    await result;
   });
 
   it("changes its ring's glow, colour and brightness, each alone", async () => {

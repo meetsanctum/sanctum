@@ -18,6 +18,7 @@ import {
   Blocks,
   Footprints,
   House,
+  Mic,
   Play,
   Sun,
   Thermometer,
@@ -44,6 +45,7 @@ import {
   MediaPlaying,
   MediaRemote,
   MediaVolume,
+  MicrophonesToggle,
   missingArtworkTint,
   RemoteIcon,
 } from "./media-detail";
@@ -308,6 +310,39 @@ export function DeviceDetail(props: {
       onCommand: (command: MediaCommand) =>
         void devices.command(playerTile, command).catch(() => undefined),
     };
+  const hasVolume =
+    mediaProps &&
+    !mediaProps.capability.features.power &&
+    (mediaProps.capability.features.volume !== null ||
+      mediaProps.capability.features.mute);
+  const audio = device?.capabilities.find(
+    (each) =>
+      each.kind === "audio" &&
+      each.features.mutes &&
+      each.observed?.muted !== undefined,
+  );
+  const microphones = device && audio?.kind === "audio" && (
+    <MicrophonesToggle
+      key={tileKey(device.id, audio.id)}
+      name={mediaProps ? mediaProps.name : device.name}
+      muted={audio.observed?.muted === true}
+      disabled={device.availability === "offline" || audio.sync === "pending"}
+      failures={devices.failures.get(tileKey(device.id, audio.id))}
+      onMute={(muted) =>
+        void devices
+          .command(
+            {
+              key: tileKey(device.id, audio.id),
+              deviceId: device.id,
+              capabilityId: audio.id,
+              kind: "audio",
+            },
+            { muted },
+          )
+          .catch(() => undefined)
+      }
+    />
+  );
   // Every page after its controls'.
   const after = device
     ? [
@@ -338,8 +373,7 @@ export function DeviceDetail(props: {
                       content: <MediaRemote {...mediaProps} />,
                     },
                   ]
-                : mediaProps.capability.features.volume !== null ||
-                    mediaProps.capability.features.mute
+                : hasVolume
                   ? [
                       {
                         id: "volume",
@@ -349,11 +383,26 @@ export function DeviceDetail(props: {
                           <MediaVolume
                             key={`${device.id}/volume`}
                             {...mediaProps}
+                            microphones={microphones}
                           />
                         ),
                       },
                     ]
                   : []),
+            ]
+          : []),
+        ...(!hasVolume && microphones
+          ? [
+              {
+                id: "microphones",
+                label: "Microphones",
+                icon: Mic,
+                content: (
+                  <div className="mt-4 flex flex-col items-center gap-5">
+                    {microphones}
+                  </div>
+                ),
+              },
             ]
           : []),
         ...(motion

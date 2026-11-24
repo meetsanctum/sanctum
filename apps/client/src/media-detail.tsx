@@ -1,9 +1,4 @@
-import type {
-  AudioCommand,
-  CapabilityInfo,
-  DeviceInfo,
-  MediaCommand,
-} from "@meetsanctum/app-sdk";
+import type { DeviceInfo, MediaCommand } from "@meetsanctum/app-sdk";
 import { Button, LevelSlider, useShowFailed } from "@meetsanctum/ui-sdk";
 import {
   createLucideIcon,
@@ -29,7 +24,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { coreJson } from "./core-fetch";
 import { canPlayPause, isPlaying, type Media } from "./media";
 
 // A media player's pages in its detail, on the veil's glass with no card:
@@ -499,9 +493,10 @@ function Toggle(props: {
   onClick: () => void;
   /** Taps that didn't work, each shown once: a red wash and a shake. */
   failures?: number;
+  onFailed?: () => void;
   children: ReactNode;
 }) {
-  const { surface, wash } = useShowFailed(props.failures);
+  const { surface, wash } = useShowFailed(props.failures, props.onFailed);
   return (
     <Button
       ref={surface}
@@ -511,7 +506,7 @@ function Toggle(props: {
       aria-pressed={props.pressed}
       disabled={props.disabled}
       onClick={props.onClick}
-      className="relative overflow-hidden"
+      className="relative"
     >
       <span
         ref={wash}
@@ -631,38 +626,35 @@ export function MediaRemote(props: Props) {
   );
 }
 
-type Microphones = Extract<CapabilityInfo, { kind: "audio" }>;
-
-// A smart speaker's microphones' mute, beside its sound's, through core
-// Devices as any command goes. It shows what the speaker last said, and
-// waits while a change is on its way. A change that doesn't work, such as
-// an unmute its own switch on its side holds, shakes it red and leaves it
-// as it was.
-function MicrophonesToggle(props: {
+// Microphone mute shows what the speaker last reported while a change is
+// on its way. A failed change shakes the button and announces the failure.
+export function MicrophonesToggle(props: {
   name: string;
-  device: DeviceInfo;
-  capability: Microphones;
+  muted: boolean;
   disabled: boolean;
+  failures?: number;
+  onMute: (muted: boolean) => void;
 }) {
-  const { device, capability } = props;
-  const muted = capability.observed?.muted === true;
-  const [failures, setFailures] = useState(0);
+  const { muted } = props;
+  const [announcement, setAnnouncement] = useState(0);
   return (
-    <Toggle
-      label={`Mute ${props.name}'s microphones`}
-      pressed={muted}
-      disabled={props.disabled || capability.sync === "pending"}
-      failures={failures}
-      onClick={() => {
-        const command: AudioCommand = { muted: !muted };
-        void coreJson("/api/devices/command", {
-          method: "POST",
-          json: { device: device.id, capability: capability.id, command },
-        }).catch(() => setFailures((count) => count + 1));
-      }}
-    >
-      {muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
-    </Toggle>
+    <>
+      <Toggle
+        label={`Mute ${props.name}'s microphones`}
+        pressed={muted}
+        disabled={props.disabled}
+        failures={props.failures}
+        onFailed={() => setAnnouncement((count) => count + 1)}
+        onClick={() => props.onMute(!muted)}
+      >
+        {muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+      </Toggle>
+      <span role="alert" className="sr-only">
+        {announcement > 0 && (
+          <span key={announcement}>Couldn't change the microphone mute.</span>
+        )}
+      </span>
+    </>
   );
 }
 
@@ -671,15 +663,9 @@ function MicrophonesToggle(props: {
  * mute beside it where Sanctum can mute them, above its level, as Remote is
  * laid out.
  */
-export function MediaVolume(props: Props) {
-  const { capability, onCommand } = props;
+export function MediaVolume(props: Props & { microphones?: ReactNode }) {
+  const { capability, microphones, onCommand } = props;
   const muted = capability.state?.muted === true;
-  const microphones = props.device.capabilities.find(
-    (each): each is Microphones =>
-      each.kind === "audio" &&
-      each.features.mutes &&
-      each.observed?.muted !== undefined,
-  );
   return (
     <div className="mt-4 flex flex-col items-center gap-5">
       {(capability.features.mute || microphones) && (
@@ -698,14 +684,7 @@ export function MediaVolume(props: Props) {
               )}
             </Toggle>
           )}
-          {microphones && (
-            <MicrophonesToggle
-              name={props.name}
-              device={props.device}
-              capability={microphones}
-              disabled={props.disabled}
-            />
-          )}
+          {microphones}
         </div>
       )}
       {capability.features.volume === "level" ? (

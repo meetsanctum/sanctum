@@ -11,7 +11,7 @@ import {
   type DriverRepairResult,
   type DriverRemoval,
 } from "@meetsanctum/app-sdk";
-import { entityId, type Entity } from "esphome-client";
+import { entityId } from "esphome-client";
 
 import {
   connectOnce,
@@ -41,6 +41,7 @@ import { connectionFactsOf, describeSession } from "./session-details.js";
 import { lightCommandOf, mediaCommandOf } from "./states.js";
 import {
   changeSpeaker,
+  muteCommand,
   speakerStateOf,
   type SpeakerChange,
   type SpeakerState,
@@ -54,8 +55,6 @@ import {
 
 export type DriverOptions = {
   timings?: Partial<Timings>;
-  /** How long an unmute waits to show before its side switch is taken to hold it. */
-  unmuteMs?: number;
 };
 
 // A Noise key as ESPHome writes it: 32 bytes in base64.
@@ -313,34 +312,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
     if (session) owned.connection.adopt(session);
     else owned.connection.start();
     return owned;
-  }
-
-  // A smart speaker's Mute switch: on mutes the microphones. Its side switch
-  // holds it on, which the speaker keeps to itself: an unmute then changes
-  // nothing and it says nothing. An unmute it takes shows within moments, so
-  // one that hasn't shown by then is refused at once, rather than waiting
-  // out the core's confirmation.
-  async function muteCommand(session: Session, mute: Entity, muted: boolean) {
-    const id = entityId("switch", mute.objectId);
-    if (muted) {
-      session.client.command(id, { state: true });
-      return;
-    }
-    try {
-      await session.client.commandAndAwait(
-        id,
-        { state: false },
-        {
-          predicate: (event) => event.state !== true,
-          timeoutMs: options.unmuteMs ?? 2_000,
-        },
-      );
-    } catch (error) {
-      if (session.client.latest(id)?.state === true) {
-        throw new ActionError("conflict", "Still muted by its side switch");
-      }
-      throw error;
-    }
   }
 
   // Says a device's problem, as it stands when it's said, until the core
