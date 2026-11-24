@@ -41,8 +41,9 @@ setup, the commands and the layout; these notes are the rules.
 
 - Apps depend only on `@meetsanctum/app-sdk` and `@meetsanctum/ui-sdk` plus
   plain libraries — never on `apps/*` or other `catalog/*` packages.
-- Apps never call or subscribe to other apps. Cooperation goes through
-  workflows and standard intents.
+- Apps never call or subscribe to other apps, except through `ctx.ai`, as an
+  AI agent, for someone in the home who opened a turn. Cooperation goes
+  through workflows and standard intents.
 - Shared nouns (people, places and where the home is, devices) belong to the
   core, not to an app. Weather and natural light are apps. So do the pages
   that show places and devices: the sidebar and room and category pages are

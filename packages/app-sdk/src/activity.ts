@@ -51,6 +51,15 @@ export type ActivityWho =
         id: string;
         name: string | null;
       } | null;
+      /**
+       * For an app acting as the household's AI assistant, the person or
+       * shared device it acted for, in place of who added it.
+       */
+      askedBy?: {
+        kind: "person" | "client";
+        id: string;
+        name: string | null;
+      };
     }
   | { kind: "device" }
   | { kind: "sanctum" }

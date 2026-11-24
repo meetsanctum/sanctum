@@ -1,6 +1,7 @@
 import type { PermissionIcon } from "@meetsanctum/app-sdk";
 import {
   Activity,
+  Bot,
   CircleDot,
   DoorClosed,
   Globe,
@@ -47,4 +48,5 @@ export const permissionIconOf: Record<PermissionIcon, LucideIcon> = {
   tv: Tv,
   sparkles: Sparkles,
   mic: Mic,
+  bot: Bot,
 };

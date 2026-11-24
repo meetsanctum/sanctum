@@ -137,7 +137,19 @@ export function createAgentTools(options: AgentToolsOptions) {
     }
   }
 
-  function overview(agent: AgentCaller): HomeOverview {
+  // What AI agents can use, leaving out an assistant app's own offers: it
+  // never lists or calls itself.
+  function canUseApart(apart: string | undefined): AiCanUse {
+    const canUse = options.canUse();
+    return apart === undefined
+      ? canUse
+      : {
+          ...canUse,
+          offers: canUse.offers.filter((offer) => offer.app !== apart),
+        };
+  }
+
+  function overview(agent: AgentCaller, canUse: AiCanUse): HomeOverview {
     const places = options.places();
     const kinds = options.readableDeviceKinds();
     return {
@@ -147,14 +159,15 @@ export function createAgentTools(options: AgentToolsOptions) {
       rooms: places.rooms,
       zones: places.zones,
       devices: options.devices.list({ kinds }).map(overviewDevice),
-      notAllowed: notAllowedOf(options.canUse(), apps.name),
+      notAllowed: notAllowedOf(canUse, apps.name),
       notForAgents,
     };
   }
 
   return {
-    list(): Tool[] {
-      const canUse = options.canUse();
+    /** The tools, without an assistant app's own when it is `apart`. */
+    list(within: { apart?: string } = {}): Tool[] {
+      const canUse = canUseApart(within.apart);
       const tools = [overviewTool];
       tools.push(...options.core.list(canUse));
       for (const [name, offer] of namedActions(canUse.offers)) {
@@ -176,19 +189,21 @@ export function createAgentTools(options: AgentToolsOptions) {
 
     /**
      * Runs one tool for an agent. Undefined for a tool that isn't there,
-     * which the endpoint answers as the protocol's unknown tool.
+     * which the endpoint answers as the protocol's unknown tool, as it
+     * does an assistant app's own.
      */
     async call(
       agent: AgentCaller,
       name: string,
       input: Record<string, unknown> | undefined,
+      within: { apart?: string } = {},
     ): Promise<CallToolResult | undefined> {
+      const canUse = canUseApart(within.apart);
       if (name === overviewTool.name) {
         return input !== undefined && Object.keys(input).length > 0
           ? toolError("invalid_input", "The home overview takes no input.")
-          : answer(overview(agent));
+          : answer(overview(agent, canUse));
       }
-      const canUse = options.canUse();
       const coreResult = await options.core.call(
         name,
         agent,

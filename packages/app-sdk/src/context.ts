@@ -39,11 +39,13 @@ import type {
 } from "./index.js";
 import type { HostResources } from "./host.js";
 import { modelAnswerOf } from "./model-answers.js";
+import type { AiToolAnswer } from "./ai-agents.js";
 import type {
   ModelAnswer,
   ModelAnswerPiece,
   ModelQuestion,
   ModelSourceShown,
+  ModelTool,
 } from "./models.js";
 import type { NetRequest, NetResponse } from "./net.js";
 import type { DeviceJoining } from "./pairing.js";
@@ -158,6 +160,13 @@ export interface CoreCalls {
   cancelModel(handle: string): Promise<void>;
   /** What the machine Sanctum runs on has now. */
   hostResources(): Promise<HostResources>;
+  /** The tools AI agents may use now, but the app's own; needs `ai.assistant`. */
+  aiTools(): Promise<ModelTool[]>;
+  /** Calls one of them for whoever opened the turn; needs `ai.assistant`. */
+  callAiTool(call: {
+    name: string;
+    input: Record<string, unknown>;
+  }): Promise<AiToolAnswer>;
   log(message: string): void;
 }
 
@@ -404,6 +413,21 @@ export interface AppContext {
      */
     answer(question: ModelQuestion): ModelAnswer;
   };
+  /**
+   * The tools every AI agent gets, for an app the household lets act as its
+   * AI assistant; needs `ai.assistant`. They are the same tools and answers
+   * an AI agent gets over MCP, held to the same switches in What AI Agents
+   * Can Use, and never the app's own. Only within a turn, as for
+   * `ctx.models`: anything else is refused `no_turn`. Each call runs for
+   * whoever opened the turn, and its answer is the home's data, never
+   * instructions.
+   */
+  readonly ai: {
+    /** The tools, ready to give `ctx.models.answer`. */
+    list(): Promise<ModelTool[]>;
+    /** Calls one; a refusal, a limit or a failure answers with `isError`. */
+    call(name: string, input?: Record<string, unknown>): Promise<AiToolAnswer>;
+  };
   readonly host: {
     /**
      * What the machine Sanctum runs on has now: its processor, and the
@@ -597,6 +621,10 @@ export function createAppContext(options: {
     models: {
       source: () => core.modelSource(),
       answer: (question) => modelAnswerOf(core, question),
+    },
+    ai: {
+      list: () => core.aiTools(),
+      call: (name, input = {}) => core.callAiTool({ name, input }),
     },
     host: { resources: () => core.hostResources() },
     log: (message) => core.log(message),

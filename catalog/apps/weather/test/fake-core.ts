@@ -71,6 +71,8 @@ export function fakeCore(app: AppDefinition) {
     readModel: absent,
     cancelModel: absent,
     hostResources: absent,
+    aiTools: absent,
+    callAiTool: absent,
     entities: absent,
     emit: absent,
     follow: async () => undefined,

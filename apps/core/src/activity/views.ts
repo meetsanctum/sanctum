@@ -8,6 +8,7 @@ import type {
   ActivityWho,
 } from "@meetsanctum/app-sdk";
 
+import { assistantOf } from "../agents/assistants.js";
 import type { Activity, ActivityEntry } from "./activity.js";
 
 // How clients see an entry of the activity log: who did it, found at the
@@ -158,21 +159,32 @@ export function createActivityViews(
         };
       case "app":
         return { kind: "app", id: actor.id, name: lookups.app(actor.id) };
-      case "assistant-run":
-        return {
-          kind: "agent",
-          id: actor.id,
-          name: origin.clientName,
-          // Who added it, by their name now, or as it was while they're gone.
-          addedBy: origin.agentAddedBy && {
-            ...origin.agentAddedBy,
-            name:
-              (origin.agentAddedBy.kind === "person"
-                ? lookups.person(origin.agentAddedBy.id)?.name
-                : lookups.client(origin.agentAddedBy.id)) ??
-              origin.agentAddedBy.name,
-          },
+      case "assistant-run": {
+        // Who added it, or for an assistant app who asked, by their name
+        // now, or as it was while they're gone.
+        const named = origin.agentAddedBy && {
+          ...origin.agentAddedBy,
+          name:
+            (origin.agentAddedBy.kind === "person"
+              ? lookups.person(origin.agentAddedBy.id)?.name
+              : lookups.client(origin.agentAddedBy.id)) ??
+            origin.agentAddedBy.name,
         };
+        return assistantOf(actor.id)
+          ? {
+              kind: "agent",
+              id: actor.id,
+              name: origin.clientName,
+              addedBy: null,
+              ...(named ? { askedBy: named } : {}),
+            }
+          : {
+              kind: "agent",
+              id: actor.id,
+              name: origin.clientName,
+              addedBy: named,
+            };
+      }
       case "device":
         return { kind: "device" };
       case "sanctum":

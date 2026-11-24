@@ -8,13 +8,10 @@ import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
 
 import { registerActivityRoutes } from "./activity/routes.js";
-import { createAgentChanges } from "./agents/changes.js";
-import { createCoreTools } from "./agents/core-tools.js";
 import { createAgentLimiter } from "./agents/limits.js";
 import { registerMcpRoute } from "./agents/mcp.js";
 import { registerAgentRoutes } from "./agents/routes.js";
 import { registerModelRoutes } from "./models/routes.js";
-import { createAgentTools } from "./agents/tools.js";
 import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
 import { registerAppRoutes } from "./app-host/routes.js";
@@ -66,6 +63,7 @@ export function createServer(
     | "activity"
     | "activityViews"
     | "agentsCanUse"
+    | "agentTools"
     | "logAgentLimited"
     | "models"
     | "apps"
@@ -214,35 +212,7 @@ export function createServer(
       registerAgentRoutes(core, { canUse: options.agentsCanUse, gate });
       registerModelRoutes(core, { models: options.models, gate });
       registerMcpRoute(core, {
-        tools: createAgentTools({
-          canUse: () => options.agentsCanUse.list(),
-          core: createCoreTools({
-            readableDeviceKinds: () =>
-              options.agentsCanUse.readableDeviceKinds(),
-            appName: (appId) => options.apps.manifest(appId)?.name,
-            devices,
-            lights,
-            changes: createAgentChanges({
-              isActiveAgent: (id) => auth.clients.isActiveAgent(id),
-              now: options.now,
-            }),
-            entities: options.entities,
-            activity,
-            activityViews: options.activityViews,
-            history: options.history,
-            now: options.now,
-            record: activity.for("agents"),
-            agentWho: (id) => activity.agentWho(id),
-          }),
-          readableDeviceKinds: () => options.agentsCanUse.readableDeviceKinds(),
-          places: () => places.list(),
-          devices,
-          apps: {
-            name: (appId) => options.apps.manifest(appId)?.name,
-            action: (appId, actionId) => options.apps.action(appId, actionId),
-            call: (request) => options.apps.call(request),
-          },
-        }),
+        tools: options.agentTools,
         limiter: createAgentLimiter(),
         logLimited: options.logAgentLimited,
         duringCall: (callId, work) => activity.duringCall(callId, work),

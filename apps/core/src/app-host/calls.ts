@@ -1,4 +1,5 @@
 import {
+  aiAssistantPermission,
   blobOf,
   ActionError,
   actionErrorCodes,
@@ -27,6 +28,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
+import type { AssistantCalls, TurnOpener } from "../agents/assistants.js";
 import type { AgentsCanUse } from "../agents/can-use.js";
 import type { Claims } from "./commits.js";
 import { issuesText, type DeclaredEntityType } from "./contract.js";
@@ -45,6 +47,15 @@ import type { Turn } from "../models/turns.js";
 import type { NetFetch, NetHolds } from "./net.js";
 import type { Blobs } from "../blobs/blobs.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
+
+// An assistant app's call of a tool, from its untrusted socket.
+const aiToolCall = z.strictObject({
+  name: z.string().min(1).max(128),
+  input: z.record(z.string(), z.unknown()),
+});
+
+const isTurnOpener = (actor: Actor): actor is TurnOpener =>
+  actor.kind === "user" || actor.kind === "client";
 
 // The calls an app makes into the core, for one app and one actor. Two
 // checks always apply: the app must hold the permission, and the actor must
@@ -193,6 +204,8 @@ export function createCoreCalls(options: {
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model, and the turn this call opened, if it opened one.
   models: { source: () => ModelSourceShown | null; turn?: Turn };
+  // The tools an assistant app calls, within the turn this call opened.
+  assistant: AssistantCalls;
   // What the machine Sanctum runs on has now.
   host: () => Promise<HostResources>;
   log: (message: string) => void;
@@ -609,6 +622,35 @@ export function createCoreCalls(options: {
       const { turn } = options.models;
       if (!turn) throw new ActionError("no_turn");
       turn.cancel(handle);
+    },
+
+    // An assistant app's tools, as for an AI agent acting for whoever opened
+    // the turn: a person or a shared device, the only callers that open one.
+    async aiTools() {
+      need(aiAssistantPermission);
+      if (!options.models.turn || !isTurnOpener(actor)) {
+        throw new ActionError("no_turn");
+      }
+      return options.assistant.list(appId);
+    },
+
+    async callAiTool(call) {
+      need(aiAssistantPermission);
+      if (!options.models.turn || !isTurnOpener(actor)) {
+        throw new ActionError("no_turn");
+      }
+      const parsed = aiToolCall.safeParse(call);
+      if (!parsed.success) {
+        throw new Error("A tool's call is its name and an input object");
+      }
+      const answer = await options.assistant.call(
+        appId,
+        actor,
+        parsed.data.name,
+        parsed.data.input,
+      );
+      need(aiAssistantPermission);
+      return answer;
     },
 
     log: options.log,

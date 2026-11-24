@@ -1,10 +1,12 @@
 import {
+  aiAssistantPermission,
   answersTo,
   modelsUsePermission,
   shownQuestions,
   sunTimesSchema,
   sunType,
 } from "@meetsanctum/app-sdk";
+import { randomUUID } from "node:crypto";
 
 import { createActivity } from "./activity/activity.js";
 import {
@@ -12,10 +14,15 @@ import {
   type ManagerAudit,
 } from "./activity/manager-audit.js";
 import { createActivityViews } from "./activity/views.js";
+import { assistantOf, createAssistantCalls } from "./agents/assistants.js";
 import { createAgentsCanUse } from "./agents/can-use.js";
+import { createAgentChanges } from "./agents/changes.js";
+import { createCoreTools } from "./agents/core-tools.js";
+import { createAgentTools, type AgentTools } from "./agents/tools.js";
 import { createBlobs } from "./blobs/blobs.js";
 import {
   createAgentCommandLimiter,
+  createAgentLimiter,
   createLimitedLog,
   type AgentCommandLimits,
 } from "./agents/limits.js";
@@ -254,22 +261,38 @@ export async function createModules(
     options.agentCommandLimits,
     ticks,
   );
+  // Assistant apps' commands and calls count in a home pool of their own,
+  // so a script looping on a computer never silences the household's
+  // assistant, nor the assistant an MCP agent.
+  const assistantCommands = createAgentCommandLimiter(
+    options.agentCommandLimits,
+    ticks,
+  );
+  const assistantLimiter = createAgentLimiter(undefined, ticks);
   const logAgentLimited = createLimitedLog({
     record: activity.for("agents"),
     agentWho: activity.agentWho,
     now: ticks,
   });
   function checkAgentCommand(agentId: string, shouldCount = true) {
-    const refusal = agentCommands.takeCommand(agentId, shouldCount);
+    const limiter = assistantOf(agentId) ? assistantCommands : agentCommands;
+    const refusal = limiter.takeCommand(agentId, shouldCount);
     if (!refusal) return;
     logAgentLimited(agentId, refusal.limited);
     throw new ActionCallError("limited");
   }
-  const gate = createGate(
-    people,
-    auth.clients.isActiveAgent,
-    agentsCanUse.areaOn,
-  );
+  // An MCP client while it's unrevoked; an assistant app while it runs and
+  // holds `ai.assistant`.
+  function isActiveAgent(id: string) {
+    const assistant = assistantOf(id);
+    if (!assistant) return auth.clients.isActiveAgent(id);
+    return (
+      apps.isRunning(assistant.appId) &&
+      (apps.holds(assistant.appId)?.granted.includes(aiAssistantPermission) ??
+        false)
+    );
+  }
+  const gate = createGate(people, isActiveAgent, agentsCanUse.areaOn);
   const live = createLiveUpdates(auth.connections, gate);
   const places = createPlaces(db, {
     record: activity.for("places"),
@@ -525,6 +548,14 @@ export async function createModules(
     gate,
     activity,
     turns,
+    assistant: createAssistantCalls({
+      tools: () => agentTools,
+      appName: (appId) => apps.manifest(appId)?.name,
+      limiter: assistantLimiter,
+      logLimited: logAgentLimited,
+      duringCall: (callId, work) => activity.duringCall(callId, work),
+      newCallId: () => randomUUID(),
+    }),
     agents: agentsCanUse,
     manager: options.manager,
     people,
@@ -675,9 +706,51 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
+  // The tools every AI agent gets: an MCP client over /api/mcp
+  // (server.ts), an assistant app through ctx.ai.
+  const agentTools: AgentTools = createAgentTools({
+    canUse: () => agentsCanUse.list(),
+    core: createCoreTools({
+      readableDeviceKinds: () => agentsCanUse.readableDeviceKinds(),
+      appName: (appId) => apps.manifest(appId)?.name,
+      devices,
+      lights,
+      changes: createAgentChanges({ isActiveAgent, now }),
+      entities,
+      activity,
+      activityViews,
+      history,
+      now,
+      record: activity.for("agents"),
+      agentWho: (id) => activity.agentWho(id),
+    }),
+    readableDeviceKinds: () => agentsCanUse.readableDeviceKinds(),
+    places: () => places.list(),
+    devices,
+    apps: {
+      name: (appId) => apps.manifest(appId)?.name,
+      action: (appId, actionId) => apps.action(appId, actionId),
+      call: (request) => apps.call(request),
+    },
+  });
+  // An assistant app goes by its name, and acts for whoever opened its turn.
   activity.nameClients({
-    name: auth.clients.name,
-    agentAdder: auth.agentAdder,
+    name: (id) => {
+      const assistant = assistantOf(id);
+      return assistant
+        ? (apps.manifest(assistant.appId)?.name ?? null)
+        : auth.clients.name(id);
+    },
+    agentAdder: (id) => {
+      const assistant = assistantOf(id);
+      if (!assistant) return auth.agentAdder(id);
+      const { who } = assistant;
+      return auth.named(
+        who.kind === "user"
+          ? { kind: "person", id: who.id }
+          : { kind: "client", id: who.id },
+      );
+    },
   });
   // Live clients hear of a committed entry and the entries it adds to.
   activity.follow((entry) => {
@@ -748,6 +821,7 @@ export async function createModules(
     blobs,
     activityViews,
     agentsCanUse,
+    agentTools,
     logAgentLimited,
     models,
     turns,

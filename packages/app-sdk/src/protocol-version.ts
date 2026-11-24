@@ -33,6 +33,8 @@
 // before would read as no port at all.
 // 19 brings smart speakers' microphones: a driver may register the `audio`
 // kind.
-export const protocolVersion = 19;
+// 20 lets an app act as the household's AI assistant: ctx.ai lists the
+// tools AI agents may use and calls them within a turn.
+export const protocolVersion = 20;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;
