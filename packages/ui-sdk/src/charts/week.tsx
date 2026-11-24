@@ -16,6 +16,7 @@ export function WeekNames(props: {
   now: number;
   plot: number;
   slot: number;
+  labelClass: string;
   today?: string;
   dayName?: (start: number) => string;
 }) {
@@ -31,7 +32,7 @@ export function WeekNames(props: {
         <span
           key={day.start}
           style={{ left: Math.round(slot * (index + 0.5)) }}
-          className="absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] text-(--pewter)"
+          className={`absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] ${props.labelClass}`}
         >
           {day.start === today ? (props.today ?? "Today") : dayName(day.start)}
         </span>

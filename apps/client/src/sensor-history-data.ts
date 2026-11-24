@@ -1,4 +1,5 @@
 import type { DeviceStatistics, HistoryStatistic } from "@meetsanctum/app-sdk";
+import type { WeekRange } from "@meetsanctum/ui-sdk/charts";
 
 import { dayMs, midnight } from "./device-history-data";
 
@@ -78,21 +79,14 @@ export function dayLine(
   };
 }
 
-/** One day of the week: its lowest and highest, or none when nothing was known. */
-export type DayRange = {
-  start: number;
-  min: number | null;
-  max: number | null;
-};
-
 /** The last 7 local days, today last, from the hourly roll-ups and what it reads now. */
 export function weekRanges(
   statistics: Pick<DeviceStatistics, "fields"> | null,
   now: number,
   current: number | null,
-): DayRange[] {
+): WeekRange[] {
   const hours: HistoryStatistic[] = statisticsOf(statistics);
-  const days: DayRange[] = [];
+  const days: WeekRange[] = [];
   for (let back = 6; back >= 0; back--) {
     const start = midnight(now, back);
     const end = midnight(now, back - 1);
@@ -103,22 +97,22 @@ export function weekRanges(
     });
     const values = own.flatMap((hour) => [hour.min, hour.max]);
     if (back === 0 && current !== null) values.push(current);
-    days.push({
-      start,
-      min: values.length ? Math.min(...values) : null,
-      max: values.length ? Math.max(...values) : null,
-    });
+    days.push(
+      values.length > 0
+        ? { start, min: Math.min(...values), max: Math.max(...values) }
+        : { start, min: null, max: null },
+    );
   }
   return days;
 }
 
 /** The lowest and highest of the week, over the days that were known. */
-export function weekRange(days: readonly DayRange[]) {
-  const known = days.filter((day) => day.min !== null && day.max !== null);
+export function weekRange(days: readonly WeekRange[]) {
+  const known = days.filter((day) => day.min !== null);
   return known.length
     ? {
-        min: Math.min(...known.map((day) => day.min!)),
-        max: Math.max(...known.map((day) => day.max!)),
+        min: Math.min(...known.map((day) => day.min)),
+        max: Math.max(...known.map((day) => day.max)),
       }
     : null;
 }

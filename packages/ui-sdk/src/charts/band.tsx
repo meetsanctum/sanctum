@@ -4,7 +4,7 @@ import { TimeTicks } from "./axis";
 import { plotClass, Readout, useWidth } from "./frame";
 import { timeText } from "./time";
 
-// A day as a band 40 px tall: what is on as White spans, what is faint as a
+// A day as a band 40 px tall: what is on as solid spans, what is faint as a
 // faint fill across the band, the rest as a hairline along its foot, and
 // nothing where nothing was known. As a whole chart it has the time every 6
 // hours under it, a readout under the pointer or the arrow keys, and the
@@ -23,15 +23,21 @@ const bandHeight = 40;
 // it is narrower than a pixel.
 const snap = 4;
 
-// The band's marks across `plot` px, the span pointed at in full White.
+// The band's marks across `plot` px, the span pointed at in full colour.
 const BandRects = memo(function BandRects(props: {
   spans: readonly BandSpan[];
   from: number;
   to: number;
   plot: number;
+  page: boolean;
   pointed?: BandSpan;
 }) {
-  const { spans, from, to, plot } = props;
+  const { spans, from, to, plot, page } = props;
+  const faint = page ? "fill-foreground/16" : "fill-white/16";
+  const faintPointed = page ? "fill-foreground/24" : "fill-white/24";
+  const off = page ? "fill-foreground/30" : "fill-white/30";
+  const on = page ? "fill-foreground/70" : "fill-white/70";
+  const onPointed = page ? "fill-foreground" : "fill-white";
   const x = (at: number) => ((at - from) / (to - from)) * plot;
   return spans.map((span) => {
     if (span.level === "unknown") return null;
@@ -47,7 +53,7 @@ const BandRects = memo(function BandRects(props: {
           y={0}
           width={fillWidth}
           height={bandHeight}
-          className={span === props.pointed ? "fill-white/24" : "fill-white/16"}
+          className={span === props.pointed ? faintPointed : faint}
         />
       );
     }
@@ -59,7 +65,7 @@ const BandRects = memo(function BandRects(props: {
           y={bandHeight - 1}
           width={Math.max(0, right - left)}
           height={1}
-          className="fill-white/30"
+          className={off}
         />
       );
     }
@@ -72,7 +78,7 @@ const BandRects = memo(function BandRects(props: {
         width={spanWidth}
         height={bandHeight}
         rx={Math.min(3, spanWidth / 2)}
-        className={span === props.pointed ? "fill-white" : "fill-white/70"}
+        className={span === props.pointed ? onPointed : on}
       />
     );
   });
@@ -86,6 +92,8 @@ export type DayBandMarksProps = {
   to: number;
   /** Its width in px; without one it measures its box. */
   width?: number;
+  /** On a device's glass, in White, or on a page, in its ink. */
+  tone?: "glass" | "page";
   /** Its box's classes, which size it: `block h-10 w-full` unless said. */
   className?: string;
 };
@@ -114,6 +122,7 @@ export function DayBandMarks(props: DayBandMarksProps) {
             from={props.from}
             to={props.to}
             plot={width}
+            page={props.tone === "page"}
           />
         )}
       </svg>
@@ -138,6 +147,8 @@ export type DayBandChartProps<Span extends BandSpan> = {
   time?: (at: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
+  /** On a device's glass, in White, or on a page, in its ink. */
+  tone?: "glass" | "page";
 };
 
 // Where the band's readout is: a span, and the pointer's place over it, or
@@ -145,14 +156,15 @@ export type DayBandChartProps<Span extends BandSpan> = {
 type Cursor = { index: number; x: number | null };
 
 /**
- * A day as a band with its hours under it. The pointer shows the span
- * under it, an on span within a few pixels before the rest; the arrow keys
- * step from span to span.
+ * A day as a band with its hours under it. The pointer shows an on span
+ * under it or within a few pixels, then any other span under it. The arrow
+ * keys step from span to span.
  */
 export function DayBandChart<Span extends BandSpan>(
   props: DayBandChartProps<Span>,
 ) {
   const { spans, from, to, text, time = timeText } = props;
+  const page = props.tone === "page";
   const about =
     props.about ??
     ((span: Span) =>
@@ -165,15 +177,16 @@ export function DayBandChart<Span extends BandSpan>(
   const pointed = index >= 0 ? spans[index] : undefined;
 
   const spanAt = (left: number) => {
+    const at = from + (left / Math.max(1, plot)) * (to - from);
+    const inside = spans.findIndex((span) => span.from <= at && at < span.to);
+    if (spans[inside]?.level === "on") return inside;
     const near = spans.findIndex(
       (span) =>
         span.level === "on" &&
         x(span.from) - snap <= left &&
         left <= x(span.to) + snap,
     );
-    if (near >= 0) return near;
-    const at = from + (left / Math.max(1, plot)) * (to - from);
-    return spans.findIndex((span) => span.from <= at && at < span.to);
+    return near >= 0 ? near : inside;
   };
   const fromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const left =
@@ -238,6 +251,7 @@ export function DayBandChart<Span extends BandSpan>(
               from={from}
               to={to}
               plot={plot}
+              page={page}
               pointed={pointed}
             />
           )}
@@ -247,7 +261,7 @@ export function DayBandChart<Span extends BandSpan>(
               y={0}
               width={1}
               height={bandHeight}
-              className="fill-white/40"
+              className={page ? "fill-foreground/40" : "fill-white/40"}
             />
           )}
         </svg>
@@ -265,7 +279,7 @@ export function DayBandChart<Span extends BandSpan>(
         to={to}
         plot={plot}
         time={time}
-        className="mt-2 text-(--pewter)"
+        className={page ? "mt-2 text-muted-foreground" : "mt-2 text-(--pewter)"}
       />
       <ul className="sr-only">
         {spans.map((span) => (

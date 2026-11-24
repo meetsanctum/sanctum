@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { frameBridge } from "../src/frame/protocol";
@@ -77,6 +78,19 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(read("charts.js")).toContain("over the last 24 hours");
     expect(read("ui-sdk.js")).not.toContain("over the last 24 hours");
     expect(importsOf("ui-sdk.js")).not.toContain("charts.js");
+  });
+
+  it("exports each public chart from the built module an app imports", async () => {
+    const charts = await import(pathToFileURL(join(dir, "charts.js")).href);
+    expect(Object.keys(charts).sort()).toEqual([
+      "DayBandChart",
+      "DayBandMarks",
+      "DayStripChart",
+      "DayTimeAxis",
+      "LineChart",
+      "WeekColumnsChart",
+      "WeekRangeChart",
+    ]);
   });
 
   it("gives a frame one React, which all its modules share", () => {

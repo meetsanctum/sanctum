@@ -30,8 +30,11 @@ const ColumnMarks = memo(function ColumnMarks(props: {
   columnWidth: number;
   top: number;
   pointed?: WeekColumn;
+  page: boolean;
 }) {
-  const { slot, columnWidth } = props;
+  const { slot, columnWidth, page } = props;
+  const fill = page ? "fill-foreground/70" : "fill-white/70";
+  const pointedFill = page ? "fill-foreground" : "fill-white";
   return props.days.map((day, index) => {
     const value = day.value ?? 0;
     if (value === 0) return null;
@@ -43,7 +46,7 @@ const ColumnMarks = memo(function ColumnMarks(props: {
       <path
         key={day.start}
         d={`M${left},${columnsHeight}V${top + radius}Q${left},${top} ${left + radius},${top}H${left + columnWidth - radius}Q${left + columnWidth},${top} ${left + columnWidth},${top + radius}V${columnsHeight}Z`}
-        className={props.pointed === day ? "fill-white" : "fill-white/70"}
+        className={props.pointed === day ? pointedFill : fill}
       />
     );
   });
@@ -77,6 +80,8 @@ export type WeekColumnsChartProps<Day extends WeekColumn> = {
   date?: (start: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
+  /** On a device's glass, in White, or on a page, in its ink. */
+  tone?: "glass" | "page";
 };
 
 /** The week as a column a day. */
@@ -84,6 +89,8 @@ export function WeekColumnsChart<Day extends WeekColumn>(
   props: WeekColumnsChartProps<Day>,
 ) {
   const { days, now, text, date = dateText } = props;
+  const page = props.tone === "page";
+  const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
   const cursor = useCursor(days.length || 1);
   const plot = Math.max(0, width - gutter);
@@ -120,13 +127,19 @@ export function WeekColumnsChart<Day extends WeekColumn>(
           height={columnsHeight}
           className="block"
         >
-          <rect x={0} y={0} width={plot} height={1} className="fill-white/8" />
+          <rect
+            x={0}
+            y={0}
+            width={plot}
+            height={1}
+            className={page ? "fill-foreground/8" : "fill-white/8"}
+          />
           <rect
             x={0}
             y={columnsHeight - 1}
             width={plot}
             height={1}
-            className="fill-white/14"
+            className={page ? "fill-foreground/14" : "fill-white/14"}
           />
           {plot > 0 && (
             <ColumnMarks
@@ -135,6 +148,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
               columnWidth={markWidth}
               top={top}
               pointed={pointed}
+              page={page}
             />
           )}
         </svg>
@@ -149,7 +163,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
       </div>
       <span
         aria-hidden="true"
-        className="absolute top-0 right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
+        className={`absolute top-0 right-0 -translate-y-1/2 text-[13px] leading-[18px] tabular-nums ${labelClass}`}
       >
         {topText(top)}
       </span>
@@ -158,6 +172,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
         now={now}
         plot={plot}
         slot={slot}
+        labelClass={labelClass}
         today={props.today}
         dayName={props.dayName}
       />

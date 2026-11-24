@@ -41,6 +41,7 @@ function marksOf(
   spans: readonly StripSpan[],
   x: (at: number) => number,
   height: number,
+  levels: boolean,
 ) {
   const layers: MarkLayer[] = [];
   let previousLeft = -1;
@@ -58,7 +59,9 @@ function marksOf(
     }
     const { level: shown, colour } = span.mark;
     const level =
-      shown === null ? height : Math.max(2, Math.round((height * shown) / 100));
+      !levels || shown === null
+        ? height
+        : Math.max(2, Math.round((height * shown) / 100));
     const each = layer.on.get(colour) ?? { fill: "", top: "" };
     each.fill += `M${left} ${height - level}h${width}v${level}h${-width}z`;
     each.top += `M${left} ${height - level}h${width}v2h${-width}z`;
@@ -137,8 +140,9 @@ export function DayStripChart<Span extends StripSpan>(
         spans,
         (at) => Math.round(((at - from) / (to - from)) * plot),
         height,
+        levels,
       ),
-    [spans, from, to, plot, height],
+    [spans, from, to, plot, height, levels],
   );
   const spanAt = (at: number) =>
     spans.find((span) => span.from <= at && at < span.to);

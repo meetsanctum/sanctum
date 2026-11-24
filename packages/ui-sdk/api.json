@@ -1,5 +1,5 @@
 {
-  "version": "0.1.24",
+  "version": "0.1.25",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2334,6 +2334,7 @@
       "    to: number;",
       "    plot: number;",
       "    withNow?: boolean;",
+      "    fractional?: boolean;",
       "    className?: string;",
       "    time?: (at: number) => string;",
       "    nowText?: string;",
@@ -2361,6 +2362,7 @@
       "    from: number;",
       "    to: number;",
       "    width?: number;",
+      "    tone?: \"glass\" | \"page\";",
       "    className?: string;",
       "};",
       "export declare function DayBandMarks(props: DayBandMarksProps): import(\"react\").JSX.Element;",
@@ -2373,34 +2375,9 @@
       "    about?: (span: Span) => string;",
       "    time?: (at: number) => string;",
       "    width?: number;",
+      "    tone?: \"glass\" | \"page\";",
       "};",
       "export declare function DayBandChart<Span extends BandSpan>(props: DayBandChartProps<Span>): import(\"react\").JSX.Element;"
-    ],
-    "charts/frame.d.ts": [
-      "import { type KeyboardEvent, type PointerEvent } from \"react\";",
-      "export declare function useWidth<Box extends HTMLElement = HTMLDivElement>(given?: number): {",
-      "    box: import(\"react\").RefObject<Box | null>;",
-      "    width: number;",
-      "};",
-      "export declare function Readout(props: {",
-      "    x: number;",
-      "    width: number;",
-      "    value: string;",
-      "    about: string;",
-      "    colour?: string;",
-      "}): import(\"react\").JSX.Element;",
-      "export declare function useCursor(steps: number, stepAt?: (x: number, width: number) => number): {",
-      "    at: number | null;",
-      "    handlers: (width: number) => {",
-      "        onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;",
-      "        onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;",
-      "        onPointerLeave: () => void;",
-      "        onFocus: () => void;",
-      "        onBlur: () => void;",
-      "        onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;",
-      "    };",
-      "};",
-      "export declare const plotClass = \"relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50\";"
     ],
     "charts/index.d.ts": [
       "export { DayBandChart, DayBandMarks, type BandLevel, type BandSpan, type DayBandChartProps, type DayBandMarksProps, } from \"./band\";",
@@ -2451,7 +2428,8 @@
       "    max: number;",
       "    lines: number[];",
       "};",
-      "export declare function scaleOf(min: number, max: number): ChartScale;"
+      "export declare function scaleOf(min: number, max: number): ChartScale;",
+      "export declare function scaleFraction({ min, max }: ChartScale, value: number): number;"
     ],
     "charts/strip.d.ts": [
       "export type StripMark = \"unknown\" | \"off\" | {",
@@ -2476,15 +2454,6 @@
       "};",
       "export declare function DayStripChart<Span extends StripSpan>(props: DayStripChartProps<Span>): import(\"react\").JSX.Element;"
     ],
-    "charts/time.d.ts": [
-      "export declare const hourMs: number;",
-      "export declare const dayMs: number;",
-      "export declare function timeText(at: number): string;",
-      "export declare function midnight(at: number, daysBack?: number): number;",
-      "export declare function sixHours(from: number, now: number): number[];",
-      "export declare const weekdayText: (start: number) => string;",
-      "export declare const dateText: (start: number) => string;"
-    ],
     "charts/week-columns.d.ts": [
       "export type WeekColumn = {",
       "    start: number;",
@@ -2504,6 +2473,7 @@
       "    dayName?: (start: number) => string;",
       "    date?: (start: number) => string;",
       "    width?: number;",
+      "    tone?: \"glass\" | \"page\";",
       "};",
       "export declare function WeekColumnsChart<Day extends WeekColumn>(props: WeekColumnsChartProps<Day>): import(\"react\").JSX.Element;"
     ],
@@ -2511,8 +2481,12 @@
       "import type { ChartFormat } from \"./line\";",
       "export type WeekRange = {",
       "    start: number;",
-      "    min: number | null;",
-      "    max: number | null;",
+      "    min: number;",
+      "    max: number;",
+      "} | {",
+      "    start: number;",
+      "    min: null;",
+      "    max: null;",
       "};",
       "export type WeekRangeFormat = Pick<ChartFormat, \"gutter\" | \"shown\" | \"grid\"> & {",
       "    range: (min: number, max: number) => string;",
@@ -2528,24 +2502,9 @@
       "    dayName?: (start: number) => string;",
       "    date?: (start: number) => string;",
       "    width?: number;",
+      "    tone?: \"glass\" | \"page\";",
       "};",
       "export declare function WeekRangeChart(props: WeekRangeChartProps): import(\"react\").JSX.Element;"
-    ],
-    "charts/week.d.ts": [
-      "export declare function weekSlots(plot: number, days: number): {",
-      "    slot: number;",
-      "    markWidth: number;",
-      "};",
-      "export declare function WeekNames(props: {",
-      "    days: readonly {",
-      "        start: number;",
-      "    }[];",
-      "    now: number;",
-      "    plot: number;",
-      "    slot: number;",
-      "    today?: string;",
-      "    dayName?: (start: number) => string;",
-      "}): import(\"react\").JSX.Element;"
     ],
     "client.d.ts": [
       "import { type PressCaptureListener } from \"./presses\";",

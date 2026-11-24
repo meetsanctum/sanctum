@@ -1,9 +1,10 @@
 import { cn } from "cn";
 import { memo, useId, useMemo } from "react";
 
+import { TimeTicks } from "./axis";
 import { plotClass, Readout, useCursor, useWidth } from "./frame";
-import { scaleOf, type ChartScale } from "./scale";
-import { dayMs, hourMs, sixHours, timeText } from "./time";
+import { scaleFraction, scaleOf, type ChartScale } from "./scale";
+import { dayMs, hourMs, timeText } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
 // It is broken where nothing was known, has two or three faint gridlines with
@@ -56,25 +57,22 @@ const LineMarks = memo(function LineMarks(props: {
   const x = (at: number) => ((at - from) / dayMs) * plot;
   const yOfShown = (shownValue: number) => yOn(scale, height, shownValue);
   const y = (value: number) => yOfShown(shown(value));
-  const runs = props.runs.map((run) =>
-    run.length === 1 ? (
-      <circle
-        key={run[0]!.at}
-        cx={x(run[0]!.at)}
-        cy={y(run[0]!.value)}
-        r={1.5}
-      />
+  const runs = props.runs.map((run) => {
+    const first = run[0];
+    if (!first) return null;
+    return run.length === 1 ? (
+      <circle key={first.at} cx={x(first.at)} cy={y(first.value)} r={1.5} />
     ) : (
       <polyline
-        key={run[0]!.at}
+        key={first.at}
         fill="none"
         strokeWidth={2}
         strokeLinejoin="round"
         strokeLinecap="round"
         points={run.map((each) => `${x(each.at)},${y(each.value)}`).join(" ")}
       />
-    ),
-  );
+    );
+  });
   return (
     <>
       {scale?.lines.map((value) => (
@@ -121,8 +119,10 @@ const LineMarks = memo(function LineMarks(props: {
 function yOn(scale: ChartScale | null, height: number, shownValue: number) {
   return scale
     ? height -
-        ((Math.min(scale.max, Math.max(scale.min, shownValue)) - scale.min) /
-          (scale.max - scale.min)) *
+        scaleFraction(
+          scale,
+          Math.min(scale.max, Math.max(scale.min, shownValue)),
+        ) *
           height
     : height / 2;
 }
@@ -220,9 +220,6 @@ export function LineChart(props: LineChartProps) {
             .sort(
               (a, b) => Math.abs(a.at - pointedAt) - Math.abs(b.at - pointedAt),
             )[0];
-  const ticks = sixHours(from, now).filter(
-    (at) => x(at) > 20 && x(at) < plot - 20,
-  );
   const label = page ? "text-muted-foreground" : "text-(--pewter)";
 
   return (
@@ -301,25 +298,16 @@ export function LineChart(props: LineChartProps) {
           {format.grid(value)}
         </span>
       ))}
-      <div
-        aria-hidden="true"
-        hidden={props.hours === false}
-        className="relative mt-2 h-[18px]"
-        style={{ width: plot }}
-      >
-        {ticks.map((at) => (
-          <span
-            key={at}
-            style={{ left: x(at) }}
-            className={cn(
-              "absolute top-0 -translate-x-1/2 text-[13px] leading-[18px] tabular-nums",
-              label,
-            )}
-          >
-            {time(at)}
-          </span>
-        ))}
-      </div>
+      {props.hours !== false && (
+        <TimeTicks
+          from={from}
+          to={now}
+          plot={plot}
+          time={time}
+          fractional
+          className={`mt-2 ${label}`}
+        />
+      )}
       <ul className="sr-only">
         {means.map((hour) => (
           <li key={hour.at}>

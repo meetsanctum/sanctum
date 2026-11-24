@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, relative } from "node:path";
+import { join, posix, relative } from "node:path";
 import ts from "typescript";
 
 import { lucideIcons, sdkModule } from "./icons.js";
@@ -46,6 +46,25 @@ const exportsOf = (report: ApiReport): Record<string, string[]> =>
 type Change = "none" | "addition" | "removal";
 
 const require = createRequire(import.meta.url);
+
+// A chart declaration belongs to the public entry if the emitted types
+// reach it. Imports used only to draw the charts are gone by this point.
+function chartDeclarations(declarations: Record<string, string[]>) {
+  const reached = new Set<string>();
+  const visit = (file: string) => {
+    const lines = declarations[file];
+    if (!lines || reached.has(file)) return;
+    reached.add(file);
+    for (const { fileName } of ts.preProcessFile(lines.join("\n"))
+      .importedFiles) {
+      if (fileName.startsWith(".")) {
+        visit(posix.join(posix.dirname(file), `${fileName}.d.ts`));
+      }
+    }
+  };
+  visit("charts/index.d.ts");
+  return reached;
+}
 
 /** What ui-sdk's kit offers pages now, at its current version. */
 export function apiOf(): ApiReport {
@@ -112,10 +131,11 @@ export function apiOf(): ApiReport {
       }),
     );
   }
+  const publicCharts = chartDeclarations(declarations);
   const sorted = Object.fromEntries(
-    Object.entries(declarations).sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    ),
+    Object.entries(declarations)
+      .filter(([file]) => !file.startsWith("charts/") || publicCharts.has(file))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
   );
   const icons = [...lucideIcons().keys()]
     .filter((name) => !name.startsWith("Lucide") && !name.endsWith("Icon"))

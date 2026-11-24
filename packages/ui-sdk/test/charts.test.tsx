@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   DayBandChart,
@@ -13,8 +21,15 @@ import {
   WeekRangeChart,
   type BandSpan,
   type StripSpan,
+  type WeekRange,
 } from "../src/charts";
 import { midnight } from "../src/charts/time";
+
+// The charts' date formatters take the zone the page starts in, as a page's
+// do, so the zone is set before they load, whatever the machine's own.
+vi.hoisted(() => {
+  process.env.TZ = "Europe/Zurich";
+});
 
 // @meetsanctum/ui-sdk/charts: whole charts from plain times and values, each
 // with its readout, keyboard cursor and list for screen readers, the words
@@ -26,8 +41,11 @@ const from = now - 24 * hour;
 let container: HTMLDivElement;
 let root: Root;
 
+// The chart modules create their date formatters when imported.
+vi.hoisted(() => vi.stubEnv("TZ", "Europe/Zurich"));
+afterAll(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
-  vi.stubEnv("TZ", "Europe/Zurich");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -47,7 +65,6 @@ afterEach(async () => {
   container.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
 });
 
 const render = (element: ReactElement) => act(async () => root.render(element));
@@ -122,6 +139,34 @@ describe("a day's band", () => {
     expect(listed()[0]).toBe("15h to 21h: Not known");
     await act(async () => group().focus());
     expect(readout()).toBe("Quietfrom 5h");
+  });
+
+  it("highlights the on span under the pointer even beside another on span", async () => {
+    await render(
+      <DayBandChart
+        spans={[
+          { from, to: from + 12 * hour, level: "on", said: "First" },
+          { from: from + 12 * hour, to: now, level: "on", said: "Second" },
+        ]}
+        from={from}
+        to={now}
+        width={480}
+        tone="page"
+        label="Activity"
+        text={(span) => span.said}
+      />,
+    );
+    await act(async () =>
+      group().dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 242, bubbles: true }),
+      ),
+    );
+    expect(readout()).toMatch(/^Second/);
+    expect(
+      [...container.querySelectorAll("svg rect")].map((rect) =>
+        rect.getAttribute("class"),
+      ),
+    ).toEqual(["fill-foreground/70", "fill-foreground"]);
   });
 });
 
@@ -216,6 +261,16 @@ describe("a day's strip", () => {
     expect(container.textContent).toContain("Voll");
     expect(listed()[0]).toBe("15:30 to 19:30: Etwas");
   });
+
+  it("fills the flat strip for an on span with a numeric level", async () => {
+    await render(
+      <DayStripChart spans={spans} from={from} to={now} width={480} />,
+    );
+    expect(group().style.height).toBe("40px");
+    expect(
+      container.querySelector('path[fill="#ff8800"]')?.getAttribute("d"),
+    ).toBe("M240 0h120v40h-120z");
+  });
 });
 
 describe("a day's line", () => {
@@ -236,11 +291,12 @@ describe("a day's line", () => {
   it("is broken where nothing was known, and turns the danger colour past a limit", async () => {
     await render(
       <LineChart
-        runs={runs}
+        runs={[[], ...runs]}
         now={now}
         format={format}
         name="Temperature"
         height={100}
+        width={519}
         scale={{ min: 0, max: 40, lines: [0, 20, 40] }}
         above={25}
       />,
@@ -254,6 +310,17 @@ describe("a day's line", () => {
     expect(danger!.getAttribute("class")).toBe(
       "fill-(--danger) stroke-(--danger)",
     );
+    const clip = container.querySelector("clipPath")!;
+    expect(clip.id).toBeTruthy();
+    expect(danger!.getAttribute("clip-path")).toBe(`url(#${clip.id})`);
+    const rect = clip.querySelector("rect")!;
+    expect(
+      Number(rect.getAttribute("y")) + Number(rect.getAttribute("height")),
+    ).toBe(37.5);
+    const tick = [...container.querySelectorAll("span")].find(
+      (span) => span.textContent === "18:00",
+    );
+    expect(parseFloat(tick!.style.left)).toBeCloseTo((2.5 / 24) * 479);
     await act(async () => group().focus());
     expect(readout()).toBe("30°Now");
     await press("ArrowLeft");
@@ -268,12 +335,16 @@ describe("a day's line", () => {
         format={format}
         name="Temperature"
         height={100}
+        hours={false}
         label="Temperatur"
         unknown="Unbekannt"
         nowText="Jetzt"
       />,
     );
     expect(group().getAttribute("aria-label")).toBe("Temperatur");
+    expect(
+      [...container.querySelectorAll("span")].map((span) => span.textContent),
+    ).not.toContain("18:00");
     await act(async () => group().focus());
     expect(readout()).toBe("30°Jetzt");
     await press("ArrowLeft");
@@ -281,18 +352,20 @@ describe("a day's line", () => {
   });
 });
 
-const week = [6, 5, 4, 3, 2, 1, 0].map((back) => midnight(now, back));
+// Built in the same time zone as the charts' date formatters.
+const week = () => [6, 5, 4, 3, 2, 1, 0].map((back) => midnight(now, back));
 
 describe("a week's columns", () => {
-  const days = week.map((start, index) => ({
-    start,
-    value: index === 0 ? null : index === 1 ? 0 : index,
-  }));
+  const days = () =>
+    week().map((start, index) => ({
+      start,
+      value: index === 0 ? null : index === 1 ? 0 : index,
+    }));
 
   it("tops hours with a round number of them, and tells a day without any from one not known", async () => {
     await render(
       <WeekColumnsChart
-        days={days}
+        days={days()}
         now={now}
         scale="hours"
         label="How long it was on each day"
@@ -319,7 +392,7 @@ describe("a week's columns", () => {
   it("tops counts with a round count, and says its words as the caller's props say them", async () => {
     await render(
       <WeekColumnsChart
-        days={days}
+        days={days()}
         now={now}
         scale="counts"
         label="How often it opened each day"
@@ -341,14 +414,39 @@ describe("a week's columns", () => {
       "2026-11-12: Never",
     ]);
   });
+
+  it("keeps the keyboard cursor in range when the week gets shorter", async () => {
+    const weekDays = days().slice(2);
+    const chart = (shown: typeof weekDays) => (
+      <WeekColumnsChart
+        days={shown}
+        now={now}
+        scale="counts"
+        label="Activity"
+        text={(day) => `${day.value} times`}
+        spoken={(day) => `${day.value} times`}
+        tone="page"
+      />
+    );
+    await render(chart(weekDays));
+    await act(async () => group().focus());
+    expect(readout()).toMatch(/^6 times/);
+    await render(chart(weekDays.slice(0, 3)));
+    expect(readout()).toMatch(/^4 times/);
+    expect(container.querySelector("path.fill-foreground")).toBeTruthy();
+    expect(container.querySelector("span.text-muted-foreground")).toBeTruthy();
+    await press("ArrowLeft");
+    expect(readout()).toMatch(/^3 times/);
+  });
 });
 
 describe("a week's ranges", () => {
-  const days = week.map((start, index) => ({
-    start,
-    min: index === 2 ? null : 18 + index * 0.5,
-    max: index === 2 ? null : 21 + index * 0.5,
-  }));
+  const days = () =>
+    week().map((start, index): WeekRange =>
+      index === 2
+        ? { start, min: null, max: null }
+        : { start, min: 18 + index * 0.5, max: 21 + index * 0.5 },
+    );
   const format = {
     gutter: 36,
     shown: (value: number) => value,
@@ -359,7 +457,7 @@ describe("a week's ranges", () => {
   it("draws a bar a day from its lowest to its highest on round gridlines", async () => {
     await render(
       <WeekRangeChart
-        days={days}
+        days={days()}
         now={now}
         format={format}
         name="Temperature"
@@ -377,17 +475,22 @@ describe("a week's ranges", () => {
   it("says its words as the caller's props say them", async () => {
     await render(
       <WeekRangeChart
-        days={days}
+        days={days()}
         now={now}
         format={format}
         name="Temperature"
         label="Temperatur"
         unknown="Unbekannt"
         width={300}
+        tone="page"
       />,
     );
     expect(group().getAttribute("aria-label")).toBe("Temperatur");
     expect(group().style.width).toBe("264px");
+    expect(container.querySelector('rect[rx="4"]')?.getAttribute("class")).toBe(
+      "fill-foreground/70",
+    );
+    expect(container.querySelector("span.text-muted-foreground")).toBeTruthy();
     expect(listed()[2]).toBe("Sat 14 Nov: Unbekannt");
   });
 });

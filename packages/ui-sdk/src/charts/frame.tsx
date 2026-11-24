@@ -69,7 +69,13 @@ export function useCursor(
   // Which step a pointer at x falls on, where the steps aren't all as wide.
   stepAt?: (x: number, width: number) => number,
 ) {
-  const [at, setAt] = useState<number | null>(null);
+  const [selected, setAt] = useState<number | null>(null);
+  // Keep the cursor at the new end when a chart loses steps.
+  let at = selected;
+  if (at !== null && at >= steps) {
+    at = steps - 1;
+    setAt(at);
+  }
   const fromPointer =
     (width: number) => (event: PointerEvent<HTMLDivElement>) => {
       const box = event.currentTarget.getBoundingClientRect();

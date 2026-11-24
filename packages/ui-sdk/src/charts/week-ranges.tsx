@@ -2,7 +2,7 @@ import { memo, useMemo } from "react";
 
 import { plotClass, Readout, useCursor, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
-import { scaleOf, type ChartScale } from "./scale";
+import { scaleFraction, scaleOf, type ChartScale } from "./scale";
 import { dateText } from "./time";
 import { WeekNames, weekSlots } from "./week";
 
@@ -12,11 +12,9 @@ import { WeekNames, weekSlots } from "./week";
 // and lists the days for screen readers.
 
 /** A day of a week's ranges, from its local midnight: its lowest and highest, or none when nothing was known. */
-export type WeekRange = {
-  start: number;
-  min: number | null;
-  max: number | null;
-};
+export type WeekRange =
+  | { start: number; min: number; max: number }
+  | { start: number; min: null; max: null };
 
 /** How a week's ranges show their values: as a day's line does, with a range in words. */
 export type WeekRangeFormat = Pick<ChartFormat, "gutter" | "shown" | "grid"> & {
@@ -27,10 +25,7 @@ const barsHeight = 96;
 
 // Where a value in the unit shown sits, from the top.
 const yOn = (scale: ChartScale | null, shownValue: number) =>
-  scale
-    ? barsHeight -
-      ((shownValue - scale.min) / (scale.max - scale.min)) * barsHeight
-    : 0;
+  scale ? barsHeight - scaleFraction(scale, shownValue) * barsHeight : 0;
 
 const RangeMarks = memo(function RangeMarks(props: {
   days: readonly WeekRange[];
@@ -40,8 +35,11 @@ const RangeMarks = memo(function RangeMarks(props: {
   scale: ChartScale | null;
   shown: (value: number) => number;
   pointed?: WeekRange;
+  page: boolean;
 }) {
-  const { plot, slot, barWidth, scale, shown } = props;
+  const { plot, slot, barWidth, scale, shown, page } = props;
+  const fill = page ? "fill-foreground/70" : "fill-white/70";
+  const pointedFill = page ? "fill-foreground" : "fill-white";
   return (
     <>
       {scale?.lines.map((value) => (
@@ -51,11 +49,11 @@ const RangeMarks = memo(function RangeMarks(props: {
           y={Math.round(yOn(scale, value))}
           width={plot}
           height={1}
-          className="fill-white/12"
+          className={page ? "fill-foreground/12" : "fill-white/12"}
         />
       ))}
       {props.days.map((day, index) => {
-        if (day.min === null || day.max === null) return null;
+        if (day.min === null) return null;
         const top = Math.round(yOn(scale, shown(day.max)));
         const height = Math.max(
           4,
@@ -70,7 +68,7 @@ const RangeMarks = memo(function RangeMarks(props: {
             width={barWidth}
             height={height}
             rx={4}
-            className={props.pointed === day ? "fill-white" : "fill-white/70"}
+            className={props.pointed === day ? pointedFill : fill}
           />
         );
       })}
@@ -99,27 +97,29 @@ export type WeekRangeChartProps = {
   date?: (start: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
+  /** On a device's glass, in White, or on a page, in its ink. */
+  tone?: "glass" | "page";
 };
 
 /** Each day of the week as a bar from its lowest to its highest. */
 export function WeekRangeChart(props: WeekRangeChartProps) {
   const { days, now, format, date = dateText } = props;
+  const page = props.tone === "page";
+  const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);
   const cursor = useCursor(days.length || 1);
   const plot = Math.max(0, width - format.gutter);
   const { slot, markWidth: barWidth } = weekSlots(plot, days.length);
   const scale = useMemo(() => {
     const shown = days.flatMap((day) =>
-      day.min !== null && day.max !== null
-        ? [format.shown(day.min), format.shown(day.max)]
-        : [],
+      day.min === null ? [] : [format.shown(day.min), format.shown(day.max)],
     );
     return shown.length > 0
       ? scaleOf(Math.min(...shown), Math.max(...shown))
       : null;
   }, [days, format]);
   const valueOf = (day: WeekRange) =>
-    day.min === null || day.max === null
+    day.min === null
       ? (props.unknown ?? "Not known")
       : format.range(day.min, day.max);
   const pointed = cursor.at === null ? undefined : days[cursor.at];
@@ -152,6 +152,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
               scale={scale}
               shown={format.shown}
               pointed={pointed}
+              page={page}
             />
           )}
         </svg>
@@ -169,7 +170,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
           key={value}
           aria-hidden="true"
           style={{ top: Math.round(yOn(scale, value)) }}
-          className="absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] text-(--pewter) tabular-nums"
+          className={`absolute right-0 -translate-y-1/2 text-[13px] leading-[18px] tabular-nums ${labelClass}`}
         >
           {format.grid(value)}
         </span>
@@ -179,6 +180,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
         now={now}
         plot={plot}
         slot={slot}
+        labelClass={labelClass}
         today={props.today}
         dayName={props.dayName}
       />

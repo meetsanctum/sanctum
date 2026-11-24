@@ -129,6 +129,7 @@ function MainPage() {
       format={{ gutter: 36, shown: (v) => v, text: String, grid: String }}
       name="Example"
       height={72}
+      tone="page"
     />
   );
 }

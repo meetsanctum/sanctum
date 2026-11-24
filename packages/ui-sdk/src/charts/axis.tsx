@@ -11,13 +11,17 @@ export function TimeTicks(props: {
   to: number;
   plot: number;
   withNow?: boolean;
+  fractional?: boolean;
   className?: string;
   time?: (at: number) => string;
   nowText?: string;
 }) {
   const { from, to, plot, time = timeText } = props;
-  // On whole pixels, so the labels are sharp at 1×.
-  const x = (at: number) => Math.round(((at - from) / (to - from)) * plot);
+  // On whole pixels by default, so the labels are sharp at 1×.
+  const x = (at: number) => {
+    const left = ((at - from) / (to - from)) * plot;
+    return props.fractional ? left : Math.round(left);
+  };
   // Clear of Now, where it shows.
   const end = props.withNow ? 48 : 20;
   const ticks = sixHours(from, to).filter(
