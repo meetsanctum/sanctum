@@ -98,8 +98,8 @@ export function QuestionField(props: {
                 <span
                   className={
                     remaining <= 10
-                      ? "text-(--sun-text) tabular-nums"
-                      : "tabular-nums"
+                      ? "whitespace-nowrap text-(--sun-text) tabular-nums"
+                      : "whitespace-nowrap tabular-nums"
                   }
                 >
                   {remaining} s remaining

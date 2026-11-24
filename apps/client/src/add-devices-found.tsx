@@ -352,7 +352,7 @@ function FoundCard(props: {
             <Button
               type="button"
               variant="outline"
-              className="min-w-0 flex-1"
+              className="flex-1"
               disabled={doing !== null}
               onClick={cancel}
             >
@@ -360,7 +360,7 @@ function FoundCard(props: {
             </Button>
             <Button
               type="submit"
-              className="min-w-0 flex-1"
+              className="flex-1"
               disabled={
                 doing !== null ||
                 (!lastsUp && !isComplete(asking.asks, answers))

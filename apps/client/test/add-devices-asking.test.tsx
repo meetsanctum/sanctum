@@ -7,6 +7,7 @@ import * as coreFetch from "../src/core-fetch";
 import {
   core,
   kitchenSensor,
+  live,
   named,
   page,
   root,
@@ -109,6 +110,30 @@ describe("Add devices, adding a device that asks once started", () => {
         answers: { second: "0042" },
       },
     ]);
+    expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
+  });
+
+  it("stays, added, where the driver stops listing it before its answer", async () => {
+    let answer!: (result: unknown) => void;
+    const steps: (() => unknown)[] = [
+      () => asking(1, [first]),
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    ];
+    core.answers.tv = () => steps.shift()!();
+    await addTv();
+    await type(field(), "1234");
+    const answered = act(async () => button("Continue").click());
+
+    core.adding = { ...core.adding, found: [] };
+    await act(async () =>
+      live.publish({ type: "pairing", pairing: core.adding }),
+    );
+    answer({ added: light("tv", "Living Room") });
+    await answered;
+
     expect(page().querySelector('[aria-label="Added"]')).not.toBeNull();
   });
 
