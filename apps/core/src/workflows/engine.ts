@@ -17,18 +17,19 @@ import type { View } from "../devices/views.js";
 import type { Lights } from "../devices/lights.js";
 import type { Motion, MotionPlace } from "../devices/motion.js";
 import type { Entities } from "../entities/entities.js";
-import type {
-  DeviceConditionConfig,
-  DeviceStepConfig,
-  EntityConditionConfig,
-  LightLevelConditionConfig,
-  LightsConditionConfig,
-  MotionConditionConfig,
-  NoMotionConditionConfig,
-  LightsStepConfig,
-  TimeConditionConfig,
+import {
+  deviceCommandOf,
+  type DeviceConditionConfig,
+  type EntityConditionConfig,
+  type LightLevelConditionConfig,
+  type LightsConditionConfig,
+  type MotionConditionConfig,
+  type NoMotionConditionConfig,
+  type LightsStepConfig,
+  type TimeConditionConfig,
 } from "./core-pieces.js";
 import { executionPlan, statePasses } from "./graph.js";
+import { comparedState, nothingToDo } from "./media.js";
 import { problemsReason, type Pieces } from "./pieces.js";
 import type { Runs } from "./runs.js";
 import type { RunTrigger, workflows } from "./schema.js";
@@ -415,7 +416,13 @@ export function createEngine(options: {
         return false;
       }
       const state = part?.state;
-      return state !== undefined && statePasses(predicate, state);
+      return (
+        state !== undefined &&
+        statePasses(
+          predicate,
+          comparedState(part!.kind, state, predicate.loadingIsPlaying),
+        )
+      );
     }
     const output = await host.invoke({
       actor: actorOf(workflow),
@@ -444,7 +451,10 @@ export function createEngine(options: {
           pressOf(firing),
         );
       }
-      const { device, capability, command } = config as DeviceStepConfig;
+      const { device, capability, command } = deviceCommandOf(
+        node.piece,
+        config,
+      )!;
       const done = await devices.command(
         actorOf(workflow),
         { device, capability, command },
@@ -459,6 +469,30 @@ export function createEngine(options: {
       actionId: node.piece,
       input: node.config,
     });
+  }
+
+  // Why a core step about a device has nothing to act on, such as Pause on
+  // a player that isn't playing (media.ts), or undefined when it has.
+  function nothingFor(workflow: WorkflowRow, node: WorkflowNode) {
+    const sent = node.app
+      ? undefined
+      : deviceCommandOf(node.piece, pieces.coreConfig(node));
+    if (!sent) {
+      return undefined;
+    }
+    const part = devices
+      .get(sent.device, actingOn(workflow, node))
+      ?.capabilities.find((each) => each.id === sent.capability);
+    return (
+      part &&
+      nothingToDo(
+        part.kind,
+        sent.command,
+        part.state,
+        part.observed,
+        sent.resumeOnly,
+      )
+    );
   }
 
   // One run: each step the fired triggers reach runs when a path of
@@ -557,6 +591,11 @@ export function createEngine(options: {
         const row = runs.addStep(runId, position++, step, step.config);
         ran++;
         try {
+          const idle = nothingFor(workflow, step);
+          if (idle) {
+            runs.endStep(row, { status: "skipped", error: idle });
+            continue;
+          }
           const output = await act(workflow, step, firing);
           runs.endStep(row, { status: "succeeded", output });
         } catch (error) {

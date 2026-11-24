@@ -1,4 +1,5 @@
 import {
+  capabilities,
   capabilityKinds,
   deviceCategoryOf,
   stateOperators,
@@ -13,15 +14,30 @@ import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { plural } from "../plural";
 
-/** Whether a capability fits a device field and the state it compares. */
+/**
+ * Whether a capability fits a device field: the state it compares, and the
+ * command a step sends, which it must be able to do by the features its
+ * device registered, as the core checks when the step is saved.
+ */
 export function matchesCapability(
   capability: CapabilityInfo,
   kinds: readonly string[],
   field: unknown,
+  command?: Record<string, unknown>,
 ): boolean {
+  if (!kinds.includes(capability.kind)) return false;
+  if (field === "on" && capability.kind === "media") {
+    return capability.features.power;
+  }
+  if (command === undefined) return true;
+  const definition = capabilities[capability.kind];
+  const parsed = definition.command.safeParse(command);
   return (
-    kinds.includes(capability.kind) &&
-    (field !== "on" || capability.kind !== "media" || capability.features.power)
+    parsed.success &&
+    (definition.supports as (features: unknown, command: unknown) => boolean)(
+      capability.features,
+      parsed.data,
+    )
   );
 }
 
@@ -57,6 +73,7 @@ export type FieldKind =
   | { kind: "offsetMinutes" }
   | { kind: "minutes" }
   | { kind: "lux" }
+  | { kind: "percent" }
   | { kind: "choice"; labels: Record<string, string> }
   | { kind: "boolean" }
   | { kind: "number"; minimum?: number; maximum?: number }
@@ -115,6 +132,7 @@ export function fieldKind(field: FieldSchema): FieldKind {
   if (field.offsetMinutes === true) return { kind: "offsetMinutes" };
   if (field.minutes === true) return { kind: "minutes" };
   if (field.lux === true) return { kind: "lux" };
+  if (field.percent === true) return { kind: "percent" };
   if (isRecord(field.labels)) {
     return { kind: "choice", labels: field.labels as Record<string, string> };
   }
@@ -207,6 +225,11 @@ export function formatLux(value: number) {
   return `${lux.format(value)} lx`;
 }
 
+/** A level in percent, as a player's volume: "30%". */
+export function formatPercent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
 export function capitalize(text: string) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -226,6 +249,8 @@ export function placeholder(kind: FieldKind) {
       return "Choose how long";
     case "lux":
       return "Choose a light level";
+    case "percent":
+      return "Choose a level";
     default:
       return "Choose";
   }
@@ -308,6 +333,8 @@ export function formatValue(
         : undefined;
     case "lux":
       return typeof value === "number" ? formatLux(value) : undefined;
+    case "percent":
+      return typeof value === "number" ? formatPercent(value) : undefined;
     case "choice": {
       const label = typeof value === "string" ? kind.labels[value] : undefined;
       return label && style === "card" ? capitalize(label) : label;

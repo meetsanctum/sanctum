@@ -64,6 +64,14 @@ export const minutesField = z
 /** A light level in lux, such as darker than 30 lx. */
 export const luxField = z.number().min(0).max(200_000).meta({ lux: true });
 
+/** A level in percent, such as a player's volume at 30%. */
+export const percentField = z
+  .number()
+  .int()
+  .min(0)
+  .max(100)
+  .meta({ percent: true });
+
 /**
  * Options with the words a sentence reads for each, such as
  * choice({ anyOn: "any light is on", allOff: "every light is off" }).

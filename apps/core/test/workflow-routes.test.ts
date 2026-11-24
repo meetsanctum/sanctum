@@ -428,6 +428,7 @@ describe("the pieces", () => {
       "condition core time",
       "condition core lights",
       "step core device",
+      "step core volume",
       "step core lights",
       "trigger test.sample sample.done",
       "condition test.sample sample.isDue",

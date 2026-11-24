@@ -14,6 +14,7 @@ import {
 import { deviceKinds, entityTypes } from "../app-host/calls.js";
 import type { Devices } from "../devices/devices.js";
 import type { View } from "../devices/views.js";
+import { deviceCommandOf } from "./core-pieces.js";
 import { namedIn } from "./named.js";
 import type { Pieces } from "./pieces.js";
 
@@ -73,7 +74,8 @@ export function createKeptGrants(options: {
     if (hasNamedPlaces && !granted.includes(placesReadPermission)) {
       return missing(placesReadPermission);
     }
-    switch (`${node.kind}.${node.piece}`) {
+    const sent = node.kind === "step" && deviceCommandOf(node.piece, config);
+    switch (sent ? "step.device" : `${node.kind}.${node.piece}`) {
       case "trigger.press":
         return read("button");
       case "trigger.motion":

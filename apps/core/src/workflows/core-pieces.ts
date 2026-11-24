@@ -7,6 +7,7 @@ import {
   minutesField,
   names,
   partOf,
+  percentField,
   stateOperators,
   sunOffset,
   timeOfDay,
@@ -22,6 +23,7 @@ import { motionPlace } from "../devices/motion.js";
 // The core's own workflow pieces, for time, the sun, devices, remotes'
 // presses, the lights of a place, motion and the light level in a place
 // (devices/motion.ts) and entities, beside those apps provide (pieces.ts).
+// Media players' pieces read a player loading as playing (media.ts).
 // Each carries the words Automations reads it with, as apps' pieces do
 // (PieceWords), and a trigger the group its workflows are listed under. The
 // client knows no piece by its id, so the words, the presets and the markers
@@ -30,6 +32,7 @@ import { motionPlace } from "../devices/motion.js";
 const field = z.string().min(1).max(100);
 const operator = z.enum(stateOperators);
 const entityId = z.string().min(1).max(128);
+const loadingIsPlaying = z.literal(true).optional().meta({ hidden: true });
 
 // Which entities an entity piece means: one, by its app and key, or every
 // one of a type. An app goes with a key, so a piece names the app behind a
@@ -103,17 +106,34 @@ export const corePieces = {
     },
     device: {
       title: "A device changes",
-      config: z.strictObject({
-        device: names("device").optional(),
-        capability: partOf("device").optional(),
-        kind: z.enum(capabilityKinds).optional(),
-        field: field.optional(),
-        operator: operator.optional(),
-        value: z.unknown().optional(),
-        // Fires only on a change from a value the core knew, not on a
-        // device's first state: a door found open has not just opened.
-        fromKnown: z.boolean().optional().meta({ title: "Only on a change" }),
-      }),
+      config: z
+        .strictObject({
+          device: names("device").optional(),
+          capability: partOf("device").optional(),
+          kind: z.enum(capabilityKinds).optional(),
+          field: field.optional(),
+          operator: operator.optional(),
+          value: z.unknown().optional(),
+          loadingIsPlaying,
+          // Fires only on a change from a value the core knew, not on a
+          // device's first state: a door found open has not just opened.
+          fromKnown: z.boolean().optional().meta({ title: "Only on a change" }),
+          // Fires once the change has held this long, and not at all if it
+          // is undone before: a player stopped for a moment between two
+          // episodes has not stopped playing.
+          forSeconds: z
+            .number()
+            .int()
+            .min(1)
+            .max(3600)
+            .optional()
+            .meta({ title: "Held for seconds" }),
+        })
+        .refine(
+          ({ forSeconds, field }) =>
+            forSeconds === undefined || field !== undefined,
+          { path: ["forSeconds"], message: "A hold needs a state field" },
+        ),
       words: {
         sentence: "{device} changes",
         card: { name: "{device}", specifics: "Changes" },
@@ -172,6 +192,44 @@ export const corePieces = {
               field: "open",
               operator: "is_off",
               fromKnown: true,
+            },
+          },
+          {
+            title: "Starts playing",
+            sentence: "{device} starts playing",
+            card: { name: "{device}", specifics: "Starts playing" },
+            config: {
+              kind: "media",
+              field: "activity",
+              operator: "equals",
+              value: "playing",
+              fromKnown: true,
+              loadingIsPlaying: true,
+            },
+          },
+          {
+            title: "Pauses",
+            sentence: "{device} pauses",
+            card: { name: "{device}", specifics: "Pauses" },
+            config: {
+              kind: "media",
+              field: "activity",
+              operator: "equals",
+              value: "paused",
+              fromKnown: true,
+            },
+          },
+          {
+            title: "Stops playing",
+            sentence: "{device} stops playing",
+            card: { name: "{device}", specifics: "Stops playing" },
+            config: {
+              kind: "media",
+              field: "activity",
+              operator: "equals",
+              value: "idle",
+              fromKnown: true,
+              forSeconds: 5,
             },
           },
         ],
@@ -237,6 +295,7 @@ export const corePieces = {
         field,
         operator,
         value: z.unknown().optional(),
+        loadingIsPlaying,
       }),
       words: {
         presets: [
@@ -264,6 +323,26 @@ export const corePieces = {
             title: "Is closed",
             sentence: "{device} is closed",
             config: { field: "open", operator: "is_off" },
+          },
+          {
+            title: "Is playing",
+            sentence: "{device} is playing",
+            config: {
+              field: "activity",
+              operator: "equals",
+              value: "playing",
+              loadingIsPlaying: true,
+            },
+          },
+          {
+            title: "Isn't playing",
+            sentence: "{device} isn't playing",
+            config: {
+              field: "activity",
+              operator: "not_equals",
+              value: "playing",
+              loadingIsPlaying: true,
+            },
           },
         ],
       },
@@ -366,6 +445,7 @@ export const corePieces = {
         device: names("device"),
         capability: partOf("device"),
         command: z.record(z.string(), z.unknown()),
+        resumeOnly: z.literal(true).optional().meta({ hidden: true }),
       }),
       words: {
         presets: [
@@ -379,7 +459,46 @@ export const corePieces = {
             sentence: "Turn off {device}",
             config: { command: { on: false } },
           },
+          // Resume carries on with what a player had; it starts nothing new.
+          {
+            title: "Resume",
+            sentence: "Resume {device}",
+            config: { command: { activity: "playing" }, resumeOnly: true },
+          },
+          {
+            title: "Pause",
+            sentence: "Pause {device}",
+            config: { command: { activity: "paused" } },
+          },
+          {
+            title: "Stop",
+            sentence: "Stop {device}",
+            config: { command: { playback: "stop" } },
+          },
+          {
+            title: "Mute",
+            sentence: "Mute {device}",
+            config: { command: { muted: true } },
+          },
+          {
+            title: "Unmute",
+            sentence: "Unmute {device}",
+            config: { command: { muted: false } },
+          },
         ],
+      },
+    },
+    volume: {
+      title: "Set a player's volume",
+      config: z.strictObject({
+        device: names("device").meta({ sends: { volume: 0 } }),
+        capability: partOf("device"),
+        volume: percentField.meta({ percent: true, title: "Volume" }),
+      }),
+      words: {
+        sentence: "Set {device}'s volume to {volume}",
+        // Add starts it at a level a room can talk over.
+        presets: [{ title: "Set the volume", config: { volume: 30 } }],
       },
     },
     lights: {
@@ -410,6 +529,24 @@ export const corePieces = {
   },
 } as const satisfies Record<PieceKind, Record<string, CorePiece>>;
 
+/**
+ * What a core step about one device sends it, the device step's command or
+ * the volume step's level, or undefined for another piece.
+ */
+export function deviceCommandOf(
+  piece: string,
+  config: unknown,
+): DeviceStepConfig | undefined {
+  if (piece === "device") {
+    return config as DeviceStepConfig;
+  }
+  if (piece === "volume") {
+    const { device, capability, volume } = config as VolumeStepConfig;
+    return { device, capability, command: { volume } };
+  }
+  return undefined;
+}
+
 export type DeviceTriggerConfig = z.output<
   typeof corePieces.trigger.device.config
 >;
@@ -431,6 +568,7 @@ export type TimeConditionConfig = z.output<
   typeof corePieces.condition.time.config
 >;
 export type DeviceStepConfig = z.output<typeof corePieces.step.device.config>;
+export type VolumeStepConfig = z.output<typeof corePieces.step.volume.config>;
 export type LightsConditionConfig = z.output<
   typeof corePieces.condition.lights.config
 >;
