@@ -365,6 +365,13 @@
       "when": 1795559154160,
       "tag": "0051_home-hour-cycle",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1795560456898,
+      "tag": "0052_workflow-clock-zone",
+      "breakpoints": true
     }
   ]
 }

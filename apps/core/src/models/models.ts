@@ -10,7 +10,6 @@ import type {
   ModelTokens,
   ModelUsage,
 } from "@meetsanctum/app-sdk";
-import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -90,8 +89,8 @@ export function createModels(
     sealer: Sealer;
     fetchers: ModelFetchers;
     record: (entry: NewActivityEntry) => string;
-    // The home's time zone, which its days of tokens follow.
-    timeZone: () => string | null;
+    // The home's date, such as 2026-11-24, for counting daily usage.
+    dayOf: (date: Date) => string;
     // The apps that may use the home's AI model, for what Settings shows.
     appsUsing: () => { id: string; name: string }[];
     // Where the manager's Ollama answers while it runs, or null.
@@ -101,6 +100,7 @@ export function createModels(
   },
 ) {
   const now = options.now ?? (() => new Date());
+  const { dayOf } = options;
   // Checks under way, by source, and since when the one in use hasn't
   // answered: both only while the core runs.
   const checking = new Map<string, RunningCheck>();
@@ -121,10 +121,6 @@ export function createModels(
     }
     for (const listener of leaving) listener(sourceId);
   };
-
-  // A day of the home's, such as 2026-11-24, on the home clock.
-  const dayOf = (date: Date) =>
-    homeClock({ timeZone: options.timeZone() }).date(date);
 
   const rows = () =>
     db.select().from(modelSources).orderBy(modelSources.createdAt).all();

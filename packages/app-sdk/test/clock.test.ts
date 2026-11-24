@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import * as sdk from "../src/index.js";
 import {
   addLocalDays,
   dateText,
@@ -28,6 +29,13 @@ const newYork = "America/New_York";
 const santiago = "America/Santiago";
 
 describe("local dates", () => {
+  it("keeps the existing helpers available at the package root", () => {
+    expect(sdk.localDate).toBe(localDate);
+    expect(sdk.addLocalDays).toBe(addLocalDays);
+    expect(sdk.zonedDateToUtc).toBe(zonedDateToUtc);
+    expect(sdk.isTimeZone).toBe(isTimeZone);
+  });
+
   it("are read in the home's time zone", () => {
     const instant = at("2026-10-29T23:30:00Z");
     expect(localDate(zurich, instant)).toBe("2026-10-30");
@@ -87,6 +95,16 @@ describe("a time the clocks change", () => {
 });
 
 describe("a day's start", () => {
+  it("starts at the clock change when the gap begins before midnight", () => {
+    const toronto = "America/Toronto";
+    expect(startOfDay(Date.parse("1919-03-31T12:00:00Z"), toronto)).toBe(
+      Date.parse("1919-03-31T04:30:00Z"),
+    );
+    expect(zonedDateToUtc("1919-03-31", 0, 0, toronto)).toEqual(
+      at("1919-03-31T05:00:00Z"),
+    );
+  });
+
   it("is the home's midnight, whatever the device's zone", () => {
     const evening = Date.parse("2026-11-24T22:30:00Z");
     // 23:30 in Zurich, 17:30 in New York: two different days start.
@@ -128,6 +146,30 @@ describe("the hours every 6", () => {
       hoursBetween(from, to, santiago).map((each) => timeText(each, santiago)),
     ).toEqual(["12:00", "18:00", "06:00"]);
   });
+
+  it("leave out an entire date the clocks skip", () => {
+    const from = Date.parse("2011-12-30T00:00:00Z");
+    const to = Date.parse("2011-12-31T12:00:00Z");
+    expect(hoursBetween(from, to, "Pacific/Apia")).toEqual(
+      [
+        "2011-12-30T04:00:00Z",
+        "2011-12-30T10:00:00Z",
+        "2011-12-30T16:00:00Z",
+        "2011-12-30T22:00:00Z",
+        "2011-12-31T04:00:00Z",
+        "2011-12-31T10:00:00Z",
+      ].map(Date.parse),
+    );
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Infinity])(
+    "reject an invalid interval of %s hours",
+    (every) => {
+      const from = Date.parse("2026-11-24T00:00:00Z");
+      const to = Date.parse("2026-11-25T00:00:00Z");
+      expect(() => hoursBetween(from, to, "UTC", every)).toThrow(RangeError);
+    },
+  );
 });
 
 describe("the home's words", () => {

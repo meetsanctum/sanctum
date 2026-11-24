@@ -60,6 +60,12 @@ export const workflowTimers = sqliteTable(
   ],
 );
 
+// The zone in which time triggers were last scheduled, across restarts.
+export const workflowClock = sqliteTable("workflow_clock", {
+  id: integer("id").primaryKey(),
+  timeZone: text("time_zone").notNull(),
+});
+
 export type RunTrigger = { nodes: string[]; key: string | null; data: unknown };
 
 export const workflowRuns = sqliteTable(

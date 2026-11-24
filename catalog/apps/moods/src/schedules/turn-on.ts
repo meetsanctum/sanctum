@@ -1,14 +1,11 @@
 import {
+  addDays,
+  homeClock,
   turnOnType,
   type AppContext,
   type DeviceInfo,
   type TurnOn,
 } from "@meetsanctum/app-sdk";
-import {
-  addLocalDays,
-  localDate,
-  zonedDateToUtc,
-} from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 
@@ -24,7 +21,7 @@ import {
   type Snapshot,
   type TurnOnBehaviour,
 } from "./store.js";
-import { day, minuteIn, spanAt } from "./times.js";
+import { day, isOvernight } from "./times.js";
 
 // What turning a room's lights on brings. The core turns a room, a zone or
 // the home on, so Moods publishes each room's rule as a standard
@@ -42,22 +39,6 @@ import { day, minuteIn, spanAt } from "./times.js";
 //
 // A rule that would turn no light on is none, so the core switches the
 // room on as if it had none.
-
-/** The instant a minute of the day next comes after now, in a time zone. */
-export function nextAt(minute: number, timeZone: string, now: Date) {
-  const today = localDate(timeZone, now);
-  for (const days of [0, 1, 2]) {
-    const date = addLocalDays(today, days + (minute === day ? 1 : 0));
-    const at = zonedDateToUtc(
-      date,
-      Math.floor((minute % day) / 60),
-      minute % 60,
-      timeZone,
-    );
-    if (at > now) return at;
-  }
-  throw new Error(`No ${minute} after ${now.toISOString()} in ${timeZone}`);
-}
 
 /** What turning a room on does now, or null when the core's own way serves. */
 export function turnOnRule(input: {
@@ -122,14 +103,33 @@ async function ruleOf(
 ) {
   const { db } = ctx.storage;
   const target = { kind: "room", id: roomId } as const;
-  const entry = spanAt(await readSchedule(db, roomId), minuteIn(now, timeZone));
-  const mood = entry ? await readMood(db, entry.moodId) : null;
+  const clock = homeClock({ timeZone });
+  const today = clock.parts(now);
+  const yesterday = addDays(today, -1);
+  let active: { moodId: string; start: Date; until: Date } | undefined;
+  for (const entry of await readSchedule(db, roomId)) {
+    const endsNextDay = isOvernight(entry) || entry.end === day;
+    for (const date of endsNextDay ? [today, yesterday] : [today]) {
+      const start = clock.at(
+        date,
+        Math.floor(entry.start / 60),
+        entry.start % 60,
+      );
+      if (start > now || (active && start <= active.start)) continue;
+      const until = clock.at(
+        endsNextDay ? addDays(date, 1) : date,
+        Math.floor((entry.end % day) / 60),
+        entry.end % 60,
+      );
+      if (now < until) active = { moodId: entry.moodId, start, until };
+    }
+  }
+  const mood = active ? await readMood(db, active.moodId) : null;
   return turnOnRule({
     roomId,
     behaviour: await readTurnOn(db, target),
     lights,
-    scheduled:
-      entry && mood ? { mood, until: nextAt(entry.end, timeZone, now) } : null,
+    scheduled: active && mood ? { mood, until: active.until } : null,
     snapshot: await readSnapshot(db, target),
   });
 }

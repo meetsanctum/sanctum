@@ -55,6 +55,21 @@ export * from "./app-definition.js";
 export * from "./app-manifest.js";
 export * from "./audio.js";
 export * from "./blobs.js";
+export {
+  addDays,
+  addLocalDays,
+  homeClock,
+  hostTimeZone,
+  hourCycles,
+  isTimeZone,
+  localDate,
+  localParts,
+  weekdayIndex,
+  zonedDateToUtc,
+  zonedTime,
+  type HourCycle,
+  type LocalDate,
+} from "./clock.js";
 export * from "./context.js";
 export * from "./core-events.js";
 export * from "./dashboards.js";

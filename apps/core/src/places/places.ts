@@ -1,5 +1,7 @@
 import {
+  homeClock,
   homeLocationSchema,
+  hourCycles,
   temperatureUnits,
   type Floor,
   type HomeLocation,
@@ -7,7 +9,6 @@ import {
   type Room,
   type Zone,
 } from "@meetsanctum/app-sdk";
-import { homeClock, hourCycles } from "@meetsanctum/app-sdk/clock";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -208,6 +209,8 @@ export function createPlaces(
     onChange?: (change: PlacesChange) => void;
     // Where the home is changed, which apps read apart from the places.
     onLocationChange?: (change: LocationChange) => void;
+    // Move dependent timers in the same transaction as the zone change.
+    onTimeZoneChange?: (at: Date, previousZone: string) => void;
     // Capture dependent state before the foreign-key cascade; the returned
     // notification runs only once the removal has committed, before
     // onChange, so what follows the devices hears them move first.
@@ -383,8 +386,8 @@ export function createPlaces(
     home: homeInfo,
 
     /**
-     * The home clock, which everything in the core that works out days and
-     * times uses: the home's zone, or the host's while it has none.
+     * The home clock uses the saved hour preference and the home's zone,
+     * falling back to the host's zone while the home has none.
      */
     clock: () => clockOf(read.home.get()),
 
@@ -446,6 +449,7 @@ export function createPlaces(
     updateHome(by: ChangedBy, input: z.input<typeof homeChanges>) {
       const changes = homeChanges.parse(input);
       return change(by, "home.update", () => {
+        const previousZone = clockOf(read.home.get()).timeZone;
         const current = homeInfo();
         const zone =
           changes.timeZone === undefined ? current.timeZone : changes.timeZone;
@@ -456,6 +460,7 @@ export function createPlaces(
             "Coordinates need a time zone",
           );
         }
+        const updatedAt = now();
         const set = {
           ...(changes.name === undefined ? {} : { name: changes.name }),
           ...(changes.temperatureUnit === undefined
@@ -468,12 +473,18 @@ export function createPlaces(
           latitude: at?.latitude ?? null,
           longitude: at?.longitude ?? null,
           elevation: at?.elevation ?? null,
-          updatedAt: now(),
+          updatedAt,
         };
         db.insert(home)
           .values({ id: 1, name: defaultHomeName, ...set })
           .onConflictDoUpdate({ target: home.id, set })
           .run();
+        if (
+          options.onTimeZoneChange &&
+          clockOf(read.home.get()).timeZone !== previousZone
+        ) {
+          options.onTimeZoneChange(updatedAt, previousZone);
+        }
         return { result: homeInfo() };
       });
     },

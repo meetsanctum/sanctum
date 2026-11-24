@@ -71,6 +71,26 @@ const atZurich = {
 };
 const bern = { latitude: 46.948, longitude: 7.4474 };
 
+it("keeps the home's 12-hour preference through a name-only update", async () => {
+  const core = await testCore({ timeZone: "UTC" });
+  const maya = await claimed(core);
+  const update = (changes: object) =>
+    post(core, "/api/places/home/update", changes, maya);
+
+  expect((await update({ hourCycle: "12h" })).json()).toMatchObject({
+    hourCycle: "12h",
+  });
+  expect((await update({ name: "Lake house" })).statusCode).toBe(200);
+  const home = { name: "Lake house", hourCycle: "12h" };
+  expect((await get(core, "/api/places/home", maya)).json()).toMatchObject(
+    home,
+  );
+  expect((await get(core, "/api/places", maya)).json()).toMatchObject({ home });
+  expect(core.places.clock().timeText(new Date("2026-10-26T14:00:00Z"))).toBe(
+    "2:00 PM",
+  );
+});
+
 describe("the home's location", () => {
   it("is unset until someone sets it, changes it or takes it away", async () => {
     const core = await testCore();

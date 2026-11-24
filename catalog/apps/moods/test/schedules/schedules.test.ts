@@ -424,6 +424,23 @@ describe("turning a room on", () => {
     expect(turnOn()?.until).toBe("2026-10-31T06:30:00.000Z");
   });
 
+  it("does not bring back a mood that ended in the first occurrence of a repeated hour", async () => {
+    const { call, focus, state, turnOn, start } = await home();
+    state.places.home.timeZone = "Europe/Zurich";
+    vi.setSystemTime(new Date("2026-10-25T00:10:00Z"));
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: focus.id,
+      start: 60,
+      end: 150,
+    });
+    expect(turnOn()?.until).toBe("2026-10-25T00:30:00.000Z");
+
+    vi.setSystemTime(new Date("2026-10-25T01:10:00Z"));
+    await start();
+    expect(turnOn()).toBeUndefined();
+  });
+
   it("refreshes the rule when a device gains a light capability", async () => {
     const { call, focus, changeDevice, turnOn } = await home();
     await call(scheduleMood, {

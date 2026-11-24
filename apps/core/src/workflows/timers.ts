@@ -12,7 +12,7 @@ import type { Engine, Firing, WorkflowRow } from "./engine.js";
 import { sameValue } from "./graph.js";
 import { nextSun, refreshSunTimer, type SunDays, type Timer } from "./jobs.js";
 import type { Pieces } from "./pieces.js";
-import { workflowTimers, workflows } from "./schema.js";
+import { workflowClock, workflowTimers, workflows } from "./schema.js";
 import { nextDaily } from "./time.js";
 
 // Workflows' timers: when each time and sun trigger of a workflow is next
@@ -64,6 +64,8 @@ export function createTimers(
   },
 ) {
   const { pieces, engine, clock, motion } = options;
+  const clockRow = eq(workflowClock.id, 1);
+  const readZone = db.select().from(workflowClock).where(clockRow).prepare();
 
   const one = (timer: { workflowId: string; node: string }) =>
     and(
@@ -78,6 +80,7 @@ export function createTimers(
     node: WorkflowNode,
     after: Date,
     ranFor: string | null = null,
+    timeZone?: string,
   ): Timer {
     if (node.piece === "noMotion") {
       const { place, forMinutes } = pieces.coreConfig(
@@ -91,7 +94,7 @@ export function createTimers(
     if (node.piece === "time") {
       const { time, days } = pieces.coreConfig(node) as TimeTriggerConfig;
       return {
-        nextAt: nextDaily(after, time, clock.timeZone(), days),
+        nextAt: nextDaily(after, time, timeZone ?? clock.timeZone(), days),
         sunDay: null,
       };
     }
@@ -113,6 +116,23 @@ export function createTimers(
       now.quietSince !== null &&
       at.getTime() - now.quietSince.getTime() >= forMinutes * 60_000
     );
+  }
+
+  function refresh(piece: "noMotion" | "time", at: Date, timeZone?: string) {
+    for (const timer of db.select().from(workflowTimers).all()) {
+      if (timer.nextAt && timer.nextAt <= at) continue;
+      const node = db
+        .select()
+        .from(workflows)
+        .where(eq(workflows.id, timer.workflowId))
+        .get()
+        ?.graph.nodes.find((each) => each.id === timer.node);
+      if (node?.piece !== piece || node.app || !pieces.find(node)) continue;
+      const { nextAt } = nextFor(node, at, null, timeZone);
+      if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
+        db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
+      }
+    }
   }
 
   return {
@@ -191,48 +211,33 @@ export function createTimers(
      * One that's due stays, for the tick to run or skip.
      */
     followQuiet() {
-      const at = clock.now();
-      for (const timer of db.select().from(workflowTimers).all()) {
-        if (timer.nextAt && timer.nextAt <= at) continue;
-        const node = db
-          .select()
-          .from(workflows)
-          .where(eq(workflows.id, timer.workflowId))
-          .get()
-          ?.graph.nodes.find((each) => each.id === timer.node);
-        if (node?.piece !== "noMotion" || node.app || !pieces.find(node)) {
-          continue;
-        }
-        const { nextAt } = nextFor(node, at);
-        if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
-          db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
-        }
-      }
+      refresh("noMotion", clock.now());
     },
 
     /**
      * Every time trigger's timer as the home's clock now reads, as the
      * home's time zone changes: 07:30 is the new zone's 07:30. One that's
-     * due stays, for the tick to run or skip.
+     * due at the change stays, for the tick to run or skip. The saved zone
+     * moves with the timers so a failure leaves the change eligible for retry.
      */
-    followZone() {
-      const at = clock.now();
-      for (const timer of db.select().from(workflowTimers).all()) {
-        if (timer.nextAt && timer.nextAt <= at) continue;
-        const node = db
-          .select()
-          .from(workflows)
-          .where(eq(workflows.id, timer.workflowId))
-          .get()
-          ?.graph.nodes.find((each) => each.id === timer.node);
-        if (node?.piece !== "time" || node.app || !pieces.find(node)) {
-          continue;
+    followZone(at: Date, previousZone?: string) {
+      const zone = clock.timeZone();
+      const saved = readZone.get()?.timeZone;
+      if (saved === zone && previousZone === undefined) return;
+      db.transaction(() => {
+        // Timers from before the zone was recorded already use the home's
+        // zone unless Places is changing it in this transaction.
+        if ((previousZone ?? saved ?? zone) !== zone) {
+          refresh("time", at, zone);
         }
-        const { nextAt } = nextFor(node, at);
-        if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
-          db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
-        }
-      }
+        db.insert(workflowClock)
+          .values({ id: 1, timeZone: zone })
+          .onConflictDoUpdate({
+            target: workflowClock.id,
+            set: { timeZone: zone },
+          })
+          .run();
+      });
     },
 
     /**

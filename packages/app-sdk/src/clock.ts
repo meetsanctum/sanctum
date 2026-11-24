@@ -1,14 +1,12 @@
-// The home clock: how Sanctum works out days and times in the home's time
-// zone, the one way the core, apps' servers, apps' pages and the shell all
-// do. The zone and how the home counts hours are the household's, kept by
-// the core with the home's places; the instant is each device's own clock.
+// The home clock works out dates and times in the home's time zone. Places
+// keeps the household's zone and hour preference. Workflows use the zone to
+// schedule time triggers, and Models uses it to count usage by day.
 //
 // A time of day the clocks skip comes as much later as they moved (02:30
 // becomes 03:30), and one they repeat comes the first time, as JavaScript's
 // Temporal does; a day starts at its first instant, even where its midnight
-// is skipped. It needs nothing but the runtime's Intl, and keeps one
-// formatter for each zone and use, since making one costs far more than
-// using it, on a wall display above all.
+// is skipped. It uses the runtime's Intl and keeps a bounded cache of recent
+// formatters because making one costs far more than using it.
 
 /** How the home writes a time of day, which the household sets: 14:48 or 2:48 PM. */
 export const hourCycles = ["24h", "12h"] as const;
@@ -25,18 +23,25 @@ export type LocalParts = LocalDate & {
 };
 
 const formats = new Map<string, Intl.DateTimeFormat>();
+const maxFormats = 128;
 
 function formatter(
   key: string,
   locale: string,
   options: Intl.DateTimeFormatOptions,
 ) {
-  let found = formats.get(key);
-  if (!found) {
-    found = new Intl.DateTimeFormat(locale, options);
+  const found = formats.get(key);
+  if (found) {
+    formats.delete(key);
     formats.set(key, found);
+    return found;
   }
-  return found;
+  const created = new Intl.DateTimeFormat(locale, options);
+  if (formats.size === maxFormats) {
+    formats.delete(formats.keys().next().value!);
+  }
+  formats.set(key, created);
+  return created;
 }
 
 const partsFormat = (timeZone: string) =>
@@ -102,6 +107,16 @@ export function zonedTime(
   minute: number,
   timeZone: string,
 ): Date {
+  return new Date(resolveTime(date, hour, minute, timeZone));
+}
+
+function resolveTime(
+  date: LocalDate,
+  hour: number,
+  minute: number,
+  timeZone: string,
+  startOfDate = false,
+): number {
   const wall = Date.UTC(date.year, date.month - 1, date.day, hour, minute);
   // The offsets on either side of any change of the clocks that day.
   const before = offsetAt(wall - 14 * 3600_000, timeZone);
@@ -110,7 +125,19 @@ export function zonedTime(
     (at) => wall - offsetAt(at, timeZone) === at,
   );
   // Repeated: the first. Skipped: as much later as the clocks moved.
-  return new Date(fits.length > 0 ? Math.min(...fits) : wall - before);
+  if (fits.length > 0) return Math.min(...fits);
+  if (!startOfDate) return wall - before;
+
+  // Midnight is in a gap. The two offsets bracket the instant when the
+  // clock enters the date (or passes it entirely).
+  let earlier = wall - after;
+  let later = wall - before;
+  while (later - earlier > 1) {
+    const middle = earlier + Math.floor((later - earlier) / 2);
+    if (offsetAt(middle, timeZone) === before) earlier = middle;
+    else later = middle;
+  }
+  return later;
 }
 
 /** The date some days after another, or before it with a negative count. */
@@ -171,7 +198,7 @@ export function zonedDateToUtc(
 /** When the day an instant falls on starts in a time zone, `daysBack` days before. */
 export function startOfDay(at: number, timeZone: string, daysBack = 0) {
   const date = addDays(localParts(at, timeZone), -daysBack);
-  return zonedTime(date, 0, 0, timeZone).getTime();
+  return resolveTime(date, 0, 0, timeZone, true);
 }
 
 /**
@@ -185,17 +212,29 @@ export function hoursBetween(
   timeZone: string,
   every = 6,
 ) {
+  if (!Number.isInteger(every) || every <= 0) {
+    throw new RangeError("The hour interval must be a positive integer");
+  }
   const hours: number[] = [];
   for (
     let date: LocalDate = localParts(from, timeZone);
-    zonedTime(date, 0, 0, timeZone).getTime() < to;
+    resolveTime(date, 0, 0, timeZone, true) < to;
     date = addDays(date, 1)
   ) {
     for (let hour = 0; hour < 24; hour += every) {
-      const at = zonedTime(date, hour, 0, timeZone).getTime();
+      const at = resolveTime(date, hour, 0, timeZone);
       if (at <= from || at >= to) continue;
       const local = localParts(at, timeZone);
-      if (local.hour === hour && local.minute === 0) hours.push(at);
+      if (
+        local.year === date.year &&
+        local.month === date.month &&
+        local.day === date.day &&
+        local.hour === hour &&
+        local.minute === 0 &&
+        local.second === 0
+      ) {
+        hours.push(at);
+      }
     }
   }
   return hours;
@@ -256,8 +295,8 @@ export const dateText = (at: Date | number, timeZone: string) =>
 /** The home clock: every way of working out days and times above, bound to the home's zone and its hours. */
 export type HomeClock = {
   /** The home's time zone, such as Europe/Zurich. */
-  timeZone: string;
-  hourCycle: HourCycle;
+  readonly timeZone: string;
+  readonly hourCycle: HourCycle;
   now(): Date;
   /** What the home's wall clock reads, now unless said. */
   parts(at?: Date | number): LocalParts;
