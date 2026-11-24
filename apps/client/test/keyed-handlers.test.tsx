@@ -12,8 +12,8 @@ let root: Root;
 let container: HTMLDivElement;
 let handlers: ((key: string) => () => void) | undefined;
 
-function List(props: { onSelect: (key: string) => void }) {
-  handlers = useKeyedHandlers(props.onSelect);
+function List(props: { onSelect: (key: string) => void; keys: string[] }) {
+  handlers = useKeyedHandlers(props.onSelect, props.keys);
   return null;
 }
 
@@ -28,17 +28,24 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("keeps each key's function and calls the latest handler", async () => {
+it("keeps current keys' functions, releases removed keys, and calls the latest handler", async () => {
   const first = vi.fn();
   const second = vi.fn();
-  await act(async () => root.render(<List onSelect={first} />));
+  const keys = ["kitchen", "office"];
+  await act(async () => root.render(<List onSelect={first} keys={keys} />));
   const kitchen = handlers!("kitchen");
+  const office = handlers!("office");
   expect(handlers!("kitchen")).toBe(kitchen);
-  expect(handlers!("office")).not.toBe(kitchen);
+  expect(office).not.toBe(kitchen);
 
-  await act(async () => root.render(<List onSelect={second} />));
+  await act(async () =>
+    root.render(<List onSelect={second} keys={["kitchen"]} />),
+  );
   expect(handlers!("kitchen")).toBe(kitchen);
   kitchen();
   expect(first).not.toHaveBeenCalled();
   expect(second).toHaveBeenCalledWith("kitchen");
+
+  await act(async () => root.render(<List onSelect={second} keys={keys} />));
+  expect(handlers!("office")).not.toBe(office);
 });

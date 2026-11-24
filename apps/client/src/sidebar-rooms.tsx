@@ -88,8 +88,11 @@ export function SidebarRooms(props: {
   openNoRoom: () => void;
 }) {
   const { folded, toggle } = useFolded();
-  const openRoom = useKeyedHandlers(props.openRoom);
   const rooms = props.places?.rooms ?? [];
+  const openRoom = useKeyedHandlers(
+    props.openRoom,
+    rooms.map(({ id }) => id),
+  );
   const floors = props.places?.floors ?? [];
   if (rooms.length === 0 && !props.hasNoRoom) return null;
   const known = new Set(floors.map((floor) => floor.id));

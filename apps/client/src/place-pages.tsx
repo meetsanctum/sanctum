@@ -15,7 +15,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -480,7 +480,7 @@ export function RoomPage(props: {
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
       />
       {!isRowEmpty(row) && (
-        <RoomRow row={row} roomName={room.name} entities={entities} />
+        <RoomRow row={row} roomName={room.name} press={entities.press} />
       )}
       <Sections
         sections={sectionsOfRoom(own, devices.devices)}
@@ -732,14 +732,6 @@ export function SidebarPlaces(props: {
   ) => void;
 }) {
   const { devices, current, open } = props;
-  // The same functions each time, so an item that didn't change isn't
-  // drawn again (SidebarItem).
-  const openCategory = useKeyedHandlers((id: string) =>
-    open("category", { id }),
-  );
-  const roomOpener = useKeyedHandlers((id: string) => open("room", { id }));
-  const openRoom = useCallback((id: string) => roomOpener(id)(), [roomOpener]);
-  const openNoRoom = useKeyedHandlers(() => open(noRoomPage, {}))(noRoomPage);
   const shown = sidebarCategories
     .map((category) => ({
       ...category,
@@ -747,6 +739,15 @@ export function SidebarPlaces(props: {
     }))
     .filter((category) => category.tiles.length > 0);
   const hasNoRoom = inNoRoom(devices).length > 0;
+  // Keep callbacks stable for the items still in the sidebar.
+  const openCategory = useKeyedHandlers(
+    (id: string) => open("category", { id }),
+    shown.map(({ id }) => id),
+  );
+  const openNoRoom = useKeyedHandlers(
+    () => open(noRoomPage, {}),
+    [noRoomPage],
+  )(noRoomPage);
   return (
     <>
       {shown.length > 0 && <SidebarHeading>Categories</SidebarHeading>}
@@ -770,7 +771,7 @@ export function SidebarPlaces(props: {
         }
         hasNoRoom={hasNoRoom}
         isNoRoomCurrent={current?.page === noRoomPage}
-        openRoom={openRoom}
+        openRoom={(id) => open("room", { id })}
         openNoRoom={openNoRoom}
       />
     </>

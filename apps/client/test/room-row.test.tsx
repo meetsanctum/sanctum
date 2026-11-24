@@ -203,22 +203,29 @@ describe("a room's row", () => {
     ]);
   });
 
-  it("shows a tap that failed on the app's chip", async () => {
-    const animate = vi.fn();
-    Element.prototype.animate = animate;
-    try {
-      await show("room");
-      vi.mocked(coreJson).mockImplementationOnce(async () => {
-        throw new Error("unavailable");
-      });
-      await act(async () => {
-        named("Glow in Office")!.click();
-      });
-      expect(animate.mock.contexts).toContain(named("Glow in Office"));
-    } finally {
-      delete (Element.prototype as Partial<Element>).animate;
-    }
-  });
+  it.each([
+    { page: "room", label: "Glow in Office" },
+    { page: "home", label: "Relax in Office" },
+  ] as const)(
+    "shows a failed tap on $label on the $page page",
+    async ({ page, label }) => {
+      const animate = vi.fn();
+      Element.prototype.animate = animate;
+      try {
+        await show(page);
+        const control = named(label)!;
+        vi.mocked(coreJson).mockImplementationOnce(async () => {
+          throw new Error("unavailable");
+        });
+        await act(async () => {
+          control.click();
+        });
+        expect(animate.mock.contexts).toContain(control);
+      } finally {
+        delete (Element.prototype as Partial<Element>).animate;
+      }
+    },
+  );
 
   it.each([
     {

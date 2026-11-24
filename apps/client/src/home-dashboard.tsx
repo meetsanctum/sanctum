@@ -21,6 +21,7 @@ import {
   isRowEmpty,
   RoomRow,
   roomRowOf,
+  sameRoomRow,
   type SectionEntities,
 } from "./room-sections";
 import { sameData, sameItems } from "./same-data";
@@ -128,7 +129,7 @@ export function HomeRooms(props: {
       key={place.id}
       place={place}
       level={level}
-      entities={entities}
+      press={entities.press}
       onToggle={onToggle}
       onDim={onDim}
       openDevice={props.openDevice}
@@ -186,7 +187,7 @@ type HomeRoomProps = {
   };
   /** Its heading's level, a level down under a floor's. */
   level: 2 | 3;
-  entities: SectionEntities;
+  press: SectionEntities["press"];
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
   openDevice: (tile: Tile) => void;
@@ -195,21 +196,30 @@ type HomeRoomProps = {
 };
 
 // A room draws again only when what it shows changed: its tiles and lights
-// are the same objects while unchanged (use-devices.ts), and what its line
-// and row say is compared by value, its lights button's press, made from
-// the room and its lights, with them. A sensor's change otherwise drew
-// every room again.
-const sameRoom = (before: HomeRoomProps, after: HomeRoomProps) =>
-  before.level === after.level &&
-  before.entities === after.entities &&
-  before.onToggle === after.onToggle &&
-  before.onDim === after.onDim &&
-  before.openDevice === after.openDevice &&
-  before.openRoom === after.openRoom &&
-  before.openNoRoom === after.openNoRoom &&
-  sameItems(before.place.onHome, after.place.onHome) &&
-  sameItems(before.place.lights, after.place.lights) &&
-  sameData(before.place, after.place, { functionsAlike: true });
+// keep their identity while unchanged, as do its app entries' source objects.
+// The lights button's press is made from the room and its lights.
+function sameRoom(before: HomeRoomProps, after: HomeRoomProps) {
+  const { onHome, lights, row, ...place } = before.place;
+  const {
+    onHome: nextOnHome,
+    lights: nextLights,
+    row: nextRow,
+    ...nextPlace
+  } = after.place;
+  return (
+    before.level === after.level &&
+    before.press === after.press &&
+    before.onToggle === after.onToggle &&
+    before.onDim === after.onDim &&
+    before.openDevice === after.openDevice &&
+    before.openRoom === after.openRoom &&
+    before.openNoRoom === after.openNoRoom &&
+    sameItems(onHome, nextOnHome) &&
+    sameItems(lights, nextLights) &&
+    sameRoomRow(row, nextRow) &&
+    sameData(place, nextPlace)
+  );
+}
 
 const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
   const { place } = props;
@@ -241,11 +251,7 @@ const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
         />
       )}
       {place.row && (
-        <RoomRow
-          row={place.row}
-          roomName={place.name}
-          entities={props.entities}
-        />
+        <RoomRow row={place.row} roomName={place.name} press={props.press} />
       )}
       {place.onHome.length > 0 && (
         <div

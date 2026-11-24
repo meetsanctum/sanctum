@@ -45,10 +45,14 @@ export function HomeSidebar(props: {
       route.app !== placePages &&
       !pinned?.some((app) => app.id === onShow));
   const openApps = () => go([{ app: appsPage, page: "main", params: {} }]);
-  const showDashboard = useKeyedHandlers((id: string) => {
-    props.showDashboard(id);
-    go([]);
-  });
+  const dashboards = props.dashboards ?? [];
+  const showDashboard = useKeyedHandlers(
+    (id: string) => {
+      props.showDashboard(id);
+      go([]);
+    },
+    dashboards.map(({ id }) => id),
+  );
   return (
     <SidebarContent
       isInert={props.isVeiled || (!props.isFloating && !layout.docked)}
@@ -77,16 +81,14 @@ export function HomeSidebar(props: {
           pinApps={openApps}
         />
       }
-      dashboards={(props.dashboards ?? []).map(
-        ({ id, name, background, kind }) => ({
-          id,
-          name,
-          background: dashboardBackground[background],
-          home: kind === "home",
-          current: routes.length === 0 && id === props.shown?.id,
-          onSelect: showDashboard(id),
-        }),
-      )}
+      dashboards={dashboards.map(({ id, name, background, kind }) => ({
+        id,
+        name,
+        background: dashboardBackground[background],
+        home: kind === "home",
+        current: routes.length === 0 && id === props.shown?.id,
+        onSelect: showDashboard(id),
+      }))}
       account={
         props.account && {
           ...props.account,
