@@ -11,6 +11,7 @@ import type { Route } from "./apps";
 import type { SetupTarget } from "./setup-guide";
 import {
   appSettingsPage,
+  devicesSettingsPage,
   settingsApp,
   settingsPageTitle,
   setupPage,
@@ -84,15 +85,19 @@ export function useSettingsNavigation(
     ]);
   }
 
+  const backTo =
+    parent?.app === settingsApp.id
+      ? settingsPageTitle(parent.page, parent.params, apps)
+      : route?.page === devicesSettingsPage && route.app === settingsApp.id
+        ? apps.find((app) => app.id === parent?.app)?.name
+        : undefined;
+
   return {
     openSettings,
     openOverview,
     openSetup,
     scrollArea,
-    backTo:
-      parent?.app === settingsApp.id
-        ? settingsPageTitle(parent.page, parent.params, apps)
-        : undefined,
+    backTo,
     start:
       setupStep && route?.page === setupPage[setupStep] ? setupStep : undefined,
     onStarted,

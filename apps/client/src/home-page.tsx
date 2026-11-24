@@ -2,7 +2,6 @@ import type { AppInfo, DashboardInfo } from "@meetsanctum/app-sdk";
 import type { Me } from "@meetsanctum/auth-protocol";
 import {
   Button,
-  mainPage,
   type createLiveFeed,
   type PageParams,
   type Tile,
@@ -10,7 +9,7 @@ import {
 import { Component, Suspense, useEffect, type ReactNode } from "react";
 
 import { AppNotice, WhileNotRunning } from "./app-state";
-import { hasDefaultPage, type HostedApp, type Route } from "./apps";
+import type { HostedApp, Route } from "./apps";
 import { AppsPage, appsPage, type ListedApp } from "./apps-page";
 import { DefaultAppPage } from "./default-app-page";
 import type { CoreStatus } from "./core-status";
@@ -69,6 +68,7 @@ type HomePageProps = {
   routeDepth: number;
   routeApp: HostedApp | undefined;
   isAppPage: boolean;
+  isDefaultPage: boolean;
   openedByItsApp: boolean;
   back: () => void;
   opener: (app: string) => (page: string, params?: PageParams) => void;
@@ -132,6 +132,7 @@ function HomePageWithDevices({
   routeDepth,
   routeApp,
   isAppPage,
+  isDefaultPage,
   openedByItsApp,
   back,
   opener,
@@ -244,13 +245,11 @@ function HomePageWithDevices({
             back={back}
           />
         )
-      ) : route &&
-        routeApp &&
-        isAppPage &&
-        route.page === mainPage &&
-        hasDefaultPage(routeApp) ? (
+      ) : route && routeApp && isDefaultPage ? (
         <DefaultAppPage
+          key={`${routeApp.info.id}@${routeApp.info.version}:${routeApp.info.build ?? ""}`}
           app={routeApp.info}
+          live={live}
           deviceCount={
             devices.devices.filter(
               (device) => device.driver === routeApp.info.id,

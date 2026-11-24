@@ -531,6 +531,7 @@ function HomeScreen(
                       routeDepth={routes.length}
                       routeApp={routeApp}
                       isAppPage={isAppPage}
+                      isDefaultPage={isDefaultPage}
                       openedByItsApp={openedByItsApp}
                       back={back}
                       opener={opener}

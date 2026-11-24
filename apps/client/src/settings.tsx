@@ -67,7 +67,7 @@ export function SettingsPage(props: {
   open: (page: string, params?: PageParams) => void;
   // Leaves a page Settings or an app opened for the one under it.
   back: () => void;
-  // The title of the page of Settings under this one, which Back names;
+  // The title of the page under this one, which Back names;
   // without one, a page opened from elsewhere closes with Done.
   backTo?: string;
   apps: AppInfo[];

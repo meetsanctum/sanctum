@@ -1,5 +1,9 @@
-import type { AppInfo, StaticManifest } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import {
+  appColors,
+  type AppInfo,
+  type StaticManifest,
+} from "@meetsanctum/app-sdk";
+import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
@@ -16,6 +20,19 @@ import { coreJson } from "./core-fetch";
 const shade =
   "linear-gradient(to bottom, rgb(0 0 0 / 24%), rgb(0 0 0 / 0%) 140px)";
 const hex = /^#[0-9a-f]{6}$/i;
+const actionBlue = "#3e6ae1";
+
+function isBackdropColor(color: unknown): color is string {
+  return (
+    typeof color === "string" &&
+    hex.test(color) &&
+    color.toLowerCase() !== actionBlue
+  );
+}
+
+function defaultPageIcon(app: AppInfo) {
+  return app.icon && appColors.includes(app.icon.color) ? app.icon : plainIcon;
+}
 
 /**
  * The page's background: the app's own colours where it names them, darkest
@@ -23,22 +40,30 @@ const hex = /^#[0-9a-f]{6}$/i;
  */
 export function appBackdrop(app: AppInfo) {
   const backdrop = app.backdrop;
-  if (backdrop && hex.test(backdrop.from) && hex.test(backdrop.to)) {
+  if (
+    backdrop &&
+    isBackdropColor(backdrop.from) &&
+    isBackdropColor(backdrop.to)
+  ) {
     return `${shade}, linear-gradient(to top right, ${backdrop.from}, ${backdrop.to})`;
   }
-  const color = `var(--${(app.icon ?? plainIcon).color})`;
+  const color = `var(--${defaultPageIcon(app).color})`;
   return `${shade}, linear-gradient(to top right, color-mix(in srgb, ${color} 30%, var(--carbon)), ${color} 55%, color-mix(in srgb, ${color} 85%, var(--white)))`;
 }
 
 export function DefaultAppPage(props: {
   app: AppInfo;
+  live: LiveFeed;
   deviceCount: number;
   openDevices: () => void;
   openSettings: () => void;
   openStatus: () => void;
 }) {
   const { app } = props;
-  const manifest = useManifest(app);
+  const manifest = useManifest(app.id, props.live);
+  const summary =
+    typeof manifest?.summary === "string" ? manifest.summary.trim() : "";
+  const isDriver = !!manifest?.driver;
   return (
     <div className="flex grow flex-col-reverse justify-between gap-8 sm:flex-row sm:items-end sm:p-10">
       <div className="flex flex-col items-start gap-1">
@@ -60,45 +85,55 @@ export function DefaultAppPage(props: {
           openSettings={props.openSettings}
           openStatus={props.openStatus}
         />
-        <section className="flex flex-col gap-4 rounded-lg bg-card/80 p-6">
-          <div className="flex items-center gap-3">
-            <AppIcon
-              icon={app.icon ?? plainIcon}
-              className="size-11 [&_svg]:size-6"
-            />
-            <h2 className="m-0 text-[15px] leading-5 font-medium">
-              What it does
-            </h2>
-          </div>
-          {manifest?.summary && (
-            <p className="m-0 text-[17px] leading-6">{manifest.summary}</p>
-          )}
-          {manifest?.driver && (
-            <Button className="self-start" onClick={props.openDevices}>
-              Show devices
-            </Button>
-          )}
-        </section>
+        {(summary || isDriver) && (
+          <section className="flex flex-col gap-4 rounded-lg bg-card/80 p-6">
+            <div className="flex items-center gap-3">
+              <AppIcon
+                icon={defaultPageIcon(app)}
+                className="size-11 [&_svg]:size-6"
+              />
+              <h2 className="m-0 text-[15px] leading-5 font-medium">
+                What it does
+              </h2>
+            </div>
+            {summary && <p className="m-0 text-[17px] leading-6">{summary}</p>}
+            {isDriver && (
+              <Button className="self-start" onClick={props.openDevices}>
+                Show devices
+              </Button>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );
 }
 
-// What it does and whether it brings devices, from its manifest, read again
-// when it moves to another version.
-function useManifest(app: AppInfo) {
+// The page remounts for a new build. A live refresh retries a failed read.
+function useManifest(id: string, live: LiveFeed) {
   const [manifest, setManifest] = useState<StaticManifest>();
-  const { id, version } = app;
   useEffect(() => {
     let isCurrent = true;
-    coreJson<StaticManifest>(`/api/apps/${encodeURIComponent(id)}/manifest`)
-      .then((next) => {
-        if (isCurrent) setManifest(next);
-      })
-      .catch(() => undefined);
+    let needsManifest = true;
+    const load = () => {
+      if (!needsManifest) return;
+      needsManifest = false;
+      void coreJson<StaticManifest>(
+        `/api/apps/${encodeURIComponent(id)}/manifest`,
+      )
+        .then((next) => {
+          if (isCurrent) setManifest(next);
+        })
+        .catch(() => {
+          needsManifest = true;
+        });
+    };
+    load();
+    const unsubscribe = live.subscribe({ refresh: load });
     return () => {
       isCurrent = false;
+      unsubscribe();
     };
-  }, [id, version]);
+  }, [id, live]);
   return manifest;
 }

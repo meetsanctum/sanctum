@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { AppInfo, StaticManifest } from "@meetsanctum/app-sdk";
+import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,13 +53,14 @@ afterEach(() => {
   vi.mocked(coreJson).mockReset();
 });
 
-async function show(app: AppInfo, driver: boolean) {
-  vi.mocked(coreJson).mockResolvedValue(manifest(driver));
+async function show(app: AppInfo) {
+  const live = createLiveFeed();
   const openDevices = vi.fn();
   await act(async () => {
     root.render(
       <DefaultAppPage
         app={app}
+        live={live}
         deviceCount={0}
         openDevices={openDevices}
         openSettings={vi.fn()}
@@ -66,7 +68,7 @@ async function show(app: AppInfo, driver: boolean) {
       />,
     );
   });
-  return { openDevices };
+  return { live, openDevices };
 }
 
 const button = (name: string) =>
@@ -75,15 +77,19 @@ const button = (name: string) =>
   );
 
 describe("an app's default page", () => {
+  beforeEach(() => {
+    vi.mocked(coreJson).mockResolvedValue(manifest(true));
+  });
+
   it("names the app and its version, with Look for updates dimmed", async () => {
-    await show(example, true);
+    await show(example);
     expect(container.querySelector("h1")?.textContent).toBe("Example Devices");
     expect(container.textContent).toContain("Version 0.3.1");
     expect(button("Look for updates")?.disabled).toBe(true);
   });
 
   it("says what the app does, from its manifest", async () => {
-    await show(example, true);
+    await show(example);
     expect(coreJson).toHaveBeenCalledWith("/api/apps/sanctum.example/manifest");
     expect(container.textContent).toContain(
       "Brings your example devices into your home.",
@@ -91,20 +97,47 @@ describe("an app's default page", () => {
   });
 
   it("opens the home's devices from Show devices, for an app that brings them", async () => {
-    const { openDevices } = await show(example, true);
+    const { openDevices } = await show(example);
     await act(async () => button("Show devices")?.click());
     expect(openDevices).toHaveBeenCalledOnce();
   });
 
   it("has no Show devices for an app that brings none", async () => {
-    await show(example, false);
+    vi.mocked(coreJson).mockResolvedValue(manifest(false));
+    await show(example);
     expect(button("Show devices")).toBeUndefined();
   });
 
   it("says so while the app isn't running", async () => {
-    await show({ ...example, state: "stopped" }, true);
+    vi.mocked(coreJson).mockResolvedValue({ summary: null, driver: null });
+    await show({ ...example, state: "stopped" });
     expect(container.textContent).toContain("Example Devices isn't running");
     expect(button("Open Status")).toBeDefined();
+    expect(container.textContent).not.toContain("What it does");
+  });
+
+  it("keeps the driver action when the manifest has an invalid summary", async () => {
+    vi.mocked(coreJson).mockResolvedValue({
+      ...manifest(true),
+      summary: { text: "Description" },
+    });
+    await show(example);
+    expect(container.textContent).toContain(example.name);
+    expect(container.textContent).not.toContain("Description");
+    expect(button("Show devices")).toBeDefined();
+  });
+
+  it("retries a failed manifest read on the shell's next refresh", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Connection lost"));
+    const { live } = await show(example);
+    expect(button("Show devices")).toBeUndefined();
+
+    await act(async () => live.refresh());
+    expect(container.textContent).toContain(manifest(true).summary);
+    expect(button("Show devices")).toBeDefined();
+
+    await act(async () => live.refresh());
+    expect(coreJson).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -118,6 +151,26 @@ describe("its background", () => {
   it("takes the icon's colour where the app names none", () => {
     expect(appBackdrop(example)).toContain("var(--graphite)");
   });
+
+  it("falls back when the icon's colour is unknown", () => {
+    const icon = {
+      glyph: "tv",
+      color: "unknown",
+    } as unknown as AppInfo["icon"];
+    expect(appBackdrop({ ...example, icon })).toContain("var(--graphite)");
+  });
+
+  it.each([
+    { from: "#3e6ae1", to: "#18bcf2" },
+    { from: "#0a5c7a", to: "#3E6AE1" },
+  ])(
+    "reserves the action colour when the backdrop is $from to $to",
+    (backdrop) => {
+      expect(appBackdrop({ ...example, backdrop })).toContain(
+        "var(--graphite)",
+      );
+    },
+  );
 
   it("paints nothing but colours", () => {
     const backdrop = appBackdrop({
