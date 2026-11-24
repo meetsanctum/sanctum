@@ -78,6 +78,12 @@
   transition: opacity 200ms ease;
 }
 
+/* An overlay comes and goes at once under Reduce effects (overlay.tsx), and
+   the backing with it; a veil keeps its own late fade, below. */
+[data-effects="reduced"] .frame-under-glass {
+  transition: none;
+}
+
 [data-platform="macos"] .home-screen[data-covered] .frame-under-glass {
   opacity: 1;
 }

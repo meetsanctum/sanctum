@@ -310,6 +310,26 @@ describe("Reduce effects in the built CSS", () => {
     );
   });
 
+  it("brings an overlay and the frame's backing in and out at once", () => {
+    // After the fade's own rules, which it outweighs only by coming later.
+    for (const phase of ["open", "closed"]) {
+      const still = css.indexOf(
+        `.reduce-effects\\:data-${phase}\\:animate-none${reduced}:where([data-state=${phase}])`,
+      );
+      const fade = css.indexOf(
+        `.data-${phase}\\:animate-${phase === "open" ? "in" : "out"}:where(`,
+      );
+      expect(fade).toBeGreaterThan(-1);
+      expect(still).toBeGreaterThan(fade);
+    }
+    expect(css).toMatch(
+      /\.reduce-effects\\:data-closed\\:animate-none[^{]*\{animation:none\}/,
+    );
+    expect(declarationsOf("[data-effects=reduced] .frame-under-glass")).toEqual(
+      [["transition", "none"]],
+    );
+  });
+
   it("makes the floating sidebar solid, in a place's deepened background", () => {
     expect(declarationsOf("[data-effects=reduced] .sidebar-float")).toEqual([
       ["background", "var(--float-solid,var(--card))"],
