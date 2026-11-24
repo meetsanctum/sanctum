@@ -3,39 +3,37 @@ import {
   assistantAppId,
   isActionError,
   turnLimits,
-  type AppContext,
   type AssistantRequest,
+  type RequestContext,
   type RequestReply,
 } from "@meetsanctum/app-sdk";
-import type { AppStorage } from "@meetsanctum/app-sdk/storage";
 
 import type { ActivityAuthor } from "../activity/activity.js";
 import type { TurnOpener } from "../agents/assistants.js";
+import { createAgentLimiter } from "../agents/limits.js";
 import type { Turn } from "../models/turns.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { InstalledApp } from "./installed.js";
 
-// A request: someone said or typed something to Sanctum, and the core runs
-// Sanctum's Assistant's handler for it, within a turn of its own for whoever
-// asked. The reply goes back as soon as the handler gives it; the turn ends
-// with the handler, or at its time. With no Assistant to answer, running,
-// holding its permission and declaring a handler, the core answers at once.
+// A typed request runs the Assistant's handler within a turn for whoever
+// asked. The reply goes back as soon as the handler gives it. The turn and
+// its admission slot stay open until the handler finishes or its time is up.
 
 export function createRequests(options: {
   installed: ReadonlyMap<string, InstalledApp>;
   accepts: (entry: InstalledApp) => boolean;
-  arrives: (entry: InstalledApp) => Promise<boolean>;
+  arrives: (entry: InstalledApp, signal: AbortSignal) => Promise<boolean>;
   contextFor: (
     entry: InstalledApp,
     actor: TurnOpener,
-    storage: ReturnType<AppStorage["call"]>,
+    scope: { readonly ended: boolean },
     within: {
       withinMs: number;
       turn: Turn;
       reply: (reply: RequestReply) => void;
     },
-  ) => AppContext;
-  coreOf: (ctx: AppContext) => {
+  ) => RequestContext;
+  coreOf: (ctx: RequestContext) => {
     replyRequest(reply: RequestReply): Promise<void>;
   };
   turnFor: (entry: InstalledApp, who: ActivityAuthor) => Turn;
@@ -43,20 +41,111 @@ export function createRequests(options: {
   log: (message: string) => void;
 }) {
   const { installed, accepts } = options;
+  const stopping = new AbortController();
+  const { signal } = stopping;
+  // Leave room for other clients when one client has a request under way.
+  const limiter = createAgentLimiter({
+    agentPerMinute: 12,
+    homePerMinute: 60,
+    agentAtOnce: 1,
+    homeAtOnce: 4,
+  });
 
-  function answering(entry: InstalledApp | undefined) {
+  function canAnswer(entry: InstalledApp) {
     return (
-      entry !== undefined &&
       entry.app.requests !== undefined &&
-      entry.granted.includes(aiAssistantPermission) &&
-      accepts(entry)
+      entry.granted.includes(aiAssistantPermission)
     );
   }
 
+  function dispatch(
+    entry: InstalledApp,
+    request: {
+      actor: TurnOpener;
+      who: ActivityAuthor;
+      asked: AssistantRequest;
+    },
+  ) {
+    const app = entry.app;
+    const turn = options.turnFor(entry, request.who);
+    let resolveReply!: (answer: RequestReply | null) => void;
+    let rejectReply!: (error: ActionCallError) => void;
+    const replied = new Promise<RequestReply | null>((resolve, reject) => {
+      resolveReply = resolve;
+      rejectReply = reject;
+    });
+    let cancel!: () => void;
+    const cancelled = new Promise<never>((_, reject) => {
+      cancel = () => reject(signal.reason);
+    });
+    let ended = false;
+    let answered = false;
+    const ctx = options.contextFor(
+      entry,
+      request.actor,
+      {
+        get ended() {
+          return ended;
+        },
+      },
+      {
+        withinMs: turnLimits.turnMs,
+        turn,
+        reply(answer) {
+          if (answered) throw new Error("A request is answered once");
+          answered = true;
+          resolveReply(answer);
+        },
+      },
+    );
+    const core = options.coreOf(ctx);
+    signal.addEventListener("abort", cancel, { once: true });
+    const work = Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return app.requests!(ctx, {
+        ...request.asked,
+        reply: (answer) => core.replyRequest(answer),
+      });
+    });
+    const running = options.track(
+      entry,
+      withTimeout(Promise.race([work, cancelled]), turnLimits.turnMs),
+    );
+
+    function finish(failure?: { error: unknown }) {
+      const error = failure?.error;
+      signal.removeEventListener("abort", cancel);
+      ended = true;
+      try {
+        turn.end();
+      } catch {
+        options.log(`apps: ${assistantAppId} could not close a request's turn`);
+      } finally {
+        if (error instanceof ActionCallError && error.code === "unavailable") {
+          rejectReply(error);
+        } else {
+          resolveReply(null);
+          if (failure && !isActionError(error)) {
+            const reason = error instanceof TimedOut ? "timed out" : "failed";
+            options.log(`apps: ${assistantAppId} request ${reason}`);
+          }
+        }
+      }
+    }
+
+    return {
+      reply: replied,
+      finished: running.then(
+        () => finish(),
+        (error: unknown) => finish({ error }),
+      ),
+    };
+  }
+
   return {
-    /** Whether Sanctum's Assistant would answer a request now. */
-    isOn() {
-      return answering(installed.get(assistantAppId));
+    /** Stops new requests and releases callers before the HTTP server closes. */
+    close() {
+      stopping.abort(new ActionCallError("unavailable"));
     },
 
     /**
@@ -65,68 +154,42 @@ export function createRequests(options: {
      */
     async ask(request: {
       actor: TurnOpener;
-      who: ActivityAuthor;
+      who: ActivityAuthor & { clientId: string };
       asked: AssistantRequest;
+      checkClient: () => void;
     }): Promise<RequestReply | null> {
-      let entry = installed.get(assistantAppId);
-      // One on its way back is waited for, within the turn's time.
-      if (entry && !answering(entry) && entry.app.requests) {
-        if (!(await options.arrives(entry))) entry = undefined;
-      }
-      if (
-        !entry ||
-        !answering(entry) ||
-        installed.get(assistantAppId) !== entry
-      ) {
+      signal.throwIfAborted();
+      const entry = installed.get(assistantAppId);
+      if (!entry || !canAnswer(entry)) {
         throw new ActionCallError("unavailable");
       }
-      const handler = entry.app.requests!;
-      const storage = entry.storage.call();
-      const turn = options.turnFor(entry, request.who);
-      let given: (reply: RequestReply | null) => void = () => {};
-      const replied = new Promise<RequestReply | null>((resolve) => {
-        given = resolve;
-      });
-      let answered = false;
-      const ctx = options.contextFor(entry, request.actor, storage, {
-        withinMs: turnLimits.turnMs,
-        turn,
-        reply(reply) {
-          if (answered) throw new Error("A request is answered once");
-          answered = true;
-          given(reply);
-        },
-      });
-      const core = options.coreOf(ctx);
-      const running = options
-        .track(
-          entry,
-          withTimeout(
-            Promise.resolve().then(() =>
-              handler(ctx, {
-                ...request.asked,
-                reply: (reply) => core.replyRequest(reply),
-              }),
-            ),
-            turnLimits.turnMs,
-          ),
-        )
-        .catch((error: unknown) => {
-          if (!isActionError(error)) {
-            options.log(
-              `apps: ${assistantAppId} did not answer a request (${error instanceof TimedOut ? "timed out" : error instanceof Error ? error.message : String(error)})`,
-            );
+      const client = request.who.clientId;
+      if (limiter.takeRequest(client)) throw new ActionCallError("limited");
+      const slot = limiter.begin(client);
+      if (!("done" in slot)) throw new ActionCallError("limited");
+
+      try {
+        if (!accepts(entry)) {
+          if (!(await options.arrives(entry, signal))) {
+            throw new ActionCallError("unavailable");
           }
-        })
-        .finally(() => {
-          storage.end();
-          turn.end();
-          given(null);
-        });
-      void running;
-      return replied;
+          signal.throwIfAborted();
+          if (
+            installed.get(assistantAppId) !== entry ||
+            !canAnswer(entry) ||
+            !accepts(entry)
+          ) {
+            throw new ActionCallError("unavailable");
+          }
+        }
+        request.checkClient();
+        const { reply, finished } = dispatch(entry, request);
+        void finished.then(slot.done, slot.done);
+        return reply;
+      } catch (error) {
+        slot.done();
+        throw error;
+      }
     },
   };
 }
-
-export type Requests = ReturnType<typeof createRequests>;

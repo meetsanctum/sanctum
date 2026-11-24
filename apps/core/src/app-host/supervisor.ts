@@ -664,9 +664,10 @@ export function createSupervisor(options: {
      * Waits for it to be running, within `withinMs`, if it's on its way. A press
      * waits for an app that's restarting rather than fail at once.
      */
-    async arrives(entry: InstalledApp, withinMs: number) {
+    async arrives(entry: InstalledApp, withinMs: number, signal?: AbortSignal) {
       const supervision = entry.supervision;
       if (
+        signal?.aborted ||
         supervision.isEnded ||
         entry.off ||
         (supervision.phase !== "starting" &&
@@ -678,13 +679,15 @@ export function createSupervisor(options: {
       let timer: NodeJS.Timeout | undefined;
       let wake: () => void = () => undefined;
       await new Promise<void>((done) => {
-        wake = done;
-        supervision.waiters.add(done);
-        timer = setTimeout(done, withinMs);
+        wake = () => done();
+        supervision.waiters.add(wake);
+        signal?.addEventListener("abort", wake, { once: true });
+        timer = setTimeout(wake, withinMs);
       });
       clearTimeout(timer);
+      signal?.removeEventListener("abort", wake);
       supervision.waiters.delete(wake);
-      return !supervision.isEnded && isRunning(supervision);
+      return !signal?.aborted && !supervision.isEnded && isRunning(supervision);
     },
   };
 }

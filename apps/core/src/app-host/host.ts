@@ -337,10 +337,10 @@ export function createAppHost(options: {
   const requests = createRequests({
     installed,
     accepts,
-    arrives: (entry) =>
+    arrives: (entry, signal) =>
       appStateOf(entry) === "paused"
         ? Promise.resolve(false)
-        : supervisor.arrives(entry, timeoutMs),
+        : supervisor.arrives(entry, timeoutMs, signal),
     contextFor,
     coreOf: contexts.coreOf,
     turnFor: (entry, who) =>
@@ -632,8 +632,7 @@ export function createAppHost(options: {
 
     /** Someone's request, for Sanctum's Assistant (requests.ts). */
     ask: requests.ask,
-    /** Whether Sanctum's Assistant answers requests now. */
-    isAssistantOn: requests.isOn,
+    stopRequests: requests.close,
 
     /** One of an installed app's actions. */
     action(appId: string, actionId: string) {

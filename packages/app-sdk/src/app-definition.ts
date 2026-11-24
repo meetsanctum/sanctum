@@ -1,7 +1,7 @@
 import type { z } from "zod";
 
 import type { AppManifestFields } from "./app-manifest.js";
-import type { AppContext } from "./context.js";
+import type { AppContext, RequestContext } from "./context.js";
 import type { DriverCancelAdd, DriverCancelRepair } from "./device-asking.js";
 import type { DevicePageDefinition } from "./device-pages.js";
 import type { DriverCommand, DriverMove } from "./devices.js";
@@ -90,7 +90,7 @@ export interface AppDefinition extends AppManifestFields {
    * the turn the core opened for it, with `request.reply()`. The core refuses
    * it from any other app.
    */
-  requests?(ctx: AppContext, request: AssistantRequestCall): Promise<void>;
+  requests?(ctx: RequestContext, request: AssistantRequestCall): Promise<void>;
   /**
    * A driver app's side of the Drivers contract: the core hands it every
    * command for its own devices, as the actor behind the command. It

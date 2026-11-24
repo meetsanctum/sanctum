@@ -1,6 +1,5 @@
 import {
-  requestLanguages,
-  requestTextMaxLength,
+  assistantRequestSchema,
   type AppGoBack,
   type AppRunning,
   type AppInfo,
@@ -13,6 +12,9 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import type { Auth } from "../auth/auth.js";
+import { AuthError } from "../auth/errors.js";
+import { bearerToken } from "../auth/tokens.js";
 import type { AppAdding } from "./adding.js";
 import type { AppDeleting } from "./deleting.js";
 import type { HardwareOffers } from "./hardware-offers.js";
@@ -94,10 +96,9 @@ import type { AppHost } from "./host.js";
 
 const appParams = z.object({ appId: z.string().min(1).max(128) });
 
-const askBody = z.strictObject({
-  text: z.string().trim().min(1).max(requestTextMaxLength),
-  language: z.enum(requestLanguages).optional(),
-});
+const askBody = assistantRequestSchema
+  .pick({ text: true, language: true })
+  .partial({ language: true });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedId = z.string().min(1).max(64);
@@ -131,6 +132,7 @@ export function registerAppRoutes(
     deleting: AppDeleting;
     offers: HardwareOffers;
     gate: Gate;
+    authenticate: Auth["authenticate"];
   },
 ) {
   const { host, available, adding, removing, deleting, offers, gate } = options;
@@ -249,15 +251,22 @@ export function registerAppRoutes(
     if (actor.kind !== "user" && actor.kind !== "client") {
       throw new ActionCallError("forbidden");
     }
+    const token = bearerToken(request.headers.authorization);
     const reply = await host.ask({
       actor,
       who: { personId: principal.person?.id, clientId: principal.client.id },
       asked: {
         text: parsed.data.text,
         language: parsed.data.language ?? "en",
-        room: null,
-        from: { kind: "client", name: principal.client.name },
-        earlier: [],
+        clientName: principal.client.name,
+      },
+      checkClient() {
+        if (
+          !token ||
+          options.authenticate(token)?.client.id !== principal.client.id
+        ) {
+          throw new AuthError("invalid_client_token");
+        }
       },
     });
     return { reply: reply?.text ?? null };

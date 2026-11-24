@@ -441,6 +441,17 @@ describe("an app's supervisor", () => {
       await expect(arriving).resolves.toBe(false);
     });
 
+    it("stops waiting when its caller cancels", async () => {
+      const { entry, supervisor } = setUp();
+      const controller = new AbortController();
+      const arriving = supervisor.arrives(entry, 30_000, controller.signal);
+
+      controller.abort();
+
+      await expect(arriving).resolves.toBe(false);
+      expect(entry.supervision?.waiters.size).toBe(0);
+    });
+
     it("doesn't wait for one that was given up on", async () => {
       const { entry, supervisor, fail } = setUp();
       for (let count = 0; count < 5; count += 1) {

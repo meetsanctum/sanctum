@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import {
+  aiAssistantPermission,
   assertDriverProblems,
   assertLanPermissions,
   lanRanges,
@@ -411,8 +412,15 @@ function inputCheck(schema: object): SchemaCheck {
 
 export function contractOf(manifest: StaticManifest): AppContract {
   // Requests go to Sanctum's Assistant alone: one household voice.
-  if (manifest.requests && manifest.id !== assistantAppId) {
-    throw new Error("Only Sanctum's Assistant answers requests");
+  if (manifest.requests) {
+    if (manifest.id !== assistantAppId) {
+      throw new Error("Only Sanctum's Assistant answers requests");
+    }
+    if (!manifest.permissions.some(({ id }) => id === aiAssistantPermission)) {
+      throw new Error(
+        `The Assistant's request handler needs ${aiAssistantPermission}`,
+      );
+    }
   }
   const actions = new Map<string, DeclaredAction>(
     manifest.actions.map((action) => [

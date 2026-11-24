@@ -227,6 +227,7 @@ export function createServer(
         deleting: options.appDeleting,
         offers: options.hardwareOffers,
         gate,
+        authenticate: auth.authenticate,
       });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
       registerBlobRoutes(core, { blobs: options.blobs, gate });

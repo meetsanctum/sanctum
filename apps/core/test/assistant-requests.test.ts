@@ -2,6 +2,7 @@ import {
   aiAssistantPermission,
   assistantAppId,
   defineApp,
+  modelsUsePermission,
   toStaticManifest,
   type AppDefinition,
   type AssistantRequestCall,
@@ -10,7 +11,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { contractOf } from "../src/app-host/contract.js";
 import { apart, base, running, useCleanUps } from "./app-apart-support.js";
-import { claimed, post, testCore, type TestCore } from "./support.js";
+import {
+  claimed,
+  deferredDelivery,
+  deferredResult,
+  post,
+  sharedClient,
+  testCore,
+  type TestCore,
+} from "./support.js";
 
 // A request is what someone types to Sanctum: the core opens a turn for it
 // and runs Sanctum's Assistant's handler, which answers with request.reply.
@@ -24,7 +33,10 @@ type Handler = (
   request: AssistantRequestCall,
 ) => Promise<void>;
 
-function assistant(handler: Handler, id = assistantAppId) {
+function assistant(
+  handler: Handler,
+  { id = assistantAppId, needed = true } = {},
+) {
   return defineApp({
     ...base,
     id,
@@ -33,8 +45,9 @@ function assistant(handler: Handler, id = assistantAppId) {
       {
         id: aiAssistantPermission,
         reason: "To do what you ask.",
-        needed: true,
+        needed,
       },
+      { id: modelsUsePermission, reason: "To answer you.", needed: false },
     ],
     actions: [],
     requests: handler,
@@ -47,7 +60,7 @@ const echo: Handler = async (ctx, request) => {
   const overview = await ctx.ai.call("home_overview");
   const rooms = (JSON.parse(overview.text) as { rooms: unknown[] }).rooms;
   await request.reply({
-    text: `"${request.text}" from ${request.from.name} (${request.language}), ${tools.length > 0 ? "with tools" : "without"}, ${rooms.length} rooms`,
+    text: `"${request.text}" from ${request.clientName} (${request.language}), ${tools.length > 0 ? "with tools" : "without"}, ${rooms.length} rooms`,
   });
 };
 
@@ -76,17 +89,30 @@ describe("a typed request", () => {
   });
 
   it("answers as soon as the Assistant replies, while it goes on", async () => {
-    let finished = false;
-    const { core, maya } = await inCore(async (_ctx, request) => {
+    const release = deferredDelivery();
+    const answered = deferredResult<unknown>();
+    const { core, maya } = await inCore(async (ctx, request) => {
       await request.reply({ text: "On it." });
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      finished = true;
+      await release.promise;
+      try {
+        const text = await ctx.models
+          .answer({ messages: [{ role: "user", content: request.text }] })
+          .text();
+        answered.resolve(text);
+      } catch (error) {
+        answered.resolve(error);
+      }
     });
 
-    const asked = await ask(core, maya.token, { text: "Tidy up" });
-
-    expect(asked.json()).toEqual({ reply: "On it." });
-    expect(finished).toBe(false);
+    try {
+      const asked = await ask(core, maya.token, { text: "Tidy up" });
+      expect(asked.json()).toEqual({ reply: "On it." });
+      release.resolve();
+      // With no model configured, the open turn returns an empty answer.
+      expect(await answered.promise).toBe("");
+    } finally {
+      release.resolve();
+    }
   });
 
   it("is answered once, and with nothing when the Assistant gives no reply", async () => {
@@ -119,6 +145,35 @@ describe("a typed request", () => {
     expect(asked.statusCode).toBe(503);
   });
 
+  it("refuses a request when the running Assistant lacks the grant", async () => {
+    const handler = vi.fn(echo);
+    const core = await testCore({
+      apps: [
+        { app: assistant(handler, { needed: false }), origin: "official" },
+      ],
+      allowed: false,
+    });
+    const maya = await claimed(core);
+    await running(core, assistantAppId);
+
+    const asked = await ask(core, maya.token, { text: "Hello?" });
+
+    expect(asked.statusCode).toBe(503);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("runs a shared device's request as that client", async () => {
+    const { core } = await inCore(async (ctx, request) => {
+      await request.reply({ text: `${ctx.actor.kind}:${ctx.actor.id}` });
+    });
+    const client = sharedClient(core);
+
+    const asked = await ask(core, client.token, { text: "Hello" });
+
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json()).toEqual({ reply: `client:${client.id}` });
+  });
+
   it("comes only from a person or a shared device, in words", async () => {
     const { core, maya } = await inCore(echo);
     const agent = core.auth.clients.createAgent({
@@ -137,12 +192,19 @@ describe("a typed request", () => {
 
 describe("who answers requests", () => {
   it("is Sanctum's Assistant alone: any other app's handler is refused", () => {
-    const other = assistant(echo, "sanctum.example");
+    const other = assistant(echo, { id: "sanctum.example" });
 
     expect(() => contractOf(toStaticManifest(other))).toThrow(
       "Only Sanctum's Assistant answers requests",
     );
     expect(() => contractOf(toStaticManifest(assistant(echo)))).not.toThrow();
+  });
+
+  it("requires the Assistant to declare the grant for answering requests", () => {
+    const manifest = toStaticManifest(assistant(echo));
+    expect(() => contractOf({ ...manifest, permissions: [] })).toThrow(
+      aiAssistantPermission,
+    );
   });
 
   it("is reached over the socket when the Assistant runs in its own container", async () => {
@@ -156,5 +218,28 @@ describe("who answers requests", () => {
     expect(asked.json()).toEqual({
       reply: '"Lights?" from Maya\'s MacBook (en), with tools, 0 rooms',
     });
+  });
+
+  it("refuses an invalid socket reply and accepts the next valid reply", async () => {
+    const invalid = deferredResult<unknown>();
+    const app = assistant(async function (this: AppDefinition, ctx, request) {
+      expect(ctx).not.toHaveProperty("storage");
+      try {
+        await request.reply({ text: "   " });
+        invalid.resolve(undefined);
+      } catch (error) {
+        invalid.resolve(error);
+      }
+      await request.reply({ text: this.name });
+    });
+    const { core } = await apart(app);
+    const maya = await claimed(core);
+    await running(core, assistantAppId);
+
+    const asked = await ask(core, maya.token, { text: "Hello" });
+
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json()).toEqual({ reply: app.name });
+    expect(await invalid.promise).toBeInstanceOf(Error);
   });
 });

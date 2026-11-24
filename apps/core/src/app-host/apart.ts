@@ -1,9 +1,10 @@
 import type {
   ActionDefinition,
   AppContext,
-  AssistantRequest,
+  AssistantRequestCall,
   AppDefinition,
   CoreCalls,
+  RequestContext,
   StartInfo,
   StaticManifest,
   StopInfo,
@@ -31,18 +32,21 @@ export const uninstallLimitMs = 30_000;
 const uninstallFrom = 9;
 
 /** The core's calls behind a context, so a call's id can be tied to them. */
-export type CoreOf = (ctx: AppContext) => CoreCalls;
+export type CoreOf = (ctx: RequestContext) => CoreCalls;
 
 export function apartApp(
   manifest: StaticManifest,
   link: AppLink,
   coreOf: CoreOf,
-  timeoutOf: (ctx: AppContext) => number,
+  timeoutOf: (ctx: RequestContext) => number,
   // The update its next start commits, if any.
   updateOf: () => string | undefined,
 ): AppDefinition {
-  const call = (ctx: AppContext, body: CallBody, deadlineMs = timeoutOf(ctx)) =>
-    link.call(coreOf(ctx), ctx.actor, body, deadlineMs);
+  const call = (
+    ctx: RequestContext,
+    body: CallBody,
+    deadlineMs = timeoutOf(ctx),
+  ) => link.call(coreOf(ctx), ctx.actor, body, deadlineMs);
   const hook = (name: DriverHook) => (ctx: AppContext, params?: unknown) =>
     call(ctx, { kind: "driver", hook: name, params }) as Promise<never>;
   const hooks = (manifest.driver?.hooks ?? []) as readonly string[];
@@ -87,11 +91,13 @@ export function apartApp(
     // Sanctum's Assistant answers requests within its turn's time.
     ...(manifest.requests
       ? {
-          requests: async (ctx: AppContext, request: AssistantRequest) => {
-            const { text, language, room, from, earlier } = request;
+          requests: async (
+            ctx: RequestContext,
+            { text, language, clientName }: AssistantRequestCall,
+          ) => {
             await call(ctx, {
               kind: "request",
-              request: { text, language, room, from, earlier },
+              request: { text, language, clientName },
             });
           },
         }
