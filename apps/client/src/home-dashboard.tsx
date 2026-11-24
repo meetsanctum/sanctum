@@ -42,16 +42,6 @@ import { useTileHandlers, type Devices } from "./use-devices";
 // closer to its own than to the next.
 
 /** The rooms on Home, and while nothing is on it, how to put something there. */
-// A room's line on Home as last worked out, and what it came from.
-type KeptLine = {
-  own: readonly Tile[];
-  unit: ReturnType<typeof unitOf>;
-  line: {
-    contact: ReturnType<typeof placeContacts>;
-    readings: ReturnType<typeof readingsOf>;
-  };
-};
-
 export function HomeRooms(props: {
   devices: Devices;
   /** Home's devices, in the household's order. */
@@ -71,26 +61,6 @@ export function HomeRooms(props: {
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
-  // Keep contact counts and readings for current rooms with unchanged tiles
-  // and units. Motion describes elapsed time, so it is worked out afresh.
-  const lines = useRef(new Map<string, KeptLine>());
-  const nextLines = new Map<string, KeptLine>();
-  const lineOf = (room: Room, own: readonly Tile[]) => {
-    const was = lines.current.get(room.id);
-    const entry =
-      was && was.unit === unit && sameItems(was.own, own)
-        ? was
-        : {
-            own,
-            unit,
-            line: {
-              contact: placeContacts(own),
-              readings: readingsOf(sensorReadings(own), unit),
-            },
-          };
-    nextLines.set(room.id, entry);
-    return { ...entry.line, motion: placeMotionText(own, now) };
-  };
   // Devices with no room have no line of their own and no sections.
   const shown = places.flatMap((place) => {
     const { room, own, onHome } = place;
@@ -103,9 +73,9 @@ export function HomeRooms(props: {
           roomLightsButton(lights, room, devices),
         )
       : null;
-    const { motion, contact, readings } = room
-      ? lineOf(room, own)
-      : { motion: null, contact: null, readings: [] };
+    const motion = room ? placeMotionText(own, now) : null;
+    const contact = room ? placeContacts(own) : null;
+    const readings = room ? readingsOf(sensorReadings(own), unit) : [];
     const hasLine = !!motion || !!contact || readings.length > 0;
     const hasRow = row !== null && !isRowEmpty(row);
     return hasLine || hasRow || onHome.length > 0
@@ -125,7 +95,6 @@ export function HomeRooms(props: {
         ]
       : [];
   });
-  lines.current = nextLines;
   const isEmpty =
     props.onHome !== undefined && places.every((place) => !place.onHome.length);
   const groups = byFloor(

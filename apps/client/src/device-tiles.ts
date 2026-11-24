@@ -465,70 +465,58 @@ export function tilesOf(
   pressed: ReadonlyMap<string, string> = new Map(),
   now = Date.now(),
 ) {
-  const tilePlaces = tilePlacesOf(places);
-  return devices.flatMap((device) =>
-    tilesOfDevice(device, tilePlaces, pressed, now),
-  );
-}
-
-export function tilePlacesOf(places: Places | undefined) {
   const rooms = new Set((places?.rooms ?? []).map((room) => room.id));
-  const unit: TemperatureUnit = places?.home.temperatureUnit ?? "celsius";
-  return { rooms, unit };
-}
-
-export function tilesOfDevice(
-  device: DeviceInfo,
-  { rooms, unit }: ReturnType<typeof tilePlacesOf>,
-  pressed: ReadonlyMap<string, string>,
-  now: number,
-): Tile[] {
-  const roomId =
-    device.roomId && rooms.has(device.roomId) ? device.roomId : null;
-  const isQuiet = maintenanceOf(device, now) === "quiet";
-  const controls = device.capabilities.filter(isSwitchable);
-  const buttons = device.capabilities.filter((each) => each.kind === "button");
-  const sensors = device.capabilities.filter(isSensor);
-  const motion = device.capabilities.filter(isMotion);
-  const contacts = device.capabilities.filter(isContact);
-  const players = device.capabilities.filter(isMedia);
-  const tiles = [
-    ...controls.map((capability) =>
-      tileOf(device, capability, controls.length > 1, roomId),
-    ),
-    ...buttons.map((button) =>
-      buttonTile(
-        device,
-        button.id,
-        buttons.length > 1,
-        roomId,
-        pressed.get(tileKey(device.id, button.id)),
-        isQuiet,
+  const unit = places?.home.temperatureUnit ?? "celsius";
+  return devices.flatMap((device) => {
+    const roomId =
+      device.roomId && rooms.has(device.roomId) ? device.roomId : null;
+    const isQuiet = maintenanceOf(device, now) === "quiet";
+    const controls = device.capabilities.filter(isSwitchable);
+    const buttons = device.capabilities.filter(
+      (each) => each.kind === "button",
+    );
+    const sensors = device.capabilities.filter(isSensor);
+    const motion = device.capabilities.filter(isMotion);
+    const contacts = device.capabilities.filter(isContact);
+    const players = device.capabilities.filter(isMedia);
+    const tiles = [
+      ...controls.map((capability) =>
+        tileOf(device, capability, controls.length > 1, roomId),
       ),
-    ),
-    // A motion sensor that measures has both tiles, its motion's first.
-    ...motion.map((capability) =>
-      motionTile(device, capability, motion.length > 1, roomId, now, isQuiet),
-    ),
-    ...contacts.map((capability) =>
-      contactTile(
-        device,
-        capability,
-        contacts.length > 1,
-        roomId,
-        now,
-        isQuiet,
+      ...buttons.map((button) =>
+        buttonTile(
+          device,
+          button.id,
+          buttons.length > 1,
+          roomId,
+          pressed.get(tileKey(device.id, button.id)),
+          isQuiet,
+        ),
       ),
-    ),
-    ...players.map((capability) =>
-      mediaTile(device, capability, players.length > 1, roomId),
-    ),
-    ...(sensors.length > 0
-      ? [sensorTile(device, sensors, roomId, unit, isQuiet)]
-      : []),
-  ];
-  // A device none of whose parts has a tile still has one of its own.
-  return tiles.length > 0 ? tiles : [unknownTile(device, roomId, isQuiet)];
+      // A motion sensor that measures has both tiles, its motion's first.
+      ...motion.map((capability) =>
+        motionTile(device, capability, motion.length > 1, roomId, now, isQuiet),
+      ),
+      ...contacts.map((capability) =>
+        contactTile(
+          device,
+          capability,
+          contacts.length > 1,
+          roomId,
+          now,
+          isQuiet,
+        ),
+      ),
+      ...players.map((capability) =>
+        mediaTile(device, capability, players.length > 1, roomId),
+      ),
+      ...(sensors.length > 0
+        ? [sensorTile(device, sensors, roomId, unit, isQuiet)]
+        : []),
+    ];
+    // A device none of whose parts has a tile still has one of its own.
+    return tiles.length > 0 ? tiles : [unknownTile(device, roomId, isQuiet)];
+  });
 }
 
 const byName = (a: Tile, b: Tile) => a.name.localeCompare(b.name);

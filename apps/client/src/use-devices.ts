@@ -26,7 +26,7 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
-import { tileKey, tilePlacesOf, tilesOfDevice } from "./device-tiles";
+import { tileKey, tilesOf } from "./device-tiles";
 import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
@@ -60,7 +60,6 @@ type CommandTarget = Pick<Tile, "key" | "deviceId" | "capabilityId"> & {
 // has taken it. Only what the core is sure to ask of the device shows: a
 // colour, or a level held for a light that is off, waits for its answer.
 type Asked = { on: boolean; brightness?: number };
-type Asks = ReadonlyMap<string, { asked: Asked; by: object }>;
 
 function askedOf(command: LightCommand): Asked | undefined {
   if (command.on === false || command.brightness === 0) return { on: false };
@@ -137,7 +136,9 @@ export function useDevices(live: LiveFeed) {
   }, []);
   // What the latest command from here asks of each tile, by its key, until
   // the core has answered it; null forgets what an earlier one asked.
-  const [asks, setAsks] = useState<Asks>(() => new Map());
+  const [asks, setAsks] = useState<
+    ReadonlyMap<string, { asked: Asked; by: object }>
+  >(() => new Map());
   const ask = useCallback((keys: string[], asked: Asked | null) => {
     const by = {};
     setAsks((current) => {
@@ -480,59 +481,33 @@ export function useDevices(live: LiveFeed) {
   // count on, and a device on a battery whose driver no longer knows
   // whether it answers turns quiet once a day has passed (maintenance.ts),
   // without a live message.
-  const ticks = devices.some(tilesChangeWithTime);
+  const ticks = devices.some(
+    (device) =>
+      device.capabilities.some(
+        (each) => each.kind === "motion" || each.kind === "contact",
+      ) ||
+      (onBattery(device) && device.availability === "unknown"),
+  );
   // The clock only moves the tiles on; they read the time afresh each time.
-  const clock = useMinuteClock(ticks);
-  const tilePlaces = useMemo(() => tilePlacesOf(places), [places]);
+  const minute = useMinuteClock(ticks);
   const kept = useRef(new Map<string, Tile>());
-  const made = useRef(new WeakMap<DeviceInfo, MadeTiles>());
   const tiles = useMemo(() => {
-    // Reuse tiles while their inputs match. Time-dependent tiles also need
-    // to see elapsed time between clock ticks when a live update comes in.
-    const now = Date.now();
-    const next = devices
-      .flatMap((device) => {
-        const was = made.current.get(device);
-        const timed = was?.timed ?? tilesChangeWithTime(device);
-        if (
-          was &&
-          (!timed || was.now === now) &&
-          was.places === tilePlaces &&
-          sameTileInputs(device, was, asks, pressed)
-        ) {
-          was.asks = asks;
-          was.pressed = pressed;
-          return was.tiles;
-        }
-        const shown =
-          asks.size === 0
-            ? device
-            : {
-                ...device,
-                capabilities: device.capabilities.map((capability) => {
-                  const asked = asks.get(tileKey(device.id, capability.id));
-                  return asked
-                    ? pendingAs(capability, asked.asked)
-                    : capability;
-                }),
-              };
-        const tiles = tilesOfDevice(shown, tilePlaces, pressed, now);
-        made.current.set(device, {
-          places: tilePlaces,
-          timed,
-          now,
-          asks,
-          pressed,
-          tiles,
-        });
-        return tiles;
-      })
-      .map((tile) => {
-        const failed = failures.get(tile.key);
-        return failed ? { ...tile, failures: failed } : tile;
-      });
+    const shown =
+      asks.size === 0
+        ? devices
+        : devices.map((device) => ({
+            ...device,
+            capabilities: device.capabilities.map((capability) => {
+              const each = asks.get(tileKey(device.id, capability.id));
+              return each ? pendingAs(capability, each.asked) : capability;
+            }),
+          }));
+    const next = tilesOf(shown, places, pressed, Date.now()).map((tile) => {
+      const failed = failures.get(tile.key);
+      return failed ? { ...tile, failures: failed } : tile;
+    });
     return keepUnchanged(next, kept.current);
-  }, [devices, tilePlaces, failures, pressed, asks, clock]);
+  }, [devices, places, failures, pressed, asks, minute]);
   useLayoutEffect(() => {
     kept.current = new Map(tiles.map((tile) => [tile.key, tile]));
   }, [tiles]);
@@ -589,46 +564,6 @@ export function useTileHandlers(devices: Pick<Devices, "toggle" | "dim">) {
     [dim],
   );
   return { onToggle, onDim };
-}
-
-// A device's tiles as last made, and what they were made from.
-type MadeTiles = {
-  places: ReturnType<typeof tilePlacesOf>;
-  timed: boolean;
-  now: number;
-  asks: Asks;
-  pressed: ReadonlyMap<string, string>;
-  tiles: Tile[];
-};
-
-function tilesChangeWithTime(device: DeviceInfo) {
-  return (
-    device.capabilities.some(
-      (each) => each.kind === "motion" || each.kind === "contact",
-    ) ||
-    (onBattery(device) && device.availability === "unknown")
-  );
-}
-
-// Commands and presses on other devices leave these tiles unchanged.
-function sameTileInputs(
-  device: DeviceInfo,
-  was: MadeTiles,
-  asks: Asks,
-  pressed: ReadonlyMap<string, string>,
-) {
-  const asksChanged = was.asks !== asks;
-  const pressesChanged = was.pressed !== pressed;
-  if (!asksChanged && !pressesChanged) return true;
-  return device.capabilities.every(({ id, kind }) => {
-    const comparePress = pressesChanged && kind === "button";
-    if (!asksChanged && !comparePress) return true;
-    const key = tileKey(device.id, id);
-    return (
-      (!asksChanged || was.asks.get(key)?.asked === asks.get(key)?.asked) &&
-      (!comparePress || was.pressed.get(key) === pressed.get(key))
-    );
-  });
 }
 
 // A tile that says the same as before keeps its object, so a tile drawn from
