@@ -214,6 +214,32 @@ export function midnight(at: number, daysBack = 0) {
   return date.getTime();
 }
 
+/** The local hours every 6 within the day, whatever the clocks did. */
+export function sixHours(from: number, now: number) {
+  const hours: number[] = [];
+  for (
+    const day = new Date(from);
+    day.getTime() < now;
+    day.setHours(24, 0, 0, 0)
+  ) {
+    for (const hour of [0, 6, 12, 18]) {
+      const tick = new Date(day);
+      const at = tick.setHours(hour, 0, 0, 0);
+      // A clock change can move a skipped hour forward.
+      if (
+        at > from &&
+        at < now &&
+        tick.getHours() === hour &&
+        tick.getMinutes() === 0 &&
+        tick.getSeconds() === 0
+      ) {
+        hours.push(at);
+      }
+    }
+  }
+  return hours;
+}
+
 /**
  * The last 7 local days, today last: the hourly roll-ups of whether it was
  * on, saw motion, was open or played, by `field`, and the spans for the

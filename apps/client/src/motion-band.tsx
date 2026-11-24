@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { midnight, timeText, type Span } from "./device-history-data";
+import { sixHours, timeText, type Span } from "./device-history-data";
 
 // The motion band: a day of motion 40 px tall, motion as White spans, quiet
 // as a hairline along its foot and nothing where nothing was known, with the
@@ -10,8 +10,6 @@ import { midnight, timeText, type Span } from "./device-history-data";
 // was on without playing as a faint fill.
 
 export const bandHeight = 40;
-
-const sixHours = 6 * 60 * 60_000;
 
 /**
  * The band's marks, `plot` px wide, `x` placing a time across it. The
@@ -84,8 +82,9 @@ export function BandMarks(props: {
 }
 
 /**
- * The time every 6 hours of the day, away from the ends, across a band
- * `plot` px wide; with `withNow`, Now at its right end.
+ * The time every 6 hours of the day, on the clock's own hours whatever the
+ * clocks did, away from the ends, across a chart `plot` px wide; with
+ * `withNow`, Now at its right end. A light's History has it under its strip.
  */
 export function BandTicks(props: {
   from: number;
@@ -95,14 +94,13 @@ export function BandTicks(props: {
   className?: string;
 }) {
   const { from, to, plot } = props;
-  const x = (at: number) => ((at - from) / (to - from)) * plot;
+  // On whole pixels, so the labels are sharp at 1×.
+  const x = (at: number) => Math.round(((at - from) / (to - from)) * plot);
   // Clear of Now, where it shows.
   const end = props.withNow ? 48 : 20;
-  const ticks: number[] = [];
-  for (let at = midnight(from); at < to; at += sixHours) {
-    const left = x(at);
-    if (at > from && left > 20 && left < plot - end) ticks.push(at);
-  }
+  const ticks = sixHours(from, to).filter(
+    (at) => x(at) > 20 && x(at) < plot - end,
+  );
   return (
     <div
       aria-hidden="true"

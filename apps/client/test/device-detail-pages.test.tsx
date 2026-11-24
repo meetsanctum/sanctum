@@ -191,6 +191,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -358,6 +360,89 @@ it("uses the placeholder tint on image failure and the new tint on replacement",
 });
 
 describe("a light with a button and a temperature sensor", () => {
+  it.each([
+    ["History", "Brightness", "light"],
+    ["Readings", "Temperature", "temperature"],
+  ])(
+    "moves the %s chart clock only while its tab and window are shown",
+    async (page, chart, capability) => {
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      vi.setSystemTime(new Date(2026, 9, 31, 12, 17));
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(
+        520,
+      );
+      const visibility = vi
+        .spyOn(document, "visibilityState", "get")
+        .mockReturnValue("visible");
+      const select = (label: string) =>
+        act(async () =>
+          dialog()
+            .querySelector<HTMLButtonElement>(
+              `[role="tab"][aria-label="${label}"]`,
+            )!
+            .click(),
+        );
+      const showWindow = (state: DocumentVisibilityState) =>
+        act(async () => {
+          visibility.mockReturnValue(state);
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+      const advance = () => act(async () => vi.advanceTimersByTime(3 * 60_000));
+      const tick = () =>
+        dialog()
+          .querySelector(`[aria-label="${chart} over the last 24 hours"]`)!
+          .parentElement!.querySelector<HTMLElement>(
+            'div[aria-hidden="true"] > span',
+          )!.style.left;
+      const history = vi.mocked(coreJson);
+      const request = history.getMockImplementation()!;
+      history.mockImplementation(async (path, init) => {
+        const answer = await request(path, init);
+        return path.startsWith("/api/history/")
+          ? { ...(answer as object), kept: true }
+          : answer;
+      });
+      await open("panel/light");
+      await select(page);
+      const initial = tick();
+      await advance();
+      const beforeLeaving = tick();
+      expect(beforeLeaving).not.toBe(initial);
+
+      // Keep refresh responses pending so only the clock can move the axis.
+      history.mockImplementation((path, init) =>
+        path.startsWith("/api/history/")
+          ? new Promise(() => {})
+          : request(path, init),
+      );
+      await select("Brightness");
+      await showWindow("hidden");
+      await advance();
+      await showWindow("visible");
+      expect(tick()).toBe(beforeLeaving);
+      await advance();
+      expect(tick()).toBe(beforeLeaving);
+
+      await select(page);
+      const beforeHiding = tick();
+      expect(beforeHiding).not.toBe(beforeLeaving);
+      await showWindow("hidden");
+      await advance();
+      expect(tick()).toBe(beforeHiding);
+
+      history.mockClear();
+      await showWindow("visible");
+      expect(tick()).not.toBe(beforeHiding);
+      expect(
+        history.mock.calls.filter(
+          ([path]) =>
+            path.startsWith("/api/history/") &&
+            path.includes(`capability=${capability}&`),
+        ),
+      ).toHaveLength(2);
+    },
+  );
+
   it.each([
     ["panel/light", "Brightness"],
     ["panel/temperature", "Readings"],

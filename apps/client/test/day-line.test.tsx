@@ -155,6 +155,7 @@ describe("a day's line", () => {
   });
 
   it("reads now at its end, and every 5 minutes kept a step back at a time", async () => {
+    container.dataset.mode = "day";
     const line = {
       runs: [
         [
@@ -187,8 +188,10 @@ describe("a day's line", () => {
     const chart = container.querySelector<HTMLElement>('[role="group"]')!;
     // Focus puts the cursor at the end, as End does.
     await act(async () => chart.focus());
-    expect(container.querySelector(".pointer-events-none")?.textContent).toBe(
-      "58°CNow",
+    const focused = chart.querySelector(".pointer-events-none")!;
+    expect(focused.textContent).toBe("58°CNow");
+    expect([...focused.classList]).toEqual(
+      expect.arrayContaining(["bg-(--carbon)", "text-(--white)"]),
     );
     await act(async () =>
       chart.dispatchEvent(

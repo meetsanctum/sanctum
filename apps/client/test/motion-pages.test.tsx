@@ -401,6 +401,62 @@ describe("the Presence category", () => {
     expect(overviewRows()).toEqual(["HallQuiet for 30 min"]);
   });
 
+  it("runs the overview timers only while a sensor is assigned to a room", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const sensor = loose();
+    devices = [sensor];
+    await show("category", "presence");
+    expect(overviewRows()).toEqual([]);
+    // The motion tile has its own clock, even without an overview.
+    expect(vi.getTimerCount()).toBe(1);
+
+    devices = [{ ...sensor, roomId: "hall" }];
+    await act(async () => live.refresh());
+    expect(overviewRows()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(3);
+
+    devices = [sensor];
+    await act(async () => live.refresh());
+    expect(overviewRows()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("pauses the overview chart clock while hidden and catches up on show", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 9, 31, 12, 17));
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("visible");
+    const showWindow = (state: DocumentVisibilityState) =>
+      act(async () => {
+        visibility.mockReturnValue(state);
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 30 })];
+    await show("category", "presence");
+    const tick = () =>
+      container.querySelector<HTMLElement>(
+        'section[aria-labelledby] div[aria-hidden="true"] > span[style*="left"]',
+      )!.style.left;
+    const beforeHiding = tick();
+    const history = vi.mocked(coreJson);
+    history.mockClear();
+    history.mockImplementation(() => new Promise(() => {}));
+
+    await showWindow("hidden");
+    await act(async () => vi.advanceTimersByTime(6 * minute));
+    expect(tick()).toBe(beforeHiding);
+    expect(history).not.toHaveBeenCalled();
+
+    await showWindow("visible");
+    expect(tick()).not.toBe(beforeHiding);
+    expect(history).toHaveBeenCalledOnce();
+    expect(history).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/history\/states\?/),
+    );
+  });
+
   it("measures the times when rooms arrive after the page mounts", async () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
     devices = [motionSensor("hall", "hall", { motion: false, minutesAgo: 30 })];

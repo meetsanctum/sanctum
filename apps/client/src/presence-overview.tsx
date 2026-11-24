@@ -38,6 +38,7 @@ const isMotion = (capability: CapabilityInfo): capability is Motion =>
  * of them every 5 minutes, with the end moving on each minute.
  */
 function useLastDay(sensors: readonly Sensor[]) {
+  const hasSensors = sensors.length > 0;
   const [histories, setHistories] = useState<
     ReadonlyMap<string, DeviceHistory>
   >(new Map());
@@ -141,13 +142,14 @@ function useLastDay(sensors: readonly Sensor[]) {
   }, [wanted]);
 
   useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), minute);
+    if (!hasSensors) return;
+    const stopTicks = everyWhileShown(minute, () => setNow(Date.now()));
     const stopReloads = everyWhileShown(refreshMs, () => refresh.current());
     return () => {
-      clearInterval(tick);
+      stopTicks();
       stopReloads();
     };
-  }, []);
+  }, [hasSensors]);
 
   return { histories, now, live };
 }

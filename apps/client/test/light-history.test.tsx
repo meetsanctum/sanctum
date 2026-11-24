@@ -14,7 +14,7 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 const now = Date.parse("2026-10-30T12:00:00Z");
 const change = (minutesAgo: number, state: LightState) => ({
-  at: new Date(now - minutesAgo * 60_000).toISOString(),
+  at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
   availability: "online",
   state,
 });
@@ -42,6 +42,7 @@ afterEach(async () => {
   container.remove();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -122,4 +123,21 @@ it("draws the newer colour last where two spans share a pixel", async () => {
     [lightColour(red), "M220 53h20v35h-20z"],
     [lightColour(red), "M220 53h20v2h-20z"],
   ]);
+});
+
+it("places the strip's labels on local hours when the clocks go forward", async () => {
+  vi.stubEnv("TZ", "Europe/Zurich");
+  vi.setSystemTime(new Date("2026-03-29T23:30:00+02:00"));
+  const strip = await show([change(120, lampState)], 520);
+  const ticks = strip.parentElement!.querySelectorAll<HTMLElement>(
+    'div[aria-hidden="true"] > span',
+  );
+  expect([...ticks].map((tick) => [tick.textContent, tick.style.left])).toEqual(
+    [
+      ["00:00", "30px"],
+      ["06:00", "130px"],
+      ["12:00", "250px"],
+      ["18:00", "370px"],
+    ],
+  );
 });

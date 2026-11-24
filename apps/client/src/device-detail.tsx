@@ -63,6 +63,7 @@ import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
 import { seenText } from "./settings-clients";
+import { ChartPageSelected } from "./use-chart-clock";
 import type { Devices } from "./use-devices";
 
 // A device's detail, opened from any of its tiles: an overlay, with the
@@ -462,6 +463,14 @@ export function DeviceDetail(props: {
   // The other pages keep the colour they had when they came into view.
   const onPageChange = (page: string) =>
     setSelection({ detailKey, page, tint });
+  const detailPages = after.map((each) => ({
+    ...each,
+    content: (
+      <ChartPageSelected.Provider value={each.id === page}>
+        {each.content}
+      </ChartPageSelected.Provider>
+    ),
+  }));
 
   return (
     <Overlay
@@ -499,7 +508,7 @@ export function DeviceDetail(props: {
             onCommand={(command) =>
               void devices.command(controlTile, command).catch(() => undefined)
             }
-            pages={after}
+            pages={detailPages}
             initial={initial}
             onPageChange={onPageChange}
           />
@@ -507,7 +516,7 @@ export function DeviceDetail(props: {
           <SwipePages
             key={detailKey}
             label={name}
-            pages={after}
+            pages={detailPages}
             initial={initial}
             onPageChange={onPageChange}
           />

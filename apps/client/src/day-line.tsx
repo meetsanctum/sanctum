@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { useId } from "react";
 
 import { Readout, useCursor, useWidth } from "./device-history";
-import { dayMs, midnight, timeText } from "./device-history-data";
+import { dayMs, sixHours, timeText } from "./device-history-data";
 import { hourlyMeans, scaleOf, type DayLine } from "./sensor-history-data";
 
 // A day as a line through each 5 minutes' mean: a sensor's reading in its
@@ -23,19 +23,6 @@ export type ChartFormat = {
   text: (value: number) => string;
   grid: (shownValue: number) => string;
 };
-
-/** The local hours every 6 within the day, whatever the clocks did. */
-export function sixHours(from: number, now: number) {
-  const start = midnight(from);
-  const hours: number[] = [];
-  for (let hour = 0; ; hour += 6) {
-    const date = new Date(start);
-    date.setHours(hour);
-    const at = date.getTime();
-    if (at >= now) return hours;
-    if (at > from) hours.push(at);
-  }
-}
 
 export function DayLineChart(props: {
   line: DayLine;
