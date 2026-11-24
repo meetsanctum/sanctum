@@ -316,7 +316,6 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
   // retry never says a problem it no longer has.
   function tell(owned: Owned, attempt = 0) {
     clearTimeout(owned.telling);
-    owned.telemetry.audio.cancel();
     const problem = owned.problem;
     const report = ++owned.reports;
     ctx.devices.problem({ key: owned.mac, problem }).then(
