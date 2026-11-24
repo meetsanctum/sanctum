@@ -7,11 +7,16 @@ import {
   resolveHomeAddress,
 } from "../src/models/addresses.js";
 import { checkSource } from "../src/models/check.js";
-import { chat, ModelError, type ModelPiece } from "../src/models/client.js";
+import {
+  ask as askSource,
+  ModelError,
+  type ModelEndpoint,
+  type ModelPiece,
+} from "../src/models/client.js";
 import { ollamaModelName } from "../src/models/endpoints.js";
 
 // The pieces of reaching a model: where a computer in the home may be, how
-// an Ollama tag reads, and the client's reading of a streamed answer.
+// an Ollama tag reads, and how a streamed answer becomes pieces.
 
 describe("a computer's address", () => {
   it("takes an address, a port and a name", () => {
@@ -104,9 +109,9 @@ describe("Ollama's model names", () => {
 });
 
 describe("the client", () => {
-  const endpoint = (body: string, status = 200) => ({
+  const endpoint = (body: string, status = 200): ModelEndpoint => ({
+    api: "compatible",
     baseUrl: "http://192.168.1.40:11434/v1",
-    maxTokensField: "max_tokens" as const,
     fetch: (async () =>
       new Response(body, {
         status,
@@ -115,14 +120,21 @@ describe("the client", () => {
   });
   const ask = async (body: string, status?: number) => {
     const pieces: ModelPiece[] = [];
-    for await (const piece of chat(
+    for await (const piece of askSource(
       endpoint(body, status),
       {
         model: "qwen3:8b",
         messages: [{ role: "user", content: "Hi" }],
+        tools: [
+          {
+            name: "lights",
+            description: "Turns the lights on or off.",
+            input: { type: "object", properties: { to: { type: "string" } } },
+          },
+        ],
         maxTokens: 64,
       },
-      AbortSignal.timeout(5_000),
+      { signal: AbortSignal.timeout(5_000), firstPieceMs: 5_000 },
     )) {
       pieces.push(piece);
     }
@@ -163,27 +175,41 @@ describe("the client", () => {
     ).rejects.toMatchObject({ problem: "answer" });
   });
 
-  it("treats a tool call cut short by the token limit as incomplete", async () => {
+  it("leaves out a tool call cut short by the token limit", async () => {
     const pieces = await ask(
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"lights","arguments":"{"}}]},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"lights","arguments":"{"}}]},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
     );
     expect(pieces).toEqual([
       { type: "end", stop: "limit", tokens: { read: 0, written: 0 } },
     ]);
   });
 
-  it("refuses malformed token usage and filtered answers", async () => {
-    for (const chunk of [
-      { usage: { prompt_tokens: "40", completion_tokens: 6 } },
-      { choices: [{ finish_reason: "content_filter" }] },
+  it("fails a tool call that isn't whole, or to a tool it wasn't given", async () => {
+    for (const call of [
+      '{"index":0,"id":"a","function":{"name":"lights","arguments":"{"}}',
+      '{"index":0,"id":"a","function":{"name":"locks","arguments":"{}"}}',
     ]) {
       await expect(
-        ask(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`),
+        ask(
+          `data: {"choices":[{"delta":{"tool_calls":[${call}]},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n`,
+        ),
       ).rejects.toMatchObject({ problem: "answer" });
     }
   });
 
-  it("distinguishes an empty answer from a call to a different tool", async () => {
+  it("refuses malformed token usage, and ends a filtered answer as unavailable", async () => {
+    await expect(
+      ask(
+        `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: "40", completion_tokens: 6 } })}\n\ndata: [DONE]\n\n`,
+      ),
+    ).rejects.toMatchObject({ problem: "answer" });
+    const filtered = await ask(
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "content_filter" }] })}\n\ndata: [DONE]\n\n`,
+    );
+    expect(filtered.at(-1)).toMatchObject({ type: "end", stop: "unavailable" });
+  });
+
+  it("fails a check whose answer is empty or calls a tool it wasn't given", async () => {
     const check = (body: string) =>
       checkSource({
         endpoint: endpoint(body),
@@ -194,9 +220,12 @@ describe("the client", () => {
     const empty = await check("data: [DONE]\n\n");
     expect(empty.check).toMatchObject({ outcome: "failed", problem: "answer" });
     const otherTool = await check(
-      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"other","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"other","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n',
     );
-    expect(otherTool.check).toMatchObject({ outcome: "noTool" });
+    expect(otherTool.check).toMatchObject({
+      outcome: "failed",
+      problem: "answer",
+    });
   });
 
   it("names a key that's refused", async () => {

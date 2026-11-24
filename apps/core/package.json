@@ -18,13 +18,16 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.6.0",
+    "@ai-sdk/anthropic": "4.0.107",
+    "@ai-sdk/openai": "4.0.122",
+    "@ai-sdk/openai-compatible": "3.0.94",
     "@fastify/cors": "^11.3.1",
     "@fastify/websocket": "^11.3.4",
     "@meetsanctum/app-sdk": "workspace:*",
     "@meetsanctum/auth-protocol": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
     "@serenity-kit/opaque": "1.1.0",
+    "ai": "7.0.181",
     "ajv": "8.20.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",

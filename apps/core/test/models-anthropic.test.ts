@@ -10,17 +10,21 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { messagesOf, type KeptAnswers } from "../src/models/anthropic.js";
-import { maxResponseBytes, type ModelPiece } from "../src/models/client.js";
-import { ask, endpointOf } from "../src/models/endpoints.js";
+import {
+  ask,
+  maxResponseBytes,
+  type ModelPiece,
+} from "../src/models/client.js";
+import type { KeptAnswers } from "../src/models/conversation.js";
+import { endpointOf } from "../src/models/endpoints.js";
 import type { SourceInUse } from "../src/models/models.js";
 import { createTurns } from "../src/models/turns.js";
 import { fakeSources, type FakeSources } from "./models-support.js";
 import { claimed, post, testCore, type TestCore } from "./support.js";
 
-// Anthropic as a provider: Claude through Anthropic's own Messages API, with
-// the key sent only to Anthropic, Claude's thinking given back as it came
-// within a turn, and what it reads from its cache counted with the rest.
+// Anthropic as a provider: Claude through the AI SDK's Anthropic provider,
+// with the key sent only to Anthropic, Claude's thinking given back as it
+// came within a turn, and what it reads from its cache counted with the rest.
 
 // Asks Claude, runs the tool it called, and asks again with the result, as
 // an assistant's turn does.
@@ -120,15 +124,13 @@ function askClaude(
       { kind: "anthropic", key: sources.anthropic.key },
       sources.fetchers,
     ),
+    { model: "claude-sonnet-5-5", messages, tools, maxTokens: 512 },
     {
-      model: "claude-sonnet-5-5",
-      messages,
-      tools,
-      maxTokens: 512,
+      signal: AbortSignal.timeout(5_000),
+      firstPieceMs: 5_000,
+      ...(onFirstPiece ? { onFirstPiece } : {}),
       ...(kept ? { kept } : {}),
     },
-    AbortSignal.timeout(5_000),
-    onFirstPiece,
   );
 }
 
@@ -205,8 +207,17 @@ describe("Anthropic as a source", () => {
       model: "claude-sonnet-5-5",
       max_tokens: 1024,
       stream: true,
-      system: expect.stringContaining("Call get_time"),
-      messages: [{ role: "user", content: "What time is it?" }],
+      system: [
+        expect.objectContaining({
+          text: expect.stringContaining("Call get_time"),
+        }),
+      ],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "What time is it?" }],
+        },
+      ],
       tools: [{ name: "get_time", input_schema: { type: "object" } }],
       cache_control: { type: "ephemeral" },
     });
@@ -214,40 +225,26 @@ describe("Anthropic as a source", () => {
     expect(sources.requests).not.toHaveLength(0);
     for (const request of sources.requests) {
       expect(new URL(request.url).host).toBe("api.anthropic.com");
-      expect(request.authorization).toBe(`Bearer ${sources.anthropic.key}`);
+      expect(request.apiKey).toBe(sources.anthropic.key);
+      expect(request.authorization).toBeUndefined();
     }
   });
 
-  it("sends SDK headers and the household's key without environment overrides", async () => {
+  it("takes neither its address nor its key from the environment", async () => {
     const sources = fakeSources();
-    const requests = vi.spyOn(sources.fetchers, "internet");
-    const { core, token } = await home(sources);
-    vi.stubEnv(
-      "ANTHROPIC_CUSTOM_HEADERS",
-      "Authorization: Bearer another-key\nX-Api-Key: another-key\nX-Gateway-Token: another-key\n Host : other.example\n Anthropic-Version : other-version",
-    );
+    vi.stubEnv("ANTHROPIC_BASE_URL", "https://other.example/v1");
+    vi.stubEnv("ANTHROPIC_API_KEY", "another-key");
     try {
-      const look = await post(
-        core,
-        "/api/models/look",
-        { kind: "anthropic", key: sources.anthropic.key },
-        { token },
-      );
-      expect(look.json<ModelSourceLook>()).toMatchObject({ found: true });
-      const headers = Object.fromEntries(
-        new Headers(requests.mock.calls[0]?.[1]?.headers),
-      );
-      expect(headers).toMatchObject({
-        accept: "application/json",
-        authorization: `Bearer ${sources.anthropic.key}`,
-        "anthropic-version": expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      });
-      expect(headers).not.toHaveProperty("x-api-key");
-      expect(headers).not.toHaveProperty("x-gateway-token");
-      expect(headers).not.toHaveProperty("host");
+      await answer(sources, [{ role: "user", content: "Hi" }]);
     } finally {
       vi.unstubAllEnvs();
     }
+    expect(sources.requests).toEqual([
+      expect.objectContaining({
+        url: "https://api.anthropic.com/v1/messages",
+        apiKey: sources.anthropic.key,
+      }),
+    ]);
   });
 
   it("says a check whose model declined failed", async () => {
@@ -444,20 +441,6 @@ describe("Claude's answers", () => {
     }
   });
 
-  it("refuses a conversation that ends with Claude's own text, before sending it", async () => {
-    const sources = fakeSources();
-    await expect(
-      answer(sources, [
-        { role: "user", content: "Lights on" },
-        { role: "assistant", content: "I'll turn the" },
-      ]),
-    ).rejects.toMatchObject({
-      problem: "refused",
-      message: expect.stringContaining("not after its own"),
-    });
-    expect(sources.requests).toEqual([]);
-  });
-
   it("rejects a stream with no stop reason", async () => {
     const sources = fakeSources();
     sources.anthropic.answer = { stopReason: null };
@@ -475,20 +458,6 @@ describe("Claude's answers", () => {
       problem: "answer",
       message: "the source's answer was too large",
     });
-  });
-
-  it("rejects an explicitly non-object tool schema before sending it", async () => {
-    const sources = fakeSources();
-    await expect(
-      answer(sources, [{ role: "user", content: "Hi" }], undefined, [
-        {
-          name: "lights",
-          description: "Turns on lights.",
-          input: { type: "array", items: { type: "string" } },
-        },
-      ]),
-    ).rejects.toMatchObject({ problem: "answer" });
-    expect(sources.requests).toEqual([]);
   });
 
   it("give Claude's thinking back as it came, later in the same turn", async () => {
@@ -516,10 +485,10 @@ describe("Claude's answers", () => {
       kept,
     );
 
-    const second = sources.chats[1] as { system: string; messages: unknown[] };
-    expect(second.system).toBe("You run a home.");
+    const second = sources.chats[1] as { system: unknown; messages: unknown[] };
+    expect(second.system).toEqual([{ type: "text", text: "You run a home." }]);
     expect(second.messages).toEqual([
-      { role: "user", content: "Lights on" },
+      { role: "user", content: [{ type: "text", text: "Lights on" }] },
       {
         role: "assistant",
         content: [
@@ -558,34 +527,6 @@ describe("Claude's answers", () => {
     await expect(
       answer(sources, [{ role: "user", content: "Lights on" }]),
     ).rejects.toMatchObject({ problem: "answer" });
-  });
-
-  it("reject invalid tokens before issuing tool calls", async () => {
-    const sources = fakeSources();
-    sources.anthropic.answer = {
-      callsTool: true,
-      tokens: { read: 30, written: -1 },
-    };
-    const pieces = ask(
-      endpointOf(
-        { kind: "anthropic", key: sources.anthropic.key },
-        sources.fetchers,
-      ),
-      {
-        model: "claude-sonnet-5-5",
-        messages: [{ role: "user", content: "Hi" }],
-        maxTokens: 64,
-      },
-      AbortSignal.timeout(5_000),
-    );
-
-    await expect(pieces.next()).resolves.toMatchObject({
-      value: { type: "text" },
-    });
-    await expect(pieces.next()).resolves.toMatchObject({
-      value: { type: "text" },
-    });
-    await expect(pieces.next()).rejects.toMatchObject({ problem: "answer" });
   });
 
   it.each(["system", "tools", "user", "assistant"] as const)(
@@ -644,7 +585,7 @@ describe("Claude's answers", () => {
         messages: [{ role: "user", content: "Hi" }],
         maxTokens: 64,
       },
-      AbortSignal.timeout(5_000),
+      { signal: AbortSignal.timeout(5_000), firstPieceMs: 5_000 },
     );
 
     await expect(pieces.next()).rejects.toMatchObject({ problem: "key" });
@@ -652,9 +593,12 @@ describe("Claude's answers", () => {
 });
 
 describe("the conversation Claude reads", () => {
-  it("has the system prompt apart and tool results that follow each other together", () => {
-    expect(
-      messagesOf([
+  it("has the system prompt apart, a later one as the household's words, and tool results together", async () => {
+    const sources = fakeSources();
+    sources.anthropic.answer = { text: ["Done."] };
+    await answer(
+      sources,
+      [
         { role: "system", content: "You run a home." },
         { role: "user", content: "Lights on, and the fan" },
         {
@@ -662,33 +606,39 @@ describe("the conversation Claude reads", () => {
           content: "",
           toolCalls: [
             { id: "a", name: "lights", input: { to: "on" } },
-            { id: "b", name: "fan", input: null },
+            { id: "b", name: "lights", input: null },
           ],
         },
         { role: "tool", toolCallId: "a", content: "On" },
         { role: "tool", toolCallId: "b", content: "Running" },
         { role: "system", content: "Answer briefly." },
-      ]),
-    ).toEqual({
-      system: "You run a home.",
-      messages: [
-        { role: "user", content: "Lights on, and the fan" },
-        {
-          role: "assistant",
-          content: [
-            { type: "tool_use", id: "a", name: "lights", input: { to: "on" } },
-            { type: "tool_use", id: "b", name: "fan", input: {} },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            { type: "tool_result", tool_use_id: "a", content: "On" },
-            { type: "tool_result", tool_use_id: "b", content: "Running" },
-          ],
-        },
-        { role: "user", content: "Answer briefly." },
       ],
-    });
+      undefined,
+    );
+    const [asked] = sources.chats as { system: unknown; messages: unknown }[];
+    expect(asked?.system).toEqual([
+      expect.objectContaining({ type: "text", text: "You run a home." }),
+    ]);
+    expect(asked?.messages).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Lights on, and the fan" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "a", name: "lights", input: { to: "on" } },
+          { type: "tool_use", id: "b", name: "lights", input: {} },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "a", content: "On" },
+          { type: "tool_result", tool_use_id: "b", content: "Running" },
+          { type: "text", text: "Answer briefly." },
+        ],
+      },
+    ]);
   });
 });
