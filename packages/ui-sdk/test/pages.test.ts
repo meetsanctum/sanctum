@@ -127,6 +127,21 @@ describe("an app's pages", () => {
     expect(css).not.toMatch(/@layer base\{/);
   }, 60_000);
 
+  it("write colours with alpha as rgba(), never as hex", async () => {
+    // The Shelly Wall Display's web view drops `#0000` and `#ffffff24`.
+    const dir = await app(`
+import { defineAppUi } from "@meetsanctum/ui-sdk";
+function MainPage() {
+  return <p className="bg-black/37">Example</p>;
+}
+export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { main: MainPage } });
+`);
+    await buildPages(dir);
+    const css = readFileSync(join(dir, "pages/pages.css"), "utf8");
+    expect(css).not.toMatch(/#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i);
+    expect(css).toContain("background-color:rgba(0,0,0,.37)");
+  }, 60_000);
+
   it("leave out the utilities the kit's stylesheet has, so each comes once", async () => {
     const dir = await app(`
 import { defineAppUi } from "@meetsanctum/ui-sdk";

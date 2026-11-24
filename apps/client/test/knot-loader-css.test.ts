@@ -181,6 +181,19 @@ describe("the top bar's fade in the built CSS", () => {
   });
 });
 
+// A colour with alpha written as hex, `#0000` or `#ffffff24`, which the
+// Shelly Wall Display's web view drops along with its declaration.
+const hexAlpha = /#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i;
+
+describe("colours in the built CSS", () => {
+  it("are written as rgba() or transparent where they have alpha, never as hex", () => {
+    expect(css).not.toMatch(hexAlpha);
+    expect(declarationsOf(".border-transparent")).toEqual([
+      ["border-color", "transparent"],
+    ]);
+  });
+});
+
 describe("the frame's backing under the glass in the built CSS", () => {
   const backing = (covered: string) =>
     declarationsOf(

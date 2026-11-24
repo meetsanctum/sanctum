@@ -114,6 +114,13 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(fonts.every((name) => name.endsWith(".woff2"))).toBe(true);
   });
 
+  it("writes colours with alpha as rgba() or transparent, never as hex", () => {
+    // The Shelly Wall Display's web view drops `#0000` and `#ffffff24`.
+    const css = read("kit.css");
+    expect(css).not.toMatch(/#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i);
+    expect(css).toContain(".border-transparent{border-color:transparent}");
+  });
+
   it("spans widgets across the phone tile grid and keeps their own span in other grids", () => {
     const css = read("kit.css");
     expect(css).toMatch(
