@@ -105,7 +105,10 @@ export const quietLogs: OnLog = (level, log, handler) => {
   handler(level, log);
 };
 
-// The HexAlphaColors flag accepted by Vite's CSS minifier.
+// lightningcss's Features.HexAlphaColors, which Vite's CSS minifier takes,
+// written out: ui-sdk is Apache-2.0 and lightningcss MPL-2.0, so ui-sdk
+// doesn't depend on it directly. The kit's test fails if the flag stops
+// lowering those colours.
 const hexAlphaColors = 1 << 14;
 
 /**

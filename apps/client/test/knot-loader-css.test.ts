@@ -2,8 +2,6 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { hexAlphaColours } from "../../../packages/ui-sdk/test/css-colours";
-
 // The knot loader's motion, the top bar's fade and the frame's backing under
 // the glass (src/styles.css), read from the stylesheet the production build
 // emits. The dev server serves the CSS as written, but the build's minifier
@@ -183,9 +181,20 @@ describe("the top bar's fade in the built CSS", () => {
   });
 });
 
+// A colour with alpha written as hex, `#0000` or `#ffffff24`, which the
+// Shelly Wall Display's web view drops along with its declaration. Only
+// declarations' values are read, so a selector such as `.bg-\[\#0000\]`
+// isn't taken for a colour.
+const hexAlpha = /#(?:[\da-f]{4}|[\da-f]{8})(?![\w-])/i;
+
 describe("colours in the built CSS", () => {
   it("are written as rgba() or transparent where they have alpha, never as hex", () => {
-    expect(hexAlphaColours(css)).toEqual([]);
+    const values = rules.flatMap((rule) =>
+      rule.declarations.map((declaration) =>
+        declaration.slice(declaration.indexOf(":") + 1),
+      ),
+    );
+    expect(values.filter((value) => hexAlpha.test(value))).toEqual([]);
     expect(declarationsOf(".border-transparent")).toEqual([
       ["border-color", "transparent"],
     ]);
