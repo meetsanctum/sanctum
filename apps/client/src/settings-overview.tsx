@@ -24,10 +24,10 @@ import { useModels } from "./models/data";
 import { modelsTitle, sourceName } from "./models/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
-import { roomsTitle } from "./settings-rooms";
 import { SummaryLine, summarySpoken } from "./settings-status";
 import type { SystemStatus } from "./system-status";
 import { useMinuteClock } from "./device-firmware";
+import { roomsTitle } from "./system-apps";
 
 // Settings' first page: what needs attention, while anything does, then a
 // row for each of its areas, each opening that area's page. A row says in a

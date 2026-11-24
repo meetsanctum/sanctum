@@ -8,6 +8,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const execFile = promisify(execFileCallback);
 const script = resolve(import.meta.dirname, "../../../deploy/dev/stack.sh");
+// The fake devices' rooms, which the seed is given from the worktree.
+const fakeHome = resolve(
+  import.meta.dirname,
+  "../../../deploy/dev/apps/fake-lights/home.js",
+);
 const folders: string[] = [];
 
 afterEach(async () => {
@@ -39,6 +44,7 @@ async function worktree() {
   await mkdir(bin);
   await cp(script, join(root, "deploy/dev/stack.sh"));
   await writeFile(join(root, "deploy/dev/seed.mjs"), "");
+  await cp(fakeHome, join(root, "deploy/dev/apps/fake-lights/home.js"));
   await writeFile(join(root, "deploy/dev/approve.mjs"), "");
   await writeFile(commands, "");
   await writeFile(
@@ -215,6 +221,10 @@ describe("development stack CLI", { timeout: 20_000 }, () => {
     );
     expect(exec).toContain("SEED_CORE_URL=https://127.0.0.1:4100");
     expect(exec).toContain("NODE_TLS_REJECT_UNAUTHORIZED=0");
+    const rooms = exec
+      ?.find((arg) => arg.startsWith("SEED_ROOMS="))
+      ?.slice("SEED_ROOMS=".length);
+    expect(Object.keys(JSON.parse(rooms!))).toHaveLength(9);
   });
 
   it("approves a pairing code as the seed does, with the name given", async () => {

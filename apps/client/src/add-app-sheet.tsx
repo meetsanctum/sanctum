@@ -8,8 +8,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
-import { AppIcon } from "./app-icon";
-import { plainIcon } from "./app-settings";
+import { AppIcon, plainIcon } from "./app-icon";
 import { productName } from "./brand";
 import {
   Dialog,

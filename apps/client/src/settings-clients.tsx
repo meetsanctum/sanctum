@@ -29,6 +29,7 @@ import {
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
 import { platformNames } from "./platforms";
+import { everyWhileShown } from "./while-shown";
 
 // Settings → Clients: every client with its kind, person, platform and
 // last-seen time, or Connected now while it is. Every client sees and
@@ -102,8 +103,8 @@ export function ClientsSection(props: {
   useEffect(() => {
     const update = () => void refresh().catch(() => undefined);
     update();
-    const timer = window.setInterval(update, 5_000);
-    return () => window.clearInterval(timer);
+    const stopPolling = everyWhileShown(5_000, update);
+    return () => stopPolling();
   }, [refresh]);
 
   return (

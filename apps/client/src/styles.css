@@ -197,12 +197,26 @@ body {
   }
 }
 
+/* Over an app's page, one flat colour, the band is a gradient of that
+   colour: no copy of the background under a mask, which a slow tablet
+   draws as a layer of its own. */
+.panel[data-flat] .top-fade {
+  inset: var(--page-top) 0 auto;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--background), transparent);
+  mask-image: none;
+}
+
 /* The band follows the page from beside it, so it needs timeline-scope as
    well, which came a version after scroll timelines in Chromium. */
 @supports not ((animation-timeline: scroll()) and (timeline-scope: --page)) {
   .top-fade {
     mask-size: 100% 24px;
     opacity: 1;
+  }
+
+  .panel[data-flat] .top-fade {
+    height: 24px;
   }
 }
 

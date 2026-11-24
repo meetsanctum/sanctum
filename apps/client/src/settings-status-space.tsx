@@ -15,6 +15,7 @@ import {
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 import { formatBytes, serviceNames } from "./system-status";
+import { everyWhileShown } from "./while-shown";
 
 // Free up space, the Storage card's last row on Status: what it would free
 // and what goes, asked first, naming what stays: the version running, the
@@ -129,8 +130,8 @@ export function useSpace() {
   useEffect(() => void count(), [count]);
   useEffect(() => {
     if (state.at !== "unknown") return;
-    const timer = setInterval(() => void count(), 5_000);
-    return () => clearInterval(timer);
+    const stopPolling = everyWhileShown(5_000, () => void count());
+    return () => stopPolling();
   }, [count, state.at]);
 
   const free = async (plan: SpacePlan) => {

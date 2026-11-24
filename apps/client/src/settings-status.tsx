@@ -55,8 +55,6 @@ import {
 // (settings-status-day.tsx), the network and the clients connected now. It
 // asks every 5 seconds while open, and figures change in place.
 
-export const statusSettingsPage = "status";
-
 const appNamer = (apps: readonly AppInfo[]) => (id: string) =>
   apps.find((app) => app.id === id)?.name ?? id;
 

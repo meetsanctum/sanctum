@@ -7,8 +7,7 @@ import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { AppIcon } from "../app-icon";
-import { plainIcon } from "../app-settings";
+import { AppIcon, plainIcon } from "../app-icon";
 import { Row, Section, SettingsPageBar } from "../components";
 import {
   Dialog,
@@ -37,8 +36,6 @@ import {
 // switched. The areas that tell who's home have a card of their own, and
 // each asks before it turns on; everything else switches at once, and
 // turning anything off never asks.
-
-export const canUseSettingsPage = "ai-can-use";
 
 export function CanUsePage(props: {
   apps: readonly AppInfo[];

@@ -6,6 +6,7 @@ import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import { timeText } from "./device-history-data";
 import type { Channel } from "./system-update";
+import { isShown, onShown } from "./while-shown";
 
 // The host's status (apps/core/src/system/status.ts), for Settings → Status,
 // System's row, Needs attention and the dashboard's Attention tile, in the
@@ -105,8 +106,15 @@ export function useSystemStatus(options: {
   useEffect(() => {
     if (!enabled) return;
     let isStopped = false;
+    let isLoading = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancelPoll = () => {
+      clearTimeout(timer);
+      timer = undefined;
+    };
     const load = async () => {
+      cancelPoll();
+      isLoading = true;
       try {
         const answer = await systemStatus.get();
         if (isStopped) return;
@@ -115,13 +123,24 @@ export function useSystemStatus(options: {
       } catch {
         if (isStopped) return;
         setFailed(true);
+      } finally {
+        isLoading = false;
       }
-      timer = setTimeout(load, everyMs);
+      // A hidden window asks again once it is shown.
+      if (isShown()) {
+        timer = setTimeout(() => {
+          if (isShown()) void load();
+        }, everyMs);
+      }
     };
     void load();
+    const stopShown = onShown(() => {
+      if (!isStopped && !isLoading) void load();
+    }, cancelPoll);
     return () => {
       isStopped = true;
-      clearTimeout(timer);
+      cancelPoll();
+      stopShown();
     };
   }, [enabled, everyMs]);
   return { status, failed };

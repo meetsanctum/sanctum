@@ -1,5 +1,7 @@
 import type { AppInfo, Floor } from "@meetsanctum/app-sdk";
 import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -13,7 +15,7 @@ import {
   roomRowOf,
   type SectionEntities,
 } from "./room-sections";
-import type { Devices } from "./use-devices";
+import { useTileHandlers, type Devices } from "./use-devices";
 
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
@@ -45,6 +47,7 @@ export function HomeRooms(props: {
   onEdit: () => void;
 }) {
   const { devices, entities } = props;
+  const { onToggle, onDim } = useTileHandlers(devices);
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
@@ -102,11 +105,7 @@ export function HomeRooms(props: {
     const { room } = place;
     const Heading = level === 3 ? "h3" : "h2";
     return (
-      <section
-        key={place.id}
-        aria-labelledby={headingId}
-        className="flex shrink-0 flex-col gap-3"
-      >
+      <RoomSection key={place.id} aria-labelledby={headingId}>
         <Heading
           id={headingId}
           className="m-0 text-[15px] leading-5 font-medium"
@@ -147,18 +146,14 @@ export function HomeRooms(props: {
               <DeviceTile
                 key={tile.key}
                 tile={tile}
-                onToggle={(each) =>
-                  void devices.toggle(each).catch(() => undefined)
-                }
-                onDim={(each, brightness) =>
-                  void devices.dim(each, brightness).catch(() => undefined)
-                }
+                onToggle={onToggle}
+                onDim={onDim}
                 onOpen={props.openDevice}
               />
             ))}
           </div>
         )}
-      </section>
+      </RoomSection>
     );
   };
 
@@ -252,6 +247,40 @@ function NothingOnHome(props: { name: string; onEdit: () => void }) {
           Edit {props.name}
         </Button>
       </div>
+    </section>
+  );
+}
+
+// A room off screen isn't styled or laid out until it nears the screen:
+// with many rooms, a change over Home, such as a device's detail opening,
+// otherwise styled them all again. It lays out in full once first, so the
+// browser keeps its size (contain-intrinsic-size: auto) and nothing shifts
+// as it comes into view. Its 4 px of padding, given back by the margin,
+// keeps its tiles' focus rings inside what it paints.
+function RoomSection(props: {
+  "aria-labelledby": string;
+  children: ReactNode;
+}) {
+  const [skipsOffScreen, setSkipsOffScreen] = useState(false);
+  useEffect(() => {
+    let later: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      later = setTimeout(() => setSkipsOffScreen(true));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(later);
+    };
+  }, []);
+  return (
+    <section
+      aria-labelledby={props["aria-labelledby"]}
+      className={cn(
+        "-m-1 flex shrink-0 flex-col gap-3 p-1 [contain-intrinsic-size:auto_320px]",
+        skipsOffScreen && "[content-visibility:auto]",
+      )}
+    >
+      {props.children}
     </section>
   );
 }

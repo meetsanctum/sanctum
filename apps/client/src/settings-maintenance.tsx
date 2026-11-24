@@ -57,8 +57,6 @@ import { DeviceLine } from "./settings-devices";
 // with its button. A row shown here keeps its place until the page closes,
 // saying how it was put right, so nothing moves under the pointer.
 
-export const maintenanceSettingsPage = "maintenance";
-
 // A charge that rises this much at once is a new battery, as the core
 // reckons it for the activity log.
 const newBatteryRise = 25;

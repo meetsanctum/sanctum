@@ -140,6 +140,21 @@ describe("the top bar's fade in the built CSS", () => {
     expect(css).toContain("@keyframes top-fade-in{to{opacity:1}}");
   });
 
+  it("is a plain band of the page's colour over an app's flat page", () => {
+    expect(
+      Object.fromEntries(declarationsOf(".panel[data-flat] .top-fade")),
+    ).toMatchObject({
+      height: "40px",
+      "mask-image": "none",
+    });
+    expect(
+      declarationsOf(
+        ".panel[data-flat] .top-fade",
+        "@supportsnot((animation-timeline:scroll())and(timeline-scope:--page))",
+      ),
+    ).toEqual([["height", "24px"]]);
+  });
+
   it("follows the page's scroll from beside it", () => {
     expect(declarationsOf(".page")).toContainEqual([
       "scroll-timeline",
@@ -167,13 +182,13 @@ describe("the top bar's fade in the built CSS", () => {
 });
 
 describe("the frame's backing under the glass in the built CSS", () => {
-  const backing = (covering: string) =>
+  const backing = (covered: string) =>
     declarationsOf(
-      `[data-platform=macos] .home-screen:has(>${covering}) .frame-under-glass`,
+      `[data-platform=macos] .home-screen[${covered}] .frame-under-glass`,
     );
 
   it("comes in under an overlay, on macOS only, as it opens", () => {
-    expect(backing(".overlay[data-state=open]")).toEqual([["opacity", "1"]]);
+    expect(backing("data-covered")).toEqual([["opacity", "1"]]);
   });
 
   it("keeps following the glass's fade where motion is reduced", () => {
@@ -201,19 +216,19 @@ describe("the frame's backing under the glass in the built CSS", () => {
     const veil = declarationsOf(".veil").find(([property]) =>
       property!.startsWith("animation"),
     )![1]!;
-    const transition = backing(".veil").find(
+    const transition = backing("data-veiled").find(
       ([property]) => property === "transition",
     )![1]!;
     const seconds = (value: string) => value.match(/[\d.]*\d+m?s/g);
 
-    expect(backing(".veil")).toContainEqual(["opacity", "1"]);
+    expect(backing("data-veiled")).toContainEqual(["opacity", "1"]);
     expect(seconds(transition)).toEqual(seconds(veil));
   });
 
   it("waits for the veil even when the screen first mounts under it", () => {
     expect(
       declarationsOf(
-        "[data-platform=macos] .home-screen:has(>.veil) .frame-under-glass",
+        "[data-platform=macos] .home-screen[data-veiled] .frame-under-glass",
         "",
         true,
       ),

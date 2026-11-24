@@ -15,12 +15,6 @@ import { AutomationsList } from "./list";
 // automation, one with its history; edit, the editor, for a new one without
 // an id.
 
-export const automationsApp = {
-  id: "sanctum.automations",
-  name: "Automations",
-  icon: { glyph: "sparkles", color: "blossom" },
-} as const;
-
 export function AutomationsPage(props: {
   page: string;
   params: PageParams;

@@ -12,7 +12,14 @@ import {
   type Places,
 } from "@meetsanctum/app-sdk";
 import type { LiveFeed, Tile } from "@meetsanctum/ui-sdk";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
@@ -477,6 +484,7 @@ export function useDevices(live: LiveFeed) {
   );
   // The clock only moves the tiles on; they read the time afresh each time.
   const minute = useMinuteClock(ticks);
+  const kept = useRef(new Map<string, Tile>());
   const tiles = useMemo(() => {
     const shown =
       asks.size === 0
@@ -488,11 +496,15 @@ export function useDevices(live: LiveFeed) {
               return each ? pendingAs(capability, each.asked) : capability;
             }),
           }));
-    return tilesOf(shown, places, pressed, Date.now()).map((tile) => {
+    const next = tilesOf(shown, places, pressed, Date.now()).map((tile) => {
       const failed = failures.get(tile.key);
       return failed ? { ...tile, failures: failed } : tile;
     });
+    return keepUnchanged(next, kept.current);
   }, [devices, places, failures, pressed, asks, minute]);
+  useLayoutEffect(() => {
+    kept.current = new Map(tiles.map((tile) => [tile.key, tile]));
+  }, [tiles]);
   return {
     places,
     devices,
@@ -509,3 +521,49 @@ export function useDevices(live: LiveFeed) {
 }
 
 export type Devices = ReturnType<typeof useDevices>;
+
+/**
+ * What a tile does when switched or dimmed, the same functions each time so
+ * a tile that didn't change isn't drawn again (DeviceTile is memoised). A
+ * refusal or a failure shows on the tile, so nothing is thrown.
+ */
+export function useTileHandlers(devices: Pick<Devices, "toggle" | "dim">) {
+  const { toggle, dim } = devices;
+  const onToggle = useCallback(
+    (tile: Tile) => void toggle(tile).catch(() => undefined),
+    [toggle],
+  );
+  const onDim = useCallback(
+    (tile: Tile, brightness: number) =>
+      void dim(tile, brightness).catch(() => undefined),
+    [dim],
+  );
+  return { onToggle, onDim };
+}
+
+// A tile that says the same as before keeps its object, so a tile drawn from
+// it draws again only when it changed: one sensor's change otherwise drew
+// every tile in the home again.
+function keepUnchanged(next: Tile[], kept: Map<string, Tile>) {
+  return next.map((tile) => {
+    const before = kept.get(tile.key);
+    return before && sameData(before, tile) ? before : tile;
+  });
+}
+
+// Whether two pieces of plain data, as a tile is, say the same.
+function sameData(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(
+    (key) =>
+      Object.hasOwn(b, key) &&
+      sameData(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+      ),
+  );
+}

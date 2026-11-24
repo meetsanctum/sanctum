@@ -27,8 +27,6 @@ import {
 // press, a run or an app's action led to folds under it. Settings shows the
 // newest few in a section of its own, with Show all.
 
-export const activitySettingsPage = "activity";
-
 const kindOptions: { value: ActivityKind | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "devices", label: "Devices" },

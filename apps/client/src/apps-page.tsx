@@ -9,11 +9,9 @@ import {
 import { Minus, Pin, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
-import { AppIcon } from "./app-icon";
-import { plainIcon } from "./app-settings";
+import { AppIcon, plainIcon } from "./app-icon";
 import { opens, type HostedApp, type Route } from "./apps";
-import { settingsApp } from "./settings";
-import { appSettingsPage } from "./settings-apps";
+import { appSettingsPage, settingsApp } from "./system-apps";
 
 /** Where Apps is on show, as a route's app. */
 export const appsPage = "sanctum.apps";

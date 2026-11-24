@@ -44,8 +44,6 @@ import { agentDetail, agentsTitle, canUseTitle, onCount } from "./words";
 // a setup whose prompt the person pastes into the agent. Every client sees
 // and manages every agent.
 
-export const agentsSettingsPage = "agents";
-
 type Editing = {
   action: "rename" | "remove";
   agent: AgentInfo;

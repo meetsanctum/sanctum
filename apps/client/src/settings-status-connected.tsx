@@ -6,6 +6,7 @@ import { Avatar, Row, Section } from "./components";
 import { coreJson } from "./core-fetch";
 import { platformNames } from "./platforms";
 import { lastAtText } from "./system-status";
+import { everyWhileShown } from "./while-shown";
 
 // Connected now, Status' last section: each screen with a live connection
 // open, drawn as Settings → Clients draws it, this device first and then the
@@ -45,10 +46,10 @@ export function ConnectedSection() {
       }
     };
     void load();
-    const timer = setInterval(() => void load(), 5_000);
+    const stopPolling = everyWhileShown(5_000, () => void load());
     return () => {
       current = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, []);
 

@@ -25,12 +25,12 @@ import {
 import { memo, useId, useState } from "react";
 
 import { AppIcon } from "../app-icon";
-import { automationsApp } from "../automations/page";
 import { productName } from "../brand";
 import { Avatar } from "../components";
 import { timeText } from "../device-history-data";
 import type { ActivityState, Folded } from "./data";
 import { activityWords, type RoomNames, type Where } from "./words";
+import { automationsApp } from "../system-apps";
 
 // The rows of an activity list: who or what did it by its mark, a person by
 // their avatar, an app by its icon; what happened and who, a problem with an

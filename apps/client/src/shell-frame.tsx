@@ -47,6 +47,11 @@ export function ShellFrame(props: {
       className="home-screen"
       data-sidebar={layout.docked ? "docked" : undefined}
       data-sliding={layout.isSliding ? "" : undefined}
+      // What covers it and what is under it, for shell-frame.css.
+      data-veiled={props.isVeiled ? "" : undefined}
+      data-day-page={
+        !props.isPlace && props.deviceMode === "day" ? "" : undefined
+      }
     >
       <div
         aria-hidden="true"
@@ -77,7 +82,12 @@ export function ShellFrame(props: {
       >
         {props.sidebar(false)}
       </aside>
-      <div className="panel" style={{ background: props.panelBackground }}>
+      <div
+        className="panel"
+        style={{ background: props.panelBackground }}
+        // An app's page is one flat colour (styles.css, .top-fade).
+        data-flat={props.isPlace ? undefined : ""}
+      >
         {props.panel}
       </div>
       {layout.edge && (

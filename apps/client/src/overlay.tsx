@@ -1,6 +1,6 @@
 import { Button } from "@meetsanctum/ui-sdk";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { VeilGlass } from "./veil";
 
@@ -33,6 +33,23 @@ function WhileCovering(props: { onCovering: (covering: boolean) => void }) {
   return null;
 }
 
+// The overlays open over a container, which says it is covered while any
+// is (data-covered, shell-frame.css), from as one opens until as it starts
+// to go.
+const openOver = new WeakMap<HTMLElement, number>();
+function useCovers(container: HTMLElement | null, open: boolean) {
+  useLayoutEffect(() => {
+    if (!container || !open) return;
+    openOver.set(container, (openOver.get(container) ?? 0) + 1);
+    container.dataset.covered = "";
+    return () => {
+      const left = (openOver.get(container) ?? 1) - 1;
+      openOver.set(container, left);
+      if (left === 0) delete container.dataset.covered;
+    };
+  }, [container, open]);
+}
+
 export function Overlay(props: {
   container: HTMLElement | null;
   open: boolean;
@@ -55,6 +72,7 @@ export function Overlay(props: {
   children: ReactNode;
 }) {
   const { onClose } = props;
+  useCovers(props.container, props.open);
   const opener = useRef<HTMLElement | null>(null);
   const glass = useRef<HTMLDivElement>(null);
   // Whether the press now under way started, and so far ended, on the

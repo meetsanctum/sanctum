@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AppInfo, EntityInfo, WidgetContent } from "@meetsanctum/app-sdk";
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   homeDashboard,
@@ -94,6 +94,12 @@ async function openFromOverview(name: string) {
   return apps.map((button) => button.textContent);
 }
 
+// Settings and Automations load when first opened (Home.tsx): loaded here
+// first, they open as quickly as the tests look for them.
+beforeAll(() =>
+  Promise.all([import("../src/settings"), import("../src/automations/page")]),
+);
+
 describe("navigation", () => {
   it("opens a room from the sidebar, named in the top bar, with no Back", async () => {
     await openKitchen();
@@ -109,12 +115,15 @@ describe("navigation", () => {
   });
 
   it("opens Apps from the sidebar's last tile, as a page in the device's mode", async () => {
+    const fade = container.querySelector(".top-fade")!;
+    expect(fade.matches(".panel[data-flat] .top-fade")).toBe(false);
     const tile = container.querySelector<HTMLButtonElement>(
       'aside button[aria-label="Apps"]',
     )!;
     await act(async () => tile.click());
     expect(pageTitle()).toBe("Apps");
     expect(container.querySelector("main")!.className).toBe("page app-page");
+    expect(fade.matches(".panel[data-flat] .top-fade")).toBe(true);
     expect(tile.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });

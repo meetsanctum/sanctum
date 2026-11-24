@@ -102,19 +102,50 @@ describe("what an overlay says about covering the window", () => {
   });
 });
 
-// What the frame's backing goes by (src/shell-frame.css): `:has(> .overlay…)`
-// needs it a direct child of the screen, and its state to change as it starts
-// to fade, so the two fade together.
+// What the frame's backing goes by (src/shell-frame.css): its container says
+// it is covered while the overlay is open, and not once it starts to fade,
+// so the two fade together.
 describe("what the frame's backing under the glass goes by", () => {
-  it("is a direct child of its container, open only until it starts to fade", async () => {
+  it("marks its container covered while open, and not once it starts to fade", async () => {
     withFade();
     await show(true);
     expect(dialog()!.parentElement).toBe(container);
-    expect(dialog()!.matches(".overlay[data-state=open]")).toBe(true);
+    expect(container.hasAttribute("data-covered")).toBe(true);
 
     await show(false);
 
     expect(dialog()).not.toBeNull();
-    expect(dialog()!.matches(".overlay[data-state=open]")).toBe(false);
+    expect(container.hasAttribute("data-covered")).toBe(false);
+  });
+});
+
+describe("a container two overlays cover", () => {
+  it("stays covered until the last of them closes", async () => {
+    const both = (first: boolean, second: boolean) =>
+      act(async () => {
+        root.render(
+          <>
+            {[first, second].map((open, index) => (
+              <Overlay
+                key={index}
+                container={container}
+                open={open}
+                onClose={() => {}}
+                onCovering={() => {}}
+                title={`Overlay ${index}`}
+              >
+                A page
+              </Overlay>
+            ))}
+          </>,
+        );
+      });
+
+    await both(true, true);
+    expect(container.hasAttribute("data-covered")).toBe(true);
+    await both(false, true);
+    expect(container.hasAttribute("data-covered")).toBe(true);
+    await both(false, false);
+    expect(container.hasAttribute("data-covered")).toBe(false);
   });
 });

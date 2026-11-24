@@ -6,8 +6,7 @@ import { useState, type ReactNode } from "react";
 import { AddAppSheet } from "./add-app-sheet";
 import { DeleteAppData } from "./app-delete-data";
 import { dayWords } from "./app-go-back";
-import { AppIcon } from "./app-icon";
-import { plainIcon } from "./app-settings";
+import { AppIcon, plainIcon } from "./app-icon";
 import { useAvailableApps } from "./available-apps";
 import { Row, Section } from "./components";
 
@@ -18,9 +17,6 @@ import { Row, Section } from "./components";
 // isn't there. One the household removed says until when its data is kept,
 // since adding it back meanwhile brings back what it had, and offers to
 // delete it now (app-delete-data.tsx).
-
-/** Settings' page for one app, by its id. */
-export const appSettingsPage = "app";
 
 export function AppsSection(props: {
   apps: AppInfo[];

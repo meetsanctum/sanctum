@@ -61,7 +61,7 @@ import { SidebarRooms } from "./sidebar-rooms";
 import { statusRow, statusTile, StatusTileWords } from "./status-tile";
 import { SummaryCards, type Summary } from "./summary-cards";
 import type { HostProblem, ServiceNotSetUp } from "./system-status";
-import type { Devices } from "./use-devices";
+import { useTileHandlers, type Devices } from "./use-devices";
 
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, what its sensors
@@ -228,14 +228,12 @@ function Sections(props: {
   /** Its headings' level, 3 under a floor's. */
   level?: 2 | 3;
 }) {
-  const { devices } = props;
+  const { onToggle, onDim } = useTileHandlers(props.devices);
   return (
     <DeviceSections
       sections={props.sections}
-      onToggle={(tile) => void devices.toggle(tile).catch(() => undefined)}
-      onDim={(tile, brightness) =>
-        void devices.dim(tile, brightness).catch(() => undefined)
-      }
+      onToggle={onToggle}
+      onDim={onDim}
       onOpen={props.onOpen}
       lead={props.lead}
       level={props.level}

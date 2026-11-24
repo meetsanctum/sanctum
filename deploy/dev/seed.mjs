@@ -1,23 +1,21 @@
 // `pnpm dev:seed` (deploy/dev/stack.sh): claims a new development home and
-// puts its fake lights, contact sensors and media players in rooms. It runs
-// in the core's container, where its dependencies are. The login is only ever for a
-// stack, which listens on this Mac alone unless `pnpm dev:display` puts it
-// on the network.
+// puts its sixty fake devices in nine rooms: lights, plugs, contact, motion
+// and climate sensors and media players. It runs in the core's container,
+// where its dependencies are. The login is only ever for a stack, which
+// listens on this Mac alone unless `pnpm dev:display` puts it on the network.
 import { keyStretching } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
 const base = process.env.SEED_CORE_URL;
 const login = { username: "dev", password: "sanctum-dev-stack" };
-const rooms = {
-  "Living room": [
-    "Floor lamp",
-    "Shelf light",
-    "Balcony door",
-    "Living room box",
-  ],
-  Office: ["Desk lamp", "Office speaker"],
-  Bedroom: ["Bedside lamp", "Bedroom window"],
-};
+const rooms = JSON.parse(process.env.SEED_ROOMS);
+// What the household shows its contact sensors as.
+const shownAs = Object.fromEntries(
+  Object.values(rooms)
+    .flat()
+    .filter((name) => / (door|window|gate)$/.test(name))
+    .map((name) => [name, name.endsWith("window") ? "window" : "door"]),
+);
 
 async function call(path, body, token) {
   const response = await fetch(`${base}${path}`, {
@@ -64,14 +62,22 @@ const { token } = await call("/api/auth/claim/finish", {
 });
 
 // The driver registers its devices as it starts, a moment after the core does.
-let devices = [];
+let devices = new Map();
 const names = Object.values(rooms).flat();
 for (let tries = 0; tries < 30; tries++) {
-  devices = await call("/api/devices", undefined, token);
-  if (names.every((name) => devices.some((each) => each.driverName === name)))
-    break;
+  const available = await call("/api/devices", undefined, token);
+  devices = new Map(
+    available
+      .filter((device) => device.driver === "sanctum.fake-lights")
+      .map((device) => [device.driverName, device]),
+  );
+  if (names.every((name) => devices.has(name))) break;
   await new Promise((done) => setTimeout(done, 500));
 }
+
+const missing = names.filter((name) => !devices.has(name));
+if (missing.length)
+  throw new Error(`Fake lights did not register: ${missing.join(", ")}`);
 
 for (const [room, deviceNames] of Object.entries(rooms)) {
   const { id: roomId } = await call(
@@ -80,10 +86,16 @@ for (const [room, deviceNames] of Object.entries(rooms)) {
     token,
   );
   for (const name of deviceNames) {
-    const device = devices.find((each) => each.driverName === name);
-    if (!device)
-      throw new Error(`${name} didn't appear: is Fake lights running?`);
-    await call("/api/devices/update", { id: device.id, name, roomId }, token);
+    await call(
+      "/api/devices/update",
+      {
+        id: devices.get(name).id,
+        name: name.replace(/(^| )\p{L}/gu, (letter) => letter.toUpperCase()),
+        roomId,
+        shownAs: shownAs[name],
+      },
+      token,
+    );
   }
 }
 

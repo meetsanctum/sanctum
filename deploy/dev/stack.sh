@@ -340,7 +340,12 @@ in_core() {
 }
 
 seed() {
-  in_core seed.mjs
+  local rooms
+  rooms="$(node --input-type=module -e '
+    import { seedRooms } from "./deploy/dev/apps/fake-lights/home.js";
+    console.log(JSON.stringify(seedRooms));
+  ')"
+  in_core seed.mjs -e "SEED_ROOMS=$rooms"
 }
 
 # `pnpm dev:approve <code> [name]`: a plain-HTTP stack's shared device, as

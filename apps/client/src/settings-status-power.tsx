@@ -15,6 +15,7 @@ import {
 import { CoreError, coreJson } from "./core-fetch";
 import { goneWithinMs } from "./power-notice";
 import { systemUpdate } from "./system-update";
+import { everyWhileShown } from "./while-shown";
 
 // Restart and Shut down, at the end of Status' Sanctum card, under Running
 // for, which they reset. Each asks first, saying what happens and how to
@@ -68,10 +69,10 @@ function useUpdateRunning() {
       }
     };
     void check();
-    const timer = setInterval(() => void check(), 10_000);
+    const stopChecks = everyWhileShown(10_000, () => void check());
     return () => {
       current = false;
-      clearInterval(timer);
+      stopChecks();
     };
   }, []);
   return running;
