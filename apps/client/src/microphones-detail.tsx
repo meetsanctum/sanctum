@@ -102,8 +102,9 @@ export function MicrophonesPage(props: {
     }
   }
 
+  // As wide as the pages apps add beside it, such as its driver's.
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex w-[520px] max-w-full flex-col gap-2">
       <PageSection id={id} title="Microphones">
         {(muted !== undefined || busy) && (
           <div className="flex min-h-13 items-center justify-between gap-3 px-2.5 text-[15px] leading-5">

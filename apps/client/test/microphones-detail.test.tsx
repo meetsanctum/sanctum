@@ -184,6 +184,13 @@ describe("a smart speaker's Microphones page", () => {
     expect(container.textContent).not.toContain("on its side");
   });
 
+  it("is as wide as the pages apps add beside it", async () => {
+    await show(audio());
+
+    expect(container.firstElementChild?.className).toContain("w-[520px]");
+    expect(container.firstElementChild?.className).toContain("max-w-full");
+  });
+
   it("can't be switched while it's offline", async () => {
     await show(audio(), { ...device, availability: "offline" });
 
