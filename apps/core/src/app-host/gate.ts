@@ -23,6 +23,38 @@ import { ActionCallError } from "./errors.js";
 // (agents/can-use.ts).
 export type Rule = Pick<ActionDefinition, "tier"> & { agentArea?: string };
 
+/**
+ * The AI agent behind a call, whatever it reaches the core through: its id,
+ * which the limits, its changes and the activity log key on, its name, and
+ * the actor its calls run as.
+ */
+export type AgentCaller = {
+  id: string;
+  name: string;
+  actor: Extract<Actor, { kind: "assistant-run" }>;
+};
+
+/** Who is behind a call: a client's principal, or an AI agent. */
+export type Caller = Principal | AgentCaller;
+
+export const isAgentCaller = (caller: Caller): caller is AgentCaller =>
+  "actor" in caller;
+
+/** An MCP client acts as itself, on behalf of whoever added it. */
+export function agentOf(
+  principal: Extract<Principal, { scope: "agent" }>,
+): AgentCaller {
+  return {
+    id: principal.client.id,
+    name: principal.client.name,
+    actor: {
+      kind: "assistant-run",
+      id: principal.client.id,
+      onBehalfOf: principal.addedBy.id,
+    },
+  };
+}
+
 export function deviceCommandRule(kind: CapabilityKind): Rule {
   return { tier: capabilityOf(kind).tier, agentArea: controlPermission(kind) };
 }
@@ -87,14 +119,7 @@ export function createGate(
 
   // The actor a principal acts as.
   function actorOf(principal: Principal): Actor {
-    // An agent acts as itself, on behalf of whoever added it.
-    if (principal.scope === "agent") {
-      return {
-        kind: "assistant-run",
-        id: principal.client.id,
-        onBehalfOf: principal.addedBy.id,
-      };
-    }
+    if (principal.scope === "agent") return agentOf(principal).actor;
     // Widget tokens read widget data and nothing else.
     if (principal.scope !== "full") {
       throw new ActionCallError("forbidden");
@@ -112,8 +137,8 @@ export function createGate(
 
   return {
     // The actor for this call, or an ActionCallError.
-    admit(principal: Principal, rule: Rule): Actor {
-      const actor = actorOf(principal);
+    admit(caller: Caller, rule: Rule): Actor {
+      const actor = isAgentCaller(caller) ? caller.actor : actorOf(caller);
       permit(actor, rule);
       return actor;
     },

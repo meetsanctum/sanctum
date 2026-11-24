@@ -7,6 +7,7 @@ import {
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
+import { agentOf, type AgentCaller } from "../app-host/gate.js";
 import type { Principal } from "../auth/clients.js";
 import type { AgentLimiter, LimitedLog, LimitRefusal } from "./limits.js";
 import type { AgentTools } from "./tools.js";
@@ -52,7 +53,7 @@ export function registerMcpRoute(
 ) {
   const { tools, limiter } = options;
 
-  function serverFor(principal: AgentPrincipal) {
+  function serverFor(agent: AgentCaller) {
     const server = new Server(
       { name: "sanctum", version: options.version },
       {
@@ -66,7 +67,7 @@ export function registerMcpRoute(
     server.setRequestHandler("tools/call", async (request) => {
       const { name, arguments: input } = request.params;
       const result = await options.duringCall(randomUUID(), () =>
-        tools.call(principal, name, input),
+        tools.call(agent, name, input),
       );
       if (!result) {
         throw new ProtocolError(
@@ -81,17 +82,17 @@ export function registerMcpRoute(
 
   const handler = createMcpHandler(
     (context) =>
-      serverFor(context.authInfo?.extra?.principal as AgentPrincipal),
+      serverFor(agentOf(context.authInfo?.extra?.principal as AgentPrincipal)),
     // Only 2026-07-28: the connector translates for agents on older ones.
     { legacy: "reject" },
   );
 
   function refuseLimit(
     reply: FastifyReply,
-    principal: AgentPrincipal,
+    agent: AgentCaller,
     refusal: LimitRefusal,
   ) {
-    options.logLimited(principal.client.id, refusal.limited);
+    options.logLimited(agent.id, refusal.limited);
     return jsonRpcError(
       reply.header("retry-after", String(refusal.retryAfter)),
       429,
@@ -112,20 +113,22 @@ export function registerMcpRoute(
         return jsonRpcError(reply, 403, "Origin not allowed");
       }
       if (request.method === "POST") {
-        const refusal = limiter.takeRequest(principal.client.id);
-        if (refusal) return refuseLimit(reply, principal, refusal);
+        const agent = agentOf(principal);
+        const refusal = limiter.takeRequest(agent.id);
+        if (refusal) return refuseLimit(reply, agent, refusal);
       }
     },
   };
 
   app.post("/api/mcp", route, async (request, reply) => {
     const principal = request.principal as AgentPrincipal;
+    const agent = agentOf(principal);
     // An agent may have been removed while Fastify was reading its body.
-    if (!options.isActiveAgent(principal.client.id)) {
+    if (!options.isActiveAgent(agent.id)) {
       return reply.code(401).send({ error: "invalid_client_token" });
     }
-    const admitted = limiter.begin(principal.client.id);
-    if ("limited" in admitted) return refuseLimit(reply, principal, admitted);
+    const admitted = limiter.begin(agent.id);
+    if ("limited" in admitted) return refuseLimit(reply, agent, admitted);
     try {
       const response = await handler.fetch(webRequest(request), {
         authInfo: {

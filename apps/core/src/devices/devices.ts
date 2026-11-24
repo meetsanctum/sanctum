@@ -16,8 +16,12 @@ import type {
   ChangedBy,
 } from "../activity/activity.js";
 import { ActionCallError } from "../app-host/errors.js";
-import { deviceCommandRule, type Gate } from "../app-host/gate.js";
-import type { Principal } from "../auth/clients.js";
+import {
+  deviceCommandRule,
+  isAgentCaller,
+  type Caller,
+  type Gate,
+} from "../app-host/gate.js";
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { createDeviceLog } from "./activity.js";
@@ -525,9 +529,9 @@ export function createDevices(
       return loadEvery().filter((device) => device.driver === driver);
     },
 
-    // A client's command: the gate admits the principal behind it.
+    // A client's or an AI agent's command: the gate admits who is behind it.
     async commandFor(
-      principal: Principal,
+      caller: Caller,
       input: unknown,
       hooks?: CommandHooks,
     ): Promise<CapabilityInfo> {
@@ -536,15 +540,16 @@ export function createDevices(
         throw new ActionCallError("invalid_request");
       }
       const view: View = {};
-      const who =
-        principal.scope === "agent"
-          ? options.activity.agentWho(principal.client.id)
-          : { personId: principal.person?.id, clientId: principal.client.id };
+      const who = isAgentCaller(caller)
+        ? options.activity.agentWho(caller.id)
+        : caller.scope === "agent"
+          ? options.activity.agentWho(caller.client.id)
+          : { personId: caller.person?.id, clientId: caller.client.id };
       const target = admitted(who, request.data.device, () =>
         visible(request.data.device, request.data.capability, view),
       );
       const actor = admitted(who, target.device.id, () =>
-        gate.admit(principal, deviceCommandRule(target.capability.kind)),
+        gate.admit(caller, deviceCommandRule(target.capability.kind)),
       );
       return run(
         actor,

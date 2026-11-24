@@ -1,7 +1,7 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 
 import { ActionCallError } from "../app-host/errors.js";
-import type { Principal } from "../auth/clients.js";
+import type { AgentCaller } from "../app-host/gate.js";
 import type { Devices } from "../devices/devices.js";
 import type { View } from "../devices/views.js";
 import type { ChangedCapability } from "./changes.js";
@@ -116,7 +116,7 @@ export function createRestoreCapability(options: {
   }
 
   return async function putBack(
-    principal: Extract<Principal, { scope: "agent" }>,
+    agent: AgentCaller,
     item: ChangedCapability,
   ): Promise<
     RestoreOutcome & Pick<ChangedCapability, "device" | "capability">
@@ -135,7 +135,7 @@ export function createRestoreCapability(options: {
     try {
       let isConfirmed = false;
       const after = await options.devices.commandFor(
-        principal,
+        agent,
         { ...address, command: lookOf(item.kind, item.before) },
         {
           shouldLeaveMoving: true,

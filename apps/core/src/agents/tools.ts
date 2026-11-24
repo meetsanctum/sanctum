@@ -9,7 +9,7 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
 
 import type { DeclaredAction } from "../app-host/contract.js";
 import { ActionCallError } from "../app-host/errors.js";
-import type { Principal } from "../auth/clients.js";
+import type { AgentCaller, Caller } from "../app-host/gate.js";
 import type { Devices } from "../devices/devices.js";
 import { answer, errorAnswer, notInstructions, toolError } from "./answers.js";
 import type { CoreTools } from "./core-tools.js";
@@ -31,8 +31,6 @@ import {
 // off answers `not_allowed` with where it's decided; one never offered
 // answers as an unknown tool does, so its existence doesn't leak.
 
-type AgentPrincipal = Extract<Principal, { scope: "agent" }>;
-
 type AgentToolsOptions = {
   canUse: () => AiCanUse;
   /** The core's own tools (core-tools.ts). */
@@ -45,7 +43,7 @@ type AgentToolsOptions = {
     name: (appId: string) => string | undefined;
     action: (appId: string, actionId: string) => DeclaredAction | undefined;
     call: (request: {
-      principal: Principal;
+      caller: Caller;
       appId: string;
       actionId: string;
       input: unknown;
@@ -139,11 +137,11 @@ export function createAgentTools(options: AgentToolsOptions) {
     }
   }
 
-  function overview(principal: AgentPrincipal): HomeOverview {
+  function overview(agent: AgentCaller): HomeOverview {
     const places = options.places();
     const kinds = options.readableDeviceKinds();
     return {
-      agent: { name: principal.client.name },
+      agent: { name: agent.name },
       home: places.home,
       floors: places.floors,
       rooms: places.rooms,
@@ -181,19 +179,19 @@ export function createAgentTools(options: AgentToolsOptions) {
      * which the endpoint answers as the protocol's unknown tool.
      */
     async call(
-      principal: AgentPrincipal,
+      agent: AgentCaller,
       name: string,
       input: Record<string, unknown> | undefined,
     ): Promise<CallToolResult | undefined> {
       if (name === overviewTool.name) {
         return input !== undefined && Object.keys(input).length > 0
           ? toolError("invalid_input", "The home overview takes no input.")
-          : answer(overview(principal));
+          : answer(overview(agent));
       }
       const canUse = options.canUse();
       const coreResult = await options.core.call(
         name,
-        principal,
+        agent,
         input ?? {},
         canUse,
       );
@@ -203,7 +201,7 @@ export function createAgentTools(options: AgentToolsOptions) {
       try {
         return answer(
           await apps.call({
-            principal,
+            caller: agent,
             appId: offer.app,
             actionId: offer.id,
             input: input ?? {},

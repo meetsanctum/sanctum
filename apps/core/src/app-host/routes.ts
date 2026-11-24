@@ -215,7 +215,7 @@ export function registerAppRoutes(
       throw new ActionCallError("not_found");
     }
     const output = await host.call({
-      principal: request.principal!,
+      caller: request.principal!,
       appId: parsed.data.appId,
       actionId: parsed.data.actionId,
       input: request.body === undefined ? {} : request.body,
