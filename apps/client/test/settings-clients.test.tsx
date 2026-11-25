@@ -196,25 +196,18 @@ describe("Settings → Clients", () => {
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
     expect(dialog.textContent).toContain("Effects and motion");
     expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
-    expect(dialog.textContent).toContain(
-      "On where Kitchen tablet is known to be slow or asks for reduced transparency.",
-    );
+    // Nothing under the choices until Automatic has something on now.
+    expect(dialog.textContent).not.toContain("On, ");
 
     await act(async () => choice("Reduce effects", "On").click());
     expect(drawing).toEqual([
       { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
     ]);
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
-    expect(dialog.textContent).toContain(
-      "On with Reduce effects. You can turn it off on its own.",
-    );
 
     // Reduce motion keeps its own choice from then on.
     await act(async () => choice("Reduce motion", "Off").click());
     expect(drawing.at(-1)).toEqual({ id: "tablet", reduceMotion: "off" });
-    expect(dialog.textContent).toContain(
-      "Every movement, even where Kitchen tablet asks for less.",
-    );
     await act(async () => choice("Reduce effects", "Off").click());
     expect(drawing.at(-1)).toEqual({ id: "tablet", reduceEffects: "off" });
     expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
@@ -272,7 +265,7 @@ describe("Settings → Clients", () => {
     await refresh();
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
     expect(document.querySelector("[role=dialog]")?.textContent).toContain(
-      "On now, since Kitchen tablet asks for reduced transparency.",
+      "On, by Kitchen tablet's accessibility settings",
     );
     shownTablet = {
       ...shownTablet,
