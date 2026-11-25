@@ -11,6 +11,7 @@ import { Component, Suspense, useEffect, type ReactNode } from "react";
 import { AppNotice, WhileNotRunning } from "./app-state";
 import type { HostedApp, Route } from "./apps";
 import { AppsPage, appsPage, type ListedApp } from "./apps-page";
+import { DefaultAppPage } from "./default-app-page";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
 import { EditHome } from "./edit-home";
@@ -32,6 +33,7 @@ import type { useSettingsNavigation } from "./settings-navigation";
 import { SetupGuide, SetupLeft } from "./setup-guide";
 import {
   automationsApp,
+  devicesSettingsPage,
   maintenanceSettingsPage,
   settingsApp,
   statusSettingsPage,
@@ -66,6 +68,7 @@ type HomePageProps = {
   routeDepth: number;
   routeApp: HostedApp | undefined;
   isAppPage: boolean;
+  isDefaultPage: boolean;
   openedByItsApp: boolean;
   back: () => void;
   opener: (app: string) => (page: string, params?: PageParams) => void;
@@ -129,6 +132,7 @@ function HomePageWithDevices({
   routeDepth,
   routeApp,
   isAppPage,
+  isDefaultPage,
   openedByItsApp,
   back,
   opener,
@@ -241,6 +245,20 @@ function HomePageWithDevices({
             back={back}
           />
         )
+      ) : route && routeApp && isDefaultPage ? (
+        <DefaultAppPage
+          key={`${routeApp.info.id}@${routeApp.info.version}:${routeApp.info.build ?? ""}`}
+          app={routeApp.info}
+          live={live}
+          deviceCount={
+            devices.devices.filter(
+              (device) => device.driver === routeApp.info.id,
+            ).length
+          }
+          openDevices={() => opener(settingsApp.id)(devicesSettingsPage)}
+          openSettings={settingsOf(route.app)}
+          openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+        />
       ) : route && routeApp && isAppPage ? (
         <>
           {/* Its top bar keeps the page's way out, and the gear. */}

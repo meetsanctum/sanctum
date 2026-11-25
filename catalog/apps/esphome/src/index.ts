@@ -60,6 +60,8 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
     icon: { glyph: "cpu", color: "graphite" },
+    // ESPHome's blue.
+    backdrop: { from: "#0A5C7A", to: "#18BCF2" },
     permissions: [
       {
         id: "devices.register",

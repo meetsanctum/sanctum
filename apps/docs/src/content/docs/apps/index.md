@@ -29,8 +29,10 @@ explains.
 
 Choose **Apps** from the tiles at the top of the sidebar. It lists your
 installed apps, along with **Settings** and **Automations**. Press an app
-to open it. An app with no page of its own, such as ESPHome, opens its
-settings.
+to open it. An app with no page of its own, such as ESPHome, opens a page
+in its colours that says what it does, with its version. **Show devices**
+there opens **Settings → Devices**, where its devices are, and the gear at
+the top opens its settings.
 
 To keep an app close at hand, choose **Pin apps** at the top of Apps. Press
 an app to pin or unpin it, then choose **Done**. Pinned apps sit at the top

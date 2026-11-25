@@ -75,6 +75,7 @@ const kitchen = { id: "kitchen", name: "Kitchen", floorId: null };
 export const homeData = {
   rooms: [kitchen] as { id: string; name: string; floorId: string | null }[],
   installed: [] as AppInfo[],
+  manifests: new Map<string, unknown>(),
   dashboards: [] as DashboardInfo[],
   entities: [] as EntityInfo[],
   devices: [] as unknown[],
@@ -109,6 +110,7 @@ beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   localStorage.clear();
   homeData.installed = [moods];
+  homeData.manifests.clear();
   homeData.dashboards = [homeDashboard];
   homeData.entities = [];
   homeData.devices = [];
@@ -116,6 +118,9 @@ beforeEach(async () => {
   homeData.pins = [];
   mockCoreJson.mockReset();
   mockCoreJson.mockImplementation(async (path, init) => {
+    const manifest = /^\/api\/apps\/([^/]+)\/manifest$/.exec(path);
+    if (manifest)
+      return homeData.manifests.get(decodeURIComponent(manifest[1]!));
     if (path.startsWith("/api/entities?")) {
       const query = new URLSearchParams(path.slice(path.indexOf("?")));
       return homeData.entities.filter(
@@ -176,4 +181,32 @@ export async function remountHome() {
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => renderHome());
+}
+
+// An app's page carries its title in the top bar; a room's page and a
+// dashboard in the page.
+export const pageTitle = () =>
+  (container.querySelector(".top-bar h1") ?? container.querySelector("main h1"))
+    ?.textContent;
+
+export const backShown = () =>
+  [...container.querySelectorAll("button")].some(
+    (button) => button.textContent === "Back",
+  );
+
+// Apps, from the sidebar's last tile, and the app pressed there.
+export async function openFromOverview(name: string) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>('aside button[aria-label="Apps"]')!
+      .click();
+  });
+  const apps = [
+    ...container.querySelectorAll<HTMLButtonElement>("main li button"),
+  ];
+  await act(async () => {
+    apps.find((button) => button.textContent === name)!.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  return apps.map((button) => button.textContent);
 }

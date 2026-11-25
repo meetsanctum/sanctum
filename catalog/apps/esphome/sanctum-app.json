@@ -97,6 +97,10 @@
     "glyph": "cpu",
     "color": "graphite"
   },
+  "backdrop": {
+    "from": "#0A5C7A",
+    "to": "#18BCF2"
+  },
   "pages": [],
   "settings": null,
   "actions": [

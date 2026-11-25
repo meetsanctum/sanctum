@@ -2,7 +2,7 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import { createLiveFeed, type CoreBridge } from "@meetsanctum/ui-sdk";
 import { describe, expect, it, vi } from "vitest";
 
-import { hasPage, hostedApps, opens } from "../src/apps";
+import { hasDefaultPage, hasPage, hostedApps, showsPage } from "../src/apps";
 
 // The apps the shell hosts: every one the core lists as installed, each with
 // a client limited to what the core says it holds, and the pages it lists.
@@ -54,7 +54,7 @@ describe("hosted apps", () => {
     ]);
   });
 
-  it("open from the overview at a main page the core lists, as Moods and Zigbee", () => {
+  it("show their own main page where the core lists one, else the shell's default", () => {
     const [moods, zigbee] = hostedApps(
       [
         app("sanctum.moods", "Moods", ["main", "room", "category"]),
@@ -62,13 +62,22 @@ describe("hosted apps", () => {
       ],
       bridge(),
     );
-    expect(opens(moods!)).toBe(true);
-    expect(opens(zigbee!)).toBe(true);
-    const [older] = hostedApps(
-      [app("sanctum.moods", "Moods", ["room", "category"])],
+    expect(hasDefaultPage(moods)).toBe(false);
+    expect(hasDefaultPage(zigbee)).toBe(false);
+    const [older, driver] = hostedApps(
+      [
+        app("sanctum.moods", "Moods", ["room", "category"]),
+        app("sanctum.example", "Example"),
+      ],
       bridge(),
     );
-    expect(opens(older!)).toBe(false);
+    expect(hasDefaultPage(older)).toBe(true);
+    expect(hasDefaultPage(driver)).toBe(true);
+    expect(showsPage(driver, "main")).toBe(true);
+    // Only the main page has a default; another page it lacks isn't shown.
+    expect(showsPage(driver, "room")).toBe(false);
+    expect(hasDefaultPage(undefined)).toBe(false);
+    expect(showsPage(undefined, "main")).toBe(false);
   });
 
   it("open only the pages the core lists", () => {

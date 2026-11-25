@@ -11,9 +11,12 @@ import {
   weather,
 } from "./home-shell-fixtures";
 import {
+  backShown,
   container,
   homeData,
   mockCoreJson,
+  openFromOverview,
+  pageTitle,
   placesSnapshot,
   publishCoreStatus,
   pushLive,
@@ -21,17 +24,6 @@ import {
   remountHome,
 } from "./home-shell-harness";
 import { light } from "./settings-devices-fixtures";
-
-// An app's page carries its title in the top bar; a room's page and a
-// dashboard in the page.
-const pageTitle = () =>
-  (container.querySelector(".top-bar h1") ?? container.querySelector("main h1"))
-    ?.textContent;
-
-const backShown = () =>
-  [...container.querySelectorAll("button")].some(
-    (button) => button.textContent === "Back",
-  );
 
 // The places in the docked sidebar, after its pins.
 async function showSidebar() {
@@ -77,23 +69,6 @@ const backTo = (name: string) =>
   container.querySelector<HTMLButtonElement>(
     `.top-bar button[aria-label="Back to ${name}"]`,
   );
-
-// Apps, from the sidebar's last tile, and the app pressed there.
-async function openFromOverview(name: string) {
-  await act(async () => {
-    container
-      .querySelector<HTMLButtonElement>('aside button[aria-label="Apps"]')!
-      .click();
-  });
-  const apps = [
-    ...container.querySelectorAll<HTMLButtonElement>("main li button"),
-  ];
-  await act(async () => {
-    apps.find((button) => button.textContent === name)!.click();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  });
-  return apps.map((button) => button.textContent);
-}
 
 // Settings and Automations load when first opened (Home.tsx): loaded here
 // first, they open as quickly as the tests look for them.
@@ -146,6 +121,19 @@ describe("navigation", () => {
     );
     await act(async () => backTo("Settings")!.click());
     expect(pageTitle()).toBe("Settings");
+  });
+
+  it("keeps an open page when the app list has not changed", async () => {
+    await openKitchen();
+    await refresh();
+    expect(pageTitle()).toBe("Kitchen");
+  });
+
+  it("keeps a room's page when Moods goes: rooms are the shell's", async () => {
+    await openKitchen();
+    homeData.installed = [];
+    await refresh();
+    expect(pageTitle()).toBe("Kitchen");
   });
 });
 
@@ -228,6 +216,13 @@ describe("Settings' pages", () => {
     await openFromOverview("Settings");
     await openArea("Devices");
     await openFromOverview("Moods");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Moods settings"]',
+        )!
+        .click(),
+    );
     expect(pageTitle()).toBe("Moods Settings");
 
     await act(async () =>
@@ -277,12 +272,23 @@ describe("an app's preferences", () => {
     expect(pageTitle()).toBe("Apps");
   });
 
-  it("are the page Apps opens for an app without one of its own, over Apps, so Done returns there", async () => {
+  it("open over the default page Apps shows for an app without one of its own, and Done returns there", async () => {
     await openFromOverview("Moods");
+    // The shell's own page: the app's name and version, no settings yet.
+    expect(pageTitle()).toBe("Moods");
+    expect(container.querySelector("main")?.textContent).toContain(
+      `Version ${moods.version}`,
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Moods settings"]',
+        )!
+        .click(),
+    );
     expect(pageTitle()).toBe("Moods Settings");
-    expect(backShown()).toBe(false);
     await done();
-    expect(pageTitle()).toBe("Apps");
+    expect(pageTitle()).toBe("Moods");
   });
 
   it("open from the same button at the end of the bar on every app page, never on Sanctum's own", async () => {
@@ -347,59 +353,6 @@ describe("an app's preferences", () => {
     await refresh();
 
     expect(pageTitle()).toBe("Apps");
-  });
-});
-
-describe("the home's installed apps", () => {
-  it("keeps an open page when the app list has not changed", async () => {
-    await openKitchen();
-    await refresh();
-    expect(pageTitle()).toBe("Kitchen");
-  });
-
-  it("keeps a room's page when Moods goes: rooms are the shell's", async () => {
-    await openKitchen();
-    homeData.installed = [];
-    await refresh();
-    expect(pageTitle()).toBe("Kitchen");
-  });
-
-  it.each([
-    { name: "app", apps: [moods] },
-    { name: "page", apps: [moods, { ...weather, pages: [] }] },
-  ])("returns home when the current $name disappears", async ({ apps }) => {
-    homeData.installed = [moods, weather];
-    await refresh();
-    await openFromOverview("Weather");
-    expect(pageTitle()).toBe("Weather");
-    homeData.installed = apps;
-    await refresh();
-    expect(pageTitle()).toBe("Home");
-    expect(container.querySelector("header")?.textContent).toBe("Home");
-    expect(backShown()).toBe(false);
-  });
-
-  it("ignores an older app list that arrives after a newer refresh", async () => {
-    let resolve!: (apps: AppInfo[]) => void;
-    const pending = new Promise<AppInfo[]>((done) => {
-      resolve = done;
-    });
-    // A focus refresh asks for the identity first and then the apps.
-    mockCoreJson
-      .mockResolvedValueOnce({ client: { kind: "shared" }, person: null })
-      .mockReturnValueOnce(pending);
-    await refresh();
-    homeData.installed = [];
-    await refresh();
-    await act(async () => {
-      resolve([moods, weather]);
-      await pending;
-    });
-    // Weather stays gone from Apps.
-    expect(await openFromOverview("Settings")).toEqual([
-      "Automations",
-      "Settings",
-    ]);
   });
 });
 
@@ -733,75 +686,5 @@ describe("the home's dashboards", () => {
     expect(
       container.querySelector("header button[aria-label$=more]"),
     ).toBeNull();
-  });
-});
-
-describe("the pinned apps", () => {
-  const tiles = () =>
-    [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        'aside ul[aria-label="Pinned apps"] button',
-      ),
-    ].map((tile) => tile.getAttribute("aria-label"));
-  const tile = (name: string) =>
-    container.querySelector<HTMLButtonElement>(
-      `aside ul[aria-label="Pinned apps"] button[aria-label="${name}"]`,
-    )!;
-  const press = async (button: HTMLButtonElement) => {
-    await act(async () => {
-      button.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-  };
-
-  it("are the household's, Apps last, each opening its app and marked while it is on show", async () => {
-    homeData.pins = ["sanctum.settings", "sanctum.gone"];
-    await refresh();
-    // An app the home doesn't have has no tile.
-    expect(tiles()).toEqual(["Settings", "Apps"]);
-    await press(tile("Settings"));
-    expect(pageTitle()).toBe("Settings");
-    expect(tile("Settings").getAttribute("aria-current")).toBe("page");
-    expect(tile("Apps").getAttribute("aria-current")).toBeNull();
-  });
-
-  it("mark an app without a page of its own while its settings are on show", async () => {
-    homeData.pins = ["sanctum.settings", "sanctum.moods"];
-    await refresh();
-    await press(tile("Moods"));
-    expect(pageTitle()).toBe("Moods Settings");
-    expect(tile("Moods").getAttribute("aria-current")).toBe("page");
-    expect(tile("Settings").getAttribute("aria-current")).toBeNull();
-    expect(tile("Apps").getAttribute("aria-current")).toBeNull();
-  });
-
-  it("mark Apps while the page of an app that isn't pinned is on show", async () => {
-    await openFromOverview("Automations");
-    expect(pageTitle()).toBe("Automations");
-    expect(tile("Apps").getAttribute("aria-current")).toBe("page");
-  });
-
-  it("are pinned from Apps for every device, and follow what the core pushes", async () => {
-    expect(tiles()).toEqual(["Pin apps", "Apps"]);
-    await press(tile("Pin apps"));
-    expect(pageTitle()).toBe("Apps");
-    await press(
-      [
-        ...container.querySelectorAll<HTMLButtonElement>(".top-bar button"),
-      ].find((button) => button.textContent === "Pin apps")!,
-    );
-    await press(
-      container.querySelector<HTMLButtonElement>(
-        'main button[aria-label="Pin Automations"]',
-      )!,
-    );
-    expect(mockCoreJson).toHaveBeenCalledWith("/api/pins/update", {
-      method: "POST",
-      json: { apps: ["sanctum.automations"] },
-    });
-    expect(tiles()).toEqual(["Automations", "Apps"]);
-
-    await act(async () => pushLive({ type: "pins", apps: [] }));
-    expect(tiles()).toEqual(["Pin apps", "Apps"]);
   });
 });

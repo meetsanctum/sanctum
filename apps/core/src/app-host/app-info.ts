@@ -1,4 +1,5 @@
 import {
+  appBackdropSchema,
   pausedBy,
   type AppInfo,
   type AppRun,
@@ -10,6 +11,11 @@ import {
 } from "@meetsanctum/app-sdk";
 
 import type { Supervision } from "./supervisor.js";
+
+function backdropOf(manifest: StaticManifest): Pick<AppInfo, "backdrop"> {
+  const backdrop = appBackdropSchema.safeParse(manifest.backdrop);
+  return backdrop.success ? { backdrop: backdrop.data } : {};
+}
 
 // An installed app as clients see it (GET /api/apps): what it is, what it
 // asks for and holds now, whether it runs, and what it brings to the home.
@@ -30,6 +36,10 @@ export function appInfoOf(
     version: manifest.version,
     ...(manifest.oldestPage ? { oldestPage: manifest.oldestPage } : {}),
     icon: manifest.icon,
+    // Only colours: a sanctum-app.json is the package's word, unchecked
+    // until here, and the shell paints the page with them. Missing from a
+    // manifest written before apps could name their colours.
+    ...backdropOf(manifest),
     pages: [...manifest.pages],
     permissions: [...now.granted],
     requests: manifest.permissions,
