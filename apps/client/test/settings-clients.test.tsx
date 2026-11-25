@@ -234,7 +234,7 @@ describe("Settings → Clients", () => {
     ).toBe("That did not work. Try again.");
   });
 
-  it("waits for the current save and keeps its failure out of a reopened dialog", async () => {
+  it("lets a pick go while a save is on its way, and keeps its failure out of a reopened dialog", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
     let refuseSave!: (error: Error) => void;
     const save = new Promise<ClientInfo>((_, reject) => {
@@ -242,16 +242,13 @@ describe("Settings → Clients", () => {
     });
     vi.mocked(coreJson).mockReturnValueOnce(save);
     await act(async () => choice("Reduce effects", "On").click());
-    expect(choice("Reduce motion", "Off").disabled).toBe(true);
     await act(async () => choice("Reduce motion", "Off").click());
     expect(drawing).toEqual([]);
 
     await act(async () => button("Done").click());
     await editClient("Kitchen tablet", "Effects and motion");
-    expect(choice("Reduce effects", "On").disabled).toBe(true);
     await act(async () => refuseSave(new CoreError(500, "unknown")));
     expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
-    expect(choice("Reduce effects", "On").disabled).toBe(false);
     expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
   });
 

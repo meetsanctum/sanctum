@@ -121,6 +121,8 @@ export function ClientDrawing(props: {
     (linkedRevision !== undefined &&
       linkedRevision === client?.drawingRevision);
 
+  // One save at a time, so they reach the core in order; a pick while one
+  // is on its way is let go. The choices stay enabled, so focus stays.
   const save = async (change: DrawingChange, linked: boolean) => {
     const opened = opening.current;
     if (!openId || !opened || saving.current) return;
@@ -180,7 +182,6 @@ export function ClientDrawing(props: {
               title="Reduce effects"
               about="Without blur, fades or shadows, for a device that feels slow."
               value={effects}
-              disabled={!!pending}
               onChange={chooseEffects}
               hint={effectsHint(client, effects)}
             />
@@ -189,7 +190,6 @@ export function ClientDrawing(props: {
               title="Reduce motion"
               about="Things appear and change in place, without sliding, zooming or flying in."
               value={motion}
-              disabled={!!pending}
               onChange={chooseMotion}
               hint={
                 isLinked
@@ -221,7 +221,6 @@ function Group(props: {
   title: string;
   about: string;
   value: DrawingChoice;
-  disabled: boolean;
   onChange: (value: DrawingChoice) => void;
   hint: string;
 }) {
@@ -240,7 +239,6 @@ function Group(props: {
         describedBy={`${props.id}-about ${props.id}-hint`}
         options={options}
         value={props.value}
-        disabled={props.disabled}
         onValueChange={props.onChange}
         className="self-start"
       />
