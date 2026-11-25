@@ -291,7 +291,7 @@ function deviceEntry(
     }
     case "device.announce":
       return said(
-        `${entry.outcome === "ok" ? "Sent" : "Couldn't deliver"} “${String(entry.detail?.text ?? "")}”`,
+        `${entry.outcome === "ok" ? "Said" : "Couldn't say"} “${String(entry.detail?.text ?? "")}”`,
       );
     case "device.offline":
       return said("Went offline", "It stopped answering");
