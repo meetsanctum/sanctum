@@ -53,7 +53,14 @@ function onNow(
   part: "effects" | "motion",
 ) {
   const { drawn } = client;
-  if (choice !== "automatic" || drawn?.[part] !== "reduced") return null;
+  const saved = part === "effects" ? client.reduceEffects : client.reduceMotion;
+  if (
+    choice !== "automatic" ||
+    saved !== "automatic" ||
+    drawn?.[part] !== "reduced"
+  ) {
+    return null;
+  }
   if (drawn.slowDevice) return "On, low performance detected";
   const whose = client.current ? "this device's" : `${client.name}'s`;
   return `On, by ${whose} accessibility settings`;
@@ -193,8 +200,8 @@ function Group(props: {
   status: string | null;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col">
+      <div className="mb-2 flex flex-col gap-0.5">
         <span id={`${props.id}-label`} className="text-sm font-medium">
           {props.title}
         </span>
@@ -214,20 +221,23 @@ function Group(props: {
         onValueChange={props.onChange}
         className="self-start"
       />
-      {/* A status, in green with the menu item's symbol. */}
-      {props.status && (
-        <span
-          id={`${props.id}-status`}
-          className="flex w-fit max-w-full items-start gap-1.5 rounded-sm bg-green/6 px-2 py-1 text-[13px] leading-[18px] font-medium text-green dark:bg-green/12"
-        >
-          <Gauge
-            aria-hidden="true"
-            className="mt-px size-3.5 shrink-0"
-            strokeWidth={2.25}
-          />
-          {props.status}
-        </span>
-      )}
+      <div
+        id={`${props.id}-status`}
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex flex-col"
+      >
+        {props.status && (
+          <span className="mt-2 flex w-fit max-w-full items-start gap-1.5 rounded-sm bg-green/6 px-2 py-1 text-[13px] leading-[18px] font-medium text-green dark:bg-green/12">
+            <Gauge
+              aria-hidden="true"
+              className="mt-px size-3.5 shrink-0"
+              strokeWidth={2.25}
+            />
+            {props.status}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
