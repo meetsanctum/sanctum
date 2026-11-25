@@ -45,7 +45,7 @@ function ipv4Of(address: string | undefined) {
 /** How long an address waits for its speaker. */
 export const announcementKeptMs = 60_000;
 /** At most this many announcements at once in the whole home. */
-export const maxAnnouncements = 8;
+export const maxAnnouncements = 10;
 /** At most this many for one speaker: the one it says and those waiting. */
 export const maxPerSpeaker = 3;
 /** The most sound one announcement holds, in bytes (minutes of speech). */

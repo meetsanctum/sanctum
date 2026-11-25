@@ -304,9 +304,9 @@ describe("createAnnouncements", () => {
     ]);
   });
 
-  it("takes at most eight at once in the home, those waiting too", async () => {
+  it("takes at most ten at once in the home, those waiting too", async () => {
     const served = await started();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       served.create(`speaker-${i}`, network, 4180, speech([10]));
     }
     served.create("speaker-0", network, 4180, speech([10]));
