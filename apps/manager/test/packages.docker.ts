@@ -40,11 +40,14 @@ const {
   createVolumes,
 } = realStack("test-packages", running);
 
-// What each official app's manifest says, in the worktree.
+// What each official app declares in its package and manifest.
 const shipped = readdirSync(join(root, "catalog/apps")).map((folder) => ({
   folder,
-  // Apple Home Devices uses the shell's media controls and has no pages.
-  hasPages: folder !== "apple-home-devices",
+  hasPages: (
+    JSON.parse(
+      readFileSync(join(root, "catalog/apps", folder, "package.json"), "utf8"),
+    ) as { files: string[] }
+  ).files.includes("pages"),
   ...(JSON.parse(
     readFileSync(
       join(root, "catalog/apps", folder, "sanctum-app.json"),
