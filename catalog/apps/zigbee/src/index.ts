@@ -15,8 +15,7 @@ import { createBridge, type Bridge, type BridgeOptions } from "./bridge.js";
 // removes, changes motion sensors' settings, updates their firmware over the
 // air and asks them how they are when someone asks. The manager runs
 // Zigbee2MQTT and the broker as services for it (services:zigbee2mqtt); the
-// app connects with the broker account the core hands it. Its UI is in ./ui,
-// which opens in a frame the core serves.
+// app connects with the broker account the core hands it.
 
 export type { BridgeOptions } from "./bridge.js";
 
@@ -55,13 +54,14 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     // 0.5.0: motion sensors, their light level and their settings.
     // 0.6.0: contact sensors.
     // 0.7.0: a battery its device says is low.
-    version: "0.9.0",
+    // 0.10.0: no page of its own; the shell draws its default page.
+    version: "0.10.0",
     core: "^2.0.0",
     summary:
       "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
     icon: { glyph: "radio-tower", color: "graphite" },
-    // The app overview opens main.
-    pages: ["main"],
+    // Zigbee's red.
+    backdrop: { from: "#9A0230", to: "#EB0443" },
     permissions: [
       {
         id: "services:zigbee2mqtt",

@@ -4,7 +4,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  // The UI is built into pages of its own, checked with tsconfig.ui.json.
-  "include": ["src", "test"],
-  "exclude": ["src/ui"]
+  "include": ["src", "test"]
 }
