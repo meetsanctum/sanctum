@@ -93,6 +93,20 @@ it("reports ordinary playback when the announcement's fetch notice never comes",
   expect(states).toEqual([{ activity: "playing", volume: 40, muted: false }]);
 });
 
+it("holds no later report once an announcement's fetch notice never came", () => {
+  const { states, state } = setup();
+  state(MediaPlayerState.PLAYING, 0.4);
+  vi.advanceTimersByTime(5_000);
+  // Music after it is reported at once.
+  state(MediaPlayerState.PAUSED, 0.4);
+  state(MediaPlayerState.PLAYING, 0.4);
+  expect(states).toEqual([
+    { activity: "playing", volume: 40, muted: false },
+    { activity: "paused", volume: 40, muted: false },
+    { activity: "playing", volume: 40, muted: false },
+  ]);
+});
+
 it("drops held reports when the speaker's connection ends", () => {
   const { states, state, disconnect } = setup();
   state(MediaPlayerState.PLAYING, 0.4);

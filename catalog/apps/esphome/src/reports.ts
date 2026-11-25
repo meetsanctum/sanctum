@@ -196,6 +196,14 @@ export function createReports(
           const flush = () => {
             clearTimeout(timer);
             announcing.held = undefined;
+            // No fetch: the announcement never played, so the player's
+            // reports are its own again from here on.
+            if (
+              announcing.fetchedAt === null &&
+              announcements.get(session) === announcing
+            ) {
+              announcements.delete(session);
+            }
             if (current() !== session) return;
             for (const held of events) reportState(held, session);
           };
