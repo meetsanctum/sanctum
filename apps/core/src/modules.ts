@@ -256,6 +256,8 @@ export async function createModules(
       eventBus.publish({ name: "places.changed", ...change }),
     onLocationChange: (change) =>
       eventBus.publish({ name: "location.changed", ...change }),
+    onTimeZoneChange: (at, previousZone) =>
+      workflows.followTimeZone(at, previousZone),
     // A room's devices move to No room as it goes, which Devices tells once
     // the removal has committed.
     onRoomRemoving: (roomId) => devices.prepareRoomRemoval(roomId),
@@ -484,7 +486,7 @@ export async function createModules(
       internet: publicInternet(),
     },
     record: activity.for("models"),
-    timeZone: options.timeZone ?? (() => places.timeZone()),
+    dayOf: (date) => places.clock().date(date),
     appsUsing: () =>
       apps
         .list()
@@ -635,7 +637,7 @@ export async function createModules(
     now,
     // The home's time zone, which Places keeps, and its sunrises and
     // sunsets from whichever app provides the standard sun entity.
-    timeZone: options.timeZone ?? (() => places.timeZone()),
+    timeZone: () => places.clock().timeZone,
     sun: options.sun ?? (() => sunDays(entities)),
   });
   const activityViews = createActivityViews(activity, {

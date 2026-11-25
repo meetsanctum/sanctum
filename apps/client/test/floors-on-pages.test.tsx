@@ -24,7 +24,12 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 // each device remembers.
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   // In the household's order.
   floors: [
     { id: "first", name: "First floor", level: 0 },

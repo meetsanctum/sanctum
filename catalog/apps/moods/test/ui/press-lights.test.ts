@@ -7,7 +7,12 @@ import { device, lightCapability } from "../moods/home";
 // The lights a press can be for.
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [
     { id: "kitchen", name: "Kitchen", floorId: null },

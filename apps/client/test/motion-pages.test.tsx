@@ -1,10 +1,5 @@
 // @vitest-environment jsdom
-import type {
-  CapabilityInfo,
-  DeviceHistory,
-  DeviceInfo,
-  Places,
-} from "@meetsanctum/app-sdk";
+import type { DeviceHistory, DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,8 +15,11 @@ import {
 import { useSectionEntities } from "../src/room-sections";
 import { useDevices } from "../src/use-devices";
 import {
+  capability,
+  climate,
   contactSensor,
   copyWithoutScreenReaderText,
+  motionSensor,
 } from "./place-pages-fixtures";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
@@ -31,7 +29,12 @@ vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 const minute = 60_000;
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [
@@ -39,98 +42,6 @@ const places: Places = {
     { id: "hall", name: "Hall", floorId: null },
   ],
 };
-
-const capability = (
-  id: string,
-  kind: "sensor" | "motion",
-  features: object,
-  state: object | null,
-  changedAt: string | null = null,
-) =>
-  ({
-    id,
-    kind,
-    features,
-    state,
-    observed: state,
-    desired: null,
-    sync: "synced",
-    setBy: null,
-    changedAt,
-  }) as CapabilityInfo;
-
-// A Hue motion sensor: motion, temperature and light level.
-function motionSensor(
-  id: string,
-  roomId: string | null,
-  motion: { motion: boolean; minutesAgo: number } | null,
-  readings: { temperature?: number; illuminance?: number } = {},
-  availability: DeviceInfo["availability"] = "online",
-): DeviceInfo {
-  return {
-    id,
-    name: `${id} motion sensor`,
-    driverName: "SML001",
-    type: "motion",
-    driver: "sanctum.zigbee",
-    manufacturer: null,
-    model: null,
-    roomId,
-    availability,
-    lastSeenAt: null,
-    firmware: null,
-    probe: false,
-    identify: false,
-    battery: 87,
-    batteryLow: null,
-    shownAs: null,
-    leftAt: null,
-    problem: null,
-    capabilities: [
-      capability(
-        "occupancy",
-        "motion",
-        {
-          sensitivity: null,
-          clearAfter: null,
-          indicator: false,
-        },
-        motion && { motion: motion.motion },
-        motion &&
-          new Date(Date.now() - motion.minutesAgo * minute).toISOString(),
-      ),
-      ...Object.entries(readings).map(([measure, value]) =>
-        capability(measure, "sensor", { measures: measure }, { value }),
-      ),
-    ],
-  };
-}
-
-function climate(
-  id: string,
-  roomId: string,
-  temperature: number,
-  humidity: number,
-) {
-  return {
-    ...motionSensor(id, roomId, null),
-    name: `${id} sensor`,
-    capabilities: [
-      capability(
-        "temperature",
-        "sensor",
-        { measures: "temperature" },
-        { value: temperature },
-      ),
-      capability(
-        "humidity",
-        "sensor",
-        { measures: "humidity" },
-        { value: humidity },
-      ),
-    ],
-  };
-}
 
 let root: Root;
 let container: HTMLDivElement;

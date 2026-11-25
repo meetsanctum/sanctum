@@ -1,9 +1,5 @@
-import {
-  zonedDateToUtc,
-  type AppContext,
-  type Forecast,
-  type HomeLocation,
-} from "@meetsanctum/app-sdk";
+import type { AppContext, Forecast, HomeLocation } from "@meetsanctum/app-sdk";
+import { zonedDateToUtc } from "@meetsanctum/app-sdk/clock";
 import { z } from "zod";
 
 // The forecast for the home from Open-Meteo: the weather now, the next two

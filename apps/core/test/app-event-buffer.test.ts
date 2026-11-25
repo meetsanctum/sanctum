@@ -19,7 +19,12 @@ function busFor(events: EventsForApps) {
 // past which the core drops them and it starts again.
 
 const nowhere: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [],
   zones: [],

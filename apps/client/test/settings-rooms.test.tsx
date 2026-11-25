@@ -140,7 +140,12 @@ describe("Settings → Rooms", () => {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     places = {
-      home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+      home: {
+        name: "Home",
+        timeZone: "UTC",
+        temperatureUnit: "celsius",
+        hourCycle: "24h",
+      },
       floors: [ground],
       rooms: [kitchen, office],
       zones: [],

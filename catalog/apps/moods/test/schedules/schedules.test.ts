@@ -424,6 +424,67 @@ describe("turning a room on", () => {
     expect(turnOn()?.until).toBe("2026-10-31T06:30:00.000Z");
   });
 
+  it("does not bring back a mood that ended in the first occurrence of a repeated hour", async () => {
+    const { call, focus, state, turnOn, start } = await home();
+    state.places.home.timeZone = "Europe/Zurich";
+    vi.setSystemTime(new Date("2026-10-25T00:10:00Z"));
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: focus.id,
+      start: 60,
+      end: 150,
+    });
+    expect(turnOn()?.until).toBe("2026-10-25T00:30:00.000Z");
+
+    vi.setSystemTime(new Date("2026-10-25T01:10:00Z"));
+    await start();
+    expect(turnOn()).toBeUndefined();
+  });
+
+  it("publishes a mood from its shifted start when the clocks skip an hour", async () => {
+    const { call, focus, state, turnOn } = await home();
+    state.places.home.timeZone = "Europe/Zurich";
+    vi.setSystemTime(new Date("2026-03-29T01:15:00Z"));
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: focus.id,
+      start: 150,
+      end: 240,
+    });
+    expect(turnOn()).toBeUndefined();
+
+    vi.setSystemTime(new Date("2026-03-29T01:30:00Z"));
+    await call(applySchedule, { roomId: "office", minute: 150 });
+    expect(turnOn()?.until).toBe("2026-03-29T02:00:00.000Z");
+  });
+
+  it("ends a shifted mood at its replacement's start without bringing it back", async () => {
+    const { call, focus, night, state, turnOn } = await home();
+    state.places.home.timeZone = "Europe/Zurich";
+    vi.setSystemTime(new Date("2026-03-29T00:50:00Z"));
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: focus.id,
+      start: 90,
+      end: 165,
+    });
+    await call(scheduleMood, {
+      roomId: "office",
+      moodId: night.id,
+      start: 180,
+      end: 195,
+    });
+    expect(turnOn()?.until).toBe("2026-03-29T01:00:00.000Z");
+
+    vi.setSystemTime(new Date("2026-03-29T01:00:00Z"));
+    await call(applySchedule, { roomId: "office", minute: 180 });
+    expect(turnOn()?.until).toBe("2026-03-29T01:15:00.000Z");
+
+    vi.setSystemTime(new Date("2026-03-29T01:15:00Z"));
+    await call(applySchedule, { roomId: "office", minute: 195 });
+    expect(turnOn()).toBeUndefined();
+  });
+
   it("refreshes the rule when a device gains a light capability", async () => {
     const { call, focus, changeDevice, turnOn } = await home();
     await call(scheduleMood, {

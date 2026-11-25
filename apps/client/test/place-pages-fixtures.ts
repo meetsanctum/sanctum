@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  CapabilityInfo,
   DeviceInfo,
   DeviceType,
   EntityInfo,
@@ -16,7 +17,12 @@ export function copyWithoutScreenReaderText(element: Element) {
 }
 
 export const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [
@@ -224,6 +230,98 @@ export function contactSensor(
         setBy: null,
         changedAt,
       },
+    ],
+  };
+}
+
+export const capability = (
+  id: string,
+  kind: "sensor" | "motion",
+  features: object,
+  state: object | null,
+  changedAt: string | null = null,
+) =>
+  ({
+    id,
+    kind,
+    features,
+    state,
+    observed: state,
+    desired: null,
+    sync: "synced",
+    setBy: null,
+    changedAt,
+  }) as CapabilityInfo;
+
+// A Hue motion sensor: motion, temperature and light level.
+export function motionSensor(
+  id: string,
+  roomId: string | null,
+  motion: { motion: boolean; minutesAgo: number } | null,
+  readings: { temperature?: number; illuminance?: number } = {},
+  availability: DeviceInfo["availability"] = "online",
+): DeviceInfo {
+  return {
+    id,
+    name: `${id} motion sensor`,
+    driverName: "SML001",
+    type: "motion",
+    driver: "sanctum.zigbee",
+    manufacturer: null,
+    model: null,
+    roomId,
+    availability,
+    lastSeenAt: null,
+    firmware: null,
+    probe: false,
+    identify: false,
+    battery: 87,
+    batteryLow: null,
+    shownAs: null,
+    leftAt: null,
+    problem: null,
+    capabilities: [
+      capability(
+        "occupancy",
+        "motion",
+        {
+          sensitivity: null,
+          clearAfter: null,
+          indicator: false,
+        },
+        motion && { motion: motion.motion },
+        motion &&
+          new Date(Date.now() - motion.minutesAgo * 60_000).toISOString(),
+      ),
+      ...Object.entries(readings).map(([measure, value]) =>
+        capability(measure, "sensor", { measures: measure }, { value }),
+      ),
+    ],
+  };
+}
+
+export function climate(
+  id: string,
+  roomId: string,
+  temperature: number,
+  humidity: number,
+) {
+  return {
+    ...motionSensor(id, roomId, null),
+    name: `${id} sensor`,
+    capabilities: [
+      capability(
+        "temperature",
+        "sensor",
+        { measures: "temperature" },
+        { value: temperature },
+      ),
+      capability(
+        "humidity",
+        "sensor",
+        { measures: "humidity" },
+        { value: humidity },
+      ),
     ],
   };
 }

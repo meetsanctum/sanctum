@@ -589,7 +589,12 @@ describe("the core's events", () => {
 
 describe("delivering the core's events", () => {
   const before: Places = {
-    home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+    home: {
+      name: "Home",
+      timeZone: "UTC",
+      temperatureUnit: "celsius",
+      hourCycle: "24h",
+    },
     floors: [],
     rooms: [],
     zones: [],

@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { loadAppPackage } from "./runner-apps.js";
 import type { SunDays } from "../src/workflows/jobs.js";
+import { workflowClock, workflowTimers } from "../src/workflows/schema.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
 import {
   addWorkflow,
+  lightsOff,
   sample,
   samplePackage,
   noteStep,
@@ -134,6 +136,23 @@ describe("time triggers", () => {
     return { core, token, id };
   }
 
+  async function at14(
+    options: { timeZone: string | null } = { timeZone: null },
+  ) {
+    const core = await testCore(options);
+    const { token } = await claimed(core);
+    const zone = (timeZone: string) =>
+      post(core, "/api/places/home/update", { timeZone }, { token });
+    expect((await zone("UTC")).statusCode).toBe(200);
+    const { id } = await addWorkflow(core, token, {
+      graph: steps(
+        trigger("t", "time", { time: "14:00" }),
+        lightsOff("off", { kind: "home" }),
+      ),
+    });
+    return { core, token, zone, id };
+  }
+
   it("skip a time missed by more than 15 minutes, and run one missed by less", async () => {
     const { core, token, id } = await at13();
 
@@ -168,6 +187,181 @@ describe("time triggers", () => {
     core.advance(minutes(60) + 5_000);
     await tick(core);
     expect(sample.noted).toHaveLength(1);
+  });
+
+  it("keep the new schedule across a restart before the next tick", async () => {
+    const { core, token, zone, id } = await at14();
+    core.advance(minutes(60) - 4_000);
+    expect((await zone("Europe/Berlin")).statusCode).toBe(200);
+    await core.stop();
+
+    // The new 14:00 local came while the core was down.
+    const again = await testCore({
+      dataDir: core.dataDir,
+      timeZone: null,
+      startsAt: "2026-10-26T13:00:05Z",
+    });
+    await tick(again);
+    expect(await runsOf(again, token, id)).toMatchObject([
+      {
+        status: "succeeded",
+        trigger: { data: { due: "2026-10-26T13:00:00.000Z" } },
+      },
+    ]);
+  });
+
+  it("catch a run due in the new zone between the save and the tick", async () => {
+    const { core, token, zone, id } = await at14();
+    core.advance(minutes(60) - 4_000);
+    expect((await zone("Europe/Berlin")).statusCode).toBe(200);
+    core.advance(9_000);
+    await tick(core);
+    expect(await runsOf(core, token, id)).toMatchObject([
+      {
+        status: "succeeded",
+        trigger: { data: { due: "2026-10-26T13:00:00.000Z" } },
+      },
+    ]);
+  });
+
+  it("replace an old timer still pending when the zone changes", async () => {
+    const { core, token, zone, id } = await at14();
+    core.advance(minutes(120) - 4_000);
+    expect((await zone("America/New_York")).statusCode).toBe(200);
+    core.advance(9_000);
+    await tick(core);
+    expect(await runsOf(core, token, id)).toEqual([]);
+
+    core.advance(minutes(240));
+    await tick(core);
+    expect(await runsOf(core, token, id)).toMatchObject([
+      {
+        status: "succeeded",
+        trigger: { data: { due: "2026-10-26T18:00:00.000Z" } },
+      },
+    ]);
+  });
+
+  it("keep a run that was already due when the zone changed", async () => {
+    const { core, token, zone, id } = await at14();
+    core.advance(minutes(122));
+    expect((await zone("America/New_York")).statusCode).toBe(200);
+    await tick(core);
+    expect(await runsOf(core, token, id)).toMatchObject([
+      {
+        status: "succeeded",
+        trigger: { data: { due: "2026-10-26T14:00:00.000Z" } },
+      },
+    ]);
+
+    core.advance(minutes(238));
+    await tick(core);
+    expect(await runsOf(core, token, id)).toHaveLength(1);
+
+    core.advance(minutes(24 * 60));
+    await tick(core);
+    expect(await runsOf(core, token, id)).toHaveLength(2);
+  });
+
+  it("keep a date already handled when the zone changes after a restart", async () => {
+    const { core, token, id } = await at14();
+    core.advance(minutes(122));
+    await tick(core);
+    expect(await runsOf(core, token, id)).toHaveLength(1);
+    await core.stop();
+
+    const again = await testCore({
+      dataDir: core.dataDir,
+      startsAt: "2026-10-26T14:02:00Z",
+      timeZone: null,
+    });
+    const changed = await post(
+      again,
+      "/api/places/home/update",
+      { timeZone: "America/New_York" },
+      { token },
+    );
+    expect(changed.statusCode).toBe(200);
+    again.advance(minutes(238));
+    await tick(again);
+    expect(await runsOf(again, token, id)).toHaveLength(1);
+    expect(again.db.select().from(workflowTimers).get()?.nextAt).toEqual(
+      new Date("2026-10-27T18:00:00Z"),
+    );
+  });
+
+  it("keep the original date of a due run when the new zone is a day ahead", async () => {
+    const { core, token, zone, id } = await at14();
+    core.advance(minutes(122));
+    expect((await zone("Pacific/Kiritimati")).statusCode).toBe(200);
+    await tick(core);
+    expect(await runsOf(core, token, id)).toHaveLength(1);
+    expect(core.db.select().from(workflowTimers).get()?.nextAt).toEqual(
+      new Date("2026-10-27T00:00:00Z"),
+    );
+  });
+
+  it("recalculate a pending timer saved before the host's zone was recorded", async () => {
+    const { core, token, id } = await at14({ timeZone: "UTC" });
+    core.db.delete(workflowClock).run();
+    core.db.update(workflowTimers).set({ nextDailyDay: null }).run();
+    await core.stop();
+
+    const again = await testCore({
+      dataDir: core.dataDir,
+      timeZone: "Europe/Berlin",
+    });
+    await tick(again);
+    again.advance(minutes(60) + 5_000);
+    await tick(again);
+    expect(await runsOf(again, token, id)).toMatchObject([
+      { trigger: { data: { due: "2026-10-26T13:00:00.000Z" } } },
+    ]);
+  });
+
+  it("roll back the saved home zone and the timer if recording the new zone fails", async () => {
+    const { core, token, zone } = await at14();
+    core.db.$client.exec(`
+      CREATE TEMP TRIGGER refuse_clock_write BEFORE INSERT ON workflow_clock
+      BEGIN SELECT RAISE(ABORT, 'clock write failed'); END;
+    `);
+
+    expect((await zone("Europe/Berlin")).statusCode).toBe(500);
+    expect(
+      (await get(core, "/api/places/home", { token })).json(),
+    ).toMatchObject({
+      timeZone: "UTC",
+    });
+    expect(core.db.select().from(workflowTimers).get()?.nextAt).toEqual(
+      new Date("2026-10-26T14:00:00Z"),
+    );
+  });
+
+  it("retry a failed timer update after the host's time zone changes", async () => {
+    const { core, token, id } = await at14({ timeZone: "UTC" });
+    await tick(core);
+    await core.stop();
+    const again = await testCore({
+      dataDir: core.dataDir,
+      timeZone: "Europe/Berlin",
+    });
+    again.db.$client.exec(`
+      CREATE TEMP TRIGGER refuse_timer_update BEFORE UPDATE ON workflow_timers
+      BEGIN SELECT RAISE(ABORT, 'timer write failed'); END;
+    `);
+    await tick(again);
+    expect(again.logs.join("\n")).toContain("timer write failed");
+    again.db.$client.exec("DROP TRIGGER refuse_timer_update");
+    await tick(again);
+
+    again.advance(minutes(60) + 5_000);
+    await tick(again);
+    expect(await runsOf(again, token, id)).toMatchObject([
+      {
+        status: "succeeded",
+        trigger: { data: { due: "2026-10-26T13:00:00.000Z" } },
+      },
+    ]);
   });
 
   it("move on without running while the workflow is off", async () => {

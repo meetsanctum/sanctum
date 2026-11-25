@@ -79,7 +79,12 @@ const tap = { ...device("tap", [capability("light", "light")]) };
 tap.capabilities = [...tap.capabilities, valve];
 const drain = { ...device("drain", []), capabilities: [valve] };
 const places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" as const },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius" as const,
+    hourCycle: "24h" as const,
+  },
   floors: [],
   rooms: [],
   zones: [],

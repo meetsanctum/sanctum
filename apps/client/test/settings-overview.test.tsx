@@ -47,6 +47,7 @@ const home: Places = {
     name: "Office",
     timeZone: "Europe/Zurich",
     temperatureUnit: "celsius",
+    hourCycle: "24h",
   },
   floors: [{ id: "ground", name: "Ground floor", level: 0 }],
   rooms: [

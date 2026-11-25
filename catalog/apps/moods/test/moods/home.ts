@@ -13,7 +13,12 @@ import type { Light, LightCapability } from "../../src/targets.js";
 // sensors and light sensors built as the core shows them.
 
 export const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [
     { id: "office", name: "Office", floorId: null },

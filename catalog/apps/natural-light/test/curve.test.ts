@@ -1,4 +1,4 @@
-import { localDate } from "@meetsanctum/app-sdk";
+import { localDate } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
 import {

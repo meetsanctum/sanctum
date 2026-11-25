@@ -7,7 +7,12 @@ export const office = { id: "office", name: "Office", floorId: null };
 // A Saturday.
 export const now = Date.parse("2026-10-31T12:00:00Z");
 export const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [office],
   zones: [],

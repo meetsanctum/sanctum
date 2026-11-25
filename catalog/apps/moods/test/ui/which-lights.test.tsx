@@ -14,7 +14,12 @@ import { device, lightCapability } from "../moods/home";
 // places, its lights, and a choice that goes with the floor.
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [
     { id: "ground", name: "Ground floor", level: 0 },
     { id: "first", name: "First floor", level: 1 },

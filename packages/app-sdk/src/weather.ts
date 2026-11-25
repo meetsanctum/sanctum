@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { defineEntityType } from "./entities.js";
-import { isTimeZone } from "./places.js";
+import { isTimeZone } from "./clock.js";
 
 // The standard entity types for the sun and the weather, defined by the core
 // so that any app may provide them and any app read them with

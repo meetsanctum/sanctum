@@ -88,6 +88,7 @@ export function placesSnapshot(): Places {
       name: "Our home",
       timeZone: "UTC",
       temperatureUnit: "celsius",
+      hourCycle: "24h",
     },
     rooms: homeData.rooms,
     floors: [],

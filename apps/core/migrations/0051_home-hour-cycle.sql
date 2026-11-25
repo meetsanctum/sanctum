@@ -1,0 +1,1 @@
+ALTER TABLE `home` ADD `hour_cycle` text DEFAULT '24h' NOT NULL;

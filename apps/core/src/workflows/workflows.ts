@@ -8,6 +8,7 @@ import {
   type WorkflowProblem,
   type WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
+import { hostTimeZone } from "@meetsanctum/app-sdk/clock";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -31,7 +32,6 @@ import { createKeptGrants } from "./kept-grants.js";
 import { createPieces } from "./pieces.js";
 import { createRuns } from "./runs.js";
 import { workflows, workflowsOffForApps } from "./schema.js";
-import { hostTimeZone } from "./time.js";
 import { createTimers, lateness } from "./timers.js";
 
 // The Workflows module: the household's rules and apps' jobs. It keeps
@@ -712,11 +712,17 @@ export function createWorkflows(
       list: (app: string) => jobs.list(app),
     },
 
-    /** Fires due timers and runs due jobs. */
+    followTimeZone: timers.followZone,
+
+    /**
+     * Fires due timers and runs due jobs, first moving time triggers to
+     * the home's new time zone when it has changed.
+     */
     tick() {
       if (interrupted) return;
       const at = now();
       try {
+        timers.followZone(at);
         timers.fire(at);
         runJobs(at);
       } catch (error) {

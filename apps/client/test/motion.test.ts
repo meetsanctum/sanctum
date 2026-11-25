@@ -18,7 +18,12 @@ const now = new Date(2026, 9, 31, 15, 0).getTime();
 const ago = (ms: number) => new Date(now - ms).toISOString();
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [

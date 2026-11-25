@@ -15,7 +15,12 @@ import { fakeClient } from "./support";
 // choosing it, and finding a press.
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   rooms: [{ id: "office", name: "Office", floorId: null }],
   zones: [{ id: "upstairs", name: "Upstairs", roomIds: ["office"] }],

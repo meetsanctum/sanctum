@@ -1,8 +1,5 @@
 import {
-  addLocalDays,
-  localDate,
   turnOnType,
-  zonedDateToUtc,
   type AppContext,
   type DeviceInfo,
   type TurnOn,
@@ -15,6 +12,7 @@ import { turnOnEntities } from "../moods/schema.js";
 import { lightsOf } from "../moods/smart.js";
 import { readMood, type Mood } from "../moods/store.js";
 import { allLightsInRoom, type Light } from "../targets.js";
+import { activeSpan } from "./active-span.js";
 import {
   readSchedule,
   readSnapshot,
@@ -22,7 +20,6 @@ import {
   type Snapshot,
   type TurnOnBehaviour,
 } from "./store.js";
-import { day, minuteIn, spanAt } from "./times.js";
 
 // What turning a room's lights on brings. The core turns a room, a zone or
 // the home on, so Moods publishes each room's rule as a standard
@@ -40,22 +37,6 @@ import { day, minuteIn, spanAt } from "./times.js";
 //
 // A rule that would turn no light on is none, so the core switches the
 // room on as if it had none.
-
-/** The instant a minute of the day next comes after now, in a time zone. */
-export function nextAt(minute: number, timeZone: string, now: Date) {
-  const today = localDate(timeZone, now);
-  for (const days of [0, 1, 2]) {
-    const date = addLocalDays(today, days + (minute === day ? 1 : 0));
-    const at = zonedDateToUtc(
-      date,
-      Math.floor((minute % day) / 60),
-      minute % 60,
-      timeZone,
-    );
-    if (at > now) return at;
-  }
-  throw new Error(`No ${minute} after ${now.toISOString()} in ${timeZone}`);
-}
 
 /** What turning a room on does now, or null when the core's own way serves. */
 export function turnOnRule(input: {
@@ -120,14 +101,13 @@ async function ruleOf(
 ) {
   const { db } = ctx.storage;
   const target = { kind: "room", id: roomId } as const;
-  const entry = spanAt(await readSchedule(db, roomId), minuteIn(now, timeZone));
-  const mood = entry ? await readMood(db, entry.moodId) : null;
+  const active = activeSpan(await readSchedule(db, roomId), now, timeZone);
+  const mood = active ? await readMood(db, active.span.moodId) : null;
   return turnOnRule({
     roomId,
     behaviour: await readTurnOn(db, target),
     lights,
-    scheduled:
-      entry && mood ? { mood, until: nextAt(entry.end, timeZone, now) } : null,
+    scheduled: active && mood ? { mood, until: active.until } : null,
     snapshot: await readSnapshot(db, target),
   });
 }

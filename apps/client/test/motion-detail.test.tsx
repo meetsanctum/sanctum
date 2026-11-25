@@ -23,7 +23,12 @@ const hour = 60 * minute;
 const now = new Date(2026, 9, 31, 15, 0).getTime();
 
 const places: Places = {
-  home: { name: "Home", timeZone: "UTC", temperatureUnit: "celsius" },
+  home: {
+    name: "Home",
+    timeZone: "UTC",
+    temperatureUnit: "celsius",
+    hourCycle: "24h",
+  },
   floors: [],
   zones: [],
   rooms: [{ id: "office", name: "Office", floorId: null }],
