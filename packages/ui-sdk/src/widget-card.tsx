@@ -33,9 +33,10 @@ import { widgetIconOf } from "./widget-icons";
 
 /** How the shell writes a card's values. */
 type Shown = { unit: TemperatureUnit; clock: HomeClock };
+type Zoned = { unit: TemperatureUnit; timeZone: string | undefined };
 
 /** A card's value as the household reads it, such as "8°", "07:04" or "Wed". */
-export function formatWidgetValue(value: WidgetValue, shown: Shown) {
+export function formatWidgetValue(value: WidgetValue, shown: Shown | Zoned) {
   if (typeof value === "string") return value;
   if ("temperature" in value) {
     // Whole degrees, the unit clear from the card, as a forecast shows them.
@@ -45,7 +46,13 @@ export function formatWidgetValue(value: WidgetValue, shown: Shown) {
     });
   }
   if ("time" in value) {
-    return shown.clock.timeText(new Date(value.time));
+    const at = new Date(value.time);
+    if ("clock" in shown) return shown.clock.timeText(at);
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: shown.timeZone,
+    }).format(at);
   }
   if ("date" in value) {
     return new Intl.DateTimeFormat(

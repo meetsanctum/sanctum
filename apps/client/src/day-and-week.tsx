@@ -81,7 +81,14 @@ export function DayAndWeek(props: {
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const timed = loaded
-    ? daysOf(clock, loaded.statistics, spans, now, words.field)
+    ? daysOf(
+        clock,
+        loaded.statistics,
+        spans,
+        now,
+        words.field,
+        loaded.midnights,
+      )
     : [];
   const days =
     loaded && words.counted

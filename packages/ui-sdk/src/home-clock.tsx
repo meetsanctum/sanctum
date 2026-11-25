@@ -6,10 +6,9 @@ import {
 } from "@meetsanctum/app-sdk/clock";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-// The home clock (Settings → Household): the home's time zone and whether it
-// counts 24 hours or 12, in which the shell and apps' pages write and work
-// out times, so a device away from home says the home's times. The time
-// itself is the device's own.
+// The shell and apps' pages use the home's time zone from Settings → Household
+// and the household's 24- or 12-hour preference, even on a device away from
+// home. The time itself is the device's own.
 
 const HomeClockContext = createContext<HomeClock | undefined>(undefined);
 

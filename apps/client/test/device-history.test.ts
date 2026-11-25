@@ -276,17 +276,28 @@ describe("a device's history", () => {
     ).toBe("Under a minute a day");
   });
 
-  it("shares an hour that local midnight splits between its two days", () => {
-    const today = clock.startOfDay(now);
+  it("counts each side of a split hour from its recorded states", () => {
+    const kolkata = homeClock({ timeZone: "Asia/Kolkata" });
+    const today = kolkata.startOfDay(now);
+    const start = today - 30 * minute;
+    const midnights = new Map([
+      [
+        start,
+        history([
+          [start - hour, "online", { ...warm, on: false }],
+          [today, "online", warm],
+        ]),
+      ],
+    ]);
     const days = daysOf(
-      clock,
+      kolkata,
       {
         fields: {
           on: [
             {
-              start: new Date(today - 30 * minute).toISOString(),
-              mean: 1,
-              min: 1,
+              start: new Date(start).toISOString(),
+              mean: 0.5,
+              min: 0,
               max: 1,
               seconds: 3600,
             },
@@ -295,9 +306,11 @@ describe("a device's history", () => {
       },
       [],
       now,
+      "on",
+      midnights,
     );
 
-    expect(days.at(-2)).toMatchObject({ on: 1800, known: 1800 });
-    expect(days.at(-1)!.on).toBeGreaterThanOrEqual(1800);
+    expect(days.at(-2)).toMatchObject({ on: 0, known: 1800 });
+    expect(days.at(-1)).toMatchObject({ on: 1800, known: 1800 });
   });
 });

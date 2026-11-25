@@ -2,7 +2,7 @@ import type { DeviceStatistics, HistoryStatistic } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { WeekRange } from "@meetsanctum/ui-sdk/charts";
 
-import { dayMs } from "./device-history-data";
+import { dayMs, hourMs, type MidnightStates } from "./device-history-data";
 
 // What a sensor's detail charts, from core History's roll-ups: the last 24
 // hours as a line through each 5 minutes' mean, broken where nothing was
@@ -80,24 +80,41 @@ export function dayLine(
   };
 }
 
-/** The home's last 7 days, today last, from the hourly roll-ups and what it reads now. */
+/** The home's last 7 days, from hourly roll-ups, split hours' readings and what it reads now. */
 export function weekRanges(
   clock: HomeClock,
   statistics: Pick<DeviceStatistics, "fields"> | null,
   now: number,
   current: number | null,
+  midnights?: MidnightStates,
 ): WeekRange[] {
   const hours: HistoryStatistic[] = statisticsOf(statistics);
   const days: WeekRange[] = [];
   for (let back = 6; back >= 0; back--) {
     const start = clock.startOfDay(now, back);
     const end = clock.startOfDay(now, back - 1);
-    // An hour that the home's midnight splits counts on the day it starts.
-    const own = hours.filter((hour) => {
+    const values: number[] = [];
+    for (const hour of hours) {
       const at = Date.parse(hour.start);
-      return at >= start && at < end;
-    });
-    const values = own.flatMap((hour) => [hour.min, hour.max]);
+      const until = at + hourMs;
+      if (until <= start || at >= end) continue;
+      if (at >= start && until <= end) {
+        values.push(hour.min, hour.max);
+        continue;
+      }
+      const changes = midnights?.get(at)?.states ?? [];
+      const from = Math.max(at, start);
+      const to = Math.min(until, end);
+      for (const [index, change] of changes.entries()) {
+        const value = change.state?.value;
+        if (change.availability === "offline" || typeof value !== "number")
+          continue;
+        const next = changes[index + 1];
+        const heldFrom = Math.max(from, Date.parse(change.at));
+        const heldTo = next ? Math.min(to, Date.parse(next.at)) : to;
+        if (heldFrom < heldTo) values.push(value);
+      }
+    }
     if (back === 0 && current !== null) values.push(current);
     days.push(
       values.length > 0

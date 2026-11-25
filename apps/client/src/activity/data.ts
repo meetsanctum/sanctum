@@ -59,11 +59,23 @@ const dayMs = 24 * 60 * 60_000;
 
 /** A day's heading on the home clock: Today, Yesterday, or the day and date. */
 export function dayHeading(clock: HomeClock, at: number, now = Date.now()) {
-  const day = clock.startOfDay(at);
-  const today = clock.startOfDay(now);
+  return headingForDay(
+    clock,
+    clock.startOfDay(at),
+    clock.startOfDay(now),
+    clock.startOfDay(now, 1),
+  );
+}
+
+function headingForDay(
+  clock: HomeClock,
+  day: number,
+  today: number,
+  yesterday: number,
+) {
   if (day === today) return "Today";
-  if (day === clock.startOfDay(now, 1)) return "Yesterday";
-  return new Date(at).toLocaleDateString("en-GB", {
+  if (day === yesterday) return "Yesterday";
+  return new Date(day).toLocaleDateString("en-GB", {
     timeZone: clock.timeZone,
     weekday: "long",
     day: "numeric",
@@ -81,14 +93,23 @@ export function daysOf(
   now = Date.now(),
 ) {
   const days: Day[] = [];
+  if (entries.length === 0) return days;
+  const today = clock.startOfDay(now);
+  const yesterday = clock.startOfDay(now, 1);
+  let end = 0;
   for (const entry of entries) {
     const at = Date.parse(entry.at);
-    const key = clock.startOfDay(at);
     const last = days.at(-1);
-    if (last?.key === key) {
+    if (last && at >= last.key && at < end) {
       last.entries.push(entry);
     } else {
-      days.push({ key, heading: dayHeading(clock, at, now), entries: [entry] });
+      const key = clock.startOfDay(at);
+      end = clock.startOfDay(at, -1);
+      days.push({
+        key,
+        heading: headingForDay(clock, key, today, yesterday),
+        entries: [entry],
+      });
     }
   }
   return days;

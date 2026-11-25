@@ -71,6 +71,19 @@ describe("a card's values", () => {
       }).format(new Date(2026, 10, 4)),
     );
   });
+
+  it("accepts time zone options from existing app pages", () => {
+    const time = { time: "2026-11-03T06:04:00Z" };
+    for (const timeZone of ["Europe/Zurich", undefined]) {
+      expect(formatWidgetValue(time, { unit: "celsius", timeZone })).toBe(
+        new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone,
+        }).format(new Date(time.time)),
+      );
+    }
+  });
 });
 
 const list: WidgetContent = {

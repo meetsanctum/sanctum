@@ -283,7 +283,8 @@ function written(
   at: Date | number,
 ) {
   const time = typeof at === "number" ? at : at.getTime();
-  if (!Number.isFinite(time)) return invalid;
+  if (!Number.isFinite(time) || Math.abs(time) > 8_640_000_000_000_000)
+    return invalid;
   return formatter(key, locale, options).format(time);
 }
 

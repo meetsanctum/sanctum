@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LineChart, type DaysLineChartProps } from "../src/charts";
+import { HomeTimeZoneProvider } from "../src/home-clock";
 
 // Days as lines (charts/days-line.tsx): a point a day for up to three
 // lines, a readout with a row for each, and each day listed for screen
@@ -35,6 +36,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const render = (element: ReactElement) => act(async () => root.render(element));
@@ -55,7 +57,9 @@ const series = [
 const chart = (
   shown: DaysLineChartProps["series"] = series,
   shownDays = days,
-  overrides: Partial<Pick<DaysLineChartProps, "format" | "scale">> = {},
+  overrides: Partial<
+    Pick<DaysLineChartProps, "date" | "format" | "scale">
+  > = {},
 ) => (
   <LineChart
     mode="days"
@@ -105,6 +109,19 @@ describe("days as lines", () => {
       "Today",
     ]);
     expect(names[1]!.style.left).toBe("100.5px");
+  });
+
+  it("defaults to the home's date for a point at home midnight", async () => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+    const midnights = days.map((start) => start - 60 * 60_000);
+    await render(
+      <HomeTimeZoneProvider timeZone="Europe/Zurich">
+        {chart(series, midnights, { date: undefined })}
+      </HomeTimeZoneProvider>,
+    );
+    expect(container.querySelector("ul.sr-only > li")?.textContent).toMatch(
+      /^Fri 20 Nov:/,
+    );
   });
 
   it("reads each line's value for a day, in a row each", async () => {

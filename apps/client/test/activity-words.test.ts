@@ -2,6 +2,7 @@ import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
+import { triggerWords } from "../src/activity/actor-words";
 import { activityWords, lastChangeWords } from "../src/activity/words";
 import { productName } from "../src/brand";
 import { entry } from "./activity-fixtures";
@@ -202,6 +203,17 @@ describe("an entry's words", () => {
     expect(
       activityWords(clock, entry({ who: { kind: "device" } }), "device").detail,
     ).toBe("Outside Sanctum, at the device or its switch");
+  });
+
+  it("writes the scheduled wall time in the home's hour format", () => {
+    const zurich = homeClock({ timeZone: "Europe/Zurich", hourCycle: "12h" });
+    const at = "2026-03-29T01:30:00Z";
+    const trigger = { piece: "time", app: null };
+    // The configured 02:30 is in the spring's missing hour.
+    expect(triggerWords(zurich, { ...trigger, time: "02:30" }, at)).toBe(
+      "at 2:30 AM",
+    );
+    expect(triggerWords(zurich, trigger, at)).toBe("at 3:30 AM");
   });
 
   it("joins a morning of adjustments into one", () => {

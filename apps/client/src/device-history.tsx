@@ -4,6 +4,7 @@ import type {
   DeviceInfo,
   DeviceStatistics,
 } from "@meetsanctum/app-sdk";
+import { startOfDay } from "@meetsanctum/app-sdk/clock";
 import { useHomeClock, type SwipePage } from "@meetsanctum/ui-sdk";
 import {
   DayStripChart,
@@ -28,7 +29,9 @@ import {
   weekHeadline,
   type Day,
   type Live,
+  type MidnightStates,
 } from "./device-history-data";
+import { loadMidnightStates } from "./history-midnights";
 import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
@@ -71,7 +74,11 @@ export function historyPage(
   };
 }
 
-type Loaded = { states: DeviceHistory; statistics: DeviceStatistics };
+type Loaded = {
+  states: DeviceHistory;
+  statistics: DeviceStatistics;
+  midnights: MidnightStates;
+};
 
 /**
  * A capability's changes over the last 24 hours and its hourly roll-ups
@@ -91,13 +98,14 @@ export function useDayAndWeek(
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useChartClock(setNow);
-  const clock = useHomeClock();
+  const { timeZone } = useHomeClock();
 
   useEffect(() => {
     let current = true;
     const load = async () => {
       const to = Date.now();
-      const weekStart = clock.startOfDay(to, 6);
+      const weekStart = startOfDay(to, timeZone, 6);
+      const firstHour = Math.floor(weekStart / hourMs) * hourMs;
       const query = (more: Record<string, string>) =>
         new URLSearchParams({
           device: device.id,
@@ -111,7 +119,7 @@ export function useDayAndWeek(
             `/api/history/states?${query({
               from: new Date(
                 // Keep the preceding state for an opening at midnight.
-                weekOfChanges ? weekStart - 1 : to - dayMs,
+                weekOfChanges ? Math.min(weekStart - 1, firstHour) : to - dayMs,
               ).toISOString(),
             })}`,
           ),
@@ -119,14 +127,18 @@ export function useDayAndWeek(
             `/api/history/statistics?${query({
               period: "hour",
               // Include the UTC hour that overlaps the week's first midnight.
-              from: new Date(
-                Math.floor(weekStart / hourMs) * hourMs,
-              ).toISOString(),
+              from: new Date(firstHour).toISOString(),
             })}`,
           ),
         ]);
         if (!current) return;
-        setLoaded({ states, statistics });
+        const midnights = await loadMidnightStates(
+          timeZone,
+          statistics,
+          states,
+        );
+        if (!current) return;
+        setLoaded({ states, statistics, midnights });
         setLive((changes) =>
           changes.filter((change) => change.since >= Date.parse(states.to)),
         );
@@ -142,7 +154,7 @@ export function useDayAndWeek(
       current = false;
       stopReloads();
     };
-  }, [device.id, capability.id, weekOfChanges, clock]);
+  }, [device.id, capability.id, weekOfChanges, timeZone]);
 
   // Keep every change seen since the last history read. The next read
   // replaces these with the core's recorded times.
@@ -195,7 +207,9 @@ function DeviceHistoryPage(props: {
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const dims =
     capability.kind === "light" && capability.features.brightness === true;
-  const days = loaded ? daysOf(clock, loaded.statistics, spans, now) : [];
+  const days = loaded
+    ? daysOf(clock, loaded.statistics, spans, now, "on", loaded.midnights)
+    : [];
 
   return (
     <div

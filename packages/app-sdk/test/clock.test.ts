@@ -204,6 +204,8 @@ describe("the home's words", () => {
     ]) {
       expect(word(Number.NaN)).toBe("Invalid Date");
       expect(word(new Date("not a time"))).toBe("Invalid Date");
+      expect(word(8_640_000_000_000_001)).toBe("Invalid Date");
+      expect(word(-8_640_000_000_000_001)).toBe("Invalid Date");
     }
   });
 

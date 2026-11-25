@@ -6,6 +6,7 @@ import {
   type SensorMeasure,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
+import { startOfDay } from "@meetsanctum/app-sdk/clock";
 import {
   convertTemperature,
   formatLightLevel,
@@ -22,8 +23,9 @@ import { useEffect, useId, useState } from "react";
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import { Notice, Part } from "./device-history";
-import { dayMs } from "./device-history-data";
+import { dayMs, hourMs, type MidnightStates } from "./device-history-data";
 import { measureNames } from "./device-tiles";
+import { loadMidnightStates } from "./history-midnights";
 import { lowBatteryText } from "./maintenance";
 import { dayLine, weekRange, weekRanges } from "./sensor-history-data";
 import { useChartClock } from "./use-chart-clock";
@@ -140,7 +142,11 @@ export function Battery(props: {
   );
 }
 
-type Loaded = { day: DeviceStatistics; week: DeviceStatistics };
+type Loaded = {
+  day: DeviceStatistics;
+  week: DeviceStatistics;
+  midnights: MidnightStates;
+};
 
 function SensorReading(props: {
   device: DeviceInfo;
@@ -153,6 +159,7 @@ function SensorReading(props: {
   const [now, setNow] = useState(() => Date.now());
   useChartClock(setNow);
   const clock = useHomeClock();
+  const { timeZone } = clock;
   const titleId = useId();
 
   useEffect(() => {
@@ -182,12 +189,16 @@ function SensorReading(props: {
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
               period: "hour",
-              from: new Date(clock.startOfDay(to, 6)).toISOString(),
+              from: new Date(
+                Math.floor(startOfDay(to, timeZone, 6) / hourMs) * hourMs,
+              ).toISOString(),
             })}`,
           ),
         ]);
         if (!current) return;
-        setLoaded({ day, week });
+        const midnights = await loadMidnightStates(timeZone, week);
+        if (!current) return;
+        setLoaded({ day, week, midnights });
         setFailed(false);
         setNow(Date.now());
       } catch {
@@ -200,12 +211,18 @@ function SensorReading(props: {
       current = false;
       stopReloads();
     };
-  }, [device.id, sensor.id, clock]);
+  }, [device.id, sensor.id, timeZone]);
 
   const reading =
     device.availability === "offline" ? null : (sensor.state?.value ?? null);
   const line = dayLine(loaded?.day ?? null, now, reading);
-  const days = weekRanges(clock, loaded?.week ?? null, now, reading);
+  const days = weekRanges(
+    clock,
+    loaded?.week ?? null,
+    now,
+    reading,
+    loaded?.midnights,
+  );
   const week = weekRange(days);
   const name = measureNames[sensor.features.measures];
 

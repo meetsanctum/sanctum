@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { DeviceInfo, MediaState } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import { HomeTimeZoneProvider } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,6 +26,7 @@ const at = (hours: number, minutes = 0) =>
 let root: Root;
 let container: HTMLDivElement;
 let kept: boolean;
+let rollupStart: string;
 let states: { at: string; availability: string; state: object | null }[];
 
 beforeEach(() => {
@@ -39,6 +41,7 @@ beforeEach(() => {
     },
   );
   kept = true;
+  rollupStart = new Date(2026, 10, 22, 20).toISOString();
   states = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path) => {
@@ -62,7 +65,7 @@ beforeEach(() => {
         fields: {
           playing: [
             {
-              start: new Date(2026, 10, 22, 20).toISOString(),
+              start: rollupStart,
               mean: 0.5,
               min: 0,
               max: 1,
@@ -88,12 +91,16 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function show(device: DeviceInfo, timeZone?: string) {
+async function show(
+  device: DeviceInfo,
+  timeZone?: string,
+  hourCycle?: HourCycle,
+) {
   const player = device.capabilities[0]!;
   if (player.kind !== "media") throw new Error("not a media player");
   await act(async () => {
     root.render(
-      <HomeTimeZoneProvider timeZone={timeZone}>
+      <HomeTimeZoneProvider timeZone={timeZone} hourCycle={hourCycle}>
         {mediaHistoryPage(device, player).content}
       </HomeTimeZoneProvider>,
     );
@@ -273,20 +280,62 @@ it("reads its history as the player's, from the day before", async () => {
   expect(query.get("from")).toBe(new Date(now - 24 * hour).toISOString());
 });
 
-it("requests the hour that overlaps the start of the home's first day", async () => {
+it("reloads the week's first hour when the home time zone changes", async () => {
   // A home in Kolkata, seen from a device in Los Angeles.
   vi.stubEnv("TZ", "America/Los_Angeles");
   vi.setSystemTime(new Date("2026-11-23T15:00:00Z"));
+  const player = mediaPlayer("tv", "TV", "living", { activity: "idle" });
+  await show(player, "Asia/Kolkata", "24h");
+
+  const asked = () =>
+    vi
+      .mocked(coreJson)
+      .mock.calls.map(([path]) => path)
+      .filter((path) => path.startsWith("/api/history/statistics"))
+      .map((path) => new URL(path, "http://core").searchParams.get("from"));
+  // The home's first day starts at 18:30 UTC.
+  expect(asked()).toEqual(["2026-11-16T18:00:00.000Z"]);
+
+  await show(player, "Asia/Kolkata", "12h");
+  expect(asked()).toEqual(["2026-11-16T18:00:00.000Z"]);
+
+  await show(player, "Asia/Yangon", "12h");
+  expect(asked()).toEqual([
+    "2026-11-16T18:00:00.000Z",
+    "2026-11-16T17:00:00.000Z",
+  ]);
+});
+
+it("reads recorded changes for an older hour that home midnight splits", async () => {
+  vi.setSystemTime(new Date("2026-11-23T15:00:00Z"));
+  rollupStart = "2026-11-20T18:00:00.000Z";
+  states = [
+    { at: rollupStart, availability: "online", state: { activity: "idle" } },
+    {
+      at: "2026-11-20T18:30:00Z",
+      availability: "online",
+      state: { activity: "playing" },
+    },
+    { at: "2026-11-20T19:00:00Z", availability: "offline", state: null },
+  ];
   await show(
     mediaPlayer("tv", "TV", "living", { activity: "idle" }),
     "Asia/Kolkata",
   );
 
-  const asked = vi
+  const split = vi
     .mocked(coreJson)
-    .mock.calls.map(([path]) => path)
-    .find((path) => path.startsWith("/api/history/statistics"))!;
-  const query = new URL(asked, "http://core").searchParams;
-  // The home's first day starts at 18:30 UTC.
-  expect(query.get("from")).toBe("2026-11-16T18:00:00.000Z");
+    .mock.calls.map(([path]) => new URL(path, "http://core"))
+    .find(
+      ({ pathname, searchParams }) =>
+        pathname === "/api/history/states" &&
+        searchParams.get("from") === rollupStart,
+    );
+  expect(split?.searchParams.get("to")).toBe("2026-11-20T19:00:00.000Z");
+  expect(spoken()).toEqual(
+    expect.arrayContaining([
+      "Fri 20 Nov: Nothing played",
+      "Sat 21 Nov: played for 30 min",
+    ]),
+  );
 });

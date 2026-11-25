@@ -19,6 +19,11 @@ import type { BandSpan, StripSpan } from "@meetsanctum/ui-sdk/charts";
 export const hourMs = 60 * 60_000;
 export const dayMs = 24 * hourMs;
 
+export type MidnightStates = ReadonlyMap<
+  number,
+  Pick<DeviceHistory, "kind" | "states">
+>;
+
 /** What a capability was from `from` until `to`. */
 export type Span = {
   from: number;
@@ -244,8 +249,8 @@ export function countedDays(
 
 /**
  * The home's last 7 days, today last: the hourly roll-ups of whether it was
- * on, saw motion, was open or played, by `field`, and the spans for the
- * time since the last of them.
+ * on, saw motion, was open or played, by `field`, with recorded changes
+ * for hours split by midnight and the time since the last roll-up.
  */
 export function daysOf(
   clock: HomeClock,
@@ -253,6 +258,7 @@ export function daysOf(
   spans: readonly Span[],
   now: number,
   field: "on" | "motion" | "open" | "playing" = "on",
+  midnights?: MidnightStates,
 ): Day[] {
   const hours = statistics?.fields[field] ?? [];
   const rolledUpTo = hours.reduce(
@@ -266,13 +272,21 @@ export function daysOf(
     let on = 0;
     let known = 0;
     for (const hour of hours) {
-      // An hour that the home's midnight splits, as in a zone half an hour off
-      // the hour, counts on either side for its share of the hour.
       const at = Date.parse(hour.start);
-      const share =
-        Math.max(0, Math.min(at + hourMs, end) - Math.max(at, start)) / hourMs;
-      on += hour.mean * hour.seconds * share;
-      known += hour.seconds * share;
+      const until = at + hourMs;
+      if (until <= start || at >= end) continue;
+      if (at >= start && until <= end) {
+        on += hour.mean * hour.seconds;
+        known += hour.seconds;
+      } else {
+        const changes = midnights?.get(at);
+        if (!changes) continue;
+        const from = Math.max(at, start);
+        const to = Math.min(until, end);
+        const part = onWithin(spansOf(changes, from, to), from, to);
+        on += part.on;
+        known += part.known;
+      }
     }
     const tail = onWithin(
       spans,
