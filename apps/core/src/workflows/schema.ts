@@ -25,6 +25,9 @@ export const workflows = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    automaticName: integer("automatic_name", { mode: "boolean" })
+      .notNull()
+      .default(false),
     enabled: integer("enabled", { mode: "boolean" }).notNull(),
     runMode: text("run_mode").$type<RunMode>().notNull(),
     graph: text("graph", { mode: "json" }).$type<WorkflowGraph>().notNull(),

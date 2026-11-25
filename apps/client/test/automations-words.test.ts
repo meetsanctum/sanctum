@@ -10,7 +10,12 @@ import {
 } from "../src/automations/graph";
 import { deviceKindsFor, withDevice } from "../src/automations/chooser";
 import { lightLevelIn } from "../src/automations/fields";
-import { dayWords, listStatus, runWords } from "../src/automations/when";
+import {
+  dayWords,
+  listStatus,
+  momentWords,
+  runWords,
+} from "../src/automations/when";
 import {
   cardOf,
   compareGroups,
@@ -483,6 +488,20 @@ describe("Automations' statuses", () => {
     expect(dayWords(clock, new Date("2026-10-28T07:30:00"), now)).toBe(
       "last Wednesday",
     );
+  });
+
+  it("calls a run before the home's midnight yesterday", () => {
+    const newYork = homeClock({
+      timeZone: "America/New_York",
+      hourCycle: "12h",
+    });
+    expect(
+      momentWords(
+        newYork,
+        new Date("2026-10-30T03:50:00Z"),
+        new Date("2026-10-30T04:10:00Z"),
+      ),
+    ).toBe("Yesterday at 11:50 PM");
   });
 
   it("put the home's next run in the ink, and otherwise how today went", () => {

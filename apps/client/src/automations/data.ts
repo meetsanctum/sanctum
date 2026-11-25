@@ -8,7 +8,6 @@ import type {
   WorkflowInfo,
   WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
-import { wallTimeText } from "@meetsanctum/app-sdk/clock";
 import type { PersonInfo } from "@meetsanctum/auth-protocol";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,6 +24,7 @@ import type { Names } from "./words";
 
 export type NewWorkflow = {
   name: string;
+  automaticName?: boolean;
   enabled?: boolean;
   runMode?: WorkflowInfo["runMode"];
   graph: WorkflowGraph;
@@ -137,6 +137,7 @@ export function namesOf(
   devices: readonly DeviceInfo[],
   apps: readonly AppInfo[],
   entities: readonly EntityInfo[],
+  time: Names["time"],
 ): Names {
   return {
     room: (id) => places?.rooms.find((room) => room.id === id)?.name,
@@ -154,7 +155,7 @@ export function namesOf(
     entity: (type, key) =>
       entities.find((each) => each.type === type && each.key === key)?.name,
     app: (id) => apps.find((app) => app.id === id)?.name,
-    time: (wall) => wallTimeText(wall, places?.home.hourCycle),
+    time,
   };
 }
 

@@ -69,6 +69,17 @@ describe("a client's detail", () => {
     expect(seenText(clock, lastSeenAt, now)).toBe(text);
   });
 
+  it("uses the home's date for a device last seen more than a day ago", () => {
+    const zurich = homeClock({ timeZone: "Europe/Zurich" });
+    expect(
+      seenText(
+        zurich,
+        "2026-10-27T23:30:00Z",
+        new Date("2026-10-29T12:00:00Z"),
+      ),
+    ).toBe("Seen on 28 Oct");
+  });
+
   it("names its person, or the household, its platform and when it was seen", () => {
     expect(clientDetail(clock, tablet, undefined, now)).toBe(
       "Shared · Web browser · Never seen",

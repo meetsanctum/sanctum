@@ -5,6 +5,7 @@ import {
   type DeviceInfo,
   type PieceInfo,
 } from "@meetsanctum/app-sdk";
+import { wallTimeText } from "@meetsanctum/app-sdk/clock";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -315,7 +316,7 @@ describe("a player's volume", () => {
             }}
             apps={[]}
             home={{ places, devices, entities: [] }}
-            names={namesOf(places, devices, [], [])}
+            names={namesOf(places, devices, [], [], wallTimeText)}
             back={vi.fn()}
             ask={vi.fn()}
           />,

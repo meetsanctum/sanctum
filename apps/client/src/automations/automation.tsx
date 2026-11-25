@@ -20,6 +20,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { blockedBy, blockedWords } from "./blocked";
 import { pieceOf, problemOf, type Automations } from "./data";
+import { workflowName } from "./graph";
 import { byHand } from "./list";
 import { MiniAvatar, PieceIcon, Sentence, Status } from "./parts";
 import { momentWords, runWords } from "./when";
@@ -175,7 +176,7 @@ export function AutomationPage(props: {
 
   return (
     <>
-      <PageBar title={workflow.name}>
+      <PageBar title={workflowName(workflow, pieces, props.names)}>
         <PageBarButton
           primary={runsByHand}
           icon={Play}

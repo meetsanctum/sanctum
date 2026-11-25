@@ -6,7 +6,10 @@ import {
   type DeviceInfo,
   type FirmwareState,
 } from "@meetsanctum/app-sdk";
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import {
+  calendarDaysBetween,
+  type HomeClock,
+} from "@meetsanctum/app-sdk/clock";
 
 import { plural } from "./plural";
 
@@ -15,14 +18,10 @@ import { plural } from "./plural";
 // line and tile say it: a device on a battery gone quiet, a low battery, and
 // firmware to update.
 
-const dayMs = 24 * 60 * 60_000;
-
 /** When a device was last heard from, as "since …" says it: yesterday, a weekday this week, or a date. */
 export function sinceWords(clock: HomeClock, at: string, now: number) {
   const then = Date.parse(at);
-  const days = Math.round(
-    (clock.startOfDay(now) - clock.startOfDay(then)) / dayMs,
-  );
+  const days = calendarDaysBetween(then, now, clock.timeZone);
   if (days <= 1) return "yesterday";
   return days < 7 ? clock.longWeekdayText(then) : clock.longDayText(then);
 }

@@ -6,7 +6,7 @@ import type {
   AgentSetupStarted,
   AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
-import { createLiveFeed } from "@meetsanctum/ui-sdk";
+import { createLiveFeed, HomeTimeZoneProvider } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -186,6 +186,19 @@ describe("the words for AI agents", () => {
     );
   });
 
+  it("shows the offsets when the home clock repeats an agent's creation time", () => {
+    const zurich = homeClock({ timeZone: "Europe/Zurich", hourCycle: "12h" });
+    const first = { ...codex, createdAt: "2026-10-25T00:15:03Z" };
+    const second = { ...codex, id: "again", createdAt: "2026-10-25T01:15:03Z" };
+    const agents = [first, second];
+    expect(agentDetail(zurich, first, agents, now)).toContain(
+      "25 Oct at 2:15:03 AM (UTC+02:00)",
+    );
+    expect(agentDetail(zurich, second, agents, now)).toContain(
+      "25 Oct at 2:15:03 AM (UTC+01:00)",
+    );
+  });
+
   it("says what an item needs that's off", () => {
     const [, create] = canUseWith().offers;
     expect(missingWords(create!, canUseWith().offers)).toEqual({
@@ -242,18 +255,23 @@ describe("Settings → AI agents", () => {
   let openedCanUse: number;
   let openedApps: string[];
 
-  async function show(apps: AppInfo[] = [example]) {
+  async function show(apps: AppInfo[] = [example], adding = false) {
     openedCanUse = 0;
     openedApps = [];
     await act(async () =>
       root.render(
-        <AgentsPage
-          apps={apps}
-          live={live}
-          onOpenCanUse={() => openedCanUse++}
-          onOpenApp={(id) => openedApps.push(id)}
-          page={null}
-        />,
+        <HomeTimeZoneProvider
+          timeZone={adding ? "Europe/Zurich" : undefined}
+          hourCycle={adding ? "12h" : undefined}
+        >
+          <AgentsPage
+            apps={apps}
+            live={live}
+            onOpenCanUse={() => openedCanUse++}
+            onOpenApp={(id) => openedApps.push(id)}
+            page={null}
+          />
+        </HomeTimeZoneProvider>,
       ),
     );
   }
@@ -389,7 +407,7 @@ describe("Settings → AI agents", () => {
     });
 
     async function add(name: string) {
-      await show();
+      await show(undefined, true);
       await act(async () => button("Add an agent").click());
       await type(dialog()!.querySelector("input")!, name);
     }
@@ -491,7 +509,9 @@ describe("Settings → AI agents", () => {
       };
       await wait(1_500);
       expect(dialog()!.textContent).toContain("Codex is connected");
-      expect(dialog()!.textContent).toContain("It connected from 192.168.7.24");
+      expect(dialog()!.textContent).toContain(
+        "It connected from 192.168.7.24 at 1:01 PM.",
+      );
       expect(button("Done")).toBeTruthy();
     });
 

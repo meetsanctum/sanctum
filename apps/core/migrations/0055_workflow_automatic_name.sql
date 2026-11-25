@@ -1,0 +1,1 @@
+ALTER TABLE `workflows` ADD `automatic_name` integer DEFAULT false NOT NULL;

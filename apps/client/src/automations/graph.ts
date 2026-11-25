@@ -1,6 +1,7 @@
 import type {
   PieceInfo,
   WorkflowGraph,
+  WorkflowInfo,
   WorkflowNode,
   WorkflowProblem,
 } from "@meetsanctum/app-sdk";
@@ -113,4 +114,16 @@ export function autoName(
     .split(",")[0]!
     .trim();
   return words.length > 120 ? `${words.slice(0, 119)}…` : words;
+}
+
+/** The current trigger name, or the saved name if the trigger is unavailable. */
+export function workflowName(
+  workflow: WorkflowInfo,
+  pieces: readonly PieceInfo[] | undefined,
+  names: Names,
+) {
+  return (
+    (workflow.automaticName && autoName(workflow.graph.nodes, pieces, names)) ||
+    workflow.name
+  );
 }

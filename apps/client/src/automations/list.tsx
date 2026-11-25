@@ -12,8 +12,9 @@ import { useState } from "react";
 
 import { blockedBy, blockedLine } from "./blocked";
 import { pieceOf, problemOf, type Automations } from "./data";
+import { workflowName } from "./graph";
 import { PieceIcon, Status, TriggerCard } from "./parts";
-import { listStatus, nextOf, timeWords } from "./when";
+import { listStatus, nextOf } from "./when";
 import {
   cardOf,
   compareGroups,
@@ -84,7 +85,7 @@ function rowsOf(
           ? `${config.event === "sunrise" ? 0 : 1}${String(
               Number(config.offsetMinutes ?? 0) + 1000,
             ).padStart(5, "0")}`
-          : workflow.name.toLocaleLowerCase();
+          : workflowName(workflow, pieces, names).toLocaleLowerCase();
     groups.set(group, [
       ...(groups.get(group) ?? []),
       { workflow, group, order },
@@ -230,7 +231,8 @@ export function AutomationsList(props: {
       </div>
       {next?.nextRun && (
         <p className="sr-only">
-          Next: {next.name} at {timeWords(clock, new Date(next.nextRun))}
+          Next: {workflowName(next, pieces, props.names)} at{" "}
+          {clock.timeText(new Date(next.nextRun))}
         </p>
       )}
     </>
@@ -250,6 +252,7 @@ function AutomationRow(props: {
 }) {
   const clock = useHomeClock();
   const { workflow, pieces, names } = props;
+  const name = workflowName(workflow, pieces, names);
   const triggers = triggersOf(workflow);
   const first = triggers[0];
   const piece = first && pieceOf(pieces, first);
@@ -290,7 +293,7 @@ function AutomationRow(props: {
               workflow.enabled ? "" : " text-muted-foreground"
             }`}
           >
-            {workflow.name}
+            {name}
           </span>
           {problem || blocked ? (
             <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] font-medium">
@@ -332,7 +335,7 @@ function AutomationRow(props: {
           size="sm"
           disabled={props.running || workflow.problems.length > 0 || !!blocked}
           onClick={props.onRun}
-          aria-label={`Run ${workflow.name}`}
+          aria-label={`Run ${name}`}
         >
           <Play aria-hidden="true" />
           {props.running ? "Running…" : "Run"}

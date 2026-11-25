@@ -3,7 +3,10 @@ import type {
   WorkflowInfo,
   WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import {
+  calendarDaysBetween,
+  type HomeClock,
+} from "@meetsanctum/app-sdk/clock";
 
 import { productName } from "../brand";
 
@@ -14,13 +17,9 @@ import { productName } from "../brand";
 export type StatusKind =
   "ran" | "skipped" | "failed" | "next" | "off" | "problem";
 
-const day = 24 * 3600_000;
-
 /** A day on the home clock as people say it: today, yesterday, tomorrow, Monday, 28 Oct. */
 export function dayWords(clock: HomeClock, at: Date, now: Date) {
-  const days = Math.round(
-    (clock.startOfDay(at.getTime()) - clock.startOfDay(now.getTime())) / day,
-  );
+  const days = calendarDaysBetween(now.getTime(), at.getTime(), clock.timeZone);
   if (days === 0) return "today";
   if (days === -1) return "yesterday";
   if (days === 1) return "tomorrow";
@@ -31,15 +30,10 @@ export function dayWords(clock: HomeClock, at: Date, now: Date) {
   return clock.dayText(at);
 }
 
-/** 07:30, or 7:30 AM, on the home clock. */
-export function timeWords(clock: HomeClock, at: Date) {
-  return clock.timeText(at);
-}
-
 /** A run's moment: Today at 07:30, Wednesday at 07:30. */
 export function momentWords(clock: HomeClock, at: Date, now: Date) {
   const words = dayWords(clock, at, now);
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)} at ${timeWords(clock, at)}`;
+  return `${capitalise(words)} at ${clock.timeText(at)}`;
 }
 
 const runStatuses: Record<RunStatus, { kind: StatusKind; text: string }> = {
@@ -71,7 +65,7 @@ export function listStatus(
   if (workflow.nextRun && options.nextId === workflow.id) {
     return {
       kind: "next",
-      text: `Next at ${timeWords(clock, new Date(workflow.nextRun))}`,
+      text: `Next at ${clock.timeText(new Date(workflow.nextRun))}`,
       ink: true,
     };
   }
